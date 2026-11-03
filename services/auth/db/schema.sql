@@ -53,6 +53,106 @@ END $$;
 
 
 --
+-- Name: auth_configuration_client_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_configuration_client_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- These fields have no admitted personal producer or active native consumer.
+  NEW.contacts := NULL; NEW.name := NULL; NEW.uri := NULL; NEW.icon := NULL;
+  NEW.tos := NULL; NEW.policy := NULL; NEW."softwareId" := NULL;
+  NEW."softwareVersion" := NULL; NEW."softwareStatement" := NULL;
+  IF TG_OP='INSERT' THEN
+    NEW.metadata := NULL;
+    NEW."referenceId" := NULL;
+    NEW.display_name_writer := NULL;
+  ELSE
+    NEW.display_name_writer := OLD.display_name_writer;
+    IF OLD.display_name_writer=1 THEN
+      IF octet_length(NEW.display_name)>400 THEN
+        NEW.display_name_writer := NULL;
+      ELSIF NEW.display_name IS DISTINCT FROM OLD.display_name OR NEW.client_id IS DISTINCT FROM OLD.client_id THEN
+        NEW.display_name_writer := NULL;
+      END IF;
+    END IF;
+    -- There is no admitted source retiring a legacy provider reference.
+    NEW."referenceId" := OLD."referenceId";
+    IF OLD.metadata IS NULL THEN
+      NEW.metadata := NULL;
+    ELSIF NEW.metadata IS NULL THEN
+      IF NEW.client_id='rezics-website'
+        AND current_setting('auth.configuration_client',true) IS DISTINCT FROM NEW.client_id THEN
+        RAISE EXCEPTION 'Auth website metadata requires configuration replacement' USING ERRCODE='55000';
+      END IF;
+    ELSE
+      -- Never compare, traverse or detoast the old JSON to classify a write.
+      -- A non-null attempted replacement cannot install a new private value.
+      NEW.metadata := OLD.metadata;
+    END IF;
+  END IF;
+  -- The command supplies the actual configured key and label, never a caller's
+  -- assertion that arbitrary JSON is safe. Transaction-local settings expire.
+  IF current_setting('auth.configuration_client',true)=NEW.client_id
+    AND current_setting('auth.configuration_label',true)=NEW.display_name THEN
+    NEW.display_name_writer := 1;
+  END IF;
+  IF NEW.display_name_writer IS DISTINCT FROM 1 THEN NEW.display_name := NULL; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_configuration_link_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_configuration_link_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.metadata := NULL;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_configuration_resource_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_configuration_resource_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW.metadata := NULL;
+  IF TG_OP='INSERT' THEN
+    NEW."customClaims" := NULL;
+    NEW.name_writer := NULL;
+  ELSE
+    NEW.name_writer := OLD.name_writer;
+    IF OLD.name_writer=1 THEN
+      IF NEW.name IS DISTINCT FROM 'REZICS API' OR NEW.id IS DISTINCT FROM OLD.id
+        OR NEW.identifier IS DISTINCT FROM OLD.identifier THEN NEW.name_writer := NULL; END IF;
+    END IF;
+    IF OLD."customClaims" IS NULL THEN
+      NEW."customClaims" := NULL;
+    ELSIF NEW."customClaims" IS NULL THEN
+      IF current_setting('auth.configuration_resource',true) IS DISTINCT FROM NEW.id THEN
+        RAISE EXCEPTION 'Auth resource claims require configuration replacement' USING ERRCODE='55000';
+      END IF;
+    ELSE
+      NEW."customClaims" := OLD."customClaims";
+    END IF;
+  END IF;
+  IF current_setting('auth.configuration_resource',true)=NEW.id AND NEW.name='REZICS API' THEN
+    NEW.name_writer := 1;
+  END IF;
+  IF NEW.name_writer IS DISTINCT FROM 1 THEN NEW.name := ''; NEW.name_writer := 0; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_consent_revision(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -61,6 +161,35 @@ CREATE FUNCTION public.auth_consent_revision() RETURNS trigger
     AS $$
 BEGIN
   NEW.revision := OLD.revision + CASE WHEN NEW.scopes IS DISTINCT FROM OLD.scopes THEN 1 ELSE 0 END;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_copy_native_fence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_copy_native_fence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN
+    IF OLD.sdk_fence_generation IS NOT NULL THEN
+      RAISE EXCEPTION 'Auth native writer receipt is permanent' USING ERRCODE='23514';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF OLD.sdk_fence_generation IS NOT NULL AND (
+    ROW(NEW.workflow_id,NEW.name,NEW.version,NEW.scope_count,NEW.parent_workflow_id,
+      NEW.ready,NEW.source_key,NEW.result_digest,NEW.result_finished_at,NEW.sdk_fence_generation,NEW.sdk_fence_closure_id,NEW.sdk_fence_closed_at)
+    IS DISTINCT FROM ROW(OLD.workflow_id,OLD.name,OLD.version,OLD.scope_count,OLD.parent_workflow_id,
+      OLD.ready,OLD.source_key,OLD.result_digest,OLD.result_finished_at,OLD.sdk_fence_generation,OLD.sdk_fence_closure_id,OLD.sdk_fence_closed_at)
+    OR (OLD.retired AND NOT NEW.retired) OR (OLD.absent AND NOT NEW.absent)) THEN
+    RAISE EXCEPTION 'Auth native writer receipt is immutable' USING ERRCODE='23514';
+  END IF;
+  IF NEW.retired AND NOT OLD.retired AND NEW.sdk_fence_generation IS NULL THEN
+    RAISE EXCEPTION 'Auth native writer receipt is missing' USING ERRCODE='23514';
+  END IF;
   RETURN NEW;
 END $$;
 
@@ -160,6 +289,138 @@ END $$;
 
 
 --
+-- Name: auth_creation_parties_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_creation_parties_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source auth_registration_stage%ROWTYPE; personal_id text; producer_client text;
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF ROW(NEW.creation_context_version,NEW.creation_scope_digest,NEW.creation_context,NEW.creation_approval_reference,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id) IS DISTINCT FROM ROW(OLD.creation_context_version,OLD.creation_scope_digest,OLD.creation_context,OLD.creation_approval_reference,OLD.erasure_actor_id,OLD.erasure_human_id,OLD.erasure_principal_id,OLD.erasure_native_operator_id,OLD.erasure_client_id,OLD.erasure_source_client_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id) THEN
+      RAISE EXCEPTION 'Auth creation source is immutable' USING ERRCODE='55000';
+    END IF;
+    IF TG_TABLE_NAME='auth_registration_stage' THEN
+      IF OLD.creation_context_version=1 AND (
+        ROW(NEW.registration_id,NEW.request_key,NEW.account_id,NEW.handle,NEW.request_digest,
+            NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_version)
+        IS DISTINCT FROM
+        ROW(OLD.registration_id,OLD.request_key,OLD.account_id,OLD.handle,OLD.request_digest,
+            OLD.erasure_creator_id,OLD.erasure_operator_id,OLD.erasure_initiator_id,OLD.erasure_delegate_id,OLD.erasure_actor_version)
+        OR (OLD.creation_context IS NOT NULL AND NEW.creation_binding IS DISTINCT FROM OLD.creation_binding)
+      ) THEN RAISE EXCEPTION 'Auth creation request is immutable' USING ERRCODE='55000'; END IF;
+      IF NEW.ciphertext IS NOT NULL AND NEW.ciphertext IS DISTINCT FROM OLD.ciphertext THEN
+        IF NEW.creation_context_version<>1 THEN
+          RAISE EXCEPTION 'Auth creation context unavailable: historical-provenance' USING ERRCODE='55000';
+        END IF;
+      ELSE RETURN NEW;
+      END IF;
+    ELSE RETURN NEW;
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
+    -- Exact source supplied by the native credential transaction, never a
+    -- descriptor search. The old generic no-stage adapter stays unknown.
+    IF NEW.erasure_stage_id IS NOT NULL THEN
+      SELECT * INTO source FROM auth_registration_stage
+        WHERE registration_id=NEW.erasure_stage_id AND account_id=NEW.account_id FOR UPDATE;
+      IF NOT FOUND OR source.creation_context_version<>1
+        OR NEW.creation_scope_digest IS DISTINCT FROM source.creation_scope_digest THEN
+        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
+      END IF;
+      IF ROW(NEW.registration_id,NEW.reservation_id,NEW.expires_at) IS DISTINCT FROM
+         ROW(source.reservation_id,source.reservation_id,source.expires_at) THEN
+        RAISE EXCEPTION 'Auth creation receipt source binding refused' USING ERRCODE='55000';
+      END IF;
+      NEW.creation_context_version:=source.creation_context_version;
+      NEW.creation_scope_digest:=source.creation_scope_digest;
+      NEW.creation_context:=source.creation_context;
+      NEW.creation_approval_reference:=source.creation_approval_reference;
+      NEW.erasure_actor_id:=source.erasure_actor_id;
+      NEW.erasure_human_id:=source.erasure_human_id;
+      NEW.erasure_principal_id:=source.erasure_principal_id;
+      NEW.erasure_native_operator_id:=source.erasure_native_operator_id;
+      NEW.erasure_client_id:=source.erasure_client_id;
+      NEW.erasure_source_client_id:=source.erasure_source_client_id;
+      NEW.erasure_client_owner_id:=source.erasure_client_owner_id;
+      NEW.erasure_source_client_owner_id:=source.erasure_source_client_owner_id;
+      NEW.erasure_creator_id:=source.erasure_creator_id;
+      NEW.erasure_operator_id:=source.erasure_operator_id;
+      NEW.erasure_initiator_id:=source.erasure_initiator_id;
+      NEW.erasure_delegate_id:=source.erasure_delegate_id;
+      NEW.erasure_actor_version:=source.erasure_actor_version;
+    ELSE
+      IF EXISTS (SELECT 1 FROM auth_registration_stage WHERE account_id=NEW.account_id) OR
+         NEW.creation_context_version<>0 OR NEW.creation_context IS NOT NULL THEN
+        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
+      END IF;
+      PERFORM auth_native_role_unknown('auth_provisioning_receipt','source-unavailable');
+      RETURN NEW;
+    END IF;
+  ELSE
+    IF current_setting('auth.native_role_producer',true) IS DISTINCT FROM '1' OR
+       NEW.creation_context_version<>1 THEN
+      RAISE EXCEPTION 'Auth creation context unavailable: producer-missing' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  IF NEW.creation_scope_digest IS NULL OR NEW.erasure_actor_version<>1 THEN
+    RAISE EXCEPTION 'Auth creation context binding refused' USING ERRCODE='55000';
+  END IF;
+  IF NEW.creation_context IS NULL THEN
+    -- Public human registration has a preselected subject, with no authenticated
+    -- approval actor, delegated principal, opening operator or source client.
+    IF ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,
+       NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,
+       NEW.creation_approval_reference,NEW.erasure_creator_id,NEW.erasure_operator_id,
+       NEW.erasure_initiator_id,NEW.erasure_delegate_id) IS DISTINCT FROM
+       ROW(NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,
+           NULL::text,NULL::text,NULL::text,NULL::text,NULL::text) THEN
+      RAISE EXCEPTION 'Auth public creation provenance refused' USING ERRCODE='55000';
+    END IF;
+  ELSE
+    IF jsonb_typeof(NEW.creation_context)<>'object' OR
+       NEW.erasure_actor_id IS NULL OR NEW.erasure_source_client_id IS NULL OR NEW.creation_approval_reference IS NULL OR
+       ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,
+           NEW.erasure_source_client_id,NEW.creation_approval_reference,NEW.erasure_client_id) IS DISTINCT FROM
+       ROW(NEW.creation_context->>'actorAccountId',NEW.creation_context->>'actingHumanId',
+           NEW.creation_context->>'principalAccountId',NEW.creation_context->>'operatorAccountId',
+           NEW.creation_context->>'sourceClientId',NEW.creation_context->>'approvalReference',
+           NEW.creation_context->'operation'->>'targetClientId') THEN
+      RAISE EXCEPTION 'Auth approved creation provenance refused' USING ERRCODE='55000';
+    END IF;
+    IF TG_TABLE_NAME='auth_registration_stage' THEN
+    IF (
+       NEW.creation_binding->>'kind' IS DISTINCT FROM 'automated' OR
+       NEW.creation_binding->>'operatorAccountId' IS DISTINCT FROM NEW.erasure_operator_id OR
+       NEW.creation_binding->>'operationKey' IS DISTINCT FROM NEW.creation_context->>'operationKey' OR
+       NEW.creation_context->'operation'->>'targetResourceId' IS DISTINCT FROM NEW.erasure_operator_id OR
+       NEW.creation_context->'operation'->>'kind' IS DISTINCT FROM 'automated' OR
+       NEW.creation_context->'operation'->>'action' IS DISTINCT FROM 'account:manage'
+    ) THEN RAISE EXCEPTION 'Auth approved creation target refused' USING ERRCODE='55000'; END IF;
+    END IF;
+  END IF;
+  FOREACH personal_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
+    PERFORM auth_erasure_admit(personal_id);
+  END LOOP;
+  FOREACH producer_client IN ARRAY ARRAY[NEW.erasure_client_id,NEW.erasure_source_client_id] LOOP
+    PERFORM auth_erasure_admit_client(producer_client);
+  END LOOP;
+  IF TG_OP='INSERT' AND TG_TABLE_NAME='auth_registration_stage' THEN
+    SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_client_id FOR SHARE;
+    SELECT "userId" INTO NEW.erasure_source_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_source_client_id FOR SHARE;
+    -- The fixed deployment client can be ownerless. An absent source client is
+    -- unavailable; only an actual public registration makes it inapplicable.
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT FOUND THEN
+      RAISE EXCEPTION 'Auth creation source client unavailable' USING ERRCODE='55000';
+    END IF;
+    PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+    PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_credential_stage_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -188,7 +449,14 @@ CREATE FUNCTION public.auth_delete_workflow_request() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  DELETE FROM public.auth_workflow_request WHERE workflow_id=OLD.workflow_uuid AND terminal_at IS NOT NULL;
+  -- Exactly nativeRequestTerminal's registration closure. Other native consumers
+  -- retain their pending request until their owning closure can retire it.
+  DELETE FROM public.auth_workflow_request r
+    USING public.auth_native_consumer_proof p
+    WHERE r.workflow_id=OLD.workflow_uuid AND r.terminal_at IS NOT NULL
+      AND r.request_party_version=1 AND r.request_context_version=1
+      AND p.store='registration' AND p.key=r.erasure_stage_id
+      AND p.binding->>1=r.workflow_id AND p.result->>'outcome' IN ('activated','expired');
   RETURN OLD;
 END $$;
 
@@ -202,6 +470,9 @@ CREATE FUNCTION public.auth_erasure_admit(owner_id text) RETURNS void
     AS $$
 BEGIN
   IF owner_id IS NULL OR owner_id='' THEN RETURN; END IF;
+  -- Only the native bounded deployment page installs this transaction context.
+  -- Its trigger accepts version-only updates, never a new artifact or role move.
+  IF current_setting('auth.native_role_reconcile',true)='1' THEN RETURN; END IF;
   PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-erasure:'||owner_id,0));
   IF EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id)
     AND NOT EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id
@@ -221,6 +492,7 @@ CREATE FUNCTION public.auth_erasure_admit_client(client text) RETURNS void
 DECLARE owner_id text; fenced boolean;
 BEGIN
   IF client IS NULL THEN RETURN; END IF;
+  IF current_setting('auth.native_role_reconcile',true)='1' THEN RETURN; END IF;
   PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-client:'||client,0));
   SELECT "userId",erasure_fenced INTO owner_id,fenced FROM auth_client WHERE client_id=client;
   IF EXISTS (SELECT 1 FROM auth_erased_client WHERE client_id=client
@@ -232,6 +504,7 @@ BEGIN
       AND id::text=current_setting('auth.erasure_obligation',true)) THEN
     RAISE EXCEPTION 'Auth client erasure fence' USING ERRCODE='55000';
   END IF;
+  RETURN;
 END $$;
 
 
@@ -239,7 +512,9 @@ END $$;
 -- Name: auth_erasure_client_empty(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.auth_erasure_client_empty() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.auth_erasure_client_empty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
   IF EXISTS (SELECT 1 FROM session WHERE "clientId"=OLD.client_id)
     OR EXISTS (SELECT 1 FROM "oauthAccessToken" WHERE "clientId"=OLD.client_id)
@@ -980,13 +1255,303 @@ BEGIN
      (OLD.erasure_account_id,OLD.erasure_client_id,OLD.erasure_session_id,OLD.erasure_source_client_id) THEN
     RAISE EXCEPTION 'Auth verification attribution is immutable';
   END IF;
-  IF NEW.erasure_session_id IS NOT NULL THEN
+  IF NEW.erasure_session_id IS NOT NULL AND (TG_OP='INSERT' OR OLD.erasure_session_id IS NULL) THEN
     SELECT "clientId",erasure_human_id,erasure_operator_id
       INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
       FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000'; END IF;
   END IF;
   RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_kind_consent_dependency_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_kind_consent_dependency_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('auth-kind-consent-frontier',0));
+    IF EXISTS (
+      SELECT 1 FROM auth_kind_consent_transition t
+      WHERE t.state<>'applied' AND (t.transition_kind='restore' OR
+        (t.client_id=NEW.client_id AND (t.account_id IS NULL OR t.account_id=NEW.account_id)))
+    ) THEN
+      RAISE EXCEPTION 'Kind consent enrollment frontier is closed' USING ERRCODE='55000';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.active THEN RAISE EXCEPTION 'Active Kind consent dependency cannot be erased' USING ERRCODE='55000'; END IF;
+    RETURN OLD;
+  END IF;
+  IF TG_OP='UPDATE' THEN
+    IF ROW(NEW.reference_id,NEW.consumer_key_hash,NEW.account_id,NEW.client_id,NEW.requested_scopes,
+           NEW.effective_scopes,NEW.consent_revision,NEW.client_scopes,NEW.client_first_party,NEW.consumer_route,NEW.owner_account_id,
+           NEW.collection_id,NEW.preparation_id,NEW.origin_id,NEW.created_at)
+       IS DISTINCT FROM
+       ROW(OLD.reference_id,OLD.consumer_key_hash,OLD.account_id,OLD.client_id,OLD.requested_scopes,
+           OLD.effective_scopes,OLD.consent_revision,OLD.client_scopes,OLD.client_first_party,OLD.consumer_route,OLD.owner_account_id,
+           OLD.collection_id,OLD.preparation_id,OLD.origin_id,OLD.created_at) THEN
+      RAISE EXCEPTION 'Kind consent consumer binding is immutable' USING ERRCODE='23514';
+    END IF;
+    IF (NOT OLD.active AND NEW.active) OR
+       (OLD.fenced_transition_id IS NOT NULL AND ROW(NEW.fenced_transition_id,NEW.receipt_reference,NEW.fenced_at)
+         IS DISTINCT FROM ROW(OLD.fenced_transition_id,OLD.receipt_reference,OLD.fenced_at)) THEN
+      RAISE EXCEPTION 'Kind consent dependency fence is immutable' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  IF TG_OP='INSERT' THEN RETURN NEW; END IF;
+  IF OLD.active AND NOT NEW.active THEN
+    IF NEW.fenced_transition_id IS NULL OR NEW.receipt_reference IS NULL OR NEW.fenced_at IS NULL OR NOT EXISTS (
+      SELECT 1 FROM auth_kind_consent_transition t
+      WHERE t.transition_id=NEW.fenced_transition_id AND t.state='pending'
+        AND (t.transition_kind='restore' OR (t.client_id=OLD.client_id AND (t.account_id IS NULL OR t.account_id=OLD.account_id)))
+        AND OLD.enrollment_seq<=t.frontier_seq
+        AND current_setting('auth.kind_consent_transition_id',true)=t.transition_id::text
+    ) THEN RAISE EXCEPTION 'Kind consent dependency fence is unverified' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_kind_consent_transition_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_kind_consent_transition_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  transition auth_kind_consent_transition%ROWTYPE;
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF ROW(NEW.transition_id,NEW.transition_key,NEW.transition_kind,NEW.client_id,NEW.account_id,NEW.target,NEW.frontier_seq,NEW.created_at)
+       IS DISTINCT FROM
+       ROW(OLD.transition_id,OLD.transition_key,OLD.transition_kind,OLD.client_id,OLD.account_id,OLD.target,OLD.frontier_seq,OLD.created_at) THEN
+      RAISE EXCEPTION 'Kind consent transition identity is immutable' USING ERRCODE='23514';
+    END IF;
+    IF NEW.after_seq<OLD.after_seq OR
+       (OLD.state='pending' AND NEW.state NOT IN ('pending','ready')) OR
+       (OLD.state='ready' AND NEW.state NOT IN ('ready','applied')) OR
+       OLD.state='applied' AND ROW(NEW.after_seq,NEW.state,NEW.updated_at,NEW.applied_at)
+         IS DISTINCT FROM ROW(OLD.after_seq,OLD.state,OLD.updated_at,OLD.applied_at) THEN
+      RAISE EXCEPTION 'Kind consent transition progress is invalid' USING ERRCODE='23514';
+    END IF;
+    IF NEW.state IN ('ready','applied') AND EXISTS (
+      SELECT 1 FROM auth_kind_consent_dependency d
+      WHERE d.active AND (NEW.transition_kind='restore' OR
+        (d.client_id=NEW.client_id AND (NEW.account_id IS NULL OR d.account_id=NEW.account_id)))
+        AND d.enrollment_seq<=NEW.frontier_seq
+    ) THEN
+      RAISE EXCEPTION 'Kind consent transition has unfenced consumers' USING ERRCODE='23514';
+    END IF;
+    IF NEW.state='applied' AND OLD.state<>'ready' THEN
+      RAISE EXCEPTION 'Kind consent transition was not ready' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_OP='DELETE' THEN
+    IF OLD.state<>'applied' THEN RAISE EXCEPTION 'Kind consent transition is unresolved' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
+END $$;
+
+
+--
+-- Name: auth_kind_consent_writer_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_kind_consent_writer_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  account_key text;
+  client_key text;
+  operation text;
+  transition auth_kind_consent_transition%ROWTYPE;
+  required boolean := false;
+  authority_change boolean := false;
+BEGIN
+  IF TG_TABLE_NAME='auth_consent' THEN
+    client_key:=CASE WHEN TG_OP='DELETE' THEN OLD.client_id ELSE NEW.client_id END;
+    account_key:=CASE WHEN TG_OP='DELETE' THEN OLD.account_id ELSE NEW.account_id END;
+    IF TG_OP='DELETE' THEN
+      authority_change:=true;
+      required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.account_id=OLD.account_id AND d.client_id=OLD.client_id);
+      operation:='consent-delete';
+    ELSIF TG_OP='INSERT' THEN
+      authority_change:=true;
+      required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.account_id=NEW.account_id AND d.client_id=NEW.client_id);
+      operation:='consent-upsert';
+    ELSE
+      authority_change:=ROW(NEW.scopes,NEW.pending_scopes,NEW.pending_reference) IS DISTINCT FROM ROW(OLD.scopes,OLD.pending_scopes,OLD.pending_reference);
+      required:=authority_change
+        AND EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.account_id=NEW.account_id AND d.client_id=NEW.client_id);
+      operation:=CASE WHEN NEW.scopes IS NOT DISTINCT FROM OLD.scopes THEN 'consent-pending' ELSE 'consent-upsert' END;
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_client' THEN
+    client_key:=CASE WHEN TG_OP='DELETE' THEN OLD.client_id ELSE NEW.client_id END;
+    IF TG_OP='DELETE' THEN
+      authority_change:=true;
+      required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key);
+    ELSE
+      authority_change:=ROW(NEW.scopes,NEW.first_party,NEW.erasure_fenced,NEW.disabled) IS DISTINCT FROM ROW(OLD.scopes,OLD.first_party,OLD.erasure_fenced,OLD.disabled);
+      required:=authority_change
+        AND EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key);
+    END IF;
+    operation:=CASE WHEN TG_OP='UPDATE' AND
+      ROW(NEW.disabled,NEW.erasure_fenced) IS DISTINCT FROM ROW(OLD.disabled,OLD.erasure_fenced)
+      THEN 'client-erasure-fence' ELSE 'client-config' END;
+  ELSIF TG_TABLE_NAME='auth_client_reduction' THEN
+    client_key:=CASE WHEN TG_OP='DELETE' THEN OLD.client_id ELSE NEW.client_id END;
+    authority_change:=TG_OP<>'UPDATE';
+    required:=authority_change AND EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key);
+    operation:=CASE WHEN TG_OP='DELETE' THEN 'client-reduction-finish' ELSE 'client-reduction-start' END;
+  ELSIF TG_TABLE_NAME='auth_client_coverage' THEN
+    client_key:=CASE WHEN TG_OP='DELETE' THEN OLD.client_id ELSE NEW.client_id END;
+    IF TG_OP='DELETE' THEN
+      authority_change:=true;
+      required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key);
+    ELSE
+      authority_change:=(TG_OP='INSERT' AND NEW.ready) OR
+        (TG_OP='UPDATE' AND NEW.ready IS DISTINCT FROM OLD.ready);
+      required:=authority_change AND
+        EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key);
+    END IF;
+    operation:='client-coverage';
+  ELSE
+    RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
+  END IF;
+  IF NOT authority_change THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END; END IF;
+  -- This is the database-side serialization point for legacy/direct writers.
+  -- A direct mutation cannot race an enrollment snapshot or slip through after
+  -- a page has fenced its rows but before the exact transition is applied.
+  PERFORM pg_advisory_xact_lock(hashtextextended('auth-kind-consent-frontier',0));
+  IF TG_TABLE_NAME='auth_consent' THEN
+    required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.account_id=account_key AND d.client_id=client_key)
+      OR EXISTS(SELECT 1 FROM auth_kind_consent_transition t WHERE t.state<>'applied' AND
+        (t.transition_kind='restore' OR (t.client_id=client_key AND (t.account_id IS NULL OR t.account_id=account_key))));
+  ELSE
+    required:=EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key)
+      OR EXISTS(SELECT 1 FROM auth_kind_consent_transition t WHERE t.state<>'applied' AND
+        (t.transition_kind='restore' OR (t.client_id=client_key AND (t.account_id IS NULL OR t.account_id=account_key))));
+  END IF;
+  IF NOT required THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END; END IF;
+  SELECT * INTO transition FROM auth_kind_consent_transition t
+  WHERE t.transition_id::text=current_setting('auth.kind_consent_transition_id',true)
+    AND t.state='ready' AND t.client_id=client_key
+    AND (t.account_id IS NULL OR t.account_id=account_key)
+    AND (t.target->>'operation'=operation OR
+      (TG_TABLE_NAME='auth_client_coverage' AND TG_OP='INSERT' AND operation='client-coverage'
+       AND t.target->>'operation'='client-config'));
+  IF NOT FOUND THEN RAISE EXCEPTION 'Kind consent dependency closure required before Auth write' USING ERRCODE='55000'; END IF;
+  IF EXISTS(SELECT 1 FROM auth_kind_consent_dependency d WHERE d.active AND d.client_id=client_key
+      AND (transition.account_id IS NULL OR d.account_id=transition.account_id)
+      AND d.enrollment_seq<=transition.frontier_seq) THEN
+    RAISE EXCEPTION 'Kind consent dependency closure is incomplete' USING ERRCODE='55000';
+  END IF;
+  IF TG_TABLE_NAME='auth_consent' THEN
+    IF operation='consent-upsert' AND TG_OP<>'DELETE' THEN
+      IF transition.target->'scopes' IS DISTINCT FROM to_jsonb(NEW.scopes) OR
+        (transition.target ? 'pendingScopes' AND transition.target->'pendingScopes' IS DISTINCT FROM COALESCE(to_jsonb(NEW.pending_scopes),'null'::jsonb)) OR
+        (transition.target ? 'pendingReference' AND transition.target->>'pendingReference' IS DISTINCT FROM NEW.pending_reference) THEN
+        RAISE EXCEPTION 'Kind consent transition target mismatch' USING ERRCODE='23514';
+      END IF;
+    ELSIF operation='consent-pending' AND TG_OP='UPDATE' THEN
+      IF transition.target->'pendingScopes' IS DISTINCT FROM to_jsonb(NEW.pending_scopes) OR
+        transition.target->>'pendingReference' IS DISTINCT FROM NEW.pending_reference THEN
+        RAISE EXCEPTION 'Kind pending consent transition target mismatch' USING ERRCODE='23514';
+      END IF;
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_client' THEN
+    IF TG_OP='UPDATE' THEN
+      IF operation='client-config' THEN
+        IF transition.target->'scopes' IS DISTINCT FROM to_jsonb(NEW.scopes) OR
+          transition.target->>'firstParty' IS DISTINCT FROM to_jsonb(NEW.first_party)#>>'{}' THEN
+          RAISE EXCEPTION 'Kind client transition target mismatch' USING ERRCODE='23514';
+        END IF;
+      ELSIF operation='client-erasure-fence' AND (NOT NEW.erasure_fenced OR NOT NEW.disabled) THEN
+        RAISE EXCEPTION 'Kind client erasure fence target mismatch' USING ERRCODE='23514';
+      END IF;
+    ELSIF TG_OP='DELETE' AND transition.target->>'operation'<>'client-delete' THEN
+      RAISE EXCEPTION 'Kind client deletion transition target mismatch' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_client_coverage' THEN
+    IF TG_OP<>'DELETE' THEN
+      IF transition.target->>'operation'='client-coverage' AND
+        transition.target->>'ready' IS DISTINCT FROM to_jsonb(NEW.ready)#>>'{}' THEN
+        RAISE EXCEPTION 'Kind client coverage transition target mismatch' USING ERRCODE='23514';
+      ELSIF TG_OP='INSERT' AND transition.target->>'operation'='client-config' AND
+        (NOT NEW.ready OR NOT EXISTS(
+          SELECT 1 FROM auth_client c WHERE c.client_id=client_key
+            AND to_jsonb(c.scopes)=transition.target->'scopes'
+            AND (to_jsonb(c.first_party)#>>'{}')=transition.target->>'firstParty'
+        )) THEN
+        RAISE EXCEPTION 'Kind client coverage is outside client transition target' USING ERRCODE='23514';
+      END IF;
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_client_reduction' THEN
+    IF TG_OP='INSERT' THEN
+      IF transition.target->>'operationId' IS DISTINCT FROM NEW.operation_id OR
+        transition.target->'scopes' IS DISTINCT FROM to_jsonb(NEW.scopes) OR
+        transition.target->>'firstParty' IS DISTINCT FROM to_jsonb(NEW.first_party)#>>'{}' THEN
+        RAISE EXCEPTION 'Kind client reduction start target mismatch' USING ERRCODE='23514';
+      END IF;
+    ELSIF TG_OP='DELETE' THEN
+      IF transition.target->>'operationId' IS DISTINCT FROM OLD.operation_id OR
+        transition.target->'scopes' IS DISTINCT FROM to_jsonb(OLD.scopes) OR
+        transition.target->>'firstParty' IS DISTINCT FROM to_jsonb(OLD.first_party)#>>'{}' THEN
+        RAISE EXCEPTION 'Kind client reduction finish target mismatch' USING ERRCODE='23514';
+      END IF;
+    END IF;
+  END IF;
+  RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
+END $$;
+
+
+--
+-- Name: auth_minimize_native_registration(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_minimize_native_registration(stage_key text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE proof auth_native_consumer_proof; skeleton jsonb;
+BEGIN
+  IF stage_key IS NULL THEN RETURN; END IF;
+  -- Lock before the separate dependency statement. Concurrent last-reader
+  -- deletions serialize here; the waiter observes the previous commit as well.
+  SELECT * INTO proof FROM auth_native_consumer_proof
+    WHERE store='registration' AND key=stage_key FOR UPDATE;
+  IF NOT FOUND THEN RETURN; END IF;
+  skeleton:=auth_native_registration_skeleton(proof.binding,proof.result);
+  IF skeleton IS NULL OR auth_native_registration_readers(stage_key) THEN RETURN; END IF;
+  UPDATE auth_native_consumer_proof SET
+    binding=CASE WHEN proof.result->>'outcome'='expired' THEN 'null'::jsonb
+      ELSE jsonb_build_array(proof.binding->0,proof.binding->1,proof.binding->2,proof.binding->3) END,
+    result=skeleton WHERE store='registration' AND key=stage_key;
+END $$;
+
+
+--
+-- Name: auth_native_consumer_proof_minimize_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_consumer_proof_minimize_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE skeleton jsonb; minimal_binding jsonb;
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.store='registration' AND NEW.store=OLD.store AND NEW.key=OLD.key THEN
+    skeleton:=auth_native_registration_skeleton(OLD.binding,OLD.result);
+    minimal_binding:=CASE WHEN OLD.result->>'outcome'='expired' THEN 'null'::jsonb
+      ELSE jsonb_build_array(OLD.binding->0,OLD.binding->1,OLD.binding->2,OLD.binding->3) END;
+    IF skeleton IS NOT NULL AND NEW.binding=minimal_binding AND NEW.result=skeleton
+      AND NOT auth_native_registration_readers(OLD.key) THEN RETURN NEW; END IF;
+  END IF;
+  RAISE EXCEPTION 'Native consumer terminal proof is immutable' USING ERRCODE='55000';
 END $$;
 
 
@@ -1082,6 +1647,21 @@ END $$;
 
 
 --
+-- Name: auth_native_phase_upgrade_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_phase_upgrade_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.native_phase_upgrade IS NOT NULL AND NEW.native_phase_upgrade IS DISTINCT FROM OLD.native_phase_upgrade THEN
+    RAISE EXCEPTION 'Auth native phase upgrade evidence is immutable' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_native_registration_identity(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1094,6 +1674,1323 @@ BEGIN
     OR (OLD.operator_reservation_id IS NOT NULL AND NEW.operator_reservation_id IS DISTINCT FROM OLD.operator_reservation_id) THEN
     RAISE EXCEPTION 'Native registration consumer identity is immutable' USING ERRCODE='55000';
   END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_producer_fence(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_producer_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE stage_key text;
+BEGIN
+  stage_key:=CASE WHEN TG_TABLE_NAME='auth_registration_stage' THEN to_jsonb(NEW)->>'registration_id'
+    ELSE to_jsonb(NEW)->>'erasure_stage_id' END;
+  IF TG_OP='UPDATE' THEN
+    IF to_jsonb(NEW)->>'erasure_stage_id' IS NOT DISTINCT FROM to_jsonb(OLD)->>'erasure_stage_id'
+      THEN RETURN NEW; END IF;
+    IF to_jsonb(OLD)->>'erasure_stage_id' IS NOT NULL THEN
+      RAISE EXCEPTION 'Native registration reader identity is immutable' USING ERRCODE='55000';
+    END IF;
+  END IF;
+  IF stage_key IS NULL THEN RETURN NEW; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||stage_key,0));
+  IF EXISTS(SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=stage_key) THEN
+    -- Preserve existing exact-key ON CONFLICT replay while its native reader
+    -- remains. The row lock prevents a concurrent DELETE/reinsert resurrection.
+    IF TG_TABLE_NAME='auth_workflow_request' THEN
+      PERFORM 1 FROM auth_workflow_request WHERE workflow_id=NEW.workflow_id
+        AND erasure_stage_id=stage_key FOR KEY SHARE;
+      IF FOUND THEN RETURN NEW; END IF;
+    ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
+      PERFORM 1 FROM auth_provisioning_receipt WHERE idempotency_key=NEW.idempotency_key
+        AND erasure_stage_id=stage_key FOR KEY SHARE;
+      IF FOUND THEN RETURN NEW; END IF;
+    END IF;
+    RAISE EXCEPTION 'Native registration consumer is terminal' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_proof_insert_lock(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_proof_insert_lock() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.store='registration' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||NEW.key,0));
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_proof_inserted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_proof_inserted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.store='registration' THEN PERFORM auth_minimize_native_registration(NEW.key); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_registration_reader_deleted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_reader_deleted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM auth_minimize_native_registration(CASE WHEN TG_TABLE_NAME='auth_registration_stage'
+    THEN to_jsonb(OLD)->>'registration_id' ELSE to_jsonb(OLD)->>'erasure_stage_id' END);
+  RETURN OLD;
+END $$;
+
+
+--
+-- Name: auth_native_registration_readers(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_readers(stage_key text) RETURNS boolean
+    LANGUAGE sql
+    AS $$
+  SELECT EXISTS(SELECT 1 FROM auth_registration_stage WHERE registration_id=stage_key)
+    OR EXISTS(SELECT 1 FROM auth_provisioning_receipt WHERE erasure_stage_id=stage_key)
+    OR EXISTS(SELECT 1 FROM auth_workflow_request WHERE erasure_stage_id=stage_key);
+$$;
+
+
+--
+-- Name: auth_native_registration_skeleton(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_registration_skeleton(source_binding jsonb, source_result jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    AS $_$
+  SELECT CASE
+    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
+      AND source_result->>'outcome'='expired'
+      AND source_result->'sourceResult'->>'accountId'=source_binding->>3
+      AND source_result->'sourceResult'->>'kind'='tombstone'
+      AND source_result->'sourceResult'->>'receiptId'<>''
+      AND source_result->'sourceResult'->>'minimumAuthnEpoch' ~ '^[1-9][0-9]*$'
+      AND source_result->'handleResult'=jsonb_build_object('accountId',source_binding->>3,'handle',source_binding->>4)
+      AND (CASE WHEN source_binding->6='null'::jsonb THEN NOT source_result ? 'responsibilityResult'
+        ELSE source_result->'responsibilityResult'=jsonb_build_object(
+          'retired',jsonb_build_object('operatorAccountId',source_binding->>6,
+            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7),
+          'released',jsonb_build_object('operatorAccountId',source_binding->>6,
+            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7)) END)
+      THEN jsonb_build_object('outcome','expired')
+    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
+      AND source_result=jsonb_build_object('outcome','activated',
+        'sourceResult',jsonb_build_object('accountId',source_binding->>3))
+      THEN source_result
+    ELSE NULL END;
+$_$;
+
+
+--
+-- Name: auth_native_request_party_version_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_request_party_version_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- The original ABI deliberately retains historical version zero. It is not
+  -- a current producer claim and can never certify native coverage.
+  IF NEW.request_party_version=0 THEN
+    PERFORM auth_native_role_unknown('auth_workflow_request','unsupported-producer-format');
+  ELSIF NEW.request_context_version<>1 OR NEW.erasure_actor_version<>1 THEN
+    RAISE EXCEPTION 'Auth native request party producer version refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_account(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_account() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."userId") IS DISTINCT FROM ROW(OLD."userId") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('account',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_attempt_account(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_attempt_account() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_attempt_account',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_barrier_proof(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_barrier_proof() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_barrier_proof','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW.erasure_session_id IS NOT NULL THEN SELECT erasure_client_owner_id,erasure_role_version INTO NEW.erasure_source_client_owner_id,source_version FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE; covered:=FOUND AND source_version=1; END IF;
+    covered:=covered AND (NEW.purpose<>'consent-reduction' OR NEW.erasure_session_id IS NOT NULL);
+    IF NEW."erasure_client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_barrier_proof',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_client(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_client() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_client_coverage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_client_coverage() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_coverage','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_coverage',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_client_reduction(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_client_reduction() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_reduction','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_reduction',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_client_reduction_progress(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_client_reduction_progress() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_reduction_progress','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_reduction_progress',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_consent(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_consent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_consent','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_consent',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_effect_receipt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_effect_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_effect_receipt','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=fresh OR NEW.stage_version=1;
+    IF NEW."client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."acting_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."acting_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_effect_receipt',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_key_assertion(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_key_assertion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_key_assertion',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_provisioning_receipt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_provisioning_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_provisioning_receipt','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW.erasure_stage_id IS NOT NULL THEN
+      SELECT erasure_delegate_id,erasure_initiator_id,erasure_actor_version,erasure_role_version
+        INTO NEW.erasure_delegate_id,NEW.erasure_initiator_id,NEW.erasure_actor_version,source_version
+        FROM auth_registration_stage WHERE registration_id=NEW.erasure_stage_id AND account_id=NEW.account_id FOR KEY SHARE;
+      covered:=FOUND AND source_version=1;
+    ELSE covered:=false;
+    END IF;
+    covered:=covered AND (NEW.erasure_stage_id IS NULL OR NEW.erasure_actor_version=1);
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
+      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
+    END IF;
+    NEW.erasure_actor_version:=COALESCE(NEW.erasure_actor_version,CASE WHEN TG_OP='UPDATE' THEN OLD.erasure_actor_version ELSE 0 END);
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_creator_id",NEW."erasure_operator_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_creator_id",OLD."erasure_operator_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_delegate_id);
+  PERFORM auth_erasure_admit(NEW.erasure_initiator_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_provisioning_receipt',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_public_key(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_public_key() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_public_key',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_recent_oidc_session(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_recent_oidc_session() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_recent_oidc_session','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    SELECT "clientId",erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_role_version INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,source_version FROM session WHERE id=NEW.session_id AND "userId"=NEW.account_id FOR KEY SHARE;
+    covered:=FOUND AND source_version=1;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recent_oidc_session',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_recovery(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_recovery() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recovery',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_recovery_establishment(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_recovery_establishment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_recovery_establishment','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    SELECT erasure_client_id,erasure_source_client_id,erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_source_client_owner_id,erasure_role_version
+      INTO NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,source_version
+      FROM auth_barrier_proof WHERE reference=NEW.reference AND account_id=NEW.account_id FOR KEY SHARE;
+    covered:=FOUND AND source_version=1;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recovery_establishment',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_registration_stage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_registration_stage() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_registration_stage','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=NEW.erasure_actor_version=1;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."account_id",NEW."erasure_creator_id",NEW."erasure_operator_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_creator_id",OLD."erasure_operator_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_delegate_id);
+  PERFORM auth_erasure_admit(NEW.erasure_initiator_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_registration_stage',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_session_opening(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_session_opening() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_session_opening','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=NEW.subject_account_id IS NOT NULL AND NEW.acting_human_id IS NOT NULL AND NEW.operator_account_id IS NOT NULL;
+    IF NEW."erasure_client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    SELECT erasure_client_owner_id INTO NEW.erasure_client_owner_id FROM session WHERE id=NEW.session_id AND "userId"=NEW.subject_account_id FOR KEY SHARE; covered:=covered AND FOUND;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."subject_account_id",NEW."acting_human_id",NEW."operator_account_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."subject_account_id",OLD."acting_human_id",OLD."operator_account_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_session_opening',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_auth_workflow_request(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_auth_workflow_request() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT (TG_OP='DELETE' AND pg_trigger_depth()>1 AND EXISTS(SELECT 1 FROM auth_copy_work WHERE workflow_id=OLD.workflow_id AND ready AND retired)) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_workflow_request','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=NEW.erasure_actor_version=1;
+    IF NEW."erasure_client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_subject_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_member_id",NEW."erasure_previous_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."erasure_subject_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_member_id",OLD."erasure_previous_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id",OLD."erasure_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_client_owner_id); END IF;
+  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id); END IF;
+  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_delegate_id); END IF;
+  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_initiator_id); END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_workflow_request',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_finish_oauthclientassertion(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_finish_oauthclientassertion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE "oauthClientAssertion" SET erasure_role_version=0 WHERE id=NEW.id AND erasure_role_version=0;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: auth_native_role_finish_verification(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_finish_verification() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE "verification" SET erasure_role_version=0 WHERE id=NEW.id AND erasure_role_version=0;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: auth_native_role_oauthaccesstoken(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_oauthaccesstoken() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthAccessToken','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."sessionId" IS NOT NULL THEN
+      SELECT erasure_human_id,erasure_operator_id,"clientId",erasure_client_owner_id,erasure_role_version
+        INTO NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,NEW.erasure_source_client_owner_id,source_version
+        FROM session WHERE id=NEW."sessionId" AND "userId"=NEW."userId" FOR KEY SHARE;
+      covered:=FOUND AND source_version=1;
+    ELSE covered:=fresh;
+    END IF;
+    IF NEW."clientId" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthAccessToken',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_oauthclientassertion(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_oauthclientassertion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthClientAssertion','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=NEW.erasure_client_id IS NOT NULL;
+    IF NEW."erasure_client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  IF fresh AND TG_OP='INSERT' AND NOT COALESCE(covered,false) THEN NEW.erasure_role_version:=0;
+  ELSE NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END; END IF;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthClientAssertion',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_oauthclientresource(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_oauthclientresource() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthClientResource','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."clientId" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthClientResource',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_oauthrefreshfamily(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_oauthrefreshfamily() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthRefreshFamily','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    SELECT erasure_account_id,erasure_human_id,erasure_operator_id,erasure_source_client_id,
+      erasure_source_client_owner_id,erasure_role_version
+      INTO NEW.erasure_account_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,
+        NEW.erasure_source_client_owner_id,source_version
+      -- Resolve the same newest winner as the pinned native consume. Never
+      -- scan older protocol history looking for a matching client.
+      FROM (SELECT erasure_account_id,erasure_human_id,erasure_operator_id,erasure_source_client_id,
+        erasure_source_client_owner_id,erasure_role_version,erasure_client_id
+        FROM verification WHERE identifier=NEW.id
+        ORDER BY "createdAt" DESC,id DESC LIMIT 1 FOR KEY SHARE) source
+      WHERE source.erasure_client_id=NEW."clientId";
+    covered:=FOUND AND source_version=1;
+    IF NEW."clientId" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."erasure_account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthRefreshFamily',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_oauthrefreshtoken(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_oauthrefreshtoken() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthRefreshToken','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF NEW."sessionId" IS NOT NULL THEN
+      SELECT erasure_human_id,erasure_operator_id,"clientId",erasure_client_owner_id,erasure_role_version
+        INTO NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,NEW.erasure_source_client_owner_id,source_version
+        FROM session WHERE id=NEW."sessionId" AND "userId"=NEW."userId" FOR KEY SHARE;
+      covered:=FOUND AND source_version=1;
+    ELSE covered:=fresh;
+    END IF;
+    IF NEW."clientId" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthRefreshToken',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_passkey(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_passkey() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."userId") IS DISTINCT FROM ROW(OLD."userId") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('passkey',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_session(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_session() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('session','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    SELECT acting_human_id,operator_account_id INTO NEW.erasure_human_id,NEW.erasure_operator_id FROM auth_session_opening WHERE session_id=NEW.id AND subject_account_id=NEW."userId";
+    covered:=fresh OR FOUND;
+    IF NEW."clientId" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('session',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_unknown(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_unknown(source_store text, reason_code text) RETURNS void
+    LANGUAGE sql
+    AS $$
+  INSERT INTO auth_native_role_unknown(store,reason) VALUES(source_store,reason_code) ON CONFLICT DO NOTHING;
+  UPDATE auth_copy_coverage SET native_covered=false WHERE singleton AND native_covered;
+$$;
+
+
+--
+-- Name: auth_native_role_user(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_user() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."id") IS DISTINCT FROM ROW(OLD."id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('user',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_native_role_verification(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_native_role_verification() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
+BEGIN
+  fresh:=current_setting('auth.native_role_producer',true)='1';
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
+    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='DELETE' THEN
+    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('verification','historical-role-custody'); END IF;
+    RETURN OLD;
+  END IF;
+  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
+  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
+  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    covered:=NEW.erasure_account_id IS NOT NULL OR (fresh AND NEW.erasure_format='webauthn-anonymous-v1');
+    IF NEW.erasure_session_id IS NOT NULL THEN
+      SELECT erasure_role_version,erasure_client_owner_id INTO source_version,NEW.erasure_source_client_owner_id FROM session WHERE id=NEW.erasure_session_id AND "userId"=NEW.erasure_account_id FOR KEY SHARE;
+      covered:=covered AND FOUND AND source_version=1;
+    END IF;
+    IF NEW."erasure_client_id" IS NOT NULL THEN
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+    END IF;
+  ELSE
+    covered:=OLD.erasure_role_version=1;
+  END IF;
+  IF fresh AND TG_OP='INSERT' AND NOT COALESCE(covered,false) THEN NEW.erasure_role_version:=0;
+  ELSE NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END; END IF;
+  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
+    ROW(NEW."erasure_account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."erasure_account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
+    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
+  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
+  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('verification',CASE WHEN fresh THEN CASE WHEN NEW.erasure_format='unknown' THEN 'unsupported-producer-format' ELSE 'source-unavailable' END ELSE 'historical-role-custody' END); END IF;
   RETURN NEW;
 END $$;
 
@@ -1125,6 +3022,187 @@ $$;
 
 
 --
+-- Name: auth_receiving_copy_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_receiving_copy_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'Auth receiving SDK receipt is immutable'; END $$;
+
+
+--
+-- Name: auth_receiving_work_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_receiving_work_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving work is permanent'; END IF;
+ IF TG_OP='INSERT' THEN
+  IF NEW.native_xid IS NOT NULL OR NEW.closure_receipt_id IS NOT NULL OR NEW.closure_xid IS NOT NULL THEN
+   RAISE EXCEPTION 'Auth receiving work must start without completion';
+  END IF;
+ ELSE
+  IF (NEW.obligation_id,NEW.control_revision,NEW.binding,NEW.restore_generation)
+   IS DISTINCT FROM (OLD.obligation_id,OLD.control_revision,OLD.binding,OLD.restore_generation)
+   OR (OLD.native_xid IS NOT NULL AND NEW.native_xid IS DISTINCT FROM OLD.native_xid)
+   OR (NEW.native_xid IS NOT NULL AND OLD.native_xid IS NULL AND NEW.native_xid<>pg_current_xact_id())
+   OR (NEW.closure_xid IS NOT NULL AND OLD.closure_xid IS NULL AND NEW.closure_xid<>pg_current_xact_id())
+   OR (OLD.closure_receipt_id IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
+   RAISE EXCEPTION 'Auth receiving work cannot replace its binding or completed receipt';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_recovery_copy_capture(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_recovery_copy_capture() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source verification%ROWTYPE; owner_id text;
+BEGIN
+  -- The source is the native INSERT in THIS transaction, not a later observation
+  -- or a caller-supplied role/version/settings assertion. Derive every role and
+  -- timestamp from its exact key. Never copy identifier, value or their hashes.
+  SELECT id,value,erasure_account_id,erasure_human_id,erasure_operator_id,erasure_client_owner_id,
+    erasure_source_client_owner_id,erasure_role_xid,erasure_role_version,erasure_format,"createdAt","expiresAt"
+    INTO source.id,source.value,source.erasure_account_id,source.erasure_human_id,source.erasure_operator_id,
+      source.erasure_client_owner_id,source.erasure_source_client_owner_id,source.erasure_role_xid,
+      source.erasure_role_version,source.erasure_format,source."createdAt",source."expiresAt"
+    FROM verification WHERE id=NEW.delivery_id;
+  IF NOT FOUND OR source.erasure_role_xid IS DISTINCT FROM txid_current()
+    OR source.erasure_role_version<>1 OR source.erasure_format IS DISTINCT FROM 'reset-v1'
+    OR source.erasure_account_id IS NULL OR source.erasure_account_id IS DISTINCT FROM source.value THEN
+    RAISE EXCEPTION 'Auth recovery Source provenance unavailable' USING ERRCODE='55000';
+  END IF;
+  NEW.account_id:=source.erasure_account_id;
+  NEW.erasure_human_id:=source.erasure_human_id;
+  NEW.erasure_operator_id:=source.erasure_operator_id;
+  NEW.erasure_client_owner_id:=source.erasure_client_owner_id;
+  NEW.erasure_source_client_owner_id:=source.erasure_source_client_owner_id;
+  NEW.created_at:=source."createdAt";
+  NEW.expires_at:=source."expiresAt";
+  NEW.erasure_role_xid:=source.erasure_role_xid;
+  NEW.erasure_role_version:=1;
+  IF NEW.status<>'intent' OR NEW.attempts<>0 OR NEW.attempted_at IS NOT NULL
+    OR NEW.code<>'receiving-adapter-unavailable' THEN
+    RAISE EXCEPTION 'Auth recovery Source must begin at intent' USING ERRCODE='55000';
+  END IF;
+  FOREACH owner_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_human_id,NEW.erasure_operator_id,
+      NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
+    PERFORM auth_erasure_admit(owner_id);
+    IF EXISTS(SELECT 1 FROM auth_erasure WHERE account_id=owner_id) THEN
+      RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_recovery_copy_producer_cut(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_recovery_copy_producer_cut() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Native role projection finishes after INSERT but inside its supported
+  -- adapter transaction. This commit-time guard refuses old reset writers.
+  IF EXISTS(SELECT 1 FROM verification WHERE id=NEW.id AND erasure_format='reset-v1'
+      AND erasure_role_xid=txid_current())
+    AND NOT EXISTS(SELECT 1 FROM auth_recovery_copy_source WHERE delivery_id=NEW.id) THEN
+    RAISE EXCEPTION 'Auth recovery Source producer unavailable' USING ERRCODE='55000';
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: auth_recovery_copy_progress(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_recovery_copy_progress() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE owner_id text;
+BEGIN
+  -- Only a receiving owner's durable verified disposition could authorize
+  -- minimization. There is no such installed adapter in this Source slice.
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION 'Auth recovery receiving disposition unavailable' USING ERRCODE='55000';
+  END IF;
+  IF ROW(NEW.delivery_id,NEW.producer,NEW.source_component,NEW.account_id,
+      NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,
+      NEW.created_at,NEW.expires_at,NEW.sink_generation,NEW.custody,NEW.erasure_role_version,NEW.erasure_role_xid)
+    IS DISTINCT FROM ROW(OLD.delivery_id,OLD.producer,OLD.source_component,OLD.account_id,
+      OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id,
+      OLD.created_at,OLD.expires_at,OLD.sink_generation,OLD.custody,OLD.erasure_role_version,OLD.erasure_role_xid) THEN
+    RAISE EXCEPTION 'Auth recovery Source is immutable' USING ERRCODE='55000';
+  END IF;
+  IF OLD.status='intent' AND NEW.status='in-flight' AND OLD.attempts=0 AND NEW.attempts=1
+    AND OLD.attempted_at IS NULL AND NEW.attempted_at IS NOT NULL
+    AND NEW.code='receiving-result-unavailable' THEN
+    FOREACH owner_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_human_id,NEW.erasure_operator_id,
+        NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
+      PERFORM auth_erasure_admit(owner_id);
+      IF EXISTS(SELECT 1 FROM auth_erasure WHERE account_id=owner_id) THEN
+        RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
+      END IF;
+    END LOOP;
+  ELSIF OLD.status='in-flight' AND NEW.status='unknown' AND NEW.attempts=OLD.attempts
+    AND NEW.attempted_at=OLD.attempted_at
+    AND NEW.code IN ('legacy-void','unsupported-result','callback-failed','callback-timeout') THEN
+    -- Late completion is technical evidence only; current erasure does not
+    -- authorize resending, invalidate the source, or certify a receiver fence.
+    NULL;
+  ELSE
+    RAISE EXCEPTION 'Auth recovery Source progress refused' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_request_parties_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_request_parties_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND
+    ROW(NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,
+      NEW.erasure_client_id,NEW.erasure_member_id,NEW.erasure_previous_operator_id,
+      NEW.erasure_stage_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,
+      NEW.erasure_actor_version,NEW.erasure_actor_id,NEW.erasure_principal_id,
+      NEW.erasure_source_client_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,
+      NEW.request_party_version,NEW.request_context_version)
+    IS DISTINCT FROM
+    ROW(OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,
+      OLD.erasure_client_id,OLD.erasure_member_id,OLD.erasure_previous_operator_id,
+      OLD.erasure_stage_id,OLD.erasure_initiator_id,OLD.erasure_delegate_id,
+      OLD.erasure_actor_version,OLD.erasure_actor_id,OLD.erasure_principal_id,
+      OLD.erasure_source_client_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id,
+      OLD.request_party_version,OLD.request_context_version) THEN
+    RAISE EXCEPTION 'Auth request parties are immutable' USING ERRCODE='55000';
+  END IF;
+  IF TG_OP='UPDATE' AND NEW.request IS NOT DISTINCT FROM OLD.request
+    AND NEW.digest IS NOT DISTINCT FROM OLD.digest AND NEW.terminal_at IS NOT NULL THEN RETURN NEW; END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_actor_id);
+  PERFORM auth_erasure_admit(NEW.erasure_principal_id);
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_require_cursor_cutover(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1152,6 +3230,126 @@ BEGIN
         RAISE EXCEPTION 'Auth cursor worker version refused';
       END IF;
     END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_cut_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_cut_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.source_cut_id IS DISTINCT FROM OLD.source_cut_id
+    OR NEW.source_verify_partition < OLD.source_verify_partition
+    OR NEW.source_revision < OLD.source_revision THEN
+    RAISE EXCEPTION 'Auth native Source cut locator is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_identity_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_identity_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR (OLD.inventory IS NOT NULL AND NEW.inventory IS DISTINCT FROM OLD.inventory)
+    OR (OLD.native_coverage_started AND NOT NEW.native_coverage_started) THEN
+    RAISE EXCEPTION 'Auth restore identity is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_live_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_live_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation THEN
+    RAISE EXCEPTION 'Auth live receiver is immutable' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME='auth_restore_live_generation' THEN
+    IF NEW.inventory IS DISTINCT FROM OLD.inventory OR NEW.source_cut_id IS DISTINCT FROM OLD.source_cut_id
+      OR NEW.replay_inventory_after<OLD.replay_inventory_after
+      OR (OLD.replay_inventory_complete AND NOT NEW.replay_inventory_complete) THEN
+      RAISE EXCEPTION 'Auth live inventory binding is immutable' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='auth_restore_live_partition' THEN
+    IF NEW.partition IS DISTINCT FROM OLD.partition OR NEW.arm IS DISTINCT FROM OLD.arm
+      OR NEW.after_ordinal<OLD.after_ordinal OR NEW.revision<>OLD.revision+1 THEN
+      RAISE EXCEPTION 'Auth live Source checkpoint is immutable' USING ERRCODE='23514';
+    END IF;
+  ELSIF NEW.obligation_id IS DISTINCT FROM OLD.obligation_id
+    OR (OLD.state='external' AND NEW.state<>'external') THEN
+    RAISE EXCEPTION 'Auth live native work identity is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_obligation_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_obligation_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.source_obligation IS NOT NULL AND NEW.source_obligation IS DISTINCT FROM OLD.source_obligation THEN
+    RAISE EXCEPTION 'Auth original Source obligation is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_replay_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_replay_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.obligation_id IS DISTINCT FROM OLD.obligation_id OR NEW.original_progress IS DISTINCT FROM OLD.original_progress
+    OR (OLD.user_replayed AND NOT NEW.user_replayed)
+    OR (OLD.native_completed_at IS NOT NULL AND NEW.native_completed_at IS DISTINCT FROM OLD.native_completed_at)
+    OR (OLD.consent_completed_at IS NOT NULL AND NEW.consent_completed_at IS DISTINCT FROM OLD.consent_completed_at)
+    OR (OLD.copies_completed_at IS NOT NULL AND NEW.copies_completed_at IS DISTINCT FROM OLD.copies_completed_at) THEN
+    RAISE EXCEPTION 'Auth restore replay evidence is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_restore_source_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_restore_source_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (OLD.source_route IS NOT NULL AND NEW.source_route IS DISTINCT FROM OLD.source_route)
+    OR (OLD.original_native_id IS NOT NULL AND NEW.original_native_id IS DISTINCT FROM OLD.original_native_id)
+    OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at
+    OR (OLD.user_deleted_at IS NOT NULL AND NEW.user_deleted_at IS DISTINCT FROM OLD.user_deleted_at)
+    OR (OLD.consent_due_at IS NOT NULL AND NEW.consent_due_at IS DISTINCT FROM OLD.consent_due_at)
+    OR (OLD.consent_completed_at IS NOT NULL AND NEW.consent_completed_at IS DISTINCT FROM OLD.consent_completed_at)
+    OR (OLD.applicable AND NOT NEW.applicable) THEN
+    RAISE EXCEPTION 'Auth restored source evidence is immutable' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
 END $$;
@@ -1281,6 +3479,9 @@ CREATE TABLE public.account (
     password text,
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp with time zone NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT account_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
     CONSTRAINT password_owner CHECK ((("providerId" = 'credential'::text) AND ("accountId" = "userId")))
 );
 
@@ -1291,7 +3492,10 @@ CREATE TABLE public.account (
 
 CREATE TABLE public.auth_attempt_account (
     account_id text NOT NULL,
-    key text NOT NULL
+    key text NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT auth_attempt_account_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
 );
 
 
@@ -1329,9 +3533,16 @@ CREATE TABLE public.auth_barrier_proof (
     erasure_session_id text,
     erasure_human_id text,
     erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
     CONSTRAINT auth_barrier_proof_account_id_check CHECK (((length(account_id) >= 1) AND (length(account_id) <= 1024))),
     CONSTRAINT auth_barrier_proof_check CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)))),
     CONSTRAINT auth_barrier_proof_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT auth_barrier_proof_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_barrier_proof_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_barrier_proof_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
     CONSTRAINT auth_barrier_proof_evidence_check CHECK (((jsonb_typeof(evidence) = 'array'::text) AND (octet_length((evidence)::text) <= 65536))),
     CONSTRAINT auth_barrier_proof_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 128))),
     CONSTRAINT auth_barrier_proof_previous_epoch_check CHECK ((previous_epoch >= 0)),
@@ -1386,7 +3597,10 @@ CREATE TABLE public.auth_client (
     metadata jsonb,
     display_name text,
     erasure_fenced boolean DEFAULT false NOT NULL,
-    display_name_writer integer
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    display_name_writer integer,
+    CONSTRAINT auth_client_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
 );
 
 
@@ -1399,7 +3613,14 @@ CREATE TABLE public.auth_client_coverage (
     legacy_after_account text,
     ready boolean DEFAULT false NOT NULL,
     ready_after timestamp with time zone DEFAULT (CURRENT_TIMESTAMP + '00:05:00'::interval) NOT NULL,
-    after_ordinal bigint DEFAULT 0 NOT NULL
+    after_ordinal bigint DEFAULT 0 NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_client_coverage_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_client_coverage_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_client_coverage_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -1411,7 +3632,14 @@ CREATE TABLE public.auth_client_reduction (
     client_id text NOT NULL,
     operation_id text NOT NULL,
     scopes text[] NOT NULL,
-    first_party boolean NOT NULL
+    first_party boolean NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_client_reduction_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_client_reduction_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_client_reduction_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -1437,7 +3665,14 @@ CREATE TABLE public.auth_client_reduction_progress (
     page_count integer,
     completed_count integer DEFAULT 0 NOT NULL,
     current_workflow_id text,
-    CONSTRAINT auth_client_reduction_progress_current_workflow_id_check CHECK ((octet_length(current_workflow_id) <= 256))
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_client_reduction_progre_erasure_source_client_owner__check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
+    CONSTRAINT auth_client_reduction_progress_current_workflow_id_check CHECK ((octet_length(current_workflow_id) <= 256)),
+    CONSTRAINT auth_client_reduction_progress_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_client_reduction_progress_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
 );
 
 
@@ -1459,6 +3694,13 @@ CREATE TABLE public.auth_consent (
     pending_scopes text[],
     pending_reference text,
     traversal_ordinal bigint,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_consent_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_consent_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_consent_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
     CONSTRAINT auth_consent_pending_pair CHECK (((pending_scopes IS NULL) = (pending_reference IS NULL))),
     CONSTRAINT auth_consent_revision_check CHECK ((revision > 0))
 );
@@ -1536,6 +3778,11 @@ CREATE TABLE public.auth_copy_work (
     source_key text,
     result_digest bytea,
     result_finished_at timestamp with time zone,
+    sdk_fence_generation text,
+    sdk_fence_closure_id uuid,
+    sdk_fence_closed_at bigint,
+    sdk_fence_pending text,
+    CONSTRAINT auth_copy_native_fence CHECK ((((sdk_fence_generation IS NULL) AND (sdk_fence_closure_id IS NULL) AND (sdk_fence_closed_at IS NULL)) OR ((sdk_fence_generation IS NOT NULL) AND (sdk_fence_generation = '2'::text) AND (sdk_fence_closure_id IS NOT NULL) AND (sdk_fence_closed_at IS NOT NULL) AND ((sdk_fence_closed_at >= 1) AND (sdk_fence_closed_at <= '9007199254740991'::bigint)) AND ready AND (result_finished_at IS NOT NULL)))),
     CONSTRAINT auth_copy_result_source CHECK (((result_digest IS NULL) = (result_finished_at IS NULL))),
     CONSTRAINT auth_copy_work_bytes_check CHECK (((bytes >= 0) AND (bytes <= 10485760))),
     CONSTRAINT auth_copy_work_check CHECK (((NOT absent) OR retired)),
@@ -1544,6 +3791,7 @@ CREATE TABLE public.auth_copy_work (
     CONSTRAINT auth_copy_work_result_digest_check CHECK ((octet_length(result_digest) = 32)),
     CONSTRAINT auth_copy_work_rows_check CHECK (((rows >= 0) AND (rows <= 139))),
     CONSTRAINT auth_copy_work_scope_count_check CHECK (((scope_count >= 1) AND (scope_count <= 16))),
+    CONSTRAINT auth_copy_work_sdk_fence_pending_check CHECK ((sdk_fence_pending = ANY (ARRAY['auth-sdk-permanent-late-writer-fence-unavailable'::text, 'auth-sdk-native-fence-receipt-mismatch'::text, 'auth-sdk-original-result-pending'::text, 'auth-sdk-original-copy-mapping-unavailable'::text, 'auth-sdk-original-source-pending'::text, 'auth-sdk-original-consumer-pending'::text, 'auth-sdk-native-copy-coverage-pending'::text, 'auth-sdk-physical-copies-pending'::text]))),
     CONSTRAINT auth_copy_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
     CONSTRAINT auth_copy_work_version_check CHECK ((version = 1)),
     CONSTRAINT auth_copy_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
@@ -1574,7 +3822,14 @@ CREATE TABLE public.auth_effect_receipt (
     committed_at timestamp with time zone,
     opening_reference text,
     erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
     CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text, 'add-passkey'::text, 'remove-passkey'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
+    CONSTRAINT auth_effect_receipt_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_effect_receipt_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_effect_receipt_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
     CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
 );
 
@@ -1624,6 +3879,7 @@ CREATE TABLE public.auth_erasure (
     copies_published_at timestamp with time zone,
     native_role_version smallint DEFAULT 0 NOT NULL,
     native_phase_version smallint DEFAULT 3 NOT NULL,
+    native_phase_upgrade jsonb,
     source_route integer,
     original_native_id text,
     recovery_copy_pending text DEFAULT 'recovery-copy-coverage'::text NOT NULL,
@@ -1633,6 +3889,7 @@ CREATE TABLE public.auth_erasure (
     CONSTRAINT auth_erasure_inventory_coverage_check CHECK ((inventory_coverage = ANY (ARRAY['unknown'::text, 'covered'::text]))),
     CONSTRAINT auth_erasure_kernel_at_check CHECK ((octet_length(kernel_at) <= 64)),
     CONSTRAINT auth_erasure_kernel_identity CHECK ((((kernel_version IS NULL) AND (kernel_at IS NULL)) OR ((kernel_version > 0) AND (kernel_at IS NOT NULL)))),
+    CONSTRAINT auth_erasure_native_phase_upgrade_check CHECK ((octet_length((native_phase_upgrade)::text) <= 16384)),
     CONSTRAINT auth_erasure_native_phase_version_check CHECK ((native_phase_version = ANY (ARRAY[1, 2, 3]))),
     CONSTRAINT auth_erasure_native_role_version_check CHECK ((native_role_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_erasure_original_native_id_check CHECK (((octet_length(original_native_id) >= 1) AND (octet_length(original_native_id) <= 1024))),
@@ -1682,7 +3939,117 @@ ALTER TABLE public.auth_erasure ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY
 CREATE TABLE public.auth_key_assertion (
     account_id text NOT NULL,
     jti text NOT NULL,
-    expires_at timestamp with time zone NOT NULL
+    expires_at timestamp with time zone NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT auth_key_assertion_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
+);
+
+
+--
+-- Name: auth_kind_consent_dependency; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_kind_consent_dependency (
+    enrollment_seq bigint NOT NULL,
+    reference_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    consumer_key_hash bytea NOT NULL,
+    account_id text NOT NULL,
+    client_id text NOT NULL,
+    requested_scopes text[] NOT NULL,
+    effective_scopes text[] NOT NULL,
+    consent_revision bigint NOT NULL,
+    client_scopes text[] NOT NULL,
+    client_first_party boolean NOT NULL,
+    consumer_route text NOT NULL,
+    owner_account_id text NOT NULL,
+    collection_id text NOT NULL,
+    preparation_id text NOT NULL,
+    origin_id text NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    fenced_transition_id uuid,
+    receipt_reference text,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    fenced_at timestamp with time zone,
+    CONSTRAINT auth_kind_consent_dependency_account_id_check CHECK (((octet_length(account_id) >= 1) AND (octet_length(account_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_check CHECK (((fenced_transition_id IS NULL) = (receipt_reference IS NULL))),
+    CONSTRAINT auth_kind_consent_dependency_check1 CHECK ((active OR ((fenced_transition_id IS NOT NULL) AND (fenced_at IS NOT NULL)))),
+    CONSTRAINT auth_kind_consent_dependency_client_id_check CHECK (((octet_length(client_id) >= 1) AND (octet_length(client_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_client_scopes_check CHECK ((cardinality(client_scopes) <= 512)),
+    CONSTRAINT auth_kind_consent_dependency_collection_id_check CHECK (((octet_length(collection_id) >= 1) AND (octet_length(collection_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_consent_revision_check CHECK ((consent_revision >= 0)),
+    CONSTRAINT auth_kind_consent_dependency_consumer_key_hash_check CHECK ((octet_length(consumer_key_hash) = 32)),
+    CONSTRAINT auth_kind_consent_dependency_consumer_route_check CHECK (((octet_length(consumer_route) >= 1) AND (octet_length(consumer_route) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_effective_scopes_check CHECK ((cardinality(effective_scopes) <= 512)),
+    CONSTRAINT auth_kind_consent_dependency_origin_id_check CHECK (((octet_length(origin_id) >= 1) AND (octet_length(origin_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_owner_account_id_check CHECK (((octet_length(owner_account_id) >= 1) AND (octet_length(owner_account_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_preparation_id_check CHECK (((octet_length(preparation_id) >= 1) AND (octet_length(preparation_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_receipt_reference_check CHECK (((receipt_reference IS NULL) OR (octet_length(receipt_reference) <= 1024))),
+    CONSTRAINT auth_kind_consent_dependency_requested_scopes_check CHECK ((cardinality(requested_scopes) <= 512))
+);
+
+
+--
+-- Name: auth_kind_consent_dependency_enrollment_seq_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.auth_kind_consent_dependency_enrollment_seq_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: auth_kind_consent_dependency_enrollment_seq_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.auth_kind_consent_dependency_enrollment_seq_seq OWNED BY public.auth_kind_consent_dependency.enrollment_seq;
+
+
+--
+-- Name: auth_kind_consent_transition; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_kind_consent_transition (
+    transition_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    transition_key text NOT NULL,
+    transition_kind text NOT NULL,
+    client_id text NOT NULL,
+    account_id text,
+    target jsonb NOT NULL,
+    frontier_seq bigint NOT NULL,
+    after_seq bigint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    applied_at timestamp with time zone,
+    CONSTRAINT auth_kind_consent_transition_account_id_check CHECK (((account_id IS NULL) OR ((octet_length(account_id) >= 1) AND (octet_length(account_id) <= 1024)))),
+    CONSTRAINT auth_kind_consent_transition_check CHECK (((after_seq >= 0) AND (after_seq <= frontier_seq))),
+    CONSTRAINT auth_kind_consent_transition_check1 CHECK (((transition_kind = 'consent'::text) = (account_id IS NOT NULL))),
+    CONSTRAINT auth_kind_consent_transition_check2 CHECK (((transition_kind = 'restore'::text) = ((client_id = '*'::text) AND (account_id IS NULL)))),
+    CONSTRAINT auth_kind_consent_transition_check3 CHECK (((state = 'applied'::text) = (applied_at IS NOT NULL))),
+    CONSTRAINT auth_kind_consent_transition_client_id_check CHECK (((octet_length(client_id) >= 1) AND (octet_length(client_id) <= 1024))),
+    CONSTRAINT auth_kind_consent_transition_frontier_seq_check CHECK ((frontier_seq >= 0)),
+    CONSTRAINT auth_kind_consent_transition_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'applied'::text]))),
+    CONSTRAINT auth_kind_consent_transition_target_check CHECK (((jsonb_typeof(target) = 'object'::text) AND (octet_length((target)::text) <= 8192))),
+    CONSTRAINT auth_kind_consent_transition_transition_key_check CHECK (((octet_length(transition_key) >= 1) AND (octet_length(transition_key) <= 1024))),
+    CONSTRAINT auth_kind_consent_transition_transition_kind_check CHECK ((transition_kind = ANY (ARRAY['consent'::text, 'client'::text, 'restore'::text])))
+);
+
+
+--
+-- Name: auth_metadata_scrub; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_metadata_scrub (
+    store text NOT NULL,
+    writer_version integer NOT NULL,
+    after_key text,
+    CONSTRAINT auth_metadata_scrub_after_key_check CHECK ((octet_length(after_key) <= 1024)),
+    CONSTRAINT auth_metadata_scrub_store_check CHECK ((store = ANY (ARRAY['auth_client'::text, 'oauthResource'::text, 'oauthClientResource'::text]))),
+    CONSTRAINT auth_metadata_scrub_writer_version_check CHECK ((writer_version = 1))
 );
 
 
@@ -1733,6 +4100,32 @@ CREATE TABLE public.auth_native_phase_deployment (
 
 
 --
+-- Name: auth_native_role_deployment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_native_role_deployment (
+    singleton boolean DEFAULT true NOT NULL,
+    version smallint NOT NULL,
+    armed boolean DEFAULT false NOT NULL,
+    store_index smallint DEFAULT 0 NOT NULL,
+    CONSTRAINT auth_native_role_deployment_singleton_check CHECK (singleton),
+    CONSTRAINT auth_native_role_deployment_store_index_check CHECK (((store_index >= 0) AND (store_index <= 28))),
+    CONSTRAINT auth_native_role_deployment_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: auth_native_role_unknown; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_native_role_unknown (
+    store text NOT NULL,
+    reason text NOT NULL,
+    CONSTRAINT auth_native_role_unknown_reason_check CHECK ((reason = ANY (ARRAY['historical-role-custody'::text, 'unsupported-producer-format'::text, 'source-unavailable'::text])))
+);
+
+
+--
 -- Name: auth_provisioning_receipt; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1750,6 +4143,11 @@ CREATE TABLE public.auth_provisioning_receipt (
     erasure_creator_id text,
     erasure_operator_id text,
     erasure_stage_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_delegate_id text,
+    erasure_initiator_id text,
+    erasure_actor_version smallint DEFAULT 0 NOT NULL,
     creation_context_version smallint DEFAULT 0 NOT NULL,
     creation_scope_digest bytea,
     creation_context jsonb,
@@ -1762,18 +4160,22 @@ CREATE TABLE public.auth_provisioning_receipt (
     erasure_source_client_id text,
     erasure_client_owner_id text,
     erasure_source_client_owner_id text,
+    CONSTRAINT auth_provisioning_evidence_complete CHECK ((((registration_id IS NULL) AND (reservation_id IS NULL) AND (authn_epoch IS NULL) AND (expires_at IS NULL) AND (owner_id IS NULL) AND (credential_id IS NULL) AND (provisioning_kind IS NULL)) OR ((registration_id IS NOT NULL) AND (reservation_id IS NOT NULL) AND (authn_epoch IS NOT NULL) AND ((authn_epoch >= 1) AND (authn_epoch <= '9007199254740991'::bigint)) AND (expires_at IS NOT NULL) AND (owner_id IS NOT NULL) AND (owner_id = account_id) AND (credential_id IS NOT NULL) AND (provisioning_kind IS NOT NULL) AND (provisioning_kind = ANY (ARRAY['password'::text, 'credentialless'::text]))))),
     CONSTRAINT auth_provisioning_receipt_creation_approval_reference_check CHECK (((octet_length(creation_approval_reference) >= 1) AND (octet_length(creation_approval_reference) <= 4096))),
     CONSTRAINT auth_provisioning_receipt_creation_context_version_check CHECK ((creation_context_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_provisioning_receipt_creation_scope_digest_check CHECK ((octet_length(creation_scope_digest) = 32)),
     CONSTRAINT auth_provisioning_receipt_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_actor_version_check CHECK ((erasure_actor_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_provisioning_receipt_erasure_client_id_check CHECK (((octet_length(erasure_client_id) >= 1) AND (octet_length(erasure_client_id) <= 1024))),
     CONSTRAINT auth_provisioning_receipt_erasure_client_owner_id_check CHECK (((octet_length(erasure_client_owner_id) >= 1) AND (octet_length(erasure_client_owner_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_delegate_id_check CHECK ((octet_length(erasure_delegate_id) <= 1024)),
     CONSTRAINT auth_provisioning_receipt_erasure_human_id_check CHECK (((octet_length(erasure_human_id) >= 1) AND (octet_length(erasure_human_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_initiator_id_check CHECK ((octet_length(erasure_initiator_id) <= 1024)),
     CONSTRAINT auth_provisioning_receipt_erasure_native_operator_id_check CHECK (((octet_length(erasure_native_operator_id) >= 1) AND (octet_length(erasure_native_operator_id) <= 1024))),
     CONSTRAINT auth_provisioning_receipt_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024))),
+    CONSTRAINT auth_provisioning_receipt_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
     CONSTRAINT auth_provisioning_receipt_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024))),
-    CONSTRAINT auth_provisioning_receipt_erasure_source_client_owner_id_check CHECK (((octet_length(erasure_source_client_owner_id) >= 1) AND (octet_length(erasure_source_client_owner_id) <= 1024))),
-    CONSTRAINT auth_provisioning_evidence_complete CHECK ((((registration_id IS NULL) AND (reservation_id IS NULL) AND (authn_epoch IS NULL) AND (expires_at IS NULL) AND (owner_id IS NULL) AND (credential_id IS NULL) AND (provisioning_kind IS NULL)) OR ((registration_id IS NOT NULL) AND (reservation_id IS NOT NULL) AND (authn_epoch IS NOT NULL) AND ((authn_epoch >= 1) AND (authn_epoch <= '9007199254740991'::bigint)) AND (expires_at IS NOT NULL) AND (owner_id IS NOT NULL) AND (owner_id = account_id) AND (credential_id IS NOT NULL) AND (provisioning_kind IS NOT NULL) AND (provisioning_kind = ANY (ARRAY['password'::text, 'credentialless'::text])))))
+    CONSTRAINT auth_provisioning_receipt_erasure_source_client_owner_id_check CHECK (((octet_length(erasure_source_client_owner_id) >= 1) AND (octet_length(erasure_source_client_owner_id) <= 1024)))
 );
 
 
@@ -1785,7 +4187,42 @@ CREATE TABLE public.auth_public_key (
     account_id text NOT NULL,
     kid text NOT NULL,
     public_jwk jsonb NOT NULL,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT auth_public_key_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
     CONSTRAINT auth_public_key_public_jwk_check CHECK ((((public_jwk ->> 'alg'::text) = 'ES256'::text) AND (NOT (public_jwk ? 'd'::text)) AND (NOT (public_jwk ? 'k'::text))))
+);
+
+
+--
+-- Name: auth_receiving_copy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_receiving_copy (
+    obligation_id bigint NOT NULL,
+    control_revision bigint NOT NULL,
+    workflow_id text NOT NULL,
+    sdk_closure_id uuid NOT NULL,
+    sdk_closed_at bigint NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT auth_receiving_copy_workflow_id_check CHECK ((octet_length(workflow_id) <= 1024))
+);
+
+
+--
+-- Name: auth_receiving_work; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_receiving_work (
+    obligation_id bigint NOT NULL,
+    control_revision bigint NOT NULL,
+    binding jsonb NOT NULL,
+    restore_generation text,
+    native_xid xid8,
+    closure_receipt_id uuid,
+    closure_xid xid8,
+    CONSTRAINT auth_receiving_work_binding_check CHECK ((octet_length((binding)::text) <= 1024)),
+    CONSTRAINT auth_receiving_work_check CHECK (((closure_receipt_id IS NULL) = (closure_xid IS NULL)))
 );
 
 
@@ -1799,7 +4236,14 @@ CREATE TABLE public.auth_recent_oidc_session (
     expires_at timestamp with time zone NOT NULL,
     erasure_client_id text,
     erasure_human_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_recent_oidc_session_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_recent_oidc_session_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_recent_oidc_session_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -1815,8 +4259,52 @@ CREATE TABLE public.auth_recovery (
     consumed_operation text,
     consumed_verification_id text,
     consumed_at timestamp with time zone,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
     CONSTRAINT auth_recovery_authn_epoch_check CHECK ((authn_epoch >= 0)),
-    CONSTRAINT auth_recovery_consumption CHECK ((((consumed_operation IS NULL) AND (consumed_verification_id IS NULL) AND (consumed_at IS NULL)) OR ((consumed_operation IS NOT NULL) AND (consumed_verification_id IS NOT NULL) AND (consumed_at IS NOT NULL))))
+    CONSTRAINT auth_recovery_consumption CHECK ((((consumed_operation IS NULL) AND (consumed_verification_id IS NULL) AND (consumed_at IS NULL)) OR ((consumed_operation IS NOT NULL) AND (consumed_verification_id IS NOT NULL) AND (consumed_at IS NOT NULL)))),
+    CONSTRAINT auth_recovery_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
+);
+
+
+--
+-- Name: auth_recovery_copy_source; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_recovery_copy_source (
+    delivery_id text NOT NULL,
+    producer text DEFAULT 'better-auth-reset/1.8.0-beta.2/source-v1'::text NOT NULL,
+    source_component text DEFAULT 'verification'::text NOT NULL,
+    account_id text NOT NULL,
+    erasure_human_id text,
+    erasure_operator_id text,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    sink_generation text,
+    custody text DEFAULT 'unknown'::text NOT NULL,
+    status text DEFAULT 'intent'::text NOT NULL,
+    code text DEFAULT 'receiving-adapter-unavailable'::text NOT NULL,
+    attempts smallint DEFAULT 0 NOT NULL,
+    attempted_at timestamp with time zone,
+    erasure_role_version smallint DEFAULT 1 NOT NULL,
+    erasure_role_xid bigint NOT NULL,
+    CONSTRAINT auth_recovery_copy_source_account_id_check CHECK (((octet_length(account_id) >= 1) AND (octet_length(account_id) <= 1024))),
+    CONSTRAINT auth_recovery_copy_source_attempts_check CHECK ((attempts = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_recovery_copy_source_code_check CHECK ((code = ANY (ARRAY['receiving-adapter-unavailable'::text, 'receiving-result-unavailable'::text, 'legacy-void'::text, 'unsupported-result'::text, 'callback-failed'::text, 'callback-timeout'::text]))),
+    CONSTRAINT auth_recovery_copy_source_custody_check CHECK ((custody = 'unknown'::text)),
+    CONSTRAINT auth_recovery_copy_source_delivery_id_check CHECK (((octet_length(delivery_id) >= 1) AND (octet_length(delivery_id) <= 1024))),
+    CONSTRAINT auth_recovery_copy_source_delivery_id_check1 CHECK ((octet_length((to_json(delivery_id))::text) <= 768)),
+    CONSTRAINT auth_recovery_copy_source_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_recovery_copy_source_erasure_human_id_check CHECK ((octet_length(erasure_human_id) <= 1024)),
+    CONSTRAINT auth_recovery_copy_source_erasure_operator_id_check CHECK ((octet_length(erasure_operator_id) <= 1024)),
+    CONSTRAINT auth_recovery_copy_source_erasure_role_version_check CHECK ((erasure_role_version = 1)),
+    CONSTRAINT auth_recovery_copy_source_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
+    CONSTRAINT auth_recovery_copy_source_producer_check CHECK ((producer = 'better-auth-reset/1.8.0-beta.2/source-v1'::text)),
+    CONSTRAINT auth_recovery_copy_source_sink_generation_check CHECK ((sink_generation IS NULL)),
+    CONSTRAINT auth_recovery_copy_source_source_component_check CHECK ((source_component = 'verification'::text)),
+    CONSTRAINT auth_recovery_copy_source_status_check CHECK ((status = ANY (ARRAY['intent'::text, 'in-flight'::text, 'unknown'::text])))
 );
 
 
@@ -1837,9 +4325,16 @@ CREATE TABLE public.auth_recovery_establishment (
     erasure_client_id text,
     erasure_human_id text,
     erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
     CONSTRAINT auth_recovery_establishment_authn_epoch_check CHECK ((authn_epoch > 0)),
     CONSTRAINT auth_recovery_establishment_credential_fingerprint_check CHECK ((credential_fingerprint ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT auth_recovery_establishment_effect_commitment_check CHECK ((effect_commitment ~ '^[0-9a-f]{64}$'::text))
+    CONSTRAINT auth_recovery_establishment_effect_commitment_check CHECK ((effect_commitment ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT auth_recovery_establishment_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_recovery_establishment_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_recovery_establishment_erasure_source_client_owner_i_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -1868,6 +4363,11 @@ CREATE TABLE public.auth_registration_stage (
     consumer_workflow_id text,
     activation_key text,
     operator_reservation_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_delegate_id text,
+    erasure_initiator_id text,
+    erasure_actor_version smallint DEFAULT 0 NOT NULL,
     creation_context_version smallint DEFAULT 0 NOT NULL,
     creation_scope_digest bytea,
     creation_context jsonb,
@@ -1884,13 +4384,139 @@ CREATE TABLE public.auth_registration_stage (
     CONSTRAINT auth_registration_stage_creation_context_version_check CHECK ((creation_context_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_registration_stage_creation_scope_digest_check CHECK ((octet_length(creation_scope_digest) = 32)),
     CONSTRAINT auth_registration_stage_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_actor_version_check CHECK ((erasure_actor_version = ANY (ARRAY[0, 1]))),
     CONSTRAINT auth_registration_stage_erasure_client_id_check CHECK (((octet_length(erasure_client_id) >= 1) AND (octet_length(erasure_client_id) <= 1024))),
     CONSTRAINT auth_registration_stage_erasure_client_owner_id_check CHECK (((octet_length(erasure_client_owner_id) >= 1) AND (octet_length(erasure_client_owner_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_delegate_id_check CHECK ((octet_length(erasure_delegate_id) <= 1024)),
     CONSTRAINT auth_registration_stage_erasure_human_id_check CHECK (((octet_length(erasure_human_id) >= 1) AND (octet_length(erasure_human_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_initiator_id_check CHECK ((octet_length(erasure_initiator_id) <= 1024)),
     CONSTRAINT auth_registration_stage_erasure_native_operator_id_check CHECK (((octet_length(erasure_native_operator_id) >= 1) AND (octet_length(erasure_native_operator_id) <= 1024))),
     CONSTRAINT auth_registration_stage_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024))),
+    CONSTRAINT auth_registration_stage_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
     CONSTRAINT auth_registration_stage_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024))),
     CONSTRAINT auth_registration_stage_erasure_source_client_owner_id_check CHECK (((octet_length(erasure_source_client_owner_id) >= 1) AND (octet_length(erasure_source_client_owner_id) <= 1024)))
+);
+
+
+--
+-- Name: auth_restore_generation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_generation (
+    generation text NOT NULL,
+    inventory jsonb,
+    native_coverage_started boolean DEFAULT false NOT NULL,
+    source_cut_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source_cut jsonb,
+    source_cursor jsonb DEFAULT '{"partition": 0, "afterOrdinal": "0"}'::jsonb,
+    source_verify_partition integer DEFAULT 0 NOT NULL,
+    source_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT auth_restore_generation_check CHECK (((NOT native_coverage_started) OR (inventory IS NOT NULL))),
+    CONSTRAINT auth_restore_generation_generation_check CHECK (((octet_length(generation) >= 1) AND (octet_length(generation) <= 1024))),
+    CONSTRAINT auth_restore_generation_inventory_check CHECK ((octet_length((inventory)::text) <= 16384)),
+    CONSTRAINT auth_restore_generation_source_cursor_check CHECK ((octet_length((source_cursor)::text) <= 128)),
+    CONSTRAINT auth_restore_generation_source_cut_check CHECK ((octet_length((source_cut)::text) <= 1024)),
+    CONSTRAINT auth_restore_generation_source_revision_check CHECK ((source_revision >= 0)),
+    CONSTRAINT auth_restore_generation_source_verify_partition_check CHECK (((source_verify_partition >= 0) AND (source_verify_partition <= 4096)))
+);
+
+
+--
+-- Name: auth_restore_live_generation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_generation (
+    generation text NOT NULL,
+    inventory jsonb NOT NULL,
+    source_cut_id uuid NOT NULL,
+    live_partition integer DEFAULT 0 NOT NULL,
+    live_verified_partitions integer DEFAULT 0 NOT NULL,
+    reconcile_turn integer DEFAULT 0 NOT NULL,
+    replay_after bigint DEFAULT 0 NOT NULL,
+    replay_inventory_after bigint DEFAULT 0 NOT NULL,
+    replay_inventory_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_restore_live_generation_generation_check CHECK (((octet_length(generation) >= 1) AND (octet_length(generation) <= 1024))),
+    CONSTRAINT auth_restore_live_generation_inventory_check CHECK ((octet_length((inventory)::text) <= 16384)),
+    CONSTRAINT auth_restore_live_generation_live_partition_check CHECK (((live_partition >= 0) AND (live_partition <= 4095))),
+    CONSTRAINT auth_restore_live_generation_live_verified_partitions_check CHECK (((live_verified_partitions >= 0) AND (live_verified_partitions <= 4096))),
+    CONSTRAINT auth_restore_live_generation_reconcile_turn_check CHECK ((reconcile_turn = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_restore_live_generation_replay_after_check CHECK ((replay_after >= 0)),
+    CONSTRAINT auth_restore_live_generation_replay_inventory_after_check CHECK ((replay_inventory_after >= 0))
+);
+
+
+--
+-- Name: auth_restore_live_partition; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_partition (
+    generation text NOT NULL,
+    partition integer NOT NULL,
+    arm jsonb NOT NULL,
+    after_ordinal bigint NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    page jsonb,
+    verification jsonb,
+    verified boolean DEFAULT false NOT NULL,
+    CONSTRAINT auth_restore_live_partition_after_ordinal_check CHECK ((after_ordinal >= 0)),
+    CONSTRAINT auth_restore_live_partition_arm_check CHECK ((octet_length((arm)::text) <= 8192)),
+    CONSTRAINT auth_restore_live_partition_page_check CHECK ((octet_length((page)::text) <= 65536)),
+    CONSTRAINT auth_restore_live_partition_partition_check CHECK (((partition >= 0) AND (partition <= 4095))),
+    CONSTRAINT auth_restore_live_partition_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT auth_restore_live_partition_verification_check CHECK ((octet_length((verification)::text) <= 8192))
+);
+
+
+--
+-- Name: auth_restore_live_work; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_live_work (
+    generation text NOT NULL,
+    obligation_id bigint NOT NULL,
+    state text DEFAULT 'native'::text NOT NULL,
+    CONSTRAINT auth_restore_live_work_obligation_id_check CHECK ((obligation_id > 0)),
+    CONSTRAINT auth_restore_live_work_state_check CHECK ((state = ANY (ARRAY['native'::text, 'receiving'::text, 'external'::text])))
+);
+
+
+--
+-- Name: auth_restore_replay; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_replay (
+    generation text NOT NULL,
+    obligation_id bigint NOT NULL,
+    original_progress jsonb NOT NULL,
+    phase integer DEFAULT 0 NOT NULL,
+    after_key text DEFAULT ''::text NOT NULL,
+    client_id text,
+    client_phase integer DEFAULT 0 NOT NULL,
+    user_replayed boolean DEFAULT false NOT NULL,
+    native_completed_at timestamp with time zone,
+    consent_completed_at timestamp with time zone,
+    copies_completed_at timestamp with time zone,
+    pending_code text DEFAULT 'native'::text NOT NULL,
+    source_obligation jsonb,
+    CONSTRAINT auth_restore_replay_after_key_check CHECK ((octet_length(after_key) <= 1024)),
+    CONSTRAINT auth_restore_replay_client_id_check CHECK ((octet_length(client_id) <= 1024)),
+    CONSTRAINT auth_restore_replay_original_progress_check CHECK ((octet_length((original_progress)::text) <= 16384)),
+    CONSTRAINT auth_restore_replay_source_obligation_check CHECK ((octet_length((source_obligation)::text) <= 1024))
+);
+
+
+--
+-- Name: auth_restore_source_partition; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_restore_source_partition (
+    generation text NOT NULL,
+    partition integer NOT NULL,
+    page jsonb NOT NULL,
+    verification jsonb,
+    CONSTRAINT auth_restore_source_partition_page_check CHECK ((octet_length((page)::text) <= 65536)),
+    CONSTRAINT auth_restore_source_partition_partition_check CHECK (((partition >= 0) AND (partition <= 4095))),
+    CONSTRAINT auth_restore_source_partition_verification_check CHECK ((octet_length((verification)::text) <= 2048))
 );
 
 
@@ -1905,7 +4531,14 @@ CREATE TABLE public.auth_session_opening (
     operator_account_id text NOT NULL,
     receipt_id text NOT NULL,
     opened_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    erasure_client_id text
+    erasure_client_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT auth_session_opening_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_session_opening_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_session_opening_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -1979,7 +4612,31 @@ CREATE TABLE public.auth_workflow_request (
     erasure_member_id text,
     erasure_previous_operator_id text,
     terminal_at timestamp with time zone,
-    erasure_stage_id text
+    erasure_stage_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    erasure_delegate_id text,
+    erasure_initiator_id text,
+    erasure_actor_version smallint DEFAULT 0 NOT NULL,
+    erasure_actor_id text,
+    erasure_principal_id text,
+    erasure_source_client_id text,
+    request_party_version smallint DEFAULT 0 NOT NULL,
+    request_context_version smallint DEFAULT 0 NOT NULL,
+    CONSTRAINT auth_request_party_context CHECK (((request_party_version = 0) OR ((request_context_version = 1) AND (erasure_actor_version = 1) AND (erasure_actor_id IS NOT NULL) AND (erasure_source_client_id IS NOT NULL)))),
+    CONSTRAINT auth_workflow_request_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024))),
+    CONSTRAINT auth_workflow_request_erasure_actor_version_check CHECK ((erasure_actor_version = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_workflow_request_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT auth_workflow_request_erasure_delegate_id_check CHECK ((octet_length(erasure_delegate_id) <= 1024)),
+    CONSTRAINT auth_workflow_request_erasure_initiator_id_check CHECK ((octet_length(erasure_initiator_id) <= 1024)),
+    CONSTRAINT auth_workflow_request_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024))),
+    CONSTRAINT auth_workflow_request_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT auth_workflow_request_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024))),
+    CONSTRAINT auth_workflow_request_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024)),
+    CONSTRAINT auth_workflow_request_request_context_version_check CHECK ((request_context_version = ANY (ARRAY[0, 1]))),
+    CONSTRAINT auth_workflow_request_request_party_version_check CHECK ((request_party_version = ANY (ARRAY[0, 1])))
 );
 
 
@@ -2020,7 +4677,14 @@ CREATE TABLE public."oauthAccessToken" (
     scopes jsonb NOT NULL,
     erasure_source_client_id text,
     erasure_human_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT "oauthAccessToken_erasure_client_owner_id_check" CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT "oauthAccessToken_erasure_role_version_check" CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT "oauthAccessToken_erasure_source_client_owner_id_check" CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2031,7 +4695,14 @@ CREATE TABLE public."oauthAccessToken" (
 CREATE TABLE public."oauthClientAssertion" (
     id text NOT NULL,
     "expiresAt" timestamp with time zone NOT NULL,
-    erasure_client_id text
+    erasure_client_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT "oauthClientAssertion_erasure_client_owner_id_check" CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT "oauthClientAssertion_erasure_role_version_check" CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT "oauthClientAssertion_erasure_source_client_owner_id_check" CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2044,7 +4715,14 @@ CREATE TABLE public."oauthClientResource" (
     "clientId" text NOT NULL,
     "resourceId" text NOT NULL,
     metadata jsonb,
-    "createdAt" timestamp with time zone
+    "createdAt" timestamp with time zone,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT "oauthClientResource_erasure_client_owner_id_check" CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT "oauthClientResource_erasure_role_version_check" CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT "oauthClientResource_erasure_source_client_owner_id_check" CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2061,7 +4739,14 @@ CREATE TABLE public."oauthRefreshFamily" (
     erasure_source_client_id text,
     erasure_account_id text,
     erasure_human_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT "oauthRefreshFamily_erasure_client_owner_id_check" CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT "oauthRefreshFamily_erasure_role_version_check" CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT "oauthRefreshFamily_erasure_source_client_owner_id_check" CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2092,7 +4777,14 @@ CREATE TABLE public."oauthRefreshToken" (
     scopes jsonb NOT NULL,
     erasure_source_client_id text,
     erasure_human_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT "oauthRefreshToken_erasure_client_owner_id_check" CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT "oauthRefreshToken_erasure_role_version_check" CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT "oauthRefreshToken_erasure_source_client_owner_id_check" CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2136,7 +4828,10 @@ CREATE TABLE public.passkey (
     transports text,
     "createdAt" timestamp with time zone NOT NULL,
     aaguid text,
-    last_used_at timestamp with time zone
+    last_used_at timestamp with time zone,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT passkey_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
 );
 
 
@@ -2169,7 +4864,14 @@ CREATE TABLE public.session (
     "authMethods" text NOT NULL,
     erasure_human_id text,
     erasure_operator_id text,
-    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'pop'::text, 'private_key_jwt'::text, 'operator'::text]))))
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'pop'::text, 'private_key_jwt'::text, 'operator'::text])))),
+    CONSTRAINT session_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT session_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT session_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
 
 
@@ -2187,7 +4889,10 @@ CREATE TABLE public."user" (
     "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     sessions_bounded boolean DEFAULT true NOT NULL,
     traversal_ordinal bigint,
-    CONSTRAINT inert_profile CHECK (((name = ''::text) AND (image IS NULL)))
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    CONSTRAINT inert_profile CHECK (((name = ''::text) AND (image IS NULL))),
+    CONSTRAINT user_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1])))
 );
 
 
@@ -2207,8 +4912,24 @@ CREATE TABLE public.verification (
     erasure_client_id text,
     erasure_session_id text,
     erasure_human_id text,
-    erasure_operator_id text
+    erasure_operator_id text,
+    erasure_role_version smallint DEFAULT 0 NOT NULL,
+    erasure_role_xid bigint,
+    erasure_client_owner_id text,
+    erasure_source_client_owner_id text,
+    erasure_format text,
+    CONSTRAINT verification_erasure_client_owner_id_check CHECK ((octet_length(erasure_client_owner_id) <= 1024)),
+    CONSTRAINT verification_erasure_format_check CHECK ((erasure_format = ANY (ARRAY['reset-v1'::text, 'webauthn-v1'::text, 'webauthn-anonymous-v1'::text, 'code-v1'::text, 'unknown'::text]))),
+    CONSTRAINT verification_erasure_role_version_check CHECK ((erasure_role_version = ANY (ARRAY['-1'::integer, 0, 1]))),
+    CONSTRAINT verification_erasure_source_client_owner_id_check CHECK ((octet_length(erasure_source_client_owner_id) <= 1024))
 );
+
+
+--
+-- Name: auth_kind_consent_dependency enrollment_seq; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_dependency ALTER COLUMN enrollment_seq SET DEFAULT nextval('public.auth_kind_consent_dependency_enrollment_seq_seq'::regclass);
 
 
 --
@@ -2404,6 +5125,54 @@ ALTER TABLE ONLY public.auth_key_assertion
 
 
 --
+-- Name: auth_kind_consent_dependency auth_kind_consent_dependency_consumer_key_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_dependency
+    ADD CONSTRAINT auth_kind_consent_dependency_consumer_key_hash_key UNIQUE (consumer_key_hash);
+
+
+--
+-- Name: auth_kind_consent_dependency auth_kind_consent_dependency_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_dependency
+    ADD CONSTRAINT auth_kind_consent_dependency_pkey PRIMARY KEY (enrollment_seq);
+
+
+--
+-- Name: auth_kind_consent_dependency auth_kind_consent_dependency_reference_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_dependency
+    ADD CONSTRAINT auth_kind_consent_dependency_reference_id_key UNIQUE (reference_id);
+
+
+--
+-- Name: auth_kind_consent_transition auth_kind_consent_transition_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_transition
+    ADD CONSTRAINT auth_kind_consent_transition_pkey PRIMARY KEY (transition_id);
+
+
+--
+-- Name: auth_kind_consent_transition auth_kind_consent_transition_transition_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_kind_consent_transition
+    ADD CONSTRAINT auth_kind_consent_transition_transition_key_key UNIQUE (transition_key);
+
+
+--
+-- Name: auth_metadata_scrub auth_metadata_scrub_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_metadata_scrub
+    ADD CONSTRAINT auth_metadata_scrub_pkey PRIMARY KEY (store);
+
+
+--
 -- Name: auth_native_consumer_proof auth_native_consumer_proof_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2425,6 +5194,22 @@ ALTER TABLE ONLY public.auth_native_credential_terminal
 
 ALTER TABLE ONLY public.auth_native_phase_deployment
     ADD CONSTRAINT auth_native_phase_deployment_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: auth_native_role_deployment auth_native_role_deployment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_role_deployment
+    ADD CONSTRAINT auth_native_role_deployment_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: auth_native_role_unknown auth_native_role_unknown_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_native_role_unknown
+    ADD CONSTRAINT auth_native_role_unknown_pkey PRIMARY KEY (store, reason);
 
 
 --
@@ -2452,11 +5237,35 @@ ALTER TABLE ONLY public.auth_public_key
 
 
 --
+-- Name: auth_receiving_copy auth_receiving_copy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_receiving_copy
+    ADD CONSTRAINT auth_receiving_copy_pkey PRIMARY KEY (obligation_id, control_revision, workflow_id);
+
+
+--
+-- Name: auth_receiving_work auth_receiving_work_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_receiving_work
+    ADD CONSTRAINT auth_receiving_work_pkey PRIMARY KEY (obligation_id, control_revision);
+
+
+--
 -- Name: auth_recent_oidc_session auth_recent_oidc_session_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_recent_oidc_session
     ADD CONSTRAINT auth_recent_oidc_session_pkey PRIMARY KEY (session_id);
+
+
+--
+-- Name: auth_recovery_copy_source auth_recovery_copy_source_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_copy_source
+    ADD CONSTRAINT auth_recovery_copy_source_pkey PRIMARY KEY (delivery_id);
 
 
 --
@@ -2513,6 +5322,54 @@ ALTER TABLE ONLY public.auth_registration_stage
 
 ALTER TABLE ONLY public.auth_registration_stage
     ADD CONSTRAINT auth_registration_stage_request_key_key UNIQUE (request_key);
+
+
+--
+-- Name: auth_restore_generation auth_restore_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_generation
+    ADD CONSTRAINT auth_restore_generation_pkey PRIMARY KEY (generation);
+
+
+--
+-- Name: auth_restore_live_generation auth_restore_live_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_generation
+    ADD CONSTRAINT auth_restore_live_generation_pkey PRIMARY KEY (generation);
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_partition_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_partition
+    ADD CONSTRAINT auth_restore_live_partition_pkey PRIMARY KEY (generation, partition);
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_work_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_work
+    ADD CONSTRAINT auth_restore_live_work_pkey PRIMARY KEY (generation, obligation_id);
+
+
+--
+-- Name: auth_restore_replay auth_restore_replay_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_replay
+    ADD CONSTRAINT auth_restore_replay_pkey PRIMARY KEY (generation, obligation_id);
+
+
+--
+-- Name: auth_restore_source_partition auth_restore_source_partition_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_source_partition
+    ADD CONSTRAINT auth_restore_source_partition_pkey PRIMARY KEY (generation, partition);
 
 
 --
@@ -2800,6 +5657,41 @@ CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, 
 
 
 --
+-- Name: auth_kind_consent_by_account_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_kind_consent_by_account_client ON public.auth_kind_consent_dependency USING btree (account_id, client_id, enrollment_seq) WHERE active;
+
+
+--
+-- Name: auth_kind_consent_by_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_kind_consent_by_client ON public.auth_kind_consent_dependency USING btree (client_id, enrollment_seq) WHERE active;
+
+
+--
+-- Name: auth_kind_consent_transition_pending_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_kind_consent_transition_pending_client ON public.auth_kind_consent_transition USING btree (client_id, account_id, transition_id) WHERE (state <> 'applied'::text);
+
+
+--
+-- Name: auth_native_proof_provisioning_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_native_proof_provisioning_stage ON public.auth_provisioning_receipt USING btree (erasure_stage_id, idempotency_key);
+
+
+--
+-- Name: auth_native_proof_request_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_native_proof_request_stage ON public.auth_workflow_request USING btree (erasure_stage_id, workflow_id);
+
+
+--
 -- Name: auth_provisioning_receipt_credential_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2835,6 +5727,20 @@ CREATE INDEX auth_registration_stage_due ON public.auth_registration_stage USING
 
 
 --
+-- Name: auth_restore_live_work_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_restore_live_work_pending ON public.auth_restore_live_work USING btree (generation, obligation_id) WHERE (state <> 'external'::text);
+
+
+--
+-- Name: auth_restore_live_work_state; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_restore_live_work_state ON public.auth_restore_live_work USING btree (generation, state, obligation_id);
+
+
+--
 -- Name: auth_session_opening_subject_account_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2853,6 +5759,132 @@ CREATE UNIQUE INDEX auth_user_ordinal ON public."user" USING btree (traversal_or
 --
 
 CREATE INDEX auth_workflow_request_automated_registration ON public.auth_workflow_request USING btree (((request ->> 'registrationId'::text))) WHERE ((request ->> 'kind'::text) = 'automated'::text);
+
+
+--
+-- Name: creation_receipt_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_actor ON public.auth_provisioning_receipt USING btree (erasure_actor_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_client ON public.auth_provisioning_receipt USING btree (erasure_client_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_client_owner ON public.auth_provisioning_receipt USING btree (erasure_client_owner_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_human ON public.auth_provisioning_receipt USING btree (erasure_human_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_native_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_native_operator ON public.auth_provisioning_receipt USING btree (erasure_native_operator_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_principal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_principal ON public.auth_provisioning_receipt USING btree (erasure_principal_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_source_client ON public.auth_provisioning_receipt USING btree (erasure_source_client_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_source_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_source_client_owner ON public.auth_provisioning_receipt USING btree (erasure_source_client_owner_id, idempotency_key);
+
+
+--
+-- Name: creation_receipt_unknown; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_receipt_unknown ON public.auth_provisioning_receipt USING btree (idempotency_key) WHERE (creation_context_version = 0);
+
+
+--
+-- Name: creation_stage_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_actor ON public.auth_registration_stage USING btree (erasure_actor_id, registration_id);
+
+
+--
+-- Name: creation_stage_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_client ON public.auth_registration_stage USING btree (erasure_client_id, registration_id);
+
+
+--
+-- Name: creation_stage_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_client_owner ON public.auth_registration_stage USING btree (erasure_client_owner_id, registration_id);
+
+
+--
+-- Name: creation_stage_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_human ON public.auth_registration_stage USING btree (erasure_human_id, registration_id);
+
+
+--
+-- Name: creation_stage_native_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_native_operator ON public.auth_registration_stage USING btree (erasure_native_operator_id, registration_id);
+
+
+--
+-- Name: creation_stage_principal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_principal ON public.auth_registration_stage USING btree (erasure_principal_id, registration_id);
+
+
+--
+-- Name: creation_stage_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_source_client ON public.auth_registration_stage USING btree (erasure_source_client_id, registration_id);
+
+
+--
+-- Name: creation_stage_source_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_source_client_owner ON public.auth_registration_stage USING btree (erasure_source_client_owner_id, registration_id);
+
+
+--
+-- Name: creation_stage_unknown; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creation_stage_unknown ON public.auth_registration_stage USING btree (registration_id) WHERE (creation_context_version = 0);
 
 
 --
@@ -3262,6 +6294,13 @@ CREATE INDEX erasure_provisioning_operator ON public.auth_provisioning_receipt U
 
 
 --
+-- Name: erasure_request_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_actor ON public.auth_workflow_request USING btree (erasure_actor_id, workflow_id);
+
+
+--
 -- Name: erasure_request_client; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3297,10 +6336,31 @@ CREATE INDEX erasure_request_previous_operator ON public.auth_workflow_request U
 
 
 --
+-- Name: erasure_request_principal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_principal ON public.auth_workflow_request USING btree (erasure_principal_id, workflow_id);
+
+
+--
+-- Name: erasure_request_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_source_client ON public.auth_workflow_request USING btree (erasure_source_client_id, workflow_id);
+
+
+--
 -- Name: erasure_request_subject; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX erasure_request_subject ON public.auth_workflow_request USING btree (erasure_subject_id, workflow_id);
+
+
+--
+-- Name: erasure_request_unknown_context; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_unknown_context ON public.auth_workflow_request USING btree (workflow_id) WHERE (request_party_version = 0);
 
 
 --
@@ -3371,6 +6431,482 @@ CREATE INDEX erasure_verification_4 ON public.verification USING btree (erasure_
 --
 
 CREATE INDEX erasure_verification_source_client ON public.verification USING btree (erasure_source_client_id, id);
+
+
+--
+-- Name: native_role_account_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_account_pending ON public.account USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_attempt_account_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_attempt_account_pending ON public.auth_attempt_account USING btree (account_id, key) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_barrier_proof_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_barrier_proof_0 ON public.auth_barrier_proof USING btree (erasure_client_owner_id, reference);
+
+
+--
+-- Name: native_role_auth_barrier_proof_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_barrier_proof_1 ON public.auth_barrier_proof USING btree (erasure_source_client_owner_id, reference);
+
+
+--
+-- Name: native_role_auth_barrier_proof_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_barrier_proof_pending ON public.auth_barrier_proof USING btree (reference) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_client_coverage_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_coverage_0 ON public.auth_client_coverage USING btree (erasure_client_owner_id, client_id);
+
+
+--
+-- Name: native_role_auth_client_coverage_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_coverage_1 ON public.auth_client_coverage USING btree (erasure_source_client_owner_id, client_id);
+
+
+--
+-- Name: native_role_auth_client_coverage_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_coverage_pending ON public.auth_client_coverage USING btree (client_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_client_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_pending ON public.auth_client USING btree (client_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_client_reduction_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_0 ON public.auth_client_reduction USING btree (erasure_client_owner_id, client_id);
+
+
+--
+-- Name: native_role_auth_client_reduction_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_1 ON public.auth_client_reduction USING btree (erasure_source_client_owner_id, client_id);
+
+
+--
+-- Name: native_role_auth_client_reduction_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_pending ON public.auth_client_reduction USING btree (client_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_client_reduction_progress_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_progress_0 ON public.auth_client_reduction_progress USING btree (erasure_client_owner_id, operation_id);
+
+
+--
+-- Name: native_role_auth_client_reduction_progress_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_progress_1 ON public.auth_client_reduction_progress USING btree (erasure_source_client_owner_id, operation_id);
+
+
+--
+-- Name: native_role_auth_client_reduction_progress_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_client_reduction_progress_pending ON public.auth_client_reduction_progress USING btree (operation_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_consent_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_consent_0 ON public.auth_consent USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_auth_consent_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_consent_1 ON public.auth_consent USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_auth_consent_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_consent_pending ON public.auth_consent USING btree (account_id, client_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_effect_receipt_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_effect_receipt_0 ON public.auth_effect_receipt USING btree (erasure_client_owner_id, receipt_id);
+
+
+--
+-- Name: native_role_auth_effect_receipt_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (erasure_source_client_owner_id, receipt_id);
+
+
+--
+-- Name: native_role_auth_effect_receipt_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_effect_receipt_pending ON public.auth_effect_receipt USING btree (receipt_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_key_assertion_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_key_assertion_pending ON public.auth_key_assertion USING btree (account_id, jti) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_provisioning_receipt_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_provisioning_receipt_0 ON public.auth_provisioning_receipt USING btree (erasure_delegate_id, idempotency_key);
+
+
+--
+-- Name: native_role_auth_provisioning_receipt_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_provisioning_receipt_1 ON public.auth_provisioning_receipt USING btree (erasure_initiator_id, idempotency_key);
+
+
+--
+-- Name: native_role_auth_provisioning_receipt_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_provisioning_receipt_pending ON public.auth_provisioning_receipt USING btree (idempotency_key) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_public_key_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_public_key_pending ON public.auth_public_key USING btree (account_id, kid) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_recent_oidc_session_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recent_oidc_session_0 ON public.auth_recent_oidc_session USING btree (erasure_client_owner_id, session_id);
+
+
+--
+-- Name: native_role_auth_recent_oidc_session_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recent_oidc_session_1 ON public.auth_recent_oidc_session USING btree (erasure_source_client_owner_id, session_id);
+
+
+--
+-- Name: native_role_auth_recent_oidc_session_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recent_oidc_session_pending ON public.auth_recent_oidc_session USING btree (session_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_recovery_copy_source_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recovery_copy_source_pending ON public.auth_recovery_copy_source USING btree (delivery_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_recovery_establishment_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recovery_establishment_0 ON public.auth_recovery_establishment USING btree (erasure_client_owner_id, reference);
+
+
+--
+-- Name: native_role_auth_recovery_establishment_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recovery_establishment_1 ON public.auth_recovery_establishment USING btree (erasure_source_client_owner_id, reference);
+
+
+--
+-- Name: native_role_auth_recovery_establishment_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recovery_establishment_pending ON public.auth_recovery_establishment USING btree (reference) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_recovery_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_recovery_pending ON public.auth_recovery USING btree (proof_hash) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_registration_stage_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_registration_stage_0 ON public.auth_registration_stage USING btree (erasure_delegate_id, registration_id);
+
+
+--
+-- Name: native_role_auth_registration_stage_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_registration_stage_1 ON public.auth_registration_stage USING btree (erasure_initiator_id, registration_id);
+
+
+--
+-- Name: native_role_auth_registration_stage_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_registration_stage_pending ON public.auth_registration_stage USING btree (registration_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_session_opening_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_session_opening_0 ON public.auth_session_opening USING btree (erasure_client_owner_id, session_id);
+
+
+--
+-- Name: native_role_auth_session_opening_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_session_opening_1 ON public.auth_session_opening USING btree (erasure_source_client_owner_id, session_id);
+
+
+--
+-- Name: native_role_auth_session_opening_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_session_opening_pending ON public.auth_session_opening USING btree (session_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_auth_workflow_request_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_workflow_request_0 ON public.auth_workflow_request USING btree (erasure_client_owner_id, workflow_id);
+
+
+--
+-- Name: native_role_auth_workflow_request_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_workflow_request_1 ON public.auth_workflow_request USING btree (erasure_source_client_owner_id, workflow_id);
+
+
+--
+-- Name: native_role_auth_workflow_request_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_workflow_request_2 ON public.auth_workflow_request USING btree (erasure_delegate_id, workflow_id);
+
+
+--
+-- Name: native_role_auth_workflow_request_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_workflow_request_3 ON public.auth_workflow_request USING btree (erasure_initiator_id, workflow_id);
+
+
+--
+-- Name: native_role_auth_workflow_request_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_auth_workflow_request_pending ON public.auth_workflow_request USING btree (workflow_id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_oauthaccesstoken_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthaccesstoken_0 ON public."oauthAccessToken" USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthaccesstoken_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthaccesstoken_1 ON public."oauthAccessToken" USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthaccesstoken_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthaccesstoken_pending ON public."oauthAccessToken" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_oauthclientassertion_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientassertion_0 ON public."oauthClientAssertion" USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthclientassertion_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientassertion_1 ON public."oauthClientAssertion" USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthclientassertion_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientassertion_pending ON public."oauthClientAssertion" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_oauthclientresource_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientresource_0 ON public."oauthClientResource" USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthclientresource_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientresource_1 ON public."oauthClientResource" USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthclientresource_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthclientresource_pending ON public."oauthClientResource" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_oauthrefreshfamily_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshfamily_0 ON public."oauthRefreshFamily" USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthrefreshfamily_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshfamily_1 ON public."oauthRefreshFamily" USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthrefreshfamily_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshfamily_pending ON public."oauthRefreshFamily" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_oauthrefreshtoken_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshtoken_0 ON public."oauthRefreshToken" USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthrefreshtoken_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshtoken_1 ON public."oauthRefreshToken" USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_oauthrefreshtoken_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_oauthrefreshtoken_pending ON public."oauthRefreshToken" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_passkey_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_passkey_pending ON public.passkey USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_session_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_session_0 ON public.session USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_session_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_session_1 ON public.session USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_session_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_session_pending ON public.session USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_user_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_user_pending ON public."user" USING btree (id) WHERE (erasure_role_version = 0);
+
+
+--
+-- Name: native_role_verification_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_verification_0 ON public.verification USING btree (erasure_client_owner_id, id);
+
+
+--
+-- Name: native_role_verification_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_verification_1 ON public.verification USING btree (erasure_source_client_owner_id, id);
+
+
+--
+-- Name: native_role_verification_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX native_role_verification_pending ON public.verification USING btree (id) WHERE (erasure_role_version = 0);
 
 
 --
@@ -3500,6 +7036,41 @@ CREATE INDEX passkey_userid_idx ON public.passkey USING btree ("userId", id);
 
 
 --
+-- Name: recovery_copy_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX recovery_copy_client_owner ON public.auth_recovery_copy_source USING btree (erasure_client_owner_id, delivery_id);
+
+
+--
+-- Name: recovery_copy_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX recovery_copy_human ON public.auth_recovery_copy_source USING btree (erasure_human_id, delivery_id);
+
+
+--
+-- Name: recovery_copy_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX recovery_copy_operator ON public.auth_recovery_copy_source USING btree (erasure_operator_id, delivery_id);
+
+
+--
+-- Name: recovery_copy_source_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX recovery_copy_source_owner ON public.auth_recovery_copy_source USING btree (erasure_source_client_owner_id, delivery_id);
+
+
+--
+-- Name: recovery_copy_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX recovery_copy_subject ON public.auth_recovery_copy_source USING btree (account_id, delivery_id);
+
+
+--
 -- Name: session_expiry; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3549,6 +7120,48 @@ CREATE INDEX verification_latest_idx ON public.verification USING btree (identif
 
 
 --
+-- Name: auth_provisioning_receipt a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();
+
+
+--
+-- Name: auth_registration_stage a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();
+
+
+--
+-- Name: auth_native_consumer_proof aa_native_proof_insert_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_proof_insert_lock BEFORE INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_insert_lock();
+
+
+--
+-- Name: auth_provisioning_receipt aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
+-- Name: auth_registration_stage aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
+-- Name: auth_workflow_request aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
+
+
+--
 -- Name: auth_barrier_proof auth_barrier_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3567,6 +7180,13 @@ CREATE TRIGGER auth_consent_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON 
 --
 
 CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_consent_revision();
+
+
+--
+-- Name: auth_copy_work auth_copy_native_fence_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_copy_native_fence_immutable BEFORE DELETE OR UPDATE ON public.auth_copy_work FOR EACH ROW EXECUTE FUNCTION public.auth_copy_native_fence_immutable();
 
 
 --
@@ -3595,6 +7215,62 @@ CREATE TRIGGER auth_coverage_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON
 --
 
 CREATE TRIGGER auth_credential_stage_immutable BEFORE UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_credential_stage_immutable();
+
+
+--
+-- Name: auth_erasure auth_erasure_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_erasure_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_proof_immutable();
+
+
+--
+-- Name: auth_client_coverage auth_kind_client_coverage_writer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_client_coverage_writer_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_coverage FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_writer_guard();
+
+
+--
+-- Name: auth_client_reduction auth_kind_client_reduction_writer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_client_reduction_writer_guard BEFORE INSERT OR DELETE ON public.auth_client_reduction FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_writer_guard();
+
+
+--
+-- Name: auth_client auth_kind_client_writer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_client_writer_guard BEFORE DELETE OR UPDATE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_writer_guard();
+
+
+--
+-- Name: auth_kind_consent_dependency auth_kind_consent_dependency_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_consent_dependency_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_kind_consent_dependency FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_dependency_guard();
+
+
+--
+-- Name: auth_kind_consent_transition auth_kind_consent_transition_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_consent_transition_guard BEFORE DELETE OR UPDATE ON public.auth_kind_consent_transition FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_transition_guard();
+
+
+--
+-- Name: auth_consent auth_kind_consent_writer_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_kind_consent_writer_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_kind_consent_writer_guard();
+
+
+--
+-- Name: auth_native_consumer_proof auth_native_consumer_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_consumer_proof_minimize_guard();
 
 
 --
@@ -3647,17 +7323,17 @@ CREATE TRIGGER auth_native_phase_producer_guard BEFORE INSERT OR DELETE OR UPDAT
 
 
 --
+-- Name: auth_erasure auth_native_phase_upgrade_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_native_phase_upgrade_immutable BEFORE UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_native_phase_upgrade_immutable();
+
+
+--
 -- Name: auth_registration_stage auth_native_registration_identity; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER auth_native_registration_identity BEFORE UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_identity();
-
-
---
--- Name: auth_erasure auth_erasure_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_erasure_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_proof_immutable();
 
 
 --
@@ -3675,6 +7351,20 @@ CREATE TRIGGER auth_provisioning_receipt_immutable BEFORE UPDATE ON public.auth_
 
 
 --
+-- Name: auth_receiving_copy auth_receiving_copy_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_copy_immutable BEFORE DELETE OR UPDATE ON public.auth_receiving_copy FOR EACH ROW EXECUTE FUNCTION public.auth_receiving_copy_immutable();
+
+
+--
+-- Name: auth_receiving_work auth_receiving_work_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_receiving_work_guard BEFORE INSERT OR DELETE OR UPDATE ON public.auth_receiving_work FOR EACH ROW EXECUTE FUNCTION public.auth_receiving_work_guard();
+
+
+--
 -- Name: auth_client_reduction_progress auth_reduction_cursor_version; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3682,10 +7372,87 @@ CREATE TRIGGER auth_reduction_cursor_version BEFORE INSERT OR DELETE OR UPDATE O
 
 
 --
+-- Name: auth_restore_generation auth_restore_cut_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_cut_immutable BEFORE UPDATE ON public.auth_restore_generation FOR EACH ROW EXECUTE FUNCTION public.auth_restore_cut_immutable();
+
+
+--
+-- Name: auth_restore_generation auth_restore_identity_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_identity_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_generation FOR EACH ROW EXECUTE FUNCTION public.auth_restore_identity_immutable();
+
+
+--
+-- Name: auth_restore_live_generation auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_generation FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_partition FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_work FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
+
+
+--
+-- Name: auth_restore_replay auth_restore_obligation_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_obligation_immutable BEFORE UPDATE ON public.auth_restore_replay FOR EACH ROW EXECUTE FUNCTION public.auth_restore_obligation_immutable();
+
+
+--
+-- Name: auth_restore_replay auth_restore_replay_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_replay_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_replay FOR EACH ROW EXECUTE FUNCTION public.auth_restore_replay_immutable();
+
+
+--
+-- Name: auth_erasure auth_restore_source_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_restore_source_immutable BEFORE UPDATE ON public.auth_erasure FOR EACH ROW EXECUTE FUNCTION public.auth_restore_source_immutable();
+
+
+--
 -- Name: user auth_user_cursor_version; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER auth_user_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION public.auth_require_cursor_cutover();
+
+
+--
+-- Name: auth_client configuration_fields; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_client_guard();
+
+
+--
+-- Name: oauthClientResource configuration_fields; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthClientResource" FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_link_guard();
+
+
+--
+-- Name: oauthResource configuration_fields; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthResource" FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_resource_guard();
 
 
 --
@@ -3955,6 +7722,48 @@ CREATE TRIGGER erasure_zero_children BEFORE DELETE ON public."user" FOR EACH ROW
 
 
 --
+-- Name: auth_native_consumer_proof native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_inserted();
+
+
+--
+-- Name: auth_provisioning_receipt native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
+
+
+--
+-- Name: auth_registration_stage native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
+
+
+--
+-- Name: auth_workflow_request native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
+
+
+--
+-- Name: auth_recovery_copy_source recovery_copy_capture; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER recovery_copy_capture BEFORE INSERT ON public.auth_recovery_copy_source FOR EACH ROW EXECUTE FUNCTION public.auth_recovery_copy_capture();
+
+
+--
+-- Name: auth_recovery_copy_source recovery_copy_progress; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER recovery_copy_progress BEFORE DELETE OR UPDATE ON public.auth_recovery_copy_source FOR EACH ROW EXECUTE FUNCTION public.auth_recovery_copy_progress();
+
+
+--
 -- Name: session session_capacity; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3973,6 +7782,230 @@ CREATE TRIGGER session_erasure_barrier BEFORE DELETE ON public."user" FOR EACH R
 --
 
 CREATE TRIGGER session_identity BEFORE UPDATE OF id, "userId" ON public.session FOR EACH ROW EXECUTE FUNCTION public.auth_session_identity();
+
+
+--
+-- Name: account zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.account FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_account();
+
+
+--
+-- Name: auth_attempt_account zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_attempt_account FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_attempt_account();
+
+
+--
+-- Name: auth_barrier_proof zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_barrier_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_barrier_proof();
+
+
+--
+-- Name: auth_client zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_client();
+
+
+--
+-- Name: auth_client_coverage zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_coverage FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_client_coverage();
+
+
+--
+-- Name: auth_client_reduction zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_reduction FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_client_reduction();
+
+
+--
+-- Name: auth_client_reduction_progress zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_client_reduction_progress FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_client_reduction_progress();
+
+
+--
+-- Name: auth_consent zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_consent();
+
+
+--
+-- Name: auth_effect_receipt zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_effect_receipt();
+
+
+--
+-- Name: auth_key_assertion zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_key_assertion FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_key_assertion();
+
+
+--
+-- Name: auth_provisioning_receipt zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_provisioning_receipt();
+
+
+--
+-- Name: auth_public_key zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_public_key FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_public_key();
+
+
+--
+-- Name: auth_recent_oidc_session zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_recent_oidc_session FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_recent_oidc_session();
+
+
+--
+-- Name: auth_recovery zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_recovery FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_recovery();
+
+
+--
+-- Name: auth_recovery_establishment zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_recovery_establishment FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_recovery_establishment();
+
+
+--
+-- Name: auth_registration_stage zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_registration_stage();
+
+
+--
+-- Name: auth_session_opening zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_session_opening FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_session_opening();
+
+
+--
+-- Name: auth_workflow_request zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_auth_workflow_request();
+
+
+--
+-- Name: oauthAccessToken zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_oauthaccesstoken();
+
+
+--
+-- Name: oauthClientAssertion zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."oauthClientAssertion" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_oauthclientassertion();
+
+
+--
+-- Name: oauthClientResource zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."oauthClientResource" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_oauthclientresource();
+
+
+--
+-- Name: oauthRefreshFamily zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."oauthRefreshFamily" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_oauthrefreshfamily();
+
+
+--
+-- Name: oauthRefreshToken zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."oauthRefreshToken" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_oauthrefreshtoken();
+
+
+--
+-- Name: passkey zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.passkey FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_passkey();
+
+
+--
+-- Name: session zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.session FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_session();
+
+
+--
+-- Name: user zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_user();
+
+
+--
+-- Name: verification zz_native_role; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zz_native_role BEFORE INSERT OR DELETE OR UPDATE ON public.verification FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_verification();
+
+
+--
+-- Name: oauthClientAssertion zz_native_role_finish; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zz_native_role_finish AFTER INSERT ON public."oauthClientAssertion" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_finish_oauthclientassertion();
+
+
+--
+-- Name: verification zz_native_role_finish; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zz_native_role_finish AFTER INSERT ON public.verification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.auth_native_role_finish_verification();
+
+
+--
+-- Name: verification zz_recovery_copy_producer_cut; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zz_recovery_copy_producer_cut AFTER INSERT ON public.verification DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.auth_recovery_copy_producer_cut();
+
+
+--
+-- Name: auth_workflow_request zzz_native_request_party_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zzz_native_request_party_version BEFORE INSERT ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_request_party_version_guard();
+
+
+--
+-- Name: auth_workflow_request zzz_request_parties; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER zzz_request_parties BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_request_parties_guard();
 
 
 --
@@ -4104,6 +8137,22 @@ ALTER TABLE ONLY public.auth_public_key
 
 
 --
+-- Name: auth_receiving_copy auth_receiving_copy_obligation_id_control_revision_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_receiving_copy
+    ADD CONSTRAINT auth_receiving_copy_obligation_id_control_revision_fkey FOREIGN KEY (obligation_id, control_revision) REFERENCES public.auth_receiving_work(obligation_id, control_revision);
+
+
+--
+-- Name: auth_receiving_work auth_receiving_work_obligation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_receiving_work
+    ADD CONSTRAINT auth_receiving_work_obligation_id_fkey FOREIGN KEY (obligation_id) REFERENCES public.auth_erasure(id);
+
+
+--
 -- Name: auth_recovery auth_recovery_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4125,6 +8174,46 @@ ALTER TABLE ONLY public.auth_recovery_establishment
 
 ALTER TABLE ONLY public.auth_recovery_establishment
     ADD CONSTRAINT auth_recovery_establishment_reference_fkey FOREIGN KEY (reference) REFERENCES public.auth_barrier_proof(reference) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_restore_live_partition auth_restore_live_partition_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_partition
+    ADD CONSTRAINT auth_restore_live_partition_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
+
+
+--
+-- Name: auth_restore_live_work auth_restore_live_work_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_live_work
+    ADD CONSTRAINT auth_restore_live_work_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
+
+
+--
+-- Name: auth_restore_replay auth_restore_replay_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_replay
+    ADD CONSTRAINT auth_restore_replay_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_generation(generation);
+
+
+--
+-- Name: auth_restore_replay auth_restore_replay_obligation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_replay
+    ADD CONSTRAINT auth_restore_replay_obligation_id_fkey FOREIGN KEY (obligation_id) REFERENCES public.auth_erasure(id);
+
+
+--
+-- Name: auth_restore_source_partition auth_restore_source_partition_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_restore_source_partition
+    ADD CONSTRAINT auth_restore_source_partition_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_generation(generation);
 
 
 --
@@ -4219,2525 +8308,3 @@ ALTER TABLE ONLY public.session
 -- PostgreSQL database dump complete
 --
 
-
--- Native role producer admission and deployment reconciliation.
-SET search_path = public;
--- The existing copy coverage field remains the sole native completion authority.
--- Drain writers before installing the fence. Queued old leases are refused once
--- the startup cut arms it; deleting an unreconciled row retains unknown custody.
-LOCK TABLE "account","auth_attempt_account","auth_barrier_proof","auth_client","auth_client_coverage","auth_client_reduction","auth_client_reduction_progress","auth_consent","auth_effect_receipt","auth_key_assertion","auth_provisioning_receipt","auth_public_key","auth_recent_oidc_session","auth_recovery","auth_recovery_establishment","auth_registration_stage","auth_session_opening","auth_workflow_request","oauthAccessToken","oauthClientAssertion","oauthClientResource","oauthRefreshFamily","oauthRefreshToken","passkey","session","user","verification" IN SHARE ROW EXCLUSIVE MODE;
-CREATE TABLE auth_native_role_deployment (
-  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
-  version smallint NOT NULL CHECK(version=1),
-  armed boolean NOT NULL DEFAULT false,
-  store_index smallint NOT NULL DEFAULT 0 CHECK(store_index BETWEEN 0 AND 27)
-);
-INSERT INTO auth_native_role_deployment(singleton,version) VALUES(true,1);
-UPDATE auth_copy_coverage SET native_covered=false WHERE singleton;
--- Permanent, nonpersonal reasons per source store. Expiry, a missing source
--- or deletion of a historical row never turns unresolved custody into absence.
-ALTER TABLE auth_erasure ADD COLUMN native_role_version smallint NOT NULL DEFAULT 0 CHECK(native_role_version IN (0,1));
-DROP INDEX auth_erasure_pending;
-CREATE INDEX auth_erasure_pending ON auth_erasure(revision,id) WHERE native_completed_at IS NULL OR native_role_version=0;
-CREATE TABLE auth_native_role_unknown (
-  store text NOT NULL,
-  reason text NOT NULL CHECK(reason IN ('historical-role-custody','unsupported-producer-format','source-unavailable')),
-  PRIMARY KEY(store,reason)
-);
-CREATE FUNCTION auth_native_role_unknown(source_store text, reason_code text) RETURNS void LANGUAGE sql AS $$
-  INSERT INTO auth_native_role_unknown(store,reason) VALUES(source_store,reason_code) ON CONFLICT DO NOTHING;
-  UPDATE auth_copy_coverage SET native_covered=false WHERE singleton AND native_covered;
-$$;
-
-ALTER TABLE "user" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "user" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_user_pending ON "user" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_client" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_client" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_auth_client_pending ON "auth_client" ("client_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_session_opening" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_session_opening" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_session_opening" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_session_opening_0 ON "auth_session_opening" (erasure_client_owner_id,"session_id");
-ALTER TABLE "auth_session_opening" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_session_opening_1 ON "auth_session_opening" (erasure_source_client_owner_id,"session_id");
-CREATE INDEX native_role_auth_session_opening_pending ON "auth_session_opening" ("session_id") WHERE erasure_role_version=0;
-ALTER TABLE "session" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "session" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "session" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_session_0 ON "session" (erasure_client_owner_id,"id");
-ALTER TABLE "session" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_session_1 ON "session" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_session_pending ON "session" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "verification" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "verification" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "verification" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_verification_0 ON "verification" (erasure_client_owner_id,"id");
-ALTER TABLE "verification" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_verification_1 ON "verification" (erasure_source_client_owner_id,"id");
-ALTER TABLE verification ADD COLUMN erasure_format text CHECK(erasure_format IN ('reset-v1','webauthn-v1','webauthn-anonymous-v1','code-v1','unknown'));
-CREATE INDEX native_role_verification_pending ON "verification" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthrefreshfamily_0 ON "oauthRefreshFamily" (erasure_client_owner_id,"id");
-ALTER TABLE "oauthRefreshFamily" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthrefreshfamily_1 ON "oauthRefreshFamily" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_oauthrefreshfamily_pending ON "oauthRefreshFamily" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthrefreshtoken_0 ON "oauthRefreshToken" (erasure_client_owner_id,"id");
-ALTER TABLE "oauthRefreshToken" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthrefreshtoken_1 ON "oauthRefreshToken" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_oauthrefreshtoken_pending ON "oauthRefreshToken" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthaccesstoken_0 ON "oauthAccessToken" (erasure_client_owner_id,"id");
-ALTER TABLE "oauthAccessToken" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthaccesstoken_1 ON "oauthAccessToken" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_oauthaccesstoken_pending ON "oauthAccessToken" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "oauthClientAssertion" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "oauthClientAssertion" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "oauthClientAssertion" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthclientassertion_0 ON "oauthClientAssertion" (erasure_client_owner_id,"id");
-ALTER TABLE "oauthClientAssertion" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthclientassertion_1 ON "oauthClientAssertion" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_oauthclientassertion_pending ON "oauthClientAssertion" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_recent_oidc_session_0 ON "auth_recent_oidc_session" (erasure_client_owner_id,"session_id");
-ALTER TABLE "auth_recent_oidc_session" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_recent_oidc_session_1 ON "auth_recent_oidc_session" (erasure_source_client_owner_id,"session_id");
-CREATE INDEX native_role_auth_recent_oidc_session_pending ON "auth_recent_oidc_session" ("session_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_barrier_proof_0 ON "auth_barrier_proof" (erasure_client_owner_id,"reference");
-ALTER TABLE "auth_barrier_proof" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_barrier_proof_1 ON "auth_barrier_proof" (erasure_source_client_owner_id,"reference");
-CREATE INDEX native_role_auth_barrier_proof_pending ON "auth_barrier_proof" ("reference") WHERE erasure_role_version=0;
-ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_recovery_establishment_0 ON "auth_recovery_establishment" (erasure_client_owner_id,"reference");
-ALTER TABLE "auth_recovery_establishment" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_recovery_establishment_1 ON "auth_recovery_establishment" (erasure_source_client_owner_id,"reference");
-CREATE INDEX native_role_auth_recovery_establishment_pending ON "auth_recovery_establishment" ("reference") WHERE erasure_role_version=0;
-ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_delegate_id text CHECK(octet_length(erasure_delegate_id)<=1024);
-CREATE INDEX native_role_auth_registration_stage_0 ON "auth_registration_stage" (erasure_delegate_id,"registration_id");
-ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_initiator_id text CHECK(octet_length(erasure_initiator_id)<=1024);
-CREATE INDEX native_role_auth_registration_stage_1 ON "auth_registration_stage" (erasure_initiator_id,"registration_id");
-ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_actor_version smallint NOT NULL DEFAULT 0 CHECK(erasure_actor_version IN (0,1));
-CREATE INDEX native_role_auth_registration_stage_pending ON "auth_registration_stage" ("registration_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_provisioning_receipt" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_provisioning_receipt" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_provisioning_receipt" ADD COLUMN erasure_delegate_id text CHECK(octet_length(erasure_delegate_id)<=1024);
-CREATE INDEX native_role_auth_provisioning_receipt_0 ON "auth_provisioning_receipt" (erasure_delegate_id,"idempotency_key");
-ALTER TABLE "auth_provisioning_receipt" ADD COLUMN erasure_initiator_id text CHECK(octet_length(erasure_initiator_id)<=1024);
-CREATE INDEX native_role_auth_provisioning_receipt_1 ON "auth_provisioning_receipt" (erasure_initiator_id,"idempotency_key");
-ALTER TABLE "auth_provisioning_receipt" ADD COLUMN erasure_actor_version smallint NOT NULL DEFAULT 0 CHECK(erasure_actor_version IN (0,1));
-CREATE INDEX native_role_auth_provisioning_receipt_pending ON "auth_provisioning_receipt" ("idempotency_key") WHERE erasure_role_version=0;
-ALTER TABLE "account" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "account" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_account_pending ON "account" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "passkey" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "passkey" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_passkey_pending ON "passkey" ("id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_recovery" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_recovery" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_auth_recovery_pending ON "auth_recovery" ("proof_hash") WHERE erasure_role_version=0;
-ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_effect_receipt_0 ON "auth_effect_receipt" (erasure_client_owner_id,"receipt_id");
-ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_effect_receipt_1 ON "auth_effect_receipt" (erasure_source_client_owner_id,"receipt_id");
-CREATE INDEX native_role_auth_effect_receipt_pending ON "auth_effect_receipt" ("receipt_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_workflow_request_0 ON "auth_workflow_request" (erasure_client_owner_id,"workflow_id");
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_workflow_request_1 ON "auth_workflow_request" (erasure_source_client_owner_id,"workflow_id");
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_delegate_id text CHECK(octet_length(erasure_delegate_id)<=1024);
-CREATE INDEX native_role_auth_workflow_request_2 ON "auth_workflow_request" (erasure_delegate_id,"workflow_id");
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_initiator_id text CHECK(octet_length(erasure_initiator_id)<=1024);
-CREATE INDEX native_role_auth_workflow_request_3 ON "auth_workflow_request" (erasure_initiator_id,"workflow_id");
-ALTER TABLE "auth_workflow_request" ADD COLUMN erasure_actor_version smallint NOT NULL DEFAULT 0 CHECK(erasure_actor_version IN (0,1));
-CREATE INDEX native_role_auth_workflow_request_pending ON "auth_workflow_request" ("workflow_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_public_key" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_public_key" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_auth_public_key_pending ON "auth_public_key" ("account_id","kid") WHERE erasure_role_version=0;
-ALTER TABLE "auth_key_assertion" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_key_assertion" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_auth_key_assertion_pending ON "auth_key_assertion" ("account_id","jti") WHERE erasure_role_version=0;
-ALTER TABLE "auth_attempt_account" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_attempt_account" ADD COLUMN erasure_role_xid bigint;
-CREATE INDEX native_role_auth_attempt_account_pending ON "auth_attempt_account" ("account_id","key") WHERE erasure_role_version=0;
-ALTER TABLE "auth_consent" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_consent" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_consent" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_consent_0 ON "auth_consent" (erasure_client_owner_id,"id");
-ALTER TABLE "auth_consent" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_consent_1 ON "auth_consent" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_auth_consent_pending ON "auth_consent" ("account_id","client_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_client_reduction_progress" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_client_reduction_progress" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_client_reduction_progress" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_reduction_progress_0 ON "auth_client_reduction_progress" (erasure_client_owner_id,"operation_id");
-ALTER TABLE "auth_client_reduction_progress" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_reduction_progress_1 ON "auth_client_reduction_progress" (erasure_source_client_owner_id,"operation_id");
-CREATE INDEX native_role_auth_client_reduction_progress_pending ON "auth_client_reduction_progress" ("operation_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_client_reduction" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_client_reduction" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_client_reduction" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_reduction_0 ON "auth_client_reduction" (erasure_client_owner_id,"client_id");
-ALTER TABLE "auth_client_reduction" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_reduction_1 ON "auth_client_reduction" (erasure_source_client_owner_id,"client_id");
-CREATE INDEX native_role_auth_client_reduction_pending ON "auth_client_reduction" ("client_id") WHERE erasure_role_version=0;
-ALTER TABLE "auth_client_coverage" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "auth_client_coverage" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "auth_client_coverage" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_coverage_0 ON "auth_client_coverage" (erasure_client_owner_id,"client_id");
-ALTER TABLE "auth_client_coverage" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_auth_client_coverage_1 ON "auth_client_coverage" (erasure_source_client_owner_id,"client_id");
-CREATE INDEX native_role_auth_client_coverage_pending ON "auth_client_coverage" ("client_id") WHERE erasure_role_version=0;
-ALTER TABLE "oauthClientResource" ADD COLUMN erasure_role_version smallint NOT NULL DEFAULT 0 CHECK(erasure_role_version IN (-1,0,1));
-ALTER TABLE "oauthClientResource" ADD COLUMN erasure_role_xid bigint;
-ALTER TABLE "oauthClientResource" ADD COLUMN erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthclientresource_0 ON "oauthClientResource" (erasure_client_owner_id,"id");
-ALTER TABLE "oauthClientResource" ADD COLUMN erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024);
-CREATE INDEX native_role_oauthclientresource_1 ON "oauthClientResource" (erasure_source_client_owner_id,"id");
-CREATE INDEX native_role_oauthclientresource_pending ON "oauthClientResource" ("id") WHERE erasure_role_version=0;
-
--- Association refreshes use exact native keys. They preserve committed snapshots
--- when a source later moves or disappears, rather than re-reading today's owner.
-CREATE OR REPLACE FUNCTION auth_erasure_admit(owner_id text) RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  IF owner_id IS NULL OR owner_id='' THEN RETURN; END IF;
-  -- Only the native bounded deployment page installs this transaction context.
-  -- Its trigger accepts version-only updates, never a new artifact or role move.
-  IF current_setting('auth.native_role_reconcile',true)='1' THEN RETURN; END IF;
-  PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-erasure:'||owner_id,0));
-  IF EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id)
-    AND NOT EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id
-      AND id::text=current_setting('auth.erasure_obligation',true)) THEN
-    RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
-  END IF;
-END $$;
-CREATE OR REPLACE FUNCTION auth_erasure_admit_client(client text) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE owner_id text; fenced boolean;
-BEGIN
-  IF client IS NULL THEN RETURN; END IF;
-  IF current_setting('auth.native_role_reconcile',true)='1' THEN RETURN; END IF;
-  PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-client:'||client,0));
-  SELECT "userId",erasure_fenced INTO owner_id,fenced FROM auth_client WHERE client_id=client;
-  IF EXISTS (SELECT 1 FROM auth_erased_client WHERE client_id=client
-      AND obligation_id::text IS DISTINCT FROM current_setting('auth.erasure_obligation',true)) THEN
-    RAISE EXCEPTION 'Auth erased client fence' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(owner_id);
-  IF fenced AND NOT EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id
-      AND id::text=current_setting('auth.erasure_obligation',true)) THEN
-    RAISE EXCEPTION 'Auth client erasure fence' USING ERRCODE='55000';
-  END IF;
-  RETURN;
-END $$;
-CREATE OR REPLACE FUNCTION auth_erasure_verification_roles() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='UPDATE' AND OLD.erasure_account_id IS NOT NULL AND
-     (NEW.erasure_account_id,NEW.erasure_client_id,NEW.erasure_session_id,NEW.erasure_source_client_id) IS DISTINCT FROM
-     (OLD.erasure_account_id,OLD.erasure_client_id,OLD.erasure_session_id,OLD.erasure_source_client_id) THEN
-    RAISE EXCEPTION 'Auth verification attribution is immutable';
-  END IF;
-  IF NEW.erasure_session_id IS NOT NULL AND (TG_OP='INSERT' OR OLD.erasure_session_id IS NULL) THEN
-    SELECT "clientId",erasure_human_id,erasure_operator_id
-      INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
-      FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000'; END IF;
-  END IF;
-  RETURN NEW;
-END $$;
-
-CREATE FUNCTION auth_native_role_user() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."id") IS DISTINCT FROM ROW(OLD."id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('user',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION auth_native_role_user();
-
-CREATE FUNCTION auth_native_role_auth_client() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_client" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_client();
-
-CREATE FUNCTION auth_native_role_auth_session_opening() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_session_opening','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=NEW.subject_account_id IS NOT NULL AND NEW.acting_human_id IS NOT NULL AND NEW.operator_account_id IS NOT NULL;
-    IF NEW."erasure_client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    SELECT erasure_client_owner_id INTO NEW.erasure_client_owner_id FROM session WHERE id=NEW.session_id AND "userId"=NEW.subject_account_id FOR KEY SHARE; covered:=covered AND FOUND;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."subject_account_id",NEW."acting_human_id",NEW."operator_account_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."subject_account_id",OLD."acting_human_id",OLD."operator_account_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_session_opening',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_session_opening" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_session_opening();
-
-CREATE FUNCTION auth_native_role_session() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('session','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    SELECT acting_human_id,operator_account_id INTO NEW.erasure_human_id,NEW.erasure_operator_id FROM auth_session_opening WHERE session_id=NEW.id AND subject_account_id=NEW."userId";
-    covered:=fresh OR FOUND;
-    IF NEW."clientId" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('session',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "session" FOR EACH ROW EXECUTE FUNCTION auth_native_role_session();
-
-CREATE FUNCTION auth_native_role_verification() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('verification','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=NEW.erasure_account_id IS NOT NULL OR (fresh AND NEW.erasure_format='webauthn-anonymous-v1');
-    IF NEW.erasure_session_id IS NOT NULL THEN
-      SELECT erasure_role_version,erasure_client_owner_id INTO source_version,NEW.erasure_source_client_owner_id FROM session WHERE id=NEW.erasure_session_id AND "userId"=NEW.erasure_account_id FOR KEY SHARE;
-      covered:=covered AND FOUND AND source_version=1;
-    END IF;
-    IF NEW."erasure_client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  IF fresh AND TG_OP='INSERT' AND NOT COALESCE(covered,false) THEN NEW.erasure_role_version:=0;
-  ELSE NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END; END IF;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."erasure_account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('verification',CASE WHEN fresh THEN CASE WHEN NEW.erasure_format='unknown' THEN 'unsupported-producer-format' ELSE 'source-unavailable' END ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "verification" FOR EACH ROW EXECUTE FUNCTION auth_native_role_verification();
-
-CREATE FUNCTION auth_native_role_oauthrefreshfamily() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthRefreshFamily','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    SELECT erasure_account_id,erasure_human_id,erasure_operator_id,erasure_source_client_id,
-      erasure_source_client_owner_id,erasure_role_version
-      INTO NEW.erasure_account_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,
-        NEW.erasure_source_client_owner_id,source_version
-      -- Resolve the same newest winner as the pinned native consume. Never
-      -- scan older protocol history looking for a matching client.
-      FROM (SELECT erasure_account_id,erasure_human_id,erasure_operator_id,erasure_source_client_id,
-        erasure_source_client_owner_id,erasure_role_version,erasure_client_id
-        FROM verification WHERE identifier=NEW.id
-        ORDER BY "createdAt" DESC,id DESC LIMIT 1 FOR KEY SHARE) source
-      WHERE source.erasure_client_id=NEW."clientId";
-    covered:=FOUND AND source_version=1;
-    IF NEW."clientId" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."erasure_account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthRefreshFamily',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "oauthRefreshFamily" FOR EACH ROW EXECUTE FUNCTION auth_native_role_oauthrefreshfamily();
-
-CREATE FUNCTION auth_native_role_oauthrefreshtoken() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthRefreshToken','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."sessionId" IS NOT NULL THEN
-      SELECT erasure_human_id,erasure_operator_id,"clientId",erasure_client_owner_id,erasure_role_version
-        INTO NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,NEW.erasure_source_client_owner_id,source_version
-        FROM session WHERE id=NEW."sessionId" AND "userId"=NEW."userId" FOR KEY SHARE;
-      covered:=FOUND AND source_version=1;
-    ELSE covered:=fresh;
-    END IF;
-    IF NEW."clientId" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthRefreshToken',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "oauthRefreshToken" FOR EACH ROW EXECUTE FUNCTION auth_native_role_oauthrefreshtoken();
-
-CREATE FUNCTION auth_native_role_oauthaccesstoken() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthAccessToken','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."sessionId" IS NOT NULL THEN
-      SELECT erasure_human_id,erasure_operator_id,"clientId",erasure_client_owner_id,erasure_role_version
-        INTO NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_source_client_id,NEW.erasure_source_client_owner_id,source_version
-        FROM session WHERE id=NEW."sessionId" AND "userId"=NEW."userId" FOR KEY SHARE;
-      covered:=FOUND AND source_version=1;
-    ELSE covered:=fresh;
-    END IF;
-    IF NEW."clientId" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."userId",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."userId",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthAccessToken',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION auth_native_role_oauthaccesstoken();
-
-CREATE FUNCTION auth_native_role_oauthclientassertion() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthClientAssertion','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=NEW.erasure_client_id IS NOT NULL;
-    IF NEW."erasure_client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  IF fresh AND TG_OP='INSERT' AND NOT COALESCE(covered,false) THEN NEW.erasure_role_version:=0;
-  ELSE NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END; END IF;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthClientAssertion',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "oauthClientAssertion" FOR EACH ROW EXECUTE FUNCTION auth_native_role_oauthclientassertion();
-
-CREATE FUNCTION auth_native_role_auth_recent_oidc_session() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_recent_oidc_session','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    SELECT "clientId",erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_role_version INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,source_version FROM session WHERE id=NEW.session_id AND "userId"=NEW.account_id FOR KEY SHARE;
-    covered:=FOUND AND source_version=1;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recent_oidc_session',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_recent_oidc_session" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_recent_oidc_session();
-
-CREATE FUNCTION auth_native_role_auth_barrier_proof() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_barrier_proof','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW.erasure_session_id IS NOT NULL THEN SELECT erasure_client_owner_id,erasure_role_version INTO NEW.erasure_source_client_owner_id,source_version FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE; covered:=FOUND AND source_version=1; END IF;
-    covered:=covered AND (NEW.purpose<>'consent-reduction' OR NEW.erasure_session_id IS NOT NULL);
-    IF NEW."erasure_client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_barrier_proof',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_barrier_proof" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_barrier_proof();
-
-CREATE FUNCTION auth_native_role_auth_recovery_establishment() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_recovery_establishment','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    SELECT erasure_client_id,erasure_source_client_id,erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_source_client_owner_id,erasure_role_version
-      INTO NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,source_version
-      FROM auth_barrier_proof WHERE reference=NEW.reference AND account_id=NEW.account_id FOR KEY SHARE;
-    covered:=FOUND AND source_version=1;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_client_id",NEW."erasure_source_client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_client_id",OLD."erasure_source_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recovery_establishment',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_recovery_establishment" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_recovery_establishment();
-
-CREATE FUNCTION auth_native_role_auth_registration_stage() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_registration_stage','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=NEW.erasure_actor_version=1;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_creator_id",NEW."erasure_operator_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_creator_id",OLD."erasure_operator_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_delegate_id);
-  PERFORM auth_erasure_admit(NEW.erasure_initiator_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_registration_stage',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_registration_stage" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_registration_stage();
-
-CREATE FUNCTION auth_native_role_auth_provisioning_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_provisioning_receipt','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW.erasure_stage_id IS NOT NULL THEN
-      SELECT erasure_delegate_id,erasure_initiator_id,erasure_actor_version,erasure_role_version
-        INTO NEW.erasure_delegate_id,NEW.erasure_initiator_id,NEW.erasure_actor_version,source_version
-        FROM auth_registration_stage WHERE registration_id=NEW.erasure_stage_id AND account_id=NEW.account_id FOR KEY SHARE;
-      covered:=FOUND AND source_version=1;
-    ELSE covered:=false;
-    END IF;
-    covered:=covered AND (NEW.erasure_stage_id IS NULL OR NEW.erasure_actor_version=1);
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
-      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
-    END IF;
-    NEW.erasure_actor_version:=COALESCE(NEW.erasure_actor_version,CASE WHEN TG_OP='UPDATE' THEN OLD.erasure_actor_version ELSE 0 END);
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_creator_id",NEW."erasure_operator_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_creator_id",OLD."erasure_operator_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_delegate_id);
-  PERFORM auth_erasure_admit(NEW.erasure_initiator_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_provisioning_receipt',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_provisioning_receipt" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_provisioning_receipt();
-
-CREATE FUNCTION auth_native_role_account() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."userId") IS DISTINCT FROM ROW(OLD."userId") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('account',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "account" FOR EACH ROW EXECUTE FUNCTION auth_native_role_account();
-
-CREATE FUNCTION auth_native_role_passkey() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."userId") IS DISTINCT FROM ROW(OLD."userId") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('passkey',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "passkey" FOR EACH ROW EXECUTE FUNCTION auth_native_role_passkey();
-
-CREATE FUNCTION auth_native_role_auth_recovery() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_recovery',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_recovery" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_recovery();
-
-CREATE FUNCTION auth_native_role_auth_effect_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_effect_receipt','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=fresh OR NEW.stage_version=1;
-    IF NEW."client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."acting_human_id",NEW."erasure_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."acting_human_id",OLD."erasure_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_effect_receipt',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_effect_receipt" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_effect_receipt();
-
-CREATE FUNCTION auth_native_role_auth_workflow_request() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT (TG_OP='DELETE' AND pg_trigger_depth()>1 AND EXISTS(SELECT 1 FROM auth_copy_work WHERE workflow_id=OLD.workflow_id AND ready AND retired)) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_workflow_request','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    covered:=NEW.erasure_actor_version=1;
-    IF NEW."erasure_client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_subject_id",NEW."erasure_human_id",NEW."erasure_operator_id",NEW."erasure_member_id",NEW."erasure_previous_operator_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."erasure_delegate_id",NEW."erasure_initiator_id",NEW."erasure_client_id") IS DISTINCT FROM ROW(OLD."erasure_subject_id",OLD."erasure_human_id",OLD."erasure_operator_id",OLD."erasure_member_id",OLD."erasure_previous_operator_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."erasure_delegate_id",OLD."erasure_initiator_id",OLD."erasure_client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_client_owner_id); END IF;
-  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id); END IF;
-  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_delegate_id); END IF;
-  IF NOT (TG_OP='UPDATE' AND NEW.terminal_at IS NOT NULL AND NEW.request IS NOT DISTINCT FROM OLD.request AND NEW.digest IS NOT DISTINCT FROM OLD.digest) THEN PERFORM auth_erasure_admit(NEW.erasure_initiator_id); END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_workflow_request',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_workflow_request" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_workflow_request();
-
-CREATE FUNCTION auth_native_role_auth_public_key() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_public_key',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_public_key" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_public_key();
-
-CREATE FUNCTION auth_native_role_auth_key_assertion() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_key_assertion',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_key_assertion" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_key_assertion();
-
-CREATE FUNCTION auth_native_role_auth_attempt_account() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id") IS DISTINCT FROM ROW(OLD."account_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_attempt_account',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_attempt_account" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_attempt_account();
-
-CREATE FUNCTION auth_native_role_auth_consent() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_consent','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."account_id",NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."account_id",OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_consent',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_consent" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_consent();
-
-CREATE FUNCTION auth_native_role_auth_client_reduction_progress() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_reduction_progress','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_reduction_progress',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_client_reduction_progress" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_client_reduction_progress();
-
-CREATE FUNCTION auth_native_role_auth_client_reduction() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_reduction','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_reduction',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_client_reduction" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_client_reduction();
-
-CREATE FUNCTION auth_native_role_auth_client_coverage() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('auth_client_coverage','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."client_id" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."client_id") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."client_id") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('auth_client_coverage',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "auth_client_coverage" FOR EACH ROW EXECUTE FUNCTION auth_native_role_auth_client_coverage();
-
-CREATE FUNCTION auth_native_role_oauthclientresource() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
-BEGIN
-  fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
-    RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.erasure_role_version=0 THEN PERFORM auth_native_role_unknown('oauthClientResource','historical-role-custody'); END IF;
-    RETURN OLD;
-  END IF;
-  fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
-  IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
-  IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF NEW."clientId" IS NOT NULL THEN
-      IF fresh THEN
-        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-        covered:=covered AND FOUND;
-      ELSE covered:=false;
-      END IF;
-    END IF;
-  ELSE
-    covered:=OLD.erasure_role_version=1;
-  END IF;
-  NEW.erasure_role_version:=CASE WHEN COALESCE(covered,false) THEN 1 ELSE -1 END;
-  IF TG_OP='UPDATE' AND OLD.erasure_role_version<>0 AND NOT fresh AND
-    ROW(NEW."erasure_client_owner_id",NEW."erasure_source_client_owner_id",NEW."clientId") IS DISTINCT FROM ROW(OLD."erasure_client_owner_id",OLD."erasure_source_client_owner_id",OLD."clientId") THEN
-    RAISE EXCEPTION 'Auth native role custody is immutable' USING ERRCODE='55000';
-  END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-  PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  IF NEW.erasure_role_version=-1 AND (TG_OP='INSERT' OR OLD.erasure_role_version=0) THEN PERFORM auth_native_role_unknown('oauthClientResource',CASE WHEN fresh THEN 'source-unavailable' ELSE 'historical-role-custody' END); END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zz_native_role BEFORE INSERT OR UPDATE OR DELETE ON "oauthClientResource" FOR EACH ROW EXECUTE FUNCTION auth_native_role_oauthclientresource();
-
-CREATE FUNCTION auth_native_role_finish_verification() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE "verification" SET erasure_role_version=0 WHERE id=NEW.id AND erasure_role_version=0;
-  RETURN NULL;
-END $$;
-CREATE CONSTRAINT TRIGGER zz_native_role_finish AFTER INSERT ON "verification" DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION auth_native_role_finish_verification();
-
-CREATE FUNCTION auth_native_role_finish_oauthclientassertion() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE "oauthClientAssertion" SET erasure_role_version=0 WHERE id=NEW.id AND erasure_role_version=0;
-  RETURN NULL;
-END $$;
-CREATE CONSTRAINT TRIGGER zz_native_role_finish AFTER INSERT ON "oauthClientAssertion" DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION auth_native_role_finish_oauthclientassertion();
-
-
--- Database/deployment identity is verified by its trusted owner, never generated
--- from startup time. This record proves neither backup custody nor Source EOF.
-CREATE TABLE auth_restore_generation (
-  generation text PRIMARY KEY CHECK(octet_length(generation) BETWEEN 1 AND 1024),
-  inventory jsonb CHECK(octet_length(inventory::text)<=16384),
-  native_coverage_started boolean NOT NULL DEFAULT false,
-  CHECK(NOT native_coverage_started OR inventory IS NOT NULL)
-);
-CREATE FUNCTION auth_restore_identity_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation
-    OR (OLD.inventory IS NOT NULL AND NEW.inventory IS DISTINCT FROM OLD.inventory)
-    OR (OLD.native_coverage_started AND NOT NEW.native_coverage_started) THEN
-    RAISE EXCEPTION 'Auth restore identity is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_restore_identity_immutable BEFORE UPDATE OR DELETE ON auth_restore_generation
-  FOR EACH ROW EXECUTE FUNCTION auth_restore_identity_immutable();
-
---
--- Name: auth_restore_live_immutable(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_restore_live_immutable() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation THEN
-    RAISE EXCEPTION 'Auth live receiver is immutable' USING ERRCODE='23514';
-  END IF;
-  IF TG_TABLE_NAME='auth_restore_live_generation' THEN
-    IF NEW.inventory IS DISTINCT FROM OLD.inventory OR NEW.source_cut_id IS DISTINCT FROM OLD.source_cut_id
-      OR NEW.replay_inventory_after<OLD.replay_inventory_after
-      OR (OLD.replay_inventory_complete AND NOT NEW.replay_inventory_complete) THEN
-      RAISE EXCEPTION 'Auth live inventory binding is immutable' USING ERRCODE='23514';
-    END IF;
-  ELSIF TG_TABLE_NAME='auth_restore_live_partition' THEN
-    IF NEW.partition IS DISTINCT FROM OLD.partition OR NEW.arm IS DISTINCT FROM OLD.arm
-      OR NEW.after_ordinal<OLD.after_ordinal OR NEW.revision<>OLD.revision+1 THEN
-      RAISE EXCEPTION 'Auth live Source checkpoint is immutable' USING ERRCODE='23514';
-    END IF;
-  ELSIF NEW.obligation_id IS DISTINCT FROM OLD.obligation_id
-    OR (OLD.state='external' AND NEW.state<>'external') THEN
-    RAISE EXCEPTION 'Auth live native work identity is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_restore_live_generation; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.auth_restore_live_generation (
-    generation text NOT NULL,
-    inventory jsonb NOT NULL,
-    source_cut_id uuid NOT NULL,
-    live_partition integer DEFAULT 0 NOT NULL,
-    live_verified_partitions integer DEFAULT 0 NOT NULL,
-    reconcile_turn integer DEFAULT 0 NOT NULL,
-    replay_after bigint DEFAULT 0 NOT NULL,
-    replay_inventory_after bigint DEFAULT 0 NOT NULL,
-    replay_inventory_complete boolean DEFAULT false NOT NULL,
-    CONSTRAINT auth_restore_live_generation_generation_check CHECK (((octet_length(generation) >= 1) AND (octet_length(generation) <= 1024))),
-    CONSTRAINT auth_restore_live_generation_inventory_check CHECK ((octet_length((inventory)::text) <= 16384)),
-    CONSTRAINT auth_restore_live_generation_live_partition_check CHECK (((live_partition >= 0) AND (live_partition <= 4095))),
-    CONSTRAINT auth_restore_live_generation_live_verified_partitions_check CHECK (((live_verified_partitions >= 0) AND (live_verified_partitions <= 4096))),
-    CONSTRAINT auth_restore_live_generation_reconcile_turn_check CHECK ((reconcile_turn = ANY (ARRAY[0, 1]))),
-    CONSTRAINT auth_restore_live_generation_replay_after_check CHECK ((replay_after >= 0)),
-    CONSTRAINT auth_restore_live_generation_replay_inventory_after_check CHECK ((replay_inventory_after >= 0))
-);
-
-
---
--- Name: auth_restore_live_partition; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.auth_restore_live_partition (
-    generation text NOT NULL,
-    partition integer NOT NULL,
-    arm jsonb NOT NULL,
-    after_ordinal bigint NOT NULL,
-    revision bigint DEFAULT 0 NOT NULL,
-    page jsonb,
-    verification jsonb,
-    verified boolean DEFAULT false NOT NULL,
-    CONSTRAINT auth_restore_live_partition_after_ordinal_check CHECK ((after_ordinal >= 0)),
-    CONSTRAINT auth_restore_live_partition_arm_check CHECK ((octet_length((arm)::text) <= 8192)),
-    CONSTRAINT auth_restore_live_partition_page_check CHECK ((octet_length((page)::text) <= 65536)),
-    CONSTRAINT auth_restore_live_partition_partition_check CHECK (((partition >= 0) AND (partition <= 4095))),
-    CONSTRAINT auth_restore_live_partition_revision_check CHECK ((revision >= 0)),
-    CONSTRAINT auth_restore_live_partition_verification_check CHECK ((octet_length((verification)::text) <= 8192))
-);
-
-
---
--- Name: auth_restore_live_work; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.auth_restore_live_work (
-    generation text NOT NULL,
-    obligation_id bigint NOT NULL,
-    state text DEFAULT 'native'::text NOT NULL,
-    CONSTRAINT auth_restore_live_work_obligation_id_check CHECK ((obligation_id > 0)),
-    CONSTRAINT auth_restore_live_work_state_check CHECK ((state = ANY (ARRAY['native'::text, 'receiving'::text, 'external'::text])))
-);
-
-
---
--- Name: auth_restore_live_generation auth_restore_live_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_restore_live_generation
-    ADD CONSTRAINT auth_restore_live_generation_pkey PRIMARY KEY (generation);
-
-
---
--- Name: auth_restore_live_partition auth_restore_live_partition_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_restore_live_partition
-    ADD CONSTRAINT auth_restore_live_partition_pkey PRIMARY KEY (generation, partition);
-
-
---
--- Name: auth_restore_live_work auth_restore_live_work_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_restore_live_work
-    ADD CONSTRAINT auth_restore_live_work_pkey PRIMARY KEY (generation, obligation_id);
-
-
---
--- Name: auth_restore_live_work_pending; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_restore_live_work_pending ON public.auth_restore_live_work USING btree (generation, obligation_id) WHERE (state <> 'external'::text);
-
-
---
--- Name: auth_restore_live_work_state; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_restore_live_work_state ON public.auth_restore_live_work USING btree (generation, state, obligation_id);
-
-
---
--- Name: auth_restore_live_generation auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_generation FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
-
-
---
--- Name: auth_restore_live_partition auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_partition FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
-
-
---
--- Name: auth_restore_live_work auth_restore_live_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_restore_live_immutable BEFORE DELETE OR UPDATE ON public.auth_restore_live_work FOR EACH ROW EXECUTE FUNCTION public.auth_restore_live_immutable();
-
-
---
--- Name: auth_restore_live_partition auth_restore_live_partition_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_restore_live_partition
-    ADD CONSTRAINT auth_restore_live_partition_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
-
-
---
--- Name: auth_restore_live_work auth_restore_live_work_generation_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_restore_live_work
-    ADD CONSTRAINT auth_restore_live_work_generation_fkey FOREIGN KEY (generation) REFERENCES public.auth_restore_live_generation(generation);
-
-ALTER TABLE auth_erasure ADD COLUMN source_route integer CHECK(source_route BETWEEN 0 AND 4095);
-ALTER TABLE auth_erasure ADD COLUMN original_native_id text CHECK(octet_length(original_native_id) BETWEEN 1 AND 1024);
-CREATE FUNCTION auth_restore_source_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF (OLD.source_route IS NOT NULL AND NEW.source_route IS DISTINCT FROM OLD.source_route)
-    OR (OLD.original_native_id IS NOT NULL AND NEW.original_native_id IS DISTINCT FROM OLD.original_native_id)
-    OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at
-    OR (OLD.user_deleted_at IS NOT NULL AND NEW.user_deleted_at IS DISTINCT FROM OLD.user_deleted_at)
-    OR (OLD.consent_due_at IS NOT NULL AND NEW.consent_due_at IS DISTINCT FROM OLD.consent_due_at)
-    OR (OLD.consent_completed_at IS NOT NULL AND NEW.consent_completed_at IS DISTINCT FROM OLD.consent_completed_at)
-    OR (OLD.applicable AND NOT NEW.applicable) THEN
-    RAISE EXCEPTION 'Auth restored source evidence is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_restore_source_immutable BEFORE UPDATE ON auth_erasure
-  FOR EACH ROW EXECUTE FUNCTION auth_restore_source_immutable();
-
--- Per-generation cursors for the EXISTING native engine. Source acceptance,
--- consent cutoff and original source completion remain on auth_erasure.
-CREATE TABLE auth_restore_replay (
-  generation text NOT NULL REFERENCES auth_restore_generation(generation),
-  obligation_id bigint NOT NULL REFERENCES auth_erasure(id),
-  original_progress jsonb NOT NULL CHECK(octet_length(original_progress::text)<=16384),
-  phase integer NOT NULL DEFAULT 0,
-  after_key text NOT NULL DEFAULT '' CHECK(octet_length(after_key)<=1024),
-  client_id text CHECK(octet_length(client_id)<=1024),
-  client_phase integer NOT NULL DEFAULT 0,
-  user_replayed boolean NOT NULL DEFAULT false,
-  native_completed_at timestamptz,
-  consent_completed_at timestamptz,
-  copies_completed_at timestamptz,
-  pending_code text NOT NULL DEFAULT 'native',
-  PRIMARY KEY(generation,obligation_id)
-);
-CREATE FUNCTION auth_restore_replay_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation
-    OR NEW.obligation_id IS DISTINCT FROM OLD.obligation_id OR NEW.original_progress IS DISTINCT FROM OLD.original_progress
-    OR (OLD.user_replayed AND NOT NEW.user_replayed)
-    OR (OLD.native_completed_at IS NOT NULL AND NEW.native_completed_at IS DISTINCT FROM OLD.native_completed_at)
-    OR (OLD.consent_completed_at IS NOT NULL AND NEW.consent_completed_at IS DISTINCT FROM OLD.consent_completed_at)
-    OR (OLD.copies_completed_at IS NOT NULL AND NEW.copies_completed_at IS DISTINCT FROM OLD.copies_completed_at) THEN
-    RAISE EXCEPTION 'Auth restore replay evidence is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_restore_replay_immutable BEFORE UPDATE OR DELETE ON auth_restore_replay
-  FOR EACH ROW EXECUTE FUNCTION auth_restore_replay_immutable();
-
-
--- The UUID locates one real Access cut for this restored generation. It proves
--- neither Source closure nor physical inventory, and is never rotated on retry.
-ALTER TABLE auth_restore_generation
-  ADD COLUMN source_cut_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  ADD COLUMN source_cut jsonb CHECK(octet_length(source_cut::text)<=1024),
-  ADD COLUMN source_cursor jsonb DEFAULT '{"partition":0,"afterOrdinal":"0"}'::jsonb
-    CHECK(octet_length(source_cursor::text)<=128),
-  ADD COLUMN source_verify_partition integer NOT NULL DEFAULT 0 CHECK(source_verify_partition BETWEEN 0 AND 4096),
-  ADD COLUMN source_revision bigint NOT NULL DEFAULT 0 CHECK(source_revision>=0);
-
--- Account routes are 16-bit; only feed partitions have a 12-bit domain.
-ALTER TABLE auth_erasure DROP CONSTRAINT auth_erasure_source_route_check;
-ALTER TABLE auth_erasure ADD CONSTRAINT auth_erasure_source_route_check CHECK(source_route BETWEEN 0 AND 65535);
-
-ALTER TABLE auth_restore_replay ADD COLUMN source_obligation jsonb
-  CHECK(octet_length(source_obligation::text)<=1024);
-CREATE FUNCTION auth_restore_obligation_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.source_obligation IS NOT NULL AND NEW.source_obligation IS DISTINCT FROM OLD.source_obligation THEN
-    RAISE EXCEPTION 'Auth original Source obligation is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_restore_obligation_immutable BEFORE UPDATE ON auth_restore_replay
-  FOR EACH ROW EXECUTE FUNCTION auth_restore_obligation_immutable();
-
-CREATE FUNCTION auth_restore_cut_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.source_cut_id IS DISTINCT FROM OLD.source_cut_id
-    OR NEW.source_verify_partition < OLD.source_verify_partition
-    OR NEW.source_revision < OLD.source_revision THEN
-    RAISE EXCEPTION 'Auth native Source cut locator is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_restore_cut_immutable BEFORE UPDATE ON auth_restore_generation
-  FOR EACH ROW EXECUTE FUNCTION auth_restore_cut_immutable();
-
--- Exactly one bounded page and actual verifier observation per native partition.
--- Earlier page obligations/root/floor stay bound to immutable original_progress
--- in auth_restore_replay. This is consumed progress, not a second erasure engine.
-CREATE TABLE auth_restore_source_partition (
-  generation text NOT NULL REFERENCES auth_restore_generation(generation),
-  partition integer NOT NULL CHECK(partition BETWEEN 0 AND 4095),
-  page jsonb NOT NULL CHECK(octet_length(page::text)<=65536),
-  verification jsonb CHECK(octet_length(verification::text)<=2048),
-  PRIMARY KEY(generation,partition)
-);
-
--- Quiesce the original producer while installing its transactional Source cut.
-LOCK TABLE verification IN SHARE ROW EXCLUSIVE MODE;
-CREATE TABLE auth_recovery_copy_source (
-  delivery_id text PRIMARY KEY CHECK(octet_length(delivery_id) BETWEEN 1 AND 1024)
-    -- Reserve room for encoded status/keys within each <=1KiB locator.
-    CHECK(octet_length(to_json(delivery_id)::text)<=768),
-  producer text NOT NULL DEFAULT 'better-auth-reset/1.8.0-beta.2/source-v1'
-    CHECK(producer='better-auth-reset/1.8.0-beta.2/source-v1'),
-  source_component text NOT NULL DEFAULT 'verification' CHECK(source_component='verification'),
-  account_id text NOT NULL CHECK(octet_length(account_id) BETWEEN 1 AND 1024),
-  erasure_human_id text CHECK(octet_length(erasure_human_id)<=1024),
-  erasure_operator_id text CHECK(octet_length(erasure_operator_id)<=1024),
-  erasure_client_owner_id text CHECK(octet_length(erasure_client_owner_id)<=1024),
-  erasure_source_client_owner_id text CHECK(octet_length(erasure_source_client_owner_id)<=1024),
-  created_at timestamptz NOT NULL,
-  expires_at timestamptz NOT NULL,
-  -- No receiving owner is installed. NULL is unknown, never a sink namespace.
-  sink_generation text CHECK(sink_generation IS NULL),
-  custody text NOT NULL DEFAULT 'unknown' CHECK(custody='unknown'),
-  status text NOT NULL DEFAULT 'intent' CHECK(status IN ('intent','in-flight','unknown')),
-  code text NOT NULL DEFAULT 'receiving-adapter-unavailable' CHECK(code IN (
-    'receiving-adapter-unavailable','receiving-result-unavailable','legacy-void',
-    'unsupported-result','callback-failed','callback-timeout')),
-  attempts smallint NOT NULL DEFAULT 0 CHECK(attempts IN (0,1)),
-  attempted_at timestamptz,
-  erasure_role_version smallint NOT NULL DEFAULT 1 CHECK(erasure_role_version=1),
-  erasure_role_xid bigint NOT NULL
-);
-CREATE INDEX recovery_copy_subject ON auth_recovery_copy_source(account_id,delivery_id);
-CREATE INDEX recovery_copy_human ON auth_recovery_copy_source(erasure_human_id,delivery_id);
-CREATE INDEX recovery_copy_operator ON auth_recovery_copy_source(erasure_operator_id,delivery_id);
-CREATE INDEX recovery_copy_client_owner ON auth_recovery_copy_source(erasure_client_owner_id,delivery_id);
-CREATE INDEX recovery_copy_source_owner ON auth_recovery_copy_source(erasure_source_client_owner_id,delivery_id);
-CREATE INDEX native_role_auth_recovery_copy_source_pending ON auth_recovery_copy_source(delivery_id)
-  WHERE erasure_role_version=0;
-
-CREATE FUNCTION auth_recovery_copy_capture() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE source verification%ROWTYPE; owner_id text;
-BEGIN
-  -- The source is the native INSERT in THIS transaction, not a later observation
-  -- or a caller-supplied role/version/settings assertion. Derive every role and
-  -- timestamp from its exact key. Never copy identifier, value or their hashes.
-  SELECT id,value,erasure_account_id,erasure_human_id,erasure_operator_id,erasure_client_owner_id,
-    erasure_source_client_owner_id,erasure_role_xid,erasure_role_version,erasure_format,"createdAt","expiresAt"
-    INTO source.id,source.value,source.erasure_account_id,source.erasure_human_id,source.erasure_operator_id,
-      source.erasure_client_owner_id,source.erasure_source_client_owner_id,source.erasure_role_xid,
-      source.erasure_role_version,source.erasure_format,source."createdAt",source."expiresAt"
-    FROM verification WHERE id=NEW.delivery_id;
-  IF NOT FOUND OR source.erasure_role_xid IS DISTINCT FROM txid_current()
-    OR source.erasure_role_version<>1 OR source.erasure_format IS DISTINCT FROM 'reset-v1'
-    OR source.erasure_account_id IS NULL OR source.erasure_account_id IS DISTINCT FROM source.value THEN
-    RAISE EXCEPTION 'Auth recovery Source provenance unavailable' USING ERRCODE='55000';
-  END IF;
-  NEW.account_id:=source.erasure_account_id;
-  NEW.erasure_human_id:=source.erasure_human_id;
-  NEW.erasure_operator_id:=source.erasure_operator_id;
-  NEW.erasure_client_owner_id:=source.erasure_client_owner_id;
-  NEW.erasure_source_client_owner_id:=source.erasure_source_client_owner_id;
-  NEW.created_at:=source."createdAt";
-  NEW.expires_at:=source."expiresAt";
-  NEW.erasure_role_xid:=source.erasure_role_xid;
-  NEW.erasure_role_version:=1;
-  IF NEW.status<>'intent' OR NEW.attempts<>0 OR NEW.attempted_at IS NOT NULL
-    OR NEW.code<>'receiving-adapter-unavailable' THEN
-    RAISE EXCEPTION 'Auth recovery Source must begin at intent' USING ERRCODE='55000';
-  END IF;
-  FOREACH owner_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_human_id,NEW.erasure_operator_id,
-      NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
-    PERFORM auth_erasure_admit(owner_id);
-    IF EXISTS(SELECT 1 FROM auth_erasure WHERE account_id=owner_id) THEN
-      RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
-    END IF;
-  END LOOP;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER recovery_copy_capture BEFORE INSERT ON auth_recovery_copy_source
-  FOR EACH ROW EXECUTE FUNCTION auth_recovery_copy_capture();
-
-CREATE FUNCTION auth_recovery_copy_producer_cut() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  -- Native role projection finishes after INSERT but inside its supported
-  -- adapter transaction. This commit-time guard refuses old reset writers.
-  IF EXISTS(SELECT 1 FROM verification WHERE id=NEW.id AND erasure_format='reset-v1'
-      AND erasure_role_xid=txid_current())
-    AND NOT EXISTS(SELECT 1 FROM auth_recovery_copy_source WHERE delivery_id=NEW.id) THEN
-    RAISE EXCEPTION 'Auth recovery Source producer unavailable' USING ERRCODE='55000';
-  END IF;
-  RETURN NULL;
-END $$;
-CREATE CONSTRAINT TRIGGER zz_recovery_copy_producer_cut AFTER INSERT ON verification
-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION auth_recovery_copy_producer_cut();
-
-CREATE FUNCTION auth_recovery_copy_progress() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE owner_id text;
-BEGIN
-  -- Only a receiving owner's durable verified disposition could authorize
-  -- minimization. There is no such installed adapter in this Source slice.
-  IF TG_OP='DELETE' THEN
-    RAISE EXCEPTION 'Auth recovery receiving disposition unavailable' USING ERRCODE='55000';
-  END IF;
-  IF ROW(NEW.delivery_id,NEW.producer,NEW.source_component,NEW.account_id,
-      NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,
-      NEW.created_at,NEW.expires_at,NEW.sink_generation,NEW.custody,NEW.erasure_role_version,NEW.erasure_role_xid)
-    IS DISTINCT FROM ROW(OLD.delivery_id,OLD.producer,OLD.source_component,OLD.account_id,
-      OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id,
-      OLD.created_at,OLD.expires_at,OLD.sink_generation,OLD.custody,OLD.erasure_role_version,OLD.erasure_role_xid) THEN
-    RAISE EXCEPTION 'Auth recovery Source is immutable' USING ERRCODE='55000';
-  END IF;
-  IF OLD.status='intent' AND NEW.status='in-flight' AND OLD.attempts=0 AND NEW.attempts=1
-    AND OLD.attempted_at IS NULL AND NEW.attempted_at IS NOT NULL
-    AND NEW.code='receiving-result-unavailable' THEN
-    FOREACH owner_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_human_id,NEW.erasure_operator_id,
-        NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
-      PERFORM auth_erasure_admit(owner_id);
-      IF EXISTS(SELECT 1 FROM auth_erasure WHERE account_id=owner_id) THEN
-        RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
-      END IF;
-    END LOOP;
-  ELSIF OLD.status='in-flight' AND NEW.status='unknown' AND NEW.attempts=OLD.attempts
-    AND NEW.attempted_at=OLD.attempted_at
-    AND NEW.code IN ('legacy-void','unsupported-result','callback-failed','callback-timeout') THEN
-    -- Late completion is technical evidence only; current erasure does not
-    -- authorize resending, invalidate the source, or certify a receiver fence.
-    NULL;
-  ELSE
-    RAISE EXCEPTION 'Auth recovery Source progress refused' USING ERRCODE='55000';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER recovery_copy_progress BEFORE UPDATE OR DELETE ON auth_recovery_copy_source
-  FOR EACH ROW EXECUTE FUNCTION auth_recovery_copy_progress();
-
-ALTER TABLE auth_native_role_deployment DROP CONSTRAINT auth_native_role_deployment_store_index_check;
-ALTER TABLE auth_native_role_deployment ADD CHECK(store_index BETWEEN 0 AND 28);
--- A new empty table cannot establish coverage of prior/retired sends. Keep the
--- existing permanent native conversion reason, even after verification TTL.
-ALTER TABLE auth_erasure ADD COLUMN recovery_copy_pending text NOT NULL DEFAULT 'recovery-copy-coverage'
-  CHECK(recovery_copy_pending IN ('recovery-copy-custody','recovery-copy-coverage'));
-
-ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_actor_id text;
-
-ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_principal_id text;
-
-ALTER TABLE public.auth_workflow_request ADD COLUMN erasure_source_client_id text;
-
-ALTER TABLE public.auth_workflow_request ADD COLUMN request_party_version smallint DEFAULT 0 NOT NULL;
-
-ALTER TABLE public.auth_workflow_request ADD COLUMN request_context_version smallint DEFAULT 0 NOT NULL;
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_request_party_context CHECK (((request_party_version = 0) OR ((request_context_version = 1) AND (erasure_actor_version = 1) AND (erasure_actor_id IS NOT NULL) AND (erasure_source_client_id IS NOT NULL))));
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_actor_id_check CHECK (((octet_length(erasure_actor_id) >= 1) AND (octet_length(erasure_actor_id) <= 1024)));
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_principal_id_check CHECK (((octet_length(erasure_principal_id) >= 1) AND (octet_length(erasure_principal_id) <= 1024)));
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_erasure_source_client_id_check CHECK (((octet_length(erasure_source_client_id) >= 1) AND (octet_length(erasure_source_client_id) <= 1024)));
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_request_party_version_check CHECK ((request_party_version = ANY (ARRAY[0, 1])));
-
-ALTER TABLE public.auth_workflow_request ADD CONSTRAINT auth_workflow_request_request_context_version_check CHECK ((request_context_version = ANY (ARRAY[0, 1])));
-
-CREATE INDEX erasure_request_actor ON public.auth_workflow_request USING btree (erasure_actor_id, workflow_id);
-
-CREATE INDEX erasure_request_principal ON public.auth_workflow_request USING btree (erasure_principal_id, workflow_id);
-
-CREATE INDEX erasure_request_source_client ON public.auth_workflow_request USING btree (erasure_source_client_id, workflow_id);
-
-CREATE INDEX erasure_request_unknown_context ON public.auth_workflow_request USING btree (workflow_id) WHERE (request_party_version = 0);
-
-CREATE FUNCTION public.auth_request_parties_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP='UPDATE' AND
-    ROW(NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,
-      NEW.erasure_client_id,NEW.erasure_member_id,NEW.erasure_previous_operator_id,
-      NEW.erasure_stage_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,
-      NEW.erasure_actor_version,NEW.erasure_actor_id,NEW.erasure_principal_id,
-      NEW.erasure_source_client_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,
-      NEW.request_party_version,NEW.request_context_version)
-    IS DISTINCT FROM
-    ROW(OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,
-      OLD.erasure_client_id,OLD.erasure_member_id,OLD.erasure_previous_operator_id,
-      OLD.erasure_stage_id,OLD.erasure_initiator_id,OLD.erasure_delegate_id,
-      OLD.erasure_actor_version,OLD.erasure_actor_id,OLD.erasure_principal_id,
-      OLD.erasure_source_client_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id,
-      OLD.request_party_version,OLD.request_context_version) THEN
-    RAISE EXCEPTION 'Auth request parties are immutable' USING ERRCODE='55000';
-  END IF;
-  IF TG_OP='UPDATE' AND NEW.request IS NOT DISTINCT FROM OLD.request
-    AND NEW.digest IS NOT DISTINCT FROM OLD.digest AND NEW.terminal_at IS NOT NULL THEN RETURN NEW; END IF;
-  PERFORM auth_erasure_admit(NEW.erasure_actor_id);
-  PERFORM auth_erasure_admit(NEW.erasure_principal_id);
-  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
-  RETURN NEW;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.auth_delete_workflow_request() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  -- Exactly nativeRequestTerminal's registration closure. Other native consumers
-  -- retain their pending request until their owning closure can retire it.
-  DELETE FROM public.auth_workflow_request r
-    USING public.auth_native_consumer_proof p
-    WHERE r.workflow_id=OLD.workflow_uuid AND r.terminal_at IS NOT NULL
-      AND r.request_party_version=1 AND r.request_context_version=1
-      AND p.store='registration' AND p.key=r.erasure_stage_id
-      AND p.binding->>1=r.workflow_id AND p.result->>'outcome' IN ('activated','expired');
-  RETURN OLD;
-END $$;
-
-CREATE TRIGGER zzz_request_parties BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_request_parties_guard();
-
---
--- Name: auth_minimize_native_registration(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_minimize_native_registration(stage_key text) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE proof auth_native_consumer_proof; skeleton jsonb;
-BEGIN
-  IF stage_key IS NULL THEN RETURN; END IF;
-  -- Lock before the separate dependency statement. Concurrent last-reader
-  -- deletions serialize here; the waiter observes the previous commit as well.
-  SELECT * INTO proof FROM auth_native_consumer_proof
-    WHERE store='registration' AND key=stage_key FOR UPDATE;
-  IF NOT FOUND THEN RETURN; END IF;
-  skeleton:=auth_native_registration_skeleton(proof.binding,proof.result);
-  IF skeleton IS NULL OR auth_native_registration_readers(stage_key) THEN RETURN; END IF;
-  UPDATE auth_native_consumer_proof SET
-    binding=CASE WHEN proof.result->>'outcome'='expired' THEN 'null'::jsonb
-      ELSE jsonb_build_array(proof.binding->0,proof.binding->1,proof.binding->2,proof.binding->3) END,
-    result=skeleton WHERE store='registration' AND key=stage_key;
-END $$;
-
-
---
--- Name: auth_native_consumer_proof_minimize_guard(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_consumer_proof_minimize_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE skeleton jsonb; minimal_binding jsonb;
-BEGIN
-  IF TG_OP='UPDATE' AND OLD.store='registration' AND NEW.store=OLD.store AND NEW.key=OLD.key THEN
-    skeleton:=auth_native_registration_skeleton(OLD.binding,OLD.result);
-    minimal_binding:=CASE WHEN OLD.result->>'outcome'='expired' THEN 'null'::jsonb
-      ELSE jsonb_build_array(OLD.binding->0,OLD.binding->1,OLD.binding->2,OLD.binding->3) END;
-    IF skeleton IS NOT NULL AND NEW.binding=minimal_binding AND NEW.result=skeleton
-      AND NOT auth_native_registration_readers(OLD.key) THEN RETURN NEW; END IF;
-  END IF;
-  RAISE EXCEPTION 'Native consumer terminal proof is immutable' USING ERRCODE='55000';
-END $$;
-
-
---
--- Name: auth_native_registration_producer_fence(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_producer_fence() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE stage_key text;
-BEGIN
-  stage_key:=CASE WHEN TG_TABLE_NAME='auth_registration_stage' THEN to_jsonb(NEW)->>'registration_id'
-    ELSE to_jsonb(NEW)->>'erasure_stage_id' END;
-  IF TG_OP='UPDATE' THEN
-    IF to_jsonb(NEW)->>'erasure_stage_id' IS NOT DISTINCT FROM to_jsonb(OLD)->>'erasure_stage_id'
-      THEN RETURN NEW; END IF;
-    IF to_jsonb(OLD)->>'erasure_stage_id' IS NOT NULL THEN
-      RAISE EXCEPTION 'Native registration reader identity is immutable' USING ERRCODE='55000';
-    END IF;
-  END IF;
-  IF stage_key IS NULL THEN RETURN NEW; END IF;
-  PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||stage_key,0));
-  IF EXISTS(SELECT 1 FROM auth_native_consumer_proof WHERE store='registration' AND key=stage_key) THEN
-    -- Preserve existing exact-key ON CONFLICT replay while its native reader
-    -- remains. The row lock prevents a concurrent DELETE/reinsert resurrection.
-    IF TG_TABLE_NAME='auth_workflow_request' THEN
-      PERFORM 1 FROM auth_workflow_request WHERE workflow_id=NEW.workflow_id
-        AND erasure_stage_id=stage_key FOR KEY SHARE;
-      IF FOUND THEN RETURN NEW; END IF;
-    ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
-      PERFORM 1 FROM auth_provisioning_receipt WHERE idempotency_key=NEW.idempotency_key
-        AND erasure_stage_id=stage_key FOR KEY SHARE;
-      IF FOUND THEN RETURN NEW; END IF;
-    END IF;
-    RAISE EXCEPTION 'Native registration consumer is terminal' USING ERRCODE='55000';
-  END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_native_registration_proof_insert_lock(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_proof_insert_lock() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.store='registration' THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('auth-native-registration:'||NEW.key,0));
-  END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_native_registration_proof_inserted(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_proof_inserted() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.store='registration' THEN PERFORM auth_minimize_native_registration(NEW.key); END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_native_registration_reader_deleted(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_reader_deleted() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  PERFORM auth_minimize_native_registration(CASE WHEN TG_TABLE_NAME='auth_registration_stage'
-    THEN to_jsonb(OLD)->>'registration_id' ELSE to_jsonb(OLD)->>'erasure_stage_id' END);
-  RETURN OLD;
-END $$;
-
-
---
--- Name: auth_native_registration_readers(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_readers(stage_key text) RETURNS boolean
-    LANGUAGE sql
-    AS $$
-  SELECT EXISTS(SELECT 1 FROM auth_registration_stage WHERE registration_id=stage_key)
-    OR EXISTS(SELECT 1 FROM auth_provisioning_receipt WHERE erasure_stage_id=stage_key)
-    OR EXISTS(SELECT 1 FROM auth_workflow_request WHERE erasure_stage_id=stage_key);
-$$;
-
-
---
--- Name: auth_native_registration_skeleton(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_native_registration_skeleton(source_binding jsonb, source_result jsonb) RETURNS jsonb
-    LANGUAGE sql IMMUTABLE
-    AS $_$
-  SELECT CASE
-    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
-      AND source_result->>'outcome'='expired'
-      AND source_result->'sourceResult'->>'accountId'=source_binding->>3
-      AND source_result->'sourceResult'->>'kind'='tombstone'
-      AND source_result->'sourceResult'->>'receiptId'<>''
-      AND source_result->'sourceResult'->>'minimumAuthnEpoch' ~ '^[1-9][0-9]*$'
-      AND source_result->'handleResult'=jsonb_build_object('accountId',source_binding->>3,'handle',source_binding->>4)
-      AND (CASE WHEN source_binding->6='null'::jsonb THEN NOT source_result ? 'responsibilityResult'
-        ELSE source_result->'responsibilityResult'=jsonb_build_object(
-          'retired',jsonb_build_object('operatorAccountId',source_binding->>6,
-            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7),
-          'released',jsonb_build_object('operatorAccountId',source_binding->>6,
-            'subjectAccountId',source_binding->>3,'reservationId',source_binding->>7)) END)
-      THEN jsonb_build_object('outcome','expired')
-    WHEN jsonb_array_length(CASE WHEN jsonb_typeof(source_binding)='array' THEN source_binding ELSE '[]'::jsonb END)=8
-      AND source_result=jsonb_build_object('outcome','activated',
-        'sourceResult',jsonb_build_object('accountId',source_binding->>3))
-      THEN source_result
-    ELSE NULL END;
-$_$;
-
-
---
--- Name: auth_native_proof_provisioning_stage; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_native_proof_provisioning_stage ON public.auth_provisioning_receipt USING btree (erasure_stage_id, idempotency_key);
-
-
---
--- Name: auth_native_proof_request_stage; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_native_proof_request_stage ON public.auth_workflow_request USING btree (erasure_stage_id, workflow_id);
-
-
---
--- Name: auth_native_consumer_proof aa_native_proof_insert_lock; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER aa_native_proof_insert_lock BEFORE INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_insert_lock();
-
-
---
--- Name: auth_provisioning_receipt aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
-
-
---
--- Name: auth_registration_stage aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
-
-
---
--- Name: auth_workflow_request aa_native_terminal_fence; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER aa_native_terminal_fence BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_producer_fence();
-
-
---
--- Name: auth_native_consumer_proof auth_native_consumer_proof_immutable; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER auth_native_consumer_proof_immutable BEFORE DELETE OR UPDATE ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_consumer_proof_minimize_guard();
-
-
---
--- Name: auth_native_consumer_proof native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER native_proof_minimize AFTER INSERT ON public.auth_native_consumer_proof FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_proof_inserted();
-
-
---
--- Name: auth_provisioning_receipt native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
-
-
---
--- Name: auth_registration_stage native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
-
-
---
--- Name: auth_workflow_request native_proof_minimize; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER native_proof_minimize AFTER DELETE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_native_registration_reader_deleted();
-
--- Native historical configuration disposition (compiler-emitted objects).
---
--- Name: auth_configuration_client_guard(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_configuration_client_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  -- These fields have no admitted personal producer or active native consumer.
-  NEW.contacts := NULL; NEW.name := NULL; NEW.uri := NULL; NEW.icon := NULL;
-  NEW.tos := NULL; NEW.policy := NULL; NEW."softwareId" := NULL;
-  NEW."softwareVersion" := NULL; NEW."softwareStatement" := NULL;
-  IF TG_OP='INSERT' THEN
-    NEW.metadata := NULL;
-    NEW."referenceId" := NULL;
-    NEW.display_name_writer := NULL;
-  ELSE
-    NEW.display_name_writer := OLD.display_name_writer;
-    IF OLD.display_name_writer=1 THEN
-      IF octet_length(NEW.display_name)>400 THEN
-        NEW.display_name_writer := NULL;
-      ELSIF NEW.display_name IS DISTINCT FROM OLD.display_name OR NEW.client_id IS DISTINCT FROM OLD.client_id THEN
-        NEW.display_name_writer := NULL;
-      END IF;
-    END IF;
-    -- There is no admitted source retiring a legacy provider reference.
-    NEW."referenceId" := OLD."referenceId";
-    IF OLD.metadata IS NULL THEN
-      NEW.metadata := NULL;
-    ELSIF NEW.metadata IS NULL THEN
-      IF NEW.client_id='rezics-website'
-        AND current_setting('auth.configuration_client',true) IS DISTINCT FROM NEW.client_id THEN
-        RAISE EXCEPTION 'Auth website metadata requires configuration replacement' USING ERRCODE='55000';
-      END IF;
-    ELSE
-      -- Never compare, traverse or detoast the old JSON to classify a write.
-      -- A non-null attempted replacement cannot install a new private value.
-      NEW.metadata := OLD.metadata;
-    END IF;
-  END IF;
-  -- The command supplies the actual configured key and label, never a caller's
-  -- assertion that arbitrary JSON is safe. Transaction-local settings expire.
-  IF current_setting('auth.configuration_client',true)=NEW.client_id
-    AND current_setting('auth.configuration_label',true)=NEW.display_name THEN
-    NEW.display_name_writer := 1;
-  END IF;
-  IF NEW.display_name_writer IS DISTINCT FROM 1 THEN NEW.display_name := NULL; END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_configuration_link_guard(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_configuration_link_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  NEW.metadata := NULL;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_configuration_resource_guard(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_configuration_resource_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  NEW.metadata := NULL;
-  IF TG_OP='INSERT' THEN
-    NEW."customClaims" := NULL;
-    NEW.name_writer := NULL;
-  ELSE
-    NEW.name_writer := OLD.name_writer;
-    IF OLD.name_writer=1 THEN
-      IF NEW.name IS DISTINCT FROM 'REZICS API' OR NEW.id IS DISTINCT FROM OLD.id
-        OR NEW.identifier IS DISTINCT FROM OLD.identifier THEN NEW.name_writer := NULL; END IF;
-    END IF;
-    IF OLD."customClaims" IS NULL THEN
-      NEW."customClaims" := NULL;
-    ELSIF NEW."customClaims" IS NULL THEN
-      IF current_setting('auth.configuration_resource',true) IS DISTINCT FROM NEW.id THEN
-        RAISE EXCEPTION 'Auth resource claims require configuration replacement' USING ERRCODE='55000';
-      END IF;
-    ELSE
-      NEW."customClaims" := OLD."customClaims";
-    END IF;
-  END IF;
-  IF current_setting('auth.configuration_resource',true)=NEW.id AND NEW.name='REZICS API' THEN
-    NEW.name_writer := 1;
-  END IF;
-  IF NEW.name_writer IS DISTINCT FROM 1 THEN NEW.name := ''; NEW.name_writer := 0; END IF;
-  RETURN NEW;
-END $$;
-
-
---
--- Name: auth_metadata_scrub; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.auth_metadata_scrub (
-    store text NOT NULL,
-    writer_version integer NOT NULL,
-    after_key text,
-    CONSTRAINT auth_metadata_scrub_after_key_check CHECK ((octet_length(after_key) <= 1024)),
-    CONSTRAINT auth_metadata_scrub_store_check CHECK ((store = ANY (ARRAY['auth_client'::text, 'oauthResource'::text, 'oauthClientResource'::text]))),
-    CONSTRAINT auth_metadata_scrub_writer_version_check CHECK ((writer_version = 1))
-);
-
-
---
--- Name: auth_metadata_scrub auth_metadata_scrub_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_metadata_scrub
-    ADD CONSTRAINT auth_metadata_scrub_pkey PRIMARY KEY (store);
-
-
---
--- Name: auth_client configuration_fields; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_client_guard();
-
-
---
--- Name: oauthClientResource configuration_fields; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthClientResource" FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_link_guard();
-
-
---
--- Name: oauthResource configuration_fields; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER configuration_fields BEFORE INSERT OR UPDATE ON public."oauthResource" FOR EACH ROW EXECUTE FUNCTION public.auth_configuration_resource_guard();
-
---
--- Name: auth_creation_parties_guard(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.auth_creation_parties_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE source auth_registration_stage%ROWTYPE; personal_id text; producer_client text;
-BEGIN
-  IF TG_OP='UPDATE' THEN
-    IF ROW(NEW.creation_context_version,NEW.creation_scope_digest,NEW.creation_context,NEW.creation_approval_reference,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id) IS DISTINCT FROM ROW(OLD.creation_context_version,OLD.creation_scope_digest,OLD.creation_context,OLD.creation_approval_reference,OLD.erasure_actor_id,OLD.erasure_human_id,OLD.erasure_principal_id,OLD.erasure_native_operator_id,OLD.erasure_client_id,OLD.erasure_source_client_id,OLD.erasure_client_owner_id,OLD.erasure_source_client_owner_id) THEN
-      RAISE EXCEPTION 'Auth creation source is immutable' USING ERRCODE='55000';
-    END IF;
-    IF TG_TABLE_NAME='auth_registration_stage' THEN
-      IF OLD.creation_context_version=1 AND (
-        ROW(NEW.registration_id,NEW.request_key,NEW.account_id,NEW.handle,NEW.request_digest,
-            NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_version)
-        IS DISTINCT FROM
-        ROW(OLD.registration_id,OLD.request_key,OLD.account_id,OLD.handle,OLD.request_digest,
-            OLD.erasure_creator_id,OLD.erasure_operator_id,OLD.erasure_initiator_id,OLD.erasure_delegate_id,OLD.erasure_actor_version)
-        OR (OLD.creation_context IS NOT NULL AND NEW.creation_binding IS DISTINCT FROM OLD.creation_binding)
-      ) THEN RAISE EXCEPTION 'Auth creation request is immutable' USING ERRCODE='55000'; END IF;
-      IF NEW.ciphertext IS NOT NULL AND NEW.ciphertext IS DISTINCT FROM OLD.ciphertext THEN
-        IF NEW.creation_context_version<>1 THEN
-          RAISE EXCEPTION 'Auth creation context unavailable: historical-provenance' USING ERRCODE='55000';
-        END IF;
-      ELSE RETURN NEW;
-      END IF;
-    ELSE RETURN NEW;
-    END IF;
-  ELSIF TG_TABLE_NAME='auth_provisioning_receipt' THEN
-    -- Exact source supplied by the native credential transaction, never a
-    -- descriptor search. The old generic no-stage adapter stays unknown.
-    IF NEW.erasure_stage_id IS NOT NULL THEN
-      SELECT * INTO source FROM auth_registration_stage
-        WHERE registration_id=NEW.erasure_stage_id AND account_id=NEW.account_id FOR UPDATE;
-      IF NOT FOUND OR source.creation_context_version<>1
-        OR NEW.creation_scope_digest IS DISTINCT FROM source.creation_scope_digest THEN
-        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
-      END IF;
-      IF ROW(NEW.registration_id,NEW.reservation_id,NEW.expires_at) IS DISTINCT FROM
-         ROW(source.reservation_id,source.reservation_id,source.expires_at) THEN
-        RAISE EXCEPTION 'Auth creation receipt source binding refused' USING ERRCODE='55000';
-      END IF;
-      NEW.creation_context_version:=source.creation_context_version;
-      NEW.creation_scope_digest:=source.creation_scope_digest;
-      NEW.creation_context:=source.creation_context;
-      NEW.creation_approval_reference:=source.creation_approval_reference;
-      NEW.erasure_actor_id:=source.erasure_actor_id;
-      NEW.erasure_human_id:=source.erasure_human_id;
-      NEW.erasure_principal_id:=source.erasure_principal_id;
-      NEW.erasure_native_operator_id:=source.erasure_native_operator_id;
-      NEW.erasure_client_id:=source.erasure_client_id;
-      NEW.erasure_source_client_id:=source.erasure_source_client_id;
-      NEW.erasure_client_owner_id:=source.erasure_client_owner_id;
-      NEW.erasure_source_client_owner_id:=source.erasure_source_client_owner_id;
-      NEW.erasure_creator_id:=source.erasure_creator_id;
-      NEW.erasure_operator_id:=source.erasure_operator_id;
-      NEW.erasure_initiator_id:=source.erasure_initiator_id;
-      NEW.erasure_delegate_id:=source.erasure_delegate_id;
-      NEW.erasure_actor_version:=source.erasure_actor_version;
-    ELSE
-      IF EXISTS (SELECT 1 FROM auth_registration_stage WHERE account_id=NEW.account_id) OR
-         NEW.creation_context_version<>0 OR NEW.creation_context IS NOT NULL THEN
-        RAISE EXCEPTION 'Auth creation receipt source unavailable' USING ERRCODE='55000';
-      END IF;
-      PERFORM auth_native_role_unknown('auth_provisioning_receipt','source-unavailable');
-      RETURN NEW;
-    END IF;
-  ELSE
-    IF current_setting('auth.native_role_producer',true) IS DISTINCT FROM '1' OR
-       NEW.creation_context_version<>1 THEN
-      RAISE EXCEPTION 'Auth creation context unavailable: producer-missing' USING ERRCODE='55000';
-    END IF;
-  END IF;
-  IF NEW.creation_scope_digest IS NULL OR NEW.erasure_actor_version<>1 THEN
-    RAISE EXCEPTION 'Auth creation context binding refused' USING ERRCODE='55000';
-  END IF;
-  IF NEW.creation_context IS NULL THEN
-    -- Public human registration has a preselected subject, with no authenticated
-    -- approval actor, delegated principal, opening operator or source client.
-    IF ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,
-       NEW.erasure_native_operator_id,NEW.erasure_client_id,NEW.erasure_source_client_id,
-       NEW.creation_approval_reference,NEW.erasure_creator_id,NEW.erasure_operator_id,
-       NEW.erasure_initiator_id,NEW.erasure_delegate_id) IS DISTINCT FROM
-       ROW(NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,
-           NULL::text,NULL::text,NULL::text,NULL::text,NULL::text) THEN
-      RAISE EXCEPTION 'Auth public creation provenance refused' USING ERRCODE='55000';
-    END IF;
-  ELSE
-    IF jsonb_typeof(NEW.creation_context)<>'object' OR
-       NEW.erasure_actor_id IS NULL OR NEW.erasure_source_client_id IS NULL OR NEW.creation_approval_reference IS NULL OR
-       ROW(NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,
-           NEW.erasure_source_client_id,NEW.creation_approval_reference,NEW.erasure_client_id) IS DISTINCT FROM
-       ROW(NEW.creation_context->>'actorAccountId',NEW.creation_context->>'actingHumanId',
-           NEW.creation_context->>'principalAccountId',NEW.creation_context->>'operatorAccountId',
-           NEW.creation_context->>'sourceClientId',NEW.creation_context->>'approvalReference',
-           NEW.creation_context->'operation'->>'targetClientId') THEN
-      RAISE EXCEPTION 'Auth approved creation provenance refused' USING ERRCODE='55000';
-    END IF;
-    IF TG_TABLE_NAME='auth_registration_stage' THEN
-    IF (
-       NEW.creation_binding->>'kind' IS DISTINCT FROM 'automated' OR
-       NEW.creation_binding->>'operatorAccountId' IS DISTINCT FROM NEW.erasure_operator_id OR
-       NEW.creation_binding->>'operationKey' IS DISTINCT FROM NEW.creation_context->>'operationKey' OR
-       NEW.creation_context->'operation'->>'targetResourceId' IS DISTINCT FROM NEW.erasure_operator_id OR
-       NEW.creation_context->'operation'->>'kind' IS DISTINCT FROM 'automated' OR
-       NEW.creation_context->'operation'->>'action' IS DISTINCT FROM 'account:manage'
-    ) THEN RAISE EXCEPTION 'Auth approved creation target refused' USING ERRCODE='55000'; END IF;
-    END IF;
-  END IF;
-  FOREACH personal_id IN ARRAY ARRAY[NEW.account_id,NEW.erasure_creator_id,NEW.erasure_operator_id,NEW.erasure_initiator_id,NEW.erasure_delegate_id,NEW.erasure_actor_id,NEW.erasure_human_id,NEW.erasure_principal_id,NEW.erasure_native_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id] LOOP
-    PERFORM auth_erasure_admit(personal_id);
-  END LOOP;
-  FOREACH producer_client IN ARRAY ARRAY[NEW.erasure_client_id,NEW.erasure_source_client_id] LOOP
-    PERFORM auth_erasure_admit_client(producer_client);
-  END LOOP;
-  IF TG_OP='INSERT' AND TG_TABLE_NAME='auth_registration_stage' THEN
-    SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_client_id FOR SHARE;
-    SELECT "userId" INTO NEW.erasure_source_client_owner_id FROM auth_client WHERE client_id=NEW.erasure_source_client_id FOR SHARE;
-    -- The fixed deployment client can be ownerless. An absent source client is
-    -- unavailable; only an actual public registration makes it inapplicable.
-    IF NEW.erasure_source_client_id IS NOT NULL AND NOT FOUND THEN
-      RAISE EXCEPTION 'Auth creation source client unavailable' USING ERRCODE='55000';
-    END IF;
-    PERFORM auth_erasure_admit(NEW.erasure_client_owner_id);
-    PERFORM auth_erasure_admit(NEW.erasure_source_client_owner_id);
-  END IF;
-  RETURN NEW;
-END $$;
-
---
--- Name: creation_receipt_actor; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_actor ON public.auth_provisioning_receipt USING btree (erasure_actor_id, idempotency_key);
-
---
--- Name: creation_receipt_client; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_client ON public.auth_provisioning_receipt USING btree (erasure_client_id, idempotency_key);
-
---
--- Name: creation_receipt_client_owner; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_client_owner ON public.auth_provisioning_receipt USING btree (erasure_client_owner_id, idempotency_key);
-
---
--- Name: creation_receipt_human; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_human ON public.auth_provisioning_receipt USING btree (erasure_human_id, idempotency_key);
-
---
--- Name: creation_receipt_native_operator; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_native_operator ON public.auth_provisioning_receipt USING btree (erasure_native_operator_id, idempotency_key);
-
---
--- Name: creation_receipt_principal; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_principal ON public.auth_provisioning_receipt USING btree (erasure_principal_id, idempotency_key);
-
---
--- Name: creation_receipt_source_client; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_source_client ON public.auth_provisioning_receipt USING btree (erasure_source_client_id, idempotency_key);
-
---
--- Name: creation_receipt_source_client_owner; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_source_client_owner ON public.auth_provisioning_receipt USING btree (erasure_source_client_owner_id, idempotency_key);
-
---
--- Name: creation_receipt_unknown; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_receipt_unknown ON public.auth_provisioning_receipt USING btree (idempotency_key) WHERE (creation_context_version = 0);
-
---
--- Name: creation_stage_actor; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_actor ON public.auth_registration_stage USING btree (erasure_actor_id, registration_id);
-
---
--- Name: creation_stage_client; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_client ON public.auth_registration_stage USING btree (erasure_client_id, registration_id);
-
---
--- Name: creation_stage_client_owner; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_client_owner ON public.auth_registration_stage USING btree (erasure_client_owner_id, registration_id);
-
---
--- Name: creation_stage_human; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_human ON public.auth_registration_stage USING btree (erasure_human_id, registration_id);
-
---
--- Name: creation_stage_native_operator; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_native_operator ON public.auth_registration_stage USING btree (erasure_native_operator_id, registration_id);
-
---
--- Name: creation_stage_principal; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_principal ON public.auth_registration_stage USING btree (erasure_principal_id, registration_id);
-
---
--- Name: creation_stage_source_client; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_source_client ON public.auth_registration_stage USING btree (erasure_source_client_id, registration_id);
-
---
--- Name: creation_stage_source_client_owner; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_source_client_owner ON public.auth_registration_stage USING btree (erasure_source_client_owner_id, registration_id);
-
---
--- Name: creation_stage_unknown; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX creation_stage_unknown ON public.auth_registration_stage USING btree (registration_id) WHERE (creation_context_version = 0);
-
---
--- Name: auth_provisioning_receipt a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();
-
---
--- Name: auth_registration_stage a_creation_parties; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER a_creation_parties BEFORE INSERT OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_creation_parties_guard();
-
--- Exact native technical receipt in existing Auth receiving progress. The SDK
--- owns permanent writer guards; this migration never changes its schema.
-ALTER TABLE auth_copy_work ADD COLUMN sdk_fence_generation text;
-ALTER TABLE auth_copy_work ADD COLUMN sdk_fence_closure_id uuid;
-ALTER TABLE auth_copy_work ADD COLUMN sdk_fence_closed_at bigint;
-ALTER TABLE auth_copy_work ADD COLUMN sdk_fence_pending text CHECK (sdk_fence_pending IN (
-  'auth-sdk-permanent-late-writer-fence-unavailable',
-  'auth-sdk-native-fence-receipt-mismatch',
-  'auth-sdk-original-result-pending',
-  'auth-sdk-original-copy-mapping-unavailable',
-  'auth-sdk-original-source-pending',
-  'auth-sdk-original-consumer-pending',
-  'auth-sdk-native-copy-coverage-pending',
-  'auth-sdk-physical-copies-pending'
-));
-ALTER TABLE auth_copy_work ADD CONSTRAINT auth_copy_native_fence CHECK (
-  (sdk_fence_generation IS NULL AND sdk_fence_closure_id IS NULL AND sdk_fence_closed_at IS NULL)
-  OR (sdk_fence_generation IS NOT NULL AND sdk_fence_generation='2'
-    AND sdk_fence_closure_id IS NOT NULL AND sdk_fence_closed_at IS NOT NULL
-    AND sdk_fence_closed_at BETWEEN 1 AND 9007199254740991
-    AND ready AND result_finished_at IS NOT NULL)
-);
-CREATE FUNCTION auth_copy_native_fence_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP='DELETE' THEN
-    IF OLD.sdk_fence_generation IS NOT NULL THEN
-      RAISE EXCEPTION 'Auth native writer receipt is permanent' USING ERRCODE='23514';
-    END IF;
-    RETURN OLD;
-  END IF;
-  IF OLD.sdk_fence_generation IS NOT NULL AND (
-    ROW(NEW.workflow_id,NEW.name,NEW.version,NEW.scope_count,NEW.parent_workflow_id,
-      NEW.ready,NEW.source_key,NEW.result_digest,NEW.result_finished_at,NEW.sdk_fence_generation,NEW.sdk_fence_closure_id,NEW.sdk_fence_closed_at)
-    IS DISTINCT FROM ROW(OLD.workflow_id,OLD.name,OLD.version,OLD.scope_count,OLD.parent_workflow_id,
-      OLD.ready,OLD.source_key,OLD.result_digest,OLD.result_finished_at,OLD.sdk_fence_generation,OLD.sdk_fence_closure_id,OLD.sdk_fence_closed_at)
-    OR (OLD.retired AND NOT NEW.retired) OR (OLD.absent AND NOT NEW.absent)) THEN
-    RAISE EXCEPTION 'Auth native writer receipt is immutable' USING ERRCODE='23514';
-  END IF;
-  IF NEW.retired AND NOT OLD.retired AND NEW.sdk_fence_generation IS NULL THEN
-    RAISE EXCEPTION 'Auth native writer receipt is missing' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_copy_native_fence_immutable BEFORE UPDATE OR DELETE ON auth_copy_work
-  FOR EACH ROW EXECUTE FUNCTION auth_copy_native_fence_immutable();
-
-ALTER TABLE auth_erasure ADD COLUMN native_phase_upgrade jsonb
-  CHECK(octet_length(native_phase_upgrade::text)<=16384);
-CREATE FUNCTION auth_native_phase_upgrade_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.native_phase_upgrade IS NOT NULL AND NEW.native_phase_upgrade IS DISTINCT FROM OLD.native_phase_upgrade THEN
-    RAISE EXCEPTION 'Auth native phase upgrade evidence is immutable' USING ERRCODE='55000';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_native_phase_upgrade_immutable BEFORE UPDATE ON auth_erasure
-  FOR EACH ROW EXECUTE FUNCTION auth_native_phase_upgrade_immutable();
-
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM auth_workflow_request WHERE request_party_version=0 LIMIT 1) THEN
-    PERFORM auth_native_role_unknown('auth_workflow_request','unsupported-producer-format');
-  END IF;
-END $$;
-
-CREATE FUNCTION auth_native_request_party_version_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  -- The original ABI deliberately retains historical version zero. It is not
-  -- a current producer claim and can never certify native coverage.
-  IF NEW.request_party_version=0 THEN
-    PERFORM auth_native_role_unknown('auth_workflow_request','unsupported-producer-format');
-  ELSIF NEW.request_context_version<>1 OR NEW.erasure_actor_version<>1 THEN
-    RAISE EXCEPTION 'Auth native request party producer version refused' USING ERRCODE='55000';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER zzz_native_request_party_version BEFORE INSERT ON auth_workflow_request
-  FOR EACH ROW EXECUTE FUNCTION auth_native_request_party_version_guard();
-
-
--- Final forward-inventory pending predicate, after the native role extensions.
-DROP INDEX auth_erasure_pending;
-CREATE INDEX auth_erasure_pending ON auth_erasure(revision,id)
-  WHERE native_completed_at IS NULL OR native_role_version=0 OR native_phase_version<3 OR phase<102;
-
--- Local work is never the independent physical-owner authority. A copied receipt
--- can be used only through its exact currently bound Access receiving control.
-CREATE TABLE auth_receiving_work (
- obligation_id bigint NOT NULL REFERENCES auth_erasure(id),
- control_revision bigint NOT NULL,
- binding jsonb NOT NULL CHECK(octet_length(binding::text)<=1024),
- restore_generation text,
- native_xid xid8,
- closure_receipt_id uuid,
- closure_xid xid8,
- PRIMARY KEY(obligation_id,control_revision),
- CHECK((closure_receipt_id IS NULL)=(closure_xid IS NULL))
-);
-CREATE TABLE auth_receiving_copy (
- obligation_id bigint NOT NULL,
- control_revision bigint NOT NULL,
- workflow_id text NOT NULL CHECK(octet_length(workflow_id)<=1024),
- sdk_closure_id uuid NOT NULL,
- sdk_closed_at bigint NOT NULL,
- native_xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
- PRIMARY KEY(obligation_id,control_revision,workflow_id),
- FOREIGN KEY(obligation_id,control_revision) REFERENCES auth_receiving_work
-);
-CREATE FUNCTION auth_receiving_work_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving work is permanent'; END IF;
- IF TG_OP='INSERT' THEN
-  IF NEW.native_xid IS NOT NULL OR NEW.closure_receipt_id IS NOT NULL OR NEW.closure_xid IS NOT NULL THEN
-   RAISE EXCEPTION 'Auth receiving work must start without completion';
-  END IF;
- ELSE
-  IF (NEW.obligation_id,NEW.control_revision,NEW.binding,NEW.restore_generation)
-   IS DISTINCT FROM (OLD.obligation_id,OLD.control_revision,OLD.binding,OLD.restore_generation)
-   OR (OLD.native_xid IS NOT NULL AND NEW.native_xid IS NULL)
-   OR (OLD.closure_receipt_id IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
-   RAISE EXCEPTION 'Auth receiving work cannot replace its binding or completed receipt';
-  END IF;
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER auth_receiving_work_guard BEFORE INSERT OR UPDATE OR DELETE ON auth_receiving_work
- FOR EACH ROW EXECUTE FUNCTION auth_receiving_work_guard();
-CREATE FUNCTION auth_receiving_copy_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'Auth receiving SDK receipt is immutable'; END $$;
-CREATE TRIGGER auth_receiving_copy_immutable BEFORE UPDATE OR DELETE ON auth_receiving_copy
- FOR EACH ROW EXECUTE FUNCTION auth_receiving_copy_immutable();
-
-CREATE OR REPLACE FUNCTION auth_receiving_work_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Auth receiving work is permanent'; END IF;
- IF TG_OP='INSERT' THEN
-  IF NEW.native_xid IS NOT NULL OR NEW.closure_receipt_id IS NOT NULL OR NEW.closure_xid IS NOT NULL THEN
-   RAISE EXCEPTION 'Auth receiving work must start without completion';
-  END IF;
- ELSE
-  IF (NEW.obligation_id,NEW.control_revision,NEW.binding,NEW.restore_generation)
-   IS DISTINCT FROM (OLD.obligation_id,OLD.control_revision,OLD.binding,OLD.restore_generation)
-   OR (OLD.native_xid IS NOT NULL AND NEW.native_xid IS DISTINCT FROM OLD.native_xid)
-   OR (NEW.native_xid IS NOT NULL AND OLD.native_xid IS NULL AND NEW.native_xid<>pg_current_xact_id())
-   OR (NEW.closure_xid IS NOT NULL AND OLD.closure_xid IS NULL AND NEW.closure_xid<>pg_current_xact_id())
-   OR (OLD.closure_receipt_id IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
-   RAISE EXCEPTION 'Auth receiving work cannot replace its binding or completed receipt';
-  END IF;
- END IF;
- RETURN NEW;
-END $$;

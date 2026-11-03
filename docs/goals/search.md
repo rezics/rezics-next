@@ -25,6 +25,8 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
+Second-scope Space discovery uses the Content producer's complete native keyset pages and anonymous current summaries; the Space UUID is the sole hit identity, a public attached Realm only enriches it, and absent or invalid coverage remains readiness.
+
 Includes the public index tier, admitted catalogue plans and preparation, presentation profiles, compositions and
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
