@@ -71,16 +71,23 @@ test('an editor compares pinned and current field definitions without rewriting 
   expect(html).toContain('/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit');
   expect(html).toContain('statement=selected');
   expect(html).toContain(m.guide_close_compare({}, { locale: 'en' }));
-  expect(new URL(definitionGuideHref('en', { ...address, compare: undefined }), 'https://site.test').searchParams.get('returnTo')).toBe(
-    editor,
-  );
+  expect(
+    new URL(definitionGuideHref('en', { ...address, compare: undefined }), 'https://site.test').searchParams.get(
+      'returnTo',
+    ),
+  ).toBe(editor);
 
   const same = await compare({ ...address, release: currentDigest });
   if (!same.read.ok || same.read.pin !== 'compare') throw new Error('Expected matching comparison');
   expect(comparisonDigestsMatch(same.read.comparison)).toBe(true);
   expect(comparisonAspects(same.read.comparison).size).toBe(0);
   const sameHtml = renderToStaticMarkup(
-    createElement(DefinitionGuideContent, { address: { ...address, release: currentDigest }, locale: 'en', read: same.read, retry: () => {} }),
+    createElement(DefinitionGuideContent, {
+      address: { ...address, release: currentDigest },
+      locale: 'en',
+      read: same.read,
+      retry: () => {},
+    }),
   );
   expect(sameHtml).toContain(m.guide_no_change({}, { locale: 'en' }));
   expect(sameHtml).toContain(currentDigest);
@@ -88,7 +95,9 @@ test('an editor compares pinned and current field definitions without rewriting 
   const missing = await compare({ ...address, release: missingDigest });
   if (!missing.read.ok || missing.read.pin !== 'compare') throw new Error('Expected missing pin comparison');
   expect(missing.read.comparison.pinned).toEqual({ status: 'concealed', digest: missingDigest });
-  expect(missing.read.comparison.current.status === 'available' && missing.read.comparison.current.digest).toBe(currentDigest);
+  expect(missing.read.comparison.current.status === 'available' && missing.read.comparison.current.digest).toBe(
+    currentDigest,
+  );
   const missingHtml = renderToStaticMarkup(
     createElement(DefinitionGuideContent, {
       address: { ...address, release: missingDigest },

@@ -66,7 +66,12 @@ function qualifierNative(release: GuideRelease, id: string) {
   return nativeShape(release.properties[id]);
 }
 
-function qualifiersDiffer(pinned: PropertyDefinition, current: PropertyDefinition, left: GuideRelease, right: GuideRelease) {
+function qualifiersDiffer(
+  pinned: PropertyDefinition,
+  current: PropertyDefinition,
+  left: GuideRelease,
+  right: GuideRelease,
+) {
   if (!sameIds(pinned.qualifiers, current.qualifiers)) return true;
   return pinned.qualifiers.some((id) => shapesDiffer(qualifierNative(left, id), qualifierNative(right, id)));
 }
@@ -109,6 +114,7 @@ export function comparisonAspects(comparison: GuideComparison): Set<GuideFieldAs
   if (!sameIds(pinned.targets, current.targets)) changed.add('targets');
   if (!sameIds(pinned.units, current.units)) changed.add('units');
   if (pinned.disclosure !== current.disclosure) changed.add('disclosure');
-  if (qualifiersDiffer(pinned, current, comparison.pinned.release, comparison.current.release)) changed.add('qualifiers');
+  if (qualifiersDiffer(pinned, current, comparison.pinned.release, comparison.current.release))
+    changed.add('qualifiers');
   return changed;
 }

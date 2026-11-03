@@ -176,7 +176,9 @@ function Constraint({
       <dt className={cn('text-sm text-muted-foreground', changed && 'font-medium text-foreground')}>
         {label}
         {changed && locale && (
-          <span className="ms-2 font-normal text-muted-foreground">{m.guide_changed({}, { locale: locale as never })}</span>
+          <span className="ms-2 font-normal text-muted-foreground">
+            {m.guide_changed({}, { locale: locale as never })}
+          </span>
         )}
       </dt>
       <dd className="min-w-0 max-w-full [overflow-wrap:anywhere]">{children}</dd>
@@ -310,10 +312,7 @@ function Constraints({
       </dl>
       {qualifiers && (
         <section className="flex min-w-0 flex-col gap-3">
-          <ContentItemHeading
-            level={3}
-            className={cn('font-medium', changed?.has('qualifiers') && 'text-foreground')}
-          >
+          <ContentItemHeading level={3} className={cn('font-medium', changed?.has('qualifiers') && 'text-foreground')}>
             {m.guide_qualifiers({}, o)}
             {changed?.has('qualifiers') && (
               <span className="ms-2 text-sm font-normal text-muted-foreground">{m.guide_changed({}, o)}</span>
@@ -602,7 +601,14 @@ function ActiveGuide({
   const o = { locale: locale as never };
   const prefixId = useId();
   const exactId = useId();
-  const key = JSON.stringify([address.type, address.property, address.release, address.compare, address.returnTo, locale]);
+  const key = JSON.stringify([
+    address.type,
+    address.property,
+    address.release,
+    address.compare,
+    address.returnTo,
+    locale,
+  ]);
   const section = useRef<HTMLElement>(null);
   const focusIntent = useGuideFocusIntent();
   const handledFocus = useRef<object | undefined>(undefined);

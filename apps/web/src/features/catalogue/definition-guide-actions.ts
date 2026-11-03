@@ -27,7 +27,13 @@ export function guideAddress(value: unknown): GuideAddress {
   for (const key of ['type', 'property', 'release', 'returnTo', 'compare'] as const) {
     if (input[key] !== undefined) {
       const limit =
-        key === 'returnTo' ? 2048 : key === 'compare' ? 32 : key === 'type' || key === 'property' ? guideIdentifierLimit : 256;
+        key === 'returnTo'
+          ? 2048
+          : key === 'compare'
+            ? 32
+            : key === 'type' || key === 'property'
+              ? guideIdentifierLimit
+              : 256;
       if (typeof input[key] !== 'string' || input[key].length > limit) throw new Error('Invalid guide address');
       if (key === 'compare') {
         if (input[key] === guideCompareValue) result.compare = guideCompareValue;

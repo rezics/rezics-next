@@ -410,7 +410,8 @@ export function guideEditorField(address: GuideAddress, locale: string) {
 export function definitionGuideHref(locale: string, address: GuideAddress = {}): string {
   const query = new URLSearchParams();
   for (const key of ['type', 'property', 'release'] as const) if (address[key]) query.set(key, address[key]);
-  if (address.compare === guideCompareValue && guideEditorField(address, locale)) query.set('compare', guideCompareValue);
+  if (address.compare === guideCompareValue && guideEditorField(address, locale))
+    query.set('compare', guideCompareValue);
   const returnTo = guideReturnTo(address.returnTo, locale);
   if (returnTo) query.set('returnTo', returnTo);
   return `/${locale}/catalogue/definitions${query.size ? `?${query}` : ''}`;
