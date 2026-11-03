@@ -37,7 +37,9 @@ export async function createAdmissionFixture() {
   let providerCalls = 0;
   let peer = 0;
   const verifier = createTurnstileVerifier({
-    secret: 'private-admission-provider-secret', hostname: 'kernel.test', action: 'report',
+    secret: 'private-admission-provider-secret',
+    hostname: 'kernel.test',
+    action: 'report',
     fetch: async (url, init) => {
       providerCalls++;
       expect(url).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
@@ -56,7 +58,9 @@ export async function createAdmissionFixture() {
     return token;
   };
   const app = createKernel({
-    pool: db.pool, routeKey, receiptKeys: testReceiptKeys(),
+    pool: db.pool,
+    routeKey,
+    receiptKeys: testReceiptKeys(),
     access: (config) => createAccess(config),
     reports: { anonymousVerifier: verifier },
     writeRate: createWriteRateLimiter({ secret: 'private-admission-rate-secret-at-least-32-bytes', overrides: '{}' }),
@@ -77,19 +81,25 @@ export async function createAdmissionFixture() {
   let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   const close = async () => {
-    try { await work?.shutdown(); }
-    finally {
-      try { await client?.close(); }
-      finally { await db.close(); }
+    try {
+      await work?.shutdown();
+    } finally {
+      try {
+        await client?.close();
+      } finally {
+        await db.close();
+      }
     }
   };
   async function submit(key: string, token?: string, reason = input.reason) {
-    const response = await app.handle(new Request('https://kernel.test/v1/reports', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) },
-      body: JSON.stringify({ ...input, reason, ...(token === undefined ? {} : { botToken: token }) }),
-    }));
-    return { status: response.status, body: await response.json() as Record<string, unknown> };
+    const response = await app.handle(
+      new Request('https://kernel.test/v1/reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) },
+        body: JSON.stringify({ ...input, reason, ...(token === undefined ? {} : { botToken: token }) }),
+      }),
+    );
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }
   async function visibility(revoked: boolean) {
     await db.admin.query(
@@ -103,23 +113,33 @@ export async function createAdmissionFixture() {
     const ids = [selected.id, ...[...rejectedKeys.values()].map((key) => home(key).id)];
     const tables = [
       ['reports', 'SELECT to_jsonb(r) AS row FROM content.report r WHERE report_id=ANY($1::uuid[])'],
-      ['receipts', `SELECT to_jsonb(r) AS row FROM core.receipt r
-                    WHERE command_kind='${operation}' AND response->>'reportId'=ANY($1::text[])`],
-      ['events', 'SELECT to_jsonb(r) AS row FROM core.outbox r WHERE data->>\'reportId\'=ANY($1::text[])'],
+      [
+        'receipts',
+        `SELECT to_jsonb(r) AS row FROM core.receipt r
+                    WHERE command_kind='${operation}' AND response->>'reportId'=ANY($1::text[])`,
+      ],
+      ['events', "SELECT to_jsonb(r) AS row FROM core.outbox r WHERE data->>'reportId'=ANY($1::text[])"],
       ['targets', 'SELECT to_jsonb(r) AS row FROM content.report_target r WHERE report_id=ANY($1::uuid[])'],
     ] as const;
-    return Object.fromEntries(await Promise.all(tables.map(async ([name, sql]) => [
-      name, (await db.admin.query(`${sql} ORDER BY to_jsonb(r)::text`, [ids])).rows.map((row) => row.row),
-    ]))) as Record<'reports' | 'receipts' | 'events' | 'targets', Record<string, unknown>[]>;
+    return Object.fromEntries(
+      await Promise.all(
+        tables.map(async ([name, sql]) => [
+          name,
+          (await db.admin.query(`${sql} ORDER BY to_jsonb(r)::text`, [ids])).rows.map((row) => row.row),
+        ]),
+      ),
+    ) as Record<'reports' | 'receipts' | 'events' | 'targets', Record<string, unknown>[]>;
   }
   async function totals() {
-    return (await db.admin.query(
-      `SELECT (SELECT count(*)::int FROM content.report) AS reports,
+    return (
+      await db.admin.query(
+        `SELECT (SELECT count(*)::int FROM content.report) AS reports,
               (SELECT count(*)::int FROM core.receipt WHERE command_kind='${operation}') AS receipts,
               (SELECT count(*)::int FROM core.outbox WHERE type=ANY($1::text[])) AS events,
               (SELECT count(*)::int FROM content.report_target) AS targets`,
-      [[sourceType, projectionType]],
-    )).rows[0];
+        [[sourceType, projectionType]],
+      )
+    ).rows[0];
   }
   try {
     // Same migrated native board setup semantics as reports-http.test.ts; no Access stub.
@@ -131,9 +151,15 @@ export async function createAdmissionFixture() {
     );
     client = await createWorkClient(db.url, db.pool);
     work = await composeWork([registerContent], {
-      databaseUrl: db.url, pool: db.pool, client, receiptKeys: testReceiptKeys(),
+      databaseUrl: db.url,
+      pool: db.pool,
+      client,
+      receiptKeys: testReceiptKeys(),
       executorId: `admission-growth-${randomUUID()}`,
-      env: workerTestEnv({ CONTENT_TEST_COLLECTION_PARTITIONS: '0', KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') }),
+      env: workerTestEnv({
+        CONTENT_TEST_COLLECTION_PARTITIONS: '0',
+        KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      }),
     });
     await work.launch();
     // Selection is a real HTTP command, never a SQL-synthesized result.
@@ -141,16 +167,21 @@ export async function createAdmissionFixture() {
     expect(first.status).toBe(201);
     expect(first.body.reportId).toBe(selected.id);
     expect(home(selectedKey.toUpperCase())).toEqual(selected);
-    const source = (await db.admin.query<{ epoch: number; position: string; event_seq: number }>(
-      'SELECT epoch,position::text,event_seq FROM core.outbox WHERE type=$1 AND subject=$2',
-      [sourceType, selected.id],
-    )).rows;
+    const source = (
+      await db.admin.query<{ epoch: number; position: string; event_seq: number }>(
+        'SELECT epoch,position::text,event_seq FROM core.outbox WHERE type=$1 AND subject=$2',
+        [sourceType, selected.id],
+      )
+    ).rows;
     expect(source).toHaveLength(1);
     const event = source[0]!;
     // Completion uses the exact production relay and registered DBOS effect.
     const delivered = await relayEffects(db.pool, work.effects, partitionOf(selected.route));
     expect(delivered.status).toBe('read');
-    await client.retrieveWorkflow(`fx:${event.epoch}:${partitionOf(selected.route)}:${event.position}:${event.event_seq}:content_report_target`)
+    await client
+      .retrieveWorkflow(
+        `fx:${event.epoch}:${partitionOf(selected.route)}:${event.position}:${event.event_seq}:content_report_target`,
+      )
       .getResult({ pollingIntervalMs: 10 });
     const baseline = await snapshot();
     expect(baseline.reports).toHaveLength(1);
@@ -160,12 +191,28 @@ export async function createAdmissionFixture() {
     expect(baseline.events.filter((row) => row.type === projectionType)).toHaveLength(1);
 
     return {
-      db, close, selected, baseline, proofs, input, snapshot, totals, visibility,
-      get providerCalls() { return providerCalls; },
+      db,
+      close,
+      selected,
+      baseline,
+      proofs,
+      input,
+      snapshot,
+      totals,
+      visibility,
+      get providerCalls() {
+        return providerCalls;
+      },
       async run(branch: Branch) {
         const key = rejectedKeys.get(branch) ?? selectedKey;
-        const token = branch === 'missing' ? undefined : branch === 'invalid' ? 'invalid-proof'
-          : branch === 'unavailable' ? 'provider-unavailable' : mint();
+        const token =
+          branch === 'missing'
+            ? undefined
+            : branch === 'invalid'
+              ? 'invalid-proof'
+              : branch === 'unavailable'
+                ? 'provider-unavailable'
+                : mint();
         const result = await submit(key, token, branch === 'conflict' ? 'other' : input.reason);
         // No report command/effect is due on these branches. Include the registered
         // relay's empty source read rather than assuming that no queued work exists.
@@ -188,36 +235,80 @@ export async function createAdmissionFixture() {
             const route = axis === 'grants' ? boardRoute : commandHome.route;
             const id = newId(route);
             ids.push(id);
-            const rows: Record<string, Row[]> = axis === 'reports' ? {
-              'content.report': [{ route, report_id: id, target_kind: 'board', target_id: newId(boardRoute),
-                revision_id: null, reason: 'spam', evidence: 'Unrelated report evidence', reporter_account_id: null,
-                created_at: '2026-01-01T00:00:00.000Z', recorded_transaction_id: tx }],
-            } : axis === 'receipts' ? {
-              'core.receipt': [{ partition_no: partitionOf(route), principal_id: anonymous, principal_kind: 'anonymous',
-                command_kind: operation, idempotency_key: randomUUID(), request_digest: createHash('sha256').update(tx).digest(),
-                epoch: 1, position: 0, transaction_id: tx, response: { reportId: id } }],
-            } : {
-              'access.resource_grant': [{ route, resource_id: board, subject_id: newId(0x1234), subject_kind: 'identity',
-                subject_role: '', action: 'report:create', valid: '(,)', transaction_id: tx }],
-            };
+            const rows: Record<string, Row[]> =
+              axis === 'reports'
+                ? {
+                    'content.report': [
+                      {
+                        route,
+                        report_id: id,
+                        target_kind: 'board',
+                        target_id: newId(boardRoute),
+                        revision_id: null,
+                        reason: 'spam',
+                        evidence: 'Unrelated report evidence',
+                        reporter_account_id: null,
+                        created_at: '2026-01-01T00:00:00.000Z',
+                        recorded_transaction_id: tx,
+                      },
+                    ],
+                  }
+                : axis === 'receipts'
+                  ? {
+                      'core.receipt': [
+                        {
+                          partition_no: partitionOf(route),
+                          principal_id: anonymous,
+                          principal_kind: 'anonymous',
+                          command_kind: operation,
+                          idempotency_key: randomUUID(),
+                          request_digest: createHash('sha256').update(tx).digest(),
+                          epoch: 1,
+                          position: 0,
+                          transaction_id: tx,
+                          response: { reportId: id },
+                        },
+                      ],
+                    }
+                  : {
+                      'access.resource_grant': [
+                        {
+                          route,
+                          resource_id: board,
+                          subject_id: newId(0x1234),
+                          subject_kind: 'identity',
+                          subject_role: '',
+                          action: 'report:create',
+                          valid: '(,)',
+                          transaction_id: tx,
+                        },
+                      ],
+                    };
             return rows;
           },
         };
         return {
           async grow(scale: number, previous: number) {
             await seed(db, population, { from: previous, to: scale });
-            const table = axis === 'reports' ? 'content.report' : axis === 'receipts' ? 'core.receipt' : 'access.resource_grant';
+            const table =
+              axis === 'reports' ? 'content.report' : axis === 'receipts' ? 'core.receipt' : 'access.resource_grant';
             const column = axis === 'reports' ? 'recorded_transaction_id' : 'transaction_id';
             const result = await db.admin.query<{ count: number }>(
-              `SELECT count(*)::int AS count FROM ${table} WHERE ${column}=ANY($1::uuid[])`, [transactionIds],
+              `SELECT count(*)::int AS count FROM ${table} WHERE ${column}=ANY($1::uuid[])`,
+              [transactionIds],
             );
             expect(result.rows[0]!.count).toBe(scale);
           },
           async clear() {
             // Only rows authored by this private population are removed, outside capture.
-            if (axis === 'reports') await db.admin.query('DELETE FROM content.report WHERE report_id=ANY($1::uuid[])', [ids]);
-            else if (axis === 'receipts') await db.admin.query('DELETE FROM core.receipt WHERE transaction_id=ANY($1::uuid[])', [transactionIds]);
-            else await db.admin.query('DELETE FROM access.resource_grant WHERE transaction_id=ANY($1::uuid[])', [transactionIds]);
+            if (axis === 'reports')
+              await db.admin.query('DELETE FROM content.report WHERE report_id=ANY($1::uuid[])', [ids]);
+            else if (axis === 'receipts')
+              await db.admin.query('DELETE FROM core.receipt WHERE transaction_id=ANY($1::uuid[])', [transactionIds]);
+            else
+              await db.admin.query('DELETE FROM access.resource_grant WHERE transaction_id=ANY($1::uuid[])', [
+                transactionIds,
+              ]);
           },
         };
       },
