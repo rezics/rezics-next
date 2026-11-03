@@ -65,7 +65,12 @@ test('Cost operation bounds list each identity once with current CLI and retirem
   for (let index = headers[0]! + 2; index < lines.length; index++) {
     const line = lines[index]!;
     if (!line.startsWith('|')) break;
-    rows.push(line.split('|').slice(1, -1).map((cell) => cell.trim()));
+    rows.push(
+      line
+        .split('|')
+        .slice(1, -1)
+        .map((cell) => cell.trim()),
+    );
   }
   const ops = rows.map((row) => row[0]!);
   expect(ops).toHaveLength(33);
