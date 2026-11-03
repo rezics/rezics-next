@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { systemClock, type KernelClock } from '../clock.ts';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { deadlineClient } from '../access/authenticate.ts';
