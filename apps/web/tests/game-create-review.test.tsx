@@ -71,7 +71,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
   }
   async function choose(type: string) {
     await waitFor(() => expect(canvas().getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined());
-    await act(async () => user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), type));
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), type),
+    );
   }
   async function confirm() {
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
@@ -79,7 +81,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
   }
   async function add(property: string) {
-    await act(async () => user.selectOptions(canvas().getByRole('combobox', { name: m.character_add_fact() }), property));
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.character_add_fact() }), property),
+    );
     await act(async () => user.click(canvas().getByRole('button', { name: m.correction_add() })));
     return [...host.querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]')].at(-1)!;
   }
@@ -98,10 +102,18 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
   try {
     const fixture = gameProfileFixture();
     await render(
-      <GameProfile locale="en" session="signed-in" transport={fixture.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={fixture.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await choose('schema:VideoGame');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed lantern'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed lantern'),
+    );
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_add_language() })));
     await act(async () => user.type(host.querySelector<HTMLElement>('#create-language-1')!, 'ja'));
     await act(async () => user.type(host.querySelector<HTMLElement>('#create-label-1')!, '灯りのゲーム'));
@@ -148,7 +160,13 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
 
     const switched = gameProfileFixture();
     await render(
-      <GameProfile locale="en" session="signed-in" transport={switched.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={switched.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await choose('schema:VideoGame');
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept work'));
@@ -160,7 +178,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     const releaseFact = await add('schema:inLanguage');
     await act(async () => user.type(within(releaseFact).getByRole('textbox', { name: m.correction_value() }), 'ja'));
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
-    expect(host.querySelector('[data-game-create-review]')?.textContent).toContain(m.game_profile_review_grain_release());
+    expect(host.querySelector('[data-game-create-review]')?.textContent).toContain(
+      m.game_profile_review_grain_release(),
+    );
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(switched.calls.filter((call) => call.method === 'POST')).toHaveLength(1));
     const releaseItem = switched.calls.find((call) => call.method === 'POST')!.body as GameCommand['item'];
@@ -183,7 +203,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
               return {
                 ok: false as const,
                 reason: 'invalid' as const,
-                errors: [{ pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' }],
+                errors: [
+                  { pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' },
+                ],
               };
             return repaired.transport.create(command);
           },
@@ -191,7 +213,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
       />,
     );
     await choose('schema:VideoGame');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'),
+    );
     const bad = await add('schema:url');
     const keep = await add('schema:inLanguage');
     await act(async () => {
@@ -204,7 +228,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     const keepId = within(keep).getByRole('textbox', { name: m.correction_value() }).id;
     await confirm();
     const link = await waitFor(() =>
-      canvas().getByRole('link', { name: new RegExp(pickText(repaired.release.properties['schema:url']!.labels, 'en').text) }),
+      canvas().getByRole('link', {
+        name: new RegExp(pickText(repaired.release.properties['schema:url']!.labels, 'en').text),
+      }),
     );
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(keepId);
     await act(async () => user.click(within(bad).getByRole('button', { name: m.recipe_remove_field() })));
@@ -218,10 +244,18 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
 
     const uncertain = gameProfileFixture('uncertain');
     await render(
-      <GameProfile locale="en" session="signed-in" transport={uncertain.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={uncertain.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await choose('schema:VideoGame');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Uncertain lantern'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Uncertain lantern'),
+    );
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
     const frozen = structuredClone(uncertain.calls.find((call) => call.method === 'POST'));
@@ -256,7 +290,9 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
       />,
     );
     await choose('schema:VideoGame');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Unread lantern'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Unread lantern'),
+    );
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
     expect(host.textContent).toContain(gameId);
@@ -269,14 +305,28 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
 
     const retired = gameProfileFixture();
     await render(
-      <GameProfile locale="en" session="signed-in" transport={retired.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={retired.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await choose('schema:VideoGame');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Retired sentinel'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Retired sentinel'),
+    );
     await confirm();
     await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
     await render(
-      <GameProfile locale="en" session="signed-in" transport={retired.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={retired.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
       '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11',
       false,
     );
@@ -286,7 +336,13 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
 
     const blocked = gameProfileFixture('unavailable');
     await render(
-      <GameProfile locale="en" session="signed-in" transport={blocked.transport} search={async () => []} onNavigate={() => {}} />,
+      <GameProfile
+        locale="en"
+        session="signed-in"
+        transport={blocked.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await waitFor(() => expect(host.textContent).toContain(m.correction_unavailable()));
     expect(host.querySelector('form')).toBeNull();

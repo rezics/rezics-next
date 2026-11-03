@@ -20,9 +20,7 @@ const {
 } = await import('../src/features/catalogue/game-create-review-model');
 const { reuseIsStale } = await import('../src/features/catalogue/reference-reuse');
 const { gameDefinitions, gameDraft, gameType } = await import('../src/features/catalogue/game-profile');
-const { gamePlatformId, gameProfileFixture, gameStatement } = await import(
-  '../src/kernel/fake/catalogue-game-profile'
-);
+const { gamePlatformId, gameProfileFixture, gameStatement } = await import('../src/kernel/fake/catalogue-game-profile');
 
 function cited(
   property: string,
@@ -103,15 +101,17 @@ test('Game creation review admits current types, native values and independent r
 
   const locked = captureGameCreateReuse([source, target], source.key, 0)!;
   locked.selected = [gameCreateHolder(target.key)];
-  expect(
-    reuseIsStale(locked.source, gameCreateDrafts([source, target]), locked.selected, locked.capture),
-  ).toBe(false);
+  expect(reuseIsStale(locked.source, gameCreateDrafts([source, target]), locked.selected, locked.capture)).toBe(false);
   target.statement.references = [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/changed' } }] },
   ];
   expect(reuseIsStale(locked.source, gameCreateDrafts([source, target]), locked.selected, locked.capture)).toBe(true);
   source.statement.references = [
-    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source-changed' } }] },
+    {
+      parts: [
+        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source-changed' } },
+      ],
+    },
   ];
   const stale = applyGameCreateReuse([source, target], locked, fixture.release);
   expect(stale.reuse.applied).toEqual([]);
@@ -125,7 +125,9 @@ test('Game creation review admits current types, native values and independent r
   expect(
     gameCreationAddress('/statements/schema:inLanguage/0/value/content', [target], fixture.release, 'en')?.id,
   ).toContain(gameCreateHolder(target.key));
-  expect(gameCreationAddress('/statements/schema:inLanguage/0/value/content', [], fixture.release, 'en')).toBeUndefined();
+  expect(
+    gameCreationAddress('/statements/schema:inLanguage/0/value/content', [], fixture.release, 'en'),
+  ).toBeUndefined();
   expect(
     gameAdmitCreatedReader(
       {

@@ -25,20 +25,11 @@ function rankLabel(rank: string | undefined, locale: string) {
       : m.candidate_rank_normal({}, o);
 }
 
-function NativePart({
-  part,
-  read,
-  locale,
-}: {
-  part: SnakInput;
-  read: StatementFieldsRead;
-  locale: string;
-}) {
+function NativePart({ part, read, locale }: { part: SnakInput; read: StatementFieldsRead; locale: string }) {
   const definition = read.release.properties[part.property.id];
   const datatype = definition?.datatype;
   const native = gameCreateNativeContent(part, datatype);
-  const related =
-    datatype === 'wikibase-item' && typeof native === 'string' ? read.public.related[native] : undefined;
+  const related = datatype === 'wikibase-item' && typeof native === 'string' ? read.public.related[native] : undefined;
   const relatedName = related ? pickText(related.labels, locale) : undefined;
   return (
     <div className="min-w-0 space-y-1">
@@ -199,11 +190,7 @@ export function GameCreateReview({
         <p>
           <code className="break-all">{item.type}</code>
         </p>
-        {!!bases.length && (
-          <p className="text-sm">
-            {m.game_profile_review_bases({ bases: bases.join(', ') }, o)}
-          </p>
-        )}
+        {!!bases.length && <p className="text-sm">{m.game_profile_review_bases({ bases: bases.join(', ') }, o)}</p>}
         <Button type="button" variant="outline" className={wrap} onClick={() => onJump('create-type')}>
           {m.game_profile_review_open({}, o)}
         </Button>
