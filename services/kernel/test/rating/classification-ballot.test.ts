@@ -49,7 +49,9 @@ beforeAll(async () => {
   database = await openGrowthDatabase();
   database.pool.options.max = 1;
   await bootstrapRelease(database.pool, bundledRelease);
-  realAccess = await createRealAccess(database.admin, accounts, actions);
+  realAccess = await createRealAccess(database.admin, accounts, actions, {
+    credentialClock: () => new Date(Date.now() - 1_000),
+  });
   app = createKernel({
     pool: database.pool,
     access: realAccess.access,
