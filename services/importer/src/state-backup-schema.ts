@@ -122,7 +122,9 @@ export function validateImporterSchema(database: Database, observer?: SchemaObse
     if (!found)
       throw new StateBackupFailure(`Unsupported importer state schema: table ${table} is missing.`, 'incompatible');
     const actual = new Set(
-      sql(database, `PRAGMA table_info(${table})`, observer).all().map((row) => (row as { name: string }).name),
+      sql(database, `PRAGMA table_info(${table})`, observer)
+        .all()
+        .map((row) => (row as { name: string }).name),
     );
     const missing = columns.find((column) => !actual.has(column));
     if (missing)
@@ -138,7 +140,10 @@ export function validateImporterSchema(database: Database, observer?: SchemaObse
       observer,
     ).get('index', index, table) as { found: number } | null;
     if (!found)
-      throw new StateBackupFailure(`Unsupported importer state schema: required index ${index} is missing.`, 'incompatible');
+      throw new StateBackupFailure(
+        `Unsupported importer state schema: required index ${index} is missing.`,
+        'incompatible',
+      );
   }
 }
 
@@ -173,11 +178,16 @@ function optionalId(value: unknown, max: number): string | null {
   return boundedText(value, max);
 }
 
-function generationStatus(database: Database, source: string, id: string | null, observer?: SchemaObserver): string | null {
+function generationStatus(
+  database: Database,
+  source: string,
+  id: string | null,
+  observer?: SchemaObserver,
+): string | null {
   if (id === null) return null;
-  const row = sql(database, 'SELECT status FROM run_generations WHERE source=? AND id=?', observer).get(source, id) as
-    | { status: unknown }
-    | null;
+  const row = sql(database, 'SELECT status FROM run_generations WHERE source=? AND id=?', observer).get(source, id) as {
+    status: unknown;
+  } | null;
   if (!row) return null;
   return boundedText(row.status, MAX_STATUS_CHARS);
 }
@@ -305,7 +315,8 @@ export function parseManifest(value: Record<string, unknown>): SnapshotManifest 
         baselineGeneration.length > MAX_GENERATION_CHARS)
     )
       fail();
-    if (status !== null && (typeof status !== 'string' || status.length === 0 || status.length > MAX_STATUS_CHARS)) fail();
+    if (status !== null && (typeof status !== 'string' || status.length === 0 || status.length > MAX_STATUS_CHARS))
+      fail();
     if (ownerRow !== 'absent' && ownerRow !== 'stopped') fail();
     runs.push({
       source,

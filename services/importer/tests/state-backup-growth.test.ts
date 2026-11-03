@@ -46,7 +46,8 @@ function seed(path: string, records: number) {
     });
   }
   expect(session.store.seal(run, { complete: true }).status).toBe('ready');
-  for (let index = 0; index < records; index++) session.store.prepare(run, `Q${index}`, { commands: [command(`Q${index}`)] });
+  for (let index = 0; index < records; index++)
+    session.store.prepare(run, `Q${index}`, { commands: [command(`Q${index}`)] });
   session.close();
 }
 
@@ -60,7 +61,9 @@ test('backup, validate and restore scale with database bytes and keep bounded me
       const live = (await import('bun:sqlite')).Database;
       const held = new live(state);
       held.exec('PRAGMA wal_autocheckpoint=0');
-      held.exec(`INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES('wikidata','QWAL${scale}',0,0,'{}')`);
+      held.exec(
+        `INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES('wikidata','QWAL${scale}',0,0,'{}')`,
+      );
       const http = 0;
       let peak = 0;
       let hashed = 0;

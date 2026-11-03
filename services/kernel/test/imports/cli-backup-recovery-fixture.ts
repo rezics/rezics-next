@@ -195,10 +195,13 @@ export async function runCliBackupRecoveryJourney() {
       `/v1/subjects/${id}/candidates?${new URLSearchParams({ property: 'schema:name', context, limit: '100' })}`,
     );
     expect(listed.status).toBe(200);
-    const candidate = (listed.body.candidates as unknown as { id: string; source: { source: string }; statement: BatchStatement }[])[0]!;
+    const candidate = (
+      listed.body.candidates as unknown as { id: string; source: { source: string }; statement: BatchStatement }[]
+    )[0]!;
     expect(candidate.source.source).toBe('bangumi');
     expect(
-      (await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, { context, expected_head: null })).status,
+      (await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, { context, expected_head: null }))
+        .status,
     ).toBe(200);
     expect(
       (
@@ -242,7 +245,7 @@ export async function runCliBackupRecoveryJourney() {
     const restoredPending = inspect(restored);
     expect(restoredPending.pending.map((row) => row.bytes)).toEqual([pendingBytes]);
     expect(restoredPending.pending.flatMap((row) => row.keys)).toEqual(pendingKeys);
-    expect(new Database(restored, { readonly: true }).query("SELECT note FROM extra_compatible").all()).toEqual([
+    expect(new Database(restored, { readonly: true }).query('SELECT note FROM extra_compatible').all()).toEqual([
       { note: 'committed-wal' },
     ]);
     const resumed = await invoke(restored, jsonl(changed));

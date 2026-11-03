@@ -5,11 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { ImportSession } from '../src/import-session.ts';
-import {
-  backupStoppedState,
-  restoreStoppedStateSnapshot,
-  validateStoppedStateSnapshot,
-} from '../src/state-backup.ts';
+import { backupStoppedState, restoreStoppedStateSnapshot, validateStoppedStateSnapshot } from '../src/state-backup.ts';
 import { StateBackupFailure } from '../src/state-backup-errors.ts';
 import { SNAPSHOT_DATABASE_NAME, SNAPSHOT_MANIFEST_NAME } from '../src/state-backup-files.ts';
 import type { SourceProjection } from '../src/run-store.ts';
@@ -105,7 +101,9 @@ test('VACUUM INTO backup keeps committed WAL, baseline acknowledgements and exac
       ownersBefore,
     );
     expect(
-      live.query('SELECT record_key,bytes,keys_json FROM run_envelopes WHERE source=? ORDER BY record_key').all('wikidata'),
+      live
+        .query('SELECT record_key,bytes,keys_json FROM run_envelopes WHERE source=? ORDER BY record_key')
+        .all('wikidata'),
     ).toEqual(envelopesBefore);
     live.close();
     const snapshotDb = join(output, SNAPSHOT_DATABASE_NAME);
@@ -113,7 +111,7 @@ test('VACUUM INTO backup keeps committed WAL, baseline acknowledgements and exac
     expect(statSync(snapshotDb).mode & 0o777).toBe(0o600);
     expect(statSync(join(output, SNAPSHOT_MANIFEST_NAME)).mode & 0o777).toBe(0o600);
     const copied = new Database(snapshotDb, { readonly: true, create: false });
-    expect(copied.query("SELECT note FROM extra_compatible").all()).toEqual([{ note: 'committed-wal' }]);
+    expect(copied.query('SELECT note FROM extra_compatible').all()).toEqual([{ note: 'committed-wal' }]);
     expect(copied.query('SELECT record_key FROM run_acknowledged').all()).toEqual([{ record_key: 'QBASE' }]);
     expect(copied.query('SELECT bytes,keys_json FROM run_envelopes WHERE record_key=?').get('QNEW')).toEqual({
       bytes: fixture.pending[0]!.bytes,
@@ -185,8 +183,12 @@ test('older and foreign databases are incompatible without RunStore migration', 
     expect(existsSync(join(dir, 'empty-out'))).toBe(false);
     const old = join(dir, 'old.sqlite');
     const db = new Database(old, { create: true });
-    db.exec(`CREATE TABLE import_owners(source TEXT PRIMARY KEY, pid INTEGER NOT NULL, birth TEXT NOT NULL, capability TEXT NOT NULL) WITHOUT ROWID`);
-    db.exec(`CREATE TABLE run_sources(source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT, generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`);
+    db.exec(
+      `CREATE TABLE import_owners(source TEXT PRIMARY KEY, pid INTEGER NOT NULL, birth TEXT NOT NULL, capability TEXT NOT NULL) WITHOUT ROWID`,
+    );
+    db.exec(
+      `CREATE TABLE run_sources(source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT, generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`,
+    );
     db.close();
     await expect(backupStoppedState({ state: old, output: join(dir, 'old-out') })).rejects.toBeInstanceOf(
       StateBackupFailure,
@@ -240,7 +242,9 @@ test('corrupt and mismatched snapshots are refused without rewriting them', asyn
     const original = readFileSync(dbPath);
     writeFileSync(dbPath, original.subarray(0, 64));
     await expect(validateStoppedStateSnapshot({ snapshot: output })).rejects.toMatchObject({ status: 'mismatched' });
-    const manifest = JSON.parse(readFileSync(join(output, SNAPSHOT_MANIFEST_NAME), 'utf8')) as { content: { sha256: string } };
+    const manifest = JSON.parse(readFileSync(join(output, SNAPSHOT_MANIFEST_NAME), 'utf8')) as {
+      content: { sha256: string };
+    };
     expect(manifest.content.sha256).toHaveLength(64);
     writeFileSync(dbPath, original);
     const parsed = JSON.parse(readFileSync(join(output, SNAPSHOT_MANIFEST_NAME), 'utf8')) as Record<string, unknown>;

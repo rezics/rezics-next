@@ -217,8 +217,7 @@ export async function validateStoppedStateSnapshot(
     database = openStateDatabase(databaseFile.path, options.observer);
     validateImporterSchema(database, options.observer);
     const integrity = integrityWork(database, options.observer);
-    if (!integrity.ok)
-      throw new StateBackupFailure('Snapshot database failed SQLite integrity checking.', 'corrupt');
+    if (!integrity.ok) throw new StateBackupFailure('Snapshot database failed SQLite integrity checking.', 'corrupt');
     refuseBusyOwners(database, options.observer);
     const runs = readRunBaselines(database, options.observer);
     return {

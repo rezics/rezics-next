@@ -57,8 +57,7 @@ function boundedArguments(argv: readonly string[]): void {
     if (typeof argument !== 'string' || argument.length > MAX_ARGUMENT_BYTES || argument.includes('\0'))
       throw new UsageFailure('Snapshot arguments exceed the supported size.');
     totalBytes += Buffer.byteLength(argument, 'utf8');
-    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES)
-      throw new UsageFailure('Snapshot arguments exceed the supported size.');
+    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES) throw new UsageFailure('Snapshot arguments exceed the supported size.');
   }
 }
 
@@ -97,8 +96,7 @@ export function parseBackupArgs(argv: readonly string[]): Parsed | 'help' {
     return { command, state: required(values, '--state'), output: required(values, '--output'), json };
   }
   if (command === 'validate-snapshot') {
-    if (values.has('--state') || values.has('--output'))
-      throw new UsageFailure('validate-snapshot uses --snapshot.');
+    if (values.has('--state') || values.has('--output')) throw new UsageFailure('validate-snapshot uses --snapshot.');
     return { command, snapshot: required(values, '--snapshot'), json };
   }
   if (values.has('--output')) throw new UsageFailure('restore uses --snapshot and --state.');
@@ -106,10 +104,7 @@ export function parseBackupArgs(argv: readonly string[]): Parsed | 'help' {
 }
 
 function render(document: BackupDocument): string {
-  const lines = [
-    `Stopped-state snapshot: ${document.operation}`,
-    `Status: ${document.status}`,
-  ];
+  const lines = [`Stopped-state snapshot: ${document.operation}`, `Status: ${document.status}`];
   if (document.snapshot) lines.push(`Snapshot directory: ${JSON.stringify(document.snapshot)}`);
   if (document.state) lines.push(`State file: ${JSON.stringify(document.state)}`);
   if (document.createdAt) lines.push(`Created: ${document.createdAt}`);
@@ -148,14 +143,20 @@ export async function runBackupCli(argv: readonly string[], options: BackupCliOp
   } catch (error) {
     const detail = errorMessage(error);
     if (jsonRequested)
-      return { code: detail.code, stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`, stderr: '', openHandles: 0 };
+      return {
+        code: detail.code,
+        stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
     return { code: detail.code, stdout: '', stderr: `${terminalSafe(detail.message)}\n${USAGE}\n`, openHandles: 0 };
   }
 
   let document: BackupDocument | undefined;
   let failure: { code: number; message: string } | undefined;
   try {
-    if (parsed.command === 'backup') document = await backupStoppedState({ state: parsed.state, output: parsed.output }, options);
+    if (parsed.command === 'backup')
+      document = await backupStoppedState({ state: parsed.state, output: parsed.output }, options);
     else if (parsed.command === 'validate-snapshot')
       document = await validateStoppedStateSnapshot({ snapshot: parsed.snapshot }, options);
     else document = await restoreStoppedStateSnapshot({ snapshot: parsed.snapshot, state: parsed.state }, options);
@@ -164,7 +165,12 @@ export async function runBackupCli(argv: readonly string[], options: BackupCliOp
   }
   if (failure) {
     if (parsed.json)
-      return { code: failure.code, stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`, stderr: '', openHandles: 0 };
+      return {
+        code: failure.code,
+        stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
     return { code: failure.code, stdout: '', stderr: `${terminalSafe(failure.message)}\n`, openHandles: 0 };
   }
   return {

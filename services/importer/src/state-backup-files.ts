@@ -22,10 +22,7 @@ function roleError(role: string, detail: string, status: StateBackupFailure['sta
   throw new StateBackupFailure(`${role}: ${detail}`, status);
 }
 
-export function sameIdentity(
-  left: { dev: number; ino: number },
-  right: { dev: number; ino: number },
-): boolean {
+export function sameIdentity(left: { dev: number; ino: number }, right: { dev: number; ino: number }): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
@@ -58,7 +55,10 @@ export async function admitRegularFile(path: string, role: string): Promise<File
   }
 }
 
-export async function admitExistingDirectory(path: string, role: string): Promise<{ path: string; dev: number; ino: number }> {
+export async function admitExistingDirectory(
+  path: string,
+  role: string,
+): Promise<{ path: string; dev: number; ino: number }> {
   const resolved = resolve(path);
   let handle: FileHandle | undefined;
   try {
@@ -66,7 +66,8 @@ export async function admitExistingDirectory(path: string, role: string): Promis
     const identity = await handle.stat();
     if (!identity.isDirectory()) roleError(role, 'path is not a directory.');
     const after = await stat(resolved);
-    if (!after.isDirectory() || !sameIdentity(identity, after)) roleError(role, 'path changed while it was being opened.');
+    if (!after.isDirectory() || !sameIdentity(identity, after))
+      roleError(role, 'path changed while it was being opened.');
     await handle.close();
     handle = undefined;
     return { path: resolved, dev: identity.dev, ino: identity.ino };
@@ -120,7 +121,11 @@ export async function createExclusiveFile(path: string, role: string): Promise<F
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'EEXIST') roleError(role, 'destination already exists and will not be replaced.');
-    roleError(role, code ? `unable to create exclusive file (${code}).` : 'unable to create exclusive file.', 'failed-output');
+    roleError(
+      role,
+      code ? `unable to create exclusive file (${code}).` : 'unable to create exclusive file.',
+      'failed-output',
+    );
   }
 }
 
