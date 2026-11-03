@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, Profiler, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
@@ -10,6 +10,12 @@ import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+let restoreModerationRenderDiagnosis: (() => void) | undefined;
+afterEach(() => {
+  restoreModerationRenderDiagnosis?.();
+  restoreModerationRenderDiagnosis = undefined;
+});
 
 const { loadModerationReportsRequest, prepareModerationReportRead } = await import('../src/moderation/reports-read');
 
@@ -446,8 +452,37 @@ test('report and appeal sparse, loading, denied, stale, unavailable and closed s
 
 test('loaded bulk reports keep the page bound, restore review and cancel focus, and retry only the exact uncertain item', async () => {
   await withDom(async ({ host, render, flush, window }) => {
-    const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
     let stage = 'mount';
+    const bulkModule = await import('../src/moderation/reports-bulk-action');
+    const originalFactory = bulkModule.createReportsBulkAction;
+    let bulkNotifications = 0;
+    const factorySpy = spyOn(bulkModule, 'createReportsBulkAction').mockImplementation((...args) => {
+      const controller = originalFactory(...args);
+      const subscribe = controller.subscribe;
+      controller.subscribe = (listener) =>
+        subscribe(() => {
+          bulkNotifications++;
+          if (bulkNotifications >= 100)
+            throw new Error(`DIAGNOSTIC_BUDGET:bulk-notification:${stage}:${bulkNotifications}`);
+          listener();
+        });
+      return controller;
+    });
+    const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
+    const departurePrototype = AuthoringDepartureState.prototype as unknown as { notify: () => void };
+    const originalNotify = departurePrototype.notify;
+    let departureNotifications = 0;
+    departurePrototype.notify = function (this: InstanceType<typeof AuthoringDepartureState>) {
+      departureNotifications++;
+      if (departureNotifications >= 200)
+        throw new Error(`DIAGNOSTIC_BUDGET:departure-notification:${stage}:${departureNotifications}`);
+      originalNotify.call(this);
+    };
+    restoreModerationRenderDiagnosis = () => {
+      factorySpy.mockRestore();
+      departurePrototype.notify = originalNotify;
+    };
+    const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
     const setStage = (next: string) => {
       stage = next;
       console.error(`DIAGNOSTIC_STAGE:${stage}`);
@@ -542,6 +577,8 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(host.textContent).toContain(m.moderation_bulk_unattempted());
     expect(host.textContent).not.toContain('Bulk row 1');
     expect(commits).toBeLessThan(80);
+    expect(bulkNotifications).toBeLessThan(100);
+    expect(departureNotifications).toBeLessThan(200);
   });
 });
 
