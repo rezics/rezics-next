@@ -242,7 +242,7 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
     await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
     await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
     const datatype = (definitions.release.properties as Record<string, { datatype: string }>)[property]!.datatype;
-    let valueControl: HTMLInputElement | undefined;
+    let valueControl: HTMLElement | undefined;
     let valueText: string | undefined;
     if (datatype === 'time') {
       await userEvent.selectOptions(group.getByRole('combobox', { name: m.correction_precision() }), '11');

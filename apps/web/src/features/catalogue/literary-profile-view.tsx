@@ -627,7 +627,7 @@ function LiteraryProfileLive({
   const [reuse, setReuse] = useState<LiteraryReuseState | null>(null);
   const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
   const [createdId, setCreatedId] = useState<string>();
-  const expectedCreateType = useRef<string>();
+  const expectedCreateType = useRef<string | undefined>(undefined);
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
   const latest = useRef(drafts);
   latest.current = drafts;
