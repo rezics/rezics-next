@@ -107,15 +107,19 @@ function sourceEditionHistory(fixture: GrowthEditionCandidateProjectionFixture) 
     async grow(database: GrowthDatabase, scale: number, previous: number) {
       base = await partitionPosition(database, fixture.source.partition);
       rangeFrom = previous;
-      await seed(database, {
-        ...population,
-        async finish(admin, range) {
-          await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
-            fixture.source.partition,
-            base + BigInt(range.to - range.from),
-          ]);
+      await seed(
+        database,
+        {
+          ...population,
+          async finish(admin, range) {
+            await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+              fixture.source.partition,
+              base + BigInt(range.to - range.from),
+            ]);
+          },
         },
-      }, { from: previous, to: scale });
+        { from: previous, to: scale },
+      );
     },
   };
 }
@@ -218,20 +222,24 @@ function accountAndWriteBasisHistory(fixture: GrowthEditionCandidateProjectionFi
       creatorBase = await partitionPosition(database, fixture.creatorPartition);
       sourceBase = await partitionPosition(database, fixture.source.partition);
       rangeFrom = previous;
-      await seed(database, {
-        ...population,
-        async finish(admin, range) {
-          const added = BigInt(range.to - range.from);
-          await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
-            fixture.creatorPartition,
-            creatorBase + added,
-          ]);
-          await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
-            fixture.source.partition,
-            sourceBase + added,
-          ]);
+      await seed(
+        database,
+        {
+          ...population,
+          async finish(admin, range) {
+            const added = BigInt(range.to - range.from);
+            await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+              fixture.creatorPartition,
+              creatorBase + added,
+            ]);
+            await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+              fixture.source.partition,
+              sourceBase + added,
+            ]);
+          },
         },
-      }, { from: previous, to: scale });
+        { from: previous, to: scale },
+      );
     },
   };
 }
@@ -399,16 +407,16 @@ test('Creator edition candidate projection stays bounded across independent hist
     );
     expect(fence.rows).toHaveLength(1);
     expect(fence.rows[0]!.closed_at).not.toBeNull();
-    expect((await readErasureStatus(fixture.native.db.pool, fixture.creator.accountId))?.participants.content?.outcome).toBe(
-      'pending',
-    );
+    expect(
+      (await readErasureStatus(fixture.native.db.pool, fixture.creator.accountId))?.participants.content?.outcome,
+    ).toBe('pending');
 
     await fixture.relayEdition(late);
     expect(await fixture.candidateCount(late.editionId)).toBe(0);
     expect(await fixture.creatorIndexedEventCount(late.editionId)).toBe(0);
-    expect((await readErasureStatus(fixture.native.db.pool, fixture.creator.accountId))?.participants.content?.outcome).toBe(
-      'pending',
-    );
+    expect(
+      (await readErasureStatus(fixture.native.db.pool, fixture.creator.accountId))?.participants.content?.outcome,
+    ).toBe('pending');
   } finally {
     authoredBarrier?.release();
     await observer?.close();
