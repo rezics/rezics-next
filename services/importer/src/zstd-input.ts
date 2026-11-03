@@ -214,11 +214,13 @@ function mapZstdFailure(
     throw new DumpInputError('zstd frame window exceeds the decoder memory limit.', 'zstd-window');
   if (/unsupported format|unknown header|cannot be uncompressed/i.test(text)) {
     if (decodedBytes > 0)
-      throw new DumpInputError('zstd stream has non-zstd trailing bytes after a complete frame.', 'zstd-trailing-garbage');
+      throw new DumpInputError(
+        'zstd stream has non-zstd trailing bytes after a complete frame.',
+        'zstd-trailing-garbage',
+      );
     throw new DumpInputError('Input is not a zstd dump frame.', 'zstd-integrity');
   }
-  if (exitCode === 0)
-    throw new DumpInputError('zstd dump failed completeness or integrity checks.', 'zstd-integrity');
+  if (exitCode === 0) throw new DumpInputError('zstd dump failed completeness or integrity checks.', 'zstd-integrity');
   throw new DumpInputError('zstd dump failed completeness or integrity checks.', 'zstd-integrity');
 }
 
@@ -237,9 +239,7 @@ async function writePipe(stream: Writable, chunk: Uint8Array, signal: AbortSigna
       stream.write(chunk, (error) => {
         cleanup();
         if (error)
-          reject(
-            new DumpInputError('zstd input pump broke before the original file reached EOF.', 'zstd-integrity'),
-          );
+          reject(new DumpInputError('zstd input pump broke before the original file reached EOF.', 'zstd-integrity'));
         else resolve();
       });
     } catch {
@@ -275,7 +275,10 @@ async function terminateChild(child: ChildProcess, graceMs: number): Promise<voi
     }
     child.once('exit', () => resolve());
   });
-  const raced = await Promise.race([exited.then(() => 'exited' as const), delay(graceMs).then(() => 'timeout' as const)]);
+  const raced = await Promise.race([
+    exited.then(() => 'exited' as const),
+    delay(graceMs).then(() => 'timeout' as const),
+  ]);
   if (raced === 'timeout' && child.exitCode === null && child.signalCode === null) {
     try {
       child.kill('SIGKILL');
