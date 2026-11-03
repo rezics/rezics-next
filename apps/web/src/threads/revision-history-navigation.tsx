@@ -228,6 +228,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
               summary={summary}
               entry={entry}
               active={active}
+              isCurrent={ownsInteraction}
               expanded={inspecting === summary.index}
               triggerId={`${prefix}-inspect-${summary.index}`}
               inspectorId={`${prefix}-detail-${summary.index}`}

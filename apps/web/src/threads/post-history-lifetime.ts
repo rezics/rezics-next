@@ -1,5 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { PageAuthor } from '../identity/read';
+import {
+  projectHistoryContext,
+  type HistoryContext,
+  type HistoryScore,
+  type HistoryComparison,
+} from './post-history-context';
 import type { readPostHistory } from './reads';
 import {
   createHistoricalReadBinding,
@@ -27,7 +33,16 @@ export function historySessionReady(source: HistoricalReaderSource | undefined, 
   return session.state === 'signed-in' && !!session.subject && (viewerId === undefined || viewerId === session.subject);
 }
 
+export type HistoryRevisionContext = {
+  score?: HistoryScore | undefined;
+  reviewState: HistoryContext['reviewScores']['state'];
+  subjects: HistoryContext['subjects']['items'];
+  subjectState: HistoryContext['subjects']['state'];
+  comparison?: HistoryComparison | undefined;
+};
+
 export type HistoryView = {
+  context?: HistoryContext | undefined;
   /** A request replaces the entire page, including its local interactions. */
   pageGeneration: number;
   cursor: string | undefined;
@@ -41,6 +56,7 @@ export type HistoryView = {
     documentMedia: HistoryPage['documentMedia'];
     /** The originating page's author disclosure; removed rows never borrow a later/earlier page's identity. */
     summaryAuthor?: PageAuthor | undefined;
+    native?: HistoryRevisionContext;
   }[];
   authors: HistoryPage['authors'];
   mentions: HistoryPage['mentions'];
@@ -186,12 +202,30 @@ export class PostHistoryLifetime {
   /** Replace one admitted native envelope; no page data is merged with another cursor. */
   acceptPage(request: HistoryRequest, page: HistoryPage) {
     if (!this.owns(request)) return;
+    const context = page.context;
+    const native = context ? projectHistoryContext(context) : undefined;
+    const subjects = new Map(context?.subjects.items.map((item) => [item.id, item]));
     this.update(request.connection, (view) => ({
       ...view,
+      context,
       revisions: page.revisions.map((revision) => ({
         revision,
         documentMedia: page.documentMedia,
         summaryAuthor: page.authors?.[revision.authorId],
+        ...(context && native
+          ? {
+              native: {
+                score: native.scores.get(revision.revisionId),
+                reviewState: context.reviewScores.state,
+                subjects: revision.subjectIds.flatMap((id) => {
+                  const subject = subjects.get(id);
+                  return subject ? [subject] : [];
+                }),
+                subjectState: context.subjects.state,
+                comparison: native.comparisons.get(revision.revisionId),
+              },
+            }
+          : {}),
       })),
       authors: page.authors,
       mentions: page.mentions,

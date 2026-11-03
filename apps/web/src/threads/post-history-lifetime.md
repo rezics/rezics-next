@@ -2,49 +2,41 @@
 
 ## Native page admission
 
-The prepared `readPostHistory` server function delegates one explicit address to `loadPostHistoryPage`.
-The loader derives its types directly from the installed KernelClient revisions GET. Before any dependent
-identity, Subject, vote or media read, it checks the maximum 100 rows, requested post identity, shared thread
-identity and unique revision identities. An inconsistent page is unavailable; none of its keys can start a
-dependent read. It neither reorders rows nor repairs an inconsistent response.
+The loader derives both revisions and the closed `page` context from the generated Kernel client. One native
+GET supplies the admitted conversation, Board, place, current head identity and current author presentation,
+plus revision-keyed citations, question scales, subjects, mentions, media and navigation. Before projecting
+any presentation, the consumer checks the requested post, shared conversation and Board, prepared viewer,
+unique immutable revisions and the native maximum of 100 rows. Comparison destinations must name that page's
+admitted head and a distinct available selected revision. Recorded citation identity and values must match
+their exact revision. A malformed association admits no page.
 
-Decision: keep the installed revisions/next loader behind a typed page seam until the native current-context
-and exact-revision enrichment variants are published; do not fabricate optional browser fields.
+Native context requires no identity, Subject, media or private-vote hydration. Legacy revisions/next recordings
+retain the compatible bounded optional joins; those joins cannot invent current context or historical scales.
+One replacing page owns every derived index, summary, selected document and comparison reader. Starting a page
+request clears them synchronously; failure retries the exact failed cursor. An unavailable context owner uses
+the delivered same-cursor retry, independently of whether there is another page.
 
-The installed `RevisionPageResponseSchema` and generated revisions GET still contain only revisions and next.
-They supply no admitted conversation/head context, author disclosure variant, historical question scale,
-original/terminal Subject proof, per-revision enrichment source or navigation advice. Existing optional joins
-and exact-reader media inspection remain in use. Their availability cannot establish those missing facts.
-This seam is a partial implementation: native current-context and historical-enrichment presentation and
-comparison return require the native publication and consumer continuation. One-page retention and shared
-author/mention hydration work against the installed contract without manufacturing native context.
+Current names are presentation and never immutable authorship. Original Subject keys remain visible beside the
+separate delivered terminal Subject identity. Concealed presentation and failed owner reads remain distinct;
+an undisclosed citation is never labelled an unscored review. Zero, recorded question revision, delivered question
+revision, scale and lifecycle are displayed as separate supplied facts. The consumer does not infer a past scale
+from a current private vote.
+
+Decision: exact destinations open a new tab; an admitted comparison opens the existing exact read-only reader
+inside the selected inspector and returns selection and focus to its trigger without storing a cursor or credential.
+The comparison reads only its explicit immutable destination and remains fenced by both the page lifetime and
+its exact-reader provenance. It cannot read the current head endpoint or create command authority.
 
 ### Cost
 
-- **Touches:** one revisions GET at default 20, maximum 100, with the prepared credential and exact opaque
-  cursor. Admission scans N revision identities before dependent reads. A single author/mention index admits
-  at most 100 author keys and the first 100 distinct nested mention keys. Their union uses at most two public
-  batches of 100; overlapping identities are never hydrated twice. Existing optional joins retain at most four
-  Subject reads, one independent presentation batch of at most 32 referenced media keys, and at most N distinct
-  author-private Subject/question vote reads. None supplies historical scales or current-context authority.
-- **Bound:** each revision admits 128 Subject and 32 declared media keys. At maximum100 that is 12,800 and
-  3,200 keys, respectively (576,000 raw ASCII bytes for UUIDs, excluding JSON punctuation). Native canonical
-  document bytes are capped at 2 MiB each: 40 MiB at20 and 200 MiB at100, before row metadata. Those UTF-8
-  caps already account for multibyte text. The prepared cursor input admits 4,096 UTF-16 code units: at most
-  12 KiB raw UTF-8 or 24 KiB of JSON-escaped contents, before string delimiters and additional serialization.
-  Escaping an additional string layer can expand affected control characters to six ASCII bytes per code unit;
-  canonical document size is therefore not a complete server-function wire bound. No installed context cap or
-  aggregate wire/parsed-object byte cap is published; presentation placeholder strings also lack a size cap.
-- **Retained memory:** one parsed native page and its optional joins, one O(N) summary array, at most one
-  inspector and bounded key indexes. A cursor request drops the previous page before transport; failure retains
-  only the exact retry address. Projection is O(N+K), plus original document traversal/rendering, for admitted
-  nested keys K. No copies of bodies, accumulated pages, refill, history store or polling are introduced.
-  JavaScript object/node overhead and UTF-16 storage prevent treating canonical UTF-8 bytes as heap bytes.
-- **Growth check:** supplied-client and local lifetime regressions cover 1/20/100, overlapping nested identity
-  keys, replacement, delayed retirement and exact cursor retry. Existing page admission regressions preserve
-  historical zero, native order and rejection before hydration. Producer scans, represented homes, currentness,
-  access/media work and native growth256/1024/4096 remain producer evidence. Complete native envelope bytes,
-  variants and browser/Storybook acceptance remain integration obligations.
+For N returned revisions and K supplied related keys/references, validation and projection use O(N + K) work and
+memory. Maps index scores by revision identity, comparisons by their from-revision, subjects by their original
+key, identities by account key and images by media key. Documents are retained by reference and never copied
+for summaries. Only the selected inspector mounts, and only an explicit comparison opens an exact destination.
+No continuation accumulates earlier pages, rehydrates native enrichment or refills a sparse native page.
+
+The native 20-row default, 100-row maximum, opaque cursor and unchanged retry/media/exact-reader assertions remain.
+Native growth256/1024/4096, browser inspection and frozen integration acceptance are controller work.
 
 ## Prepared reader and disclosure
 
@@ -105,7 +97,7 @@ workspace typing does not establish those outcomes.
 `HistoryDisclosure` remains the only history request owner. `RevisionHistoryNavigation` receives the admitted
 window, page media, labels, subjects and author-private vote comparisons. It cannot call a read or enumerate
 history. Selection, keyboard movement, collapse and exact-address copying perform no native calls. Only the
-original History, More and Retry controls request a bounded page, with the original binding and failed cursor.
+original History, More and Retry controls request a bounded history page, with the original binding and failed cursor.
 
 The navigation subtree is keyed by connection and page generation inside its already lifetime-keyed parent.
 Retirement therefore clears the selected index, destination, inspector, pending focus and clipboard interaction
