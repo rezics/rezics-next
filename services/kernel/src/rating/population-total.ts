@@ -190,7 +190,8 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
         sum_delta: delta.sum,
         check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
       });
-      if (!updated.length) throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
+      if (!updated.length)
+        throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
     }
     await tx.query(
       `UPDATE rating.population_total_inbox SET applied=true

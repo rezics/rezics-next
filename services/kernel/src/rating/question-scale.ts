@@ -15,12 +15,7 @@ export type RatingQuestionScale = Readonly<{
 }>;
 
 export function isStoredRatingUnit(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isSafeInteger(value) &&
-    value >= 0 &&
-    value <= MAX_RATING_STORED_UNITS
-  );
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= MAX_RATING_STORED_UNITS;
 }
 
 export function checkedRatingQuestionScale(scale: RatingQuestionScale): RatingQuestionScale & { binCount: number } {

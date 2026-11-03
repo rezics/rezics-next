@@ -321,15 +321,7 @@ async function applyPartition(
         }
         const after = await readCountedVote.run(tx, parameters);
         if (!wroteVote) continue;
-        const appliedDelta = await applyComponentDelta(
-          tx,
-          change,
-          change.countingKey,
-          before,
-          after,
-          scale,
-          appliedAt,
-        );
+        const appliedDelta = await applyComponentDelta(tx, change, change.countingKey, before, after, scale, appliedAt);
         totals.add(change, [{ countingKey: change.countingKey, delta: appliedDelta }]);
         await markFigurePending(change, route);
         applied += 1;
