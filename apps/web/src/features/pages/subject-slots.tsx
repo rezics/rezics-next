@@ -83,6 +83,52 @@ export function OrganizationHistorySlot({
   );
 }
 
+/** Additive edition/release companion; the Contribute menu still owns the same destination. */
+export function ReleaseFidelitySlot({
+  subjectId,
+  subjectType,
+  label,
+  locale,
+}: {
+  subjectId: string;
+  subjectType: string;
+  label: string;
+  locale: string;
+}) {
+  const entry = catalogueEntries.releaseFidelity({ id: subjectId, type: subjectType, label, locale });
+  if (!entry) return null;
+  return (
+    <section data-slot="release-fidelity-entry" className="min-w-0 space-y-2">
+      <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
+        {entry.label}
+      </a>
+    </section>
+  );
+}
+
+/** Additive catalogue file/group companion; hashes stay catalogue statements, not possession. */
+export function CatalogueFileSlot({
+  subjectId,
+  subjectType,
+  label,
+  locale,
+}: {
+  subjectId: string;
+  subjectType: string;
+  label: string;
+  locale: string;
+}) {
+  const entry = catalogueEntries.catalogueFile({ id: subjectId, type: subjectType, label, locale });
+  if (!entry) return null;
+  return (
+    <section data-slot="catalogue-file-entry" className="min-w-0 space-y-2">
+      <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
+        {entry.label}
+      </a>
+    </section>
+  );
+}
+
 const characterType = 'wd:Q95074';
 
 export type CharacterRelationshipsSlotContext = Readonly<{

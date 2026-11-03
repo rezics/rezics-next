@@ -18,7 +18,7 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
-import { OrganizationHistorySlot } from './subject-slots';
+import { CatalogueFileSlot, OrganizationHistorySlot, ReleaseFidelitySlot } from './subject-slots';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
@@ -371,6 +371,8 @@ export function SubjectFrame({
         )}
       </header>
       <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <ReleaseFidelitySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
+      <CatalogueFileSlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
       {library ? (
         <div
           data-slot="subject-library"
