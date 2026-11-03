@@ -38,9 +38,9 @@ waiting: []
 acceptance:
   tests:
     - Install exact/descendant include/exclude and Boolean concept conditions in universal Search and direct clients; revalidate native witnesses and restart the retained cut on rejected-candidate mutation.
-    - "Complete native negative-proof ownership through retained preparation for prefixes longer than one dispatch, including finite all-pool work bounds, replay, empty terminal seeks, currentness checks and lifecycle; preserve unknown for concealed or incomplete evidence."
-    - "Expose authorized bounded scheme, breadcrumb, parent and child reads and the localized concepts journey with contextual native cards, current viewer actions, shareable URL/back behavior and repair states in all eight locales."
-    - "Derive useful-page work for raw candidates, leaves and contexts without fitted caps or unbounded refill; add focused behavior tests and run changed-workspace typing under the current launch policy."
+    - 'Complete native negative-proof ownership through retained preparation for prefixes longer than one dispatch, including finite all-pool work bounds, replay, empty terminal seeks, currentness checks and lifecycle; preserve unknown for concealed or incomplete evidence.'
+    - 'Expose authorized bounded scheme, breadcrumb, parent and child reads and the localized concepts journey with contextual native cards, current viewer actions, shareable URL/back behavior and repair states in all eight locales.'
+    - 'Derive useful-page work for raw candidates, leaves and contexts without fitted caps or unbounded refill; add focused behavior tests and run changed-workspace typing under the current launch policy.'
   workerOwned: true
 estimate:
   lines: 2100
