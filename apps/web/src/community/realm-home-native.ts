@@ -172,7 +172,7 @@ function availableActionMatches(
 }
 
 function nativeObservation(page: NativeRealmHomePage): NativeRealmHomeObservation {
-  if (page.viewer.state === 'anonymous') {
+  if ('state' in page.viewer) {
     if (page.actions.state !== 'sign-in') throw new Error('Realm home viewer changed');
     return {
       viewer: { state: 'anonymous' },
