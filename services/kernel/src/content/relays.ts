@@ -17,6 +17,7 @@ import { createReportEffect } from './report-effect.ts';
 import { createMentionNoticeEffect } from './mention-notices.ts';
 import { createReplyNoticeEffect } from './reply-notices.ts';
 import { createThreadWatchNoticeEffect } from './watch-notices.ts';
+import { createBoardWatchNoticeEffect } from './board-watch-notices.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   createRealmSubjectLifecycle,
@@ -231,5 +232,6 @@ export function contentNoticeEffects(pool: Pool, access: Access): Effect[] {
     createMentionNoticeEffect(pool, access),
     createReplyNoticeEffect(pool, access),
     createThreadWatchNoticeEffect(pool, access),
+    createBoardWatchNoticeEffect(pool, access),
   ];
 }

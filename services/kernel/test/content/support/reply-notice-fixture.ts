@@ -7,6 +7,7 @@ import { newId, routeOf } from '../../../src/route/route.ts';
 import type { CloudEvent, Envelope } from '../../../src/events/log.ts';
 import { standingFixture } from '../../access/standing-fixture.ts';
 import { openGrowthDatabase } from '../../support/growth.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export async function replyNoticeFixture() {
   const db = await openGrowthDatabase();
@@ -23,7 +24,10 @@ export async function replyNoticeFixture() {
       return Reflect.apply(query, client, args);
     },
   });
-  const accounts = await standingFixture(['account:update', 'realm:read', 'realm:participate']);
+  const accounts = await standingFixture(
+    ['account:read', 'account:update', 'realm:read', 'realm:participate'],
+    db.pool,
+  );
   await accounts.reset();
   const credentials = new Map<string, string>();
   const authenticate = accounts.access.authenticate;
@@ -46,7 +50,7 @@ export async function replyNoticeFixture() {
     access: accounts.access,
     routeKey: new Uint8Array(32).fill(17),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
-    receiptKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
+    receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({ secret: 'reply-notice-fixture-secret-at-least-32-bytes' }),
   });
   const boardId = newId(0x4321);
@@ -58,15 +62,16 @@ export async function replyNoticeFixture() {
   for (const id of credentials.keys()) {
     await accounts.grant(id, 'board:read', { route: routeOf(boardId)!, id: boardId });
     await accounts.grant(id, 'thread:create', { route: routeOf(boardId)!, id: boardId });
+    await accounts.grant(id, 'account:read', { route: routeOf(id)!, id });
     await accounts.grant(id, 'account:update', { route: routeOf(id)!, id });
   }
-  async function call(account: string, method: string, path: string, body?: unknown) {
+  async function call(account: string, method: string, path: string, body?: unknown, key: string = randomUUID()) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           authorization: `Bearer ${credentials.get(account)}`,
-          'idempotency-key': JSON.stringify(randomUUID()),
+          'idempotency-key': JSON.stringify(key),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

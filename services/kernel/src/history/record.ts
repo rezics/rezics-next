@@ -27,6 +27,8 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'access.agent-verification.revoked': 5,
   'access.agent-verification.deleted': 6,
   'access.agent-identity.recover': 7,
+  'content.board.watch': 8,
+  'content.watch.remove': 9,
 });
 export type CommandHistoryKind = string;
 const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KINDS));
@@ -47,7 +49,12 @@ export function commandHistoryKind(id: number): string | undefined {
   return [...commandKinds].find(([, value]) => value === id)?.[0];
 }
 export const COMMAND_HISTORY_COVERAGE = Object.freeze({
-  delivered: Object.freeze(['access.account.preferences', 'library.entry.retention.purge']),
+  delivered: Object.freeze([
+    'access.account.preferences',
+    'library.entry.retention.purge',
+    'content.board.watch',
+    'content.watch.remove',
+  ]),
   missing: Object.freeze([
     'other command producer and consumer conversion',
     'complete outbox producer and consumer coverage',

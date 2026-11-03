@@ -32,6 +32,7 @@ const item = t.Object({
     t.Literal('reply'),
     t.Literal('mention'),
     t.Literal('thread_watch'),
+    t.Literal('board_activity'),
     t.Literal('moderation_decision'),
   ]),
   createdAt: t.String(),

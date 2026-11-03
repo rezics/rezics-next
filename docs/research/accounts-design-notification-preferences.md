@@ -173,3 +173,8 @@ documents. This report does not adopt new notification types, delivery channels 
    post-send revocation hides target content; retention and erasure complete only with durable consumer custody.
    Bind/extend existing Content notification and Web native journeys and reuse owner delivery evidence; do not open
    another delivery implementation or repeat its native campaign during this research.
+
+Content's native watch catalogue now includes independent default-on optional `thread_watch` and `board_activity`
+preferences. The latter controls later first-published board openings only, without email or historical backfill;
+changing a preference neither removes subscriptions nor reverses a finalized send/refusal. The exact mounted methods,
+selection/cursor semantics and unavailable-row removal contract are in [Content](../../services/kernel/src/content/README.md#native-board-watches-and-private-management).

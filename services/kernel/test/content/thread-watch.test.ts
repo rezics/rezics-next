@@ -47,6 +47,7 @@ test('later replies reach current watchers once, and unwatch or a durable prefer
     'content_mention_notice',
     'content_reply_notice',
     'content_thread_watch_notice',
+    'content_board_watch_notice',
   ]);
   const effect = effects.find((candidate) => candidate.name === 'content_thread_watch_notice')!;
   const reader = f.accounts.principal;

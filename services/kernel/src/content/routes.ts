@@ -58,6 +58,7 @@ import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import { readThreadWatchState, unwatchThread, watchThread } from './watch.ts';
+import { watchRoutes } from './watch-routes.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
@@ -410,14 +411,17 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  const routes = editionRoutes(
-    appealRoutes(
-      moderationRoutes(
-        reportRoutes(
-          documentRoutes(
-            mediaImportRoutes(
-              mediaModerationRoutes(
-                sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+  const routes = watchRoutes(
+    editionRoutes(
+      appealRoutes(
+        moderationRoutes(
+          reportRoutes(
+            documentRoutes(
+              mediaImportRoutes(
+                mediaModerationRoutes(
+                  sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+                  dependencies,
+                ),
                 dependencies,
               ),
               dependencies,

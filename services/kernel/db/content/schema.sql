@@ -995,6 +995,52 @@ CREATE TABLE content.board_thread (
 
 
 --
+-- Name: board_watch; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_watch (
+    route integer NOT NULL,
+    watcher_account_id uuid NOT NULL,
+    board_id uuid NOT NULL,
+    watch_id uuid NOT NULL,
+    watching boolean NOT NULL,
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT board_watch_check CHECK ((route = ((get_byte(uuid_send(watcher_account_id), 10) * 256) + get_byte(uuid_send(watcher_account_id), 11)))),
+    CONSTRAINT board_watch_check1 CHECK ((route = ((get_byte(uuid_send(watch_id), 10) * 256) + get_byte(uuid_send(watch_id), 11)))),
+    CONSTRAINT board_watch_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT board_watch_revision_check CHECK ((revision > 0)),
+    CONSTRAINT board_watch_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: board_watch_notice_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_watch_notice_work (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    board_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_id uuid NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    cursor_created_at timestamp with time zone,
+    cursor_watch_id uuid,
+    done boolean DEFAULT false NOT NULL,
+    CONSTRAINT board_watch_notice_work_check CHECK (((cursor_created_at IS NULL) = (cursor_watch_id IS NULL))),
+    CONSTRAINT board_watch_notice_work_check1 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT board_watch_notice_work_check2 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT board_watch_notice_work_published_at_check CHECK (isfinite(published_at)),
+    CONSTRAINT board_watch_notice_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT board_watch_notice_work_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT board_watch_notice_work_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: catalogue_report_candidate; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1413,7 +1459,7 @@ CREATE TABLE content.notice (
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     CONSTRAINT notice_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
     CONSTRAINT notice_check1 CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
-    CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text, 'moderation_decision'::text]))),
+    CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text, 'board_activity'::text, 'moderation_decision'::text]))),
     CONSTRAINT notice_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -1430,7 +1476,7 @@ CREATE TABLE content.notice_finalization (
     sent boolean NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT notice_finalization_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
-    CONSTRAINT notice_finalization_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text]))),
+    CONSTRAINT notice_finalization_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text, 'board_activity'::text]))),
     CONSTRAINT notice_finalization_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -2367,6 +2413,30 @@ ALTER TABLE ONLY content.board_thread
 
 
 --
+-- Name: board_watch_notice_work board_watch_notice_work_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_watch_notice_work
+    ADD CONSTRAINT board_watch_notice_work_pkey PRIMARY KEY (route, post_id);
+
+
+--
+-- Name: board_watch board_watch_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_watch
+    ADD CONSTRAINT board_watch_pkey PRIMARY KEY (route, watcher_account_id, board_id);
+
+
+--
+-- Name: board_watch board_watch_route_watch_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_watch
+    ADD CONSTRAINT board_watch_route_watch_id_key UNIQUE (route, watch_id);
+
+
+--
 -- Name: catalogue_report_candidate catalogue_report_candidate_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3020,6 +3090,27 @@ CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (
 
 
 --
+-- Name: board_watch_account_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_watch_account_idx ON content.board_watch USING btree (route, watcher_account_id, created_at, watch_id) INCLUDE (board_id, revision) WHERE watching;
+
+
+--
+-- Name: board_watch_fanout_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_watch_fanout_idx ON content.board_watch USING btree (board_id, created_at, watch_id) INCLUDE (route, watcher_account_id) WHERE watching;
+
+
+--
+-- Name: board_watch_notice_work_expire_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_watch_notice_work_expire_idx ON content.board_watch_notice_work USING btree (route, published_at, post_id);
+
+
+--
 -- Name: catalogue_report_candidate_kind_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -3326,6 +3417,13 @@ CREATE INDEX thread_watch_account_idx ON content.thread_watch USING btree (route
 --
 
 CREATE INDEX thread_watch_fanout_idx ON content.thread_watch USING btree (thread_id, created_at, watch_id) INCLUDE (route, watcher_account_id);
+
+
+--
+-- Name: thread_watch_management_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_management_idx ON content.thread_watch USING btree (route, watcher_account_id, created_at, watch_id) INCLUDE (thread_id);
 
 
 --

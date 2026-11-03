@@ -103,6 +103,8 @@ function personal(...roles: AccountRole[]): EventClassification {
 /** Payload/native owner associations, never inferred from UUIDs or JSON. Command scope is added even for
  * non-personal payloads; an owner's private association overrides a public-resource disposition. */
 export const EVENT_CLASSIFICATIONS = Object.freeze({
+  'com.rezics.content.board.watch.changed.v1': personal('actor'),
+  'com.rezics.content.watch.removed.v1': personal('actor'),
   'com.rezics.access.account-display-name-changed.v1': personal('subject'),
   'com.rezics.access.account-handle-published.v1': personal('subject'),
   'com.rezics.access.account-tombstoned.v1': personal('subject', 'operator'),
@@ -303,7 +305,6 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.semantic.erasure.locator-advanced.v1': nonPersonal,
   'com.rezics.semantic.erasure.progress.v1': personal('subject'),
   'com.rezics.semantic.links.changed.v1': personal('subject'),
-  'com.rezics.semantic.subject_page.dependencies_changed.v1': personal('subject'),
   'com.rezics.semantic.links.keys-changed.v1': personal('subject'),
   'com.rezics.semantic.links.moving.v1': personal('subject'),
   'com.rezics.semantic.links.projected.v1': nonPersonal,

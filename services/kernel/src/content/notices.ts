@@ -25,7 +25,7 @@ export const NOTICE_PAGE_SIZE = 1000;
 export const NOTICE_RETENTION_DAYS = 180;
 export const NOTICE_RETENTION_MS = NOTICE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-export type NoticeKind = 'reply' | 'mention' | 'thread_watch' | 'moderation_decision';
+export type NoticeKind = 'reply' | 'mention' | 'thread_watch' | 'board_activity' | 'moderation_decision';
 
 export type NoticeInput = Readonly<{
   recipientId: string;
@@ -45,30 +45,34 @@ type QueryClient = Pick<Pool | PoolClient, 'query'>;
 export async function withWritableNoticeRoute<T>(
   pool: Pool,
   route: number,
-  action: (client: PoolClient) => Promise<T>,
+  action: (client: Pick<PoolClient, 'query'>) => Promise<T>,
+  deadline?: number,
 ): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN');
-    try {
-      const partition = partitionOf(route);
-      const state = await noticePartitionState.run(client, {
-        partition_no: partition,
-      });
-      if (!state) throw new CommandUnavailableError('deadline', partition);
-      if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partition, state.moved_to);
-      if (state.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
-      const result = await action(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
+  const run = () =>
+    withConnection(pool, async (connection) => {
+      const client = deadline === undefined ? connection : deadlineClient(connection, deadline);
+      await client.query('BEGIN');
       try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
+        const partition = partitionOf(route);
+        const state = await noticePartitionState.run(client, {
+          partition_no: partition,
+        });
+        if (!state) throw new CommandUnavailableError('deadline', partition);
+        if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partition, state.moved_to);
+        if (state.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
+        const result = await action(client);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    });
+  return deadline === undefined ? run() : within(deadline, run);
 }
 
 function requiredRoute(id: string, name: string): number {
@@ -81,7 +85,7 @@ function validateNotice(notice: NoticeInput): number {
   const route = requiredRoute(notice.recipientId, 'notice recipient');
   if (requiredRoute(notice.noticeId, 'notice id') !== route)
     throw new TypeError('Notice id must use the recipient route');
-  if (!['reply', 'mention', 'thread_watch', 'moderation_decision'].includes(notice.kind))
+  if (!['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision'].includes(notice.kind))
     throw new TypeError('Invalid notice kind');
   requiredRoute(notice.sourceId, 'notice source');
   for (const [name, id] of [
@@ -144,11 +148,13 @@ export async function writeNotices(client: QueryClient, notices: readonly Notice
  */
 export async function finalizeOptionalNotice(
   pool: Pool,
-  notice: NoticeInput & { kind: 'reply' | 'mention' | 'thread_watch' },
+  notice: NoticeInput & { kind: 'reply' | 'mention' | 'thread_watch' | 'board_activity' },
   readable: boolean,
   deadline: number,
   clock: KernelClock = systemClock,
-  watch?: Readonly<{ watchId: string; threadId: string; publishedAt: Date }>,
+  watch?: Readonly<
+    { watchId: string } & ({ threadId: string; publishedAt: Date } | { boardId: string; publishedAt: string })
+  >,
 ): Promise<void> {
   const route = validateNotice(notice);
   // A redrive older than the retained decision horizon cannot reopen a send.
@@ -165,6 +171,12 @@ export async function finalizeOptionalNotice(
         if (!state) throw new CommandUnavailableError('deadline', partition);
         if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partition, state.moved_to);
         if (state.write_state !== 'active') throw new CommandUnavailableError('fenced', partition);
+        // All optional kinds serialize on the same recipient/source, so worker
+        // ordering cannot produce both a board opening and its thread notice.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('content.optional-notice:' || $1::text || ':' || $2::text,0))",
+          [notice.recipientId, notice.sourceId],
+        );
         const key = {
           route,
           recipient_id: notice.recipientId,
@@ -182,14 +194,36 @@ export async function finalizeOptionalNotice(
             });
             const watching =
               watch === undefined ||
-              (await watchNoticeIsActive.run(client, {
-                route,
-                thread_id: watch.threadId,
-                watch_id: watch.watchId,
-                watcher_account_id: notice.recipientId,
-                published_at: watch.publishedAt.toISOString(),
-              })) !== null;
-            const sent = readable && allowed && watching;
+              ('threadId' in watch
+                ? (await watchNoticeIsActive.run(client, {
+                    route,
+                    thread_id: watch.threadId,
+                    watch_id: watch.watchId,
+                    watcher_account_id: notice.recipientId,
+                    published_at: watch.publishedAt.toISOString(),
+                  })) !== null
+                : (
+                    await client.query(
+                      `SELECT 1 FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2
+                 AND board_id=$3 AND watch_id=$4 AND watching AND created_at<$5::timestamptz FOR KEY SHARE`,
+                      [route, notice.recipientId, watch.boardId, watch.watchId, watch.publishedAt],
+                    )
+                  ).rowCount === 1);
+            const overlapping =
+              (
+                await client.query(
+                  notice.kind === 'board_activity'
+                    ? `SELECT 1 FROM content.notice WHERE route=$1 AND recipient_id=$2 AND source_id=$3
+                   AND kind IN ('reply','mention','thread_watch') LIMIT 1`
+                    : `SELECT 1 FROM content.notice WHERE route=$1 AND recipient_id=$2 AND source_id=$3 AND kind='board_activity'`,
+                  [route, notice.recipientId, notice.sourceId],
+                )
+              ).rowCount === 1;
+            // Source Access observations precede this checkout. Fence an
+            // intervening suspension at the current native account point,
+            // without another Access checkout under the recipient transaction.
+            const sent =
+              readable && account.state === 'active' && !account.fenced && allowed && watching && !overlapping;
             const claimed = await recordFinalization.run(client, {
               ...key,
               sent,
@@ -236,7 +270,15 @@ export async function deleteExpiredNoticesPage(pool: Pool, route: number, cutoff
         limit: NOTICE_PAGE_SIZE - deleted - finalized,
       })
     ).length;
-    return deleted + finalized + work;
+    const boardWork = await client.query(
+      `WITH page AS MATERIALIZED (
+         SELECT ctid AS row_id FROM content.board_watch_notice_work
+         WHERE route=$1 AND published_at<$2::timestamptz ORDER BY published_at,post_id LIMIT $3 FOR UPDATE
+       ) DELETE FROM content.board_watch_notice_work w
+         WHERE w.ctid=ANY(ARRAY(SELECT row_id FROM page)) RETURNING w.post_id`,
+      [route, cutoff.toISOString(), NOTICE_PAGE_SIZE - deleted - finalized - work],
+    );
+    return deleted + finalized + work + boardWork.rows.length;
   });
 }
 
@@ -264,7 +306,13 @@ export async function deleteAccountNoticePage(pool: Pool, accountId: string): Pr
         limit: NOTICE_PAGE_SIZE - deleted - finalized,
       })
     ).length;
-    return deleted + finalized + watches;
+    const boards = await deleteBoardWatchPage(
+      client,
+      route,
+      accountId,
+      NOTICE_PAGE_SIZE - deleted - finalized - watches,
+    );
+    return deleted + finalized + watches + boards;
   });
 }
 
@@ -281,7 +329,7 @@ export type NoticeErasureCursor = string;
 type NoticeErasurePageCursor = {
   version: 1;
   accountId: string;
-  stage: 'notices' | 'finalizations' | 'watches';
+  stage: 'notices' | 'finalizations' | 'watches' | 'board-watches';
   noticeAfter: { createdAt: string; noticeId: string } | null;
   finalizationAfter: { createdAt: string; kind: string; sourceId: string } | null;
 };
@@ -323,7 +371,10 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
     !('accountId' in parsed) ||
     parsed.accountId !== accountId ||
     !('stage' in parsed) ||
-    (parsed.stage !== 'notices' && parsed.stage !== 'finalizations' && parsed.stage !== 'watches') ||
+    (parsed.stage !== 'notices' &&
+      parsed.stage !== 'finalizations' &&
+      parsed.stage !== 'watches' &&
+      parsed.stage !== 'board-watches') ||
     !('noticeAfter' in parsed) ||
     !('finalizationAfter' in parsed)
   )
@@ -350,7 +401,7 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
       Number.isFinite(Date.parse(after.createdAt)) &&
       'kind' in after &&
       typeof after.kind === 'string' &&
-      ['reply', 'mention', 'thread_watch', 'moderation_decision'].includes(after.kind) &&
+      ['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision'].includes(after.kind) &&
       'sourceId' in after &&
       typeof after.sourceId === 'string' &&
       routeOf(after.sourceId) !== null);
@@ -360,7 +411,8 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
   if (
     (parsed.stage === 'notices' && parsed.finalizationAfter !== null) ||
     (parsed.stage === 'finalizations' && parsed.noticeAfter !== null) ||
-    (parsed.stage === 'watches' && (parsed.noticeAfter !== null || parsed.finalizationAfter !== null))
+    ((parsed.stage === 'watches' || parsed.stage === 'board-watches') &&
+      (parsed.noticeAfter !== null || parsed.finalizationAfter !== null))
   )
     throw new TypeError('Invalid notice erasure cursor');
   return parsed as NoticeErasurePageCursor;
@@ -375,6 +427,10 @@ export async function eraseAccountNoticesPage(
   const route = requiredRoute(accountId, 'notice account');
   const cursor = readNoticeErasureCursor(after, accountId);
   return withWritableNoticeRoute(deps.pool, route, async (client) => {
+    if (cursor.stage === 'board-watches') {
+      const found = await deleteBoardWatchPage(client, route, accountId, 50);
+      return { found, pending: found === 50 ? 1 : 0, next: found === 50 ? JSON.stringify(cursor) : null };
+    }
     const page = (await eraseAccountNoticePageSql.run(client, {
       route,
       account_id: accountId,
@@ -422,6 +478,27 @@ export async function eraseAccountNoticesPage(
             : null,
       } satisfies NoticeErasurePageCursor);
     }
-    return { next, found: Number(page.found), pending: Number(page.pending) };
+    // Preserve existing thread/notices cursor semantics, then erase board tombstones too.
+    if (page.done)
+      next = JSON.stringify({
+        version: 1,
+        accountId,
+        stage: 'board-watches',
+        noticeAfter: null,
+        finalizationAfter: null,
+      } satisfies NoticeErasurePageCursor);
+    return { next, found: Number(page.found), pending: Math.max(1, Number(page.pending)) };
   });
+}
+
+async function deleteBoardWatchPage(client: QueryClient, route: number, accountId: string, limit: number) {
+  const result = await client.query(
+    `WITH page AS MATERIALIZED (
+       SELECT ctid AS row_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2
+       ORDER BY board_id LIMIT $3 FOR UPDATE
+     ) DELETE FROM content.board_watch w
+       WHERE w.ctid=ANY(ARRAY(SELECT row_id FROM page)) RETURNING w.watch_id`,
+    [route, accountId, limit],
+  );
+  return result.rows.length;
 }

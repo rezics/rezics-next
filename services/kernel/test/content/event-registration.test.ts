@@ -31,6 +31,18 @@ const threadIndex = {
 };
 const media = { mediaId, containerId };
 const fixtures = {
+  'com.rezics.content.conversation-activity.projected.v1': {
+    postIds: [itemId],
+    sourceEpoch: 1,
+    sourcePosition: '1',
+  },
+  'com.rezics.content.board.watch.changed.v1': {
+    accountId: actorId,
+    boardId: containerId,
+    watching: true,
+    revision: 1,
+  },
+  'com.rezics.content.watch.removed.v1': { accountId: actorId, kind: 'board', watchId: itemId },
   'com.rezics.content.board.slow-mode.changed.v1': { boardId: containerId, intervalSeconds: 60 },
   'com.rezics.content.feed.indexed.v1': {},
   'com.rezics.content.feed.delivered.v1': {},
