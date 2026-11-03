@@ -60,7 +60,8 @@ export function ConfiguredProgressPanel({
   const headingId = useId();
   const inputId = useId();
   const errorId = useId();
-  const stored = progress.meaning === 'unsupported' ? '' : (progress.meaning === 'absent' ? '' : (progress.session.amount ?? ''));
+  const stored =
+    progress.meaning === 'unsupported' ? '' : progress.meaning === 'absent' ? '' : (progress.session.amount ?? '');
   const [draft, setDraft] = useState(stored);
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
@@ -78,7 +79,9 @@ export function ConfiguredProgressPanel({
     progress.meaning === 'unsupported'
       ? m.library_progress_unit_unspecified()
       : (progress.session && 'session' in progress && progress.session.unitLabel) ||
-        (release ? libraryUnitLabel(release, type, progress.measure.mode, progress.measure.unit.id, locale)?.text : undefined) ||
+        (release
+          ? libraryUnitLabel(release, type, progress.measure.mode, progress.measure.unit.id, locale)?.text
+          : undefined) ||
         progress.measure.unit.id;
   const display =
     progress.meaning === 'recorded' || progress.meaning === 'zero'
@@ -242,8 +245,7 @@ export function ConfiguredProgressPanel({
     );
   }
 
-  const changes: ProgressChange[] =
-    history.page && history.page.signedIn ? history.page.session.changes : [];
+  const changes: ProgressChange[] = history.page && history.page.signedIn ? history.page.session.changes : [];
 
   return (
     <section className="min-w-0 space-y-3" aria-labelledby={headingId}>

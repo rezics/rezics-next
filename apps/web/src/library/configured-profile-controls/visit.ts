@@ -133,8 +133,7 @@ function presentProgress(
   if (!measure) return { meaning: 'unsupported' };
   const session = sessions.find((item) => item.mode === measure.mode && item.unit === measure.unit.id);
   if (!session) return { meaning: 'absent', measure, rules: capabilities.measureRules };
-  if (session.meaning !== 'known')
-    return { meaning: 'historical', measure, rules: capabilities.measureRules, session };
+  if (session.meaning !== 'known') return { meaning: 'historical', measure, rules: capabilities.measureRules, session };
   if (session.amount === null) return { meaning: 'absent', measure, rules: capabilities.measureRules, session };
   return {
     meaning: session.amount === '0' ? 'zero' : 'recorded',
@@ -163,8 +162,11 @@ async function readEntry(
   if (result.status === 404) return { status: 'absent' };
   if (result.status === 401 || result.status === 403) return { status: 'refused' };
   if (result.error || !result.data || !('libraryEntry' in result.data)) return { status: 'absent' };
-  const entry = (result.data as { libraryEntry: { subjectId: string; state: string; revision: number; incarnationId?: string | null } })
-    .libraryEntry;
+  const entry = (
+    result.data as {
+      libraryEntry: { subjectId: string; state: string; revision: number; incarnationId?: string | null };
+    }
+  ).libraryEntry;
   if (!entry || entry.subjectId !== subjectId) return { status: 'absent' };
   return { status: 'ok', entry };
 }
@@ -249,8 +251,7 @@ export async function loadConfiguredLibraryVisit(
   const workFor = (projection: unknown, rows = 0) =>
     finishVisitWork(calls, capabilities.state === 'ready' ? capabilities.admittedFields : 0, rows, projection);
 
-  if (await prepareSession(request, sessionEnv))
-    return { state: 'refused', work: emptyVisitWork() };
+  if (await prepareSession(request, sessionEnv)) return { state: 'refused', work: emptyVisitWork() };
   const authorization = viewerCredential(request);
   const viewer = sessionSubject(request);
   if (!authorization || !viewer) return { state: 'signed-out', work: emptyVisitWork() };
@@ -297,7 +298,12 @@ export async function loadConfiguredLibraryVisit(
         ...(progress.meaning === 'unsupported' ? {} : { unit: progress.measure.unit.id }),
         ...('session' in progress ? { sessionId: progress.session.id, amount: progress.session.amount } : {}),
       },
-      copies: copies.items.map((item) => ({ id: item.id, kind: item.kind, status: item.status, revision: item.revision })),
+      copies: copies.items.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        status: item.status,
+        revision: item.revision,
+      })),
       copiesNext: copies.next,
       sessionsNext: sessionsPage.next,
     };

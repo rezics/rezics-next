@@ -1,10 +1,7 @@
 import type { CopyRemoveResult, CopyWriteResult } from '../copies-read';
 import type { ProgressFailure, ProgressRecorded, ProgressRecordInput, ProgressStarted } from '../progress-reads';
 
-export type GuardedSender<Input, Result> = (input: {
-  data: Input;
-  headers: HeadersInit;
-}) => Promise<Result>;
+export type GuardedSender<Input, Result> = (input: { data: Input; headers: HeadersInit }) => Promise<Result>;
 
 /** Captured native command. Retry keeps this sender, credential, key and operands. */
 export type GuardedCommand<Input, Result> = {

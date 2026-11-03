@@ -124,7 +124,11 @@ export function ConfiguredCopyPanel({
       {writable ? (
         editing === undefined ? (
           <Exposure operation="copy.create">
-            <button type="button" className={quiet} onClick={() => originating.isCurrent('copy.create') && setEditing(null)}>
+            <button
+              type="button"
+              className={quiet}
+              onClick={() => originating.isCurrent('copy.create') && setEditing(null)}
+            >
               {m.library_configured_add_copy()}
             </button>
           </Exposure>

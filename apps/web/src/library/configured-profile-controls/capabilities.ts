@@ -42,11 +42,7 @@ export type ConfiguredProfileCapabilities =
       measureRules: ProgressInputRules;
     };
 
-function measureRules(
-  release: Release,
-  type: string,
-  measure: ManualProgressMeasure | undefined,
-): ProgressInputRules {
+function measureRules(release: Release, type: string, measure: ManualProgressMeasure | undefined): ProgressInputRules {
   return measure ? progressInputRules(release, type, measure.mode, measure.unit.id) : undefined;
 }
 

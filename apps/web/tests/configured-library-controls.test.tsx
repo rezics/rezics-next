@@ -44,8 +44,9 @@ mock.module('../src/library/library-workspace-admission', () => ({
 }));
 
 const recordCalls: unknown[] = [];
-let recordResult: { ok: true; session: { id: string; revision: number; amount: string } } | { ok: false; reason: string } =
-  { ok: false, reason: 'conflict' };
+let recordResult:
+  | { ok: true; session: { id: string; revision: number; amount: string } }
+  | { ok: false; reason: string } = { ok: false, reason: 'conflict' };
 mock.module('../src/library/progress-server', () => ({
   startProgressSession: async () => ({ ok: false, reason: 'unavailable' }),
   recordProgressSession: async (input: { data: unknown; headers: unknown }) => {
@@ -230,7 +231,10 @@ function sessionRow(n: number, subjectId: string, amount: string | null, unitId:
   };
 }
 
-function populate(unrelated: number, selected: { copies: RawCopy[]; sessions: RawSession[]; entryState?: string }): Store {
+function populate(
+  unrelated: number,
+  selected: { copies: RawCopy[]; sessions: RawSession[]; entryState?: string },
+): Store {
   const copies = [...selected.copies];
   const sessions = [...selected.sessions];
   for (let i = 0; i < unrelated; i++) {
@@ -249,7 +253,12 @@ function request() {
   });
 }
 
-async function visit(type: string, subjectId: string, store: Store, extra: { copyCursor?: string; release?: Release } = {}) {
+async function visit(
+  type: string,
+  subjectId: string,
+  store: Store,
+  extra: { copyCursor?: string; release?: Release } = {},
+) {
   return loadConfiguredLibraryVisit(
     kernel(store),
     request(),
@@ -377,7 +386,8 @@ test('zero amount, absent amount and absent session are distinct single-manual m
   });
   const cleared = await visit(MANGA_SERIES_TYPE, SERIES, emptyAmount);
   expect(cleared.state === 'ready' && cleared.progress.meaning).toBe('absent');
-  if (cleared.state === 'ready' && cleared.progress.meaning === 'absent') expect(cleared.progress.session?.id).toBe(id(201));
+  if (cleared.state === 'ready' && cleared.progress.meaning === 'absent')
+    expect(cleared.progress.session?.id).toBe(id(201));
   expect(markup(cleared, { id: SERIES, type: MANGA_SERIES_TYPE, label: 'One Piece' })).toContain(
     m.library_configured_absent_progress(),
   );
@@ -398,7 +408,17 @@ test('unavailable retry keeps sender, credential, key and operands; conflict doe
       ? ({ ok: false, reason: 'unavailable' } as const)
       : ({
           ok: true,
-          session: { id: operands.sessionId, revision: 4, amount: '12', locator: null, position: null, completedUnitCount: 12, state: 'active' as const, completedAt: null, total: null },
+          session: {
+            id: operands.sessionId,
+            revision: 4,
+            amount: '12',
+            locator: null,
+            position: null,
+            completedUnitCount: 12,
+            state: 'active' as const,
+            completedAt: null,
+            total: null,
+          },
         } as const);
   };
   const command = createGuardedCommand(sender, 'csrf-token', operands);
@@ -475,7 +495,9 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
       }),
     );
   });
-  const save = [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_configured_record_progress());
+  const save = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === m.library_configured_record_progress(),
+  );
   expect(save).toBeDefined();
   await act(async () => {
     (save as HTMLButtonElement).click();
@@ -517,8 +539,13 @@ test('owner populations 32, 256 and 2048 keep three native calls and page-bounde
   const seriesCaps = readConfiguredProfileCapabilities(release, MANGA_SERIES_TYPE, 'en');
   expect(seriesCaps.state).toBe('ready');
   const fields = seriesCaps.state === 'ready' ? seriesCaps.admittedFields : 0;
-  const observed: { n: number; nativeCallCount: number; valuesProcessed: number; bytesRetained: number; pageRows: number }[] =
-    [];
+  const observed: {
+    n: number;
+    nativeCallCount: number;
+    valuesProcessed: number;
+    bytesRetained: number;
+    pageRows: number;
+  }[] = [];
   for (const n of [32, 256, 2048]) {
     const loaded = await visit(MANGA_SERIES_TYPE, SERIES, populate(n, selected));
     expect(loaded.state).toBe('ready');
