@@ -4,9 +4,13 @@ import { admitFilter, parseFilter, validateFilter, type FilterRelease } from '..
 const id = '018f0000-0000-7000-8000-00a000000001';
 const spoiler = 'rezics:spoilerLevel';
 const release: FilterRelease = {
-  types: { 'wd:Q95074': { facets: ['schema:gender'] }, 'schema:Movie': { facets: ['schema:character', 'wdt:P725'] } },
+  types: {
+    'wd:Q95074': { facets: ['schema:gender'] },
+    'schema:Movie': { facets: ['schema:character', 'schema:keywords', 'wdt:P725'] },
+  },
   properties: {
     'schema:gender': { datatype: 'wikibase-item', qualifiers: [spoiler], relation: { group: 'classification' } },
+    'schema:keywords': { datatype: 'wikibase-item', qualifiers: [spoiler], relation: { group: 'classification' } },
     'schema:character': { datatype: 'wikibase-item', qualifiers: [spoiler], relation: { group: 'appearance' } },
     'wdt:P725': { datatype: 'wikibase-item', qualifiers: ['wdt:P453'], relation: { group: 'credit' } },
     'wdt:P453': { datatype: 'wikibase-item' },
@@ -30,4 +34,39 @@ test('released appearance and gender admit exact spoiler levels without extendin
   const replacement = structuredClone(release);
   replacement.properties['schema:character']!.qualifiers = [];
   expect(validateFilter(leaf('schema:character', ['0']), replacement)[0]?.problem).toBe('unsupported_query');
+  const thresholded = parseFilter({ statement: { property: 'schema:character', in: [id] } });
+  expect(() => admitFilter(thresholded, replacement, { spoilerThreshold: 0 })).toThrow();
+});
+
+test('journey thresholds admit only explicit levels through the selected value', () => {
+  for (const [threshold, levels] of [[0, ['0']], [1, ['0', '1']], [2, ['0', '1', '2']]] as const) {
+    for (const property of ['schema:keywords', 'schema:gender', 'schema:character']) {
+      const filter = parseFilter({ statement: { property, in: [id] } });
+      expect(admitFilter(filter, release, { spoilerThreshold: threshold })).toEqual({
+        statement: { property, in: [id], qualifiers: [{ property: spoiler, in: levels }] },
+      });
+    }
+  }
+
+  const selected = parseFilter({
+    not: {
+      statement: {
+        property: 'schema:character',
+        in: [id],
+        qualifiers: [{ property: spoiler, in: ['0', '2'] }],
+      },
+    },
+  });
+  expect(admitFilter(selected, release, { spoilerThreshold: 1 })).toEqual({
+    not: { statement: { property: 'schema:character', in: [id], qualifiers: [{ property: spoiler, in: ['0'] }] } },
+  });
+  const voice = parseFilter({ statement: { property: 'wdt:P725', in: [id] } });
+  expect(admitFilter(voice, release, { spoilerThreshold: 0 })).toEqual(voice);
+  expect(() =>
+    admitFilter(
+      parseFilter({ statement: { property: 'schema:character', in: [id], qualifiers: [{ property: spoiler, in: ['2'] }] } }),
+      release,
+      { spoilerThreshold: 0 },
+    ),
+  ).toThrow();
 });

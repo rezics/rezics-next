@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { readNativeSpoilerLevel, type FilterDocument } from '@rezics/filter';
+import {
+  admitFilter,
+  parseFilter,
+  readNativeSpoilerLevel,
+  type FilterDocument,
+  type FilterRelease,
+} from '@rezics/filter';
 import { normalizeSourceStatement } from '../../src/semantic/scope-leaf-selection.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
@@ -38,6 +44,13 @@ test('native spoiler quantities preserve exact levels and never manufacture a mi
 });
 
 test('current raised or removed spoiler evidence retires a stale hit and stays unknown through NOT', async () => {
+  const release: FilterRelease = {
+    types: { 'schema:Movie': { facets: [property] } },
+    properties: {
+      [property]: { datatype: 'wikibase-item', qualifiers: [spoiler], relation: { group: 'appearance' } },
+      [spoiler]: { datatype: 'quantity', units: ['1'] },
+    },
+  };
   const subject: IndexedSubject = {
     id: id(1),
     type: 'schema:Movie',
@@ -67,13 +80,27 @@ test('current raised or removed spoiler evidence retires a stale hit and stays u
       ),
   };
   const hit = { id: subject.id, partition: 10, securityRevision: 1, matched: [] };
-  const leaf = { statement: { property, in: [id(2)], qualifiers: [{ property: spoiler, in: ['0', '1'] }] } };
+  const base = parseFilter({ statement: { property, in: [id(2)] } });
+  const leaf = (threshold: 0 | 1 | 2) => admitFilter(base, release, { spoilerThreshold: threshold });
   const read = (filter: FilterDocument) =>
     checkHits(source, [hit], new Map(), { filter, relationProperties: [property] });
-  expect((await read(leaf)).passed).toHaveLength(1);
-  for (const replacement of [[statement('+2')], []]) {
+
+  for (const actual of [0, 1, 2]) {
+    current = [statement(`+${actual}`)];
+    for (const threshold of [0, 1, 2] as const)
+      expect((await read(leaf(threshold))).passed).toHaveLength(actual <= threshold ? 1 : 0);
+  }
+  const missing = normalizeSourceStatement(
+    property,
+    { value: { type: 'value', content: id(2) } },
+    bundledRelease.properties,
+  )!;
+  for (const replacement of [[missing], []]) {
     current = replacement;
-    expect((await read(leaf)).passed).toEqual([]);
-    expect((await read({ not: leaf })).passed).toEqual([]);
+    for (const threshold of [0, 1, 2] as const) {
+      const filter = leaf(threshold);
+      expect((await read(filter)).passed).toEqual([]);
+      expect((await read({ not: filter })).passed).toEqual([]);
+    }
   }
 });
