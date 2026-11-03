@@ -6,8 +6,7 @@ import type { FeedItem } from './feed-contract.ts';
 /** Search owns native summaries and final eligibility. Mapping does no owner reads or refills. */
 export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { source: 'discovery' }> {
   const { key, summary } = hit;
-  if (routeOf(key.id) !== key.route || key.id !== summary.value.id)
-    throw new ProblemError('dependency_unavailable');
+  if (routeOf(key.id) !== key.route || key.id !== summary.value.id) throw new ProblemError('dependency_unavailable');
   const owner = summary.kind === 'collection' ? 'commerce' : summary.kind === 'space' ? 'content' : key.owner;
   const common = {
     id: `discovery:${owner}:${key.id}`,

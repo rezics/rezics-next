@@ -84,7 +84,12 @@ function mixedRows(): FeedItem[] {
     source: 'following',
     key: { owner: 'content', kind: 'thread', route: 4660, id: '01a1a000-0000-7000-8000-000000000827' },
     occurredAt: null,
-    summary: { id: '01a1a000-0000-7000-8000-000000000827', kind: 'discussion', title: 'A discussion', createdAt: '2026-11-03T00:00:00Z' },
+    summary: {
+      id: '01a1a000-0000-7000-8000-000000000827',
+      kind: 'discussion',
+      title: 'A discussion',
+      createdAt: '2026-11-03T00:00:00Z',
+    },
     destination: { kind: 'thread', id: '01a1a000-0000-7000-8000-000000000827', title: 'A discussion' },
   };
   const space: FeedItem = {
