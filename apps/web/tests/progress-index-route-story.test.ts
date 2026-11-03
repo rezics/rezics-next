@@ -9,6 +9,15 @@ import {
   setLibraryProgressStoryMode,
 } from '../src/kernel/fake/library-progress-story';
 
+const stored = (session: (typeof sessionsRecording.progressSessions)[number]) => [
+  session.subjectId,
+  session.mode,
+  session.unit,
+  session.amount,
+  session.position,
+  session.locator,
+];
+
 test('the routed Progress story uses constructed response examples without changing stored or private identity', async () => {
   const list = routes.find((route) => route.method === 'GET' && route.path === '/v1/progressSessions')!;
   const address = new URL('https://kernel.test/v1/progressSessions');
@@ -26,25 +35,7 @@ test('the routed Progress story uses constructed response examples without chang
       libraryProgressStoryRequestCursor,
     ]);
     expect(response.next).toBe(libraryProgressStoryNextCursor);
-    expect(
-      rows.map(({ subjectId, mode, unit, amount, position, locator }) => [
-        subjectId,
-        mode,
-        unit,
-        amount,
-        position,
-        locator,
-      ]),
-    ).toEqual(
-      sessionsRecording.progressSessions.map(({ subjectId, mode, unit, amount, position, locator }) => [
-        subjectId,
-        mode,
-        unit,
-        amount,
-        position,
-        locator,
-      ]),
-    );
+    expect(rows.map(stored)).toEqual(sessionsRecording.progressSessions.map(stored));
     expect(rows.map((row) => row.subject?.id ?? null)).toEqual(
       sessionsRecording.progressSessions.map((row) => row.subject?.id ?? null),
     );
