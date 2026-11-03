@@ -56,12 +56,12 @@ export const RealmHomePublicationPageSchema = t.Object(
  * continuation. Its cursor is the ordinary native publication cursor at limit12.
  * There is no refill, second raw page, Subject HTTP call or unavailable count.
  */
-export function createRealmHomePublicationReader(deps: PublicationDependencies) {
+export function createRealmHomePublicationObservationReader(deps: PublicationDependencies) {
   return async (
     realmId: string,
     context: PublicationReadContext,
     query: { cursor?: string; languages?: readonly string[] } = {},
-  ): Promise<RealmHomePublicationPage | null> => {
+  ): Promise<RealmHomePublicationObservation | null> => {
     requireAccessDeadline(context.deadline);
     const selection = await preparePublicationPage(deps, realmId, context, {
       limit: REALM_HOME_PUBLICATION_LIMIT,
@@ -77,14 +77,38 @@ export function createRealmHomePublicationReader(deps: PublicationDependencies) 
     // Semantic owns the source/label/media projection and each native home
     // witness. Publication owns exact selected heads and the container binding.
     // Both protocols release their connections before the other authority runs.
-    if (!(await observation.current()) || !(await selection.current())) throw new AccessUnavailableError('contention');
-    requireAccessDeadline(context.deadline);
     const items: RealmHomePublication[] = [];
     for (const publication of selection.page.items) {
       const summary = observation.summaries.get(publication.subjectId);
       if (summary) items.push({ publication, summary });
     }
-    return { items, next: selection.page.next };
+    return {
+      page: { items, next: selection.page.next },
+      async current() {
+        requireAccessDeadline(context.deadline);
+        return (await observation.current()) && (await selection.current());
+      },
+    };
+  };
+}
+
+export type RealmHomePublicationObservation = Readonly<{
+  page: RealmHomePublicationPage;
+  current: () => Promise<boolean>;
+}>;
+
+export function createRealmHomePublicationReader(deps: PublicationDependencies) {
+  const observe = createRealmHomePublicationObservationReader(deps);
+  return async (
+    realmId: string,
+    context: PublicationReadContext,
+    query: { cursor?: string; languages?: readonly string[] } = {},
+  ): Promise<RealmHomePublicationPage | null> => {
+    const observation = await observe(realmId, context, query);
+    if (!observation) return null;
+    if (!(await observation.current())) throw new AccessUnavailableError('contention');
+    requireAccessDeadline(context.deadline);
+    return observation.page;
   };
 }
 

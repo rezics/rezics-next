@@ -574,7 +574,7 @@ export function readResource(
         const current = await native.point(context, () =>
           point(client, row.kind, row.id, row.thread_id ?? row.id, false, true),
         );
-        if (!current || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
+        if (!current || current.title !== row.title || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
           throw new ContentNotFoundError();
         if (
           current.kind === 'board' &&
@@ -2678,17 +2678,13 @@ export async function readNoticeBoardContexts(
 
 /** Current bounded board response composition. The native internal reader stays
  * independent, so exact post/rules reads cannot recurse into presentation. */
-export async function readBoards(
+async function boardRecordRound(
   dependencies: ContentReadDependencies,
-  boardIds: readonly string[],
+  ids: readonly string[],
   context: ReadContext,
-): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]> {
-  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
-  if (!boardIds.length) return [];
-  const ids = [...new Set(boardIds)];
-  const decisions = await prepareBoardPageDecisions(dependencies, context);
-  const round = () =>
-    batchSnapshot(dependencies, ids, context, async (client) => {
+  decisions: Awaited<ReturnType<typeof prepareBoardPageDecisions>>,
+) {
+  return batchSnapshot(dependencies, ids, context, async (client) => {
       const boards = await batchRows(
         client,
         'board',
@@ -2705,6 +2701,60 @@ export async function readBoards(
           .map((row) => [row.id, row]),
       );
     });
+}
+
+/** Exact native board records for a containing page that owns presentation.
+ * This uses the ordinary batch disclosure round and retains its private source
+ * rows, not equality of public JSON. No connection survives either round.
+ */
+export async function observeBoardRecords(
+  dependencies: ContentReadDependencies,
+  boardIds: readonly string[],
+  context: ReadContext,
+): Promise<Readonly<{
+  records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
+  current: () => Promise<boolean>;
+}>> {
+  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
+  const ids = [...new Set(boardIds)];
+  if (!ids.length) return { records: [], current: async () => true };
+  const round = async () => {
+    const decisions = await prepareBoardPageDecisions(dependencies, context);
+    return boardRecordRound(dependencies, ids, context, decisions);
+  };
+  const initial = await round();
+  return {
+    records: boardIds.map((id) => {
+      const row = initial.value.get(id);
+      const partition = initial.anchors.get(partitionOf(route(id)))!;
+      return {
+        anchor: { partition, epoch: partition.epoch, position: partition.position },
+        value: row ? boardView(row) : null,
+      };
+    }),
+    async current() {
+      const final = await round();
+      for (const [id, row] of initial.value) {
+        const current = final.value.get(id);
+        const home = partitionOf(route(id));
+        if (!current || current.title !== row.title || signature(current) !== signature(row) ||
+            initial.anchors.get(home)?.epoch !== final.anchors.get(home)?.epoch) return false;
+      }
+      return true;
+    },
+  };
+}
+
+export async function readBoards(
+  dependencies: ContentReadDependencies,
+  boardIds: readonly string[],
+  context: ReadContext,
+): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]> {
+  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
+  if (!boardIds.length) return [];
+  const ids = [...new Set(boardIds)];
+  const decisions = await prepareBoardPageDecisions(dependencies, context);
+  const round = () => boardRecordRound(dependencies, ids, context, decisions);
   const initial = await round();
   const presentations = await readCommunityPresentations(
     dependencies,
