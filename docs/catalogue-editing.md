@@ -298,6 +298,12 @@ label outside the disabled admitted fields; cancellable local removal preserves 
 results require exact recovery through matching definitions.
 Game classification drafts keep their prior release definitions privately for read-only inspection while withdrawn;
 fresh proposals and exact replays wait until current admission returns.
+Decision: Game classification correction reviews the whole changed set through the delivered SubjectFacts coordinator
+before sealing. Contributors reuse one complete citation group onto other editable Game classification drafts as an
+independent evidence claim; copying conveys no licence, native acceptance or provider ownership. Each property remains
+an independent native command. A proposal never marks the assertion selected until an explicit native review and
+selection, after which the Game is reread. Jumping back from review invalidates the snapshot until the contributor
+reviews the current drafts again. A removed draft's diagnostic stays on that holder and is not redirected.
 
 Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
 Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
@@ -345,7 +351,7 @@ normal Web captures and native integration acceptance remain pending. There is n
 
 ## Browser flow: cited fact correction review and evidence reuse
 
-Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Album, Manga and Game classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path.
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Album and Manga classification writers that duplicate their own submit keep immediate confirmation. The Game classification caller binds the same changed-set review and reference-reuse coordinator as SubjectFacts. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path.
 
 Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
 

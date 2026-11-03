@@ -27,10 +27,13 @@ test('Game retires refused readings, privately retains exact corrections, and re
         'Document',
         'DocumentFragment',
         'MutationObserver',
+        'ResizeObserver',
       ].map((key) => [key, Reflect.get(window, key)]),
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -109,7 +112,15 @@ test('Game retires refused readings, privately retains exact corrections, and re
               locale="en"
               session="signed-in"
               transport={transport}
-              search={async () => []}
+              search={async () => [
+                {
+                  id: '00000000-0000-4000-8000-00000000f107',
+                  title: 'Recovered genre',
+                  types: ['skos:Concept'],
+                  typeLabel: 'Concept',
+                  cover: null,
+                },
+              ]}
               onNavigate={() => {}}
             />
           </CandidateReaderBoundary>
@@ -147,6 +158,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
       await user.type(input, 'fr');
     });
     const submit = within(holder).getByRole('button', { name: m.facts_submit() });
+    await click(within(holder).getByRole('button', { name: m.facts_review() }));
     await click(submit);
     await waitFor(() => expect(corrections()).toHaveLength(1));
     const original = structuredClone(corrections()[0]);
@@ -224,8 +236,10 @@ test('Game retires refused readings, privately retains exact corrections, and re
     expect(within(host).queryByRole('textbox', { name: m.correction_value() })).toBeNull();
     expect(host.textContent).not.toContain(m.correction_proposed());
 
-    const language = 'schema:inLanguage';
+    const genre = 'schema:genre';
     const platform = 'schema:gamePlatform';
+    const genreId = '00000000-0000-4000-8000-00000000f107';
+    const genreTitle = 'Recovered genre';
     const without = (property: string, removeDefinition = true): GameRead => {
       const next = structuredClone(initial);
       if (!next.ok || !next.public) throw new Error('Expected an existing Game');
@@ -239,8 +253,9 @@ test('Game retires refused readings, privately retains exact corrections, and re
       return next;
     };
     const field = (property: string) => host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
-    const fieldInput = (property: string) =>
+    const qualifier = (property: string) =>
       within(field(property)!).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+    const picker = (property: string) => within(field(property)!).getByRole('combobox') as HTMLInputElement;
     const classification = () =>
       [...host.querySelectorAll<HTMLElement>('summary')].find(
         (node) => node.textContent === m.game_profile_classification(),
@@ -249,73 +264,86 @@ test('Game retires refused readings, privately retains exact corrections, and re
       const summary = classification();
       if (!summary.closest('details')!.open) await click(summary);
     };
-    const edit = async (property: string) => {
+    const editPlatform = async () => {
       await ensureClassificationOpen();
-      await click(within(field(property)!).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
-      return fieldInput(property);
+      await click(within(field(platform)!).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
+      return qualifier(platform);
+    };
+    const addGenre = async () => {
+      await ensureClassificationOpen();
+      await click(within(field(genre)!).getByRole('button', { name: m.facts_add_value() }));
+      await act(async () => user.type(picker(genre), genreTitle));
+      await waitFor(() =>
+        expect(within(host.ownerDocument.body).getByRole('option', { name: `${genreTitle} Concept` })).toBeDefined(),
+      );
+      await act(async () => user.keyboard('{ArrowDown}{Enter}'));
     };
     const write = async (input: HTMLInputElement, value: string) =>
       act(async () => {
         await user.clear(input);
         await user.type(input, value);
       });
-    const submitClassifications = () =>
-      within(classification().closest('details')!).getByRole('button', { name: m.facts_submit() });
+    const submitClassifications = async () => {
+      const holder = classification().closest('details')!;
+      const review = within(holder).queryByRole('button', { name: m.facts_review() });
+      if (review && !(review as HTMLButtonElement).disabled) await click(review);
+      await click(within(holder).getByRole('button', { name: m.facts_submit() }));
+    };
 
-    let input = await edit(language);
+    let input = await editPlatform();
     await write(input, 'fr');
-    input = await edit(platform);
-    await write(input, 'fr');
+    await addGenre();
     const beforeAdmission = sentCommands.length;
-    outcome = without(language, false);
+    outcome = without(genre, false);
     await click(refresh());
     await status(m.game_profile_current());
-    expect(fieldInput(language).value).toBe('fr');
-    expect(fieldInput(language).closest('fieldset')?.disabled).toBe(true);
+    expect(picker(genre).value).toBe(genreTitle);
+    expect(picker(genre).closest('fieldset')?.disabled).toBe(true);
     expect(host.textContent).toContain(m.game_profile_support());
-    await click(submitClassifications());
+    await submitClassifications();
     await waitFor(() => expect(sentCommands).toHaveLength(beforeAdmission + 1));
     expect(sentCommands[beforeAdmission]!.statement.property.id).toBe(platform);
-    expect(fieldInput(language).value).toBe('fr');
-    const withheld = field(language)!;
-    await click(within(withheld).getByRole('button', { name: m.recipe_remove_field() }));
+    expect(picker(genre).value).toBe(genreTitle);
+    const withheld = field(genre)!;
+    await click(within(withheld).getByRole('button', { name: m.authored_discard() }));
     await click(within(withheld).getByRole('button', { name: m.candidate_cancel() }));
-    expect(fieldInput(language).value).toBe('fr');
-    await click(within(withheld).getByRole('button', { name: m.recipe_remove_field() }));
-    expect(field(language)).toBeNull();
+    expect(picker(genre).value).toBe(genreTitle);
+    await click(within(withheld).getByRole('button', { name: m.authored_discard() }));
+    await click(within(withheld).getByRole('button', { name: m.authored_discard() }));
+    expect(field(genre)).toBeNull();
 
     outcome = structuredClone(initial);
     await render('admission-replay-session');
     await status(m.game_profile_current());
-    input = await edit(platform);
+    input = await editPlatform();
     await write(input, 'fr');
     const beforeUncertain = sentCommands.length;
     loseNextResponse = true;
-    await click(submitClassifications());
+    await submitClassifications();
     await waitFor(() => expect(sentCommands).toHaveLength(beforeUncertain + 1));
     const originalPlatformCommand = structuredClone(sentCommands[beforeUncertain]!);
     expect(originalPlatformCommand.statement.property.id).toBe(platform);
     await status(m.correction_unavailable());
-    input = await edit(language);
-    await write(input, 'fr');
+    await addGenre();
 
     outcome = without(platform);
     await click(refresh());
     await status(m.game_profile_current());
-    expect(fieldInput(platform).value).toBe('fr');
-    expect(fieldInput(platform).closest('fieldset')?.disabled).toBe(true);
+    expect(qualifier(platform).value).toBe('fr');
+    expect(qualifier(platform).closest('fieldset')?.disabled).toBe(true);
     const beforeValidSibling = sentCommands.length;
-    await click(submitClassifications());
+    await submitClassifications();
     await waitFor(() => expect(sentCommands).toHaveLength(beforeValidSibling + 1));
-    expect(sentCommands[beforeValidSibling]!.statement.property.id).toBe(language);
+    expect(sentCommands[beforeValidSibling]!.statement.property.id).toBe(genre);
+    expect(sentCommands[beforeValidSibling]!.statement.value).toEqual({ type: 'value', content: genreId });
     expect(sentCommands[beforeValidSibling]).not.toEqual(originalPlatformCommand);
 
     outcome = structuredClone(initial);
     await click(refresh());
     await status(m.game_profile_current());
-    expect(fieldInput(platform).value).toBe('fr');
+    expect(qualifier(platform).value).toBe('fr');
     const beforeReplay = sentCommands.length;
-    await click(submitClassifications());
+    await submitClassifications();
     await waitFor(() => expect(sentCommands).toHaveLength(beforeReplay + 1));
     expect(sentCommands[beforeReplay]).toEqual(originalPlatformCommand);
   } finally {

@@ -11,11 +11,37 @@ import { CandidateReview, type CandidateTransport } from '../../subject/candidat
 import { controlId, type StatementFeedback } from './statement-validation-presentation';
 import { gameGroups, gameTarget, type GameRead } from './game-profile';
 import { InitialFieldChoice } from './initial-field-choice';
-import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
+import { StatementFields, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
-import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsTransport } from './subject-facts';
+import {
+  advanceChangedSetReview,
+  changedSetFingerprint,
+  factHolder,
+  factLocked,
+  factWritable,
+  includedChanges,
+  sealFacts,
+  sendFacts,
+  type ChangedSetReview,
+  type FactDraft,
+  type FactResult,
+  type FactsCurrent,
+  type FactsTransport,
+} from './subject-facts';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { GameFactsDeparture } from './game-classification-departure';
+import { GameClassificationAssertion } from './game-classification-view';
+import {
+  applyGameReuse,
+  bindGameClassificationReview,
+  GameClassificationReuse,
+  GameClassificationReviewControls,
+  openGameReuse,
+  refreshGameReuse,
+  type GameCopiedGroup,
+  type GameOrphanDiagnostic,
+  type GameReuseSession,
+} from './game-classification-review';
 import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
 
 const gameActionClass =
@@ -57,22 +83,26 @@ function GameItemControl({
   const definition = context.release.properties[property]!;
   const label = pickText(definition.labels, locale);
   const value = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : '';
+  const related = value ? context.public.related[value] : undefined;
+  const relatedName = related ? pickText(related.labels, locale) : undefined;
   const target = value ? picked.find((item) => item.id === value) : undefined;
   return (
+    <div className="min-w-0 space-y-2">
     <EntityPicker
       label={label.text}
       src={coverSrc}
       value={
         value
           ? [
-              target ?? {
+              {
                 id: value,
                 title:
-                  pickText(context.public.related[value]?.labels ?? {}, locale).text ||
+                  relatedName?.text ||
+                  target?.title ||
                   m.subject_value_unlabelled({}, { locale: locale as never }),
-                types: [],
-                typeLabel: '',
-                cover: null,
+                types: target?.types ?? [],
+                typeLabel: target?.typeLabel ?? '',
+                cover: target?.cover ?? null,
               },
             ]
           : []
@@ -88,6 +118,18 @@ function GameItemControl({
         change({ type: 'value', content: items[0]?.id ?? '' });
       }}
     />
+      {value && (
+        <p className="text-sm text-muted-foreground">
+          {m.game_classification_target({ id: value }, { locale: locale as never })}
+          {!related && (
+            <>
+              {' '}
+              {m.candidate_value_unavailable({}, { locale: locale as never })}
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 export function GameStatementFields({
@@ -100,6 +142,8 @@ export function GameStatementFields({
   id,
   feedback,
   valueControl,
+  reuse,
+  focusReference,
 }: {
   id?: string;
   feedback?: StatementFeedback | undefined;
@@ -111,6 +155,8 @@ export function GameStatementFields({
   search: EntityPickerSearch;
   change: (next: StatementInput) => void;
   editAllowed?: (() => boolean) | undefined;
+  reuse?: { disabled?: boolean; onReuse: (index: number, keyboard: boolean) => void } | undefined;
+  focusReference?: { index: number; nonce: number } | undefined;
 }) {
   const change = (next: StatementInput) => {
     if (!editAllowed || editAllowed()) onChange(next);
@@ -148,6 +194,9 @@ export function GameStatementFields({
       change={change}
       valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
+      stablePartAddresses
+      reuse={reuse}
+      focusReference={focusReference}
     />
   );
 }
@@ -523,21 +572,28 @@ function GameClassificationsLive({
   search,
   transport,
   review,
+  reread,
 }: {
   read: Ready & { public: NonNullable<Ready['public']> };
   locale: string;
   search: EntityPickerSearch;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
+  reread?: (() => Promise<void>) | undefined;
 }) {
   const feedbackId = useId();
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
-  const context = { ...read, source: null };
+  const context = { ...read, source: null } as FactsCurrent;
   const fields = gameGroups(read.release, read.public.subject.type).classification;
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [draftReleases, setDraftReleases] = useState<Record<string, Release>>({});
   const [busy, setBusy] = useState(false);
+  const [changedReview, setChangedReview] = useState<ChangedSetReview>({ status: 'closed' });
+  const [reuse, setReuse] = useState<GameReuseSession | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number } | null>(null);
+  const [copies, setCopies] = useState<GameCopiedGroup[]>([]);
+  const [orphans, setOrphans] = useState<GameOrphanDiagnostic[]>([]);
   const running = useRef(false);
   const holder = useRef<HTMLElement>(null);
   const focusAfterDiscard = useRef<FactDraft | null>(null);
@@ -547,8 +603,8 @@ function GameClassificationsLive({
     cancel: () => void;
   } | null>(null);
   useLayoutEffect(() => () => focusAfterOpen.current?.cancel(), []);
-  const current = useRef({ drafts, busy, lifetime, fields, read });
-  current.current = { drafts, busy, lifetime, fields, read };
+  const current = useRef({ drafts, busy, lifetime, fields, read, changedReview });
+  current.current = { drafts, busy, lifetime, fields, read, changedReview };
   const canEdit = (draft: FactDraft, rows = current.current.drafts) => {
     const active = current.current;
     return (
@@ -570,15 +626,25 @@ function GameClassificationsLive({
     current.current.drafts.includes(row) &&
     !row.command &&
     !factLocked(row);
+  const propertySection = (property: string) =>
+    [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])].find(
+      (node) => node.dataset.classificationProperty === property,
+    );
+  const openHolder = (id: string, index?: number) => {
+    if (index != null) setFocusCopy({ holder: id, index, nonce: Date.now() });
+    const target =
+      holder.current?.querySelector<HTMLElement>(`[data-fact-holder="${CSS.escape(id)}"]`) ??
+      propertySection(drafts.find((row) => factHolder(row) === id)?.property ?? id)?.querySelector('fieldset');
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'center' });
+  };
   useLayoutEffect(() => {
     const intent = focusAfterOpen.current;
     if (!intent) return;
     focusAfterOpen.current = null;
     const admitted = intent.active() && canEdit(intent.draft);
     intent.cancel();
-    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])].find(
-      (node) => node.dataset.classificationProperty === intent.draft.property,
-    );
+    const section = propertySection(intent.draft.property);
     const target = section?.querySelector('fieldset');
     if (admitted && target?.isConnected && !target.closest('[hidden]')) target.focus();
   });
@@ -586,9 +652,7 @@ function GameClassificationsLive({
     const row = focusAfterDiscard.current;
     if (!row || !lifetime.active()) return;
     focusAfterDiscard.current = null;
-    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])].find(
-      (node) => node.dataset.classificationProperty === row.property,
-    );
+    const section = propertySection(row.property);
     const controls = [...(section?.querySelectorAll<HTMLButtonElement>('button[data-classification-source]') ?? [])];
     (controls.find((button) => button.dataset.classificationSource === (row.source ?? '')) ?? controls[0])?.focus();
   }, [drafts, lifetime]);
@@ -597,6 +661,29 @@ function GameClassificationsLive({
   const o = { locale: locale as never };
   const withdrawnDrafts = drafts.filter((row) => !fields.includes(row.property));
   const properties = [...fields, ...withdrawnDrafts.map((row) => row.property)];
+  const admittedDrafts = drafts.filter((row) => fields.includes(row.property));
+  const fingerprint = changedSetFingerprint(admittedDrafts);
+  const nextReview = advanceChangedSetReview(changedReview, fingerprint);
+  if (
+    nextReview.status !== changedReview.status ||
+    (nextReview.status !== 'closed' &&
+      changedReview.status !== 'closed' &&
+      nextReview.fingerprint !== changedReview.fingerprint)
+  )
+    setChangedReview(nextReview);
+  const boundReview = useMemo(
+    () =>
+      bindGameClassificationReview(
+        review,
+        reread,
+        () => lifetime.active() && current.current.read === read,
+        (property) => {
+          const section = propertySection(property);
+          (section?.querySelector<HTMLElement>('[data-fact-holder]') ?? section)?.focus();
+        },
+      ),
+    [review, reread, lifetime, read],
+  );
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
     wasVisible.current = visible;
@@ -605,6 +692,7 @@ function GameClassificationsLive({
     if (!visible) {
       setAddress(undefined);
       setComparison(undefined);
+      setReuse(null);
       setDrafts((rows) =>
         rows.map((row) => (row.command && !row.result ? { ...row, result: { ok: false, reason: 'uncertain' } } : row)),
       );
@@ -614,12 +702,16 @@ function GameClassificationsLive({
     const active = current.current;
     if (!active.lifetime.active() || active.read !== read || running.current) return;
     const pending = active.drafts.filter((row) => active.fields.includes(row.property));
-    if (!pending.some((row) => factChanged(row) && !row.result?.ok)) return;
+    const changed = includedChanges(pending);
+    if (!changed.length) return;
+    if (changed.some((row) => !row.command) && active.changedReview.status !== 'current') return;
     running.current = true;
     setBusy(true);
     const sealed = sealFacts(read.public.subject.id, read.release, pending);
-    const sealedByProperty = new Map(sealed.map((row) => [row.property, row]));
-    setDrafts(active.drafts.map((row) => sealedByProperty.get(row.property) ?? row));
+    const sealedByHolder = new Map(sealed.map((row) => [factHolder(row), row]));
+    setDrafts(active.drafts.map((row) => sealedByHolder.get(factHolder(row)) ?? row));
+    const invalid = sealed.find((row) => row.result && !row.result.ok && row.result.reason === 'invalid');
+    if (invalid) openHolder(factHolder(invalid));
     try {
       await sendFacts(
         sealed,
@@ -627,13 +719,13 @@ function GameClassificationsLive({
         (property, result) =>
           lifetime.active() &&
           current.current.read === read &&
-          current.current.fields.includes(property) &&
           setDrafts((rows) =>
-            rows.map((row) =>
-              row.property === property && row.submission === sealedByProperty.get(property)?.submission
+            rows.map((row) => {
+              const sealedRow = sealedByHolder.get(factHolder(row));
+              return sealedRow && row.property === property && row.submission === sealedRow.submission
                 ? { ...row, result }
-                : row,
-            ),
+                : row;
+            }),
           ),
       );
     } finally {
@@ -674,6 +766,7 @@ function GameClassificationsLive({
             if (!canStage()) return;
             const baseline = source ? statementInput(source) : null;
             const draft: FactDraft = {
+              holder: crypto.randomUUID(),
               property,
               source: source?.id ?? null,
               baseline,
@@ -729,20 +822,13 @@ function GameClassificationsLive({
                     key={statement.id}
                     className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
                   >
-                    <PartValue part={statement} read={context} locale={locale} />
-                    {statement.qualifiers.map((part, i) => (
-                      <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                        <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
-                        <PartValue part={part} read={context} locale={locale} />
-                      </div>
-                    ))}
-                    {statement.references.map((reference, i) => (
-                      <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                        {reference.parts.map((part, j) => (
-                          <PartValue key={j} part={part} read={context} locale={locale} />
-                        ))}
-                      </div>
-                    ))}
+                    <GameClassificationAssertion
+                      statement={statement}
+                      rank={statement.rank}
+                      read={editorContext}
+                      locale={locale}
+                      missing={m.facts_no_value({}, o)}
+                    />
                     {!draft && (
                       <Button
                         className={gameActionClass}
@@ -773,6 +859,7 @@ function GameClassificationsLive({
                   <>
                     <fieldset
                       tabIndex={-1}
+                      data-fact-holder={factHolder(draft)}
                       aria-label={`${label.text}: ${m.facts_private({}, o)}`}
                       className="space-y-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                       disabled={busy || !admitted || factLocked(draft) || !!draft.command}
@@ -790,6 +877,21 @@ function GameClassificationsLive({
                           search={search}
                           feedback={feedback}
                           editAllowed={() => canEdit(draft)}
+                          reuse={
+                            factWritable(draft) && admitted
+                              ? {
+                                  disabled: busy || factLocked(draft) || !!draft.command,
+                                  onReuse: (index) => {
+                                    if (!lifetime.active() || !canEdit(draft)) return;
+                                    const next = openGameReuse(draft, index, current.current.drafts);
+                                    if (next) setReuse(next);
+                                  },
+                                }
+                              : undefined
+                          }
+                          focusReference={
+                            focusCopy && factHolder(draft) === focusCopy.holder ? focusCopy : undefined
+                          }
                           change={(statement) =>
                             canEdit(draft) &&
                             setDrafts((rows) =>
@@ -819,6 +921,12 @@ function GameClassificationsLive({
                       discard={(row) => {
                         if (!canDiscard(row)) return;
                         focusAfterDiscard.current = row;
+                        if (row.result && !row.result.ok)
+                          setOrphans((items) => [
+                            ...items,
+                            { holder: factHolder(row), property: row.property, result: row.result as FactResult },
+                          ]);
+                        setCopies((items) => items.filter((item) => item.holder !== factHolder(row)));
                         setDrafts((rows) => rows.filter((item) => item !== row));
                         setDraftReleases((rows) => {
                           const next = { ...rows };
@@ -845,7 +953,7 @@ function GameClassificationsLive({
                                 candidate: draft.result.candidate,
                                 session: draft.result.session,
                               });
-                              setComparison(review(property, draft.result.session));
+                              setComparison(boundReview(property, draft.result.session));
                             }
                           }}
                         >
@@ -878,20 +986,58 @@ function GameClassificationsLive({
             </section>
           );
         })}
-        <Button
-          className={gameActionClass}
-          type="button"
-          disabled={
-            busy ||
-            drafts.some(
-              (row) => fields.includes(row.property) && row.result && !row.result.ok && row.result.reason === 'stale',
-            ) ||
-            !drafts.some((row) => fields.includes(row.property) && factChanged(row) && !row.result?.ok)
-          }
-          onClick={() => void submit()}
-        >
-          {m.facts_submit({}, o)}
-        </Button>
+        <GameClassificationReviewControls
+          drafts={drafts}
+          admitted={fields}
+          read={context}
+          locale={locale}
+          busy={busy}
+          review={changedReview}
+          copies={copies}
+          orphans={orphans}
+          onReview={() => lifetime.active() && setChangedReview({ status: 'current', fingerprint })}
+          onSubmit={() => void submit()}
+          onJump={(id) => {
+            if (!lifetime.active()) return;
+            setChangedReview(advanceChangedSetReview(changedReview, fingerprint, true));
+            openHolder(id);
+          }}
+        />
+        {reuse && (
+          <GameClassificationReuse
+            reuse={reuse}
+            drafts={drafts}
+            read={context}
+            locale={locale}
+            onSelected={(selected) =>
+              lifetime.active() && setReuse({ ...reuse, selected, applied: [], refused: [] })
+            }
+            onRefresh={() => {
+              if (!lifetime.active()) return;
+              const next = refreshGameReuse(reuse, drafts);
+              if (next) setReuse(next);
+            }}
+            onApply={() => {
+              if (!lifetime.active() || busy || running.current) return;
+              const result = applyGameReuse(drafts, reuse, read.release);
+              setDrafts(result.drafts);
+              setReuse(result.reuse);
+              setCopies((items) => [
+                ...items.filter((item) => !result.copies.some((copy) => copy.holder === item.holder && copy.index === item.index)),
+                ...result.copies,
+              ]);
+              setChangedReview({ status: 'stale', fingerprint: changedSetFingerprint(result.drafts.filter((row) => fields.includes(row.property))) });
+              const first = result.reuse.applied[0];
+              if (first) openHolder(first.holder, first.index);
+            }}
+            onCancel={() => {
+              const trigger = reuse.trigger;
+              setReuse(null);
+              if (lifetime.active() && trigger?.isConnected) trigger.focus();
+            }}
+            onOpen={(id, index) => lifetime.active() && openHolder(id, index)}
+          />
+        )}
         {address && comparison && (
           <CandidateReview
             key={address.candidate}

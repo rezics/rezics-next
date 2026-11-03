@@ -14,7 +14,7 @@ test('Game departure preserves every private holder on Stay and permanently rele
   const window = new Window({ url: 'https://site.test/edit' });
   const globals = {
     ...Object.fromEntries(
-      'document navigator HTMLElement HTMLFormElement HTMLInputElement HTMLSelectElement HTMLButtonElement Node Element Document DocumentFragment MutationObserver'
+      'document navigator HTMLElement HTMLFormElement HTMLInputElement HTMLSelectElement HTMLButtonElement Node Element Document DocumentFragment MutationObserver ResizeObserver'
         .split(' ')
         .map((key) => [key, Reflect.get(window, key)]),
     ),
@@ -101,8 +101,8 @@ test('Game departure preserves every private holder on Stay and permanently rele
       (node) => node.querySelector('summary')?.textContent === name,
     )!;
   const classification = () => details(m.game_profile_classification());
-  const language = () => host.querySelector<HTMLElement>('[data-classification-property="schema:inLanguage"]')!;
-  const input = () => within(language()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+  const platform = () => host.querySelector<HTMLElement>('[data-classification-property="schema:gamePlatform"]')!;
+  const input = () => within(platform()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
   const fill = (field: HTMLInputElement, value: string) =>
     act(async () => {
       await user.clear(field);
@@ -124,10 +124,14 @@ test('Game departure preserves every private holder on Stay and permanently rele
     expect(router.state.location.pathname).toBe('/edit');
   };
   const edit = async () => {
-    await click(within(language()).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
+    await click(within(platform()).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
     await fill(input(), 'fr');
   };
-  const submit = () => click(button(classification(), m.facts_submit()));
+  const submit = async () => {
+    const review = within(classification()).queryByRole('button', { name: m.facts_review() });
+    if (review && !(review as HTMLButtonElement).disabled) await click(review);
+    await click(button(classification(), m.facts_submit()));
+  };
   try {
     await act(async () => {
       await router.load();
@@ -141,7 +145,7 @@ test('Game departure preserves every private holder on Stay and permanently rele
     expect(unload()).toBe(false);
     for (const name of [m.game_profile_classification(), m.game_profile_facts(), m.game_profile_relations()])
       details(name).setAttribute('open', '');
-    await click(within(language()).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
+    await click(within(platform()).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
     expect(unload()).toBe(false); // An unchanged source copy has no unfinished change.
     await fill(input(), 'fr');
     expect(unload()).toBe(true);
@@ -159,8 +163,6 @@ test('Game departure preserves every private holder on Stay and permanently rele
     const property = within(relations).getByLabelText(m.relation_property()) as HTMLSelectElement;
     await act(async () => user.selectOptions(property, 'schema:author'));
     await fill(input(), 'fr');
-    const platform = host.querySelector<HTMLElement>('[data-classification-property="schema:gamePlatform"]')!;
-    await click(button(platform, m.facts_edit_field()));
     const fields = [...host.querySelectorAll<HTMLInputElement>('input')],
       values = fields.map((field) => field.value);
     await stay();
@@ -232,7 +234,7 @@ test('Game departure preserves every private holder on Stay and permanently rele
     await ready();
     expect(unload()).toBe(false);
     expect(host.textContent).not.toContain(m.correction_proposed());
-    expect(language().querySelector('fieldset')).toBeNull();
+    expect(platform().querySelector('fieldset')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     client.clear();

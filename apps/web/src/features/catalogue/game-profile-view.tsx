@@ -23,7 +23,7 @@ import { EditorFailure } from './statement-editor-view';
 import type { StatementInput } from './statement-editor';
 import { gameCreationAddress } from './game-creation-address';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
-import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
+import { gameDefinitions, gameDraft, gameGroups, gameUuid, type GameCommand, type GameRead } from './game-profile';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { GameDraftDeparture } from './game-classification-departure';
 
@@ -253,6 +253,7 @@ function GameProfileLive({
               transport={transport}
               search={search}
               refresh={(event) => refreshExisting(readingRevision, event)}
+              reread={() => query.refetch().then(() => undefined)}
               focusResult={existingResult}
               refreshing={query.isFetching}
             />
@@ -341,11 +342,13 @@ function GameCorrection({
   transport,
   search,
   refresh,
+  reread,
   focusResult,
   refreshing,
   visible,
 }: {
   refresh: (event: MouseEvent<HTMLButtonElement>) => Promise<void>;
+  reread: () => Promise<void>;
   focusResult: { current: HTMLElement | null };
   refreshing: boolean;
   visible: boolean;
@@ -447,7 +450,7 @@ function GameCorrection({
                           <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
                         )}
                         <ol className="space-y-3">
-                          {(subject.statements[property] ?? []).map((statement) => (
+                                          {(subject.statements[property] ?? []).map((statement) => (
                             <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
                           ))}
                         </ol>
@@ -510,6 +513,7 @@ function GameCorrection({
               search={search}
               transport={transport.classifications}
               review={transport.classificationReview}
+              reread={reread}
             />
           </details>
           {!!fields.length && (
@@ -612,9 +616,33 @@ function GameStatement({
   locale: string;
 }) {
   const o = { locale: locale as never };
+  const target =
+    statement.value.type === 'value' && typeof statement.value.content === 'string' && gameUuid.test(statement.value.content)
+      ? statement.value.content
+      : undefined;
+  const rank =
+    statement.rank === 'preferred'
+      ? m.candidate_rank_preferred({}, o)
+      : statement.rank === 'deprecated'
+        ? m.changes_rank_deprecated({}, o)
+        : m.candidate_rank_normal({}, o);
   return (
     <li className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
       <CandidateValue snak={statement} related={read.public.related} locale={locale} />
+      {target && (
+        <p className="text-sm text-muted-foreground">
+          {m.game_classification_target({ id: target }, o)}
+          {!read.public.related[target] && (
+            <>
+              {' '}
+              {m.candidate_value_unavailable({}, o)}
+            </>
+          )}
+        </p>
+      )}
+      <p className="text-sm">
+        {m.candidate_rank({}, o)}: {rank}
+      </p>
       <dl className="space-y-2 text-sm">
         {statement.qualifiers.map((part, index) => (
           <GamePart key={index} part={part} read={read} locale={locale} />

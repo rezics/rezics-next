@@ -438,6 +438,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     expect(platform.textContent).toContain('ja');
     expect(platform.querySelector('a[href="https://example.test/game-notes"]')).not.toBeNull();
     const submit = within(host).getByRole('button', { name: m.facts_submit() });
+    const review = () => within(host).getByRole('button', { name: m.facts_review() });
     await act(async () => user.click(field.getAllByRole('button', { name: m.facts_edit_field() })[1]!));
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     const qualifier = field.getByRole('textbox', { name: m.correction_value() });
@@ -445,8 +446,10 @@ test('Game and Addon complete fields family preserves independent labels, native
       await user.clear(qualifier);
       await user.type(qualifier, 'fr');
     });
-    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
     expect(commands).toEqual([]);
+    await act(async () => user.click(review()));
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
     await act(async () => user.click(submit));
     expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(platform.querySelector('fieldset')?.disabled).toBe(true);
@@ -551,6 +554,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     });
     const partialSubmit = within(host).getByRole('button', { name: m.facts_submit() });
     expect(partialCommands).toEqual([]);
+    await act(async () => user.click(within(host).getByRole('button', { name: m.facts_review() })));
     await act(async () => user.click(partialSubmit));
     expect(partialCommands).toHaveLength(2);
     expect(new Set(partialCommands.map((command) => command.key)).size).toBe(2);
@@ -602,6 +606,7 @@ test('Game and Addon complete fields family preserves independent labels, native
         await user.type(input, 'fr');
       });
       const send = within(host).getByRole('button', { name: m.facts_submit() });
+      await act(async () => user.click(within(host).getByRole('button', { name: m.facts_review() })));
       await act(async () => user.click(send));
       expect(scope.getByRole('alert').textContent).toBe(
         scenario === 'denied'
@@ -640,6 +645,7 @@ test('Game and Addon complete fields family preserves independent labels, native
           await user.type(input, 'de');
         });
         expect(attempts).toHaveLength(2);
+        await act(async () => user.click(within(host).getByRole('button', { name: m.facts_review() })));
         await act(async () => user.click(send));
         expect(attempts).toHaveLength(3);
         expect(attempts[2]!.key).not.toBe(attempts[0]!.key);
@@ -756,6 +762,9 @@ test('Game and Addon complete fields family preserves independent labels, native
       await user.clear(oldInput);
       await user.type(oldInput, 'fr');
     });
+    await act(async () =>
+      user.click(within(summary.closest('details')!).getByRole('button', { name: m.facts_review() })),
+    );
     const oldSubmit = within(summary.closest('details')!).getByRole('button', { name: m.facts_submit() });
     const propsKey = Object.keys(oldSubmit).find((key) => key.startsWith('__reactProps$'))!;
     const queued = Reflect.get(oldSubmit, propsKey).onClick as () => void;
@@ -874,6 +883,7 @@ test('Game classification errors target its item group and fall back to the labe
       await user.clear(qualifier);
       await user.type(qualifier, 'fr');
     });
+    await act(async () => user.click(within(host).getByRole('button', { name: m.facts_review() })));
     await act(async () => user.click(within(host).getByRole('button', { name: m.facts_submit() })));
     const list = scope.getByRole('list', { name: m.correction_errors() });
     const links = [...list.querySelectorAll<HTMLAnchorElement>('a')];
