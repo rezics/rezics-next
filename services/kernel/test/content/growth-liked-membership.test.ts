@@ -20,7 +20,7 @@ async function membership(f: Fixture, ids: readonly string[], actorId = f.actorI
   const observer = observeSql(f.db.pool);
   const client = await f.db.pool.connect();
   const plans: PlanNode[] = [];
-  const notice = (message: { readonly message?: string }) => {
+  const notice = (message: { readonly message?: string | undefined }) => {
     const marker = 'plan:\n';
     if (!message.message?.startsWith('duration:') || !message.message.includes(marker)) return;
     const document: unknown = JSON.parse(message.message.slice(message.message.indexOf(marker) + marker.length));
