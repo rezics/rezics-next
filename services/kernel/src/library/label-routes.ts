@@ -189,7 +189,7 @@ export function personalLabelRoutes(
   app: ReturnType<typeof definitionRoutes>,
   deps: { routeKey: Uint8Array; pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock },
 ) {
-  const labels = createPersonalLabelCommands(deps);
+  const labels = () => createPersonalLabelCommands({ ...deps, access: deps.access() });
   const assignments = () => createLabelAssignmentCommands({ ...deps, access: deps.access() });
   return app
     .post(
@@ -350,7 +350,7 @@ export function personalLabelRoutes(
       },
       async ({ actor, query, admission, job }) => {
         if (query.q !== undefined) name(query.q, true);
-        return admission.run('normal', job, () => command(() => labels.listLabels(actor, query)));
+        return admission.run('normal', job, () => command(() => labels().listLabels(actor, query)));
       },
     )
     .post(
@@ -365,7 +365,7 @@ export function personalLabelRoutes(
       async ({ actor, body, headers, admission, job, session, set }) => {
         name(body.name);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () => command(() => labels.createLabel(actor, body, key)));
+        const result = await admission.run('normal', job, () => command(() => labels().createLabel(actor, body, key)));
         session.record(result);
         set.status = 201;
         return result.value;
@@ -385,7 +385,7 @@ export function personalLabelRoutes(
         name(body.name);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          command(() => labels.renameLabel(actor, params.id, body, key)),
+          command(() => labels().renameLabel(actor, params.id, body, key)),
         );
         session.record(result);
         return result.value;
@@ -404,7 +404,7 @@ export function personalLabelRoutes(
       async ({ actor, params, query, headers, admission, job, session, set }) => {
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          command(() => labels.deleteLabel(actor, params.id, query.revision, key)),
+          command(() => labels().deleteLabel(actor, params.id, query.revision, key)),
         );
         session.record(result);
         set.headers['Library-Label-Revision'] = String(result.value.revision);
@@ -424,7 +424,7 @@ export function personalLabelRoutes(
       async ({ actor, params, body, headers, admission, job, session }) => {
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          command(() => labels.restoreLabel(actor, params.id, body.revision, key)),
+          command(() => labels().restoreLabel(actor, params.id, body.revision, key)),
         );
         session.record(result);
         return result.value;

@@ -27,7 +27,7 @@ async function setup(count = 2) {
     flow = createLabelConsolidation(deps);
   const source = (await labels.createLabel(actor, { name: 'Source' }, entryKey())).value.label;
   const target = (await labels.createLabel(actor, { name: '😀'.repeat(100) }, entryKey())).value.label;
-  const items = [];
+  const items: { subjectId: string; assignmentId: string; revision: number }[] = [];
   for (let n = 0; n < count; n++) {
     const subjectId = await f.createSubject('unprofiled');
     const a = (await native.assignLabel(actor, source.id, { subjectId }, entryKey())).value.assignment;
@@ -99,7 +99,7 @@ test('explicit immutable confirmation moves only selected facts, reopens both na
 test('native 32-slot admission refuses before source removal and reclaims only a deleted-label reservation on original retry', async () => {
   const s = await setup(1),
     b = await s.confirmed(),
-    parents = [];
+    parents: { id: string; revision: number }[] = [];
   for (let n = 0; n < 31; n++) {
     const label = (await s.labels.createLabel(s.actor, { name: 'Reserved ' + n }, entryKey())).value.label;
     parents.push(label);
