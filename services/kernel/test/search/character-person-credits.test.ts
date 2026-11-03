@@ -48,7 +48,7 @@ test('overflow credits forward all qualifiers and never pool repeated actor/char
           facet: 'statement',
           property: probe.property,
           values: [probe.value],
-          qualifiers: probe.qualifiers,
+          ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
         })
           ? true
           : 'not_proven',

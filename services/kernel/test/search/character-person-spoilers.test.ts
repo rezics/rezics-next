@@ -73,7 +73,7 @@ test('current raised or removed spoiler evidence retires a stale hit and stays u
           facet: 'statement',
           property: probe.property,
           values: [probe.value],
-          qualifiers: probe.qualifiers,
+          ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
         })
           ? true
           : 'not_proven',
