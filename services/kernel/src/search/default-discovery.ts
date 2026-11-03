@@ -1,5 +1,6 @@
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
@@ -24,7 +25,13 @@ import {
 import { ownDiscoveryRequest } from './discovery-request.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
-import { discoveryConsumer, DiscoveryProducerCoverageError } from './generations.ts';
+import {
+  discoveryConsumer,
+  DiscoveryProducerCoverageError,
+  DiscoveryPopulationCutChangedError,
+  assertDiscoveryCapabilityBinding,
+  discoveryGenerations,
+} from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
 import { readFreshness } from './freshness.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
@@ -92,7 +99,12 @@ function reviewRecords(
   for (const review of reviews) {
     const key = metadataKey('content', 'review', review.id);
     if (partitionOf(key.route) !== partition) throw new TypeError('Review source returned a foreign partition key');
-    if (typeof review.sourceVersion !== 'string' || !review.sourceVersion || !review.sourceVersion.isWellFormed())
+    if (
+      !Object.prototype.propertyIsEnumerable.call(review, 'sourceVersion') ||
+      typeof review.sourceVersion !== 'string' ||
+      !review.sourceVersion ||
+      !review.sourceVersion.isWellFormed()
+    )
       throw new TypeError('Review source version is invalid');
     const excerpt = review.excerpt ?? '';
     records.push({
@@ -137,6 +149,7 @@ function createCollectionPopulationProducer(
       if (page.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', page.reason);
       return {
         position: BigInt(page.stamp.position),
+        epoch: page.stamp.epoch,
         next: page.next,
         continuation: null,
         keys: page.items.map((item) => ({ owner: 'commerce', kind: 'collection', ...item.key })),
@@ -152,6 +165,7 @@ function createCollectionPopulationProducer(
       if (snapshot.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
       return {
         position: BigInt(snapshot.stamp.position),
+        epoch: snapshot.stamp.epoch,
         keys,
         records: collectionRecords(snapshot.items),
       };
@@ -177,6 +191,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
       const page = await source.pageWithCut(partition, cursor, limit);
+      if (page.state === 'changed') throw new DiscoveryPopulationCutChangedError('review');
       if (page.state !== 'ready')
         throw new DiscoveryProducerCoverageError({
           missingKinds: [],
@@ -217,8 +232,7 @@ function createSpacePopulationProducer(
     kind: 'space',
     owner: 'content',
     async readiness() {
-      const capability = await adapter.source.dependencies();
-      return capability.state;
+      return adapter.source.dependencies();
     },
     async page(partition, after, continuation, limit) {
       if (continuation !== null) throw new TypeError('Space discovery does not use an opaque continuation');
@@ -333,6 +347,13 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
         context: DiscoveryReadContext,
       ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
         if (!Array.isArray(ids) || ids.length > 200) throw new RangeError('Space current read exceeds 200 identities');
+        const before = await space.source.dependencies();
+        if (before.state !== 'ready')
+          throw new DiscoveryProducerCoverageError({
+            missingKinds: [],
+            unsupportedKinds: ['space'],
+            duplicateKinds: [],
+          });
         const summaries = new Map<string, SpaceDiscoverySummary>();
         for (let offset = 0; offset < ids.length; offset += 100) {
           const batch = await space.hydrate(ids.slice(offset, offset + 100), ownerContext(context));
@@ -377,6 +398,12 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
             }
           }
         }
+        if (!isDeepStrictEqual(before, await space.source.dependencies()))
+          throw new DiscoveryProducerCoverageError({
+            missingKinds: [],
+            unsupportedKinds: ['space'],
+            duplicateKinds: [],
+          });
         return current;
       },
     },
@@ -417,6 +444,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         : Object.freeze({ kind: 'anonymous' as const });
     const execute = async () => {
       let operations: PublicDiscoveryConsumerOperations | undefined;
+      let disclosureTarget: import('./account-discovery.ts').DiscoveryTarget | undefined;
       const current = await activeRelease(config.pool);
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
@@ -462,6 +490,8 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
           async finish() {
             if (!page) throw new Error('Native page was not opened');
             await (await page).finish();
+            if (disclosureTarget)
+              await assertDiscoveryCapabilityBinding(config.pool, disclosureTarget, ownerAdapters.metadataProducers);
           },
           async dispose() {
             if (page) await (await page).dispose();
@@ -495,6 +525,17 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             discoveryIndexName(config.prefix, generation) !== queried.consumer.physicalTarget
           )
             throw new Error('Discovery freshness requires the actual queried mixed generation');
+          const target = (await discoveryGenerations(config.pool, config.prefix)).find(
+            (row) => row.generation === generation,
+          );
+          if (!target || target.uuid !== queried.consumer.incarnation)
+            throw new DiscoveryProducerCoverageError({
+              missingKinds: ['space'],
+              unsupportedKinds: [],
+              duplicateKinds: [],
+            });
+          disclosureTarget = target;
+          await assertDiscoveryCapabilityBinding(config.pool, target, ownerAdapters.metadataProducers);
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
       })(principal, request, { ...context, deadline, actor, access: config.access });
