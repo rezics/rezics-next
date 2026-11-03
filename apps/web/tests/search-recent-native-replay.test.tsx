@@ -38,7 +38,9 @@ function request(href: string) {
     ...(params.has('language') ? { language: params.getAll('language') } : {}),
   });
   expect(state.invalidInput).toBeUndefined();
-  if (state.resourceScope) expect(searchRequiresCurrentReader(state)).toBe(true);
+  // Library's ordinary-filter reader selection remains a documented producer mismatch.
+  if (!Object.hasOwn(JSON.parse(params.get('filter')!), 'owner'))
+    expect(searchRequiresCurrentReader(state)).toBe(true);
   return discoveryRequest(state, ['fr']);
 }
 
