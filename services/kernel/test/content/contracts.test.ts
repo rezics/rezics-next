@@ -379,7 +379,7 @@ function publishedModels(): void {
         licence: string;
         subjectIds: readonly string[];
         boardId: string;
-        visibility: 'published' | 'draft';
+        visibility: 'published' | 'draft' | 'protected';
         kind?: 'discussion' | 'review';
         voteCitation?: model.ReviewVoteCitation;
       }>
@@ -390,7 +390,7 @@ function publishedModels(): void {
       model.PostInput,
       Readonly<{
         threadId: string;
-        visibility?: 'published' | 'draft';
+        visibility?: 'published' | 'draft' | 'protected';
         body: unknown;
         licence: string;
         subjectIds?: readonly string[];
