@@ -134,5 +134,5 @@ test('manifest size cap is 64KiB', async () => {
   const { directory } = await workspace();
   const path = join(directory, 'huge.json');
   await writeFile(path, `${'a'.repeat(MAX_BATCH_MANIFEST_BYTES + 1)}\n`, { mode: 0o600 });
-  await expect(preflightBatchManifest(path)).rejects.toThrow('64');
+  await expect(preflightBatchManifest(path)).rejects.toThrow('65536-byte bound');
 });

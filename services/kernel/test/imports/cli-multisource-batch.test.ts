@@ -27,8 +27,8 @@ test('An operator previews and deliberately runs a bounded explicit local manife
     expect(wikidata.count).toBe(2);
     expect(bangumi.claim?.state).toBe('bound');
     expect(library.claim?.state).toBe('bound');
-    const bangumiSubject = bangumi.claim?.subject;
-    const librarySubject = library.claim?.subject;
+    const bangumiSubject = bangumi.subject;
+    const librarySubject = library.subject;
     expect(bangumiSubject).toBeTruthy();
     expect(librarySubject).toBeTruthy();
     expect(bangumiSubject).not.toBe(librarySubject);
@@ -42,8 +42,8 @@ test('An operator previews and deliberately runs a bounded explicit local manife
 
     const repeat = await f.runBatch();
     expect(repeat.code).toBe(0);
-    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).claim?.subject).toBe(bangumiSubject);
-    expect(f.inspect('catalogue-ol', f.libraryRecords[0]!.key).claim?.subject).toBe(librarySubject);
+    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).subject).toBe(bangumiSubject);
+    expect(f.inspect('catalogue-ol', f.libraryRecords[0]!.key).subject).toBe(librarySubject);
 
     await f.reviseOpenLibrary();
     const lost = await f.runBatch(true);
@@ -54,8 +54,8 @@ test('An operator previews and deliberately runs a bounded explicit local manife
       'not-started',
     ]);
     expect(lost.document.notStarted).toEqual([{ index: 3, name: 'wikidata-launch' }]);
-    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).claim?.subject).toBe(bangumiSubject);
-    expect(f.inspect('wikidata', f.wikidataRecords[0]!.id).claim?.subject).toBe(wikidata.claim?.subject);
+    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).subject).toBe(bangumiSubject);
+    expect(f.inspect('wikidata', f.wikidataRecords[0]!.id).subject).toBe(wikidata.subject);
     const afterLoss = f.inspect('catalogue-ol', f.libraryRecords[0]!.key);
     const journal = afterLoss.journals.find((row) => row.acknowledgement === null);
     const pending = afterLoss.pending[0];
@@ -67,13 +67,13 @@ test('An operator previews and deliberately runs a bounded explicit local manife
     const recovered = await f.recoverOpenLibrary();
     expect(recovered.code, recovered.stderr).toBe(0);
     const afterRecovery = f.inspect('catalogue-ol', f.libraryRecords[0]!.key);
-    expect(afterRecovery.claim?.subject).toBe(librarySubject);
+    expect(afterRecovery.subject).toBe(librarySubject);
     expect(afterRecovery.journals.some((row) => row.key === originalKey && row.bytes === originalBytes)).toBe(true);
 
     const rerun = await f.runBatch();
     expect(rerun.code).toBe(0);
-    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).claim?.subject).toBe(bangumiSubject);
-    expect(f.inspect('catalogue-ol', f.libraryRecords[0]!.key).claim?.subject).toBe(librarySubject);
+    expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).subject).toBe(bangumiSubject);
+    expect(f.inspect('catalogue-ol', f.libraryRecords[0]!.key).subject).toBe(librarySubject);
     expect(f.inspect('bangumi', String(f.bangumiRecords[0]!.id)).candidates.length).toBe(bangumi.candidates.length);
     expect((await f.readSubject(bangumiSubject!)).status).toBe(200);
   } finally {

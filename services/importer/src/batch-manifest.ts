@@ -258,7 +258,7 @@ function parseJob(raw: unknown, index: number, manifestDirectory: string): Promi
   const decodeBudget = parseDecodeBudget(record.decodeBudget, index, compression);
   const disappearanceThreshold = parseThreshold(record.disappearanceThreshold, index);
   const name = parseName(record.name, index, `${sourceAlias}`);
-  if (record.dump === undefined || record.state === undefined)
+  if (typeof record.dump !== 'string' || typeof record.state !== 'string')
     throw new BatchManifestError(`Job ${index} must declare dump and state as local complete file paths.`);
   return Promise.all([
     admitBatchPath(record.dump, manifestDirectory, `Job ${index} dump`),
