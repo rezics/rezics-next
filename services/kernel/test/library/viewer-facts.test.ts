@@ -1,238 +1,202 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { createAccess } from '../../src/access/index.ts';
-import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { randomUUID } from 'node:crypto';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { mergeSubjects } from '../../src/semantic/merges.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import type { AccountActor, Access } from '../../src/request/access.ts';
-import type { CommandAuthorization } from '../../src/command/command.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { readViewerFactsPage, prepareViewerFacts, viewerFactsCurrent } from '../../src/library/viewer-facts.ts';
+import {
+  readViewerFacts,
+  readViewerFactsPage,
+  prepareViewerFacts,
+  viewerFactsCurrent,
+} from '../../src/library/viewer-facts.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';
-import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
+import { routeOf } from '../../src/route/route.ts';
+import type { AccountActor } from '../../src/request/access.ts';
+import { communityFixtureRuntime } from '../community/community-driver.ts';
+import {
+  createSourceStatisticLifecycleFixture,
+  type SourceStatisticLifecycleFixture,
+} from '../rating/source-statistic-lifecycle-fixture.ts';
 
-const route = 0x6d41;
-const routeKey = new Uint8Array(32).fill(73);
-const ownerId = newId(route);
-const otherId = newId(route);
-const actor = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'viewer-facts',
-  scopes: ['library_entry:read', 'library_entry:list', 'rating:vote'],
-  requestedBy: null,
-  authnEpoch: 1,
-});
-const mergeAuthorization: CommandAuthorization = {
-  action: 'subject:merge',
-  resource: { route: 0, id: GLOBAL_CONTEXT },
-  denied: () => new Error('Subject merge denied'),
-  async authorize() {
-    return 'execute';
-  },
-};
-
-let database: GrowthDatabase;
-let access: Access;
+let fixture: SourceStatisticLifecycleFixture;
+let owner: AccountActor;
+const deadline = () => Date.now() + 120_000;
+const deps = () => ({ pool: fixture.database.pool, access: fixture.access });
+const votePath = (id: string) => `/v1/subjects/${id}/ratings/${STANDARD_QUESTION_ID}/vote`;
+const inputs = (ids: string[]) => ids.map((subjectId, index) => ({ rowKey: String(index), subjectId }));
+const page = (ids: string[], actor = owner, question = STANDARD_QUESTION_ID) =>
+  readViewerFactsPage(deps(), actor, inputs(ids), question, deadline());
 
 beforeAll(async () => {
-  database = await openGrowthDatabase();
-  const auth = {
-    issuer: 'https://viewer-facts.example.test',
-    audience: 'https://api.rezics.test',
-    jwksUrl: 'https://viewer-facts.example.test/jwks',
-    fetch: async () => Response.json({ keys: [] }),
-  };
-  access = createAccess({ actions: new Map(), auth });
-  for (const accountId of [ownerId, otherId])
-    await database.admin.query(
-      `INSERT INTO access.account
-       (route,account_id,kind,state,transaction_id,authn_fenced,minimum_authn_epoch,membership_inverse_complete)
-       VALUES ($1,$2,'actor','active',$2,false,1,true)`,
-      [routeOf(accountId), accountId],
-    );
-  await bootstrapRelease(database.pool, bundledRelease);
-  await bootstrapGovernance(database.pool, ownerId);
-});
-
+  fixture = await createSourceStatisticLifecycleFixture({ nativeFigures: true });
+  fixture.database.pool.options.max = 1;
+  const context = await fixture.identityCommand('rating:vote');
+  owner = { ...context.actor, scopes: [...context.actor.scopes, 'library_entry:read', 'library_entry:list'] };
+}, 180_000);
 afterAll(async () => {
-  await database?.close();
-});
+  await fixture?.close();
+}, 180_000);
 
-async function makeSubject(label: string): Promise<string> {
-  const key = randomUUID();
-  const created = await createSubject(database.pool, {
-    actor: actor(ownerId),
-    target: subjectTarget(routeKey, ownerId, key),
-    idempotencyKey: key,
-    digest: createHash('sha256').update(key).digest(),
-    item: { type: 'schema:Book', labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return created.subject.id;
+async function vote(id: string, units: number | null) {
+  const response = await fixture.request(
+    units === null ? 'DELETE' : 'PUT',
+    votePath(id),
+    units === null ? {} : { body: { units } },
+  );
+  expect(response.status, await response.clone().text()).toBe(units === null ? 204 : 200);
 }
-
-async function putEntry(accountId: string, subjectId: string, state: string, revision: number) {
-  await database.admin.query(
-    `INSERT INTO library.entry(route,account_id,subject_id,state,revision,created_at,updated_at,transaction_id,incarnation_id)
-     VALUES($1,$2,$3,$4,$5,now(),now(),$6,$7)
-     ON CONFLICT(route,account_id,subject_id) DO UPDATE SET state=EXCLUDED.state,revision=EXCLUDED.revision,updated_at=now()`,
-    [routeOf(accountId), accountId, subjectId, state, revision, randomUUID(), randomUUID()],
+async function entry(id: string, state: string) {
+  await fixture.database.admin.query(
+    `INSERT INTO library.entry
+    (route,account_id,subject_id,state,revision,created_at,updated_at,transaction_id,incarnation_id)
+    VALUES($1,$2,$3,$4,1,now(),now(),$5,$6)`,
+    [routeOf(owner.accountId), owner.accountId, id, state, randomUUID(), randomUUID()],
   );
 }
-
-async function putVote(voterId: string, targetId: string, countedTarget: string, units: number | null, revision = 1) {
-  await database.admin.query(
-    `INSERT INTO rating.vote(route,voter_id,question_id,target_id,units,revision,changed_at,transaction_id,counted_target)
-     VALUES($1,$2,$3,$4,$5,$6,now(),$7,$8)`,
-    [routeOf(voterId), voterId, STANDARD_QUESTION_ID, targetId, units, revision, randomUUID(), countedTarget],
+async function staged(id: string) {
+  const prepared = await prepareViewerFacts(deps(), owner, inputs([id]), STANDARD_QUESTION_ID, deadline());
+  const result = await withReadTransaction(
+    fixture.database.pool,
+    (client) => readViewerFacts(client, owner, prepared),
+    deadline(),
   );
+  expect(result.state).toBe('current');
+  return prepared;
 }
 
-test('bounded viewer facts keep page identity and current private state, vote and authority', async () => {
-  const [first, alias, second, absent] = await Promise.all([
-    makeSubject('zero score subject'),
-    makeSubject('merged subject alias'),
-    makeSubject('nonzero score subject'),
-    makeSubject('absent subject'),
+test('native merge selection reaches survivor and redirected duplicate rows with exact Entry precedence', async () => {
+  const [original, survivor, absent] = await Promise.all([
+    fixture.createSubject(),
+    fixture.createSubject(),
+    fixture.createSubject(),
   ]);
-  await mergeSubjects(database.pool, {
-    subjects: [alias!, first!],
-    survivor: first!,
-    actor: actor(ownerId),
-    idempotencyKey: randomUUID(),
-    digest: createHash('sha256').update(randomUUID()).digest(),
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorization: mergeAuthorization,
-    deadline: Date.now() + 30_000,
-  });
-  await putEntry(ownerId, first!, 'planned', 1);
-  await putEntry(ownerId, second!, 'completed', 1);
-  await putVote(ownerId, alias!, first!, 0);
-  await putVote(ownerId, second!, second!, 12);
-  await putVote(otherId, alias!, first!, 20);
-
-  const owner = actor(ownerId);
-  const firstPage = await readViewerFactsPage(
-    { pool: database.pool, access },
-    owner,
-    [
-      { rowKey: 'first-result', subjectId: alias! },
-      { rowKey: 'same-subject-second-row', subjectId: alias! },
-    ],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
-  expect(firstPage).toMatchObject({
+  await entry(original, 'paused');
+  await entry(survivor, 'planned');
+  await vote(original, 7);
+  await fixture.merge(original, survivor);
+  expect(await page([original, survivor])).toMatchObject({ state: 'unavailable', retryable: true });
+  await fixture.nativeFigures!.drain();
+  const expectedVote = {
+    state: 'present',
+    units: 7,
+    originalTargetId: original,
+    countingTargetId: survivor,
+    revision: 1,
+    countedRevision: 2,
+  };
+  expect(await page([original, survivor, survivor, absent])).toMatchObject({
     state: 'current',
     rows: [
       {
-        rowKey: 'first-result',
-        subjectId: alias,
-        entry: { state: 'present', entryState: 'planned', revision: 1 },
-        vote: { state: 'present', questionId: STANDARD_QUESTION_ID, units: 0, revision: 1 },
+        rowKey: '0',
+        subjectId: original,
+        entry: { entryState: 'paused' },
+        vote: { ...expectedVote, requestedTargetId: original },
       },
-      { rowKey: 'same-subject-second-row', subjectId: alias, vote: { units: 0 } },
+      {
+        rowKey: '1',
+        subjectId: survivor,
+        entry: { entryState: 'planned' },
+        vote: { ...expectedVote, requestedTargetId: survivor },
+      },
+      { rowKey: '2', subjectId: survivor, vote: expectedVote },
+      { rowKey: '3', entry: { state: 'absent' }, vote: { state: 'absent' } },
     ],
   });
-
   const reads = createCollectionReads({
-    pool: database.pool,
-    access,
+    ...deps(),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
   });
-  const collectionPage = await reads.withViewerFacts(
-    owner,
-    { members: [{ id: 'admitted-member', subjectId: alias! }], next: null },
-    Date.now() + 30_000,
-  );
-  expect(collectionPage).toMatchObject({
-    members: [{ id: 'admitted-member', subjectId: alias }],
-    viewerFacts: { state: 'current', rows: [{ rowKey: 'admitted-member', vote: { units: 0 } }] },
-  });
-
-  const secondPage = await readViewerFactsPage(
-    { pool: database.pool, access },
-    owner,
-    [{ rowKey: 'second-result', subjectId: second! }],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
-  expect(secondPage).toMatchObject({
+  expect(
+    await reads.withViewerFacts(owner, { members: [{ id: 'admitted', subjectId: survivor }] }, deadline()),
+  ).toMatchObject({ viewerFacts: { rows: [{ rowKey: 'admitted', vote: expectedVote }] } });
+  await fixture.database.admin.query('DELETE FROM library.entry WHERE account_id=$1 AND subject_id=$2', [
+    owner.accountId,
+    original,
+  ]);
+  expect(await page([original])).toMatchObject({ state: 'current', rows: [{ entry: { entryState: 'planned' } }] });
+  await vote(survivor, 0);
+  expect(await page([original, survivor])).toMatchObject({
     state: 'current',
     rows: [
-      {
-        rowKey: 'second-result',
-        entry: { state: 'present', entryState: 'completed', revision: 1 },
-        vote: { state: 'present', units: 12, revision: 1 },
-      },
+      { vote: { state: 'present', units: 0, originalTargetId: survivor } },
+      { vote: { state: 'present', units: 0 } },
     ],
   });
-
-  const foreignPage = await readViewerFactsPage(
-    { pool: database.pool, access },
-    actor(otherId),
-    [{ rowKey: 'foreign-result', subjectId: alias! }],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
-  expect(foreignPage).toMatchObject({
+  await vote(survivor, null);
+  expect(await page([survivor, absent])).toMatchObject({
     state: 'current',
-    rows: [{ entry: { state: 'absent' }, vote: { state: 'absent', questionId: STANDARD_QUESTION_ID } }],
+    rows: [
+      { vote: { state: 'clear', originalTargetId: survivor, revision: 2, countedRevision: 2 } },
+      { vote: { state: 'absent' } },
+    ],
   });
-
-  const absentPage = await readViewerFactsPage(
-    { pool: database.pool, access },
-    owner,
-    [{ rowKey: 'missing', subjectId: absent! }],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
-  expect(absentPage).toMatchObject({
-    state: 'current',
-    rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }],
-  });
-
-  await database.admin.query(
-    `UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2`,
-    [ownerId, first],
-  );
-  await database.admin.query(`UPDATE rating.vote SET units=NULL,revision=2 WHERE voter_id=$1 AND target_id=$2`, [
-    ownerId,
-    alias,
-  ]);
-  const changed = await readViewerFactsPage(
-    { pool: database.pool, access },
-    owner,
-    [{ rowKey: 'first-result', subjectId: alias! }],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
-  expect(changed).toMatchObject({
-    state: 'current',
-    rows: [{ entry: { state: 'present', entryState: 'paused', revision: 2 }, vote: { state: 'absent' } }],
-  });
-
-  const prepared = await prepareViewerFacts(
-    { pool: database.pool, access },
-    owner,
-    [{ rowKey: 'first-result', subjectId: alias! }],
-    STANDARD_QUESTION_ID,
-    Date.now() + 30_000,
-  );
+  expect(await page(Array(100).fill(survivor))).toMatchObject({ state: 'current', rows: expect.any(Array) });
+  await expect(page(Array(101).fill(survivor))).rejects.toThrow('at most 100 rows');
   await expect(
-    prepareViewerFacts(
-      { pool: database.pool, access },
+    readViewerFactsPage(
+      deps(),
       owner,
-      Array.from({ length: 101 }, (_, index) => ({ rowKey: String(index), subjectId: alias! })),
+      [{ rowKey: 'x'.repeat(16_384), subjectId: survivor }],
       STANDARD_QUESTION_ID,
-      Date.now() + 30_000,
+      deadline(),
     ),
-  ).rejects.toThrow('at most 100 rows');
-  await database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [ownerId]);
-  expect(await viewerFactsCurrent({ pool: database.pool, access }, owner, prepared, Date.now() + 30_000)).toBe(false);
-});
+  ).rejects.toThrow('16384');
+}, 180_000);
+
+test('selected row and account changes withhold stale assembly, while unchanged same-input visits complete', async () => {
+  const id = await fixture.createSubject();
+  await vote(id, 8);
+  const unchanged = await staged(id);
+  expect(await viewerFactsCurrent(deps(), owner, unchanged, deadline())).toBe(true);
+  const changed = await staged(id);
+  await vote(id, 9);
+  expect(await viewerFactsCurrent(deps(), owner, changed, deadline())).toBe(false);
+  expect(await page([id])).toMatchObject({ state: 'current', rows: [{ vote: { units: 9 } }] });
+  const scoped = await staged(id);
+  expect(await viewerFactsCurrent(deps(), { ...owner, scopes: ['library_entry:read'] }, scoped, deadline())).toBe(
+    false,
+  );
+  expect(await page([id], { ...owner, scopes: ['library_entry:read'] })).toMatchObject({
+    state: 'current',
+    rows: [{ vote: { state: 'unavailable', reason: 'scope' } }],
+  });
+  expect(await page([id], owner, id)).toMatchObject({
+    state: 'current',
+    rows: [{ vote: { state: 'unavailable', reason: 'question' } }],
+  });
+  const account = await staged(id);
+  await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [
+    owner.accountId,
+  ]);
+  try {
+    expect(await viewerFactsCurrent(deps(), owner, account, deadline())).toBe(false);
+  } finally {
+    await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=1 WHERE account_id=$1', [
+      owner.accountId,
+    ]);
+  }
+}, 180_000);
+
+test('late Subject disclosure loss refuses currentness and never exposes a concealed terminal', async () => {
+  const id = await fixture.createSubject();
+  await vote(id, 4);
+  const prepared = await staged(id);
+  const { system, kernel } = communityFixtureRuntime();
+  const response = await kernel.handle(
+    new Request(`http://kernel.test/v1/subjects/${id}:hide`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${system.actors.moderator.bearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(randomUUID()),
+      },
+      body: JSON.stringify({ reason: 'Current Subject disclosure' }),
+    }),
+  );
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(await viewerFactsCurrent(deps(), owner, prepared, deadline())).toBe(false);
+  expect(await page([id])).toMatchObject({
+    state: 'current',
+    rows: [{ vote: { state: 'unavailable', reason: 'subject' } }],
+  });
+}, 180_000);

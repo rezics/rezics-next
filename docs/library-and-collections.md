@@ -73,34 +73,63 @@ Decision: Account member reads add each viewer's own entry state and standard-qu
 Decision: Viewer entry lookup follows the installed Library read: exact subject entry first, then the current Content terminal only when the exact entry is absent.
 
 The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and
-`viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers. Every
-batch names its Rating question and carries at most 100 rows and 16 KiB of encoded input; a current fact page is
-capped at 64 KiB encoded. Row keys and requested subject IDs stay in caller order, including duplicate rows.
-Entry reads use one indexed `(route, account, subject)` batch, preferring the exact requested subject and falling
-back to the actual Content terminal only when that exact entry is absent. Unmerged identities reuse Rating's
-installed raw `readOwnVotes`; redirected identities use one indexed `counted_target` batch to select the actual
-canonical vote. Both return the viewer's native vote only; imported aggregates never enter this path. A
-present zero remains distinct from an absent or cleared vote, and an absent entry is distinct from an unavailable
-entry scope. Missing `library_entry:read`/`library_entry:list` or `rating:vote` authority is reported as unavailable.
+`viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers.
+Every batch names its question and admits at most 100 rows and 16 KiB encoded input; output is at most 64 KiB.
+Row keys and requested Subject IDs retain their order and repetitions. Only native requested IDs are deduplicated.
+Entry reads prefer the exact requested Subject; only an absent exact Entry permits current terminal fallback.
 
-The consumer owns one repeatable-read client for account lifecycle, indexed entry rows and native own votes. Staged
-callers prepare bounded Content mappings and question meaning before acquiring that client, then revalidate the
-actor scopes and account authentication epoch, mapped terminal/epoch, and visible question revision, scale and
-meaning after release. Pending/unavailable identity and changed authority return unavailable; callers must withhold
-all facts if `viewerFactsCurrent` is false. The Content mapping seam double-collects supplied originals and their
-bounded source/control homes; it does not enumerate a viewer's Library. The Library list and Collection members
-HTTP consumers attach only a current fact page, and keep their existing private, no-store response policy. Search
-owns candidate admission, its final disclosure guard and response assembly; Web's Search and discovery interfaces
-remain unchanged for integration.
+For standard question `00000000-0000-7000-8000-000000000001`, revision 1, units 0–20 step 1, every requested
+Subject, including an unredirected merge survivor, uses Content's installed `createOwnCountedVoteReader` from
+`rating/register.ts`. A single reader, actor and ordered ID array survive prepare/read/finish. Its instance-local
+preparation and selected-row evidence remain private in a WeakMap; they cannot be reconstructed from a DTO.
+Preparation occurs before checkout, read uses the caller's account-home repeatable-read client, and finish runs
+after release. These are observations across native snapshots, not one atomic cross-home snapshot.
 
-For `N <= 100` admitted rows, the producer serializes at most 16 KiB of input and 64 KiB of returned fact page.
-Preparation and post-read currentness each call Content's double-collected bounded mapping reader; both also check
-the question when `rating:vote` is present, including current Realm question authority where applicable. The fact
-snapshot uses one account-home repeatable-read checkout, one indexed entry batch over at most 2N exact/fallback
-keys, and at most two indexed own-vote batches (raw exact IDs and redirected counted terminals); each Rating batch
-rechecks the same account lifecycle/scope on that client. There are no writes, locks, command receipts or cleanup
-steps in this read. Callers own their admission, final disclosure guard, retry policy and existing work payer; no
-fixed native latency or whole-journey acceptance cost has been measured here.
+The wire vote distinguishes `present` (including zero), `clear`, `absent` and `unavailable`. Available observations
+carry `requestedTargetId`, `countingTargetId` and `sourceEpoch`; present/clear also retain the selected vote's
+`originalTargetId`, original `revision` and separate `countedRevision`. Clear has no score units. Unavailable
+Subject disclosure exposes no terminal ID. Missing Entry scope stays unavailable; missing vote scope, unavailable
+question meaning or disclosure never becomes an absent vote. Imported ratings and public aggregates are excluded.
+Decision: nonstandard questions return explicit vote `unavailable/question` with their visible question metadata,
+without rescaling; standard native clears have a distinct wire state and retain native revision/identity evidence.
+
+Pending mappings and changed account standing, authentication epoch, scopes, question meaning/lifecycle,
+identity, disclosure or selected vote rows refuse successful current assembly. Staged Search callers must retain
+the original preparation and actor, release their client, call `viewerFactsCurrent`, and withhold the entire
+provisional page when it returns false; retry uses the same admitted input with fresh preparation. Search retains
+candidate admission, source witnesses, private assembly and final disclosure fences. Library list and Collection
+members attach only a current private, no-store page under their existing gates. Web keeps its interfaces.
+This overlay does not implement owner-wide `PersonalScoreCurrentness`, activate shelf score ordering or relax 503.
+
+For N admitted rows, U distinct requested IDs and T distinct counted destinations, U,T <= N <= 100. A successful
+nonempty standard call pays the following complete composition in addition to its caller's existing admission:
+
+- Preparation: one Library bounded mapping call and one visible-question read, then native preparation's one
+  account-home snapshot, one standard-question read, two mapping calls around one Subject disclosure batch.
+- Caller snapshot: one checkout with BEGIN/COMMIT (ROLLBACK on failure), account-home binding and Library account
+  point, one Entry statement with at most 2U exact/fallback seeks, then native read's account binding/point and one
+  counted-target statement with at most T index seeks and T rows. No foreign-home preparation occurs here.
+- After release: one Library account snapshot; native finish repeats its question read, two mapping calls around
+  Subject disclosure, and a separate account-home snapshot with account point and the same T counted-target seeks.
+  Library finally repeats its bounded mapping and visible-question observations. Thus there are five account
+  point reads, four question observations, six direct mapping calls plus disclosure's mapping calls, two disclosure
+  batches, one Entry statement and two counted-target statements on the full successful path. Account-only native
+  snapshots, Library final account snapshot and the caller snapshot each pay their own checkout/begin/commit.
+- Mapping calls retain Content's supplied-source/control-home double collection; each disclosure batch also pays
+  its bounded mapping and original/terminal Access preparation/evaluation. Their native row/operation limits and
+  connection/transaction costs remain those of the installed Content/Access contracts, not the wire caps above.
+  Each statement's B-tree positioning can grow with unrelated retained history. No owner-wide Library, vote or
+  history scan, blanket reservation, maintained cache, new payer, vote mutation or repair occurs.
+- Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints.
+  Empty/no-scope/unsupported-question paths skip native vote work; identity/preparation/read/finish mismatch exits
+  early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
+  errors propagate through existing rollback/release paths. A same-input retry pays preparation and snapshots
+  again, with no hidden refill or internal retry loop.
+
+Source bounds do not establish executed native growth. The controller retains independent unrelated owner/vote
+history growth with fixed admitted identities, page size and bytes, plus frozen full acceptance. Closest reference
+journeys remain BookWyrm's owner-review shelf annotation and Bangumi's owner/Subject collection score: both keep
+personal score separate from public aggregates; neither supplies REZICS's cross-home currentness protocol.
 
 [Personal AniList uploads](library-import-anilist.md) have mounted private preview, paged review, confirmed apply
 and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field

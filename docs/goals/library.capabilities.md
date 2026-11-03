@@ -246,12 +246,20 @@ against the current live incarnation and profile, then restore it through a revi
 conflicts, retention and cost bounds. Focused HTTP and account-erasure coverage lives in `personal-http.test.ts` and
 `account-fact-purge.test.ts`.
 
-The bounded viewer-facts producer is installed at `services/kernel/src/library/viewer-facts.ts` and exposed through
-the generated client declarations. It returns caller-ordered entry incarnation/state/revision and the viewer's
-native own vote with explicit question revision, scale and meaning. Library list and Collection members attach a
-current private page; Search receives the staged producer and retains its admission, final disclosure and response
-assembly. Direct producer and consumer coverage is in `test/library/viewer-facts.test.ts`. Frozen acceptance and
-native growth remain integration checks; this inventory does not claim either outcome.
+The bounded viewer-facts producer at `services/kernel/src/library/viewer-facts.ts` composes the installed
+`rating/register.ts` counted reader with prepare before checkout, read inside the caller snapshot, and finish after
+release. Standard-question survivor and redirected requests use counted targets, with duplicate correlations and
+exact Entry precedence. The mounted wire distinguishes present/zero, clear, absent and unavailable, preserving
+requested/original/counting identities and original/counted revisions where available. Nonstandard questions
+explicitly return vote unavailable/question. Search keeps its staged admission/final disclosure obligations and
+Web keeps its interfaces; this is independent of owner-wide shelf score currentness and score ordering.
+
+Source/native outcome coverage is `test/library/viewer-facts.test.ts`, using real vote/merge commands and the native
+worker rather than a replacement counted reader, including late selected-row changes. Client declarations must be
+emitted from the mounted schema by `bun run --cwd services/kernel typecheck --emit-client`; source presence is
+not generated closure. Frozen full acceptance and independent native growth remain controller checks. The
+[owner contract](../library-and-collections.md) publishes wire caps separately from native limits and accounts for
+preparation/disclosure, caller seeks, final repeated observations, encoding, snapshots and retry/failure work.
 
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
 immediately. The union includes live state, nonempty private annotations, reviewed source observations, effective
