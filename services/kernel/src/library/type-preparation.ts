@@ -362,10 +362,14 @@ export function createNativeTypePreparationPorts(
           key,
           digest: digest.toString('hex'),
         };
-        const at = authoritativeTimeValue(command.time).replace(
-          /\.(\d{3})Z$/,
-          (_match, milliseconds: string) => `.${milliseconds}000Z`,
-        );
+        // Command time can use PostgreSQL's textual timestamp spelling. Commit the
+        // same instant in the preparation protocol's canonical microsecond form.
+        const at = (
+          await tx.query<{ at: string }>(
+            `SELECT to_char($1::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at`,
+            [authoritativeTimeValue(command.time)],
+          )
+        ).rows[0]!.at;
         const header: PreparationHeaderCommitment = {
           version: 1,
           route,
