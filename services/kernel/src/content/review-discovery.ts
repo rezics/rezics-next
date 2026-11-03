@@ -5,12 +5,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { feedExcerpt } from './feed-summary.ts';
-import {
-  ContentNotFoundError,
-  readSubjectThread,
-  type ContentReadDependencies,
-  type ThreadView,
-} from './reads.ts';
+import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
 import type { ReadContext } from './model.ts';
 
 export const REVIEW_DISCOVERY_READ_LIMIT = 100;
@@ -197,7 +192,13 @@ async function pageCandidates(
      AND (t.route, t.thread_id) > ($3::integer, $4::uuid)
      AND t.route >= $1 AND t.route < $2
      ORDER BY t.route, t.thread_id LIMIT $5`,
-    [routeFloor, routeFloor + 16, after?.route ?? routeFloor - 1, after?.id ?? '00000000-0000-0000-0000-000000000000', limit],
+    [
+      routeFloor,
+      routeFloor + 16,
+      after?.route ?? routeFloor - 1,
+      after?.id ?? '00000000-0000-0000-0000-000000000000',
+      limit,
+    ],
   );
   return rows.rows.map(candidate);
 }
@@ -210,13 +211,7 @@ async function hydrateCandidate(
   let thread: ThreadView | null;
   try {
     thread = (
-      await readSubjectThread(
-        dependencies,
-        value.id,
-        value.subjectId,
-        value.realmId ?? GLOBAL_CONTEXT,
-        currentContext,
-      )
+      await readSubjectThread(dependencies, value.id, value.subjectId, value.realmId ?? GLOBAL_CONTEXT, currentContext)
     ).value;
   } catch (error) {
     if (error instanceof ContentNotFoundError) return null;
@@ -236,7 +231,12 @@ async function hydrateCandidate(
   )
     return null;
   const post = thread.firstPost;
-  if (post.availability !== 'available' || !('revisionId' in post) || post.revisionId !== value.revisionId || !post.body)
+  if (
+    post.availability !== 'available' ||
+    !('revisionId' in post) ||
+    post.revisionId !== value.revisionId ||
+    !post.body
+  )
     return null;
   const excerpt = feedExcerpt(post);
   return {
@@ -266,20 +266,21 @@ export function createReviewDiscoverySource(
 ): ReviewDiscoverySource {
   async function readCurrent(partition: number, ids: readonly string[]) {
     const context = checkedContext(makeAnonymousContext);
-    return withReadTransaction(
+    const native = await withReadTransaction(
       dependencies.pool,
       async (client) => {
         const at = await position(client, partition);
         const candidates = await byIds(client, partition, ids);
-        const hydrated = new Map<string, ReviewDiscoverySummary & { revisionId: string }>();
-        for (const item of candidates) {
-          const value = await hydrateCandidate(dependencies, context, item);
-          if (value) hydrated.set(value.id, value);
-        }
-        return { position: at, hydrated };
+        return { position: at, candidates };
       },
       context.deadline,
     );
+    const hydrated = new Map<string, ReviewDiscoverySummary & { revisionId: string }>();
+    for (const item of native.candidates) {
+      const value = await hydrateCandidate(dependencies, context, item);
+      if (value) hydrated.set(value.id, value);
+    }
+    return { position: native.position, hydrated };
   }
 
   return Object.freeze({
@@ -316,31 +317,33 @@ export function createReviewDiscoverySource(
       if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_LIMIT)
         throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_LIMIT}`);
       const context = checkedContext(makeAnonymousContext);
-      return withReadTransaction(
+      const native = await withReadTransaction(
         dependencies.pool,
         async (client) => {
           const at = await position(client, partition);
           const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
           const candidates = await pageCandidates(client, partition, frontier, candidateLimit + 1);
-          const selected = candidates.slice(0, candidateLimit);
-          const reviews: IndexedReview[] = [];
-          let examined = 0;
-          for (const item of selected) {
-            examined += 1;
-            const value = await hydrateCandidate(dependencies, context, item);
-            if (value) reviews.push(indexRecord(value));
-            if (reviews.length === limit) break;
-          }
-          const last = selected[examined - 1];
-          return {
-            partition,
-            position: at,
-            reviews,
-            next: examined < candidates.length && last ? { route: last.route, id: last.id } : null,
-          };
+          return { position: at, candidates };
         },
         context.deadline,
       );
+      const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
+      const selected = native.candidates.slice(0, candidateLimit);
+      const reviews: IndexedReview[] = [];
+      let examined = 0;
+      for (const item of selected) {
+        examined += 1;
+        const value = await hydrateCandidate(dependencies, context, item);
+        if (value) reviews.push(indexRecord(value));
+        if (reviews.length === limit) break;
+      }
+      const last = selected[examined - 1];
+      return {
+        partition,
+        position: native.position,
+        reviews,
+        next: examined < native.candidates.length && last ? { route: last.route, id: last.id } : null,
+      };
     },
   });
 }
