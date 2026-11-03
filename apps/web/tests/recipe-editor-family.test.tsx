@@ -166,11 +166,12 @@ test('Recipe creation and current correction share complete frames with independ
   };
   const retainedChange = (element: HTMLElement) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
-    return (
+    const onChange = (
       Reflect.get(element, key) as {
-        onChange: (event: { target: { value: string } }) => void;
+        onChange: (event: { target: { value: string }; currentTarget: { value: string } }) => void;
       }
     ).onChange;
+    return (event: { target: { value: string } }) => onChange({ ...event, currentTarget: event.target });
   };
   const retainedProps = <P,>(element: HTMLElement, matches: (props: P) => boolean): P => {
     type Fiber = {

@@ -129,7 +129,11 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     expect(predicate()).toBe(true);
   };
   const click = (scope: HTMLElement, name: string) =>
-    act(async () => user.click(within(scope).getByRole('button', { name })));
+    act(async () => {
+      const buttons = within(scope).getAllByRole('button', { name });
+      const target = buttons.find((button) => !(button as HTMLButtonElement).disabled) ?? buttons[0]!;
+      await user.click(target);
+    });
   const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
   const replace = (control: HTMLElement, value: string) =>
     act(async () => {
