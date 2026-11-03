@@ -19,13 +19,14 @@ import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { normalizeHandle } from '../access/lifecycle.ts';
+import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { PROBLEMS, ProblemError, problemSchema, type ProblemCode } from '../http/problem.ts';
 import { ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
+import { accessCheck, AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { MediaUnavailableError } from '../content/media.ts';
 import { SitemapQuerySchema } from '../content/schemas.ts';
@@ -73,6 +74,15 @@ import {
 } from './join.ts';
 import { banAccount, unbanAccount, listBans, RealmBanInputError, RealmBanRoleError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
+import {
+  assertRealmMemberPageBytes,
+  confirmRealmMemberSelection,
+  MemberPageUnavailableError,
+  publicMemberIdentity,
+  readRealmMemberActions,
+  readRealmMemberIdentities,
+  selectRealmMembers,
+} from './member-page.ts';
 import { listOwnRealms } from './own-realms.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
@@ -435,6 +445,223 @@ const banResponse = t.Object(
   closed,
 );
 const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
+const memberIdentity = t.Union([
+  t.Object(
+    {
+      id,
+      kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      state: t.Literal('active'),
+      handle: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+      displayName: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      id,
+      kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      state: t.Literal('deleted'),
+    },
+    closed,
+  ),
+]);
+const memberAction = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      method: t.Union([t.Literal('POST'), t.Literal('PUT'), t.Literal('DELETE')]),
+      path: t.String({ maxLength: 1024 }),
+      body: t.Union([
+        t.Object({ accountId: id }, closed),
+        t.Object({ reason: t.String({ maxLength: 1024 }) }, closed),
+        t.Null(),
+      ]),
+      expectedStatus: t.Union([t.Literal(202), t.Literal(200), t.Literal(204)]),
+      outcome: t.String({ maxLength: 160 }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('prohibited'),
+      reason: t.Union([
+        t.Literal('already_member'),
+        t.Literal('already_banned'),
+        t.Literal('not_banned'),
+        t.Literal('not_authorized'),
+        t.Literal('protected_owner_or_moderator'),
+        t.Literal('deleted_account'),
+        t.Literal('identity_unavailable'),
+      ]),
+    },
+    closed,
+  ),
+  t.Object(
+    { state: t.Literal('uncertain'), reason: t.Union([t.Literal('authority_unavailable'), t.Literal('identity_unavailable')]) },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable'), reason: t.Literal('no_mounted_method') }, closed),
+]);
+const memberActions = t.Object(
+  {
+    addMember: memberAction,
+    ban: memberAction,
+    unban: memberAction,
+    removeMember: memberAction,
+    reviseRole: memberAction,
+  },
+  closed,
+);
+const memberRow = t.Object(
+  {
+    accountId: id,
+    membership: t.Literal('member'),
+    identity: t.Union([memberIdentity, t.Null()]),
+    displayName: t.String({ maxLength: 4096 }),
+    banState: t.Union([t.Literal('banned'), t.Literal('clear'), t.Literal('unknown')]),
+    actions: memberActions,
+  },
+  closed,
+);
+const selectedMember = t.Object(
+  {
+    accountId: id,
+    membership: t.Union([t.Literal('member'), t.Literal('none')]),
+    identity: t.Union([memberIdentity, t.Null()]),
+    displayName: t.String({ maxLength: 4096 }),
+    banState: t.Union([t.Literal('banned'), t.Literal('clear'), t.Literal('unknown')]),
+    actions: memberActions,
+  },
+  closed,
+);
+const memberPageQuery = t.Object(
+  { cursor: t.Optional(t.String({ maxLength: 4096 })), accountId: t.Optional(id) },
+  closed,
+);
+const memberPageResponse = t.Object(
+  {
+    realmId: id,
+    state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+    items: t.Array(memberRow, { maxItems: 20 }),
+    next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+    selected: t.Union([selectedMember, t.Null()]),
+  },
+  {
+    ...closed,
+    examples: [
+      {
+        realmId: '00000000-0000-0000-0000-000000000010',
+        state: 'ready',
+        items: [
+          {
+            accountId: '00000000-0000-0000-0000-000000000020',
+            membership: 'member',
+            identity: {
+              id: '00000000-0000-0000-0000-000000000020',
+              kind: 'actor',
+              state: 'active',
+              handle: 'member',
+              displayName: null,
+            },
+            displayName: 'Member',
+            banState: 'clear',
+            actions: {
+              addMember: { state: 'prohibited', reason: 'already_member' },
+              ban: {
+                state: 'available',
+                method: 'PUT',
+                path: '/v1/realms/00000000-0000-0000-0000-000000000010/bans/00000000-0000-0000-0000-000000000020',
+                body: { reason: '' },
+                expectedStatus: 200,
+                outcome: 'Ban commits; membership removal may still be pending.',
+              },
+              unban: { state: 'prohibited', reason: 'not_banned' },
+              removeMember: { state: 'unavailable', reason: 'no_mounted_method' },
+              reviseRole: { state: 'unavailable', reason: 'no_mounted_method' },
+            },
+          },
+        ],
+        next: null,
+        selected: null,
+      },
+      {
+        realmId: '00000000-0000-0000-0000-000000000010',
+        state: 'preparing',
+        items: [],
+        next: null,
+        selected: null,
+      },
+    ],
+  },
+);
+const memberPageNotFound = t.Object(
+  { ...problemSchema('not_found').properties },
+  {
+    additionalProperties: false,
+    examples: [
+      {
+        type: 'https://rezics.com/problems/not_found',
+        title: 'Not Found',
+        status: 404,
+        code: 'not_found',
+        retryable: false,
+        effect_status: 'not_applicable',
+        request_id: '00000000-0000-0000-0000-000000000001',
+      },
+      {
+        type: 'https://rezics.com/problems/not_found',
+        title: 'Not Found',
+        status: 404,
+        code: 'not_found',
+        retryable: false,
+        effect_status: 'not_applicable',
+        request_id: '00000000-0000-0000-0000-000000000002',
+      },
+    ],
+  },
+);
+const memberPageForbidden = t.Object(
+  { ...problemSchema('forbidden').properties },
+  {
+    additionalProperties: false,
+    examples: [
+      {
+        type: 'https://rezics.com/problems/forbidden',
+        title: 'Forbidden',
+        status: 403,
+        code: 'forbidden',
+        retryable: false,
+        effect_status: 'not_applicable',
+        request_id: '00000000-0000-0000-0000-000000000003',
+      },
+    ],
+  },
+);
+const memberPageUnavailable = t.Object(
+  {
+    ...problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ).properties,
+  },
+  {
+    additionalProperties: false,
+    examples: [
+      {
+        type: 'https://rezics.com/problems/dependency_unavailable',
+        title: 'Dependency Unavailable',
+        status: 503,
+        code: 'dependency_unavailable',
+        retryable: true,
+        effect_status: 'not_applicable',
+        request_id: '00000000-0000-0000-0000-000000000004',
+      },
+    ],
+  },
+);
 const sitemapQuery = strict(SitemapQuerySchema);
 const sitemapRealmPage = strict(SitemapRealmPageSchema);
 const sitemapSpacePage = strict(SitemapSpacePageSchema);
@@ -511,6 +738,7 @@ export type CommunityRouteDependencies = {
 function communityProblem(error: unknown): never {
   // Preserve the native ownership subclass for the central problem mapper.
   if (error instanceof ResourceAccessWriteDeniedError) throw error;
+  if (error instanceof MemberPageUnavailableError) throw new ProblemError('dependency_unavailable');
   if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
   if (error instanceof RealmBanInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
@@ -599,6 +827,118 @@ function publishedPublication(value: PublicationHead | PublicationResult) {
     verdict: 'adopt' as const,
     subjectRevisionId: null,
     publishedAt: new Date(value.publishedAt).toISOString(),
+  };
+}
+
+type MemberBanPermission = boolean | null;
+
+function prohibitedMemberAction(
+  reason: 'already_member' | 'already_banned' | 'not_banned' | 'not_authorized' | 'protected_owner_or_moderator' | 'deleted_account' | 'identity_unavailable',
+) {
+  return { state: 'prohibited' as const, reason };
+}
+
+function uncertainMemberAction(reason: 'authority_unavailable' | 'identity_unavailable' = 'authority_unavailable') {
+  return { state: 'uncertain' as const, reason };
+}
+
+function unavailableMemberAction() {
+  return { state: 'unavailable' as const, reason: 'no_mounted_method' as const };
+}
+
+function availableMemberAction(
+  method: 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  body: { accountId: string } | { reason: string } | null,
+  expectedStatus: 202 | 200 | 204,
+  outcome: string,
+) {
+  return { state: 'available' as const, method, path, body, expectedStatus, outcome };
+}
+
+function sameIdentityAnchor(
+  before: import('../access/account-data.ts').PublicIdentity | undefined,
+  after: import('../access/account-data.ts').PublicIdentity | undefined,
+) {
+  if (!before || !after) return before === after;
+  return before.id === after.id && before.kind === after.kind && before.state === after.state;
+}
+
+function memberActionAdvice(input: {
+  realmId: string;
+  accountId: string;
+  membership: 'member' | 'none';
+  identity: ReturnType<typeof publicMemberIdentity>['identity'];
+  banPermission: MemberBanPermission;
+  ban: { banned: boolean; protectedRole: boolean | null } | undefined;
+}) {
+  const activeIdentity = input.identity !== null && input.identity.state === 'active';
+  const missingIdentity = input.identity === null;
+  const addMember =
+    input.membership === 'member'
+      ? prohibitedMemberAction('already_member')
+      : missingIdentity
+        ? uncertainMemberAction('identity_unavailable')
+        : input.identity?.state === 'deleted'
+          ? prohibitedMemberAction('deleted_account')
+          : input.banPermission === null
+            ? uncertainMemberAction()
+            : input.banPermission && input.ban?.banned
+              ? prohibitedMemberAction('already_banned')
+              : input.banPermission && !input.ban
+                ? uncertainMemberAction()
+                : !input.banPermission
+                  ? uncertainMemberAction()
+                  : availableMemberAction(
+                      'POST',
+                      `/v1/realms/${input.realmId}/members`,
+                      { accountId: input.accountId },
+                      202,
+                      'Accepted; a membership workflow may still be pending.',
+                    );
+  const authorityAction = (allowMissingIdentity = false) => {
+    if (input.banPermission === null) return uncertainMemberAction();
+    if (!input.banPermission) return prohibitedMemberAction('not_authorized');
+    if (!input.ban) return uncertainMemberAction();
+    if (missingIdentity && !allowMissingIdentity) return uncertainMemberAction('identity_unavailable');
+    return null;
+  };
+  const banAuthority = authorityAction();
+  const ban =
+    banAuthority ??
+    (!activeIdentity
+      ? prohibitedMemberAction('deleted_account')
+      : input.ban!.banned
+        ? prohibitedMemberAction('already_banned')
+        : input.ban!.protectedRole === null
+          ? uncertainMemberAction()
+          : input.ban!.protectedRole
+            ? prohibitedMemberAction('protected_owner_or_moderator')
+            : availableMemberAction(
+                'PUT',
+                `/v1/realms/${input.realmId}/bans/${input.accountId}`,
+                { reason: '' },
+                200,
+                'Ban commits; membership removal may still be pending.',
+              ));
+  const unbanAuthority = authorityAction(true);
+  const unban =
+    unbanAuthority ??
+    (input.ban!.banned
+      ? availableMemberAction(
+          'DELETE',
+          `/v1/realms/${input.realmId}/bans/${input.accountId}`,
+          null,
+          204,
+          'The ban ends; membership is not restored.',
+        )
+      : prohibitedMemberAction('not_banned'));
+  return {
+    addMember,
+    ban,
+    unban,
+    removeMember: unavailableMemberAction(),
+    reviseRole: unavailableMemberAction(),
   };
 }
 
@@ -2080,6 +2420,198 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         );
         if (!current) throw new ProblemError('not_found');
         return readOwnRealmMembership(dependencies.pool, realmId, actor.accountId, observedAt());
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/members',
+      {
+        params: realmParams,
+        query: memberPageQuery,
+        response: {
+          200: strict(memberPageResponse),
+          ...readFailures,
+          404: memberPageNotFound,
+          403: memberPageForbidden,
+          503: memberPageUnavailable,
+          400: problemSchema('invalid_request', 'invalid_cursor', 'stale_cursor'),
+        },
+        detail: {
+          operationId: 'realm.members',
+          summary: 'List and inspect current Realm members',
+          description:
+            'Reads a bounded Realm management roster. The public exposure label makes the operation discoverable; current realm:manage authorization gates every roster read. A selected account is exact and does not advance the roster cursor.',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, authorize }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(realmId);
+        if (route === null) throw new ProblemError('not_found');
+        try {
+          return await admission.run('normal', job, async () => {
+            const currentRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!currentRealm) throw new ProblemError('not_found');
+            const managerCheck = await authorize({ route, id: realmId });
+            const managerAllowed = await withConnection(dependencies.pool, (client) =>
+              managerCheck(deadlineClient(client, job.deadline)),
+            );
+            if (!managerAllowed) throw new ProblemError('forbidden');
+
+            const selection = await selectRealmMembers(
+              { pool: dependencies.pool, tokens: dependencies.tokens, deadline: job.deadline },
+              {
+                realmId,
+                viewerAccountId: actor.accountId,
+                at: observedAt(),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.accountId === undefined ? {} : { selectedAccountId: query.accountId }),
+              },
+            );
+            if (selection.state === 'preparing')
+              return assertRealmMemberPageBytes({
+                realmId,
+                state: 'preparing' as const,
+                items: [],
+                next: selection.next,
+                selected: null,
+              });
+
+            const accountIds = [
+              ...selection.members.map((member) => member.accountId),
+              ...(selection.selected === null ? [] : [selection.selected.accountId]),
+            ];
+            const identitiesBefore = await readRealmMemberIdentities(
+              dependencies.pool,
+              accountIds,
+              job.deadline,
+            );
+            const latestIdentities = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
+            // A changed identity anchor means this read crossed account replacement or deletion.
+            // Withhold private roster data and let the caller retry the same raw cursor.
+            if (
+              accountIds.some((accountId) => !sameIdentityAnchor(identitiesBefore.get(accountId), latestIdentities.get(accountId)))
+            )
+              return assertRealmMemberPageBytes({
+                realmId,
+                state: 'preparing' as const,
+                items: [],
+                next: query.cursor ?? null,
+                selected: null,
+              });
+
+            const checkBanPermission = async (): Promise<MemberBanPermission> => {
+              try {
+                const check = await accessCheck(
+                  dependencies.access(),
+                  actor,
+                  'realm:ban',
+                  { route, id: realmId },
+                  { pool: dependencies.pool, deadline: job.deadline },
+                );
+                return await withConnection(dependencies.pool, (client) => check(deadlineClient(client, job.deadline)));
+              } catch {
+                return null;
+              }
+            };
+            let banPermission = await checkBanPermission();
+            let banObservations = new Map<string, { banned: boolean; protectedRole: boolean | null }>();
+            if (banPermission) {
+              banObservations = await readRealmMemberActions(
+                { pool: dependencies.pool, deadline: job.deadline },
+                { realmId, accountIds, at: observedAt() },
+              );
+              const finalBanPermission = await checkBanPermission();
+              if (finalBanPermission !== true) {
+                banPermission = finalBanPermission;
+                banObservations = new Map();
+              }
+            }
+
+            const stillCurrent = await confirmRealmMemberSelection(
+              { pool: dependencies.pool, deadline: job.deadline },
+              {
+                realmId,
+                at: observedAt(),
+                members: selection.members,
+                selected: selection.selected,
+              },
+            );
+            if (!stillCurrent)
+              return assertRealmMemberPageBytes({
+                realmId,
+                state: 'preparing' as const,
+                items: [],
+                next: query.cursor ?? null,
+                selected: null,
+              });
+
+            const finalRealm = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!finalRealm) throw new ProblemError('not_found');
+            const finalManagerCheck = await authorize({ route, id: realmId });
+            const finalManagerAllowed = await withConnection(dependencies.pool, (client) =>
+              finalManagerCheck(deadlineClient(client, job.deadline)),
+            );
+            if (!finalManagerAllowed) throw new ProblemError('forbidden');
+
+            const present = (accountId: string) => publicMemberIdentity(accountId, latestIdentities.get(accountId));
+            const banState = (accountId: string) => {
+              if (!banPermission) return 'unknown' as const;
+              const action = banObservations.get(accountId);
+              return action ? (action.banned ? 'banned' as const : 'clear' as const) : 'unknown' as const;
+            };
+            const items = selection.members.map((member) => {
+              const identity = present(member.accountId);
+              return {
+                accountId: member.accountId,
+                membership: 'member' as const,
+                identity: identity.identity,
+                displayName: identity.displayName,
+                banState: banState(member.accountId),
+                actions: memberActionAdvice({
+                  realmId,
+                  accountId: member.accountId,
+                  membership: 'member',
+                  identity: identity.identity,
+                  banPermission,
+                  ban: banObservations.get(member.accountId),
+                }),
+              };
+            });
+            const selected =
+              selection.selected === null
+                ? null
+                : (() => {
+                    const identity = present(selection.selected!.accountId);
+                    return {
+                      accountId: selection.selected!.accountId,
+                      membership: selection.selected!.membership,
+                      identity: identity.identity,
+                      displayName: identity.displayName,
+                      banState: banState(selection.selected!.accountId),
+                      actions: memberActionAdvice({
+                        realmId,
+                        accountId: selection.selected!.accountId,
+                        membership: selection.selected!.membership,
+                        identity: identity.identity,
+                        banPermission,
+                        ban: banObservations.get(selection.selected!.accountId),
+                      }),
+                    };
+                  })();
+            return assertRealmMemberPageBytes({
+              realmId,
+              state: 'ready' as const,
+              items,
+              next: selection.next,
+              selected,
+            });
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     )
     .put(
