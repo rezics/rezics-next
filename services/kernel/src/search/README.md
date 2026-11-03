@@ -79,14 +79,13 @@ turning those rows into `FacetNativePageResult`. `expireFacetStep(context)` recl
 step after marking the generation unavailable. These storage operations introduce no capture/bootstrap, Source
 mirror, scheduler or ACK writer. Shared native consumer capture/repair remains the sole lifecycle owner.
 
-Composition still requires the actual shared consumer/native facet executor and Semantic producers. The selected
-resolver is Source's `PublicFilterSourceBinding.resolve/join`, never another reader. Its exact constructor and
-closed declarations are adopted in the Semantic owner document; the current clearly provisional binding adapter
-returns typed unavailability. The sole Semantic finite population factory is now delivered:
-`createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`, with
+Default public Search composition supplies `facetProvider` from the same Access-bound runtime. Prepared facet
+captures keep the admitted text/filter and add the requested property to `overflowProperties` (name order for
+item labels) so Source coverage includes value membership without a second facet protocol. The selected
+resolver is Source's `PublicFilterSourceBinding.resolve/join`, never another reader. The sole Semantic finite
+population factory is `createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`, with
 `readFacetPopulationPage({population,frontier,inputLimit,capture})` and types in `facet-population-contract.ts`.
-Its native traversal remains unavailable until the binding/key-page producers are delivered. Default composition
-fails closed until native handoff and activation; it cannot claim a native product pass or eventual readiness.
+Missing generation or meaning still returns `503 index_not_ready`.
 
 ## Trending searches
 

@@ -740,7 +740,8 @@ export function createSearchService({
       admitFacets(facets, admitted, current);
       // The native factory must resolve the actual registered catalogue/meaning/identity context.
       // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
-      const provider = await facetProvider?.();
+      const provider =
+        (await facetProvider?.()) ?? (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
       if (!provider) throw indexNotReady();
       return readFacetDiscovery(
         cursors,

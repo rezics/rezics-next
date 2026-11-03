@@ -189,9 +189,19 @@ export function compilePublicFilterConsumerCapture(
       .join(' '),
     overflowProperties: properties.length ? properties : undefined,
   };
-  for (const key of ['query', 'filter', 'boost', 'overflowProperties'] as const) {
+  for (const key of ['query', 'filter', 'boost'] as const) {
     if (copied[key] !== undefined && !isDeepStrictEqual(copied[key], derived[key]))
       throw new TypeError(`Capture ${key} does not match shared semantic input`);
+  }
+  const overflowProperties =
+    copied.overflowProperties !== undefined ? copied.overflowProperties : derived.overflowProperties;
+  if (copied.overflowProperties !== undefined) {
+    if (
+      !Array.isArray(copied.overflowProperties) ||
+      copied.overflowProperties.some((property) => typeof property !== 'string') ||
+      (derived.overflowProperties ?? []).some((property) => !copied.overflowProperties!.includes(property))
+    )
+      throw new TypeError('Capture overflowProperties does not match shared semantic input');
   }
   const capture: PublicFilterConsumerCaptureInput = {
     filterDocument,
@@ -202,7 +212,7 @@ export function compilePublicFilterConsumerCapture(
     ...(derived.query === undefined ? {} : { query: derived.query }),
     ...(derived.filter === undefined ? {} : { filter: derived.filter }),
     ...(derived.boost === undefined ? {} : { boost: derived.boost }),
-    ...(derived.overflowProperties === undefined ? {} : { overflowProperties: derived.overflowProperties }),
+    ...(overflowProperties === undefined ? {} : { overflowProperties }),
     ...(copied.after === undefined ? {} : { after: copied.after }),
     ...(copied.generation === undefined ? {} : { generation: copied.generation }),
     ...(copied.rating === undefined ? {} : { rating: copied.rating }),
@@ -217,9 +227,10 @@ export function compilePublicFilterConsumerCapture(
     orders.add('name');
   }
   if (capture.sort === 'collections' || capture.sort === 'rating') orders.add('name');
+  const coverageProperties = [...new Set([...dependencyProperties, ...(overflowProperties ?? [])])];
   const dependencyKeys: PublicFilterDependencyKey[] = [
     { kind: 'type' },
-    ...dependencyProperties.map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
+    ...coverageProperties.map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
     ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
   ];
   return freeze({

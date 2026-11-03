@@ -766,9 +766,18 @@ function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilter
       .filter((leaf) => !leaf.negated)
       .map((leaf) => leaf.value)
       .join(' '),
-    overflowProperties,
   })) {
     if (Object.hasOwn(input, key) && !isDeepStrictEqual(input[key as keyof typeof input], value))
+      throw new TypeError('Compiled capture differs from its retained input');
+  }
+  if (Object.hasOwn(input, 'overflowProperties')) {
+    const actual = input.overflowProperties;
+    const required = overflowProperties ?? [];
+    if (
+      !Array.isArray(actual) ||
+      actual.some((property) => typeof property !== 'string') ||
+      required.some((property) => !actual.includes(property))
+    )
       throw new TypeError('Compiled capture differs from its retained input');
   }
   const keys: PublicFilterDependencyKey[] = [
@@ -783,6 +792,8 @@ function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilter
       for (const qualifier of leaf.qualifiers ?? []) keys.push({ kind: 'property', property: qualifier.property });
     }
   }
+  if (Array.isArray(input.overflowProperties))
+    for (const property of input.overflowProperties) keys.push({ kind: 'property', property });
   if (text)
     keys.push(...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({ kind: 'field' as const, field })));
   if (['name', 'collections', 'rating'].includes(input.sort))

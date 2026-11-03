@@ -6,8 +6,10 @@ import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
+import type { FacetDiscoveryProvider } from '../../src/search/facet-discovery-native.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import type { IndexedStatement, IndexedSubject } from '../../src/search/source.ts';
+import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
 
@@ -58,7 +60,78 @@ const source = {
     return fake.read(...args);
   },
 };
-const service = createSearchService({ pool, client, prefix, source, cursors, release: async () => release });
+const cost: PublicFilterCost = {
+  inputKeys: 0,
+  candidates: 0,
+  accessPoints: 0,
+  dependencyPoints: 0,
+  engineSearches: 0,
+  engineIteratorSteps: 0,
+  outputSlots: 0,
+  resultWrites: 0,
+  frontierWrites: 0,
+};
+const queried = {
+  consumer: {
+    physicalTarget: 'subjects',
+    incarnation: '1',
+    consumerGeneration: '1',
+    projectionGeneration: '1',
+    meaningDigest: 'a'.repeat(64),
+    readDefinition: 'read',
+  },
+  snapshot: { kind: 'prepared' as const, observation: 'obs', build: 'build', generation: 1n },
+};
+function codeProvider(): FacetDiscoveryProvider {
+  return {
+    source: prefix,
+    meaning: { digest: 'a'.repeat(64), release, type: 'schema:Book' } as FacetDiscoveryProvider['meaning'],
+    generation: 1,
+    operations: {
+      async captureFacet() {
+        return { status: 'captured', queried, repair: { consumer: queried.consumer, job: 'job' }, cost };
+      },
+      async pageFacets({ reads: pages }) {
+        const values = [
+          ...new Set(
+            books.flatMap((entry) =>
+              entry.statements
+                .filter((statement) => statement.property === 'schema:inLanguage')
+                .map(({ value }) => value),
+            ),
+          ),
+        ].sort();
+        return {
+          status: 'ready',
+          facets: pages.map((read) => {
+            const selected = values.filter((value) => read.after === null || value > read.after);
+            const page = selected.slice(0, read.size);
+            return {
+              property: read.plan.property,
+              values: page.map((value) => ({ value, labels: {} })),
+              after: page.at(-1) ?? null,
+              hasMore: selected.length > read.size,
+            };
+          }),
+          asOf: '2026-01-01T00:00:00.000Z',
+          cost,
+        };
+      },
+      async repairStep() {
+        throw new Error('unused');
+      },
+    },
+  };
+}
+const service = createSearchService({
+  pool,
+  client,
+  prefix,
+  source,
+  cursors,
+  release: async () => release,
+  facetProvider: async () => codeProvider(),
+});
 const index = subjectIndexName(prefix, 1);
 
 beforeAll(async () => {

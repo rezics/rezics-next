@@ -376,11 +376,19 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
       .filter((leaf) => !leaf.negated)
       .map((leaf) => leaf.value)
       .join(' '),
-    overflowProperties: filter
-      ? [...new Set(filter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : [])))]
-      : undefined,
   })) {
     if (Object.hasOwn(input, key)) requireValue(encode(input[key as keyof typeof input]) === encode(derived));
+  }
+  if (Object.hasOwn(input, 'overflowProperties')) {
+    const actual = input.overflowProperties;
+    const required = filter
+      ? [...new Set(filter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : [])))]
+      : [];
+    requireValue(
+      Array.isArray(actual) &&
+        actual.every((property) => typeof property === 'string') &&
+        required.every((property) => actual.includes(property)),
+    );
   }
 }
 async function read(

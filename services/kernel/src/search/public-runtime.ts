@@ -37,6 +37,8 @@ import type {
 } from './public-filter-consumer-contract.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
+import { createFacetNativeOperations } from './facet-discovery-operations.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
   pool: Pool;
@@ -80,6 +82,8 @@ export type DefaultPublicFilterRuntime = Readonly<{
     job: PublicFilterConsumerJob,
     context: PublicFilterConsumerContext,
   ): ReturnType<PublicFilterConsumerOperations['repairStep']>;
+  /** Trusted native facet composition; omitted generation or meaning stays closed. */
+  facetProvider(): Promise<FacetDiscoveryProvider | undefined>;
   close(): Promise<void>;
 }>;
 
@@ -423,6 +427,43 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           job,
           context,
         );
+      });
+    },
+    facetProvider() {
+      return track(async () => {
+        const current = await activeRelease(config.pool);
+        const state = await subjectGenerations(config.search, config.prefix);
+        if (!current || state.active === null || !current.release.types['schema:Thing']) return undefined;
+        const physicalTarget = subjectIndexName(config.prefix, state.active);
+        const meaning = { digest: current.digest, release: current.release, type: 'schema:Thing' };
+        return {
+          source: config.prefix,
+          meaning,
+          generation: state.active,
+          operations: createFacetNativeOperations({
+            pool: config.pool,
+            routeKey: config.routeKey,
+            access: config.access,
+            search: config.search,
+            clock: config.clock,
+            source,
+            binding,
+            subjects: nativeSource,
+            capture: async (plan, snapshot, context) => {
+              const handle = await subjectOperations(physicalTarget, current, context);
+              return handle.capture({ plan: { ...plan, generation: state.active }, snapshot }, context);
+            },
+            async repair(job, context) {
+              const digest = job.consumer.meaningDigest;
+              const release = digest === null ? null : await readRelease(config.pool, digest);
+              if (!release || digest === null) notReady();
+              return (await subjectOperations(job.consumer.physicalTarget, { digest, release }, context)).repairStep(
+                job,
+                context,
+              );
+            },
+          }),
+        };
       });
     },
     close() {

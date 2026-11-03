@@ -110,11 +110,10 @@ Metadata continuation does not exclude unshown kinds from hits or authorize anot
 
 ## Implementation status and native acceptance prerequisites
 
-The current `query.ts`/`service.ts` facet path is a sampled, count-ordered preview with unsafe count metadata,
-current item-label checks and slicing. Removing its public counts is a separate implementation change.
-Complete count-free continuation, execution admission, Source/privacy integration and preparation remain
-**UNIMPLEMENTED**. This adoption changes no engine, service, route, Source, native test, client or renderer.
-The exported types do not install validation, a runtime factory, a prepared-job ABI or a native Source port.
+The public service consumes count-free continuation through `facetProvider` from the default public runtime.
+Prepared facet captures keep the admitted text/filter and add the requested property to `overflowProperties`
+(name order for item labels). Sampled `countFacets` is not the public path. Missing native generation or
+meaning still returns `503 index_not_ready`.
 
 Native catalogue acceptance must consume this adopted wire and the actual committed suspended-persona driver and
 released discovery fixture before retrying or freezing its assertions. Native results and hashes are separate
