@@ -164,7 +164,7 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     const panel = host.querySelector('[data-fact-reuse]')!;
     expect(group().textContent).toContain(m.addon_create_review_reuse_base());
     expect(panel.textContent).not.toContain(addonWorkId);
-    await act(async () => user.click(within(panel).getByRole('checkbox', { name: /exact match/i })));
+    await act(async () => user.click(within(panel).getByRole('checkbox')));
     await act(async () => user.click(within(panel).getByRole('button', { name: m.facts_reuse_apply() })));
     await waitFor(() => expect(panel.textContent).toContain(m.facts_reuse_applied({ count: 1 })));
     await waitFor(() =>
