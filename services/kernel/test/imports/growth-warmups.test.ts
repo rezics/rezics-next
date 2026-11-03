@@ -9,6 +9,7 @@ test('growth seeds unrelated keys and history in the measured source without rep
   try {
     const populate = createGrowthLedgerPopulation(store.database);
     const run = store.begin('growth-source');
+    if (run === 'busy') throw new Error('Fresh growth run must begin successfully');
     const count = (table: 'run_members' | 'run_generations', source: string) =>
       (store.database.query(`SELECT count(*) AS n FROM ${table} WHERE source=?`).get(source) as { n: number }).n;
     for (const axis of ['catalogueRecords', 'historyRows'] as const)
@@ -17,7 +18,7 @@ test('growth seeds unrelated keys and history in the measured source without rep
         populate(input, 'growth-source');
         expect(count('run_members', 'growth-source')).toBe(input.catalogueRecords);
         expect(count('run_generations', 'growth-source')).toBe(input.historyRows + 1);
-        expect<unknown>(store.activeRun('growth-source')).toEqual(run);
+        expect(store.activeRun('growth-source')).toEqual(run);
       }
     populate({ catalogueRecords: 128, historyRows: 128 }, 'g-new-1');
     expect(count('run_members', 'g-new-1')).toBe(128);
