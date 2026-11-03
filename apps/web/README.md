@@ -999,6 +999,34 @@ Each server render and browser session has its own query cache. Public reads sta
   navigation background is one stretched element, with no per-line work
 - **Growth check:** `tests/public-render.test.ts` checks pre-paint preferences, the account slot and script-free Account
 
+### Route loading and recovery
+
+Route replacement stays inside AppShell's existing `main-content` skip target. `RouteState` composes the shared
+Empty header, icon, description and content slots with one page heading and localized Home/Search links. Missing
+and platform-closed routes stay distinct and never become planned-route announcements. No loader payload, error
+message, cause, request URL or diagnostic body becomes page content. Existing root error head handling keeps
+noindex, private/no-store, sanitized sharing metadata and native numeric response status.
+
+`PendingPage` reads only explicit route IDs and optional typed `staticData.routeState` (`page`, `feed`, `detail`,
+`form`). Unregistered routes use generic page loading; no pathname guessing or candidate-specific label is used.
+Skeletons contain at most eight blocks, have no interactive controls or data reads, adapt at phone/desktop widths
+and animate only with `prefers-reduced-motion: no-preference`. Data size never determines their shape.
+
+Decision: honor native Retry-After with one local wake-up for delays up to five minutes; longer delays offer safe
+navigation and ask the reader to return later, without a timer or automatic retry.
+
+Recovery reads only sanitized outcome metadata and an explicit native `retryable: false`, never status text.
+One explicit retry invalidates the original router loader synchronously, suppresses duplicate clicks before React
+renders, and resets the boundary only after success for the same visit and current session owner. Failed retries
+announce failure without exposing diagnostics. Leaving the route or replacing the account retires reset intent;
+loader/session owners retain authority over current private data. Same-address retries preserve focus; navigation
+continues to focus the existing skip target. Controls wrap long strings and retain 44px phone targets.
+
+Prepared interaction stories live in `15-route-state-recovery.stories.tsx`; ordinary recorded loader recovery also
+remains in `shell-errors.stories.tsx`. The bounded fixtures cover direct entry, contextual loading, missing/closed,
+failed retry, recovery and leaving a pending visit, including account replacement. Tests live in
+`tests/15-route-state-recovery.test.tsx` and the existing shell pending and page-head regressions.
+
 ### Session state
 
 - **Touches:** One browser GET server function reads session state and CSRF with `Cache-Control: private, no-store`;

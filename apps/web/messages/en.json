@@ -6443,5 +6443,15 @@
   "home_empty_closed_title": "This feed is closed",
   "home_empty_cursor_title": "Start a fresh feed window",
   "home_empty_deadline_title": "This feed took too long",
-  "home_empty_unavailable_body": "The feed could not be read. This does not mean there are no updates. Try again when you are ready."
+  "home_empty_unavailable_body": "The feed could not be read. This does not mean there are no updates. Try again when you are ready.",
+  "route_loading_page": "Loading page…",
+  "route_loading_feed": "Loading list…",
+  "route_loading_detail": "Loading details…",
+  "route_loading_form": "Loading form…",
+  "route_loading_description": "The page is on its way. You can still use the navigation.",
+  "route_error_description": "We could not load this page. You can try again or choose another destination.",
+  "route_retry_failed": "The page still could not be loaded. Try again when you are ready, or use Home or Search.",
+  "route_retry_unavailable": "This page cannot be retried here. You can use Home or Search to continue.",
+  "route_retry_later": "The service has asked you to try again later. You can use Home or Search in the meantime.",
+  "route_retry_after": "Wait {seconds} seconds before trying again."
 }

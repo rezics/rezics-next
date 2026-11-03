@@ -25,6 +25,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
+import { RouteState } from './route-state';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
 import { UnreadBadge } from '../inbox/unread-badge';
@@ -482,7 +483,12 @@ function ShellContent({
     setRailCollapsed(document.documentElement.dataset.nav === 'collapsed');
   }, []);
   useEffect(() => {
-    const unsub = router.subscribe('onResolved', () => document.getElementById('main-content')?.focus());
+    let previous = router.state.location.href;
+    const unsub = router.subscribe('onResolved', () => {
+      const current = router.state.location.href;
+      if (current !== previous) document.getElementById('main-content')?.focus();
+      previous = current;
+    });
     return unsub;
   }, [router]);
   const setCollapsed = (value: boolean) => {
@@ -563,36 +569,14 @@ export function StatusPage({
   onRetry?: (() => void) | undefined;
   retrying?: boolean | undefined;
 }) {
-  const locale = getLocale();
-  return (
-    <div className="max-w-prose space-y-4">
-      <PageHeading>{heading}</PageHeading>
-      <p className="leading-7">{message}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {onRetry ? (
-          <Button className={statusControlClass} size="lg" onClick={onRetry} disabled={retrying} aria-busy={retrying}>
-            {retrying ? m.status_retrying() : m.status_retry()}
-          </Button>
-        ) : null}
-        <a data-slot="button" className={cn(buttonVariants({ size: 'lg' }), statusControlClass)} href={`/${locale}`}>
-          {m.status_home()}
-        </a>
-        <a
-          data-slot="button"
-          className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), statusControlClass)}
-          href={`/${locale}/search`}
-        >
-          {m.status_search()}
-        </a>
-      </div>
-    </div>
-  );
+  return <RouteState heading={heading} message={message} onRetry={onRetry} retrying={retrying} />;
 }
+
 export function HomePage() {
   return <PageHeading>{m.nav_home()}</PageHeading>;
 }
 export function NotFoundPage() {
-  return <StatusPage heading={m.not_found_heading()} message={m.not_found_message()} />;
+  return <RouteState kind="missing" />;
 }
 export function ErrorPage({
   onRetry,

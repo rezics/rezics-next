@@ -6393,5 +6393,15 @@
   "home_empty_closed_title": "Este canal está cerrado",
   "home_empty_cursor_title": "Empieza una nueva ventana del canal",
   "home_empty_deadline_title": "El canal tardó demasiado en responder",
-  "home_empty_unavailable_body": "No se pudo leer el canal. Eso no significa que no haya novedades. Vuelve a intentarlo cuando quieras."
+  "home_empty_unavailable_body": "No se pudo leer el canal. Eso no significa que no haya novedades. Vuelve a intentarlo cuando quieras.",
+  "route_loading_page": "Cargando página…",
+  "route_loading_feed": "Cargando lista…",
+  "route_loading_detail": "Cargando detalles…",
+  "route_loading_form": "Cargando formulario…",
+  "route_loading_description": "La página se está cargando. Puedes seguir usando la navegación.",
+  "route_error_description": "No se pudo cargar esta página. Puedes volver a intentarlo o elegir otro destino.",
+  "route_retry_failed": "La página sigue sin poder cargarse. Inténtalo de nuevo o usa Inicio o Buscar.",
+  "route_retry_unavailable": "No se puede volver a cargar esta página aquí. Puedes continuar desde Inicio o Buscar.",
+  "route_retry_later": "El servicio te pide que lo intentes más tarde. Mientras tanto, puedes usar Inicio o Buscar.",
+  "route_retry_after": "Espera {seconds} segundos antes de volver a intentarlo."
 }

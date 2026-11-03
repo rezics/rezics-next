@@ -6393,5 +6393,15 @@
   "home_empty_closed_title": "Dieser Feed ist geschlossen",
   "home_empty_cursor_title": "Einen neuen Feed-Ausschnitt starten",
   "home_empty_deadline_title": "Das Laden des Feeds hat zu lange gedauert",
-  "home_empty_unavailable_body": "Der Feed konnte nicht gelesen werden. Das bedeutet nicht, dass es keine Neuigkeiten gibt. Versuche es erneut, wenn du bereit bist."
+  "home_empty_unavailable_body": "Der Feed konnte nicht gelesen werden. Das bedeutet nicht, dass es keine Neuigkeiten gibt. Versuche es erneut, wenn du bereit bist.",
+  "route_loading_page": "Seite wird geladen…",
+  "route_loading_feed": "Liste wird geladen…",
+  "route_loading_detail": "Details werden geladen…",
+  "route_loading_form": "Formular wird geladen…",
+  "route_loading_description": "Die Seite wird geladen. Die Navigation bleibt verfügbar.",
+  "route_error_description": "Diese Seite konnte nicht geladen werden. Du kannst es erneut versuchen oder eine andere Seite aufrufen.",
+  "route_retry_failed": "Die Seite konnte weiterhin nicht geladen werden. Versuche es erneut oder nutze Startseite oder Suche.",
+  "route_retry_unavailable": "Diese Seite kann hier nicht erneut geladen werden. Über Startseite oder Suche kannst du fortfahren.",
+  "route_retry_later": "Der Dienst bittet dich, es später erneut zu versuchen. In der Zwischenzeit kannst du Startseite oder Suche nutzen.",
+  "route_retry_after": "Warte {seconds} Sekunden, bevor du es erneut versuchst."
 }

@@ -6393,5 +6393,15 @@
   "home_empty_closed_title": "Ce fil est fermé",
   "home_empty_cursor_title": "Recommencer la lecture du fil",
   "home_empty_deadline_title": "Le chargement du fil a pris trop de temps",
-  "home_empty_unavailable_body": "Le fil n’a pas pu être lu. Cela ne signifie pas qu’il n’y a aucune nouveauté. Réessayez lorsque vous le souhaitez."
+  "home_empty_unavailable_body": "Le fil n’a pas pu être lu. Cela ne signifie pas qu’il n’y a aucune nouveauté. Réessayez lorsque vous le souhaitez.",
+  "route_loading_page": "Chargement de la page…",
+  "route_loading_feed": "Chargement de la liste…",
+  "route_loading_detail": "Chargement des détails…",
+  "route_loading_form": "Chargement du formulaire…",
+  "route_loading_description": "La page est en cours de chargement. La navigation reste disponible.",
+  "route_error_description": "Impossible de charger cette page. Vous pouvez réessayer ou choisir une autre destination.",
+  "route_retry_failed": "La page ne peut toujours pas être chargée. Réessayez ou utilisez l’accueil ou la recherche.",
+  "route_retry_unavailable": "Cette page ne peut pas être rechargée ici. Vous pouvez poursuivre depuis l’accueil ou la recherche.",
+  "route_retry_later": "Le service vous demande de réessayer plus tard. En attendant, vous pouvez utiliser l’accueil ou la recherche.",
+  "route_retry_after": "Attendez {seconds} secondes avant de réessayer."
 }

@@ -19,11 +19,12 @@ test('router pending content keeps the AppShell main and a named busy region, wi
   expect(shellMarkup.match(/<main\b/g) ?? []).toHaveLength(1);
   const shellRegion = loadingRegion(shellMarkup);
   expect(shellRegion).toContain('aria-busy="true"');
-  expect(shellRegion).toContain(`aria-label="${m.candidate_loading()}"`);
+  expect(shellRegion).toContain(`aria-label="${m.route_loading_page()}"`);
 
   const standaloneMarkup = renderToStaticMarkup(createElement(PendingPage));
   const standaloneRegion = loadingRegion(standaloneMarkup);
   expect(standaloneRegion).toContain('aria-busy="true"');
-  expect(standaloneRegion).toContain(`aria-label="${m.candidate_loading()}"`);
+  expect(standaloneRegion).toContain(`aria-label="${m.route_loading_page()}"`);
   expect(pending).toContain('role="region"');
+  expect(standaloneMarkup).toContain('motion-reduce:animate-none');
 });

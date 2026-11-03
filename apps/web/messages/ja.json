@@ -6393,5 +6393,15 @@
   "home_empty_closed_title": "このフィードは閉じています",
   "home_empty_cursor_title": "フィードを最初から読み直す",
   "home_empty_deadline_title": "フィードの読み込みがタイムアウトしました",
-  "home_empty_unavailable_body": "フィードを読み込めませんでした。更新がないという意味ではありません。準備ができたら再試行してください。"
+  "home_empty_unavailable_body": "フィードを読み込めませんでした。更新がないという意味ではありません。準備ができたら再試行してください。",
+  "route_loading_page": "ページを読み込み中…",
+  "route_loading_feed": "一覧を読み込み中…",
+  "route_loading_detail": "詳細を読み込み中…",
+  "route_loading_form": "フォームを読み込み中…",
+  "route_loading_description": "ページを読み込んでいます。ナビゲーションは引き続き使えます。",
+  "route_error_description": "このページを読み込めませんでした。再試行するか、別のページに移動できます。",
+  "route_retry_failed": "まだページを読み込めません。もう一度試すか、ホームまたは検索に移動してください。",
+  "route_retry_unavailable": "ここでは再試行できません。ホームまたは検索から閲覧を続けられます。",
+  "route_retry_later": "サービスから時間をおいて再試行するよう案内されています。それまではホームまたは検索を利用できます。",
+  "route_retry_after": "再試行するまで {seconds} 秒お待ちください。"
 }

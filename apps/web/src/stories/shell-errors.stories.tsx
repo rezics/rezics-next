@@ -11,13 +11,13 @@ const meta = { title: 'Pages/Shell/Errors', parameters: { layout: 'fullscreen' }
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function ErrorStory({ outcome }: { outcome: Parameters<typeof selectShellErrorStory>[0] }) {
+export function ErrorStory({ outcome }: { outcome: Parameters<typeof selectShellErrorStory>[0] }) {
   const locale = getLocale();
   useMemo(() => selectShellErrorStory(outcome), [outcome, locale]);
   return <PageStory key={`${outcome}:${locale}`} visitor="Signed Out" path={`/offers/${shellErrorOfferId}`} />;
 }
 
-async function errorReady({ canvasElement }: { canvasElement: HTMLElement }) {
+export async function errorReady({ canvasElement }: { canvasElement: HTMLElement }) {
   const view = within(canvasElement);
   const main = within(await view.findByRole('main'));
   await main.findByRole('heading', { name: m.error_heading() });
