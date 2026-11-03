@@ -17,10 +17,18 @@ $$;
 
 CREATE FUNCTION semantic.capture_canonical_subject_name() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'DELETE' AND OLD.kind='label' THEN
-    PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
-  END IF;
-  IF TG_OP <> 'DELETE' AND NEW.kind='label' THEN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.kind='label' THEN
+      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    IF NEW.kind='label' THEN
+      PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
+    END IF;
+  ELSIF OLD.kind='label' OR NEW.kind='label' THEN
+    IF (OLD.route,OLD.subject_id) IS DISTINCT FROM (NEW.route,NEW.subject_id) THEN
+      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
+    END IF;
     PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
   END IF;
   RETURN NULL;
