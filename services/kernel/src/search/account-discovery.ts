@@ -11,7 +11,15 @@ import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './di
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
-import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId, parseDiscoveryDocumentKey, secondScopeDiscoveryDocumentActions, type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
+import {
+  discoveryDocumentActions,
+  discoveryDocumentId,
+  parseDiscoveryDocumentId,
+  parseDiscoveryDocumentKey,
+  secondScopeDiscoveryDocumentActions,
+  type AnyDiscoveryIndexAction,
+  type SecondScopeDiscoveryIndexAction,
+} from './discovery-documents.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse, validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
@@ -498,7 +506,9 @@ export function createDiscoveryProjection(options: {
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
   }
   async function applyActions(
-    actions: readonly AnyDiscoveryIndexAction[], repair: boolean, capture: boolean,
+    actions: readonly AnyDiscoveryIndexAction[],
+    repair: boolean,
+    capture: boolean,
     held?: { client: PoolClient; index: string; acknowledge(): Promise<void> },
   ) {
     const effects: DiscoveryRepairEffect[] = [];
@@ -568,7 +578,12 @@ export function createDiscoveryProjection(options: {
             evidence = { kind: 'bulk', bulk: response };
           }
           const winner = await readDiscoveryRepairWinner(search, index, action);
-          effects.push({ key: parseDiscoveryDocumentId(registry, action.id), action: action as DiscoveryIndexAction, evidence, winner });
+          effects.push({
+            key: parseDiscoveryDocumentId(registry, action.id),
+            action: action as DiscoveryIndexAction,
+            evidence,
+            winner,
+          });
         }
       }
       if (held) {
@@ -578,14 +593,17 @@ export function createDiscoveryProjection(options: {
         await client.query('BEGIN');
       }
       try {
-      for (const action of pending) {
-        const key = parseDiscoveryDocumentKey(registry, action.id);
-        await client.query(
-          `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
-          [key.route, key.id, target.prefix, target.generation, key.kind, action.version.toString()],
-        );
-      }
-      if (held) { await held.acknowledge(); await client.query('COMMIT'); }
+        for (const action of pending) {
+          const key = parseDiscoveryDocumentKey(registry, action.id);
+          await client.query(
+            `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
+            [key.route, key.id, target.prefix, target.generation, key.kind, action.version.toString()],
+          );
+        }
+        if (held) {
+          await held.acknowledge();
+          await client.query('COMMIT');
+        }
       } catch (error) {
         if (held) await client.query('ROLLBACK');
         throw error;
@@ -684,12 +702,18 @@ export function createDiscoveryProjection(options: {
         throw new TypeError('Foreign review receiving row');
       // Reuse the leaf's native field validation and excerpt cap.
       const doc = reviewDiscoveryDocument(refresh.partition, refresh.nativePosition, {
-        id: row.id, route, openingRevisionId: row.revisionId, title: row.title, text: row.excerpt ?? '',
+        id: row.id,
+        route,
+        openingRevisionId: row.revisionId,
+        title: row.title,
+        text: row.excerpt ?? '',
       });
       return {
         key: { owner: 'content' as const, kind: 'review' as const, id: row.id, route },
         revision: refresh.nativePosition,
-        names: doc.title === null ? [] : [doc.title], descriptions: [doc.text], nameSort: doc.title,
+        names: doc.title === null ? [] : [doc.title],
+        descriptions: [doc.text],
+        nameSort: doc.title,
       };
     });
     for (const id of refresh.removed) {
@@ -697,21 +721,33 @@ export function createDiscoveryProjection(options: {
       seen.add(id);
     }
     if (seen.size !== requested.size) throw new TypeError('Review receiving refresh is incomplete');
-    const actions = secondScopeDiscoveryDocumentActions(registry, {
-      owner: 'content', snapshot: {
-        partition: refresh.partition, position: refresh.nativePosition, complete: true, records,
+    const actions = secondScopeDiscoveryDocumentActions(
+      registry,
+      {
+        owner: 'content',
+        snapshot: {
+          partition: refresh.partition,
+          position: refresh.nativePosition,
+          complete: true,
+          records,
+        },
       },
-    }, ids.map((id) => ({ owner: 'content', kind: 'review', id, route: routeOf(id)! })));
+      ids.map((id) => ({ owner: 'content', kind: 'review', id, route: routeOf(id)! })),
+    );
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
   }
   async function applyReviews(
     actions: readonly SecondScopeDiscoveryIndexAction[],
     held: { client: PoolClient; index: string; acknowledge(): Promise<void> },
   ) {
-    if (actions.length > 100 || actions.some((action) => {
-      const key = parseDiscoveryDocumentKey(registry, action.id);
-      return key.owner !== 'content' || key.kind !== 'review';
-    })) throw new TypeError('Invalid review receiving actions');
+    if (
+      actions.length > 100 ||
+      actions.some((action) => {
+        const key = parseDiscoveryDocumentKey(registry, action.id);
+        return key.owner !== 'content' || key.kind !== 'review';
+      })
+    )
+      throw new TypeError('Invalid review receiving actions');
     await applyActions(actions, true, false, held);
   }
   return { project, prepareRepair, applyRepair, prepareReviews, applyReviews, registry, target, listing };

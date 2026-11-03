@@ -253,10 +253,15 @@ export const searchWorkModule: WorkModule = {
       clock: context.clock,
     });
     const listing = subjectListingSource(context.pool);
-    context.addEffects([{
-      name: 'search_review_discovery_receiving', types: [REVIEW_DISCOVERY_CHANGED],
-      async run(event) { await requestReviewDiscoveryReceiving(context.pool, config.prefix, event.data); },
-    }]);
+    context.addEffects([
+      {
+        name: 'search_review_discovery_receiving',
+        types: [REVIEW_DISCOVERY_CHANGED],
+        async run(event) {
+          await requestReviewDiscoveryReceiving(context.pool, config.prefix, event.data);
+        },
+      },
+    ]);
     let active: PublicPreparation | undefined;
     let scoped: ReturnType<typeof createScopePreparation> | undefined;
     const scopeStore = createScopePreparationStore(context.pool, config.prefix, context.client);
@@ -300,9 +305,15 @@ export const searchWorkModule: WorkModule = {
         workClient: context.client,
         onAccessReady(access) {
           bindErasureAccess(access);
-          reviewSource = createReviewDiscoverySource({
-            pool: context.pool, access, tokens: defaults.tokens, clock: context.clock,
-          }, () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }));
+          reviewSource = createReviewDiscoverySource(
+            {
+              pool: context.pool,
+              access,
+              tokens: defaults.tokens,
+              clock: context.clock,
+            },
+            () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
+          );
           scoped = createScopePreparation({
             search,
             pool: context.pool,

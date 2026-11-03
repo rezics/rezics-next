@@ -2,7 +2,11 @@ import { bulkLines, type IndexAction, type SearchDocument } from './document.ts'
 import type { OpenSearch } from './opensearch.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { DiscoveryRegistry } from './discovery.ts';
-import { discoveryBulkBody, validateDiscoveryDocumentFormat, type AnyDiscoveryIndexAction } from './discovery-documents.ts';
+import {
+  discoveryBulkBody,
+  validateDiscoveryDocumentFormat,
+  type AnyDiscoveryIndexAction,
+} from './discovery-documents.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 
 /** A bulk write did not establish its required index visibility guarantee. */
