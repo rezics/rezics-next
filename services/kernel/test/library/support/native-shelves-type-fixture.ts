@@ -55,9 +55,13 @@ export function createNativeShelvesTypeFixture(world: NativeConformanceWorld) {
       // Other subject.revised consumers cannot stand in for Library's type consumer.
       // Refuse an absent owner binding before replaying any unrelated effects.
       for (const event of events) {
-        const sync = await workClient.getWorkflow(shelfTypeSyncWorkflowId({
-          kind: 'revised', subjectId: input.subjectId, revision: event.data.revision,
-        }));
+        const sync = await workClient.getWorkflow(
+          shelfTypeSyncWorkflowId({
+            kind: 'revised',
+            subjectId: input.subjectId,
+            revision: event.data.revision,
+          }),
+        );
         if (sync?.workflowName !== SHELF_TYPE_SYNC_WORKFLOW)
           return unavailable(
             'library/shelf-contract.ts:syncShelfSubjectType(change: ShelfTypeChange, dependencies: ShelfProjectionDependencies); library.shelfTypeSync subject.revised consumer registration',

@@ -12,12 +12,18 @@ beforeAll(async () => {
   await publish(world, await compileProfileRelease());
   fixture = createNativeShelvesTypeFixture(world);
 }, 240000);
-afterAll(async () => { await world?.close(); });
+afterAll(async () => {
+  await world?.close();
+});
 
-const revised = async (id: string) => (await world.native.reader.query(
-  `SELECT id,partition_no,epoch,position::text,event_seq,data FROM core.outbox
-   WHERE type='com.rezics.subject.revised.v1' AND subject=$1 ORDER BY partition_no,position,event_seq`, [id],
-)).rows;
+const revised = async (id: string) =>
+  (
+    await world.native.reader.query(
+      `SELECT id,partition_no,epoch,position::text,event_seq,data FROM core.outbox
+   WHERE type='com.rezics.subject.revised.v1' AND subject=$1 ORDER BY partition_no,position,event_seq`,
+      [id],
+    )
+  ).rows;
 
 test('primary-type binding emits the native identity revision and source stamp for the supplied subject', async () => {
   const subject = await world.native.subject(profileTypes.book);
@@ -29,13 +35,20 @@ test('primary-type binding emits the native identity revision and source stamp f
     expect(events[0].data).toEqual({ id: subject.id, revision, kind: 'identity' });
     const observed = await observeShelfType({ pool: world.native.pool, source: createShelfTypeSource() }, subject.id);
     expect(observed).toEqual({
-      binding: { sourceId: subject.id, stamp: {
-        partition: events[0].partition_no, epoch: events[0].epoch, position: BigInt(events[0].position),
-      } },
+      binding: {
+        sourceId: subject.id,
+        stamp: {
+          partition: events[0].partition_no,
+          epoch: events[0].epoch,
+          position: BigInt(events[0].position),
+        },
+      },
       source: { sourceId: subject.id, type: profileTypes.anime, stamp: observed.binding.stamp },
       survivorId: null,
     });
-  } finally { await world.native.resume(); }
+  } finally {
+    await world.native.resume();
+  }
 }, 240000);
 
 test('repeat and reverse delivery execute original consumers with unchanged event inputs and receipts', async () => {
@@ -45,12 +58,17 @@ test('repeat and reverse delivery execute original consumers with unchanged even
   await world.settle();
   const events = await revised(subject.id);
   expect(events).toHaveLength(2);
-  const originals = (await world.native.reader.query<{ workflowId: string }>(
-    `SELECT c.workflow_id AS "workflowId" FROM core.history_event_consumer c JOIN core.outbox e
-     USING(partition_no,position,event_seq) WHERE e.type='com.rezics.subject.revised.v1' AND e.subject=$1`, [subject.id],
-  )).rows;
+  const originals = (
+    await world.native.reader.query<{ workflowId: string }>(
+      `SELECT c.workflow_id AS "workflowId" FROM core.history_event_consumer c JOIN core.outbox e
+     USING(partition_no,position,event_seq) WHERE e.type='com.rezics.subject.revised.v1' AND e.subject=$1`,
+      [subject.id],
+    )
+  ).rows;
   expect(originals.length).toBeGreaterThanOrEqual(events.length);
-  const receipts = await Promise.all(originals.map(({ workflowId }) => world.native.workClient.listWorkflowSteps(workflowId)));
+  const receipts = await Promise.all(
+    originals.map(({ workflowId }) => world.native.workClient.listWorkflowSteps(workflowId)),
+  );
   for (const order of ['repeat', 'reverse'] as const) await fixture.redeliver({ subjectId: subject.id, order });
   const workflows = await world.native.workClient.listWorkflows({ limit: 10000 });
   for (const [index, { workflowId }] of originals.entries()) {
