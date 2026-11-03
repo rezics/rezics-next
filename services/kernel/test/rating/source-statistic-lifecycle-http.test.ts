@@ -54,14 +54,24 @@ async function sourceStatistics(subjectId: string, anonymous = true) {
   expect(response.status).toBe(200);
   const rows = await response.json();
   return rows.map(({ observation, ...row }: any) => {
-    if (observation) expect(observation).toEqual({ kind: 'unversioned', digest: sourceObservation(subjectId, source, rowPayload(row)).digest });
+    if (observation)
+      expect(observation).toEqual({
+        kind: 'unversioned',
+        digest: sourceObservation(subjectId, source, rowPayload(row)).digest,
+      });
     return row;
   });
 }
-function rowPayload({ source: _provider, ...value }: any) { return value; }
+function rowPayload({ source: _provider, ...value }: any) {
+  return value;
+}
 function expected(subjectId: string, value: any) {
   const { expectedObservation: _expected, ...payload } = value;
-  return { source, ...payload, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, source, payload).digest } };
+  return {
+    source,
+    ...payload,
+    observation: { kind: 'unversioned', digest: sourceObservation(subjectId, source, payload).digest },
+  };
 }
 function compare(subjectId: string, previous: any, next: any) {
   return { ...next, expectedObservation: sourceObservation(subjectId, source, previous).digest };
@@ -410,7 +420,9 @@ test('alias rebind isolates clear, no-op receipts and committed replay from the 
   expect(firstReplay.status).toBe(200);
   expect(await firstReplay.json()).toEqual({ source, ...first });
   await problem(await fixture.request('PUT', writePath(subjectId), { body: second, key: writeKey }), 422);
-  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, first, second) })).status).toBe(200);
+  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, first, second) })).status).toBe(
+    200,
+  );
   const replacedReplay = await problem(
     await fixture.request('PUT', writePath(subjectId), { body: first, key: writeKey }),
     404,
@@ -437,7 +449,9 @@ test('alias rebind isolates clear, no-op receipts and committed replay from the 
   expect(await aliasEffects(subjectId)).toBe(before + 1);
   // A receipt that recorded no removal must never become a later deletion.
   const restored = { ...first, asOf: '2026-10-22' };
-  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, correctClear, restored) })).status).toBe(200);
+  expect(
+    (await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, correctClear, restored) })).status,
+  ).toBe(200);
   expect((await fixture.request('POST', clearPath(subjectId), { body: staleClear, key: staleKey })).status).toBe(204);
   expect(await sourceStatistics(subjectId)).toEqual([{ source, ...restored }]);
   await fixture.revokeWriter();
@@ -569,11 +583,16 @@ test('default alias normalization retains original positive and clear receipt di
   const maximumAlias = 'a'.repeat(32);
   const custom = { ...value, sourceAlias: maximumAlias };
   const customKey = crypto.randomUUID();
-  const customWrite = await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, value, custom), key: customKey });
+  const customWrite = await fixture.request('PUT', writePath(subjectId), {
+    body: compare(subjectId, value, custom),
+    key: customKey,
+  });
   expect(customWrite.status).toBe(200);
   expect(await customWrite.json()).toEqual(expected(subjectId, custom));
   await problem(await fixture.request('PUT', writePath(subjectId), { body: value, key: customKey }), 422);
-  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, custom, value) })).status).toBe(200);
+  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, custom, value) })).status).toBe(
+    200,
+  );
   const clearKey = crypto.randomUUID();
   const clear = baseClear(value.sourceRecordId);
   expect((await fixture.request('POST', clearPath(subjectId), { body: clear, key: clearKey })).status).toBe(204);

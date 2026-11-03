@@ -4,7 +4,10 @@ import { createHash } from 'node:crypto';
 /** Admission is provider policy; a configured fence alias never selects a profile. */
 export const SOURCE_PROVIDERS = {
   // Existing VNDB callers carry their own scale and record keys. Keep that wire contract.
-  vndb: { record: (id: string) => id.length > 0, scale: (min: number, max: number) => min >= 0 && max <= 4096 && max > min },
+  vndb: {
+    record: (id: string) => id.length > 0,
+    scale: (min: number, max: number) => min >= 0 && max <= 4096 && max > min,
+  },
   // Bangumi converters use String(positive safe integer), never URLs, prefixes or padded IDs.
   bangumi: {
     record: (id: string) => /^[1-9][0-9]*$/.test(id) && Number.isSafeInteger(Number(id)),

@@ -188,9 +188,20 @@ test('the importer writes and refreshes a labelled statistic without creating na
   expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual(expected);
 
   const refreshed = { ...first, sourceRecordId: 'v18', mean: 9.1, count: 1500, asOf: '2026-10-15' };
-  await json(await request('PUT', path, { ...refreshed, expectedObservation: sourceObservation(subjectId, 'vndb', first).digest }, 'importer')); 
+  await json(
+    await request(
+      'PUT',
+      path,
+      { ...refreshed, expectedObservation: sourceObservation(subjectId, 'vndb', first).digest },
+      'importer',
+    ),
+  );
   expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual([
-    { source: 'vndb', ...refreshed, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshed).digest } },
+    {
+      source: 'vndb',
+      ...refreshed,
+      observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshed).digest },
+    },
   ]);
   const counts = await database.admin.query(
     `SELECT

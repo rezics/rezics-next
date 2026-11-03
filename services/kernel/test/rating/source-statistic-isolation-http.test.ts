@@ -267,15 +267,23 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
 
   const refreshKey = randomUUID();
   // Older observations conflict; rebinding the current provider requires exact CAS provenance.
-  await readProblem(await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
-    actor: fixture.actors.importer, body: { ...refreshedValue, asOf: '2026-10-01' }, key: randomUUID(),
-  }), 409);
+  await readProblem(
+    await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
+      actor: fixture.actors.importer,
+      body: { ...refreshedValue, asOf: '2026-10-01' },
+      key: randomUUID(),
+    }),
+    409,
+  );
   const refresh = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
     body: { ...refreshedValue, expectedObservation: sourceObservation(subjectId, 'vndb', firstValue).digest },
     key: refreshKey,
   });
-  const refreshedEnvelope: SourceStatistic = { ...envelope(refreshedValue), observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshedValue).digest } };
+  const refreshedEnvelope: SourceStatistic = {
+    ...envelope(refreshedValue),
+    observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshedValue).digest },
+  };
   expectedImportedEnvelope = refreshedEnvelope;
   expect(await readJson(refresh)).toEqual(refreshedEnvelope);
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([refreshedEnvelope]);

@@ -29,11 +29,22 @@ export async function lockSourceObservation(tx: CommandTransaction, input: Obser
     sourceAlias: legacy.sourceAlias as string,
     sourceRecordId: legacy.sourceRecordId as string,
     scale: { min: Number(legacy.scaleMin), max: Number(legacy.scaleMax) },
-    mean: Number(legacy.mean), count: Number(legacy.count), asOf: legacy.asOf as string,
-    licence: legacy.licence as string, attribution: legacy.attribution as string,
+    mean: Number(legacy.mean),
+    count: Number(legacy.count),
+    asOf: legacy.asOf as string,
+    licence: legacy.licence as string,
+    attribution: legacy.attribution as string,
   };
-  return { exists: true, current: { ...sourceObservation(input.subjectId, input.source, value),
-    sourceAlias: value.sourceAlias, sourceRecordId: value.sourceRecordId, asOf: value.asOf, legacy: true } };
+  return {
+    exists: true,
+    current: {
+      ...sourceObservation(input.subjectId, input.source, value),
+      sourceAlias: value.sourceAlias,
+      sourceRecordId: value.sourceRecordId,
+      asOf: value.asOf,
+      legacy: true,
+    },
+  };
 }
 
 /** Older observations never win, including against a cleared head. Equal dates require
@@ -47,7 +58,8 @@ export function admitSourceObservation(input: ObservationBinding, current: Obser
   if (expected !== undefined && !matches) throw new ProblemError('conflict');
   if (current) {
     if (input.value.asOf < current.asOf) throw new ProblemError('conflict');
-    const rebound = current.sourceAlias !== (input.value.sourceAlias ?? input.source) ||
+    const rebound =
+      current.sourceAlias !== (input.value.sourceAlias ?? input.source) ||
       current.sourceRecordId !== input.value.sourceRecordId;
     if ((input.value.asOf === current.asOf || rebound) && !matches) throw new ProblemError('conflict');
   }
@@ -55,13 +67,21 @@ export function admitSourceObservation(input: ObservationBinding, current: Obser
 }
 
 export async function saveSourceObservation(
-  tx: CommandTransaction, input: ObservationBinding,
-  next: { digest: string; payload: unknown }, transactionId: string,
+  tx: CommandTransaction,
+  input: ObservationBinding,
+  next: { digest: string; payload: unknown },
+  transactionId: string,
 ) {
   const payload = next.payload as SourceObservation;
   await observe.run(tx, {
-    route: input.route, subject_id: input.subjectId, source: input.source, digest: next.digest,
-    source_alias: payload.sourceAlias ?? input.source, source_record_id: payload.sourceRecordId,
-    as_of: payload.asOf, payload: JSON.stringify(next.payload), transaction_id: transactionId,
+    route: input.route,
+    subject_id: input.subjectId,
+    source: input.source,
+    digest: next.digest,
+    source_alias: payload.sourceAlias ?? input.source,
+    source_record_id: payload.sourceRecordId,
+    as_of: payload.asOf,
+    payload: JSON.stringify(next.payload),
+    transaction_id: transactionId,
   });
 }
