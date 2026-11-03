@@ -13,11 +13,7 @@ type GrowthAxis = 'unrelated-catalogue' | 'measurement-identity' | 'closed-globa
 type DirectoryPage = { readonly ratingQuestions: readonly DirectoryQuestion[]; readonly next: string | null };
 
 const scenarios: readonly Scenario[] = ['first', 'deep', 'terminal-empty', 'denied-current-authority'];
-const axes: readonly GrowthAxis[] = [
-  'unrelated-catalogue',
-  'measurement-identity',
-  'closed-global-denial-history',
-];
+const axes: readonly GrowthAxis[] = ['unrelated-catalogue', 'measurement-identity', 'closed-global-denial-history'];
 const unrelatedPrefix: Readonly<Record<Scenario, string>> = {
   first: 'f0000000-0000-7000-8000-',
   deep: '40000000-0000-7000-8000-',
@@ -184,10 +180,8 @@ test('rating-question directory pages retain bounded native Access work across s
             // Selection and completion use one real HTTP request in the measured operation. Repeated
             // checkGrowth samples replay this same signed position and viewer credential.
             if (scenario === 'first') {
-              const result = await page(
-                await fixture.request('/v1/rating-questions'),
-                200,
-                (body) => recordSerializedBytes(serializedBytes, scale, body),
+              const result = await page(await fixture.request('/v1/rating-questions'), 200, (body) =>
+                recordSerializedBytes(serializedBytes, scale, body),
               );
               expect<unknown>(result.ratingQuestions).toEqual(prepared.expected);
               expect(result.next).toEqual(expect.any(String));
