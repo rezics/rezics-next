@@ -2715,7 +2715,6 @@ CREATE INDEX subject_thread_page_idx ON content.subject_thread USING btree (rout
 --
 
 CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (route, board_id, author_account_id, review_subject_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility <> 'taken_down'::text));
-
 --
 -- Name: thread_review_discovery_page_idx; Type: INDEX; Schema: content; Owner: -
 --
