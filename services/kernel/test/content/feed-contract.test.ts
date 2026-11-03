@@ -19,7 +19,7 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
     expect(Object.keys(summary.properties)).toContain('reactions');
   }
   const parent = content[2].summary.properties.parentContext.anyOf[1].properties.parent.anyOf;
-  expect(parent[0].properties.excerpt.anyOf[0].maxLength).toBe(160);
+  expect(parent[0].properties.excerpt.maxLength).toBe(160);
   expect(parent[0].properties.revisionId.format).toBe('uuid');
   expect(Object.keys(parent[1].properties)).toEqual(['id', 'state']);
   expect(Object.keys(parent[2].properties)).toEqual(['state']);
