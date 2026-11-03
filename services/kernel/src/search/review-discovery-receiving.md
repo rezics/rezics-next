@@ -34,8 +34,8 @@ Under the existing target session lock the claim must still be current and unexp
 The single staged row atomically retains current upserts/removals and intended journal progress. The mixed writer
 uses canonical Format2 IDs, bounded sort normalization, permanent copy high waters, exact writer aliases and
 idempotent deletion. Native review validation receives Content's opaque `sourceVersion` unchanged; the independent
-native position still orders mixed-writer effects. Review removals use the existing keyed copy inventory, never an index scan. Bulk receipts
-and exact search-visible winners are observed before a PostgreSQL transaction commits copy settlement and the
+native position still orders mixed-writer effects. Review removals use the existing keyed copy inventory, never an
+index scan. Bulk receipts and exact search-visible winners are observed before a PostgreSQL transaction commits copy settlement and the
 receiving frontier together. A lost response or crash retains the old acknowledgement and repeats current native
 refresh. A stolen/expired claimant cannot write after a newer application; target custody serializes effects and
 the claim CAS refuses its acknowledgement. Retirement/UUID replacement refuses late target work.
