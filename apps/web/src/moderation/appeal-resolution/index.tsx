@@ -285,6 +285,7 @@ function ResolutionForm({
           {mayResolve && !terminal ? (
             <div className="flex flex-wrap gap-2">
               <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal break-words"
                 type="button"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
                 data-resolution-action="uphold"
@@ -300,6 +301,7 @@ function ResolutionForm({
                 {m.moderation_appeal_uphold_action()}
               </Button>
               <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal break-words"
                 type="button"
                 variant="outline"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
@@ -324,6 +326,7 @@ function ResolutionForm({
       {message ? <p role="alert">{message}</p> : null}
       {uncertain ? (
         <Button
+          className="h-auto min-h-11 max-w-full whitespace-normal break-words"
           type="button"
           variant="outline"
           disabled={!admitted}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type MouseEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
@@ -29,12 +29,14 @@ export type WorkbenchViewProps = {
       Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal'>
     >;
   onSearch: (search: WorkbenchSearch) => void;
-  onRetry?: () => void;
+  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
   selection?: ReportsBulkAction;
   onAction?: ReportQueueAction;
   onRefresh?: () => Promise<void>;
   isCurrent?: () => boolean;
+  onUnresolvedAppealChange?: (unresolved: boolean) => void;
+  refreshBlocked?: boolean;
 };
 
 function labelOf(item: WorkbenchDirectoryItem): string {
@@ -123,6 +125,8 @@ export function WorkbenchView({
   onAction,
   onRefresh,
   isCurrent,
+  onUnresolvedAppealChange,
+  refreshBlocked,
 }: WorkbenchViewProps) {
   const search = page.search;
   const identity = workbenchTriageIdentity(page);
@@ -144,7 +148,10 @@ export function WorkbenchView({
           ? m.moderation_workbench_stale()
           : null;
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+    <article
+      tabIndex={-1}
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+    >
       <header className="space-y-3">
         <PageHeading>{m.moderation_workbench_heading()}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
@@ -161,7 +168,7 @@ export function WorkbenchView({
         </p>
       ) : null}
       {page.state === 'unavailable' && onRetry ? (
-        <Button type="button" className={control} onClick={onRetry}>
+        <Button data-workbench-retry type="button" className={control} onClick={onRetry}>
           {m.moderation_queue_retry()}
         </Button>
       ) : null}
@@ -332,19 +339,33 @@ export function WorkbenchView({
               {...(onRetry ? { onRetry } : {})}
             />
           ) : search.queue === 'appeals' && search.case && queueScope?.kind === 'board' ? (
-            <WorkbenchAppeal
-              appealId={search.case}
-              page={{
-                state: page.state,
-                appeals: page.appeals ?? [],
-                selectedTarget: page.selectedTarget ?? null,
-                ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
-              }}
-              queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
-              {...(isCurrent ? { isCurrent } : {})}
-              {...(onRetry ? { onRetry } : {})}
-              {...(onRestart ? { onRestart } : {})}
-            />
+            <div className="space-y-4">
+              <WorkbenchAppeal
+                appealId={search.case}
+                page={{
+                  state: page.state,
+                  appeals: page.appeals ?? [],
+                  selectedTarget: page.selectedTarget ?? null,
+                  ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
+                }}
+                queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
+                {...(isCurrent ? { isCurrent } : {})}
+                {...(onRetry ? { onRetry } : {})}
+                {...(onRestart ? { onRestart } : {})}
+                {...(onUnresolvedAppealChange ? { onUnresolvedChange: onUnresolvedAppealChange } : {})}
+              />
+              {onRefresh ? (
+                <Button
+                  className={control}
+                  variant="outline"
+                  disabled={refreshBlocked}
+                  onClick={() => void onRefresh()}
+                >
+                  {m.moderation_queue_refresh()}
+                </Button>
+              ) : null}
+              {refreshBlocked ? <p role="status">{m.moderation_appeals_refresh_blocked()}</p> : null}
+            </div>
           ) : search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
             <p role="status" className="text-muted-foreground">
               {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}

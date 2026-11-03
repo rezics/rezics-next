@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -19,13 +20,15 @@ export function WorkbenchAppeal({
   isCurrent,
   onRetry,
   onRestart,
+  onUnresolvedChange,
 }: {
   appealId: string;
   page: Parameters<typeof workbenchAppealFromPage>[0];
   queueHref: string;
   isCurrent?: () => boolean;
-  onRetry?: () => void;
+  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
+  onUnresolvedChange?: (unresolved: boolean) => void;
 }) {
   const result = workbenchAppealFromPage(page, appealId);
   if (result.state !== 'ready') {
@@ -44,6 +47,7 @@ export function WorkbenchAppeal({
       target={result.target}
       queueHref={queueHref}
       {...(isCurrent ? { isCurrent } : {})}
+      {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
     />
   );
 }
@@ -53,11 +57,13 @@ export function WorkbenchAppealDetail({
   target,
   queueHref,
   isCurrent,
+  onUnresolvedChange,
 }: {
   appeal: Appeal;
   target: ResolvedReportTarget | undefined;
   queueHref: string;
   isCurrent?: () => boolean;
+  onUnresolvedChange?: (unresolved: boolean) => void;
 }) {
   const identity = appealTarget(appeal);
   const appealKind =
@@ -119,6 +125,7 @@ export function WorkbenchAppealDetail({
             mayResolve={appeal.canResolve === true}
             resolution={appeal.decision.appeal ?? null}
             {...(isCurrent ? { isCurrent } : {})}
+            {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
           />
         </div>
       </ContentItemFrame>
@@ -134,7 +141,7 @@ export function WorkbenchAppealStatus({
 }: {
   state: 'denied' | 'unavailable' | 'stale' | 'empty';
   queueHref: string;
-  onRetry?: () => void;
+  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
 }) {
   const message =
@@ -155,11 +162,20 @@ export function WorkbenchAppealStatus({
           {message}
         </ContentItemHeading>
         {state === 'stale' && onRestart ? (
-          <Button className="min-h-11" variant="outline" onClick={onRestart}>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+            variant="outline"
+            onClick={onRestart}
+          >
             {m.moderation_queue_restart()}
           </Button>
         ) : state === 'unavailable' && onRetry ? (
-          <Button className="min-h-11" variant="outline" onClick={onRetry}>
+          <Button
+            data-workbench-retry
+            className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+            variant="outline"
+            onClick={onRetry}
+          >
             {m.moderation_queue_retry()}
           </Button>
         ) : null}

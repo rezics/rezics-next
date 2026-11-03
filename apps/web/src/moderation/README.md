@@ -50,3 +50,8 @@ queue. Binding the composed appellant, destination, provenance and original comm
 no successful native exact inspection is claimed. See the [case and appeal guide](workbench-case.md) for the source,
 retirement and cost boundaries. Existing AppealResolution captures its sender and CSRF headers with its immutable
 command, retaining them through explicit uncertain retry.
+
+Selected workbench retry stays inside its admitted private reader and preserves the exact search, including the
+selected appeal and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless
+focus moved or the owner retired. Selected resolution reports pending and uncertain intent synchronously to the
+workbench, which blocks refresh until settlement; explicit unknown retry keeps the original command.

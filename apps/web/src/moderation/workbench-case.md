@@ -50,6 +50,14 @@ A session, board, queue, page or reader replacement retires the mounted case or 
 Uncertain retry keeps the original sender, credentials, key and operands. Authoring departure uses the existing
 report-review and appeal navigation contexts.
 
+## Inspection recovery
+
+Decision: retry a selected appeal inside its mounted workbench owner with the identical captured search; do not
+invalidate the route or refresh a pending or uncertain resolution. A keyboard retry returns focus to the next
+recovery control or admitted workbench boundary. Pointer input, moved focus, departure or session retirement cancels
+that handoff. Refresh is explicit and remains disabled until the original resolution settles; uncertain recovery
+continues to use only the original frozen command and sender.
+
 ## Remaining binding
 
 The report case page and typed return builder remain bound to their existing clients. The installed generated
@@ -71,9 +79,11 @@ acceptance and public publication remain separate boundaries.
 ## Cost
 
 - **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target reads.
-  An unsupported exact inspection performs zero native calls. Resolution uses the existing command owner.
+  Each explicit selected retry invokes the same reader once; unsupported exact inspection still performs zero native
+  calls. Resolution uses the existing command owner. Pending or uncertain resolution blocks refresh and retry reads.
 - **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.
+  Recovery retains one current projection, one in-flight read and one focus handoff, without a page history.
   An empty page with `next` stays sparse. A missing selection is unavailable even when the page contains its ID.
 - **Growth:** pending adaptation retains the native page in O(rows + admitted bytes), with no deduplicated enrichment
-  graph. Inspection does not advance or refill the queue. Command retries retain the same sender, CSRF headers,
+  graph. Inspection and same-input retry do not advance or refill the queue. Keyboard recovery adds constant work. Command retries retain the same sender, CSRF headers,
   frozen body, key and operands; they do not reread or recover request identity.
