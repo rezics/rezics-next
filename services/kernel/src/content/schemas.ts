@@ -546,6 +546,7 @@ export const SubjectThreadsResponseSchema = t.Object(
   {
     threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
+    reactionsAsOf: reactionFreshness,
     context: t.Object(
       {
         subject: t.Object(

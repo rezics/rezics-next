@@ -1287,13 +1287,37 @@ component and Realm head. A current denial returns 404; a changed observation re
 they cannot become a missing label or a successful empty page. The Author list keeps its existing response schema.
 
 For example, a readable unlabeled empty Global review page has
-`{threads:[],next:null,context:{subject:{id,label:null,source:{partition,epoch,position}},place:{kind:"global",id},kind:"review"}}`.
+`{threads:[],next:null,reactionsAsOf:null,context:{subject:{id,label:null,source:{partition,epoch,position}},place:{kind:"global",id},kind:"review"}}`.
 A concealed selection returns the ordinary 404 problem without context or threads; a failed or changed required
-observation returns the ordinary problem without an advanced cursor. Existing native `ThreadView` entries still
-lack the shared current interaction/action card and Home parent/target-context projections; those producers must
-be installed before composing their recorded citations, reactions, activity and command advice here. The current
-page context does not certify any such action or rendered Web acceptance. Derived OpenAPI/client publication and
-the Web binding review remain with the controller and existing Subject interface owner.
+observation returns the ordinary problem without an advanced cursor.
+
+Native thread entries now carry Home's reaction projection: `reactions` and, for an authenticated viewer,
+`viewerReaction` (including explicit `null` after clearing). Anonymous entries omit `viewerReaction`.
+`reactionsAsOf` is the native producer's oldest observed count watermark, or `null` when it observed none.
+For example, `{id,...,reactions:{love:1},viewerReaction:"love"}` preserves the thread id and distinguishes
+the viewer's current slot from relayed totals. An empty reaction object with no watermark does not prove an
+exact zero or projection coverage. Authenticated responses use `private, no-store`.
+
+`projectSubjectThreadReactions(dependencies: ContentReadDependencies, subjectId: string, placeId: string,
+selected: readonly ThreadView[], context: ReadContext)` returns
+`Promise<{entries: readonly SubjectThreadWithReactions[], anchors: readonly AnchoredPosition[],
+reactionsAsOf: ReactionCountFreshness | null}>`. This installed adapter sends at most 20 original thread keys
+to `projectFeedReactions`, without another count or viewer-slot reader. After hydration it repeats
+`readSubjectThread` for each selected source, retaining its exact final value and anchor. Final concealment
+withholds that entry without refill; a changed readable value fails with `dependency_unavailable` and leaves the
+input cursor retryable. Required page context is finalized after these source observations. A failed reaction
+dependency fails the request instead of returning empty totals. Each reader retains its own observation;
+the count watermark does not represent source or viewer-slot atomicity.
+
+Decision: reuse Home's reaction assembly for original thread keys, preserve the raw frontier on final concealment,
+and retry changed readable sources before returning hydrated entries.
+
+The shared current-thread card envelope factory/finish and Home parent/target-context projection remain to be
+composed from their producer owners' exact contracts. The installed reading-page composer is a bounded reply page,
+not that card factory. Author/media presentation, contribution/comment disclosure, recorded review score display
+and applicable actions remain part of that continuation; native recorded citations stay unchanged here.
+Derived OpenAPI/client publication and the Web binding review remain with the controller and existing Subject
+interface owner. No rendered Web or complete card acceptance is claimed.
 
 ### Cost: listSubjectThreads context
 
@@ -1303,7 +1327,7 @@ the Web binding review remain with the controller and existing Subject interface
   its prepared native Subject check. For a Realm selection, two separate ordinary Realm reads include current
   Realm/Space binding, membership/ban and native Access work. Global needs neither Realm read. Add the existing
   selection partition/Subject Access snapshot and up to 80 raw candidate ordinary disclosures, stopping at 20
-  outputs. Every disclosure retains source chains, Board/place/Realm checks, citation/history and final authority
+  outputs. Reaction hydration then repeats at most 20 of those ordinary disclosures. Every disclosure retains source chains, Board/place/Realm checks, citation/history and final authority
   costs from its native reader. No connection spans the Subject, Realm and candidate phases. Denied preparation
   stops selection; final failure withholds the whole page. Transaction controls, pool releases and nested Access
   preparation/executor/fence work remain charged even on empty or denied branches; a retry repeats these phases.
@@ -1315,9 +1339,32 @@ the Web binding review remain with the controller and existing Subject interface
   code points, at most 4096 UTF-8 bytes or 6144 JSON-escaped bytes before serialization copies; ordinary Realm
   reads also retain summary/presentation bytes not returned in context. Chosen-label bytes and all-label
   intermediate rows inherit Semantic admission, rather than a fabricated page byte ceiling. Retained memory
-  includes both initial/final context observations and up to 20 native bodies of at most 2 MiB each, their parsed
-  documents and wire serialization, plus native citation/context/identity authority intermediates. No complete
+  includes both initial/final context observations and up to 20 retained native bodies of at most 2 MiB each, their parsed
+  documents and wire serialization, plus native citation/context/identity authority intermediates. The final recheck
+  holds one additional native body and both JSON witness strings transiently. No complete
   nested byte or examined-work ceiling is claimed for the pending shared card projection.
+- Reaction addition: let O <= 20 be selected outputs and P <= O their represented native partitions. Home invokes
+  one `reaction-count-page.sql` statement per represented partition, using the physical
+  `reaction_total_pkey (route,target_id,kind)` prefix, with at most seven rows per target. It then invokes one
+  `reaction-viewer.sql` statement for an account viewer, using `reaction_pkey (route,actor_account_id,target_id)`
+  with at most one row per target; anonymous and empty pages omit this phase. These statements open and release
+  separate checkouts and add no transaction controls. Up to `7O + O` reaction rows, O requested-key intermediates
+  per batch, deduplication maps and O temporary Home summary objects are retained; none contains document bodies.
+  Binding bytes include UUID target and integer route arrays for counts and one UUID array for viewer targets, plus
+  fixed partition/viewer keys. Counts are safe integers, kind names are the seven native literals, viewer state
+  is one literal or null, and freshness is an epoch plus a decimal position. This bounds reaction wire and
+  intermediate bytes linearly in O, independently of history and total viewers.
+- The added work is `HomeReactions(O,P,viewer) + sum(D(t), selected t)`, where D is the complete ordinary native
+  Subject-thread disclosure including source/body, Board, Realm/Space, citation and Access preparation/execution
+  and fences. This is at most 100 native disclosures including initial raw80, not 100 distinct candidates.
+  Changed-source comparison serializes each initial/final native value once (native body <= 2 MiB, up to six
+  JSON bytes per source byte, plus native metadata/citations); the response serializes each retained body once
+  more. Count maps and projected summaries are O(O); source witness comparison adds O(max body) transient memory
+  to the retained O(O * body) page. Required-context failure still pays preceding hydration and final disclosures.
+  Empty pages do neither reaction SQL nor source rechecks; denied preparation stops before them; sparse, stale
+  and continued pages pay only their selected O, with no refill; retries repeat the whole request. Nested D and
+  current-term/label, authority, byte and all-pool terms still require their complete owner derivation and review
+  before a numerical end-to-end ceiling is adopted with the remaining card producers.
 - Growth check: focused HTTP/context tests cover Global empty/populated/continued identity, readable public and
   protected Realms, anonymous denial, current Realm revision change/retry and Subject withdrawal. Three-scale
   selection/history/authority measurement, all-pool runner accounting and full withheld/failed card outcomes

@@ -1422,7 +1422,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: readSecurity,
         },
       },
-      async ({ params: { id }, query, actor, admission, job, session }) => {
+      async ({ params: { id }, query, actor, admission, job, session, set }) => {
         existingId(id);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
@@ -1439,7 +1439,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             );
             session.record(sessionComponent(page.anchor));
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { threads: [...page.entries], next: page.nextCursor, context: page.context };
+            if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
+            return {
+              threads: [...page.entries],
+              next: page.nextCursor,
+              context: page.context,
+              reactionsAsOf: page.reactionsAsOf,
+            };
           }),
         );
       },

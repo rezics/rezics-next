@@ -11,6 +11,8 @@ import type { AnchoredPosition, ReadContext } from './model.ts';
 import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
 import page from './page-subject-threads.sql';
 import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
+import { projectSubjectThreadReactions, type SubjectThreadWithReactions } from './subject-threads-reactions.ts';
+import type { ReactionCountFreshness } from './reads.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
 export type SubjectThreadPageInput = {
@@ -21,7 +23,8 @@ export type SubjectThreadPageInput = {
 };
 export type SubjectThreadPage = {
   context: SubjectThreadContext;
-  entries: readonly ThreadView[];
+  entries: readonly SubjectThreadWithReactions[];
+  reactionsAsOf: ReactionCountFreshness | null;
   nextCursor: string | null;
   anchor: AnchoredPosition;
   anchors: readonly AnchoredPosition[];
@@ -182,9 +185,12 @@ export async function listSubjectThreads(
   }
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;
+  const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
+  anchors.push(...projected.anchors);
   return {
     context: await pageContext.finish(),
-    entries,
+    entries: projected.entries,
+    reactionsAsOf: projected.reactionsAsOf,
     anchor: candidates.anchor,
     anchors,
     nextCursor:
