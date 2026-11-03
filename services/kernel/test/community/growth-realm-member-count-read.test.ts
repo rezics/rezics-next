@@ -32,7 +32,11 @@ afterAll(async () => {
   await fixture?.close();
 });
 
-function assertCurrent(members: RealmMemberSummary, count: number, version?: string): asserts members is Extract<RealmMemberSummary, { state: 'current' }> {
+function assertCurrent(
+  members: RealmMemberSummary,
+  count: number,
+  version?: string,
+): asserts members is Extract<RealmMemberSummary, { state: 'current' }> {
   expect(members.state).toBe('current');
   if (members.state !== 'current') throw new Error('Expected a current Realm member count');
   expect(members.count).toBe(count);
@@ -151,162 +155,161 @@ async function growHistory(_database: GrowthDatabase, scale: number, previous: n
   expect(count.rows[0]?.count).toBe(scale);
 }
 
-test(
-  'Realm home member count stays a native point read across member, unrelated control and retained history growth',
-  async () => {
-    const database = fixture.database;
-    const selectedRoute = routeOf(fixture.growth.realmId)!;
-    const selectedPartition = partitionOf(selectedRoute);
-    const emptyRealm = await fixture.createRealm('Initialized empty Realm');
-    assertCurrent((await fixture.readHome(emptyRealm)).members, 0, '0');
+test('Realm home member count stays a native point read across member, unrelated control and retained history growth', async () => {
+  const database = fixture.database;
+  const selectedRoute = routeOf(fixture.growth.realmId)!;
+  const selectedPartition = partitionOf(selectedRoute);
+  const emptyRealm = await fixture.createRealm('Initialized empty Realm');
+  assertCurrent((await fixture.readHome(emptyRealm)).members, 0, '0');
 
-    const memberReport = await checkGrowth(database, {
-      name: 'community Realm home member count with selected members',
-      scales,
-      bounds,
-      async grow(_database, scale, previous) {
-        await fixture.growSelectedMembers(scale, previous);
-      },
-      async operation(_database, scale) {
-        const home = await fixture.readHome(fixture.growth.realmId);
-        assertCurrent(home.members, scale);
-        return home;
-      },
-    });
-    expect(memberReport.samples.map((sample) => sample.scale)).toEqual(scales);
-    assertPointPlan(memberReport.samples);
+  const memberReport = await checkGrowth(database, {
+    name: 'community Realm home member count with selected members',
+    scales,
+    bounds,
+    async grow(_database, scale, previous) {
+      await fixture.growSelectedMembers(scale, previous);
+    },
+    async operation(_database, scale) {
+      const home = await fixture.readHome(fixture.growth.realmId);
+      assertCurrent(home.members, scale);
+      return home;
+    },
+  });
+  expect(memberReport.samples.map((sample) => sample.scale)).toEqual(scales);
+  assertPointPlan(memberReport.samples);
 
-    const memberObservation = await capture(database, () => fixture.readHome(fixture.growth.realmId));
-    const countStatements = memberObservation.capture.statements.filter((sql) => /FROM\s+community\.realm_member_count\b/i.test(sql));
-    expect(countStatements).toHaveLength(1);
-    expect(countStatements[0]).toMatch(/WHERE\s+route\s*=\s*\$1::integer\s+AND\s+realm_id\s*=\s*\$2::uuid/i);
-    const ownershipStatements = memberObservation.capture.statements.filter((sql) => /FROM\s+core\.partition\s+WHERE\s+partition_no\s*=\s*\$1/i.test(sql));
-    expect(ownershipStatements).toHaveLength(1);
-    const memberCost = costOf(memberObservation.capture);
-    expect(memberCost.relations['core.partition']?.rows).toBe(1);
-    expect(memberCost.relations['community.realm_member_count']?.rows).toBe(1);
-    expect(memberCost.relations['community.realm_member_count']?.sequentialScans).toBe(0);
+  const memberObservation = await capture(database, () => fixture.readHome(fixture.growth.realmId));
+  const countStatements = memberObservation.capture.statements.filter((sql) =>
+    /FROM\s+community\.realm_member_count\b/i.test(sql),
+  );
+  expect(countStatements).toHaveLength(1);
+  expect(countStatements[0]).toMatch(/WHERE\s+route\s*=\s*\$1::integer\s+AND\s+realm_id\s*=\s*\$2::uuid/i);
+  const ownershipStatements = memberObservation.capture.statements.filter((sql) =>
+    /FROM\s+core\.partition\s+WHERE\s+partition_no\s*=\s*\$1/i.test(sql),
+  );
+  expect(ownershipStatements).toHaveLength(1);
+  const memberCost = costOf(memberObservation.capture);
+  expect(memberCost.relations['core.partition']?.rows).toBe(1);
+  expect(memberCost.relations['community.realm_member_count']?.rows).toBe(1);
+  expect(memberCost.relations['community.realm_member_count']?.sequentialScans).toBe(0);
 
-    const left = await fixture.driver.request({
-      method: 'DELETE',
-      path: `/v1/realms/${fixture.growth.realmId}/membership`,
-      actor: fixture.growth.actor,
-      key: JSON.stringify(crypto.randomUUID()),
-    });
-    expect(left.status).toBe(202);
-    await fixture.driver.settle();
-    assertCurrent((await fixture.readHome(fixture.growth.realmId)).members, 4095, '1');
-    const rejoined = await fixture.driver.request({
-      method: 'POST',
-      path: `/v1/realms/${fixture.growth.realmId}/membership`,
-      actor: fixture.growth.actor,
-      key: JSON.stringify(crypto.randomUUID()),
-    });
-    expect(rejoined.status).toBe(202);
-    await fixture.driver.settle();
-    assertCurrent((await fixture.readHome(fixture.growth.realmId)).members, 4096, '2');
+  const left = await fixture.driver.request({
+    method: 'DELETE',
+    path: `/v1/realms/${fixture.growth.realmId}/membership`,
+    actor: fixture.growth.actor,
+    key: JSON.stringify(crypto.randomUUID()),
+  });
+  expect(left.status).toBe(202);
+  await fixture.driver.settle();
+  assertCurrent((await fixture.readHome(fixture.growth.realmId)).members, 4095, '1');
+  const rejoined = await fixture.driver.request({
+    method: 'POST',
+    path: `/v1/realms/${fixture.growth.realmId}/membership`,
+    actor: fixture.growth.actor,
+    key: JSON.stringify(crypto.randomUUID()),
+  });
+  expect(rejoined.status).toBe(202);
+  await fixture.driver.settle();
+  assertCurrent((await fixture.readHome(fixture.growth.realmId)).members, 4096, '2');
 
-    const controls = unrelatedRealmControls(selectedPartition);
-    const controlReport = await checkGrowth(database, {
-      name: 'community Realm home member count with unrelated Realm controls',
-      scales,
-      bounds,
-      async grow(_database, scale, previous) {
-        await seed(database, controls, { from: previous, to: scale });
-        const controlCount = await database.admin.query<{ count: number }>(
-          `SELECT count(*)::integer AS count FROM community.realm_member_count
+  const controls = unrelatedRealmControls(selectedPartition);
+  const controlReport = await checkGrowth(database, {
+    name: 'community Realm home member count with unrelated Realm controls',
+    scales,
+    bounds,
+    async grow(_database, scale, previous) {
+      await seed(database, controls, { from: previous, to: scale });
+      const controlCount = await database.admin.query<{ count: number }>(
+        `SELECT count(*)::integer AS count FROM community.realm_member_count
            WHERE route BETWEEN $1 AND $2 AND realm_id <> $3`,
-          [selectedPartition * 16, selectedPartition * 16 + 15, fixture.growth.realmId],
-        );
-        expect(controlCount.rows[0]?.count).toBe(scale);
-      },
-      async operation(_database, scale) {
-        const home = await fixture.readHome(fixture.growth.realmId);
-        assertCurrent(home.members, 4096, '2');
-        return home;
-      },
-    });
-    expect(controlReport.samples.map((sample) => sample.scale)).toEqual(scales);
-    assertPointPlan(controlReport.samples);
+        [selectedPartition * 16, selectedPartition * 16 + 15, fixture.growth.realmId],
+      );
+      expect(controlCount.rows[0]?.count).toBe(scale);
+    },
+    async operation(_database, scale) {
+      const home = await fixture.readHome(fixture.growth.realmId);
+      assertCurrent(home.members, 4096, '2');
+      return home;
+    },
+  });
+  expect(controlReport.samples.map((sample) => sample.scale)).toEqual(scales);
+  assertPointPlan(controlReport.samples);
 
-    const historyReport = await checkGrowth(database, {
-      name: 'community Realm home member count with retained membership history',
-      scales,
-      bounds,
-      grow: growHistory,
-      async operation(_database, scale) {
-        const home = await fixture.readHome(fixture.growth.realmId);
-        assertCurrent(home.members, 4096);
-        return home;
-      },
-    });
-    expect(historyReport.samples.map((sample) => sample.scale)).toEqual(scales);
-    assertPointPlan(historyReport.samples);
+  const historyReport = await checkGrowth(database, {
+    name: 'community Realm home member count with retained membership history',
+    scales,
+    bounds,
+    grow: growHistory,
+    async operation(_database, scale) {
+      const home = await fixture.readHome(fixture.growth.realmId);
+      assertCurrent(home.members, 4096);
+      return home;
+    },
+  });
+  expect(historyReport.samples.map((sample) => sample.scale)).toEqual(scales);
+  assertPointPlan(historyReport.samples);
 
-    const runtime = communityFixtureRuntime();
-    await expect(
-      readRealmHomePresentation(
-        { pool: database.pool, access: runtime.system.access },
-        fixture.growth.realmId,
-        { actor: { kind: 'anonymous' }, deadline: Date.now() - 1 },
-      ),
-    ).rejects.toMatchObject({ code: 'deadline_exceeded' });
+  const runtime = communityFixtureRuntime();
+  await expect(
+    readRealmHomePresentation({ pool: database.pool, access: runtime.system.access }, fixture.growth.realmId, {
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() - 1,
+    }),
+  ).rejects.toMatchObject({ code: 'deadline_exceeded' });
 
-    await database.admin.query('ALTER TABLE community.realm_member_count RENAME TO realm_member_count_hidden');
-    try {
-      const failedHome = await fixture.driver.request({
-        method: 'GET',
-        path: `/v1/realms/${fixture.growth.realmId}/presentation`,
-        actor: fixture.growth.actor,
-      });
-      expect(failedHome.status).toBe(503);
-    } finally {
-      await database.admin.query('ALTER TABLE community.realm_member_count_hidden RENAME TO realm_member_count');
-    }
-
-    const missingControl = await fixture.createRealm('Missing count control');
-    await database.admin.query('DELETE FROM community.realm_member_count WHERE route=$1 AND realm_id=$2', [
-      routeOf(missingControl),
-      missingControl,
-    ]);
-    expect((await fixture.readHome(missingControl)).members).toEqual({ state: 'unknown', count: null, version: null });
-
-    const partialControl = await fixture.createRealm('Partial count control');
-    await database.admin.query(
-      'UPDATE community.realm_member_count SET initialized=false WHERE route=$1 AND realm_id=$2',
-      [routeOf(partialControl), partialControl],
-    );
-    expect((await fixture.readHome(partialControl)).members).toEqual({ state: 'unknown', count: null, version: null });
-
-    const uncoveredControl = await fixture.createRealm('Uncovered removal control');
-    await database.admin.query(
-      'UPDATE community.realm_member_count SET removal_coverage=false WHERE route=$1 AND realm_id=$2',
-      [routeOf(uncoveredControl), uncoveredControl],
-    );
-    expect((await fixture.readHome(uncoveredControl)).members).toEqual({ state: 'unknown', count: null, version: null });
-
-    const futureRealm = await fixture.createRealm('Unsupported temporal horizon');
-    const futureRoute = routeOf(futureRealm)!;
-    const futureMember = newId(futureRoute);
-    await openMembership.run(database.pool, {
-      route: futureRoute,
-      realm_id: futureRealm,
-      account_id: futureMember,
-      reservation_id: newId(routeOf(futureMember)!),
-      transaction_id: newId(futureRoute),
-      at: '2099-01-01T00:00:00.000Z',
-    });
-    expect((await fixture.readHome(futureRealm)).members).toEqual({ state: 'unknown', count: null, version: null });
-
-    const protectedRealm = await fixture.createRealm('Protected member count', 'protected');
-    const denied = await fixture.driver.request({
+  await database.admin.query('ALTER TABLE community.realm_member_count RENAME TO realm_member_count_hidden');
+  try {
+    const failedHome = await fixture.driver.request({
       method: 'GET',
-      path: `/v1/realms/${protectedRealm}/presentation`,
-      actor: fixture.accounts.outsider,
+      path: `/v1/realms/${fixture.growth.realmId}/presentation`,
+      actor: fixture.growth.actor,
     });
-    const deniedBody = await denied.text();
-    expect(denied.status).toBe(404);
-    expect(deniedBody).not.toContain(protectedRealm);
-  },
-  240_000,
-);
+    expect(failedHome.status).toBe(503);
+  } finally {
+    await database.admin.query('ALTER TABLE community.realm_member_count_hidden RENAME TO realm_member_count');
+  }
+
+  const missingControl = await fixture.createRealm('Missing count control');
+  await database.admin.query('DELETE FROM community.realm_member_count WHERE route=$1 AND realm_id=$2', [
+    routeOf(missingControl),
+    missingControl,
+  ]);
+  expect((await fixture.readHome(missingControl)).members).toEqual({ state: 'unknown', count: null, version: null });
+
+  const partialControl = await fixture.createRealm('Partial count control');
+  await database.admin.query(
+    'UPDATE community.realm_member_count SET initialized=false WHERE route=$1 AND realm_id=$2',
+    [routeOf(partialControl), partialControl],
+  );
+  expect((await fixture.readHome(partialControl)).members).toEqual({ state: 'unknown', count: null, version: null });
+
+  const uncoveredControl = await fixture.createRealm('Uncovered removal control');
+  await database.admin.query(
+    'UPDATE community.realm_member_count SET removal_coverage=false WHERE route=$1 AND realm_id=$2',
+    [routeOf(uncoveredControl), uncoveredControl],
+  );
+  expect((await fixture.readHome(uncoveredControl)).members).toEqual({ state: 'unknown', count: null, version: null });
+
+  const futureRealm = await fixture.createRealm('Unsupported temporal horizon');
+  const futureRoute = routeOf(futureRealm)!;
+  const futureMember = newId(futureRoute);
+  await openMembership.run(database.pool, {
+    route: futureRoute,
+    realm_id: futureRealm,
+    account_id: futureMember,
+    reservation_id: newId(routeOf(futureMember)!),
+    transaction_id: newId(futureRoute),
+    at: '2099-01-01T00:00:00.000Z',
+  });
+  expect((await fixture.readHome(futureRealm)).members).toEqual({ state: 'unknown', count: null, version: null });
+
+  const protectedRealm = await fixture.createRealm('Protected member count', 'protected');
+  const denied = await fixture.driver.request({
+    method: 'GET',
+    path: `/v1/realms/${protectedRealm}/presentation`,
+    actor: fixture.accounts.outsider,
+  });
+  const deniedBody = await denied.text();
+  expect(denied.status).toBe(404);
+  expect(deniedBody).not.toContain(protectedRealm);
+}, 240_000);

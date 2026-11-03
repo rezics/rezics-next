@@ -96,14 +96,7 @@ export async function openRealmMemberCountReadFixture(): Promise<RealmMemberCoun
             `INSERT INTO community.realm_member
                (route,realm_id,account_id,role,valid,reservation_id,transaction_id)
              VALUES($1,$2,$3,'member',tstzrange($4::timestamptz,NULL,'[)'),$5,$6)`,
-            [
-              route,
-              growth.realmId,
-              accountId,
-              '2020-01-01T00:00:00.000Z',
-              newId(routeOf(accountId)!),
-              newId(route),
-            ],
+            [route, growth.realmId, accountId, '2020-01-01T00:00:00.000Z', newId(routeOf(accountId)!), newId(route)],
           );
         }
         await connection.query(
