@@ -1,9 +1,11 @@
+import { calendarInterval, isCalendarDate } from '@rezics/filter';
 import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { documentActions } from './document.ts';
 import {
   ACCOUNT_DISCOVERY_BATCH_SIZE,
   DISCOVERY_DOCUMENT_FORMAT,
+  MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT,
   MIXED_DISCOVERY_DOCUMENT_FORMAT,
   type DiscoveryIndexAction,
   type DiscoveryIndexDefinition,
@@ -16,6 +18,7 @@ import { SearchUnavailableError } from './opensearch.ts';
 import definition from '../../db/search/indices/discovery.json';
 import mixedDefinition from '../../db/search/indices/discovery-mixed-v1.json';
 import { MISSING_NAME } from './document.ts';
+import { calendarIndexDefinition } from './release-search-calendar.ts';
 
 const MAX_NATIVE_VERSION = 9_223_372_036_854_775_807n;
 const ID_PREFIX = 'discovery-v1:';
@@ -297,7 +300,7 @@ export function discoveryDocumentActions(
   observation: DiscoverySnapshot,
   keys: readonly DiscoveryKey[],
   counts?: ReadonlyMap<string, number>,
-  format: 'legacy' | 'mixed-public-v1' = 'legacy',
+  format: 'legacy' | 'mixed-public-v1' | 'mixed-calendar-v1' = 'legacy',
 ): DiscoveryIndexAction[] {
   if (observation.owner !== 'semantic' && observation.owner !== 'accounts')
     throw new TypeError('Unknown discovery owner');
@@ -339,7 +342,12 @@ export function discoveryDocumentActions(
   for (const key of requested.values()) {
     const id = discoveryDocumentId(registry, key);
     const identity = {
-      document_format: format === 'legacy' ? DISCOVERY_DOCUMENT_FORMAT : MIXED_DISCOVERY_DOCUMENT_FORMAT,
+      document_format:
+        format === 'legacy'
+          ? DISCOVERY_DOCUMENT_FORMAT
+          : format === 'mixed-calendar-v1'
+            ? MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
+            : MIXED_DISCOVERY_DOCUMENT_FORMAT,
       ...(format === 'legacy' ? {} : { identity: id }),
       id: key.id,
       kind: key.kind,
@@ -382,6 +390,7 @@ export function discoveryDocumentActions(
         },
         [key.id],
         counts,
+        format === 'mixed-calendar-v1' ? 1 : undefined,
       );
       if (action?.op === 'index') document = { ...action.document, ...identity, owner: 'semantic' };
     }
@@ -459,7 +468,8 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
   if (
     !record(value) ||
     (value.document_format !== DISCOVERY_DOCUMENT_FORMAT &&
-      value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT) ||
+      value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+      value.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) ||
     typeof value.id !== 'string' ||
     typeof value.kind !== 'string' ||
     typeof value.route !== 'number' ||
@@ -473,7 +483,8 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
   );
   if (value.kind !== key.kind) throw new TypeError('Invalid discovery kind');
   if (
-    value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+    (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT ||
+      value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) &&
     value.identity !== discoveryDocumentId(registry, key)
   )
     throw new TypeError('Invalid mixed identity');
@@ -499,7 +510,8 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
     )
       throw new TypeError('Invalid Account discovery document');
     if (
-      value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+      (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT ||
+        value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) &&
       (!texts(value.names) ||
         !Array.isArray(value.descriptions) ||
         value.descriptions.length !== 0 ||
@@ -530,18 +542,35 @@ function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value:
     for (const fact of value.facts) {
       if (!record(fact) || typeof fact.property !== 'string' || !texts(fact.qualifiers))
         throw new TypeError('Invalid Subject discovery fact');
+      const calendarFormat = value.document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
       const fields =
         'value' in fact
           ? ['property', 'value', 'qualifiers']
           : 'year' in fact
-            ? ['property', 'year', 'qualifiers']
+            ? calendarFormat
+              ? ['property', 'year', 'month', 'day', 'time_lower', 'time_upper', 'qualifiers']
+              : ['property', 'year', 'qualifiers']
             : ['property', 'amount', 'unit', 'qualifiers'];
+      const date =
+        'year' in fact
+          ? {
+              year: fact.year,
+              ...('month' in fact ? { month: fact.month } : {}),
+              ...('day' in fact ? { day: fact.day } : {}),
+            }
+          : undefined;
       if (
         Object.keys(fact).some((field) => !fields.includes(field)) ||
         ('value' in fact
           ? typeof fact.value !== 'string'
           : 'year' in fact
-            ? !Number.isSafeInteger(fact.year)
+            ? !Number.isSafeInteger(fact.year) ||
+              (calendarFormat &&
+                (!isCalendarDate(date) ||
+                  typeof fact.time_lower !== 'string' ||
+                  typeof fact.time_upper !== 'string' ||
+                  calendarInterval(date).lower !== fact.time_lower ||
+                  calendarInterval(date).upper !== fact.time_upper))
             : typeof fact.amount !== 'number' || !Number.isFinite(fact.amount) || typeof fact.unit !== 'string')
       )
         throw new TypeError('Invalid Subject discovery fact value');
@@ -624,4 +653,13 @@ export function discoveryIndexDefinition(): DiscoveryIndexDefinition {
 /** Versioned successor; never modifies the immutable format-1 mapping. */
 export function mixedDiscoveryIndexDefinition(): DiscoveryIndexDefinition {
   return structuredClone(mixedDefinition) as DiscoveryIndexDefinition;
+}
+
+/** Inert format-3 mapping: old mixed generations retain their year-only writer and mapping. */
+export function mixedCalendarDiscoveryIndexDefinition(): DiscoveryIndexDefinition {
+  const result = calendarIndexDefinition(structuredClone(mixedDefinition) as Record<string, unknown>);
+  const mappings = result.mappings;
+  if (!record(mappings) || !record(mappings._meta)) throw new TypeError('Invalid mixed Search mapping');
+  mappings._meta.discovery_document_format = MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
+  return result as unknown as DiscoveryIndexDefinition;
 }

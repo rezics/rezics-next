@@ -16,8 +16,11 @@ paths:
   - services/kernel/src/search/indices.ts
   - services/kernel/src/search/discovery-documents.ts
   - services/kernel/src/search/discovery-service.ts
+  - services/kernel/src/search/discovery.ts
   - services/kernel/src/search/generations.ts
   - services/kernel/src/search/indexer.ts
+  - services/kernel/src/search/account-discovery.ts
+  - services/kernel/src/search/discovery-filter.ts
   - services/kernel/db/search/indices/*.json
   - services/kernel/db/search/templates/subjects-search-*.json
   - services/kernel/test/search/release-search*.test.ts
@@ -46,37 +49,45 @@ after:
   - bb4bb409-31b5-455b-9062-c396e85cbbd8
   - 5152ab21-e646-4ba0-aef1-09fda8c43874
   - 22ba6e31-30b9-4496-9367-7251ec8ad4c6
+  - 99299f65-9aa3-48fc-b353-c2ba5b06a60c
 waiting: []
 acceptance:
   tests:
-    - 'Calendar precision survives mixed physical generation population, publication, current matching, API and display; stale or incomplete generations cannot compile precise ranges.'
-    - 'Disclosure, redirect, date and producer changes invalidate stale group and child evidence; missing, unknown, conflicting and duplicate work links never fabricate dates or leak children.'
-    - 'Reload/back navigation, filters, expansion, and both continuations preserve request meaning across all eight locales with accessible loading, repair, unavailable, empty, and terminal states.'
+    - "Calendar precision survives prepared physical generation population, publication, current matching, API and display; stale or incomplete generations cannot compile precise ranges."
+    - "Disclosure, redirect, date and producer changes invalidate stale group and child evidence; missing, unknown, conflicting and duplicate work links never fabricate dates or leak children."
+    - "Reload/back navigation, filters, expansion, and both continuations preserve request meaning across all eight locales with accessible loading, repair, unavailable, empty, and terminal states."
     - Native 1x/4x/16x release/work and high-fanout growth exercise every all-pool seek and preparation bound; absent execution remains unmeasured.
-    - 'Inspect the landed page through the running app, Storybook or screenshots against the earlier-app bar, including contextual work/release cards and applicable current viewer state/actions in one bounded response; passing tests alone is insufficient.'
+    - "Inspect the landed page through the running app, Storybook or screenshots against the earlier-app bar, including contextual work/release cards and applicable current viewer state/actions in one bounded response; passing tests alone is insufficient."
   workerOwned: true
 estimate:
-  lines: 2100
-  files: 28
+  lines: 2250
+  files: 31
 ---
 
-# Finish grouped release discovery
+# Find matching releases in canonical work groups
 
-Complete the mixed discovery producer with the calendar successor codec. Its population, replay, reconciliation,
-publication and continuing writes must use the matching projection, and precise range compilation must bind to the
-active release and exact ready physical incarnation. Keep prior mappings, templates, codecs and physical generations
-immutable.
+Wire the mixed calendar successor through the existing resumable publication lifecycle. Population, replay,
+reconciliation and continuing writes must select the format-3 writer for its mapping, while old mappings, writer
+shapes and physical generations retain their existing meaning. Publish calendar readiness only after complete
+population and reconciliation prove the exact physical UUID. Precise compilation must require that exact active,
+ready generation. Keep the producer cut and five-producer publication owner; do not add a second protocol.
 
-Build the release journey on `POST /v1/subjects:search` and `/search/releases`. Read controls from facets admitted by
-the active released subtype. Group current matching release children under canonical works, use independent bounded
-group and child cursors, and recheck disclosure, redirects, dates and producer facts on every continuation. Never
-infer complete groups from finite previews. Keep missing, unknown, conflicting and duplicate work links truthful.
+Build canonical work groups on `POST /v1/subjects:search` and mount `/search/releases`. Read platform, language,
+date, rating, developer and publisher controls only from facets admitted by the active released subtype. Keep
+producer meanings separate and report generic producer unavailable until Semantic admits its own property. Group
+currently matching release children under canonical works, with independent bounded group and child cursors.
+Recheck current work and release disclosure, redirects, dates and producer facts on every continuation. Missing,
+unknown, conflicting and duplicate work links cannot invent dates or expose children; finite previews cannot claim a
+complete group.
 
-Mount accessible URL-backed controls and contextual work/release cards in all eight locales. Preserve filters,
-language order, sort, spoilers, reload/back navigation, expansion and both continuations. Include only existing
-current viewer state and permitted owner actions in one bounded response. Cover loading, repair, unavailable, empty
-and terminal states; keep native growth and physical seek bounds grounded in actual source contracts.
+Return contextual work and release cards with native destinations, truthful date precision, platform/language/
+producer summaries, available credits and ratings, and only existing viewer state or permitted actions in one
+bounded response. Preserve URL-backed filters, ordered languages, sort, spoilers, reload/back navigation,
+expansion and both cursors across all eight locales. Include accessible loading, repair, unavailable, empty and
+terminal states. The same universal request must serve Web and direct clients.
 
-Finish native 1x/4x/16x first, next, final and empty-page measurements, preparation/resume and change invalidation
-cases. Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar,
-including keyboard use and repair states. Missing native execution remains explicitly unmeasured.
+Derive page and preparation bounds from actual source caps, relation fanout, owner calls, writes, visibility,
+frontiers, physical rows and bytes, indexed seeks and final authority observations. Exercise native 1x/4x/16x pages,
+preparation/resume, replacement, lost responses and stale dependency rejection; leave unavailable native execution
+unmeasured. Inspect the installed page against the earlier-app bar, including contextual cards, keyboard use and
+repair states. Preserve any missing authentic capability as an explicit dependency.

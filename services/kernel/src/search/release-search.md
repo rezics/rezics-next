@@ -61,7 +61,11 @@ do not expose a generic producer control without a separately admitted Semantic 
 
 ## Remaining integration
 
-The mixed discovery producer still needs the successor codec and readiness lifecycle. Do not rewrite immutable
+Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
+fact fields; format-2 documents and physical generations retain their year-only meaning.
+
+The mixed discovery producer still needs the successor codec wired through population, replay, reconciliation,
+publication and current compilation. Do not rewrite immutable
 mappings/templates, silently admit an old generation, or broaden precise ranges into years. Replacement uses the
 existing resumable worker lifecycle. Regenerate public declarations when those integration interfaces change.
 

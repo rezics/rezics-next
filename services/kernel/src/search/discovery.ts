@@ -16,6 +16,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 export const DISCOVERY_DOCUMENT_FORMAT = 1;
 /** Successor requires a complete native rebuild; format 1 retains its original reader. */
 export const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
+/** Calendar facts are written only to a physical generation using the matching successor mapping. */
+export const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
 export const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
@@ -207,7 +209,10 @@ export type DiscoverySnapshot =
   | { owner: 'semantic'; snapshot: SubjectSnapshot }
   | { owner: 'accounts'; snapshot: AccountSnapshot };
 type DocumentIdentity = {
-  document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+  document_format:
+    | typeof DISCOVERY_DOCUMENT_FORMAT
+    | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
+    | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
   identity?: string;
   id: string;
   kind: string;
@@ -238,7 +243,10 @@ export type DiscoveryIndexDefinition = {
   settings: Record<string, unknown>;
   mappings: {
     _meta: {
-      discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+      discovery_document_format:
+        | typeof DISCOVERY_DOCUMENT_FORMAT
+        | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
+        | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
       identity?: string;
       name_sort_format: number;
       document_identity: string;
