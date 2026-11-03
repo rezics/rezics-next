@@ -2083,13 +2083,13 @@ command-kind assignments are `content.board.watch=8` and `content.watch.remove=9
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
 Decision: opening fanout uses 20 recipients per durable page, matching the native Inbox's default presentation page.
 
-| Consumer             | Native method and mounted operation                                                            | Result                                                                                        |
-| -------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                             | `{watching,revision}`, with current board disclosure                                          |
-| Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key` | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
-| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread\|board&limit=&cursor=` | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range |
-| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread\|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access |
-| Performance Inbox    | Existing `notifications.list` with `board_activity`                                            | Existing post/thread target identifiers and current native post disclosure                    |
+| Consumer             | Native method and mounted operation                                                                                       | Result                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                                                        | `{watching,revision}`, with current board disclosure                                          |
+| Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key`                            | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
+| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread\|board&limit=&cursor=`                                   | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range          |
+| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread\|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access      |
+| Performance Inbox    | Existing `notifications.list` with `board_activity`                                                                       | Existing post/thread target identifiers and current native post disclosure                    |
 
 Web board controls and Performance Settings watch management remain unavailable consumer adapters; these methods
 are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery keep their existing shapes and storage.
@@ -2128,7 +2128,9 @@ existing mandatory path.
   shared authorization, time, transaction controls, partition, receipt, outbox, history account guards/locators and write basis. Retry reauthorizes,
   reads its receipt and skips the body. No-op/retry has nonzero cost. Each mutation maintains a fixed set of indexes.
 - Growth check: `board-watch-growth.test.ts` runs the real mounted read and same-key set retry at 256/1024/4096
-  subscriptions alongside both management selections and durable delivery.
+  subscriptions alongside both management selections and durable delivery. Each native operation owns a separate
+  bounded capture at all three scales, on a fresh instance of the same connected fixture; their costs remain
+  additive. This preserves the harness's fixed telemetry ceiling without dropping native plan evidence.
 
 ### Cost: selected management page
 
