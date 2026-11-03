@@ -29,8 +29,6 @@ beforeAll(async () => {
     await Promise.race([
       (async () => {
         f = await createCollectionRulesFixture();
-        // Publication and native Members preparation may overlap independent read checkouts.
-        f.database.pool.options.max = 4;
         stage = 'owner authentication';
         const context = { pool: f.database.pool, deadline: Date.now() + 30_000 };
         actor = await f.runtime.identity.access.authenticate(f.owner, context);
