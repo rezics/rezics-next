@@ -1052,6 +1052,18 @@ history. The anchor order, provider snapshot, payload and retry configuration st
 
 ## Cost
 
+### Buyer entitlement pages
+
+- Touches: current Access `entitlement:list` and `gate:purchases`, signed cursor verify, one repeatable-read
+  snapshot, one `core.partition` point, `entitlement_account_page` keyset `limit+1`, then subject summaries for
+  the returned target ids. Denied and foreign-cursor failures return before that keyset. Exhausted continuation
+  uses the last public page's last entitlement id signed with the same cursor ring, because the mounted list omits
+  `next` when lookahead is empty.
+- Bound: constant statements and rows and logarithmic blocks as same-buyer, same-route peer and foreign-partition
+  histories grow independently at 64/512/4096 with a fixed selected grant and page limit. Examined entitlement
+  rows are the keyset lookahead, not the returned page length. Empty seeks still charge the index probe.
+- Growth check: `test/commerce/entitlement-page-growth.test.ts`.
+
 ### Creator sales page
 
 - Touches: `creator-sales.sql` seeks `commerce.creator_sale` by `(route,creator_account_id,order_id)` in one
