@@ -42,9 +42,7 @@ test('retained uploader ownership does not advertise download after Realm read r
 
 test('Realm revocation between advice rounds fails without consuming the inventory frontier', async () => {
   const observer = observeSql(fixture.db.pool);
-  const homes = new Set(
-    [fixture.privateImage.id, fixture.publicRealmImage.id].map((id) => partitionOf(routeOf(id)!)),
-  );
+  const homes = new Set([fixture.privateImage.id, fixture.publicRealmImage.id].map((id) => partitionOf(routeOf(id)!)));
   const finalObjects = observer.hold({ statement: objects.sql, occurrence: homes.size + 1 }, 'after');
   const pending = fixture.call('GET', '/v1/media', { bearer: fixture.alice.bearer });
   try {
