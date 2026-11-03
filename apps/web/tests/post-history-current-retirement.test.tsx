@@ -44,8 +44,11 @@ test('post, thread, exposure, locale and QueryClient source replacements retire 
       await view.open();
       await view.inspect();
       if (replacement === 'locale') {
-        window.history.replaceState(null, '', '/zh-Hant/threads/current');
-        setLocale('zh-Hant', { reload: false });
+        await act(async () => {
+          window.history.replaceState(null, '', '/zh-Hant/threads/current');
+          setLocale('zh-Hant', { reload: false });
+          await flush();
+        });
         expect(getLocale()).toBe('zh-Hant');
       }
       await view.render(
