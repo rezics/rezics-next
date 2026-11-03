@@ -39,6 +39,9 @@ export type AddonProfileProps = AddonAddress & {
   facts: (id: string) => FactsTransport;
   review: (id: string, property: string, session?: string) => CandidateTransport;
   relations: (id: string) => RelationTransport;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 };
 type AddonReadyRead = Extract<AddonRead, { ok: true }>;
 
@@ -59,6 +62,9 @@ function AddonProfileLive({
   facts,
   review,
   relations,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: AddonProfileProps) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
@@ -280,6 +286,9 @@ function AddonProfileLive({
                 review={(field, token) => review(read.public!.subject.id, field, token)}
                 visible={!!query.data?.ok && session === 'signed-in'}
                 revision={`${id}:${session}`}
+                {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                {...(handoffReader ? { handoffReader } : {})}
+                {...(handoffReaderLive ? { handoffReaderLive } : {})}
               />
               <section className="space-y-3">
                 <h2 className="text-xl font-semibold">{m.addon_base_workspace_title({}, o)}</h2>

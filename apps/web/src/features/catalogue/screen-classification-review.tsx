@@ -35,6 +35,9 @@ export function ScreenClassificationReview({
   transport,
   review,
   observe,
+  handoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: {
   read: FactsCurrent;
   locale: string;
@@ -42,6 +45,9 @@ export function ScreenClassificationReview({
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   observe: (next: EditorRead) => void;
+  handoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const active = useCurrentReadingActive();
   const groups = screenGroups(read.release, read.public.subject.type);
@@ -56,6 +62,9 @@ export function ScreenClassificationReview({
       search={search}
       transport={facts}
       review={review}
+      {...(handoffToken ? { handoffToken } : {})}
+      {...(handoffReader ? { handoffReader } : {})}
+      {...(handoffReaderLive ? { handoffReaderLive } : {})}
     />
   );
 }

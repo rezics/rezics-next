@@ -14,7 +14,11 @@ import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 
-function CharacterProfileSessionLive({ locale, ...address }: CharacterAddress & { locale: string }) {
+function CharacterProfileSessionLive({
+  locale,
+  classificationHandoffToken,
+  ...address
+}: CharacterAddress & { locale: string; classificationHandoffToken?: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -57,6 +61,9 @@ function CharacterProfileSessionLive({ locale, ...address }: CharacterAddress & 
           },
         };
       }}
+      {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
+      handoffReader={editorWork.reader}
+      handoffReaderLive={editorWork.live}
       relations={(id) => ({
         read: (slot, cursor, session) =>
           readSubjectRelationEditor({

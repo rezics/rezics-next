@@ -47,6 +47,9 @@ export type CharacterProfileProps = CharacterAddress & {
   facts: (id: string) => FactsTransport;
   review: (id: string, property: string, session?: string) => CandidateTransport;
   relations: (id: string) => RelationTransport;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 };
 
 export const CharacterProfile = catalogueEditor(CharacterProfileLive);
@@ -61,6 +64,9 @@ function CharacterProfileLive({
   facts,
   review,
   relations,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: CharacterProfileProps) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
@@ -449,6 +455,9 @@ function CharacterProfileLive({
                       search={search}
                       transport={facts(character.subject.id)}
                       review={(field, token) => review(character.subject.id, field, token)}
+                      {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                      {...(handoffReader ? { handoffReader } : {})}
+                      {...(handoffReaderLive ? { handoffReaderLive } : {})}
                     />
                   </AuthoringDepartureBoundary>
                 </CatalogueCurrentReading>

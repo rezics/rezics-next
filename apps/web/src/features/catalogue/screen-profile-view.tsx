@@ -166,6 +166,9 @@ function ScreenProfileLive({
   transport,
   search,
   onNavigate,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: {
   id?: string | undefined;
   series?: string | undefined;
@@ -174,6 +177,9 @@ function ScreenProfileLive({
   transport: ScreenTransport;
   search: EntityPickerSearch;
   onNavigate: (href: string) => void;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
@@ -330,6 +336,9 @@ function ScreenProfileLive({
         revision={`${id}:${readingRevision}`}
         reload={reload}
         intro={intro}
+        {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
+        {...(handoffReader ? { handoffReader } : {})}
+        {...(handoffReaderLive ? { handoffReaderLive } : {})}
         observe={(next) => {
           if (!lifetime.active()) return;
           const observed: ScreenRead =
@@ -617,6 +626,9 @@ function ScreenCorrection({
   reload,
   intro,
   observe,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: {
   id: string;
   locale: string;
@@ -631,6 +643,9 @@ function ScreenCorrection({
   reload: () => void;
   intro: React.ReactNode;
   observe: (next: EditorRead) => void;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const o = { locale: locale as never };
   const current = useMemo(
@@ -787,6 +802,9 @@ function ScreenCorrection({
                     transport={transport.facts}
                     review={transport.review}
                     observe={observe}
+                    {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                    {...(handoffReader ? { handoffReader } : {})}
+                    {...(handoffReaderLive ? { handoffReaderLive } : {})}
                   />
                 </AuthoringDepartureBoundary>
               </details>

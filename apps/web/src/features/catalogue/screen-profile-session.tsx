@@ -17,10 +17,12 @@ function ScreenProfileSessionLive({
   id,
   locale,
   series,
+  classificationHandoffToken,
 }: {
   id?: string;
   locale: string;
   series?: string | undefined;
+  classificationHandoffToken?: string;
 }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -36,6 +38,9 @@ function ScreenProfileSessionLive({
       session={state}
       search={search}
       onNavigate={(href) => window.location.assign(href)}
+      {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
+      handoffReader={editorWork.reader}
+      handoffReaderLive={editorWork.live}
       transport={{
         load: () => loadScreenProfile({ data: { ...(id ? { id } : {}), ...(series ? { series } : {}) } }),
         create: (data) => createCatalogueScreen({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),

@@ -5,6 +5,7 @@ import {
   classificationAdmitted,
   classificationBaselineKind,
   classificationConfirmable,
+  classificationFactOutcome,
   classificationReuseReason,
   classificationReviewableDrafts,
   focusableClassificationHolder,
@@ -14,11 +15,11 @@ import {
   type RemovedHolderDiagnostic,
 } from './character-classification-review';
 import { applyReuse, cloneReferenceGroup, reuseTargetLimit, type ReuseSource } from './reference-reuse';
-import { statementInput, type EditorRead, type StatementInput } from './statement-editor';
+import { type EditorRead, type StatementInput } from './statement-editor';
+import { classificationStatementInput } from './classification-create-return';
 import {
   changedSetFingerprint,
   factHolder,
-  factOutcome,
   includedChanges,
   projectChangedSet,
   sealFacts,
@@ -101,8 +102,7 @@ export function storyArcClassificationTransport(
 
 /** Correction keeps preferred rank from the selected assertion; creation-only drafts stay normal. */
 export function storyArcClassificationStatement(statement: SelectedStatement): StatementInput {
-  const input = statementInput(statement);
-  return statement.rank === 'preferred' && correctionRank.has(statement.rank) ? { ...input, rank: 'preferred' } : input;
+  return classificationStatementInput(statement);
 }
 
 export function storyArcClassificationDraft(
@@ -265,7 +265,7 @@ export function storyArcClassificationProposedVisit(drafts: FactDraft[]): {
 }
 
 export function storyArcClassificationOutcome(draft: FactDraft, read: FactsCurrent): FactOutcomeKind | null {
-  return factOutcome(draft, read);
+  return classificationFactOutcome(draft, read);
 }
 
 export function storyArcClassificationBaseline(

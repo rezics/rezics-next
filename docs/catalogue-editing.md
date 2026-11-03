@@ -237,6 +237,27 @@ relation writer. Candidate acceptance, Context selection, and the current source
 Unknown relation outcomes keep their own sealed body and key. A failed relationship never offers Create again as
 recovery. Target creation, relationship proposal, acceptance, and Context selection remain distinct actions.
 
+## Browser flow: missing classification concept
+
+An editable, unsealed classification holder on Character, Screen, Add-on, or StoryArc changed-set review can search
+an existing Concept first. When the field admits a released Concept Type and the target is still unchosen, **Create a
+missing classification concept** opens the shared Concept creator. Album and Manga classification remain on their
+owners. Decision: correction drafts project the admitted selected rank losslessly through a local classification
+statement copy; global statement-input creation stays normal-rank.
+
+The visit is a private in-memory handoff bound to the source subject, property, stable holder, original statement,
+private draft (rank, qualifiers, grouped references, inclusion), current release digest, current reader, and unchosen
+target. The URL carries only a local token. Cross-reader, expired, altered-property, reused, and arbitrary UUID tokens
+cannot authorize a return or a write. Context names the work or character and field; it copies no labels, facts,
+provider aliases, or evidence.
+
+Return shows the created readable UUID, label, and Type and requires **Choose this concept** before filling the
+unchosen target. A target edited meanwhile, a sealed, succeeded, or uncertain holder, withdrawn metadata, or an
+unadmitted created Type blocks a fresh write without discarding entered evidence and without creating another concept.
+Cancellation restores the original private draft and sends no classification command. After a deliberate choice, the
+existing changed-set review and independent native candidate writer remain in force. Creating or reading a Concept is
+not proposal, acceptance, adoption, or work publication.
+
 ## Browser flow: add-ons and expansions
 
 The subject's existing **Contribute** menu offers **Add-on and expansion editor**. Creation uses
@@ -1035,3 +1056,23 @@ Native editors keep nested type:value discriminators, date precision, quantities
 Private term and fact drafts remain distinct by exact Type. A withdrawn fact stays visible until removed, while a withdrawn Type remains available for deliberate whole-draft discard. Refresh never silently drops entered evidence. The contributor reviews the prepared Type, terms, facts, targets, ranks, qualifiers and every evidence part before confirming. A changed item or release requires a new review. Nested native diagnostics map through captured holder identities, so removal never focuses a replacement row. The BFF rechecks current admission and forwards the reviewed item through ordinary native subject creation with current authority. Unknown delivery retries the same bytes and key; after acknowledgement, recovery reads only the returned UUID. The ordinary file/group reader supplies the exact public identity. Creating one identity proposes no later relation, candidate selection or personal ownership. Existing association, grouping, inverse paging and correction controls are unchanged.
 
 Decision: file and release-group creation start with no data language selected; contributors choose each term language independently of the route locale. Successful create returns to `/{locale}/subjects/{id}/{slug}/file`.
+
+## Browser flow: concept and scheme creation
+
+`/{locale}/catalogue/concept` creates one released Concept or ConceptScheme. Generic catalogue creation links to this
+localized entry. The page reads one successful active immutable release and offers only Types admitted by
+`conceptTypeAdmitted`, including emitted structural bases. An unavailable definition read is an error; a release with
+no admitted Type shows that absence without inventing a profile or seed. Search of existing targets is ordinary
+bounded identity intake before deliberate creation; a matching title is not identity.
+
+The selected Type's exact emitted properties drive initial fact controls. `skos:inScheme`, `skos:broader`, `foaf:focus`
+and `skos:closeMatch` stay distinct; no inverse edge, hierarchy copy, or closeMatch-as-equivalence is inferred. Image
+is omitted where unsupported. Decision: a ConceptScheme admits its actual emitted fields (currently terms plus
+`schema:url` and `schema:sameAs`); the form does not invent statements to fill gaps. Terms remain multilingual subject
+terms, separate from statement evidence. Decision: Concept creation reuses the existing CreateSubjectForm identity
+search and review seams rather than a second writer.
+
+A direct visit ends at the ordinary Concept reader. A classification-return caller may offer an explicit return; the
+creator never writes a parent-work classification or grants adoption. Unknown delivery retries the same bytes and key;
+after acknowledgement, recovery reads only the returned UUID. Creating a concept proposes no vocabulary release, source
+licence, provider claim, equivalence mapping, or ballot.

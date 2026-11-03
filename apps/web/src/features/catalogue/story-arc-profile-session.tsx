@@ -18,8 +18,9 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 function StoryArcProfileSessionLive({
   locale,
   realm,
+  classificationHandoffToken,
   ...address
-}: StoryArcAddress & { locale: string; realm?: string | undefined }) {
+}: StoryArcAddress & { locale: string; realm?: string | undefined; classificationHandoffToken?: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -69,6 +70,9 @@ function StoryArcProfileSessionLive({
           },
         };
       }}
+      {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
+      handoffReader={editorWork.reader}
+      handoffReaderLive={editorWork.live}
       relations={(id) => ({
         read: (slot, cursor, session) =>
           readSubjectRelationEditor({

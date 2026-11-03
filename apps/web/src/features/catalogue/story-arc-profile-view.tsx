@@ -54,6 +54,9 @@ export type StoryArcProfileProps = StoryArcAddress & {
   facts: (id: string) => FactsTransport;
   review: (id: string, property: string, session?: string) => CandidateTransport;
   relations: (id: string) => RelationTransport;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 };
 
 /** Composition of the ordinary creation, scalar and exact-slot relationship workspaces. */
@@ -90,6 +93,9 @@ function StoryArcProfileLive({
   facts,
   review,
   relations,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: StoryArcProfileProps) {
   const lifetime = useEditorLifetime();
   const client = useQueryClient();
@@ -402,6 +408,9 @@ function StoryArcProfileLive({
                     search={search}
                     transport={facts(privateRead.arc.subject.id)}
                     review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
+                    {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                    {...(handoffReader ? { handoffReader } : {})}
+                    {...(handoffReaderLive ? { handoffReaderLive } : {})}
                     observe={(next) => {
                       if (!lifetime.active() || observation.current.token !== token) return;
                       client.setQueryData<StoryArcRead>(

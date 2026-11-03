@@ -212,6 +212,13 @@ export const catalogueEntries = {
     label: m.music_context_create_title({}, options(locale)),
     href: `/${locale}/catalogue/music-context`,
   }),
+  concept: ({ locale, token }: Locale & { token?: string }): CatalogueEntry => ({
+    group: 'create',
+    label: m.concept_create_title({}, options(locale)),
+    href: token
+      ? `/${locale}/catalogue/concept?classificationHandoff=${encodeURIComponent(token)}`
+      : `/${locale}/catalogue/concept`,
+  }),
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

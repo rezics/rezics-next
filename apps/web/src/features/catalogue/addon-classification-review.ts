@@ -4,6 +4,7 @@ import {
   bindClassificationReview,
   classificationAdmitted,
   classificationConfirmable,
+  classificationFactOutcome,
   classificationReuseReason,
   classificationReviewableDrafts,
   focusableClassificationHolder,
@@ -26,7 +27,6 @@ import type { EditorRead, SnakInput, StatementInput } from './statement-editor';
 import {
   factHolder,
   factLocked,
-  factOutcome,
   includedChanges,
   projectChangedSet,
   type ChangedFactView,
@@ -189,7 +189,7 @@ export function addonClassificationCandidateRead(draft: FactDraft): string | und
 }
 
 export function addonClassificationOutcome(draft: FactDraft, read: FactsCurrent): FactOutcomeKind | null {
-  return factOutcome(draft, read);
+  return classificationFactOutcome(draft, read);
 }
 
 export function addonClassificationReviewItems(drafts: FactDraft[]): ChangedFactView[] {

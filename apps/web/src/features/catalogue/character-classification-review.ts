@@ -3,6 +3,7 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import { pageText } from '../pages/shared';
 import { previewReuse, type ReusePreview, type ReuseRefusal } from './reference-reuse';
 import type { StatementInput } from './statement-editor';
+import { classificationStatementInput } from './classification-create-return';
 import {
   factChanged,
   factHolder,
@@ -222,15 +223,39 @@ export function bindClassificationReview(
   };
 }
 
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object')
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+      .join(',')}}`;
+  return JSON.stringify(value) ?? '';
+}
+
+/** Selected preferred rank compares losslessly against the current assertion. */
+export function classificationFactOutcome(draft: FactDraft, read?: FactsCurrent): FactOutcomeKind | null {
+  if (draft.result?.ok) {
+    if (!read || !draft.submission) return 'proposed';
+    const selected = read.public.subject.statements[draft.property] ?? [];
+    return selected.some(
+      (statement) => canonical(classificationStatementInput(statement)) === canonical(draft.submission!.statement),
+    )
+      ? 'selected'
+      : 'proposed';
+  }
+  return factOutcome(draft, read);
+}
+
 export function classificationRetainedOutcomes(drafts: FactDraft[], read: FactsCurrent): FactDraft[] {
   return drafts.filter((draft) => {
-    const kind = factOutcome(draft, read);
+    const kind = classificationFactOutcome(draft, read);
     return kind === 'proposed' || kind === 'selected' || kind === 'uncertain';
   });
 }
 
 export function classificationOutcomeKind(draft: FactDraft, read: FactsCurrent): FactOutcomeKind | null {
-  return factOutcome(draft, read);
+  return classificationFactOutcome(draft, read);
 }
 
 export function sameSealedClassification(left: FactDraft, right: FactDraft): boolean {

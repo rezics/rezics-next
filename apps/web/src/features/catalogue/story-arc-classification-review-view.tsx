@@ -14,6 +14,9 @@ export function StoryArcClassificationReview({
   transport,
   review,
   observe,
+  handoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: {
   read: FactsCurrent;
   locale: string;
@@ -21,6 +24,9 @@ export function StoryArcClassificationReview({
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   observe: (next: EditorRead) => void;
+  handoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const active = useCurrentReadingActive();
   const o = { locale: locale as never };
@@ -41,6 +47,9 @@ export function StoryArcClassificationReview({
         search={search}
         transport={facts}
         review={review}
+        {...(handoffToken ? { handoffToken } : {})}
+        {...(handoffReader ? { handoffReader } : {})}
+        {...(handoffReaderLive ? { handoffReaderLive } : {})}
       />
     </section>
   );

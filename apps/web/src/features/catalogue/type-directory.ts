@@ -16,6 +16,7 @@ import {
 } from './type-directory-client';
 import { musicContextKind } from './music-context-profile';
 import { isFileOrGroupType } from './catalogue-file-profile/model';
+import { conceptTypeAdmitted } from './source-concept-explorer';
 export type { TypeDirectoryDescriptor } from './type-directory-client';
 
 type CreateDescriptorRead =
@@ -73,9 +74,11 @@ async function readCreateDescriptor(typeId: string, locale: string): Promise<Cre
     if (!release.types?.[typeId] || !release.properties) return { ok: false, reason: 'unavailable' };
     const specializedPath = isFileOrGroupType(release, typeId)
       ? '/catalogue/file'
-      : musicContextKind(release, typeId) === 'unsupported'
-        ? undefined
-        : '/catalogue/music-context';
+      : conceptTypeAdmitted(release, typeId)
+        ? '/catalogue/concept'
+        : musicContextKind(release, typeId) === 'unsupported'
+          ? undefined
+          : '/catalogue/music-context';
     const missing = new Set<string>();
     for (const id of result.descriptor.definition.properties) {
       const property = result.descriptor.properties[id];

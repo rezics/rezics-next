@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { AddonProfileSession } from '../../features/catalogue/addon-profile-session';
+import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch, subjectHref } from '../../subject/subject-href';
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/addon')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => ({
     work: typeof input.work === 'string' ? input.work : undefined,
+    classificationHandoff: classificationHandoffSearch(input),
   }),
   loader: ({ params, location }) =>
     canonicalAddon({
@@ -51,5 +53,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/addon')({
   component: AddonRoute,
 });
 function AddonRoute() {
-  return <AddonProfileSession id={Route.useLoaderData().id} locale={getLocale()} work={Route.useSearch().work} />;
+  const { work, classificationHandoff } = Route.useSearch();
+  return (
+    <AddonProfileSession
+      id={Route.useLoaderData().id}
+      locale={getLocale()}
+      work={work}
+      {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+    />
+  );
 }

@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { ScreenProfileSession } from '../../features/catalogue/screen-profile-session';
+import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch, subjectHref } from '../../subject/subject-href';
@@ -40,6 +41,9 @@ const canonicalScreen = createServerFn({ method: 'GET', strict: false })
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/screen')({
   staticData: { publicCache: false },
+  validateSearch: (input: Record<string, unknown>) => ({
+    classificationHandoff: classificationHandoffSearch(input),
+  }),
   loader: ({ params, location }) =>
     canonicalScreen({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
@@ -48,5 +52,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/screen')({
   component: ScreenRoute,
 });
 function ScreenRoute() {
-  return <ScreenProfileSession id={Route.useLoaderData().id} locale={getLocale()} />;
+  const { classificationHandoff } = Route.useSearch();
+  return (
+    <ScreenProfileSession
+      id={Route.useLoaderData().id}
+      locale={getLocale()}
+      {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+    />
+  );
 }

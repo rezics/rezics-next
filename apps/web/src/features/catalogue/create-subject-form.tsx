@@ -24,6 +24,7 @@ import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
+import { ConceptCreateEntry } from './concept-create-entry';
 import { identityIntentKey, type IdentityIntakeInput } from './identity-intake';
 import { IdentityIntakePanel } from './identity-intake-view';
 import { CatalogueFileCreateEntry } from './catalogue-file-create-entry';
@@ -184,6 +185,8 @@ function CreateSubjectFormLive({
     reviewRevision?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
+    identitySearch?: boolean;
+    releaseDigest?: string;
     fields: (
       type: string,
       disabled: boolean,
@@ -292,14 +295,20 @@ function CreateSubjectFormLive({
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
-  const directIdentityIntake = !!identityIntake && directoryMode && !specializedCreatePath;
+  const identityReleaseDigest = directoryType?.releaseDigest ?? profile?.releaseDigest;
+  const identityTypeId = directoryType?.id ?? type;
+  const directIdentityIntake =
+    !!identityIntake &&
+    !!identityReleaseDigest &&
+    !!identityTypeId &&
+    ((directoryMode && !specializedCreatePath) || !!profile?.identitySearch);
   const identityInput: IdentityIntakeInput | null =
-    directIdentityIntake && directoryType?.releaseDigest
+    directIdentityIntake && identityTypeId && identityReleaseDigest
       ? {
           q: rows[0]?.label ?? '',
           language: rows[0]?.language ?? '',
-          typeId: directoryType.id,
-          releaseDigest: directoryType.releaseDigest,
+          typeId: identityTypeId,
+          releaseDigest: identityReleaseDigest,
           locale,
         }
       : null;
@@ -955,9 +964,13 @@ function CreateSubjectFormLive({
                   version={identityRevision}
                   viewerKey={identityIntake.viewerKey}
                   viewerState={identityIntake.viewerState}
-                  hasType={!!directoryType}
-                  {...(directoryType?.label ? { typeLabel: directoryType.label } : {})}
-                  typeCurrent={directoryDescriptorState === 'current' && !!directoryType?.releaseDigest}
+                  hasType={directoryMode ? !!directoryType : !!type}
+                  {...(selectedType?.label ? { typeLabel: selectedType.label } : {})}
+                  typeCurrent={
+                    directoryMode
+                      ? directoryDescriptorState === 'current' && !!directoryType?.releaseDigest
+                      : !!profile?.metadata?.ready && !!profile.releaseDigest
+                  }
                   disabled={locked}
                   confirmed={identityConfirmed}
                   confirmedUnverified={identityConfirmation?.unverified === true && identityConfirmed}
@@ -965,7 +978,8 @@ function CreateSubjectFormLive({
                   onClear={() => setIdentityConfirmation(null)}
                   onRefreshType={() => {
                     retireIdentityConfirmation();
-                    setDirectoryRefreshToken((token) => token + 1);
+                    if (directoryMode) setDirectoryRefreshToken((token) => token + 1);
+                    else profile?.refreshMetadata?.();
                   }}
                   inputId="create-label-0"
                 />
@@ -1132,6 +1146,7 @@ function CreateSubjectFormLive({
                 <AlbumProfileEntry locale={locale} />
                 <MusicContextCreateEntry locale={locale} />
                 <CatalogueFileCreateEntry locale={locale} />
+                <ConceptCreateEntry locale={locale} />
               </nav>
             </details>
           )}

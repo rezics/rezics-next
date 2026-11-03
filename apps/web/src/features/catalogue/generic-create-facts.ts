@@ -63,6 +63,8 @@ const specializedCreatePaths: Record<string, string> = {
   'wd:Q82753': '/catalogue/file',
   'rezics:ReleaseGroup': '/catalogue/file',
   'wd:Q55327': '/catalogue/file',
+  'skos:Concept': '/catalogue/concept',
+  'skos:ConceptScheme': '/catalogue/concept',
 };
 
 export function genericCreateSpecializedPath(

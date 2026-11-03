@@ -50,6 +50,9 @@ export function AddonClassifications({
   review,
   visible = true,
   revision,
+  handoffToken,
+  handoffReader,
+  handoffReaderLive,
 }: {
   read: FactsCurrent;
   locale: string;
@@ -58,6 +61,9 @@ export function AddonClassifications({
   review: (property: string, session?: string) => CandidateTransport;
   visible?: boolean;
   revision?: string;
+  handoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const o = { locale: locale as never };
   const properties = addonClassificationProperties(read);
@@ -82,6 +88,9 @@ export function AddonClassifications({
           search={search}
           transport={transport}
           review={review}
+          {...(handoffToken ? { handoffToken } : {})}
+          {...(handoffReader ? { handoffReader } : {})}
+          {...(handoffReaderLive ? { handoffReaderLive } : {})}
         />
       </section>
     </CatalogueCurrentReading>

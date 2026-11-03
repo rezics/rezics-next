@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { StoryArcProfileSession } from '../../features/catalogue/story-arc-profile-session';
+import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import { storyArcUuid } from '../../features/catalogue/story-arc-profile';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime';
@@ -47,6 +48,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/story-arc')({
   validateSearch: (input: Record<string, unknown>) => ({
     work: typeof input.work === 'string' ? input.work : undefined,
     realm: validatePageRealm(input.realm),
+    classificationHandoff: classificationHandoffSearch(input),
   }),
   loader: ({ params, location }) =>
     canonicalStoryArc({
@@ -56,6 +58,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/story-arc')({
   component: StoryArcRoute,
 });
 function StoryArcRoute() {
-  const { work, realm } = Route.useSearch();
-  return <StoryArcProfileSession id={Route.useLoaderData().id} locale={getLocale()} work={work} realm={realm} />;
+  const { work, realm, classificationHandoff } = Route.useSearch();
+  return (
+    <StoryArcProfileSession
+      id={Route.useLoaderData().id}
+      locale={getLocale()}
+      work={work}
+      realm={realm}
+      {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+    />
+  );
 }

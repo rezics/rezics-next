@@ -23,7 +23,25 @@ import {
   type FactsCurrent,
   type FactsTransport,
 } from './subject-facts';
-import { statementInput, type EditorRead, type StatementInput } from './statement-editor';
+import { type EditorRead, type StatementInput } from './statement-editor';
+import {
+  beginClassificationDraftReturn,
+  claimClassificationReturn,
+  classificationCreateHref,
+  classificationCreatedTypeAdmitted,
+  classificationMissingConceptAdmitted,
+  classificationMissingConceptTargets,
+  classificationStatementInput,
+  classificationTargetUnchosen,
+  createClassificationCreateHandoff,
+  currentEditorReturnPath,
+  discardClassificationCreateHandoff,
+  readClassificationCreateHandoff,
+  restoreClassificationDrafts,
+  snapshotClassificationDrafts,
+  type CreatedClassificationIdentity,
+} from './classification-create-return';
+import { candidateContext } from '../../subject/candidates';
 import { EditorFailure, StatementFields } from './statement-editor-view';
 import {
   catalogueEditor,
@@ -84,6 +102,16 @@ export type CharacterClassificationProps = {
   onReuse?: (index: number) => void;
   focusReference?: { index: number; nonce: number } | undefined;
   onReadCurrent?: () => void;
+  handoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
+  missingCreate?: {
+    identity?: CreatedClassificationIdentity;
+    blocked?: 'sealed' | 'edited' | 'unadmitted' | 'invalid';
+    onCreate?: () => void;
+    onChoose?: () => void;
+    onCancel?: () => void;
+  };
 };
 
 /** A property leaving the release removes admission, while its private work keeps its keyed holder. */
@@ -91,7 +119,7 @@ export function CharacterClassifications({
   properties,
   changedSetReview = false,
   ...props
-}: Omit<CharacterClassificationProps, 'property' | 'onHold' | 'draft' | 'onDraft'> & {
+}: Omit<CharacterClassificationProps, 'property' | 'onHold' | 'draft' | 'onDraft' | 'missingCreate'> & {
   properties: string[];
   changedSetReview?: boolean;
 }) {
@@ -127,7 +155,12 @@ function CharacterClassificationSetLive({
   search,
   transport,
   review,
-}: Omit<CharacterClassificationProps, 'property' | 'onHold' | 'draft' | 'onDraft'> & { properties: string[] }) {
+  handoffToken,
+  handoffReader = '',
+  handoffReaderLive = () => false,
+}: Omit<CharacterClassificationProps, 'property' | 'onHold' | 'draft' | 'onDraft' | 'missingCreate'> & {
+  properties: string[];
+}) {
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [changedReview, setChangedReview] = useState<ChangedSetReview>({ status: 'closed' });
@@ -148,6 +181,11 @@ function CharacterClassificationSetLive({
   reviewLive.current = review;
   const draftsLive = useRef(drafts);
   draftsLive.current = drafts;
+  const [offered, setOffered] = useState<CreatedClassificationIdentity>();
+  const [offeredHolder, setOfferedHolder] = useState<string>();
+  const [offeredProperty, setOfferedProperty] = useState<string>();
+  const claimed = useRef(false);
+  const returning = useRef(false);
   const subjectId = read.public.subject.id;
   const subjectRef = useRef(subjectId);
   if (subjectRef.current !== subjectId) {
@@ -159,7 +197,35 @@ function CharacterClassificationSetLive({
     setOverlay(null);
     setBusy(false);
     running.current = false;
+    setOffered(undefined);
+    setOfferedHolder(undefined);
+    setOfferedProperty(undefined);
+    claimed.current = false;
   }
+  useEffect(() => {
+    if (!handoffToken || claimed.current) return;
+    claimed.current = true;
+    if (!handoffReaderLive() || !lifetime.active()) {
+      discardClassificationCreateHandoff(handoffToken);
+      return;
+    }
+    const claimedHandoff = claimClassificationReturn(handoffToken, subjectId, handoffReader);
+    if (!claimedHandoff) return;
+    setDrafts(restoreClassificationDrafts(claimedHandoff.drafts));
+    setChangedReview(
+      claimedHandoff.reviewFingerprint
+        ? { status: 'stale', fingerprint: claimedHandoff.reviewFingerprint }
+        : { status: 'closed' },
+    );
+    if (claimedHandoff.phase === 'returned' && claimedHandoff.identity) {
+      setOffered(claimedHandoff.identity);
+      setOfferedHolder(claimedHandoff.holder);
+      setOfferedProperty(claimedHandoff.propertyId);
+    }
+    return () => {
+      if (!returning.current) discardClassificationCreateHandoff(handoffToken);
+    };
+  }, [handoffToken, handoffReader, handoffReaderLive, lifetime, subjectId]);
   const current: FactsCurrent = overlay && overlay.ok ? overlay : read;
   const readFailed = overlay != null && !overlay.ok;
   const admitted = new Set(properties.filter((property) => classificationAdmitted(current, property)));
@@ -284,6 +350,56 @@ function CharacterClassificationSetLive({
     [lifetime],
   );
   const success = drafts.filter((draft) => draft.result?.ok).length;
+  function beginMissingCreate(property: string, draft: FactDraft) {
+    if (!lifetime.active() || !handoffReaderLive() || factLocked(draft) || draft.command) return;
+    if (!classificationMissingConceptAdmitted(current.release, property)) return;
+    if (!classificationTargetUnchosen(draft.statement)) return;
+    const snapshots = snapshotClassificationDrafts(draftsLive.current);
+    if (!snapshots) return;
+    const created = createClassificationCreateHandoff({
+      sourceId: current.public.subject.id,
+      sourceLabel: pageText(current.public.subject.labels, locale).text || current.public.subject.id,
+      sourceType: current.public.subject.type,
+      returnPath: currentEditorReturnPath(),
+      reader: handoffReader,
+      context: candidateContext,
+      releaseDigest: `${current.release.catalogue.id}:${current.release.catalogue.version}`,
+      propertyId: property,
+      propertyLabel: pageText(current.release.properties[property]?.labels ?? {}, locale).text || property,
+      holder: factHolder(draft),
+      originalStatementId: draft.source,
+      targets: classificationMissingConceptTargets(current.release, property),
+      drafts: snapshots,
+      reviewFingerprint: fingerprint,
+    });
+    if (!created) return;
+    returning.current = true;
+    window.location.assign(classificationCreateHref(locale, created.token));
+  }
+  function chooseCreated(property: string, draft: FactDraft) {
+    if (!lifetime.active() || !offered || offeredHolder !== factHolder(draft) || offeredProperty !== property) return;
+    if (factLocked(draft) || draft.command || !classificationTargetUnchosen(draft.statement)) return;
+    if (
+      !classificationCreatedTypeAdmitted(current.release, property, offered.type, offered.bases) ||
+      current.public.subject.id !== subjectId
+    )
+      return;
+    assign(property, {
+      ...draft,
+      statement: { ...draft.statement, value: { type: 'value', content: offered.id } },
+    });
+    setOffered(undefined);
+    setOfferedHolder(undefined);
+    setOfferedProperty(undefined);
+    if (handoffToken) discardClassificationCreateHandoff(handoffToken);
+  }
+  function cancelOffered(property: string, draft: FactDraft) {
+    if (!lifetime.active() || offeredHolder !== factHolder(draft) || offeredProperty !== property) return;
+    setOffered(undefined);
+    setOfferedHolder(undefined);
+    setOfferedProperty(undefined);
+    if (handoffToken) discardClassificationCreateHandoff(handoffToken);
+  }
   if (!visible) return null;
   return (
     <div className="min-w-0 space-y-4">
@@ -327,6 +443,39 @@ function CharacterClassificationSetLive({
                 : undefined
             }
             onReadCurrent={() => void readCurrent()}
+            {...(handoffReader
+              ? (() => {
+                  if (!draft) return {};
+                  const holder = factHolder(draft);
+                  const offeredHere = offered && offeredHolder === holder && offeredProperty === property;
+                  const sealed = factLocked(draft) || !!draft.command;
+                  const edited = offeredHere && !classificationTargetUnchosen(draft.statement);
+                  const unadmitted =
+                    offeredHere &&
+                    !classificationCreatedTypeAdmitted(current.release, property, offered.type, offered.bases);
+                  return {
+                    missingCreate: {
+                      ...(offeredHere ? { identity: offered } : {}),
+                      ...(sealed
+                        ? { blocked: 'sealed' as const }
+                        : edited
+                          ? { blocked: 'edited' as const }
+                          : unadmitted
+                            ? { blocked: 'unadmitted' as const }
+                            : {}),
+                      ...(!sealed &&
+                      classificationTargetUnchosen(draft.statement) &&
+                      classificationMissingConceptAdmitted(current.release, property)
+                        ? { onCreate: () => beginMissingCreate(property, draft) }
+                        : {}),
+                      ...(offeredHere && !sealed && !edited && !unadmitted
+                        ? { onChoose: () => chooseCreated(property, draft) }
+                        : {}),
+                      ...(offeredHere ? { onCancel: () => cancelOffered(property, draft) } : {}),
+                    },
+                  };
+                })()
+              : {})}
           />
         );
       })}
@@ -397,6 +546,7 @@ function CharacterClassificationLive({
   onReuse,
   focusReference,
   onReadCurrent,
+  missingCreate,
 }: CharacterClassificationProps) {
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
@@ -567,7 +717,7 @@ function CharacterClassificationLive({
     const currentSelected = currentRead.public.subject.statements[property] ?? [];
     const selectedSource = currentSelected.find((statement) => statement.id === id);
     if (id && !selectedSource) return;
-    const baseline = selectedSource ? statementInput(selectedSource) : null;
+    const baseline = selectedSource ? classificationStatementInput(selectedSource) : null;
     setConfirmation(undefined);
     setPicked([]);
     setReviewing(false);
@@ -821,6 +971,49 @@ function CharacterClassificationLive({
                       />
                     }
                   />
+                  {missingCreate?.identity && (
+                    <p role="status">
+                      {m.classification_create_created_identity(
+                        { label: missingCreate.identity.label, type: missingCreate.identity.type },
+                        o,
+                      )}{' '}
+                      <code className="break-all">{missingCreate.identity.id}</code>
+                    </p>
+                  )}
+                  {missingCreate?.blocked === 'sealed' && (
+                    <p role="status">{m.classification_create_blocked_sealed({}, o)}</p>
+                  )}
+                  {missingCreate?.blocked === 'edited' && (
+                    <p role="status">{m.classification_create_blocked_edited({}, o)}</p>
+                  )}
+                  {missingCreate?.blocked === 'unadmitted' && (
+                    <p role="status">{m.classification_create_blocked_unadmitted({}, o)}</p>
+                  )}
+                  {missingCreate?.onChoose && (
+                    <Button className={actionClassName} type="button" onClick={() => missingCreate.onChoose?.()}>
+                      {m.classification_create_choose({}, o)}
+                    </Button>
+                  )}
+                  {missingCreate?.onCreate && !missingCreate.identity && (
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="outline"
+                      onClick={() => missingCreate.onCreate?.()}
+                    >
+                      {m.classification_create_missing({}, o)}
+                    </Button>
+                  )}
+                  {missingCreate?.onCancel && (
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="outline"
+                      onClick={() => missingCreate.onCancel?.()}
+                    >
+                      {m.classification_create_cancel_return({}, o)}
+                    </Button>
+                  )}
                 </div>
               </fieldset>
             )}
