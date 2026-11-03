@@ -1,4 +1,9 @@
-import type { DiscoveryFilterDocument, FilterDocument, FilterQualifier, OwnerLeaf } from '@rezics/filter';
+import type {
+  DiscoveryFilterDocument,
+  FilterDocument,
+  FilterQualifier,
+  OwnerLeaf,
+} from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
 import type { RelationFacetMatch } from './source.ts';
 
@@ -40,6 +45,15 @@ export function anyCurrentMatch(values: readonly RelationFacetMatch[]): Relation
   return values.includes('not_proven') ? 'not_proven' : false;
 }
 
+/** Each pair is evidence about one native statement, including its own qualifier witness. */
+export function currentConceptStatementsMatch(
+  statements: readonly Readonly<{ membership: RelationFacetMatch; witness: RelationFacetMatch }>[],
+  complete: boolean,
+): RelationFacetMatch {
+  const matches = statements.map(({ membership, witness }) => allMatch([membership, witness]));
+  return anyCurrentMatch(complete ? matches : [...matches, 'not_proven']);
+}
+
 function allMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
   if (values.includes(false)) return false;
   return values.includes('not_proven') ? 'not_proven' : true;
@@ -57,14 +71,19 @@ function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): Filt
 /** The existing disclosure clause key, including set-normalized values and qualifier clauses. */
 export function currentClauseKey(clause: FactClause): string {
   if (clause.facet === 'type') return JSON.stringify(['type', sortedValues(clause.values)]);
-  return JSON.stringify([
-    'statement',
-    clause.property,
+  const condition =
     'values' in clause
       ? ['values', sortedValues(clause.values)]
       : clause.range.type === 'time'
         ? ['time', clause.range.gte, clause.range.lte]
-        : ['range', clause.range.gte, clause.range.lte, clause.range.unit],
+        : ['range', clause.range.gte, clause.range.lte, clause.range.unit];
+  return JSON.stringify([
+    'statement',
+    clause.property,
+    condition,
+    ...('values' in clause && clause.concept
+      ? [['concept', clause.concept.scheme, clause.concept.includeChildren ?? false]]
+      : []),
     normalizedQualifiers(clause.qualifiers),
   ]);
 }
@@ -148,7 +167,12 @@ function compileCurrentPlan<Leaf>(
                       facet: 'statement',
                       property: node.statement.property,
                       ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
-                      ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
+                      ...('in' in node.statement
+                        ? {
+                            values: node.statement.in,
+                            ...(node.statement.concept ? { concept: node.statement.concept } : {}),
+                          }
+                        : { range: node.statement.range }),
                     },
             };
     const leaf = native ? select(native) : realm!((node as { realm: { id: string } }).realm.id);

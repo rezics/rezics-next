@@ -1,4 +1,4 @@
-import type { FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
+import type { ConceptSelection, FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
 import { RequestSourceLifetime } from '../request-source-lifetime.ts';
@@ -18,10 +18,14 @@ export type Hit = { id: string; partition: number; securityRevision: number; mat
 /** A filter leaf compiled by the route, keyed by its query name. */
 export type FactClause =
   | { facet: 'type'; values: readonly string[] }
-  | ({ facet: 'statement'; property: string; qualifiers?: readonly FilterQualifier[] } & (
-      | { values: readonly string[] }
-      | { range: FilterRange }
-    ));
+  | {
+      facet: 'statement';
+      property: string;
+      qualifiers?: readonly FilterQualifier[];
+      values: readonly string[];
+      concept?: ConceptSelection;
+    }
+  | { facet: 'statement'; property: string; qualifiers?: readonly FilterQualifier[]; range: FilterRange };
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 

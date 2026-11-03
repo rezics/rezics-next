@@ -64,6 +64,8 @@ one leaf represents one concept so each selection can toggle descendants indepen
 
 Decision: represent each concept as a one-value statement plus selected-scheme metadata; `includeChildren:true` selects the complete retained descendant closure while Boolean composition and same-statement qualifiers stay in the existing grammar.
 
+Decision: `/search/concepts` keeps `scheme`, `concept`, `condition`, and `spoiler` in the URL as committed page state; changing a selection or condition creates a browser history entry, while page cursors remain transient.
+
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.
 Condition error actions use one localized navigation label and focus the matching field, nearest condition group, or error summary in that order without changing the draft.
