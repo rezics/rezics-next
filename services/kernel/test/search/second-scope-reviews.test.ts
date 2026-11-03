@@ -75,9 +75,7 @@ describe('public review discovery adapter', () => {
 
   test('validates whole native pages before exposing their review frontier and documents', async () => {
     const partition = partitionOf(routeOf(id(1))!);
-    const rows = [review(id(1), 6n), review(id(2), 7n)].sort(
-      (a, b) => a.route - b.route || a.id.localeCompare(b.id),
-    );
+    const rows = [review(id(1), 6n), review(id(2), 7n)].sort((a, b) => a.route - b.route || a.id.localeCompare(b.id));
     const native = source({
       count: async () => ({ partition, position: 20n, count: rows.length }),
       page: async (_partition, after, limit, atPosition) => {
@@ -197,12 +195,14 @@ describe('public review discovery adapter', () => {
         read: async (_partition, _ids, atLeast) => ({
           partition,
           position: atLeast,
-          observations: [{
-            state: 'concealed' as const,
-            id: id(4),
-            route: routeOf(id(4))!,
-            version: 1n,
-          }],
+          observations: [
+            {
+              state: 'concealed' as const,
+              id: id(4),
+              route: routeOf(id(4))!,
+              version: 1n,
+            },
+          ],
         }),
       }),
     );
