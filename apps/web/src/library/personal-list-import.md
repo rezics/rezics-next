@@ -1,21 +1,21 @@
 # Personal list import
 
-Decision: keep the VNDB visit unavailable until the installed `@rezics/client` `KernelClient` includes the mounted
-`libraryImports.vndb` methods. Do not hand-author or cast around missing generated methods.
+Decision: bind the generated `KernelClient.libraryImports.vndb` methods from the mounted native route. A row enters
+the apply selection only after explicit target and released Library-state review; confirmation applies only the
+displayed admitted selection. Keep the visit unavailable if the generated methods are missing.
 
-Web will own a signed-in visit for a person's own VNDB XML export. Commerce owns private upload admission, matching,
+Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns private upload admission, matching,
 row review, and application. The Kernel routes are mounted at `/v1/libraryImports/vndb`, and the native contract is
-documented in [Personal VNDB list import](../../../../docs/library-import-vndb.md). The current client composition
-does not include `vndbImportRoutes` or typed `libraryImports.vndb` methods for preview, page, source, review, apply,
-cancel, and delete. Until that generated client surface is delivered, Web does not mount a route or claim that import
-is available. The missing producer is the generated Kernel client composition for those already-mounted native
-methods.
+documented in [Personal VNDB list import](../../../../docs/library-import-vndb.md). The installed `@rezics/client`
+surface exposes typed `libraryImports.vndb` methods for preview, bounded page reads, source evidence, review, apply,
+cancel, and deletion. Web stays unavailable if any required generated method is missing.
 
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
 public facts. VN and release identifiers remain distinct. Titles can assist display and explicit catalogue search;
 they do not select identity. Existing Library facts remain unless the person explicitly reviews and chooses an
-admitted state replacement.
+admitted state replacement. Web calls the generated client methods directly and adds no local endpoint, parser,
+synchronizer, or native implementation.
 
 Native preview maps only an explicitly selected released Library state. VNDB status labels suggest roles but do not
 choose state IDs. Scores retain their original 1–10 scale and do not become local ratings. Progress and units, date
