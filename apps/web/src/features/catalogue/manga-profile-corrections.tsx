@@ -91,14 +91,7 @@ export function MangaCorrections(props: CorrectionProps) {
   );
 }
 
-function MangaCorrectionsLive({
-  read,
-  locale,
-  disabled,
-  ports,
-  reload,
-  search = async () => [],
-}: CorrectionProps) {
+function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = async () => [] }: CorrectionProps) {
   // Reading recovery keeps this holder; departure and caller retirement never do.
   const workspace = useCatalogueLifetime('manga-corrections');
   const readingActive = useCurrentReadingActive();
@@ -353,102 +346,105 @@ function MangaCorrectionsLive({
                 ) : (
                   fields.map((property) =>
                     correctionProperty(current.release, subject.type, property) ? (
-                    <FactField
-                      key={property}
-                      property={property}
-                      read={current}
-                      locale={locale}
-                      href={href}
-                      busy={busy || disabled || !ports}
-                      canStage={drafts.length < factLimit}
-                      draft={drafts.find((draft) => draft.property === property)}
-                      onDiscard={discard}
-                      onChange={change}
-                      onReview={(address) => active() && setReviewing(address)}
-                      onStage={(source) => {
-                        if (!active()) return;
-                        const next = stageFact(current, property, source);
-                        if (next)
-                          draftLabels.current.set(
-                            property,
-                            pageText(current.release.properties[property]!.labels, locale),
-                          );
-                        if (next)
-                          active() &&
-                            setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
-                      }}
-                    />
-                  ) : (
-                    <section key={property} className="min-w-0 [overflow-wrap:anywhere]">
-                      <ContentItemFrame
-                        as="div"
-                        className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [&_a]:inline-flex [&_a]:min-h-11 md:pointer-fine:[&_a]:min-h-8 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
-                      >
-                        <ContentItemHeading
-                          level={3}
-                          className="min-w-0 whitespace-normal text-lg font-semibold"
-                          lang={pickText(current.release.properties[property]!.labels, locale).lang ?? undefined}
+                      <FactField
+                        key={property}
+                        property={property}
+                        read={current}
+                        locale={locale}
+                        href={href}
+                        busy={busy || disabled || !ports}
+                        canStage={drafts.length < factLimit}
+                        draft={drafts.find((draft) => draft.property === property)}
+                        onDiscard={discard}
+                        onChange={change}
+                        onReview={(address) => active() && setReviewing(address)}
+                        onStage={(source) => {
+                          if (!active()) return;
+                          const next = stageFact(current, property, source);
+                          if (next)
+                            draftLabels.current.set(
+                              property,
+                              pageText(current.release.properties[property]!.labels, locale),
+                            );
+                          if (next)
+                            active() &&
+                              setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
+                        }}
+                      />
+                    ) : (
+                      <section key={property} className="min-w-0 [overflow-wrap:anywhere]">
+                        <ContentItemFrame
+                          as="div"
+                          className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [&_a]:inline-flex [&_a]:min-h-11 md:pointer-fine:[&_a]:min-h-8 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                         >
-                          {pickText(current.release.properties[property]!.labels, locale).text}
-                        </ContentItemHeading>
-                        {!subject.statements[property]?.length && (
-                          <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
-                        )}
-                        {(subject.statements[property] ?? []).map((statement) => (
-                          <div key={statement.id} className="min-w-0 space-y-2">
-                            <PartValue part={statement} read={current} locale={locale} />
-                            <dl className="min-w-0 space-y-2 text-sm">
-                              {statement.qualifiers.map((part, index) => (
-                                <div key={index} className="min-w-0 space-y-1">
-                                  <dt
-                                    className="text-muted-foreground"
-                                    lang={
-                                      pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
-                                        .lang ?? undefined
-                                    }
-                                  >
-                                    {pickText(current.release.properties[part.property.id]?.labels ?? {}, locale).text}
-                                    :{' '}
-                                  </dt>
-                                  <dd className="min-w-0">
-                                    <PartValue part={part} read={current} locale={locale} />
-                                  </dd>
+                          <ContentItemHeading
+                            level={3}
+                            className="min-w-0 whitespace-normal text-lg font-semibold"
+                            lang={pickText(current.release.properties[property]!.labels, locale).lang ?? undefined}
+                          >
+                            {pickText(current.release.properties[property]!.labels, locale).text}
+                          </ContentItemHeading>
+                          {!subject.statements[property]?.length && (
+                            <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                          )}
+                          {(subject.statements[property] ?? []).map((statement) => (
+                            <div key={statement.id} className="min-w-0 space-y-2">
+                              <PartValue part={statement} read={current} locale={locale} />
+                              <dl className="min-w-0 space-y-2 text-sm">
+                                {statement.qualifiers.map((part, index) => (
+                                  <div key={index} className="min-w-0 space-y-1">
+                                    <dt
+                                      className="text-muted-foreground"
+                                      lang={
+                                        pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                          .lang ?? undefined
+                                      }
+                                    >
+                                      {
+                                        pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                          .text
+                                      }
+                                      :{' '}
+                                    </dt>
+                                    <dd className="min-w-0">
+                                      <PartValue part={part} read={current} locale={locale} />
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                              {statement.references.map((reference, index) => (
+                                <div key={index} className="min-w-0 space-y-2 border-s-2 border-border ps-3 text-sm">
+                                  <p className="text-muted-foreground">
+                                    {m.correction_references({}, o)} {index + 1}
+                                  </p>
+                                  <dl className="min-w-0 space-y-2">
+                                    {reference.parts.map((part, at) => (
+                                      <div key={at} className="min-w-0 space-y-1">
+                                        <dt
+                                          className="text-muted-foreground"
+                                          lang={
+                                            pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                              .lang ?? undefined
+                                          }
+                                        >
+                                          {
+                                            pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
+                                              .text
+                                          }
+                                        </dt>
+                                        <dd className="min-w-0">
+                                          <PartValue key={at} part={part} read={current} locale={locale} />
+                                        </dd>
+                                      </div>
+                                    ))}
+                                  </dl>
                                 </div>
                               ))}
-                            </dl>
-                            {statement.references.map((reference, index) => (
-                              <div key={index} className="min-w-0 space-y-2 border-s-2 border-border ps-3 text-sm">
-                                <p className="text-muted-foreground">
-                                  {m.correction_references({}, o)} {index + 1}
-                                </p>
-                                <dl className="min-w-0 space-y-2">
-                                  {reference.parts.map((part, at) => (
-                                    <div key={at} className="min-w-0 space-y-1">
-                                      <dt
-                                        className="text-muted-foreground"
-                                        lang={
-                                          pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
-                                            .lang ?? undefined
-                                        }
-                                      >
-                                        {
-                                          pickText(current.release.properties[part.property.id]?.labels ?? {}, locale)
-                                            .text
-                                        }
-                                      </dt>
-                                      <dd className="min-w-0">
-                                        <PartValue key={at} part={part} read={current} locale={locale} />
-                                      </dd>
-                                    </div>
-                                  ))}
-                                </dl>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </ContentItemFrame>
-                    </section>
-                  ),
+                            </div>
+                          ))}
+                        </ContentItemFrame>
+                      </section>
+                    ),
                   )
                 )}
               </section>

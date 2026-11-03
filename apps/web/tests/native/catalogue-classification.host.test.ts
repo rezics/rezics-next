@@ -110,7 +110,11 @@ async function nativeCandidates(id: string) {
   const response = await fixture.stack.kernel(`/v1/subjects/${id}/candidates?${query}`, {}, 'alice');
   expect(response.status).toBe(200);
   return (await response.json()) as {
-    candidates: { id: string; statement: { value: { content: unknown }; references: unknown[] }; decision: string | null }[];
+    candidates: {
+      id: string;
+      statement: { value: { content: unknown }; references: unknown[] };
+      decision: string | null;
+    }[];
   };
 }
 
