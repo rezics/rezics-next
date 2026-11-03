@@ -188,6 +188,8 @@ test('native watch commands, both management selections and durable sparse openi
         expect(progress).toEqual([{ advanced: true, done: false }]);
       }
     } finally {
+      // standingFixture owns this setup table; the next native operation creates its own fixture.
+      await f.db.admin.query('DROP TABLE public.standing_resource');
       await f.close();
     }
   }
