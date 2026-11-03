@@ -57,6 +57,7 @@ type LandingRow = {
   attempt: number;
   at: string;
   goal: string | null;
+  urgent: number | null;
   target: string | null;
   paths: string | null;
   declared_paths: string | null;
@@ -151,6 +152,7 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     .query(
       `SELECT e.task_id, e.attempt, e.at,
               json_extract(t.body, '$.brief.goal') AS goal,
+              json_extract(t.body, '$.brief.urgent') AS urgent,
               json_extract(t.body, '$.brief.target') AS target,
               json_extract(t.body, '$.brief.paths') AS paths,
               json_extract(l.request, '$.declaredPaths') AS declared_paths,
@@ -177,6 +179,7 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
   };
   const goals = new Map<string, number>();
   for (const row of byTask.values()) {
+    if (row.urgent === 1) continue;
     totals[targetFor(row)]++;
     const goal = clean(row.goal, policy.fieldCharacters);
     goals.set(goal, (goals.get(goal) ?? 0) + 1);
@@ -187,7 +190,7 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     .map(([goal, count]) => `${goal} ${count}`)
     .join(', ');
   const omittedGoals = Math.max(0, goals.size - policy.goalRows);
-  const landings = [...byTask.values()].sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
+  const landings = [...byTask.values()].filter((row) => row.urgent !== 1).sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
   const landingIdentities = landings
     .slice(0, policy.landingRows)
     .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at} (${targetFor(row)})`)
@@ -197,6 +200,7 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`,
     `Landings by Goal: ${perGoal || (rows.length ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
     `Landing identities: ${landingIdentities || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`,
+    `Urgent landings (excluded from throughput): ${[...byTask.values()].filter((row) => row.urgent === 1).map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt}`).join('; ') || 'none recorded'}.`,
   ];
 }
 
@@ -218,13 +222,13 @@ function workSummary(db: Database, available: boolean, policy: ReportPolicy): st
   if (!available || !hasTable(db, 'worker_tasks')) return 'Open work: unknown (current task state unavailable).';
   const rows = db
     .query(
-      `SELECT json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state, count(*) AS count
+      `SELECT json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state, json_extract(body, '$.brief.urgent') AS urgent, count(*) AS count
        FROM worker_tasks INDEXED BY worker_tasks_state
        WHERE json_extract(body, '$.state') IN ('ready','held','running','landing')
-       GROUP BY goal, state ORDER BY goal, state`,
+       GROUP BY goal, state, urgent ORDER BY goal, state, urgent`,
     )
-    .all() as { goal: string | null; state: string; count: number }[];
-  return `Open work: ${rows.length ? rows.map((row) => `${clean(row.goal, policy.fieldCharacters)} ${row.state} ${row.count}`).join('; ') : 'none recorded'}.`;
+    .all() as { goal: string | null; state: string; urgent: number | null; count: number }[];
+  return `Open work: ${rows.length ? rows.map((row) => `${clean(row.goal, policy.fieldCharacters)} ${row.state} ${row.count}${row.urgent === 1 ? ' [urgent]' : ''}`).join('; ') : 'none recorded'}.`;
 }
 
 function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics> | null, available: boolean): string {
@@ -441,9 +445,14 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
   const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
-  const starts = events.filter((event) => event.stage === 'worker' && event.action === 'started').length;
+  const urgentIds = new Set(openWorkAvailable
+    ? (db.query("SELECT id FROM worker_tasks WHERE json_extract(body,'$.brief.urgent')=1").all() as { id: string }[]).map((row) => row.id)
+    : []);
+  const urgentEvents = events.filter((event) => urgentIds.has(event.taskId));
+  const ordinaryEvents = events.filter((event) => !urgentIds.has(event.taskId));
+  const starts = ordinaryEvents.filter((event) => event.stage === 'worker' && event.action === 'started').length;
   const finishes = new Set(
-    events
+    ordinaryEvents
       .filter((event) => event.stage === 'worker' && event.action === 'finished')
       .map((event) => `${event.taskId}:${event.attempt}`),
   ).size;
@@ -499,6 +508,9 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
     flowAvailable
       ? `Worker starts / finishes in bucket: ${starts} starts (including resumes) / ${finishes} finished attempts.`
       : 'Worker starts / finishes in bucket: unknown (flow history unavailable).',
+    flowAvailable && openWorkAvailable
+      ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${urgentEvents.filter((e) => e.stage === 'worker' && e.action === 'started').length} / ${new Set(urgentEvents.filter((e) => e.stage === 'worker' && e.action === 'finished').map((e) => `${e.taskId}:${e.attempt}`)).size}.`
+      : 'Urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),

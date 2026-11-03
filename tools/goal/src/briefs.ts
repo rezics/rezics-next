@@ -407,6 +407,7 @@ export function parseBrief(
       ...(placement === undefined ? {} : { placement: placement as AcceptancePlacement }),
     },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
+    ...(raw.urgent === undefined ? {} : { urgent: boolean(raw.urgent, 'urgent') }),
     criticalPath: boolean(raw.criticalPath, 'criticalPath'),
     waiting: list(raw.waiting, 'waiting'),
     after: list(raw.after ?? [], 'after'),

@@ -154,7 +154,7 @@ function activeTaskCount(db: Database): number {
   return (
     db
       .query(
-        `SELECT count(*) AS count FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' OR (json_extract(body, '$.state') = 'running'${waiting})`,
+        `SELECT count(*) AS count FROM worker_tasks WHERE coalesce(json_extract(body, '$.brief.urgent'),0) != 1 AND (json_extract(body, '$.state') = 'ready' OR (json_extract(body, '$.state') = 'running'${waiting}))`,
       )
       .get() as { count: number }
   ).count;

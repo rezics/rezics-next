@@ -10,6 +10,7 @@ import { runPublicationCommand } from './publication-command.ts';
 
 const workerCommands = [
   'dispatch',
+  'urgent',
   'amend',
   'status',
   'retry',

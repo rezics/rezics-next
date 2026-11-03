@@ -45,6 +45,8 @@ import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches, installShared } from './shared-dependencies.ts';
 import { prepareInitialDispatch } from './dispatch-preparation.ts';
 import {
+  requireUrgentDispatch,
+  setUrgentGrant,
   authenticatedManager,
   applyPriorityTransition,
   criticalPriority,
@@ -447,13 +449,18 @@ export class WorkerTasks {
     briefFile: string,
     excludingTask?: string,
     actor?: AuthenticatedManager | null,
+    urgent = false,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
-    const markdown = readFileSync(briefFile, 'utf8');
+    let markdown = readFileSync(briefFile, 'utf8');
+    if (urgent) markdown = markdown.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_match, front: string) =>
+      `---\n${JSON.stringify({ ...Bun.YAML.parse(front), urgent: true }, null, 2)}\n---`);
     const brief = parseBrief(
       markdown,
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
+    if (excludingTask && Boolean(brief.urgent) !== Boolean(this.store.task(excludingTask).brief.urgent))
+      throw new Error('urgent lane cannot change after dispatch');
     if (brief.goal === 'control-plane') {
       const outside = brief.paths.filter((path) => !path.startsWith('tools/goal/'));
       if (outside.length)
@@ -490,8 +497,14 @@ export class WorkerTasks {
         `Cannot start the local acceptance retry while prior check custody is unresolved (check ${unresolved.join(', ')}): no supported worker-check teardown-intent/receipt API is available; no check was cancelled.`,
       );
   }
-  dispatch(briefFile: string, actor?: AuthenticatedManager | null): Task {
-    const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor);
+  setUrgentGrant(managerId: string, enabled: boolean, actor: AuthenticatedManager): void {
+    setUrgentGrant(this.store.db, this.settings.integration.supermanager, managerId, enabled, actor);
+  }
+  dispatch(briefFile: string, actor?: AuthenticatedManager | null, urgent = false): Task {
+    const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor, urgent);
+    if (submittedBrief.urgent)
+      requireUrgentDispatch(this.store.db, this.settings.integration.supermanager,
+        actor === undefined ? authenticatedManager(this.store.db) : actor);
     if (submittedBrief.continuation)
       throw new Error('continuation briefs must go through the backlog controller, not new-task dispatch');
     const authorization =
@@ -1259,7 +1272,7 @@ export class WorkerTasks {
       startsFirst(task),
       taskId,
       task.currentAttempt + 1,
-      { policy: this.settings.policy?.capacity },
+      { policy: this.settings.policy?.capacity, urgent: task.brief.urgent },
     );
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
@@ -1494,6 +1507,7 @@ export class WorkerTasks {
       plan && !plan.hold
         ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt, {
             policy: this.settings.policy?.capacity,
+            urgent: this.store.task(taskId).brief.urgent,
           })
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;

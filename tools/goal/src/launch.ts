@@ -21,7 +21,7 @@ import {
   watch,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
@@ -492,7 +492,7 @@ except OSError:
 open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
 os.rename(exit_path+'.tmp',exit_path)
 `;
-export type HostCapacity = { maxWorkers: number; minAvailableMiB: number };
+export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
 export type CapacityRelease = () => void;
 
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
@@ -518,7 +518,7 @@ export function capacityAvailable(
   } catch {
     /* Defaults. */
   }
-  const running = store.runningAttemptsCount() + admittedStarts(stateDirectory);
+  const running = store.capacityAttemptsCount(false) + admittedStarts(stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Stabilize and critical-path starts receive a bounded queue head start while respecting host capacity. */
@@ -541,14 +541,17 @@ export async function awaitHostCapacity(
     now?: () => number;
     policy?: ControlPolicy['capacity'] | undefined;
     leasePolicy?: ControlPolicy['leases'] | undefined;
+    urgent?: boolean | undefined;
+    availableMiB?: () => number;
   } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
+  const urgent = options.urgent === true;
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
-  if (!existsSync(file)) return () => {};
+  if (!existsSync(file) && !urgent) return () => {};
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
-  const queue = join(stateDirectory, 'capacity-queue');
+  const queue = join(stateDirectory, urgent ? 'urgent-capacity-queue' : 'capacity-queue');
   // The ticket names its task, so the host can tell a waiting start from a lost one. Critical-path starts used to skip
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
@@ -582,24 +585,28 @@ export async function awaitHostCapacity(
         continue;
       }
       try {
-        if (!existsSync(file)) return () => {};
+        if (!existsSync(file) && !urgent) return () => {};
         let capacity = policy;
         try {
           capacity = { ...policy, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
         } catch {
           /* Defaults. */
         }
-        const admitted = admittedStarts(stateDirectory);
-        const running = store.runningAttemptsCount();
+        const admitted = admittedStarts(stateDirectory, urgent);
+        const running = store.capacityAttemptsCount(urgent, taskId, targetAttempt);
         const ahead = waitersAhead(queue, ticket);
-        if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
+        const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
+        const memory = (options.availableMiB ?? availableMiB)();
+        if (running + admitted + ahead < limit && memory >= capacity.minAvailableMiB) {
           const reservation = join(queue, `${ticket}.admitted`);
           renameSync(join(queue, ticket), reservation);
           return releaseWhenStarted(store, reservation, taskId, targetAttempt, policy.reservationPollMs);
         }
         if (!reported)
           console.error(
-            `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+            urgent
+              ? `Waiting for urgent host capacity (${running} urgent workers, ${ahead} urgent starts ahead, slots ${limit}; available memory ${Math.floor(memory)} MiB, floor ${capacity.minAvailableMiB} MiB).`
+              : `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
           );
         reported = true;
       } finally {
@@ -620,8 +627,8 @@ export async function awaitHostCapacity(
     rmSync(join(queue, ticket), { force: true });
   }
 }
-function admittedStarts(stateDirectory: string): number {
-  const queue = join(stateDirectory, 'capacity-queue');
+function admittedStarts(stateDirectory: string, urgent = false): number {
+  const queue = join(stateDirectory, urgent ? 'urgent-capacity-queue' : 'capacity-queue');
   try {
     return readdirSync(queue).filter((name) => name.endsWith('.admitted') && liveTicket(queue, name)).length;
   } catch {
@@ -672,7 +679,7 @@ function releaseWhenStarted(
   targetAttempt: number | undefined,
   pollIntervalMs: number,
 ): CapacityRelease {
-  const [, rawPid] = reservation.split('-');
+  const [, rawPid] = basename(reservation).split('-');
   const identity = processIdentity(Number(rawPid));
   let timer: ReturnType<typeof setInterval> | undefined;
   let released = false;
@@ -704,7 +711,9 @@ function releaseWhenStarted(
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
-  const queue = join(stateDirectory, 'capacity-queue');
+  return new Set(['capacity-queue', 'urgent-capacity-queue'].flatMap((lane) => [...laneWaiters(join(stateDirectory, lane))]));
+}
+function laneWaiters(queue: string): Set<string> {
   let names: string[];
   try {
     names = readdirSync(queue);

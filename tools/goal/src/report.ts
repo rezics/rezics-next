@@ -18,6 +18,7 @@ export type LandedUsageReport = {
 };
 
 export type Report = {
+  urgent: { tasks: string[]; attempts: number; passedTasks: number };
   verifiedProofs: number;
   proofAttempts: number;
   attempts: number;
@@ -52,7 +53,7 @@ export function report(records: AttemptRecord[]): Report {
   const measured = records.filter((record) => record.outcome !== 'pending-gate');
   const byTask = new Map<string, AttemptRecord[]>();
   for (const record of measured) {
-    if (record.taskKind === 'verification') continue;
+    if (record.taskKind === 'verification' || record.urgent) continue;
     const group = byTask.get(record.taskId) ?? [];
     group.push(record);
     byTask.set(record.taskId, group);
@@ -150,7 +151,7 @@ export function report(records: AttemptRecord[]): Report {
   for (const record of measured) {
     const pool = poolTotals.get(record.pool) ?? { attempts: 0, passedTasks: 0, input: 0, cached: 0, output: 0 };
     pool.attempts++;
-    if (record.outcome === 'passed') pool.passedTasks++;
+    if (record.outcome === 'passed' && !record.urgent) pool.passedTasks++;
     pool.input += record.tokens.input;
     pool.cached += record.tokens.cached;
     pool.output += record.tokens.output;
@@ -175,6 +176,11 @@ export function report(records: AttemptRecord[]): Report {
   ) as Report['stepShare'];
 
   return {
+    urgent: {
+      tasks: [...new Set(measured.filter((r) => r.urgent).map((r) => r.taskId))],
+      attempts: measured.filter((r) => r.urgent).length,
+      passedTasks: new Set(measured.filter((r) => r.urgent && r.outcome === 'passed').map((r) => r.taskId)).size,
+    },
     proofAttempts: records.filter((record) => record.taskKind === 'verification').length,
     verifiedProofs: new Set(measured.filter((record) => record.outcome === 'verified').map((record) => record.taskId))
       .size,

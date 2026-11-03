@@ -34,6 +34,21 @@ include `hasMore`; when more records remain, `nextAfter` is the attempt number t
 The text form also prints whether more attempts remain and the continuation attempt number.
 Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
 
+`goal dispatch --urgent <brief>` (or `urgent: true` in its front matter) starts repair work through a separate
+host admission lane, ahead of all pending ordinary starts. Only an authenticated session of the configured
+supermanager, or a manager holding its urgent grant, may dispatch urgent work. The supermanager uses
+`goal urgent grant <manager>` and `goal urgent revoke <manager>` to manage that permission.
+Decision: urgent grants are manager-scoped and reusable until revoked; a task's urgent lane is fixed at dispatch.
+Revocation prevents new urgent dispatches; existing tasks retain their lane across retries and session resumes.
+
+`policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. These slots are outside
+`maxWorkers`; ordinary tasks never consume them. Urgent work still waits for `minAvailableMiB` of memory and for a
+reserved slot if all are occupied, independently of the ordinary queue. The reserved slot stays occupied while an
+urgent attempt runs or waits for a check, and frees when that attempt ends. Urgent admission enforces its slot and
+memory limits even without `capacity.json`; ordinary admission retains the existing opt-in behaviour.
+`status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
+ordinary throughput. Resource usage totals still include urgent work.
+
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
 must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
 acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged

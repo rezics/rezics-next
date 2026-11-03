@@ -385,6 +385,7 @@ export function makeRecord(
     startedAt: attempt.startedAt,
     endedAt: attempt.endedAt ?? new Date().toISOString(),
     steps: Object.values(measurement.steps).reduce((a, b) => a + b, 0),
+    ...(task.brief.urgent ? { urgent: true } : {}),
     criticalPath: task.brief.criticalPath,
     tokens: measurement.tokens,
     before: attempt.before,

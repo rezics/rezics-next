@@ -181,6 +181,7 @@
     },
     "capacity": {
       "maxWorkers": 32,
+      "urgentSlots": 2,
       "minAvailableMiB": 6144,
       "criticalHeadStartMs": 1800000,
       "admissionRetryMs": 50,
