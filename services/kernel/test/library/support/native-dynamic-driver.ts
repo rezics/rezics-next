@@ -8,7 +8,13 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { mountCollectionInZone } from './native-zone-collection-fixture.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import {
-  deleteAccount, grantSubjectRead, json, publish, setEntry, unavailable, write,
+  deleteAccount,
+  grantSubjectRead,
+  json,
+  publish,
+  setEntry,
+  unavailable,
+  write,
   type NativeConformanceWorld,
 } from './native-conformance.ts';
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
@@ -18,7 +24,7 @@ import { inspectNativeDynamicCollections } from './native-dynamic-inspection.ts'
 export async function createDynamicCollectionsDriver(
   installedWorld?: NativeConformanceWorld,
 ): Promise<DynamicCollectionsDriver> {
-  const world = installedWorld ?? await createLibraryDriver();
+  const world = installedWorld ?? (await createLibraryDriver());
   try {
     const input = profileSources('profile-v1');
     let release = await compileCatalogue(input);

@@ -81,15 +81,19 @@ export async function inspectNativeDynamicLibrary(
   return {
     collections: base.collections.map(({ id }) => {
       const row = byId.get(id);
-      if (!row) return unavailable(`DynamicCollectionsInspection.collections: Collection ${id} changed during observation`);
+      if (!row)
+        return unavailable(`DynamicCollectionsInspection.collections: Collection ${id} changed during observation`);
       // Curated and saved-query Collections have no builtin identity; preserve absence.
       const { builtinKey, ...header } = row;
       return builtinKey === null || builtinKey === undefined ? header : { ...header, builtinKey };
     }),
     curatedOccurrences: [...base.members]
-      .sort((left, right) =>
-        left.route - right.route || compare(left.collectionId, right.collectionId) ||
-        compare(left.orderKey, right.orderKey) || compare(left.id, right.id),
+      .sort(
+        (left, right) =>
+          left.route - right.route ||
+          compare(left.collectionId, right.collectionId) ||
+          compare(left.orderKey, right.orderKey) ||
+          compare(left.id, right.id),
       )
       .map(({ collectionId, id, subjectId, note }) => ({ collectionId, id, subjectId, note })),
     publicMembership: publicMembership.rows,
