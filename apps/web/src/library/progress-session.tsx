@@ -34,6 +34,8 @@ import {
   type ProgressState,
   type ProgressRecordInput,
   type ProgressFinishInput,
+  type ProgressSessionView,
+  type ProgressSnapshot,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
@@ -42,6 +44,12 @@ import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
 import { ProgressCorrectionReview } from './progress-actions';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import {
+  IndependentMeasuresReadout,
+  IndependentMeasuresVisit,
+  projectIndependentMeasures,
+  sessionHasIndependentMeasures,
+} from './independent-measures';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -369,14 +377,35 @@ function historyExcerpt(value: string): string {
   return value.length > end ? `${value.slice(0, end)}…` : value;
 }
 
+function mergeIndependentSnapshot(current: ProgressSessionView, snapshot: ProgressSnapshot): ProgressSessionView {
+  const measures = current.measures?.map((measure) => {
+    const next = snapshot.measures?.find((item) => item.unit === measure.unit);
+    return next ? { ...measure, amount: next.amount, total: next.total } : measure;
+  });
+  return {
+    ...current,
+    revision: snapshot.revision,
+    amount: snapshot.amount,
+    total: snapshot.total,
+    state: snapshot.state,
+    completedAt: snapshot.completedAt,
+    locator: snapshot.locator,
+    position: snapshot.position,
+    completedUnitCount: snapshot.completedUnitCount,
+    ...(measures ? { measures } : {}),
+  };
+}
+
 function ProgressHistoryFacts({ change, preview = false }: { change: ProgressChange; preview?: boolean }) {
   return (
     <dl className="flex min-w-0 flex-wrap gap-x-8 gap-y-3">
       {(
         [
+          [m.library_progress_unit(), change.measureId],
           [m.library_progress_amount(), change.amount],
           [m.library_progress_locator(), change.locator],
           [m.library_progress_position(), change.position],
+          [m.library_progress_clear(), change.cleared ? m.library_progress_measure_clear() : null],
         ] as const
       )
         .filter(([, value]) => value != null)
@@ -1007,7 +1036,21 @@ function SessionEditor({
           <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
         ) : null}
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
-        {offered && session.state === 'active' && session.mode !== 'completed_units' ? (
+        {offered && session.state === 'active' && sessionHasIndependentMeasures(session) ? (
+          <IndependentMeasuresVisit
+            session={session}
+            credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
+            isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+            onAcknowledged={(snapshot) => {
+              if (!canHandle()) return;
+              setSession((current) => mergeIndependentSnapshot(current, snapshot));
+              void refreshHistory();
+            }}
+            onRefresh={() => refreshHistory()}
+            logsCursor={logsCursor}
+          />
+        ) : null}
+        {offered && session.state === 'active' && session.mode !== 'completed_units' && !sessionHasIndependentMeasures(session) ? (
           <form
             className="max-w-xl space-y-4"
             noValidate
@@ -1210,7 +1253,14 @@ function SessionEditor({
             <p className="text-sm font-medium">
               <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
             </p>
-            <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+            {sessionHasIndependentMeasures(session) ? (
+              <IndependentMeasuresReadout
+                measures={projectIndependentMeasures(session)}
+                revision={session.revision}
+              />
+            ) : (
+              <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+            )}
             {session.meaning !== 'known' ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}

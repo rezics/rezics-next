@@ -92,6 +92,36 @@ it retains totals, the session, pin, lifecycle state and dates. Both forms requi
 The typed client exposes `ProgressSessionCreate.additionalMeasures`, optional `ProgressSession.measures`, and
 `ProgressScalarMeasure { unit, amount, total }`; values and errors match this HTTP contract.
 
+## Web consumer
+
+Web owns the independent-measure visit on the existing progress session page. It reads the owner session with
+`presentation=FULL`, projects at most eight admitted scalar values, and edits chapter and volume in the same
+occurrence without converting or completing one from the other. Generic cursor and completed-unit editors stay on
+the single-measure path.
+
+Decision: Native `:record` addresses one `measureId`. Saving more than one dirty unit sequences those records
+against the shared returned revision. There is no combined multi-measure payload in the installed producer.
+
+Unknown commands keep the original sender, credentials, idempotency key and operands. A stale revision needs an
+explicit refresh before a new key. Partial success keeps remaining drafts. Missing `KernelClient.progressSessions({ sessionId }).$record.post` with `measureId` stays unavailable at that seam. Historical or unsupported
+descriptors are shown as supplied; Web does not invent labels or a new profile.
+
+Mounted UI: `apps/web/src/library/independent-measures/` with the session page caller in
+`apps/web/src/library/progress-session.tsx`. Navigation to session history uses the existing progress session
+route. Commerce remains the native producer (task `2125f5c8-528e-4852-be3e-b95d928f0b38`).
+
+## Cost
+
+Operation: independent-measure session inspect and guarded record.
+Neighbourhood: one owner session GET (`presentation=FULL`); writes are `:record` against that session id.
+Formula: read components `C_read = 1` session GET, independent of owner history length `N`. Projection and retained
+state are `O(F)` where `F <= 8` is the admitted measure count from the native response. A save issues `D` record
+commands, `D <= F`, chained on the shared session revision; it does not list history or fan out independent
+revisions. Installed cap `MAX_PROGRESS_MEASURES = 8` from the producer; this journey exercises the genuine
+chapter+volume pair (`F = 2`) and does not fabricate an eight-measure profile.
+Test: `apps/web/tests/independent-progress-measures.test.tsx` (scales `N = 20, 200, 2_000`).
+This is a Web loader/controller bound, not a new kernel engine path.
+
 ## Scope
 
 This slice supports profile-approved scalar units, including chapter and volume when both are admitted by the same

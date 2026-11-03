@@ -33,12 +33,27 @@ function requiredString(value: unknown, max: number): string {
   return value;
 }
 
+function additionalMeasures(value: unknown): { unit: string; total?: string }[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 7) throw new Error('Invalid progress request');
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('Invalid progress request');
+    const measure = item as Record<string, unknown>;
+    const total = measure.total === undefined ? undefined : requiredString(measure.total, 32);
+    return {
+      unit: requiredString(measure.unit, 128),
+      ...(total === undefined ? {} : { total }),
+    };
+  });
+}
+
 function validateStart(input: unknown): ProgressStartInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   const total = value.total === undefined ? undefined : requiredString(value.total, 32);
   const versionSubjectId =
     value.versionSubjectId === undefined ? undefined : requiredString(value.versionSubjectId, 128);
+  const extras = additionalMeasures(value.additionalMeasures);
   return {
     subjectId: requiredString(value.subjectId, 128),
     ...(versionSubjectId === undefined ? {} : { versionSubjectId }),
@@ -46,6 +61,7 @@ function validateStart(input: unknown): ProgressStartInput {
     unit: requiredString(value.unit, 128),
     idempotencyKey: requiredString(value.idempotencyKey, 64),
     ...(total === undefined ? {} : { total }),
+    ...(extras === undefined ? {} : { additionalMeasures: extras }),
   };
 }
 
@@ -67,6 +83,7 @@ function validateRecord(input: unknown): ProgressRecordInput {
     sessionId: requiredString(value.sessionId, 128),
     revision: value.revision,
     idempotencyKey: requiredString(value.idempotencyKey, 64),
+    ...(value.measureId === undefined ? {} : { measureId: requiredString(value.measureId, 128) }),
     ...(value.clear === true ? { clear: true as const } : {}),
     ...(value.amount === undefined ? {} : { amount: requiredString(value.amount, 32) }),
     ...(value.locator === undefined ? {} : { locator: requiredString(value.locator, 256) }),

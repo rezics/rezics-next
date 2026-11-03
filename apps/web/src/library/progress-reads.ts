@@ -18,6 +18,8 @@ import {
 } from './reads';
 
 export const PROGRESS_BATCH_LIMIT = 100;
+/** Installed producer cap (`MAX_PROGRESS_MEASURES`); Web never fabricates extra units to fill it. */
+export const PROGRESS_MEASURE_CAP = 8;
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -163,6 +165,22 @@ export type ProgressChange = {
   position: string | null;
   add: string[];
   remove: string[];
+  measureId?: string;
+  cleared?: true;
+};
+
+export type ProgressMeasureView = {
+  unit: string;
+  amount: string | null;
+  total: string | null;
+  primary: boolean;
+  meaning?: 'known' | 'unknown' | 'unavailable';
+  recordingState?: 'supported' | 'unsupported' | 'unavailable';
+  unitLabel?: string;
+  unitLabelLanguage?: string;
+  unitCountForms?: NativeProgressPresentation['unitCountForms'];
+  dimension?: string;
+  inputRules?: ProgressInputRules;
 };
 
 export type ProgressSessionCore = Pick<
@@ -188,6 +206,7 @@ export type ProgressSessionCore = Pick<
   completedAt: string | null;
   subject: LibrarySubject | null;
   versionSubject: LibrarySubject | null;
+  measures?: ProgressMeasureView[];
 };
 
 export type ProgressIndex = {
@@ -234,6 +253,7 @@ export type ProgressSnapshot = {
   state: ProgressState;
   completedAt: string | null;
   total: string | null;
+  measures?: readonly { unit: string; amount: string | null; total: string | null }[];
 };
 
 export type ProgressStarted = { ok: true; id: string };
@@ -247,14 +267,17 @@ type RawSubject = {
   cover?: unknown;
 } | null;
 type RawIntent =
-  | { amount: string }
+  | { amount: string; measureId?: string }
+  | { measureId: string; clear: true }
+  | { clear: true }
   | { locator: string; position: string }
   | { add: string[]; remove?: string[] }
   | { remove: string[]; add?: string[] }
   | { action: 'complete' | 'abandon' };
-type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject'> & {
+type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject' | 'measures'> & {
   subject?: RawSubject;
   versionSubject?: RawSubject;
+  measures?: unknown;
 };
 type RawChange = { id: string; revision: number; intent: RawIntent; createdAt: string };
 type LibraryCall = { data?: unknown; error?: unknown; status?: number };
@@ -267,6 +290,49 @@ function isWritableUnit(value: string): boolean {
   return unitIdPattern.test(value);
 }
 
+function isScalarAmount(value: unknown): value is string {
+  return typeof value === 'string' && decimal.test(value);
+}
+
+function isNativeMeasure(
+  value: unknown,
+): value is {
+  unit: string;
+  amount: string | null;
+  total: string | null;
+  presentation?: NativeProgressPresentation;
+} {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['unit', 'amount', 'total', 'presentation']) &&
+    typeof value.unit === 'string' &&
+    isWritableUnit(value.unit) &&
+    (value.amount === null || isScalarAmount(value.amount)) &&
+    (value.total === null || isScalarAmount(value.total)) &&
+    (value.presentation === undefined || isPresentation(value.presentation))
+  );
+}
+
+function presentMeasures(raw: unknown, primaryUnit: string): ProgressMeasureView[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const measures: ProgressMeasureView[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (measures.length >= PROGRESS_MEASURE_CAP || !isNativeMeasure(item) || seen.has(item.unit)) continue;
+    seen.add(item.unit);
+    measures.push({
+      unit: item.unit,
+      amount: item.amount,
+      total: item.total,
+      primary: measures.length === 0,
+      ...(item.presentation ? presentationFields(item.presentation) : {}),
+    });
+  }
+  if (measures.length === 0) return undefined;
+  if (measures[0]) measures[0].primary = measures[0].unit === primaryUnit;
+  return measures;
+}
+
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
   return presentSubject(subject);
 }
@@ -275,6 +341,7 @@ function presentSession(
   session: RawSession,
   presentation?: NativeProgressPresentation | typeof unavailablePresentation,
 ): ProgressSessionCore {
+  const measures = presentMeasures(session.measures, session.unit);
   return {
     id: session.id,
     subjectId: session.subjectId,
@@ -300,6 +367,7 @@ function presentSession(
     completedAt: session.completedAt,
     subject: subjectOf(session.subject),
     versionSubject: subjectOf(session.versionSubject),
+    ...(measures ? { measures } : {}),
   };
 }
 
@@ -315,10 +383,13 @@ function presentChange(change: RawChange): ProgressChange {
     position: 'position' in intent ? intent.position : null,
     add: 'add' in intent && intent.add ? [...intent.add] : [],
     remove: 'remove' in intent && intent.remove ? [...intent.remove] : [],
+    ...('measureId' in intent && typeof intent.measureId === 'string' ? { measureId: intent.measureId } : {}),
+    ...('clear' in intent && intent.clear === true ? { cleared: true as const } : {}),
   };
 }
 
 function snapshotOf(session: RawSession): ProgressSnapshot {
+  const measures = presentMeasures(session.measures, session.unit);
   return {
     id: session.id,
     revision: session.revision,
@@ -329,6 +400,9 @@ function snapshotOf(session: RawSession): ProgressSnapshot {
     state: session.state,
     completedAt: session.completedAt,
     total: session.total,
+    ...(measures
+      ? { measures: measures.map((measure) => ({ unit: measure.unit, amount: measure.amount, total: measure.total })) }
+      : {}),
   };
 }
 
@@ -571,12 +645,30 @@ export async function loadProgressSession(
   };
 }
 
+export type ProgressMeasureDraft = { unit: string; total?: string };
+
+function additionalMeasureBody(input: ProgressStartInput): { unit: string; total?: string }[] | false {
+  if (input.additionalMeasures === undefined) return [];
+  if (input.mode !== 'scalar_amount') return false;
+  if (input.additionalMeasures.length === 0 || input.additionalMeasures.length > PROGRESS_MEASURE_CAP - 1) return false;
+  const seen = new Set<string>([input.unit]);
+  const measures: { unit: string; total?: string }[] = [];
+  for (const measure of input.additionalMeasures) {
+    const total = measure.total?.trim() ?? '';
+    if (!isWritableUnit(measure.unit) || seen.has(measure.unit) || (total !== '' && !decimal.test(total))) return false;
+    seen.add(measure.unit);
+    measures.push(total ? { unit: measure.unit, total } : { unit: measure.unit });
+  }
+  return measures;
+}
+
 export type ProgressStartInput = {
   subjectId: string;
   versionSubjectId?: string;
   mode: string;
   unit: string;
   total?: string;
+  additionalMeasures?: ProgressMeasureDraft[];
   idempotencyKey: string;
 };
 
@@ -590,13 +682,15 @@ export async function startProgress(
   const authorization = await bearer(request, env);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   const total = input.total?.trim() ?? '';
+  const additional = additionalMeasureBody(input);
   if (
     !routeId.test(input.subjectId) ||
     (input.versionSubjectId !== undefined && !routeId.test(input.versionSubjectId)) ||
     !isMode(input.mode) ||
     !isWritableUnit(input.unit) ||
     !idempotencyKeyPattern.test(input.idempotencyKey) ||
-    (total !== '' && !decimal.test(total))
+    (total !== '' && !decimal.test(total)) ||
+    additional === false
   )
     return { ok: false, reason: 'invalid' };
   try {
@@ -607,6 +701,7 @@ export async function startProgress(
         mode: input.mode,
         unit: input.unit,
         ...(total ? { total } : {}),
+        ...(additional && additional.length ? { additionalMeasures: additional } : {}),
       },
       { headers: writeHeaders(authorization, input.idempotencyKey) },
     );
@@ -623,6 +718,7 @@ export type ProgressRecordInput = {
   sessionId: string;
   revision: number;
   idempotencyKey: string;
+  measureId?: string;
   clear?: true;
   amount?: string;
   locator?: string;
@@ -632,15 +728,22 @@ export type ProgressRecordInput = {
 };
 
 type RecordBody =
-  | { revision: number; clear: true }
-  | { revision: number; amount: string }
+  | { revision: number; measureId?: string; clear: true }
+  | { revision: number; measureId?: string; amount: string }
   | { revision: number; locator: string; position: string }
   | { revision: number; add: string[] }
   | { revision: number; remove: string[] };
 
+function addressed(input: ProgressRecordInput): { measureId: string } | Record<string, never> | null {
+  if (input.measureId === undefined) return {};
+  return isWritableUnit(input.measureId) ? { measureId: input.measureId } : null;
+}
+
 function recordBody(input: ProgressRecordInput): RecordBody | null {
   if (!routeId.test(input.sessionId) || !Number.isSafeInteger(input.revision) || input.revision < 0) return null;
   if (!idempotencyKeyPattern.test(input.idempotencyKey)) return null;
+  const target = addressed(input);
+  if (!target) return null;
   const clear = input.clear !== undefined;
   const amount = input.amount !== undefined;
   const cursor = input.locator !== undefined || input.position !== undefined;
@@ -650,10 +753,11 @@ function recordBody(input: ProgressRecordInput): RecordBody | null {
     (input.add !== undefined && input.remove !== undefined)
   )
     return null;
-  if (clear) return input.clear === true ? { revision: input.revision, clear: true } : null;
+  if (input.measureId !== undefined && (cursor || batch)) return null;
+  if (clear) return input.clear === true ? { revision: input.revision, ...target, clear: true } : null;
   if (input.amount !== undefined) {
     if (!decimal.test(input.amount)) return null;
-    return { revision: input.revision, amount: input.amount };
+    return { revision: input.revision, ...target, amount: input.amount };
   }
   if (cursor) {
     if (
