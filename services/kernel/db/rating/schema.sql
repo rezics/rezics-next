@@ -1454,6 +1454,20 @@ CREATE TRIGGER realm_rank_publication_generation AFTER INSERT OR DELETE OR UPDAT
 
 
 --
+-- Name: vote shelf_score_vote_lock; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER shelf_score_vote_lock BEFORE INSERT OR DELETE OR UPDATE ON rating.vote FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_lock();
+
+
+--
+-- Name: vote shelf_score_vote_sync; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER shelf_score_vote_sync AFTER INSERT OR DELETE OR UPDATE ON rating.vote FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_sync();
+
+
+--
 -- Name: vote vote_initialize_counting; Type: TRIGGER; Schema: rating; Owner: -
 --
 
@@ -1601,9 +1615,3 @@ ALTER TABLE ONLY rating.vote
 --
 
 
-
--- Library consumes native vote effects in the same transaction; it never writes votes.
-CREATE TRIGGER shelf_score_vote_lock BEFORE INSERT OR DELETE OR UPDATE ON rating.vote
-    FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_lock();
-CREATE TRIGGER shelf_score_vote_sync AFTER INSERT OR DELETE OR UPDATE ON rating.vote
-    FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_sync();

@@ -22,7 +22,7 @@ The default public personal-score read currently returns `503 dependency_unavail
 identity fence is not installed. No empty page, inferred currentness or viewer-facts response substitutes for it.
 The internal native page/index producer is implemented; this does not claim a usable public score journey yet.
 Web A05/A06 retain their existing interface owner and must show this unavailable state until native composition
-binds `KernelDependencies.shelves.scoreCurrentness`. The existing kernel declaration producer now describes the new query literal, entry score, question descriptor and preparation route. Declaration/snapshot emission remains deferred because the unchanged base
+binds `KernelDependencies.shelves.scoreCurrentness`. The existing kernel declaration producer now describes the new query literal, entry score, question descriptor and preparation route. Declaration emission remains deferred because the unchanged base
 `community/member-page-select.sql` fails the compiler with duplicate Reylo parameters.
 
 ## Stable keysets and currentness
