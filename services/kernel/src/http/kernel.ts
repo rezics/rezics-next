@@ -613,7 +613,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(bangumi), realmRoleReader }),
   });
   const mal = malImportRoutes(bangumi as unknown as ReturnType<typeof definitionRoutes>, {
-    routeKey: dependencies.routeKey, pool: dependencies.pool, tokens, clock,
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
   });
   const labels = personalLabelRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {

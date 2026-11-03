@@ -57,9 +57,13 @@ type Dependencies = {
   shelfTypeDigest?: ShelfTypeDigest;
   typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
-export type ReviewedEntrySource = { release: string; epoch: string; acceptingType: string;
+export type ReviewedEntrySource = {
+  release: string;
+  epoch: string;
+  acceptingType: string;
   importFence?: { id: string; row: number; version: string };
-  binding?: { subject: string; route: number; source: string; externalId: string } };
+  binding?: { subject: string; route: number; source: string; externalId: string };
+};
 
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
@@ -317,11 +321,11 @@ export function createEntryCommands(config: Dependencies) {
     const resolved = reviewedSource
       ? { subjectId, requestedSubjectId: null }
       : existing
-      ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
-      : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
-          subjectId,
-          requestedSubjectId: null,
-        });
+        ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
+        : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
+            subjectId,
+            requestedSubjectId: null,
+          });
 
     // Absence retains the exact pre-incarnation receipt input.
     const requestInput = {
@@ -346,17 +350,26 @@ export function createEntryCommands(config: Dependencies) {
           async prepare(attempt) {
             try {
               const observation = await readLibraryProfileSourceObservation(
-                { pool, access, actor: owner, at: attempt.time, deadline }, subjectId);
+                { pool, access, actor: owner, at: attempt.time, deadline },
+                subjectId,
+              );
               const source = observation?.source;
               if (reviewedSource) {
-                if (!observation || source?.kind !== 'supported' || source.subjectId !== subjectId ||
-                  source.pin.releaseDigest !== reviewedSource.release || observation.anchor.identityEpoch.toString() !== reviewedSource.epoch ||
-                  observation.anchor.acceptingType !== reviewedSource.acceptingType) throw new LibraryConflictError();
+                if (
+                  !observation ||
+                  source?.kind !== 'supported' ||
+                  source.subjectId !== subjectId ||
+                  source.pin.releaseDigest !== reviewedSource.release ||
+                  observation.anchor.identityEpoch.toString() !== reviewedSource.epoch ||
+                  observation.anchor.acceptingType !== reviewedSource.acceptingType
+                )
+                  throw new LibraryConflictError();
                 if (reviewedSource.binding) {
                   const b = reviewedSource.binding;
                   const claim = await pool.query<{ subject_id: string }>(
                     'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
-                    [b.route,b.source,b.externalId]);
+                    [b.route, b.source, b.externalId],
+                  );
                   if (claim.rows[0]?.subject_id !== b.subject) throw new LibraryConflictError();
                 }
               }
@@ -414,11 +427,13 @@ export function createEntryCommands(config: Dependencies) {
             const fence = reviewedSource.importFence;
             // Serialize fresh admission with cancellation/deletion on the same owner home.
             // Original receipt replay has already returned before this fresh-command fence.
-            const admitted = await tx.query(`SELECT id FROM library.list_import_mal
+            const admitted = await tx.query(
+              `SELECT id FROM library.list_import_mal
               WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp()
                 AND NOT (document->>'canceled')::boolean
                 AND document->'intents'->$4::text->'review'->>'version'=$5 FOR SHARE`,
-              [route,owner.accountId,fence.id,String(fence.row),fence.version]);
+              [route, owner.accountId, fence.id, String(fence.row), fence.version],
+            );
             if (!admitted.rows.length) throw new LibraryConflictError();
           }
           if ('error' in prepared) throw prepared.error;

@@ -13,14 +13,14 @@ Titles assist display/search only. The page exposes readable candidates, unmatch
 already-matched rows. External claims are unique, so there is no ambiguous automatic candidate set in this slice.
 An unmatched row can be explicitly assigned any currently readable canonical subject; this never changes a claim.
 
-| Source | Native proposal or visible retention |
-| --- | --- |
-| Watching/Reading, Completed, On-Hold, Dropped, Plan to Watch/Read (or codes 1/2/3/4/6) | Unique released role active/completed/paused/dropped/planned, explicitly confirmed as `status` |
-| Score | Original integer 1–10 scale; zero means no rating. Retained; no native vote or aggregate admission |
-| Episodes, chapters and volumes | Independent original measures, including simultaneous manga counts; retained, no invented subjects or sessions |
-| Comments, tags, repeat totals | Private note, original tags and count; retained, no public review, inferred label or dated repeat session |
-| Start/finish dates | Year/month/day precision, all-zero unknown, invalid calendar dates marked invalid; no invented first day |
-| Privacy, source timestamps, other fields and export metadata | Retained privately; never a command clock or publication decision |
+| Source                                                                                 | Native proposal or visible retention                                                                           |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Watching/Reading, Completed, On-Hold, Dropped, Plan to Watch/Read (or codes 1/2/3/4/6) | Unique released role active/completed/paused/dropped/planned, explicitly confirmed as `status`                 |
+| Score                                                                                  | Original integer 1–10 scale; zero means no rating. Retained; no native vote or aggregate admission             |
+| Episodes, chapters and volumes                                                         | Independent original measures, including simultaneous manga counts; retained, no invented subjects or sessions |
+| Comments, tags, repeat totals                                                          | Private note, original tags and count; retained, no public review, inferred label or dated repeat session      |
+| Start/finish dates                                                                     | Year/month/day precision, all-zero unknown, invalid calendar dates marked invalid; no invented first day       |
+| Privacy, source timestamps, other fields and export metadata                           | Retained privately; never a command clock or publication decision                                              |
 
 Each field distinguishes missing, empty/unknown, invalid, zero and a value as applicable. `fields` preserves every
 row leaf, `retained` explains fields without admission, and the original XML retains metadata and attributes.

@@ -173,9 +173,11 @@ export async function batchCommand(
     async (tx, { transactionId }) => {
       try {
         const resolve = async (value: BulkValue) => {
-          if (command.op === 'create') await declareCommandHistory(tx, kind, {
-            response: { artifactType: 'command-receipt/v1', accounts: [] }, events: [],
-          });
+          if (command.op === 'create')
+            await declareCommandHistory(tx, kind, {
+              response: { artifactType: 'command-receipt/v1', accounts: [] },
+              events: [],
+            });
           return noEffect<Value>({ status: 200, value });
         };
         const source = command.source;

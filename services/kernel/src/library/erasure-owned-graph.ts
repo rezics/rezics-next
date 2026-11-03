@@ -191,9 +191,11 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         };
       }
       if (kind === 'list_import_mal') {
-        const removed = await tx.query(`DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+        const removed = await tx.query(
+          `DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2
           AND id IN (SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2 ORDER BY id LIMIT 100)`,
-          [route,accountId]);
+          [route, accountId],
+        );
         return noEffect({ kind, removed: removed.rowCount ?? 0, parent: null, retain: false, blocked: false });
       }
       if (kind === 'native_source_capture') {
