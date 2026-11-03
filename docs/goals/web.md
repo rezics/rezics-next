@@ -179,6 +179,15 @@ where its scope or interface wording changes. Page stories cover only the brief'
 recordings when available; illustrative responses stay labelled as such. All launch locales and the current
 phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
+Decision: bulk review focus recovery is keyboard-only; its regression sends Enter before activation and compares
+DOM focus by Boolean identity. The bounded memory incident came from a failed HTMLElement assertion after a
+programmatic click skipped that keyboard intent, causing Bun to format the large Happy DOM graph; no production
+render/subscription loop was reproduced. The integration command is
+`bun apps/web/scripts/focused.ts --private-network -- bun scripts/moderation-memory-regression.ts`. Its guard
+samples process-tree RSS and cgroup usage every 10 ms, fails at 1,700,000,000 bytes, and applies 60-second
+isolated-case, 120-second file, 480-second combined-suite and 600-second overall deadlines. Integration owns
+running it with the same-process moderation suites.
+
 ### Realm members management boundary
 
 The private `/realms/:id/members` destination and management-region link compose one bounded page and one exact

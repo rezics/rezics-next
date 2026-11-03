@@ -55,11 +55,40 @@ Decision: local selectors and same-tab links use the shared decision, including 
 queues reuse an enclosing owner or create their own boundary without acquiring private reader authority.
 Decision: Only a successful explicit cursor continuation transfers local focus to the admitted report article boundary; the route's ordinary focus handling remains in place.
 
-Cost is the existing bounded native page and deduplicated evidence, one constant-size session-cache
-observation per QueryClient shared across loader/mount, one local caller generation and O(page size)
-rendering. Mounted subscriptions disconnect on unmount. Weak retention does not store page history.
-There is no polling, history scan, per-row profile request, extra recovery read on rendering, background
-command or new native authority. The existing listTargetReports signatures are untouched.
+The bounded memory incident came from the bulk-focus test path. It used programmatic `.click()` while
+expecting keyboard focus recovery, which is admitted only after the matching keydown. The failed
+`toBe(HTMLElement)` assertion made Bun format a Happy DOM node graph; a bounded run reached 1.7 GB
+before this assertion, while the same failure against a Boolean exited at 283 MB. The test now sends
+Enter before activation and compares focus by Boolean identity. No render or external-store feedback
+loop was reproduced.
+
+## Cost
+
+**Touches.** A rendered page has one React root and one Happy DOM window. The 22-row bulk case mounts
+one controller subscription, one departure-store subscription and 23 departure registrations (the
+queue plus its 22 cards). The repeated lifecycle check records root/window high water, controller and
+departure listener counts, render calls and departure notifications. Its 1, 10 and 50 visit scales
+each tear down the root and window before the next visit. The guard samples process-tree RSS and
+high-water RSS plus cgroup memory and OOM counters every 10 ms.
+
+**Bound.** `bun apps/web/scripts/focused.ts --private-network -- bun scripts/moderation-memory-regression.ts`
+runs five isolated content-item cases, the content-item file, then one same-process moderation suite
+of 11 files. The child limits are 60 seconds per isolated case, 120 seconds for the file, 480 seconds
+for the combined suite and 600 seconds overall. A 1,700,000,000-byte process-tree or cgroup reading,
+timeout, OOM event, signal, skipped test or missing physical RSS measurement fails the guard. This
+stays below the 2,000,000,000-byte acceptance ceiling. Integration owns running this command.
+
+**Growth check.** The 1/10/50 visit regression passed in 1,226 ms with 281,731,072 bytes sampled
+process-tree RSS and 551,694,336 bytes sampled cgroup usage. Each visit rendered its queue once; root,
+window and controller-listener high water stayed at one, while root, window, controller and departure
+listeners returned to zero after teardown. Departure notifications were bounded to eight per visit.
+
+The product cost remains the existing bounded native page and deduplicated evidence, one constant-size
+session-cache observation per QueryClient shared across loader/mount, one local caller generation and
+O(page size) rendering. Mounted subscriptions disconnect on unmount. Weak retention does not store
+page history. There is no polling, history scan, per-row profile request, extra recovery read on
+rendering, background command or new native authority. The existing listTargetReports signatures are
+untouched.
 
 The authored `tests/reports-page-lifetime.test.tsx` composes real generated-native-shaped reads, the default
 Page/action binding, the existing session QueryClient, queue and cards. It covers immediate hiding,
