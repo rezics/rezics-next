@@ -522,15 +522,17 @@ async function retireDiscovery(
   target: DiscoveryGeneration,
   active: DiscoveryGeneration | undefined,
 ) {
-  if (!active) return;
   const due = await withConnection(
     pool,
     async (client) =>
       (
         await client.query<{ due: boolean }>(
-          `SELECT activated_at < clock_timestamp()-interval '15 minutes' AS due FROM search.discovery_generation
-     WHERE partition_no=0 AND prefix=$1 AND generation=$2`,
-          [active.prefix, active.generation],
+          `SELECT (activated_at IS NULL OR EXISTS (
+             SELECT 1 FROM search.discovery_generation a WHERE a.partition_no=0 AND a.prefix=$1
+               AND a.generation=$3 AND a.state='active' AND a.activated_at < clock_timestamp()-interval '15 minutes'
+           )) AS due FROM search.discovery_generation
+           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'`,
+          [target.prefix, target.generation, active?.generation ?? null],
         )
       ).rows[0]?.due,
   );

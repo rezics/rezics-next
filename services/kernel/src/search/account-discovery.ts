@@ -35,7 +35,12 @@ import {
   type IndexedAccount,
 } from './discovery.ts';
 import { reviewDiscoveryDocument } from './review-discovery.ts';
-import type { DiscoveryMetadataKind, DiscoveryMetadataProducers } from './generations.ts';
+import {
+  assertDiscoveryCapabilityBinding,
+  DiscoveryProducerCoverageError,
+  type DiscoveryMetadataKind,
+  type DiscoveryMetadataProducers,
+} from './generations.ts';
 import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';
@@ -537,6 +542,11 @@ export function createDiscoveryProjection(options: {
           throw new Error('Account native revision rewound; new incarnation required');
         if (old?.deleted && BigInt(old.position) === action.version && action.op === 'index')
           throw new Error('Discovery native position cannot resurrect its keyed deletion');
+        if (old && BigInt(old.position) === action.version && old.settled && !repair) {
+          // Raw replay revisits unchanged keys. An exact visible winner makes that replay idempotent.
+          await readDiscoveryRepairWinner(search, index, action);
+          continue;
+        }
         if (
           old &&
           (BigInt(old.position) > action.version || (BigInt(old.position) === action.version && old.settled && !repair))
@@ -564,7 +574,7 @@ export function createDiscoveryProjection(options: {
           }
         : search;
       await writeDiscoveryActions(transport, registry, index, pending);
-      if (capture) {
+      if (capture && pending.length > 0) {
         if (!record(bulk) || !Array.isArray(bulk.items) || bulk.items.length !== pending.length)
           throw new Error('Discovery repair has no exact native response');
         for (const [offset, action] of pending.entries()) {
@@ -759,10 +769,13 @@ export function createDiscoveryProjection(options: {
   }
   async function applyNativeActions(actions: readonly AnyDiscoveryIndexAction[]) {
     if (actions.length > 100) throw new RangeError('Metadata discovery write exceeds its native batch bound');
+    await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
     const prepared = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), [
       ...actions,
     ]);
-    return applyActions(prepared, false, true);
+    const result = await applyActions(prepared, false, true);
+    await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
+    return result;
   }
   async function hasMetadataPopulation(kind: DiscoveryMetadataKind) {
     metadataPopulationOwners ??= withConnection(pool, async (client) => {
@@ -812,7 +825,23 @@ export function createDiscoveryProjection(options: {
     if (!producer) throw new Error(`Native ${kind} discovery producer is not ready`);
     if (!Array.isArray(ids) || ids.length > 100 || new Set(ids).size !== ids.length)
       throw new RangeError('Metadata discovery read exceeds its bound or repeats an identity');
+    await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
     const snapshot = await producer.read(partition, ids);
+    if (snapshot.epoch !== undefined) {
+      const epoch = await withConnection(
+        pool,
+        async (client) =>
+          (
+            await client.query<{ native_epoch: number | null }>(
+              `SELECT native_epoch FROM search.discovery_population WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4`,
+              [partition, target.prefix, target.generation, kind],
+            )
+          ).rows[0]?.native_epoch,
+      );
+      if (epoch !== null && epoch !== undefined && epoch !== snapshot.epoch)
+        throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
+    }
+    await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
     if (
       snapshot.position < 0n ||
       snapshot.position > 9_223_372_036_854_775_807n ||
