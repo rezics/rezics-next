@@ -28,7 +28,12 @@ const failures = {
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const item = t.Object({
   id: t.String(),
-  kind: t.Union([t.Literal('reply'), t.Literal('mention'), t.Literal('moderation_decision')]),
+  kind: t.Union([
+    t.Literal('reply'),
+    t.Literal('mention'),
+    t.Literal('thread_watch'),
+    t.Literal('moderation_decision'),
+  ]),
   createdAt: t.String(),
   actorId: t.Union([t.String(), t.Null()]),
   threadId: t.Union([t.String(), t.Null()]),

@@ -195,10 +195,17 @@ replay emit no publication event. Reply index fields retain the existing opening
 
 ## Notifications
 
-Content owns minimal in-app notices for `reply`, `mention` and `moderation_decision`, using the names in accounts'
-notification catalogue (`src/access/notification-kinds.ts`). Accounts owns the preferences and `notificationAllowed`.
-There is no email delivery in this scope. These sections specify the pending implementation; they do not claim that
-notification or appeal routes already exist.
+Content owns minimal in-app notices for `reply`, `mention`, `thread_watch` and `moderation_decision`, using the names
+in Accounts' notification catalogue (`src/access/notification-kinds.ts`). Accounts owns the preferences and
+`notificationAllowed`. There is no email delivery in this scope.
+
+An authenticated reader uses `GET` and `PUT /v1/threads/{threadId}/watch` to read their own state and watch a thread;
+`DELETE` clears only their own watch and remains available after thread access is lost. Watching requires current
+thread read access. Watch state never grants access and no endpoint exposes watcher identities or counts. Only later
+published replies notify watchers; the opening post and other participants do not create subscriptions. Watch replies
+use their own optional, default-on `thread_watch` preference, separate from reply and mention settings.
+
+Decision: `thread_watch` has its own default-on preference, and a reader can clear their own watch after access to the thread is lost.
 
 A published post with a parent notifies that parent's author with `reply`. A published post without a parent
 notifies the thread's opening-post author. Creating the opening post never notifies its own author. A `mention`
@@ -342,7 +349,7 @@ remains separate from account lifecycle authority; a late redrive cannot recreat
 `Idempotency-Key`. The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. The GET list returns newest
 first, using an immutable notice ordering to break time ties. `limit` is 1–50, default 20. Its opaque shared list
 cursor (`src/tokens/list-cursor.ts`) binds the viewer and list query. Each item contains `id`, `kind`, `createdAt`,
-`actorId`, target ids and `unread`. Reply and mention candidates pass the current native post disclosure check,
+`actorId`, target ids and `unread`. Reply, mention and thread-watch candidates pass the current native post disclosure check,
 including the full post ancestry and independently anchored board and Realm; unreadable ones are skipped without
 exposing their notice or post ids, including through a cursor. A page scans at most
 four times its limit, advancing past scanned candidates even when none can be returned, as subject threads do.
@@ -362,24 +369,29 @@ Storage transition: the migration copies timestamps only from still-present, rec
 removes legacy markers whose points are already absent (or not owned), restarting those accounts as all unread.
 Unavailable history is not recovered, inferred from UUIDs or reconstructed by scanning an inbox. This one-time
 migration changes existing rows; requests never backfill, scan history or rewrite a recipient range.
-Notices older than 180 days are deleted in bounded batches. Account deletion erases notices and the seen marker in
-the `community` participant.
+Notices and completed thread-watch progress older than 180 days are deleted in bounded batches. Account deletion
+erases the account's watches, notices and seen marker through Content's existing bounded recipient-erasure pages.
 
 Notification costs are bounded independently of inbox or thread size:
 
 - Reply delivery considers at most two candidates and writes at most two notices per post (the single-parent
   rule above currently selects at most one). Mention delivery considers and writes at most ten. Each candidate
   has bounded current Access checks followed by one `notificationAllowed` check at finalization; recipient overlap is deduplicated.
+- Thread-watch delivery seeks at most 100 watchers by `(created_at, watch_id)`, releases that page before current
+  post disclosure and recipient writes, and persists its cursor after each completed page. Replay resumes the page;
+  each recipient's finalization preserves a sent or refused outcome. Account erasure removes watch edges in bounded
+  pages, and inbox reads recheck current post disclosure.
 - Report outcomes write at most one notice per report, amortized against that report's creation. A takedown
   resolves open reports in bounded batches rather than requiring an unbounded synchronous fan-out.
-- List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply or mention target
+- List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply, mention or
+  thread-watch target
   with native post disclosure in batches of eight. At most 200 candidates are checked; each read is bounded by the
   fixed 33-post ancestry ceiling and checks the board and Realm at their independent anchors. Count reads at most 101
   index rows after one frontier point read. Mark seen locks one owned notice point and atomically moves at most
   one frontier row. List joins only the single frontier, never its old notice. These bounds hold after retention;
   no inbox scan is needed.
-- Retention deletes bounded batches on recipient routes. The `community` erasure participant removes notices in
-  bounded batches and the one seen marker; neither cleanup requires one transaction over an entire inbox.
+- Retention deletes bounded batches on recipient routes. The Content erasure participant removes notices, watch
+  edges and the one seen marker in bounded batches; neither cleanup requires one transaction over an inbox or thread.
 
 ## Appeals
 

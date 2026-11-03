@@ -2806,7 +2806,7 @@ there is no new numerical allowance or ledger.
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
-`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "notifications": { "reply": true, "mention": true }, "version": 0 }`.
+`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "notifications": { "reply": true, "mention": true, "thread_watch": true }, "version": 0 }`.
 Anonymous viewers use these defaults locally.
 
 - `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
@@ -2831,8 +2831,9 @@ Anonymous viewers use these defaults locally.
   The column is `jsonb NOT NULL DEFAULT '{}'` with a check that it is an object of at most 16,384 bytes.
 
 - `notifications` maps every optional in-app notification kind to its effective boolean, using the saved override
-  or the catalogue default. [`notification-kinds.ts`](notification-kinds.ts) is the frozen catalogue: `reply` and
-  `mention` are optional and enabled by default; `moderation_decision` is mandatory and cannot be turned off.
+  or the catalogue default. [`notification-kinds.ts`](notification-kinds.ts) is the frozen catalogue: `reply`,
+  `mention` and `thread_watch` are optional and enabled by default; `moderation_decision` is mandatory and cannot be
+  turned off. Thread-watch notices use their own preference.
   Mandatory kinds are absent from this field. Content appends kinds to the catalogue, at most 32 total, with unique
   lowercase snake case keys and an `optional` flag and `default` boolean. Moderation decisions include the statement
   of reasons owed to a content author, the decision owed to a notifier and required appeal outcomes. These

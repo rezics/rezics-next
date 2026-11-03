@@ -65,14 +65,39 @@ WITH input AS (
       AND finalization.recipient_id = input.account_id
       AND NOT EXISTS (SELECT 1 FROM deleted_finalization AS deleted WHERE deleted.ctid = finalization.ctid)
   ) AS present
+), watch_page AS MATERIALIZED (
+  SELECT watch.route, watch.watch_id
+  FROM content.thread_watch AS watch
+  CROSS JOIN input
+  WHERE input.stage = 'watches'
+    AND watch.route = input.route
+    AND watch.watcher_account_id = input.account_id
+  ORDER BY watch.created_at, watch.route, watch.thread_id
+  LIMIT 50
+  FOR UPDATE
+), deleted_watch AS (
+  DELETE FROM content.thread_watch AS watch
+  USING watch_page AS page
+  WHERE (watch.route, watch.watch_id) = (page.route, page.watch_id)
+  RETURNING watch.watch_id
+), watch_remaining AS (
+  SELECT EXISTS (
+    SELECT 1
+    FROM content.thread_watch AS watch
+    CROSS JOIN input
+    WHERE watch.route = input.route
+      AND watch.watcher_account_id = input.account_id
+      AND NOT EXISTS (SELECT 1 FROM deleted_watch AS deleted WHERE deleted.watch_id = watch.watch_id)
+  ) AS present
 ), deleted_seen AS (
   DELETE FROM content.notice_seen AS seen
   USING input
-  WHERE input.stage = 'finalizations'
+  WHERE input.stage = 'watches'
     AND seen.route = input.route
     AND seen.account_id = input.account_id
     AND NOT (SELECT present FROM notice_remaining)
     AND NOT (SELECT present FROM finalization_remaining)
+    AND NOT (SELECT present FROM watch_remaining)
   RETURNING seen.account_id
 ), seen_remaining AS (
   SELECT EXISTS (
@@ -85,20 +110,23 @@ WITH input AS (
   ) AS present
 )
 SELECT
-  (SELECT count(*)::integer FROM deleted_notice) AS found,
+  ((SELECT count(*)::integer FROM deleted_notice) + (SELECT count(*)::integer FROM deleted_watch)) AS found,
   CASE
     WHEN (SELECT present FROM notice_remaining) THEN 'notices'
-    WHEN (SELECT present FROM finalization_remaining) OR (SELECT present FROM seen_remaining) THEN 'finalizations'
+    WHEN (SELECT present FROM finalization_remaining) THEN 'finalizations'
+    WHEN (SELECT present FROM watch_remaining) OR (SELECT present FROM seen_remaining) THEN 'watches'
     ELSE NULL
   END AS "nextStage",
   NOT (
     (SELECT present FROM notice_remaining)
     OR (SELECT present FROM finalization_remaining)
+    OR (SELECT present FROM watch_remaining)
     OR (SELECT present FROM seen_remaining)
   ) AS done,
   (
     (SELECT present FROM notice_remaining)
     OR (SELECT present FROM finalization_remaining)
+    OR (SELECT present FROM watch_remaining)
     OR (SELECT present FROM seen_remaining)
   )::integer AS pending,
   (SELECT created_at::text FROM deleted_notice ORDER BY created_at ASC, notice_id ASC LIMIT 1) AS "noticeCreatedAt",

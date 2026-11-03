@@ -491,8 +491,9 @@ account. Spoiler, suitability, shelf and notification settings belong to [prefer
 [Viewer preferences][access-preferences] defines their defaults and update contract. Content retains existing
 notification delivery and storage; Web owns settings/inbox. The
 [notification report](research/accounts-design-notification-preferences.md) is adopted with that ownership,
-superseding its alternative delivery allocation. Minimal scope remains in-app replies, mentions and required
-moderation/report/appeal outcomes, with no quiet-hour, channel, sender or conversation expansion.
+superseding its alternative delivery allocation. Minimal scope remains in-app replies, mentions, thread-watch
+notices with a distinct default-on `thread_watch` preference, and required moderation/report/appeal outcomes, with no
+quiet-hour, channel, sender or conversation expansion.
 
 An optional-send decision becomes final at the actual recipient notice commit, using the current native
 preference/account cut and existing current resource Access. Content must durably preserve suppression and

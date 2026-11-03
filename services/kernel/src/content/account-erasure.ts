@@ -20,10 +20,11 @@ import { eraseAccountModerationPage, purgeAccountStatementsPage } from './accoun
 import type { MediaStorage } from './media-storage.ts';
 import { eraseFeedInboxPage } from './feed-activity.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { eraseAccountNoticesPage, type NoticeErasureCursor } from './notices.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
-type Phase = 'close' | 'authored' | 'uploads' | 'reactions' | 'moderation' | 'proof' | 'complete';
+type Phase = 'close' | 'authored' | 'uploads' | 'reactions' | 'moderation' | 'notices' | 'proof' | 'complete';
 type Progress = {
   step: string;
   phase: Exclude<Phase, 'close'>;
@@ -287,6 +288,18 @@ async function step(pool: Pool, storage: MediaStorage, accountId: string, expect
       pendingNow = false;
       delayMs = 600_000;
     } else {
+      nextPhase = 'notices';
+      nextCursor = null;
+    }
+  } else if (currentPhase === 'notices') {
+    const page = await eraseAccountNoticesPage(
+      { pool },
+      accountId,
+      typeof progress.cursor === 'string' ? (progress.cursor as NoticeErasureCursor) : null,
+    );
+    found = page.found;
+    if (page.next) nextCursor = page.next;
+    else {
       nextPhase = 'proof';
       nextCursor = null;
     }

@@ -17,6 +17,7 @@ import { restorePost } from './restore-post.ts';
 import { readCurrentRestorationConflict } from './restoration-conflict.ts';
 import { postEraseReceiptAccess } from './operations.ts';
 import { appealRoutes } from './appeal-routes.ts';
+import { threadWatchRoutes } from './watch-routes.ts';
 import { moderationRoutes } from './moderation-routes.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -1413,7 +1414,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     );
 
-  return routes;
+  return threadWatchRoutes(routes, dependencies);
 }
 
 export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, dependencies: Dependencies) {

@@ -203,6 +203,7 @@ if (process.argv.includes('--content-registration')) {
       'content_subject_reaction_merge',
       'content_mention_notice',
       'content_reply_notice',
+      'content_thread_watch_notice',
     ]);
     expect(absenceLines(output)).toEqual([
       'content storage group is absent: CONTENT_R2_ENDPOINT, CONTENT_R2_BUCKET, CONTENT_R2_ACCESS_KEY_ID, CONTENT_R2_SECRET_ACCESS_KEY',

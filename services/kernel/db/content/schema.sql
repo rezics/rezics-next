@@ -695,7 +695,7 @@ CREATE TABLE content.account_erasure_progress (
     statements_kept_until timestamp with time zone,
     CONSTRAINT account_erasure_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_erasure_progress_erased_at_check CHECK (isfinite(erased_at)),
-    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['authored'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'proof'::text, 'complete'::text]))),
+    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['authored'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'notices'::text, 'proof'::text, 'complete'::text]))),
     CONSTRAINT account_erasure_progress_statements_kept_until_check CHECK (((statements_kept_until IS NULL) OR isfinite(statements_kept_until))),
     CONSTRAINT account_erasure_progress_step_check CHECK ((step >= 0))
 );
@@ -1296,7 +1296,7 @@ CREATE TABLE content.notice (
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     CONSTRAINT notice_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
     CONSTRAINT notice_check1 CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
-    CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'moderation_decision'::text]))),
+    CONSTRAINT notice_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text, 'moderation_decision'::text]))),
     CONSTRAINT notice_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -1313,7 +1313,7 @@ CREATE TABLE content.notice_finalization (
     sent boolean NOT NULL,
     created_at timestamp with time zone NOT NULL,
     CONSTRAINT notice_finalization_check CHECK ((route = ((get_byte(uuid_send(recipient_id), 10) * 256) + get_byte(uuid_send(recipient_id), 11)))),
-    CONSTRAINT notice_finalization_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text]))),
+    CONSTRAINT notice_finalization_kind_check CHECK ((kind = ANY (ARRAY['reply'::text, 'mention'::text, 'thread_watch'::text]))),
     CONSTRAINT notice_finalization_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -1331,6 +1331,47 @@ CREATE TABLE content.notice_seen (
     CONSTRAINT notice_seen_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT notice_seen_check1 CHECK ((route = ((get_byte(uuid_send(seen_notice_id), 10) * 256) + get_byte(uuid_send(seen_notice_id), 11)))),
     CONSTRAINT notice_seen_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: thread_watch; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.thread_watch (
+    route integer NOT NULL,
+    watch_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    watcher_account_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT thread_watch_pkey PRIMARY KEY (route, watch_id),
+    CONSTRAINT thread_watch_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT thread_watch_watcher_route_check CHECK ((route = ((get_byte(uuid_send(watcher_account_id), 10) * 256) + get_byte(uuid_send(watcher_account_id), 11)))),
+    CONSTRAINT thread_watch_id_route_check CHECK ((route = ((get_byte(uuid_send(watch_id), 10) * 256) + get_byte(uuid_send(watch_id), 11)))),
+    CONSTRAINT thread_watch_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT thread_watch_identity_key UNIQUE (route, thread_id, watcher_account_id)
+);
+
+
+--
+-- Name: thread_watch_notice_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.thread_watch_notice_work (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    cursor_created_at timestamp with time zone,
+    cursor_watch_id uuid,
+    done boolean DEFAULT false NOT NULL,
+    CONSTRAINT thread_watch_notice_work_pkey PRIMARY KEY (route, post_id),
+    CONSTRAINT thread_watch_notice_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT thread_watch_notice_work_post_route_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT thread_watch_notice_work_thread_route_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT thread_watch_notice_work_cursor_check CHECK (((cursor_created_at IS NULL) = (cursor_watch_id IS NULL))),
+    CONSTRAINT thread_watch_notice_work_cursor_route_check CHECK (((cursor_watch_id IS NULL) OR (route = ((get_byte(uuid_send(cursor_watch_id), 10) * 256) + get_byte(uuid_send(cursor_watch_id), 11))))),
+    CONSTRAINT thread_watch_notice_work_published_at_check CHECK (isfinite(published_at))
 );
 
 
@@ -2873,6 +2914,24 @@ CREATE INDEX notice_route_created_idx ON content.notice USING btree (route, crea
 --
 
 CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx ON content.notice USING btree (route, kind, source_id, recipient_id);
+
+--
+-- Name: thread_watch_fanout_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_fanout_idx ON content.thread_watch USING btree (thread_id, created_at, watch_id) INCLUDE (route, watcher_account_id);
+
+--
+-- Name: thread_watch_account_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_account_idx ON content.thread_watch USING btree (route, watcher_account_id, created_at, thread_id) INCLUDE (watch_id);
+
+--
+-- Name: thread_watch_notice_work_expire_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_notice_work_expire_idx ON content.thread_watch_notice_work USING btree (route, published_at, post_id);
 
 
 --

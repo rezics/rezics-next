@@ -16,7 +16,7 @@ export type InboxDependencies = {
 };
 export type InboxItem = Readonly<{
   id: string;
-  kind: 'reply' | 'mention' | 'moderation_decision';
+  kind: 'reply' | 'mention' | 'thread_watch' | 'moderation_decision';
   createdAt: string;
   actorId: string | null;
   threadId: string | null;
@@ -88,7 +88,8 @@ export async function listNoticeInbox(
   // the request's actual Access time. The returned content is used only as a proof.
   const content = new Map<string, { threadId: string; postId: string }>();
   for (const row of rows) {
-    if ((row.kind !== 'reply' && row.kind !== 'mention') || !row.post_id || !row.thread_id) continue;
+    if ((row.kind !== 'reply' && row.kind !== 'mention' && row.kind !== 'thread_watch') || !row.post_id || !row.thread_id)
+      continue;
     const key = `${row.thread_id}\u0000${row.post_id}`;
     content.set(key, { threadId: row.thread_id as string, postId: row.post_id as string });
   }
@@ -117,7 +118,7 @@ export async function listNoticeInbox(
     scanned++;
     lastScanned = row;
     if (
-      (row.kind === 'reply' || row.kind === 'mention') &&
+      (row.kind === 'reply' || row.kind === 'mention' || row.kind === 'thread_watch') &&
       (!row.post_id || !row.thread_id || !readable.has(`${row.thread_id}\u0000${row.post_id}`))
     )
       continue;

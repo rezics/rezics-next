@@ -13,16 +13,19 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import deleteAccountNoticePageSql from './delete-account-notices-page.sql';
 import eraseAccountNoticePageSql from './account-notice-erasure-page.sql';
 import deleteNoticeSeen from './delete-account-notice-seen.sql';
+import deleteAccountThreadWatchPage from './delete-account-thread-watch-page.sql';
 import deleteExpiredPage from './delete-expired-notices-page.sql';
 import noticePartitionState from './read-notice-partition-state.sql';
 import writeNoticeRows from './write-notices.sql';
+import watchNoticeIsActive from './watch-active-at-send.sql';
+import deleteWatchNoticeWorkPage from './delete-watch-notice-work-page.sql';
 
 export const NOTICE_WRITE_LIMIT = 100;
 export const NOTICE_PAGE_SIZE = 1000;
 export const NOTICE_RETENTION_DAYS = 180;
 export const NOTICE_RETENTION_MS = NOTICE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-export type NoticeKind = 'reply' | 'mention' | 'moderation_decision';
+export type NoticeKind = 'reply' | 'mention' | 'thread_watch' | 'moderation_decision';
 
 export type NoticeInput = Readonly<{
   recipientId: string;
@@ -39,7 +42,7 @@ export type NoticeInput = Readonly<{
 
 type QueryClient = Pick<Pool | PoolClient, 'query'>;
 
-async function withWritableNoticeRoute<T>(
+export async function withWritableNoticeRoute<T>(
   pool: Pool,
   route: number,
   action: (client: PoolClient) => Promise<T>,
@@ -78,7 +81,8 @@ function validateNotice(notice: NoticeInput): number {
   const route = requiredRoute(notice.recipientId, 'notice recipient');
   if (requiredRoute(notice.noticeId, 'notice id') !== route)
     throw new TypeError('Notice id must use the recipient route');
-  if (!['reply', 'mention', 'moderation_decision'].includes(notice.kind)) throw new TypeError('Invalid notice kind');
+  if (!['reply', 'mention', 'thread_watch', 'moderation_decision'].includes(notice.kind))
+    throw new TypeError('Invalid notice kind');
   requiredRoute(notice.sourceId, 'notice source');
   for (const [name, id] of [
     ['notice actor', notice.actorId],
@@ -140,10 +144,11 @@ export async function writeNotices(client: QueryClient, notices: readonly Notice
  */
 export async function finalizeOptionalNotice(
   pool: Pool,
-  notice: NoticeInput & { kind: 'reply' | 'mention' },
+  notice: NoticeInput & { kind: 'reply' | 'mention' | 'thread_watch' },
   readable: boolean,
   deadline: number,
   clock: KernelClock = systemClock,
+  watch?: Readonly<{ watchId: string; threadId: string; publishedAt: Date }>,
 ): Promise<void> {
   const route = validateNotice(notice);
   // A redrive older than the retained decision horizon cannot reopen a send.
@@ -175,7 +180,16 @@ export async function finalizeOptionalNotice(
               recipient: notice.recipientId,
               kind: notice.kind,
             });
-            const sent = readable && allowed;
+            const watching =
+              watch === undefined ||
+              (await watchNoticeIsActive.run(client, {
+                route,
+                thread_id: watch.threadId,
+                watch_id: watch.watchId,
+                watcher_account_id: notice.recipientId,
+                published_at: watch.publishedAt.toISOString(),
+              })) !== null;
+            const sent = readable && allowed && watching;
             const claimed = await recordFinalization.run(client, {
               ...key,
               sent,
@@ -208,16 +222,21 @@ export async function deleteExpiredNoticesPage(pool: Pool, route: number, cutoff
         cutoff: cutoff.toISOString(),
       })
     ).length;
-    return (
-      deleted +
-      (
-        await expireFinalizations.run(client, {
-          route,
-          cutoff: cutoff.toISOString(),
-          limit: NOTICE_PAGE_SIZE - deleted,
-        })
-      ).length
-    );
+    const finalized = (
+      await expireFinalizations.run(client, {
+        route,
+        cutoff: cutoff.toISOString(),
+        limit: NOTICE_PAGE_SIZE - deleted,
+      })
+    ).length;
+    const work = (
+      await deleteWatchNoticeWorkPage.run(client, {
+        route,
+        cutoff: cutoff.toISOString(),
+        limit: NOTICE_PAGE_SIZE - deleted - finalized,
+      })
+    ).length;
+    return deleted + finalized + work;
   });
 }
 
@@ -231,16 +250,21 @@ export async function deleteAccountNoticePage(pool: Pool, accountId: string): Pr
         account_id: accountId,
       })
     ).length;
-    return (
-      deleted +
-      (
-        await deleteFinalizations.run(client, {
-          route,
-          recipient_id: accountId,
-          limit: NOTICE_PAGE_SIZE - deleted,
-        })
-      ).length
-    );
+    const finalized = (
+      await deleteFinalizations.run(client, {
+        route,
+        recipient_id: accountId,
+        limit: NOTICE_PAGE_SIZE - deleted,
+      })
+    ).length;
+    const watches = (
+      await deleteAccountThreadWatchPage.run(client, {
+        route,
+        account_id: accountId,
+        limit: NOTICE_PAGE_SIZE - deleted - finalized,
+      })
+    ).length;
+    return deleted + finalized + watches;
   });
 }
 
@@ -257,14 +281,14 @@ export type NoticeErasureCursor = string;
 type NoticeErasurePageCursor = {
   version: 1;
   accountId: string;
-  stage: 'notices' | 'finalizations';
+  stage: 'notices' | 'finalizations' | 'watches';
   noticeAfter: { createdAt: string; noticeId: string } | null;
   finalizationAfter: { createdAt: string; kind: string; sourceId: string } | null;
 };
 
 type NoticeErasurePage = {
   found: number;
-  nextStage: 'notices' | 'finalizations' | null;
+  nextStage: 'notices' | 'finalizations' | 'watches' | null;
   done: boolean;
   pending: number;
   noticeCreatedAt: string | null;
@@ -299,7 +323,7 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
     !('accountId' in parsed) ||
     parsed.accountId !== accountId ||
     !('stage' in parsed) ||
-    (parsed.stage !== 'notices' && parsed.stage !== 'finalizations') ||
+    (parsed.stage !== 'notices' && parsed.stage !== 'finalizations' && parsed.stage !== 'watches') ||
     !('noticeAfter' in parsed) ||
     !('finalizationAfter' in parsed)
   )
@@ -326,7 +350,7 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
       Number.isFinite(Date.parse(after.createdAt)) &&
       'kind' in after &&
       typeof after.kind === 'string' &&
-      ['reply', 'mention', 'moderation_decision'].includes(after.kind) &&
+      ['reply', 'mention', 'thread_watch', 'moderation_decision'].includes(after.kind) &&
       'sourceId' in after &&
       typeof after.sourceId === 'string' &&
       routeOf(after.sourceId) !== null);
@@ -335,7 +359,8 @@ function readNoticeErasureCursor(value: string | null, accountId: string): Notic
     throw new TypeError('Invalid notice erasure cursor');
   if (
     (parsed.stage === 'notices' && parsed.finalizationAfter !== null) ||
-    (parsed.stage === 'finalizations' && parsed.noticeAfter !== null)
+    (parsed.stage === 'finalizations' && parsed.noticeAfter !== null) ||
+    (parsed.stage === 'watches' && (parsed.noticeAfter !== null || parsed.finalizationAfter !== null))
   )
     throw new TypeError('Invalid notice erasure cursor');
   return parsed as NoticeErasurePageCursor;

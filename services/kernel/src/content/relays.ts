@@ -16,6 +16,7 @@ import { createReportOutcomeEffect } from './report-outcomes.ts';
 import { createReportEffect } from './report-effect.ts';
 import { createMentionNoticeEffect } from './mention-notices.ts';
 import { createReplyNoticeEffect } from './reply-notices.ts';
+import { createThreadWatchNoticeEffect } from './watch-notices.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   createRealmSubjectLifecycle,
@@ -226,5 +227,5 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
 
 /** Default registration supplies the same fully mounted worker Access as Content work. */
 export function contentNoticeEffects(pool: Pool, access: Access): Effect[] {
-  return [createMentionNoticeEffect(pool, access), createReplyNoticeEffect(pool, access)];
+  return [createMentionNoticeEffect(pool, access), createReplyNoticeEffect(pool, access), createThreadWatchNoticeEffect(pool, access)];
 }
