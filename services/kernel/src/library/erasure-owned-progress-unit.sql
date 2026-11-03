@@ -18,7 +18,7 @@ WITH input AS NOT MATERIALIZED (
 ), episodes AS (
  DELETE FROM library.progress_episode victim USING keys, input
  WHERE victim.route=input.route AND victim.session_id=input.parent_id AND keys.kind='episode'
-  AND victim.episode_subject_id=keys.id::uuid
+  AND victim.episode_subject_id=CASE WHEN keys.kind='episode' THEN keys.id::uuid END
  RETURNING true AS removed
 )
 SELECT removed FROM manual UNION ALL SELECT removed FROM episodes;
