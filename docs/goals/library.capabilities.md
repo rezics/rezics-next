@@ -6,14 +6,15 @@ The [reported-year contract](../library-reported-year-summary.md) owns precision
 installation/currentness and the integrating reader’s clear/cancellation/retry receiving. Focused scenarios are in
 `test/library/reported-year-summary.test.ts`; three-scale and full lifecycle acceptance remain deferred to integration.
 
-[Selected label consolidation](../library-label-consolidation.md) has a pure supplied-ID native/HTTP review,
-capped at 16 selected assignments and four items per page. Client regeneration remains pending. Its focused native file is
-`services/kernel/test/library/label-consolidation-review.test.ts`; the landing command is
-`bun run --cwd services/kernel check test/library/label-consolidation-review.test.ts`.
-Review covers exact identities, conflicts, missing/changed/inaccessible assignments, native reservation capacity,
-deleted-parent reservations and bounded final pages. Immutable confirmation, native movement, original retries,
-cancellation, finite undo, erasure and native64/512/4096 complete-caller growth remain continuation work. Review
-source presence or a focused test result does not establish that complete journey.
+[Selected label consolidation](../library-label-consolidation.md) has native/HTTP review, immutable confirmation,
+one-item apply and original-receipt retry, cancellation, result and typed client declarations. Review is capped at 16
+explicit assignments and four per page; retained plans expire after 15 minutes, with eight unexpired plans per owner.
+Focused native files are `services/kernel/test/library/label-consolidation-review.test.ts` and
+`services/kernel/test/library/label-consolidation-native.test.ts`; the landing command is
+`bun run --cwd services/kernel check test/library/label-consolidation-review.test.ts test/library/label-consolidation-native.test.ts`.
+Native outcomes cover evidence conflicts, source and target revision fences, selected movement, no duplicate target
+effects, capacity refusal, original receipt replay, cancellation, finite undo and cleanup. Native64/512/4096
+complete-caller growth remains deferred to integration; focused results do not establish that growth clause.
 
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.

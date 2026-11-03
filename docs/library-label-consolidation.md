@@ -6,7 +6,9 @@ label IDs and explicit Subject/assignment identities. Names are display values. 
 whole membership, infer selection from a filter, change dynamic Collection operands or delete the source label.
 
 Decision: review is a pure supplied-ID page (16 selected assignments, four per page) with encrypted 15-minute cursors
-and no retained review state; its selection digest is advisory and cannot confirm a move.
+and no retained review state; its selection digest is advisory and cannot confirm a move. Confirmation requires all
+selected items to retain their exact review evidence and current Subject exposure; a plan expires 15 minutes after
+creation, at most eight unexpired plans are retained per owner, and each apply request handles one item.
 
 ## Installed review interface
 
@@ -44,18 +46,37 @@ held across Subject partition reads. Owner standing and label revisions are chec
 Responses are `Cache-Control: private, no-store`. No private names or assignment operands enter event/error payloads.
 The existing native assignment readers reopen both labels; review changes neither selected nor unselected facts.
 
-## Remaining confirmation and movement
+## Installed confirmation and movement
 
-The native typed review function and HTTP route are installed. Client declaration regeneration, confirmation,
-apply/retry/result APIs and Web integration remain continuation work. Web's existing Labels interface owns the eventual single flow. It must not interpret `movable`
-or the `selection` hash as permission or immutable confirmation. There is no competing label editor or rule filter.
+`POST /v1/libraryLabels/{id}:confirmConsolidation` accepts the complete review evidence across all pages. It checks
+the exact source and target identities/revisions, every selected source and target assignment observation, current
+Subject exposure and current native capacity before storing immutable bindings. A selection digest alone cannot
+confirm a move. The typed client declarations include review, confirmation, apply, retry, cancel and result routes.
 
-Confirmation must bind each item's exact source/target label revisions, assignment incarnations/revisions, current
-Subject exposure and stable original operation identities. Refresh requires new explicit confirmation. Native
-target assign and addressed source unassign retain their receipts, History, events and export fences exactly once.
-Source removal follows only definite accepted/current target assignment, including target acceptance with a lost
-acknowledgement. Original replay must not consume a later changed source. Cancellation stops new items and returns
-accepted partial results without promising batch atomicity. Both parent fences and current Subject authority apply.
+`POST /v1/libraryLabels/{id}:applyConsolidation` advances one selected item. It calls native target assign at the
+confirmed target revision, then native source unassign at the confirmed source revision and assignment identity.
+Native target assignment also compares the confirmed target assignment observation under the Subject guard. Before
+source removal, native unassign checks the exact accepted target incarnation and revision is still effective.
+Each stored item has original target and source receipt keys. `retryConsolidation` resumes only an item already in
+progress and replays those same receipts after an unknown outcome. `cancelConsolidation` prevents new items and
+returns accepted partial results. `GET /v1/libraryLabels/{id}/consolidations/{confirmationId}` reads the current
+result under owner and Subject admission. The existing native assignment readers reopen each label after a move.
+
+Decision: confirmation rejects changed, missing, inaccessible or capacity-limited review items as a whole; after
+confirmation, a changed binding stops that item and requires a new review. This keeps a selected plan tied to the
+evidence the owner explicitly confirmed.
+
+Web's existing Labels interface owns the single consolidation flow and can use these APIs. It must not interpret
+`movable` or the `selection` hash as permission or immutable confirmation. No competing label editor, list engine or
+bulk job is introduced.
+
+The stored plan binds both parent revisions, assignment incarnation/revision and current Subject exposure. Refresh
+requires new explicit confirmation. Native target assign and addressed source unassign retain their receipts,
+History, events and export fences exactly once. Source removal follows only definite accepted/current target
+assignment, including target acceptance with a lost acknowledgement. Original replay cannot consume a later changed
+source. Cancellation stops new items and returns accepted partial results without promising batch atomicity. The
+source label stays live, and source assignment undo retains its original finite deadline. Owner erasure removes plans;
+the native ten-minute expiry worker deletes expired plans and their bounded child items.
 
 Only native reservation semantics admit target assignment: no source-first deletion, extra reclaim, temporary 33rd
 effective label or renewed undo deadline. Source labels remain live until ordinary explicit deletion. Source undo
@@ -81,12 +102,11 @@ bounds deleted-parent scans; the lateral OFFSET 0 barrier preserves parameterize
 owner-history join. Only an actual deleted parent at these points is
 a reclaim witness. Review does not pay for native reclamation or extend any deadline.
 
-Focused native cases cover conflicts, negative target probes, deep/final pages, maximum names, stale assignment
-revision, source delete/recreate, target rename, another owner, inaccessible IDs, strict selection validation,
-32-live-parent refusal and deleted-parent reservations without read effects. Complete caller statements, rows,
-buffers, bytes and effects at native64/512/4096 with fixed S/P remain required. Native setup failure stays
-failed/unmeasured. Movement, rollback, original retry, lost acknowledgement, cancellation, finite undo, terminal
-cleanup and complete caller growth are continuation acceptance, not inferred from review.
+Focused native cases cover review conflicts, negative target probes, deep/final pages, maximum names, stale source
+revision/incarnation, source delete/recreate, target rename, changed Subject authority, another owner, strict
+confirmation, capacity refusal, successful selected moves, already-on-target, lost acknowledgement replay,
+cancellation, finite undo and terminal erasure/expiry cleanup. Complete-caller statements, rows, buffers, bytes and
+effects at native64/512/4096 remain deferred to integration. Native setup failure stays failed/unmeasured.
 
 Sources read: `docs/library-labels.md`, native metadata/assignment commands and storage, reservation/parent/tuple SQL
 and migrations, native Subject and family admission, shared cursor codec and existing native label fixtures. No

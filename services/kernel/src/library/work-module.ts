@@ -2,6 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { purgeLabelRetentionPage } from './label-retention.ts';
+import { purgeExpiredLabelConsolidations } from './label-consolidation.ts';
 import { cutoverEntryIncarnationsPage } from './entry-incarnation-cutover.ts';
 
 export const libraryWorkModule: WorkModule = {
@@ -18,6 +19,7 @@ export const libraryWorkModule: WorkModule = {
     const { registerLibraryMemberRetentionWork } = await import('./member-retention-work.ts');
     await registerLibraryMemberRetentionWork(context);
     await registerLabelRetention(context);
+    await registerLabelConsolidationRetention(context);
     const { registerLibraryPublishedLogRetentionWork } = await import('./published-log-retention.ts');
     await registerLibraryPublishedLogRetentionWork(context);
     const { registerCopyRetention } = await import('./copy-retention.ts');
@@ -131,6 +133,57 @@ async function registerLabelRetention({ pool, client, clock }: WorkContext) {
     {
       scheduleName: LABEL_RETENTION_SCHEDULE,
       workflowName: LABEL_RETENTION_SWEEP_WORKFLOW,
+      schedule: '*/10 * * * *',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+      queueName: 'maintenance',
+    },
+  ]);
+}
+
+export const LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW = 'library.labelConsolidationRetentionSweep';
+export const LABEL_CONSOLIDATION_RETENTION_SCHEDULE = 'library.labelConsolidationRetention.every-10-minutes';
+type ConsolidationSweep = { root: string; sequence: number; partition: number; after: string | null };
+
+async function registerLabelConsolidationRetention({ pool, client, clock }: WorkContext) {
+  const page = DBOS.registerStep(
+    async (partition: number, after: string | null) =>
+      purgeExpiredLabelConsolidations({ pool, clock }, { partition, limit: 100, after }),
+    { name: 'library.labelConsolidationRetentionPage', ...COMMAND_STEP_RETRIES },
+  );
+  const continuation = DBOS.registerStep(
+    async (input: ConsolidationSweep) => {
+      await client.enqueue(
+        {
+          workflowName: 'library.labelConsolidationRetentionSegment',
+          queueName: 'maintenance',
+          workflowID: `library.labelConsolidationRetention:${input.root}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    { name: 'library.labelConsolidationRetentionContinue', ...COMMAND_STEP_RETRIES },
+  );
+  const segment = async (input: ConsolidationSweep) => {
+    let { partition, after } = input;
+    for (let n = 0; n < 100 && partition < 4096; n++) {
+      after = (await page(partition, after)).next;
+      if (after === null) partition++;
+    }
+    if (partition < 4096)
+      await continuation({ ...input, sequence: input.sequence + 1, partition, after });
+    return { partition, after };
+  };
+  DBOS.registerWorkflow(segment, { name: 'library.labelConsolidationRetentionSegment' });
+  DBOS.registerWorkflow(
+    async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),
+    { name: LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW },
+  );
+  await client.applySchedules([
+    {
+      scheduleName: LABEL_CONSOLIDATION_RETENTION_SCHEDULE,
+      workflowName: LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW,
       schedule: '*/10 * * * *',
       cronTimezone: 'UTC',
       automaticBackfill: false,
