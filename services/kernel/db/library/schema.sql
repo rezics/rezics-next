@@ -4994,18 +4994,19 @@ ALTER TABLE ONLY library.entry
     ADD CONSTRAINT entry_pkey PRIMARY KEY (route, account_id, subject_id);
 
 
+-- Name: entry_source_observation entry_source_observation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_source_observation
+    ADD CONSTRAINT entry_source_observation_pkey PRIMARY KEY (route, account_id, subject_id, provider, record_id);
+
+
 --
 -- Name: entry_state_change entry_state_change_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.entry_state_change
     ADD CONSTRAINT entry_state_change_pkey PRIMARY KEY (route, account_id, subject_id, incarnation_id, revision);
-
--- Name: entry_source_observation entry_source_observation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.entry_source_observation
-    ADD CONSTRAINT entry_source_observation_pkey PRIMARY KEY (route, account_id, subject_id, provider, record_id);
 
 
 --
