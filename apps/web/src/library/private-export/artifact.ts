@@ -90,7 +90,9 @@ export function deliverLocalFile(file: ExportArtifact): boolean {
   }
 }
 
-export function parseAssembledArtifact(bytes: Uint8Array): { manifest: ExportManifest; records: ExportRecord[] } | null {
+export function parseAssembledArtifact(
+  bytes: Uint8Array,
+): { manifest: ExportManifest; records: ExportRecord[] } | null {
   try {
     const value = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;

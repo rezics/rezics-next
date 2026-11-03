@@ -136,7 +136,9 @@ function isStatus(value: unknown): value is ExportStatus {
 function isManifest(value: unknown): value is ExportManifest {
   if (!record(value) || !hasCoverage(value)) return false;
   if (typeof value.rows !== 'number' || typeof value.recordBytes !== 'number') return false;
-  return Number.isInteger(value.rows) && value.rows >= 0 && Number.isInteger(value.recordBytes) && value.recordBytes >= 0;
+  return (
+    Number.isInteger(value.rows) && value.rows >= 0 && Number.isInteger(value.recordBytes) && value.recordBytes >= 0
+  );
 }
 
 function isPage(value: unknown): value is ExportPage {

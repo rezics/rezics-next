@@ -25,11 +25,11 @@ export function ExportCoverage({
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">{m.library_export_sections_heading()}</h2>
         <ul className="list-disc space-y-2 pl-6">
-          {EXPORT_SECTIONS.filter(
-            (section) => section !== 'bangumiEvidence' && section !== 'malEvidence',
-          ).map((section) => (
-            <li key={section}>{exportSectionLabel(section)}</li>
-          ))}
+          {EXPORT_SECTIONS.filter((section) => section !== 'bangumiEvidence' && section !== 'malEvidence').map(
+            (section) => (
+              <li key={section}>{exportSectionLabel(section)}</li>
+            ),
+          )}
         </ul>
       </div>
       <ul className="list-disc space-y-2 pl-6 text-sm">

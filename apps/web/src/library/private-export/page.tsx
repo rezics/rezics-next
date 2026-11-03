@@ -10,12 +10,7 @@ import { exportFailureLabel } from './meaning';
 import { useLibraryExportPort } from './port';
 import { ExportProgress } from './progress';
 import { ExportReady } from './ready';
-import {
-  ExportSignedOut,
-  ExportTerminal,
-  ExportUnavailable,
-  LibraryReturnLink,
-} from './states';
+import { ExportSignedOut, ExportTerminal, ExportUnavailable, LibraryReturnLink } from './states';
 import { useExportVisit, type ExportVisit } from './visit';
 
 function noticeText(notice: ExportJourneySnapshot['notice']): string | null {

@@ -96,8 +96,6 @@ export class ExportCostLedger {
   }
 
   withinCaps(): boolean {
-    return (
-      this.snapshot.maxPageRecords <= EXPORT_PAGE_ROWS && this.snapshot.maxPageBytes <= EXPORT_PAGE_RECORD_BYTES
-    );
+    return this.snapshot.maxPageRecords <= EXPORT_PAGE_ROWS && this.snapshot.maxPageBytes <= EXPORT_PAGE_RECORD_BYTES;
   }
 }

@@ -114,7 +114,7 @@ export function createExportJourney(input: {
       sections,
       omissions,
       pages: cost.snapshot.pagesVisited,
-      records: assembly.recordCount() || (artifact ? manifest?.rows ?? 0 : 0),
+      records: assembly.recordCount() || (artifact ? (manifest?.rows ?? 0) : 0),
       manifest,
       hasArtifact: artifact !== null,
       previousDisposition,

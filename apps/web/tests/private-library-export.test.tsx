@@ -369,8 +369,7 @@ test('stale replay, cancellation, retirement and signed-out stay distinct', asyn
     port: live.port,
     visit: visit(),
     onChange(current) {
-      if (current.stage === 'capturing' && current.pages >= 1 && live.cancels.length === 0)
-        void cancelling.cancel();
+      if (current.stage === 'capturing' && current.pages >= 1 && live.cancels.length === 0) void cancelling.cancel();
     },
   });
   snap = await cancelling.capture();

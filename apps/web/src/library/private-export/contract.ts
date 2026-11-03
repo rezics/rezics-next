@@ -94,7 +94,12 @@ export type ExportCommand =
 export type ExportCreateResult = { kind: 'status'; status: ExportStatus };
 export type ExportPageResult = { kind: 'page'; page: ExportPage };
 export type ExportCancelResult = { kind: 'cancelled'; status: ExportStatus };
-export type ExportPortResult = ExportCreateResult | ExportPageResult | ExportCancelResult | ExportFailure | ExportUnknown;
+export type ExportPortResult =
+  | ExportCreateResult
+  | ExportPageResult
+  | ExportCancelResult
+  | ExportFailure
+  | ExportUnknown;
 
 type ExportOutcome<T> = Promise<T | ExportFailure | ExportUnknown>;
 
