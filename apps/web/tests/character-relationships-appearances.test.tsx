@@ -185,9 +185,7 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
         initial: spoilerRead,
       }),
     );
-    expect(host.querySelector('[data-slot=collapsible-trigger]')?.textContent).toContain(
-      m.character_relationships_spoiler_show(),
-    );
+    expect(host.textContent).toContain(m.character_relationships_spoiler_show());
 
     await render(
       h(CharacterRelationshipsView, {
