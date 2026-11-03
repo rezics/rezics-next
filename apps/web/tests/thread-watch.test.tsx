@@ -69,18 +69,18 @@ afterEach(async () => {
   host.remove();
 });
 
-test('unknown command outcome permits only the identical retry and confirms native success', async () => {
+test('unknown command outcome offers the identical retry and confirms native 204', async () => {
   const reads: ThreadWatchReadRequest[] = [];
   const commands: ThreadWatchCommand[] = [];
   const native: ThreadWatchNative = {
     async read(request) {
       reads.push(request);
-      return { kind: 'confirmed', state: { watching: false, revision: 'revision-1' } };
+      return { kind: 'confirmed', state: { watching: false } };
     },
     async set(command) {
       commands.push(command);
       if (commands.length === 1) throw new Error('lost response');
-      return { kind: 'confirmed', state: { watching: true, revision: 'revision-2' } };
+      return { kind: 'confirmed' };
     },
   };
   render({ ...baseline, native });
@@ -97,7 +97,6 @@ test('unknown command outcome permits only the identical retry and confirms nati
     viewerId: 'reader-a',
     sessionStamp: 'admission-a:session-1',
     watching: true,
-    expectedRevision: 'revision-1',
   });
   await click(m.thread_watch_retry_exact());
   expect(commands).toHaveLength(2);
@@ -113,11 +112,11 @@ test('refusal requires a fresh read and never reports an unwatched state', async
   const native: ThreadWatchNative = {
     async read() {
       readCount++;
-      return { kind: 'confirmed', state: { watching: readCount === 1, revision: `revision-${readCount}` } };
+      return { kind: 'confirmed', state: { watching: readCount === 1 } };
     },
     async set(command) {
       commands.push(command);
-      return { kind: 'refused', reason: 'conflict' };
+      return { kind: 'refused', reason: 'refused' };
     },
   };
   render({ ...baseline, native });
@@ -144,7 +143,7 @@ test('viewer replacement and access loss retire private state; anonymous reading
     async read(request) {
       reads.push(request);
       return request.viewerId === 'reader-a'
-        ? { kind: 'confirmed', state: { watching: true, revision: 'revision-a' } }
+        ? { kind: 'confirmed', state: { watching: true } }
         : { kind: 'access-lost' };
     },
     async set(command) {
@@ -158,7 +157,7 @@ test('viewer replacement and access loss retire private state; anonymous reading
   await click(m.thread_watch_stop());
   render({ ...baseline, threadId: 'thread-b', viewerId: 'reader-b', sessionStamp: 'admission-b:session-1', native });
   await settle();
-  releaseCommand({ kind: 'confirmed', state: { watching: false, revision: 'revision-a2' } });
+  releaseCommand({ kind: 'confirmed' });
   await settle();
   expect(reads.map((request) => request.viewerId)).toEqual(['reader-a', 'reader-b']);
   expect(reads.map((request) => request.threadId)).toEqual(['thread-a', 'thread-b']);
@@ -176,6 +175,95 @@ test('viewer replacement and access loss retire private state; anonymous reading
   await settle();
   expect(reads).toHaveLength(2);
   expect(host.textContent).toContain(m.thread_watch_anonymous());
+});
+
+test('explicit status recovery preserves an unknown requested state on failure, then establishes current status', async () => {
+  const commands: ThreadWatchCommand[] = [];
+  let reads = 0;
+  const native: ThreadWatchNative = {
+    async read() {
+      reads++;
+      if (reads === 2) return { kind: 'unknown' };
+      return { kind: 'confirmed', state: { watching: false } };
+    },
+    async set(command) { commands.push(command); return { kind: 'unknown' }; },
+  };
+  render({ ...baseline, native });
+  await settle();
+  await click(m.thread_watch_watch());
+  expect(button(m.thread_watch_check_again())).toBeDefined();
+  await click(m.thread_watch_check_again());
+  expect(host.textContent).toContain(m.thread_watch_read_failed());
+  await click(m.thread_watch_retry_exact());
+  expect(commands[1]).toBe(commands[0]);
+  await click(m.thread_watch_check_again());
+  expect(reads).toBe(3);
+  expect(button(m.thread_watch_watch())).toBeDefined();
+  expect(button(m.thread_watch_retry_exact())).toBeUndefined();
+  expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
+});
+
+test('initial read failure recovers deliberately; synchronous double clicks use one request slot', async () => {
+  let reads = 0;
+  let commands = 0;
+  let finish!: (value: Awaited<ReturnType<ThreadWatchNative['set']>>) => void;
+  const native: ThreadWatchNative = {
+    async read() {
+      return ++reads === 1 ? { kind: 'unknown' } : { kind: 'confirmed', state: { watching: false } };
+    },
+    async set() {
+      commands++;
+      return new Promise((resolve) => { finish = resolve; });
+    },
+  };
+  render({ ...baseline, native });
+  await settle();
+  expect(host.textContent).toContain(m.thread_watch_read_failed());
+  await click(m.thread_watch_check_again());
+  const watch = button(m.thread_watch_watch())!;
+  act(() => {
+    watch.focus();
+    watch.click();
+    watch.click();
+  });
+  expect(commands).toBe(1);
+  expect(host.getAttribute('aria-busy') ?? host.firstElementChild?.getAttribute('aria-busy')).toBe('true');
+  expect(button(m.thread_watch_check_again())).toBeUndefined();
+  finish({ kind: 'confirmed' });
+  await settle();
+  expect(document.activeElement?.textContent).toBe(m.thread_watch_stop());
+  expect(reads).toBe(2);
+});
+
+test('response-before-retirement clears confirmation; readiness, target and source changes retire old actions', async () => {
+  const commands: ThreadWatchCommand[] = [];
+  const native: ThreadWatchNative = {
+    async read() { return { kind: 'confirmed', state: { watching: false } }; },
+    async set(command) { commands.push(command); return { kind: 'confirmed' }; },
+  };
+  let current = true;
+  const authority = {};
+  render({ ...baseline, native, readAuthority: authority, isCurrent: () => current });
+  await settle();
+  await click(m.thread_watch_watch());
+  expect(host.textContent).toContain(m.thread_watch_confirm_started());
+  const staleStop = button(m.thread_watch_stop())!;
+  current = false;
+  act(() => staleStop.click());
+  await settle();
+  expect(commands).toHaveLength(1);
+  expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
+  render({ ...baseline, sessionKnown: false, native });
+  await settle();
+  expect(button(m.thread_watch_stop())).toBeUndefined();
+  render({ ...baseline, native, threadId: 'thread-b', readAuthority: {} });
+  await settle();
+  await click(m.thread_watch_watch());
+  expect(commands[1]?.threadId).toBe('thread-b');
+  render({ ...baseline, native, admitted: false });
+  await settle();
+  expect(host.textContent).toContain(m.thread_watch_access_lost());
+  expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
 });
 
 afterAll(async () => {

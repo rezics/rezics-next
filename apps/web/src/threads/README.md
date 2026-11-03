@@ -216,12 +216,31 @@ retirement, native refusal recovery and the remaining `boards({ id }).slowMode` 
 A signed-in reader can watch one currently readable thread for preference-governed in-app activity. Watching grants no
 read access and sends no email. The mounted control reads private state only for the current thread and viewer/session;
 it uses a no-store read outside SSR/shared caches and retires the result when its target, access or credentials change.
-Each command freezes the thread, viewer/session stamp, requested state, native revision and idempotency key. An unknown
-response permits only exact retry; a refusal requires a fresh status read and never claims a new current state.
+The generated native GET returns exactly `{watching}`; PUT and DELETE return 204. Each command freezes the thread,
+viewer/session stamp, original credential owner and requested state. There is no revision, command-key receipt or
+version lock. A 204 confirms the requested operation at its response. An unknown response offers explicit retry of the
+same naturally idempotent request or a fresh current-status read; a successful read does not establish a receipt for
+the earlier request. A failed recovery read retains the uncertain request for retry. There is no automatic write retry.
+Known refusals offer honest access/unavailable feedback; a fresh status read precedes another toggle.
+The existing in-memory browser session observation retires state synchronously on account, credentials or readiness
+replacement, including away/back. Target, admitted source, access loss and unmount also irreversibly retire the visit.
+A late import checks its original dispatch fence and never obtains replacement credentials. Retirement revokes local
+results, not remote execution. One initial private read per admitted visit and one active operation use constant state;
+there is no polling, account inventory, browser watch registry or watch read during SSR.
 Anonymous readers keep the page and receive sign-in guidance without a private watch read. Notification settings remain
 the authority for in-app preferences.
 
-Decision: Until Content delivers generated thread-watch reads and commands, Web keeps an installed unavailable seam; test and story responses are illustrative, not native proof.
+Decision: Current-status recovery is available alongside exact retry, and a failed status read preserves the original
+uncertain action; only a successful current read or command response clears it.
+
+The default adapter loads the existing server/client boundary and uses generated `threads({id}).watch.get/put/delete`
+with normal session authentication and CSRF protection. If those generated methods are absent, the unavailable seam
+belongs to Content: generate GET/PUT/DELETE `/v1/threads/:id/watch` from `services/kernel/src/content/routes.ts`.
+Settings watch inventory/removal and Inbox watch-notice presentation belong to Performance; this control owns neither.
+The prior feed/thread action and notification views informed the separate watching/delivery guidance: read-only
+`legacy-final:apps/web/features/feed/actions.tsx`, `shell/notifications/notifications-view.tsx`, and the earlier checkout's
+`content-feed/components/feed-item-card.tsx` and `notifications/pages/notifications-page.tsx`, as linked in the
+[render audit](../../../../docs/research/page-needs-api-render-audit.md); no legacy code is ported.
 
 ## Shared post actions
 

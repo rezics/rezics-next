@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "Has dejado de seguir este hilo.",
   "thread_watch_guidance": "El seguimiento cubre solo la actividad dentro de la aplicación. Se mantienen tus preferencias de notificación y el acceso actual al hilo.",
   "thread_watch_not_watching": "No sigues este hilo",
-  "thread_watch_outcome_unknown": "No se conoce el resultado. Repite la misma acción para confirmar el estado actual.",
+  "thread_watch_outcome_unknown": "No se conoce el resultado. Repite la misma acción o consulta el estado actual del seguimiento.",
   "thread_watch_preferences": "Configuración de notificaciones",
   "thread_watch_read_failed": "No se pudo comprobar el seguimiento.",
   "thread_watch_refused": "No se pudo cambiar el seguimiento. Comprueba el estado actual antes de intentar otra acción.",

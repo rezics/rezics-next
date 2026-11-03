@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "このスレッドのウォッチを解除しました。",
   "thread_watch_guidance": "ウォッチできるのはアプリ内のアクティビティのみです。通知設定と現在のスレッドへのアクセス権が引き続き適用されます。",
   "thread_watch_not_watching": "ウォッチしていません",
-  "thread_watch_outcome_unknown": "結果を確認できませんでした。現在の設定を確かめるには、同じ操作をそのまま再試行してください。",
+  "thread_watch_outcome_unknown": "結果を確認できませんでした。同じ操作を再試行するか、現在のウォッチ状態を確認してください。",
   "thread_watch_preferences": "通知設定",
   "thread_watch_read_failed": "ウォッチ状態を確認できませんでした。",
   "thread_watch_refused": "ウォッチ設定を変更できませんでした。別の操作をする前に現在の状態を確認してください。",

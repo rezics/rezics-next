@@ -1,233 +1,83 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import { SignInPrompt } from './composer';
-import {
-  threadWatchNative,
-  type ThreadWatchCommand,
-  type ThreadWatchNative,
-  type ThreadWatchState,
-} from './thread-watch-native';
+import { SignInPrompt } from './write-prompts';
+import { useThreadWatchCurrent, type ThreadWatchProps, type ThreadWatchView } from './thread-watch-current';
 
-type WatchView =
-  | { scope: string; phase: 'checking' | 'sending' }
-  | { scope: string; phase: 'confirmed'; state: ThreadWatchState; confirmation?: boolean }
-  | { scope: string; phase: 'read-failed' | 'refused' | 'access-lost' | 'unavailable' }
-  | { scope: string; phase: 'unknown'; command: ThreadWatchCommand };
+export type { ThreadWatchProps } from './thread-watch-current';
 
-export type ThreadWatchProps = {
-  threadId: string;
-  session: string;
-  sessionKnown: boolean;
-  viewerId?: string | undefined;
-  sessionStamp: string;
-  admitted: boolean;
-  returnTo: string;
-  isCurrent?: () => boolean;
-  native?: ThreadWatchNative;
-};
+const actionClass = 'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
 
-function validState(value: ThreadWatchState | undefined): value is ThreadWatchState {
-  return (
-    !!value && typeof value.watching === 'boolean' && typeof value.revision === 'string' && value.revision.length > 0
-  );
+function status(view: ThreadWatchView): string {
+  switch (view.phase) {
+    case 'confirmed':
+      return view.confirmation === true ? m.thread_watch_confirm_started() :
+        view.confirmation === false ? m.thread_watch_confirm_stopped() :
+          view.watching ? m.thread_watch_watching() : m.thread_watch_not_watching();
+    case 'unknown': return m.thread_watch_outcome_unknown();
+    case 'read-failed': return m.thread_watch_read_failed();
+    case 'refused': return m.thread_watch_refused();
+    case 'access-lost': return m.thread_watch_access_lost();
+    case 'unavailable': return m.thread_watch_unavailable();
+    default: return m.thread_watch_checking();
+  }
 }
 
-export function ThreadWatch({
-  threadId,
-  session,
-  sessionKnown,
-  viewerId,
-  sessionStamp,
-  admitted,
-  returnTo,
-  isCurrent = () => true,
-  native = threadWatchNative,
-}: ThreadWatchProps) {
-  const ready = sessionKnown && session === 'signed-in' && !!viewerId && admitted;
-  const scope = JSON.stringify([threadId, viewerId ?? null, sessionStamp, admitted]);
-  const scopeRef = useRef(scope);
-  const nativeRef = useRef(native);
-  const currentCheckRef = useRef(isCurrent);
-  const sequence = useRef(0);
-  const operation = useRef<object | null>(null);
-  const unresolvedCommand = useRef<ThreadWatchCommand | null>(null);
-  scopeRef.current = scope;
-  nativeRef.current = native;
-  currentCheckRef.current = isCurrent;
+/** The existing header's private, deliberate point control. Conversation and shared actions remain independent. */
+export function ThreadWatch(props: ThreadWatchProps) {
+  const { visit, view } = useThreadWatchCurrent(props);
+  const host = useRef<HTMLDivElement>(null);
+  const hadFocus = useRef(false);
+  const busy = view.phase === 'checking' || view.phase === 'sending';
+  const signedIn = props.sessionKnown && props.session === 'signed-in';
+  const canRecover = view.phase === 'read-failed' || view.phase === 'refused' ||
+    view.phase === 'unavailable' || view.phase === 'unknown';
 
-  const [storedView, setView] = useState<WatchView>();
-  const view: WatchView =
-    storedView?.scope === scope
-      ? storedView
-      : { scope, phase: ready ? 'checking' : admitted ? 'checking' : 'access-lost' };
-
-  const responseIsCurrent = (requestScope: string, requestSequence: number, requestNative: ThreadWatchNative) =>
-    scopeRef.current === requestScope &&
-    sequence.current === requestSequence &&
-    nativeRef.current === requestNative &&
-    currentCheckRef.current();
-
-  const readStatus = useCallback(async () => {
-    if (!ready || !viewerId || operation.current || !currentCheckRef.current()) return;
-    const requestScope = scope;
-    const requestNative = native;
-    const requestSequence = ++sequence.current;
-    const ticket = {};
-    operation.current = ticket;
-    unresolvedCommand.current = null;
-    setView({ scope: requestScope, phase: 'checking' });
-    try {
-      const result = await requestNative.read(
-        Object.freeze({ threadId, viewerId, sessionStamp, fetch: Object.freeze({ cache: 'no-store' as const }) }),
-      );
-      if (!responseIsCurrent(requestScope, requestSequence, requestNative)) return;
-      if (result.kind === 'confirmed' && validState(result.state))
-        setView({ scope: requestScope, phase: 'confirmed', state: result.state });
-      else if (result.kind === 'access-lost') setView({ scope: requestScope, phase: 'access-lost' });
-      else if (result.kind === 'unavailable') setView({ scope: requestScope, phase: 'unavailable' });
-      else setView({ scope: requestScope, phase: 'read-failed' });
-    } catch {
-      if (responseIsCurrent(requestScope, requestSequence, requestNative))
-        setView({ scope: requestScope, phase: 'read-failed' });
-    } finally {
-      if (operation.current === ticket) operation.current = null;
-    }
-  }, [native, ready, scope, sessionStamp, threadId, viewerId]);
-
-  useEffect(() => {
-    if (!ready) {
-      sequence.current++;
-      operation.current = null;
-      unresolvedCommand.current = null;
-      return;
-    }
-    void readStatus();
-    return () => {
-      sequence.current++;
-      operation.current = null;
-      unresolvedCommand.current = null;
-    };
-  }, [readStatus, ready]);
-
-  const send = async (command: ThreadWatchCommand, retry: boolean) => {
-    if (
-      !ready ||
-      !isCurrent() ||
-      operation.current ||
-      scopeRef.current !== scope ||
-      (retry && unresolvedCommand.current !== command)
-    )
-      return;
-    const requestScope = scope;
-    const requestNative = native;
-    const requestSequence = ++sequence.current;
-    const ticket = {};
-    operation.current = ticket;
-    unresolvedCommand.current = command;
-    setView({ scope: requestScope, phase: 'sending' });
-    try {
-      const result = await requestNative.set(command);
-      if (!responseIsCurrent(requestScope, requestSequence, requestNative)) return;
-      if (result.kind === 'confirmed' && validState(result.state) && result.state.watching === command.watching) {
-        unresolvedCommand.current = null;
-        setView({ scope: requestScope, phase: 'confirmed', state: result.state, confirmation: command.watching });
-      } else if (result.kind === 'refused' && result.reason === 'access-lost') {
-        unresolvedCommand.current = null;
-        setView({ scope: requestScope, phase: 'access-lost' });
-      } else if (result.kind === 'refused' && result.reason === 'unavailable') {
-        unresolvedCommand.current = null;
-        setView({ scope: requestScope, phase: 'unavailable' });
-      } else if (result.kind === 'refused') {
-        unresolvedCommand.current = null;
-        setView({ scope: requestScope, phase: 'refused' });
-      } else {
-        setView({ scope: requestScope, phase: 'unknown', command });
-      }
-    } catch {
-      if (responseIsCurrent(requestScope, requestSequence, requestNative))
-        setView({ scope: requestScope, phase: 'unknown', command });
-    } finally {
-      if (operation.current === ticket) operation.current = null;
-    }
-  };
-
-  const begin = (state: ThreadWatchState) => {
-    if (!ready || operation.current || !isCurrent()) return;
-    const command = Object.freeze({
-      threadId,
-      viewerId: viewerId!,
-      sessionStamp,
-      watching: !state.watching,
-      expectedRevision: state.revision,
-      idempotencyKey: crypto.randomUUID(),
-    });
-    void send(command, false);
-  };
-
-  const retryExact = (command: ThreadWatchCommand) => void send(command, true);
+  useLayoutEffect(() => {
+    const element = host.current;
+    if (!element || !hadFocus.current || busy) return;
+    // Keep keyboard recovery reachable when a pending button becomes a different deliberate action.
+    if (document.activeElement === document.body || element.contains(document.activeElement))
+      element.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  }, [busy, view.phase, visit]);
 
   return (
     <div
-      className="flex min-w-0 flex-col items-start gap-1 text-sm"
-      aria-busy={view.phase === 'checking' || view.phase === 'sending'}
+      ref={host}
+      className="flex min-w-0 max-w-full flex-col items-start gap-1 text-sm"
+      aria-busy={visit.ready && busy}
+      onFocusCapture={() => { hadFocus.current = true; }}
+      onBlurCapture={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) hadFocus.current = false;
+      }}
     >
-      {!sessionKnown ? <p role="status">{m.thread_watch_checking()}</p> : null}
-      {sessionKnown && session === 'signed-in' && !viewerId ? <p role="status">{m.thread_watch_checking()}</p> : null}
-      {sessionKnown && session !== 'signed-in' ? (
-        <SignInPrompt returnTo={returnTo} label={m.thread_watch_anonymous()} />
-      ) : null}
-      {sessionKnown && session === 'signed-in' && !admitted ? (
-        <p role="status">{m.thread_watch_access_lost()}</p>
-      ) : null}
-      {ready && view.phase === 'checking' ? <p role="status">{m.thread_watch_checking()}</p> : null}
-      {ready && view.phase === 'sending' ? <p role="status">{m.thread_watch_checking()}</p> : null}
-      {ready && view.phase === 'confirmed' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p role="status">
-            {view.confirmation === true
-              ? m.thread_watch_confirm_started()
-              : view.confirmation === false
-                ? m.thread_watch_confirm_stopped()
-                : view.state.watching
-                  ? m.thread_watch_watching()
-                  : m.thread_watch_not_watching()}
-          </p>
-          <Button type="button" size="sm" onClick={() => begin(view.state)}>
-            {view.state.watching ? m.thread_watch_stop() : m.thread_watch_watch()}
-          </Button>
+      {!props.sessionKnown || (signedIn && !props.viewerId) ? <p role="status">{m.thread_watch_checking()}</p> : null}
+      {props.sessionKnown && !signedIn ? <SignInPrompt returnTo={props.returnTo} label={m.thread_watch_anonymous()} /> : null}
+      {signedIn && !props.admitted ? <p role="status">{m.thread_watch_access_lost()}</p> : null}
+      {signedIn && props.admitted && props.viewerId ? (
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          <p role="status" aria-live="polite" aria-atomic="true">{status(view)}</p>
+          {visit.ready && view.phase === 'confirmed' ? (
+            <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>
+              {view.watching ? m.thread_watch_stop() : m.thread_watch_watch()}
+            </Button>
+          ) : null}
+          {visit.ready && view.command && (canRecover || busy) ? (
+            <Button type="button" size="sm" className={actionClass} disabled={busy} onClick={visit.retry}>
+              {m.thread_watch_retry_exact()}
+            </Button>
+          ) : null}
+          {visit.ready && (canRecover || (busy && !view.command)) ? (
+            <Button type="button" variant="outline" size="sm" className={actionClass} disabled={busy} onClick={() => void visit.read()}>
+              {m.thread_watch_check_again()}
+            </Button>
+          ) : null}
         </div>
       ) : null}
-      {ready && view.phase === 'unknown' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p role="status">{m.thread_watch_outcome_unknown()}</p>
-          <Button type="button" size="sm" onClick={() => retryExact(view.command)}>
-            {m.thread_watch_retry_exact()}
-          </Button>
-        </div>
-      ) : null}
-      {ready && view.phase === 'read-failed' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p role="status">{m.thread_watch_read_failed()}</p>
-          <Button type="button" size="sm" onClick={() => void readStatus()}>
-            {m.thread_watch_check_again()}
-          </Button>
-        </div>
-      ) : null}
-      {ready && view.phase === 'refused' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p role="status">{m.thread_watch_refused()}</p>
-          <Button type="button" size="sm" onClick={() => void readStatus()}>
-            {m.thread_watch_check_again()}
-          </Button>
-        </div>
-      ) : null}
-      {ready && view.phase === 'access-lost' ? <p role="status">{m.thread_watch_access_lost()}</p> : null}
-      {ready && view.phase === 'unavailable' ? <p role="status">{m.thread_watch_unavailable()}</p> : null}
-      {sessionKnown && session === 'signed-in' ? (
+      {signedIn ? (
         <p className="text-xs text-muted-foreground">
           {m.thread_watch_guidance()}{' '}
-          <a className="underline" href="/settings#notifications">
+          <a className="inline-flex min-h-11 items-center underline" href="/settings#notifications">
             {m.thread_watch_preferences()}
           </a>
         </p>

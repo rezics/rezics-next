@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "你已取消关注此讨论。",
   "thread_watch_guidance": "关注仅涵盖站内动态。你的通知偏好和当前讨论访问权限仍然适用。",
   "thread_watch_not_watching": "未关注此讨论",
-  "thread_watch_outcome_unknown": "结果未知。请重试完全相同的操作，以确认当前设置。",
+  "thread_watch_outcome_unknown": "结果未知。请重试相同操作，或查询当前的关注状态。",
   "thread_watch_preferences": "通知设置",
   "thread_watch_read_failed": "无法检查关注状态。",
   "thread_watch_refused": "无法更改关注设置。尝试其他操作前，请先检查当前状态。",

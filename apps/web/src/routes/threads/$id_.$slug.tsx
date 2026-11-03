@@ -503,6 +503,7 @@ export function ThreadPage() {
                 sessionKnown={session !== 'unknown'}
                 viewerId={subject ?? undefined}
                 sessionStamp={callbackRevision}
+                readAuthority={readScope}
                 admitted={
                   binding.current &&
                   !currentPageUnavailable &&

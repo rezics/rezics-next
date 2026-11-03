@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "你已停止追蹤這個討論。",
   "thread_watch_guidance": "追蹤僅涵蓋站內動態。你的通知偏好和目前的討論存取權仍然適用。",
   "thread_watch_not_watching": "尚未追蹤這個討論",
-  "thread_watch_outcome_unknown": "結果不明。請重試完全相同的操作，以確認目前設定。",
+  "thread_watch_outcome_unknown": "結果不明。請重試相同操作，或查詢目前的追蹤狀態。",
   "thread_watch_preferences": "通知設定",
   "thread_watch_read_failed": "無法檢查追蹤狀態。",
   "thread_watch_refused": "無法變更追蹤設定。嘗試其他操作前，請先檢查目前狀態。",

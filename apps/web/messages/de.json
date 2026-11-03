@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "Du beobachtest diesen Thread nicht mehr.",
   "thread_watch_guidance": "Die Beobachtung umfasst nur Aktivitäten in der App. Deine Benachrichtigungseinstellungen und der aktuelle Thread-Zugriff gelten weiterhin.",
   "thread_watch_not_watching": "Wird nicht beobachtet",
-  "thread_watch_outcome_unknown": "Das Ergebnis ist unbekannt. Wiederhole dieselbe Aktion, um die aktuelle Einstellung zu bestätigen.",
+  "thread_watch_outcome_unknown": "Das Ergebnis ist unbekannt. Wiederhole dieselbe Aktion oder prüfe den aktuellen Beobachtungsstatus.",
   "thread_watch_preferences": "Benachrichtigungseinstellungen",
   "thread_watch_read_failed": "Der Beobachtungsstatus konnte nicht geprüft werden.",
   "thread_watch_refused": "Die Beobachtungseinstellung konnte nicht geändert werden. Prüfe den aktuellen Status, bevor du eine andere Aktion versuchst.",

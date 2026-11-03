@@ -1471,7 +1471,7 @@
   "thread_watch_confirm_stopped": "Vous ne suivez plus ce fil.",
   "thread_watch_guidance": "Le suivi concerne uniquement l’activité dans l’application. Vos préférences de notification et votre accès actuel au fil restent applicables.",
   "thread_watch_not_watching": "Vous ne suivez pas ce fil",
-  "thread_watch_outcome_unknown": "Le résultat est inconnu. Réessayez exactement la même action pour confirmer le réglage actuel.",
+  "thread_watch_outcome_unknown": "Le résultat est inconnu. Réessayez la même action ou vérifiez l’état actuel du suivi.",
   "thread_watch_preferences": "Paramètres de notification",
   "thread_watch_read_failed": "Impossible de vérifier le suivi.",
   "thread_watch_refused": "Le réglage de suivi n’a pas pu être modifié. Vérifiez son état avant toute autre action.",
