@@ -2,6 +2,7 @@ import { spawn as spawnProcess, type ChildProcess, type ChildProcessWithoutNullS
 import { constants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import type { Writable } from 'node:stream';
 import { DumpInputError, closeInput, throwIfAborted, type DumpByteProgress } from './dump-input.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, MAX_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 
@@ -221,11 +222,7 @@ function mapZstdFailure(
   throw new DumpInputError('zstd dump failed completeness or integrity checks.', 'zstd-integrity');
 }
 
-async function writePipe(
-  stream: NodeJS.WritableStream,
-  chunk: Uint8Array,
-  signal: AbortSignal,
-): Promise<void> {
+async function writePipe(stream: Writable, chunk: Uint8Array, signal: AbortSignal): Promise<void> {
   throwIfAborted(signal);
   if (stream.destroyed || !stream.writable)
     throw new DumpInputError('zstd input pump broke before the original file reached EOF.', 'zstd-integrity');
@@ -252,7 +249,7 @@ async function writePipe(
   });
 }
 
-async function endPipe(stream: NodeJS.WritableStream | null): Promise<void> {
+async function endPipe(stream: Writable | null): Promise<void> {
   if (!stream || stream.destroyed || !stream.writable) return;
   await new Promise<void>((resolve) => {
     stream.end(() => resolve());

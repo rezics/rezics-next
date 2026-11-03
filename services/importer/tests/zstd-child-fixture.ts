@@ -1,4 +1,6 @@
 /** Repository-owned zstd child stand-in for hang, late-fail and stderr-flood cases. */
+export {};
+
 const mode = process.argv[2] ?? 'help';
 
 if (mode === 'help' || process.argv.includes('-H')) {

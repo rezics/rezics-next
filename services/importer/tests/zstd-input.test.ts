@@ -137,7 +137,7 @@ test('raw input, trailing garbage, truncated later frame, checksum failure and o
   await failIdentity(valid.subarray(0, 8), 'zstd-truncated');
   await failIdentity(Buffer.concat([valid, second.subarray(0, 8)]), 'zstd-truncated');
   const bad = Buffer.from(valid);
-  bad[bad.length - 1] ^= 0xff;
+  bad.writeUInt8(bad.readUInt8(bad.length - 1) ^ 0xff, bad.length - 1);
   await failIdentity(bad, 'zstd-integrity');
   const long = await zstdCompress(encode('x'.repeat(200)), ['--long=31', '-19']);
   await failIdentity(long, 'zstd-window');
