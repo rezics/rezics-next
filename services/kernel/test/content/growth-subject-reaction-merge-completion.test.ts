@@ -355,7 +355,7 @@ async function assertSurvivorState(item: MergeCase): Promise<void> {
     .map((actor, index) => ({
       actor_account_id: actor.accountId,
       target_id: item.final,
-      kind: index < survivorCollisions ? 'love' : 'like',
+      kind: index < survivorCollisions ? ('love' as const) : ('like' as const),
     }))
     .sort((left, right) => left.actor_account_id.localeCompare(right.actor_account_id));
   expect(queried.rows).toEqual(expected);
