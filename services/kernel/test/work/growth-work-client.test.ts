@@ -371,8 +371,7 @@ async function runBoundedFallback(prefix: string, probe: Probe): Promise<void> {
   const childWorkflowID = childWorkflowIDForProbe(prefix, probe);
   const expectedName = `growth.work_client.step:${childWorkflowID}`;
   expect(await client.getWorkflow(childWorkflowID)).toMatchObject({ workflowID: childWorkflowID, status: 'SUCCESS' });
-  const list = (offset: number) =>
-    client.listWorkflowSteps(probe.legacyWorkflowID, { limit: pageLimit, offset });
+  const list = (offset: number) => client.listWorkflowSteps(probe.legacyWorkflowID, { limit: pageLimit, offset });
   const first = await list(0);
   expect(first).toHaveLength(pageLimit);
   expect(first?.map(({ functionID }) => functionID)).toEqual(
@@ -416,20 +415,20 @@ test('Legacy leave fallback discovery stays bounded as unrelated workflow histor
       for (const probe of probes) {
         const childWorkflowID = childWorkflowIDForProbe(boundedFallbackPrefix, probe);
         const expectedName = `growth.work_client.step:${childWorkflowID}`;
-        await growth.admin.query(
-          'UPDATE dbos.operation_outputs SET function_name=$1 WHERE workflow_uuid=$2',
-          [expectedName, childWorkflowID],
-        );
+        await growth.admin.query('UPDATE dbos.operation_outputs SET function_name=$1 WHERE workflow_uuid=$2', [
+          expectedName,
+          childWorkflowID,
+        ]);
         await growth.admin.query(
           `INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
            SELECT $1, generated.step_id, $2, $3, NULL
              FROM generate_series($4::int + 1, $5::int) AS generated(step_id)`,
           [childWorkflowID, expectedName, serializedNull, seededStepCount, deepStepCount],
         );
-        await growth.admin.query(
-          'UPDATE dbos.workflow_status SET step_count=$2 WHERE workflow_uuid=$1',
-          [childWorkflowID, deepStepCount],
-        );
+        await growth.admin.query('UPDATE dbos.workflow_status SET step_count=$2 WHERE workflow_uuid=$1', [
+          childWorkflowID,
+          deepStepCount,
+        ]);
       }
     },
     async warmup(_growth, _scale, repetition) {
