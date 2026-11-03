@@ -22,6 +22,7 @@ import {
   collectOutputTree,
   encodeOutputTree,
   outputTreeDigest,
+  outputTreeInputExclusions,
   outputTreeMemberPath,
   outputTreeProfile,
   readOutputTreeFile,
@@ -34,6 +35,14 @@ import {
 } from './check-output-tree.ts';
 
 const roots: string[] = [];
+test('client emission retains compiler inputs while excluding transport and restoration staging', () => {
+  expect(outputTreeInputExclusions([PROFILE.transport])).toEqual([
+    PROFILE.transport,
+    'packages/client/src/.kernel-output-tree',
+  ]);
+  expect(outputTreeInputExclusions(['ordinary.txt'])).toEqual(['ordinary.txt']);
+});
+
 function workspace(): string {
   const root = mkdtempSync('/dev/shm/rezics-output-tree-');
   roots.push(root);
