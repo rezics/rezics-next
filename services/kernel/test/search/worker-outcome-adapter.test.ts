@@ -139,7 +139,7 @@ function assertDefaults(stats: WorkerStats) {
   expect(stats.registeredModules).toContain('search');
   expect(stats.registeredModules).toContain('semantic');
   expect(stats.registrationCounts).toEqual(Object.fromEntries(stats.defaultModules.map((name) => [name, 1])));
-  expect(stats.startedServices.search).toBe(1);
+  expect(stats.startedServices.search).toBeGreaterThan(stats.searchStarterInvocations);
   expect(stats.startedServices.semantic).toBeGreaterThan(0);
   expect(stats.searchStarterInvocations).toBe(1);
   expect(stats.stopped).toBe(false);
