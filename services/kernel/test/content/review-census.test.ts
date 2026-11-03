@@ -204,8 +204,14 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       'UPDATE content.post SET security_revision=security_revision+1 WHERE route=$1 AND post_id=$2',
       [routeOf(written.value.itemId), written.value.itemId],
     ],
-    ["UPDATE content.board SET visibility='protected' WHERE route=$1 AND board_id=$2", [board.route, board.board_id]],
-    ["UPDATE content.board SET visibility='published' WHERE route=$1 AND board_id=$2", [board.route, board.board_id]],
+    [
+      "UPDATE content.board SET visibility='protected',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id],
+    ],
+    [
+      "UPDATE content.board SET visibility='published',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id],
+    ],
     [
       "DELETE FROM content.review_discovery_dependency WHERE route=$1 AND thread_id=$2 AND gate_kind='context'",
       [routeOf(written.value.threadId), written.value.threadId],
