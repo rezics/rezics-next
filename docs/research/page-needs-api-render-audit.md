@@ -1,0 +1,415 @@
+# Core pages: user needs, API disclosure and rendered interface
+
+Research date: 2026-11-03. Current source: `f9bdfed54147dccd49f8128fb6e8ad3a11e3f55d`.
+This is a static audit of mounted route contracts, their production consumers and the components they render.
+“Covered” means the source connects the need to a contract and consumer; it does not assert runtime acceptance.
+No application code changes or live checks accompany this report.
+
+The Home diagnosis is substantially correct, with one qualification: this source **does render an action bar**.
+Its production caller supplies no reaction state, so signed-in readers receive disabled vote controls with a dash.
+The feed contract cannot supply that state. Meanwhile board cards already consume native reaction state. The
+problem is the page projection, rather than the absence of a reusable reaction component.
+
+## Interpretation and evidence
+
+- **API design gap (A)**: a needed disclosure or command is absent from the page's native contract. Separate point
+  reads do not erase a missing bounded page projection; the table identifies existing workarounds explicitly.
+- **Interface gap (I)**: native data or an existing operation can serve the need, but the production web path drops
+  it, rejects it, leaves its adapter unavailable, or offers no way to reach it. A story or injectable seam is not a
+  production binding.
+- **P1**: blocks a frequent primary action or makes an important class of content unusable or ambiguous.
+  **P2**: impairs comparison, navigation, triage or fidelity while the main journey remains possible. No P0 is
+  asserted from source inspection alone. The ranked queues below order findings within each priority.
+- Missing values, withheld resources and unsupported configurations must retain their distinct states. Internal
+  IDs, hashes, authorization evidence and revisions do not all need visual presentation; their omission alone is
+  not an interface gap.
+
+Decision: “person” means a catalogue `schema:Person`, with Organization noted where the same reader applies;
+account identity and preferences belong to settings. Earlier applications establish user needs, not authority for
+reviving their Zone, tracking or permission models.
+
+The two earlier applications were read at these fixed revisions:
+
+| Source | Evidence used to judge needs |
+| --- | --- |
+| `legacy-final`, `1ac6ed6e0668f04e30025c41e59ceaf3bdee5061`, paths beneath `apps/web/features/` | `home/home-page.tsx`, `feed/actions.tsx`, `feed/discussion-card.tsx`: discovery, continuation, votes, replies and Library actions. `realm/realm-page.tsx`, `realm/entry-page.tsx`: community identity and entry. `work-page/credits.tsx`, `work-page/discussion.tsx`, `entity-page/entity-page.tsx`: linked credits, entity context and discussions. `search/search-page.tsx`, `library/library-page.tsx`: scoped discovery and personal organization. `shell/notifications/notifications-view.tsx`, `settings/settings-sections.tsx`: inbox triage and preference controls. These are read-only Git objects, addressable as `legacy-final:<path>`; [pinned source tree](https://github.com/rezics/rezics-next/tree/1ac6ed6e0668f04e30025c41e59ceaf3bdee5061/apps/web/features). |
+| Earlier checkout, `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`, `/home/edge/projects/rezics/rezics/apps/web/features/` | `content-feed/components/feed-item-card.tsx`: attached ratings and reply context. `catalog/catalog-resource-page.tsx`, `catalog/components/catalog-resource-actions.tsx`, `catalog/components/native-related-lists.tsx`: facts, sources, scores, progress, related editions and episodes. `entities/components/entity-resource-details.tsx`: entity facts, tags, external links and related content. `realms/components/realm-info-card.tsx`, `zones/zone-page.tsx`, `zones/zone-post-page.tsx`: community context and content entry. `collections/pages/collection-detail-page.tsx`, `collections/pages/collection-items-page.tsx`: curator attribution, covers and ordered editing. `search/search-page.tsx`, `notifications/pages/notifications-page.tsx`, `settings/pages/settings-overview-page.tsx`: scoped results, per-notice/all-notice reading and settings navigation. All paths are read-only beneath the stated directory. |
+
+[API-first platform coverage](api-first-platform-coverage.md) supplies the comparison set and its scope boundaries:
+VNDB, Bangumi, MusicBrainz, Open Library, Wikidata, AniDB, AniList, MyAnimeList, TMDb, IGDB, Steam, Goodreads,
+Letterboxd, Discogs and IMDb. Catalogue identity, qualified relationships, personal scores/progress and curated
+lists are relevant patterns. This audit does not turn every provider feature into a requirement: full diaries,
+historical import fidelity, arbitrary provider statistics, provider delivery and recommendation engines remain
+separate decisions. Commerce needs follow the native Commerce contract; the older catalogue applications are
+not evidence for payment or entitlement semantics. Direct primary-source findings and licences appear below.
+
+## Home
+
+Need evidence: both earlier feed implementations, AniList personal activity/list state and TMDb account-state
+separation. Inspect the signed-in and public paths independently.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Discover readable subjects/accounts; switch Home/Following and filters; continue a sparse page without calling it empty. **Covered.** | `GET /v1/feedItems`: `feedItems`, `next`, `asOf`, and independent discovery/following/continue source states; at most 20 items. Subject summaries contain labels/types/cover. [Feed route][feed-route], [feed contract][feed-contract], [summary contract][summaries]. | Public cached and prepared private paths, stream/filter controls, continuation and unavailable/preparing states in [Home route][home-route], [Home feed][home-feed] and [feed reader][home-read]. |
+| React to a discussion, reply or subject and see counts and my selected reaction before acting. **A01, P1; owner Content.** | The feed union has no reaction counts or viewer reaction. Existing `PUT/DELETE /v1/{threads,posts,subjects}/:id/reaction` and subject count reads are separate operations in [Content routes][content-route]; richer thread reads already carry these fields in [Content schemas][content-schema]. | [Home actions][home-actions] supply links/share/report/Library actions but no `reaction` to `FeedActionBar`; [VoteControl][vote-control] shows disabled signed-in controls and a dash. Signed-out controls can offer sign-in. A visible bar is not a functioning reaction journey. |
+| Understand which work a review evaluates, the cited score, and the context of a followed reply. **A02, P1; owner Content.** | Feed thread summaries have ID/kind/title/time and optional author/excerpt; post summaries add thread ID. No reviewed-subject summary, `voteCitation`, or parent-context summary is declared in [feed contract][feed-contract]. A full thread's first post has a vote citation in [Content schemas][content-schema]. | [Feed item][home-item] and [feed reader][home-read] can present title/author/excerpt, but the reader's optional review-subject extension is not native feed disclosure. The richer reply/rating context in the earlier feed cannot be supplied consistently. |
+| Find public Collections and Spaces alongside catalogue entries; follow through to the right owner. **A03, P2; owner Content, with Search and Library dependencies.** | Following includes Library Collections, but discovery includes only semantic subjects/accounts; there is no Space variant. [Feed contract][feed-contract]. Default mixed Search also lacks the released public-owner wire union; see Search below. | [Feed reader][home-read] declares local discovery-Collection and Space extensions expressly pending owner delivery. Those types do not make real feed rows available. Following Collections that the API does return can render. |
+| Resume my own reading/progress and move to Library or the work. **Covered.** | Continue items contain the semantic summary and continue-page progress item; source state is explicit. [Feed contract][feed-contract]. | [Feed item][home-item] renders the progress/resume destination. [Home actions][home-actions] offer Library navigation for work destinations; they do not manufacture private progress for public discovery cards. |
+| Judge conversation activity before opening an item. **A08, P2; owner Content.** | Feed summaries omit reply count and last conversation activity. [Feed contract][feed-contract]. | [Feed item][home-item] cannot show those values. Share and reply navigation work; a reply link is not a reply count. |
+
+## A Realm
+
+Need evidence: earlier Realm identity/entry and scoped discovery, with the current Realm/Space distinction retained.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Know the Realm's identity, rules, presentation, membership and continuity, and its containing Space. **Covered.** | `GET /v1/realms/:realmId`, `/presentation`, `/participation`, plus the Space read. Native Realm data includes visibility, context, lifecycle/continuity and presentation. [Community routes][community-route], [Realm model][realm-model]. | The [Realm route][realm-route] uses [Space reader][space-read] and [SpacePage][space-page]. [RealmHomeHeader][realm-header] displays Realm identity, banner/avatar/rules/member context and distinguishes the Space carrier. |
+| Join/leave when admitted, understand unavailable/orphaned states, and reach permitted administration. **Covered in source.** | Participation, memberships, claim and lifecycle operations are mounted through [Community routes][community-route] and the owner's access contracts. Permission failure is not an empty Realm. | [SpacePage][space-page] composes membership, claim, lifecycle, appearance, bans and access panels. A disabled or hidden action must follow its current admission, not a cached ownership guess. |
+| Browse the full Realm catalogue, filter it and compare its ratings rather than only scanning published thumbnails. **I04, P2; owner Web.** | `POST /v1/subjects:search` accepts `population: {realm}`, filters and rating sort; `POST /v1/subjects:facets` accepts Realm scope. [Search routes][search-route]. Native Realm/public rating sources remain distinct in [rating routes][rating-route]. | [SpacePage][space-page] offers the boards/publications shelf; [RealmHomeHeader][realm-header] has no scoped catalogue/ranking entry. The Realm route does not consume the scoped Search capability. Add a reachable scoped search destination rather than another catalogue store. |
+| Enter boards and published works, and page each shelf independently. **Covered.** | `GET /v1/realms/:realmId/boards` and `/publications` have separate page continuations; published subject identity is resolved through Semantic. [Content routes][content-route], [Community routes][community-route]. | [RealmShelf in SpacePage][space-page] renders board descriptions/purpose/visibility and published covers with independent More/Retry behavior. [Space reader][space-read] currently resolves published subjects individually; bounded batch assembly is preferable as these shelves grow. |
+
+## A Space
+
+Need evidence: earlier entry/community carriers; its current role is a stable address/carrier, not a renamed legacy
+Zone with arbitrary plugins.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Recognize a Space, its address/title/summary and the Realm currently carried there. **Covered.** | `GET /v1/spaces/:spaceId`, `GET /v1/spaceAddresses/:address`, plus the carried Realm reads in [Community routes][community-route]. The [Space model][space-model] has address, title, summary, lifecycle and revision identity. | [Space reader][space-read] produces distinct `space` and nullable `realm` values; [SpacePage][space-page] renders the carrier and readable Realm instead of treating a missing Realm as an empty global community. |
+| Follow/unfollow the Space, join its readable Realm, and return through its stable address. **Covered in source.** | `GET/PUT/DELETE /v1/follows/:targetId` with owner target semantics in [personal routes][personal-route]; Realm participation in [Community routes][community-route]. | [SpacePage][space-page] composes Space follow and Realm membership separately. These are different actions and must remain so after address or Realm lifecycle changes. |
+| Browse the carried Realm's boards/works and reach its full scoped catalogue. **Covered for shelves; I04, P2 for catalogue entry.** | Same independently paged Realm board/publication reads as above, and the already available scoped [Search routes][search-route]. | [RealmShelf][space-page] shows the native shelves. The full catalogue handoff is absent from this shared page just as on the Realm route. |
+| Discover the Space from Home or mixed search without knowing its address. **A03, P2; owner Content, Search dependency.** | Point/address reads exist, but the production feed union has no Space row and the mixed Search HTTP union contains subjects/accounts only. [Feed contract][feed-contract], [discovery HTTP][discovery-http], [default discovery][default-discovery]. | Local Space renderers exist in [Home reader][home-read] and [public discovery rows][public-discovery-rows]; they do not establish a mounted source that can return Space results. |
+
+## A work
+
+Need evidence: both earlier catalogue/detail implementations; Open Library work/edition assembly, MusicBrainz
+credits/relations and the personal states in AniList, Bangumi and TMDb.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Identify the work: localized/original names, cover, type, dates, descriptive facts and their sources. **Covered.** | `GET /v1/subjects/:id` returns `subject`, `summary`, `related`, including multilingual terms and qualified statements/source records. `POST /v1/pages:read` returns the chosen template/document and named native read outcomes. [Subject contract/routes][subject-api], [page contract][page-contract], [page route][page-route]. | [Subject loader][subject-loader], [SubjectFrame][subject-frame], [composition render][composition-render] and [value rendering][page-values] consume those reads. Rendering follows the selected supported template; an API field is not a promise that every template shows every fact. |
+| Follow credits/cast, editions/releases/parts and external identifiers while preserving role, qualifier, date precision and provenance. **Covered for released definitions.** | Subject statements/related summaries and paged forward/inverse relationships are exposed in [Subject routes][subject-api]; the page continuation identifies the node being continued in [page contract][page-contract]. | [SubjectFrame/view loading][subject-frame] preserves page context and continuation. [Page data rendering][page-data] and [value rendering][page-values] render native facts/links rather than collapsing their meaning into strings. Catalogue correction companions are separate from the public reader. |
+| See public/global/Realm figures separately, cast/change my rating or reaction, and manage my Library state/progress. **Covered in source.** | `GET /v1/subjects/:id/figure`, `/ratings`, `/ratings/populations`, own `/ratings/:questionId/vote`, and reaction reads/commands; [rating routes][rating-route], [Content routes][content-route]. Library entry/progress endpoints remain private in [personal routes][personal-route] and [progress routes][progress-route]. | [Ratings view][ratings-view], [reaction view][reaction-view], [personal reader][personal-reader] and [Library leaf][library-leaf] bind private reads separately from the public page. Missing/unavailable figures are not zeroes, and imported statistics are not native votes. |
+| Compare reviews and discussions: author, excerpt, cited score and reaction state; open, contribute or react. **I01, P1; owner Web. Activity metadata also A08, P2; owner Content.** | `GET /v1/subjects/:id/threads` returns native `ThreadView` rows: first post with `voteCitation`, reaction counts/viewer reaction, title/author/time and continuation. Counts are disclosure-dependent optional slots. [Content routes][content-route], [Content schemas][content-schema]. It does not declare reply count/last activity. | [Subject community projection][subject-community] reduces a row to identity/title/author/board/time plus body-text summary. [SubjectCommunityRegion][subject-community-view] renders title/byline/excerpt and navigation, dropping native score citation and reaction slots. The data exists here, unlike in the Home feed. |
+| Find the Collections containing the work and add it to my own organization. **Covered.** | `GET /v1/subjects/:id/collections` and own entry/Collection commands, with private/public disclosure handled by their owner. [Collection routes][collection-route], [personal routes][personal-route]. | [Subject view loading][subject-frame] continues Collection pages separately; [Library leaf][library-leaf] and the public composition provide the corresponding destinations/actions. |
+| Find a native offer, understand its fixed benefit and inspect existing entitlement before buying. **Covered in source.** | `GET /v1/subjects/:id/offers` includes offers and disclosed ownership/pending-order context. [Commerce routes][commerce-route]. | [Purchase slot][subject-slots] hosts [SubjectOffersView][subject-offers-view], with session-bound private reads and links to offer/order flows. Its existence does not claim that external provider content is hosted here. |
+
+## A character
+
+Need evidence: earlier entity/resource surfaces, VNDB character/work relations and AniList's character identity,
+biography and linked media. Spoilers and work-specific values must stay attached to their context.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Recognize the character through names, image, description, classifications and sourced facts; correct mistakes. **Covered for released fields.** | The same `GET /v1/subjects/:id` and `POST /v1/pages:read` contracts, with the character type and active definitions; [Subject routes][subject-api], [page contract][page-contract], [definitions API][definitions-api]. | Public [SubjectFrame][subject-frame]/[composition rendering][composition-render] plus the [CharacterProfile correction companion][character-profile]. It reads native terms/facts and active definitions rather than a second character DTO. |
+| Follow appearances, voice credits and character relationships with role, qualifiers, references and spoiler control; continue large lists. **Covered where the release admits the relationship.** | Subject relation pages carry statement identity, related summaries, qualifiers/references and continuation. [Subject routes][subject-api]. [Character relationship reader][character-reading] derives forward/inverse streams from the active descriptor. | [Character relationship groups][character-groups] render each association's native value, qualifiers and citations, with spoiler gates; the [reader][character-reading] retains independent unreadable/configuration outcomes. Do not label a failed source an empty cast list. |
+| Distinguish a work-specific character identity from the related/main character when the source makes that distinction. **A09, P2; owner Semantic.** | Generic relation transport exists, but [the current reader's release check][character-reading] explicitly marks `main-character-linkage` unadmitted and describes that identity meaning as omitted. No corresponding released semantic disclosure can be promised to the page. | [CharacterRelationshipsUnavailable][character-groups] reports the missing configuration. This is an API/definition meaning gap, not missing JSX. Appearance role `wdt:P3831` is a different fact and must not stand in for identity linkage. |
+| React, organize the subject and read/contribute contextual community content where enabled. **Covered for subject actions; I01, P1 for community previews.** | Private Library and subject reaction APIs exist; subject thread rows include their native reaction/citation slots. [personal routes][personal-route], [Content routes][content-route], [Content schemas][content-schema]. | [Personal reader][personal-reader]/[reaction view][reaction-view] can serve subject actions. The shared [community projection][subject-community] and [community view][subject-community-view] lose the same preview interaction data as on a work. |
+
+## A person
+
+Need evidence: legacy entity/credits and the earlier entity-related feed, complemented by MusicBrainz artist
+relations and AniList staff biographies/credits. A catalogue Person is not the person's account.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Identify the Person using multilingual names/aliases, image, biography, dates and sources without conflating account verification with catalogue truth. **Covered for released fields.** | Subject/page/definition contracts carry typed Person statements, terms and source records; account linkage is a separate owner disclosure. [Subject routes][subject-api], [page contract][page-contract], [definitions API][definitions-api]. | [SubjectFrame][subject-frame]/[composition rendering][composition-render] provide the public page; [PeopleProfile][people-profile] and [its native reader][people-read] provide the Person/Organization correction companion. Its profile intro retains multilingual descriptions/aliases and biography groups. |
+| Browse credited works and roles, qualified names, dates, organizations and related people; continue rather than truncate. **Covered where released.** | Paged native relation endpoints and related subject summaries in [Subject routes][subject-api]; credit meaning comes from the active property descriptor, not a guessed account/author field. | [Page data rendering][page-data], [subject view continuation][subject-frame] and [PeopleProfile][people-profile] expose native relations and correction entry points. Do not replace a credited Person with the account that entered the statement. |
+| Correct biography/credit facts while preserving citations and candidate/revision provenance. **Covered in source.** | Native term/statement/candidate/revision operations and active definitions in [Subject routes][subject-api] and [definitions API][definitions-api]. | [PeopleProfile][people-profile] composes facts, biography groups and credit identity handoffs from [its native reader][people-read]. This is an editor journey, separate from simply viewing the public page. |
+| Organize/follow the subject as supported and read relevant discussions/reviews. **Covered for native subject actions; I01, P1 for community preview data.** | Library subject actions and subject thread reads, with native reaction/citation slots, in [personal routes][personal-route] and [Content schemas][content-schema]. | [Personal reader][personal-reader] and shared [SubjectCommunityRegion][subject-community-view]. The latter drops interaction/citation fields through [its projection][subject-community], independent of the subject type. |
+
+## Search results
+
+Need evidence: both earlier scoped result pages; the lookup/search/browse separation in MusicBrainz and the
+explicit list-entry state in AniList/Bangumi. Mixed discovery and the older subject response are different contracts.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Search/filter/sort, see applicable kinds/facets, preserve scope and continue or restart coherently. **Covered in source.** | `POST /v1/subjects:search`, `:facets`, `:suggest`, and `GET /v1/trendingSearches`; filters/languages/cursors, optional Realm population, kind pagination and explicit preparation/restart failures. [Search routes][search-route]. | [Search route][search-page], [discovery reader][discovery-reader] and [DiscoveryResults][discovery-results] retain response/state distinctions and owner-tagged identities. [Results][search-results] handles the richer subject response. |
+| Disambiguate similarly named catalogue results by description, creator/date facts and public figure without opening every row. **A06, P2; owner Search.** | The subject response supports descriptions, selected facts and `figure`, but `representation: discovery-v1` serializes semantic hits as `SubjectSummary` only: ID/types/label/cover. [Search routes][search-route], [discovery HTTP][discovery-http], [summary contract][summaries]. The richer fields do not survive merely by requesting mixed representation. | [ResultRow][search-results] supports descriptive facts/figure. [DiscoveryResults][discovery-results] cannot display them for the thin mixed semantic hit; the loss occurs before rendering. Accounts do retain handle/kind/verified-agent context. |
+| Find public Collections, reviews and Spaces as actual result kinds. **A03, P2; owner Content, with Search and Library dependencies.** | [Discovery registry][discovery-registry] defines owner-adapter seams, but [default discovery][default-discovery] uses [native subject/account registration][account-discovery]. The closed [HTTP union/serializer][discovery-http] only admits subjects/accounts. Owner adapter source files alone do not complete this transport. | [Public discovery rows][public-discovery-rows] can render Collections/reviews/Spaces, including reviewed-subject and author context. These are interface consumers awaiting the native default registration and wire contract, not evidence of returned production results. |
+| Recognize my existing Library state/score and save or change it without reopening each result. **A05, P1; owner Library, Content rating dependency.** | Search's public result contracts contain no viewer Library entry or own vote. The point entry/vote APIs exist separately in [personal routes][personal-route] and [rating routes][rating-route]. A bounded private overlay for these result identities is missing. | [DiscoveryResults][discovery-results]/[ResultRow][search-results] show public identity/facts and destinations, without a supplied personal-state/action model. A new button alone would not make the underlying read available. |
+| Distinguish account identity from catalogue agents and follow a supported public destination. **Covered.** | Owner-tagged account summaries contain display name, handle, avatar, account kind and verified-agent linkage. [discovery HTTP][discovery-http]. | [AccountRow in DiscoveryResults][discovery-results] renders these distinctions and only constructs a profile destination from a valid native handle. Missing handle is not permission to invent a profile URL. |
+
+## A Library
+
+Need evidence: legacy personal Library organization; earlier score/progress controls and Collections; AniList
+MediaList and Bangumi private collection reads. The Library is an owner's private working page, not a public index.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Scan personal entries, state/type counts, dates and progress; filter/sort and page with honest totals. **Covered for the declared chronological sorts.** | `GET /v1/libraryEntries?view=FULL`, `/libraryShelfSummary`, `/libraryShelfTypes` provide summaries, state/revision/timestamps, active progress session, counts and continuation. [personal routes][personal-route], [shelf contract][shelf-contract]. Orders are `lastActivity`, `finishedAt`, `createdAt`. | [Entries reader][entries-read], [PersonalLibraryPage][library-page], [ShelfEntries][shelf-view] render state/type navigation, chronological sorts, covers, dates and progress in grid/list. Counts are owner supplied rather than inferred from the loaded page. |
+| Compare my own scores and sort my rated works; see my state/score when deciding whether to add a discovered item. **A05, P1; owner Library, Content rating dependency.** | [ShelfEntry/ShelfQuery][shelf-contract] contain no own rating and no rating order. Own-vote point reads exist in [rating routes][rating-route]; they are not a Library page/identity-batch projection. | [Shelf params][shelf-params] expose only the chronological orders and no rating column; [ShelfEntries][shelf-view] has no rating value to display. This requires owner read design as well as UI work. |
+| Disambiguate items with creator and release context in dense Library/Collection lists. **A06, P2; Library owns these list projections, Semantic supplies facts.** | FULL entries and Collection members embed [SubjectSummary][summaries]; it does not include creator or release facts. Collection filtered facts are a separate supported path, not a general personal shelf projection. [personal routes][personal-route], [Collection views][collection-views]. | [ShelfEntries][shelf-view] primarily has title/type/cover; [CollectionPage][collection-page] can use its own supported facts. Do not label the absent general shelf fields an interface-only omission. |
+| Keep active progress visible when switching to table view. **I05, P2; owner Web.** | The same native entry still includes `activeProgressSession`. [shelf contract][shelf-contract]. | [TableView][shelf-view] constructs `row.progress`, but its columns come from [shelfColumnIds][shelf-params], which exclude `progress`. [ShelfTable][shelf-table] supports a progress column. Grid/list progress is already rendered; the personal table cannot select that column. |
+| Preserve preferred layout/grid size/columns and default order across sessions/devices. **I06, P2; owner Web, Accounts contract dependency.** | `GET/PATCH /v1/accounts/:accountId/preferences` includes `shelf.layouts`, `sorts`, `gridSize`, `tableColumns` in [access routes][access-route] and [preference model][preferences-model]. Some admitted preference fields exceed the current shelf's actual sort/data capabilities. | [Shelf params][shelf-params] use URL display choices. [Settings preference projection][settings-preferences] keeps reading fields/version and does not carry the native shelf object. Neither route connects these defaults to the personal shelf. Unsupported sort defaults must not masquerade as executable Library sorts. |
+| Change states/labels, bulk-organize, remove/undo, manage copies/progress and export rather than being trapped in a read-only shelf. **Covered in source.** | Entry/history/restore, labels/copies/Collection and progress commands are owned native operations; [personal routes][personal-route], [Collection routes][collection-route], [progress routes][progress-route]. | [PersonalLibraryPage][library-page] and [ShelfEntries][shelf-view] expose admitted row/bulk actions and destinations to the separate management surfaces. Revisions/unknown outcomes remain command state rather than optimistic success. |
+
+## A Collection
+
+Need evidence: both earlier Collection/list implementations, Open Library organization and AniList/Bangumi personal
+list patterns. Curated occurrence identity and private dynamic membership are current owner concepts.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Recognize the Collection, its curator, description, visibility, cover, presentation and member count. **Covered.** | `GET /v1/collections/:collectionId?view=FULL` returns curated/dynamic metadata, curator, presentation/cover source, revision and relevant count/order identity. [Collection routes][collection-route], [Collection model][collection-model]. | [Collection loader][collection-load]/[CollectionPage][collection-page] compose native metadata, curator, cover/presentation and appropriate controls. A private dynamic Collection is not a public curated Collection with fabricated totals. |
+| Browse members in order with their notes and subject identities; continue, filter where supported, and keep unavailable occurrences recognizable. **Covered for native fields; A06, P2 for general creator/release disambiguation.** | `GET /v1/collections/:collectionId/members?view=FULL` returns occurrence ID, subject ID/summary, note, added time and continuation; filtered list facts have their own owner-supported path. [Collection routes][collection-route], [Collection views][collection-views]. | [Collection loader][collection-load] and [CollectionPage][collection-page] render members/notes and preserve unavailable states. Generic subject summaries still do not imply creator/year fields. |
+| Add/edit/remove/restore/reorder occurrences without collapsing repeated subjects; change title/description/cover/privacy. **Covered in source.** | Native Collection/member, move, restore and batch operations use Collection/member revisions and order epoch. [Collection routes][collection-route], [Collection model][collection-model]. | [CollectionPage][collection-page] composes metadata/note editing, occurrence actions and bulk reorder/removal. Subject ID is not substituted for occurrence ID. |
+| Follow/pin a Collection, publish an admitted view, export it, or inspect a saved dynamic rule. **Covered in source.** | Follow and Collection publication/rule/bulk contracts are distinct. [personal routes][personal-route], [Collection routes][collection-route]. | [CollectionPage][collection-page] composes follow/pin, publication, export and rule-specific paths through [the native loader][collection-load]. Availability/preparing is not silently converted into an empty successful rule result. |
+| Return from a member to its work and manage my own state/score without confusing it with the curator's facts. **Covered for navigation; A05, P1 for a bounded viewer-state overlay.** | Member responses identify subjects, not the viewer's personal entry/vote. [Collection routes][collection-route], [Collection views][collection-views]. Private point APIs exist separately. | [CollectionPage][collection-page] links the member subject and owner actions. A public member row does not carry my Library/score state; apply the same private overlay proposed for discovered identities. |
+
+## A board
+
+Need evidence: earlier discussion feed/community navigation. The current board is a native Content resource with
+Realm context and purpose, not an arbitrary front-end channel.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Know which community/Realm the board belongs to, its purpose and whether I can read or contribute. **Covered.** | `GET /v1/boards/:id` returns native BoardView including Realm/community presentation, title/purpose and availability. [Content routes][content-route], [Content schemas][content-schema]. | [Board feed reader][board-read]/[BoardFeed][board-feed] compose current rows and admitted contribution context rather than guessing from a URL or old Realm membership. |
+| Scan titles/authors/excerpts, pinned items and reaction state; choose current sort and continue. **Covered in source.** | `GET /v1/boards/:id/threads` returns `pinnedThreads`, `threads`, `next`, ranking metadata and disclosed ThreadView reaction slots. [Content routes][content-route], [Content schemas][content-schema]. | [BoardFeed][board-feed] renders previews/bylines/pin badges and supplies native counts/viewer reaction to the shared action bar. This is the existing useful contrast to Home's missing projection. |
+| Estimate reply volume and how recently the conversation changed. **A08, P2; owner Content.** | The closed `ThreadViewSchema` contains first post, creation/revision metadata and reaction slots, but no `replyCount` or `lastActivityAt`. [Content schemas][content-schema]. A post edit timestamp is not the most recent reply. | [threadActivity][thread-activity] reads those optional names and deliberately returns null when absent. [BoardFeed][board-feed] can display last activity but the native schema cannot populate it. This is a dormant consumer, not proof the API returns activity. |
+| Open a thread, reply/react/report and share a durable location. **Covered in source.** | Thread/post/reaction and location endpoints are mounted in [Content routes][content-route]. | [BoardFeed][board-feed] provides destinations/action bars; [thread loader][thread-loader] resolves native locations before [thread reading][thread-reading]. |
+| Pin/unpin within my authority and retain pinned rows across page changes. **Covered in source.** | `POST /v1/boards/:id/threads/:threadId/pin` and the board thread page use native pin operations. [Content routes][content-route], [Content schemas][content-schema]. | [BoardFeed][board-feed] uses the [native pin adapter][board-pin-native] and [server binding][board-pin-server]. Unlike the thread-watch default, this source does contain the production transport. |
+
+## A thread
+
+Need evidence: both earlier discussion/post-detail journeys, especially reply context, attached subjects, moderation
+and stable navigation. Editing and erasure must not flatten history or author provenance.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Read the title/first post/replies with author, media, time, licence, subject/board context and review citation. **Covered in source.** | `GET /v1/threads/:id`, `/posts`, `GET /v1/posts/:id` return native bodies/metadata, first-post citation and optional reactions; availability can be available/erased/withheld. [Content routes][content-route], [Content schemas][content-schema], [Content model][content-model]. | [Thread loader][thread-loader] assembles current thread/posts, author/subject/media context; [ThreadReadingPage][thread-reading] renders the conversation and its provenance, rather than treating withheld text as an empty post. |
+| Follow a reply/notification link to the right page and parent, continue a long conversation and distinguish exact revisions. **Covered in source.** | `/v1/threads/:id/posts/:postId/location`, post-page cursors and `/v1/posts/:id/revisions[/:revisionId]` are declared in [Content routes][content-route]. | [Thread loader][thread-loader] uses the location seam and native page identity; [ThreadReadingPage][thread-reading] composes parent/branch and revision/provenance views. Stable identity is not reconstructed from an array index. |
+| Reply, react, revise or report when admitted; retain uncertain/conflict outcomes. **Covered in source.** | Native post, revision, reaction and moderation commands with owner admission/command headers in [Content routes][content-route]. | [ThreadReadingPage][thread-reading] composes reply/reaction/editor/moderation entry points. The already returned counts/current reaction should remain usable independently of watch availability. |
+| Watch/unwatch this thread and see current state. **I03, P1; owner Web.** | `GET /v1/threads/:id/watch` returns `{watching}`; `PUT/DELETE` implement watch/unwatch. [Content routes][content-route], [watch implementation][watch-api]. No native watch revision is returned. | [ThreadWatch][thread-watch] defaults to [threadWatchNative][thread-watch-native], whose read is permanently `unavailable` and write refused. Its local model demands `revision`/`expectedRevision` that the mounted owner contract does not supply. Adapt to the actual contract; a fabricated revision or injected story transport is not delivery. |
+| See conversation size/current activity before or during navigation. **A08, P2; owner Content.** | ThreadView has no reply count/last activity. [Content schemas][content-schema]. Paginating replies is not an authoritative count. | [threadActivity][thread-activity] can only return null for those absent fields. Do not infer a total from the loaded reply page or replace last activity with first-post time. |
+
+## Notifications
+
+Need evidence: the earlier notifications page has individual/all-read actions; legacy provides inbox/grouped
+delivery controls. AniList's reply notification connects the notification to both actor and activity/context.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Know who did what, where and enough current context to decide whether to open it, without a read per distinct target. **A04, P2; owner Content, Accounts summary dependency.** | `GET /v1/accounts/:accountId/notifications` returns IDs, kind, timestamps, unread and actor/thread/post/decision/report IDs; no actor avatar/name or target summary. [Notice route/DTO][notice-route]. `GET /v1/accounts?ids=...` separately supplies public identities in [access routes][access-route]. | [Inbox reader][inbox-read] currently deduplicates target point reads, resolves post/moderation text, then batches actor names. [InboxPage][inbox-page] therefore does show useful resolved text/names; it is not a wholly blank ID list. The native page still lacks bounded contextual assembly, and avatars are not supplied by its identity batch. |
+| Receive watched-thread activity as a supported notice, with a safe current destination. **I02, P1; owner Web.** | The native notice kind union already includes `thread_watch`. [Notice route/DTO][notice-route]. Thread reads are mounted and access-checked. [Content routes][content-route]. | [decodeInboxPage][inbox-read] accepts reply/mention/moderation directly, otherwise requires an installed watch decoder. The default [unavailableInboxWatch][inbox-watch] returns null. A native `thread_watch` row therefore rejects the **whole page**, not only that row; this can disable an otherwise useful inbox. |
+| See unread badge/count, continue, acknowledge everything through a known boundary and retry failures. **Covered in source.** | `GET /v1/accounts/:accountId/notifications/count` returns count/capped; `POST .../notifications:markSeen` accepts `through`. Notice pages have independent continuation. [Notice routes][notice-route]. | [Inbox queries][inbox-query] bind private data to the session and invalidate badge/list together after mark-seen; [InboxPage][inbox-page] exposes current page states and navigation. |
+| Mark one selected notification read while keeping earlier unrelated notices unread. **A10, P2; owner Content.** | The only acknowledgment contract is the through-boundary command; no per-notice acknowledgment/selection contract is mounted in [Notice routes][notice-route]. | [InboxPage][inbox-page]/[inbox query][inbox-query] can implement the native bulk boundary. They cannot safely emulate selected acknowledgment by marking every earlier notice seen. The earlier per-item action establishes the need; add an owner command before the control. |
+
+## Settings
+
+Need evidence: earlier settings navigation, profile/privacy/reading controls and notification preferences. Existing
+current owner contracts determine which preferences are supported; obsolete account/reader settings are not revived.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Edit my public identity/links/avatar and supported public sections, and distinguish catalogue verification from account profile editing. **Covered in source.** | `GET/PATCH /v1/accounts/:accountId/profile`, verification operations and management/profile contracts in [access routes][access-route]. | [SettingsPage][settings-page] composes profile/public views, verification and managed-account panels, retaining drafts/current reader authority. |
+| Set supported spoiler/suitability, notification and Collection privacy preferences, and reach security/session management. **Covered in source for the declared controls.** | `GET/PATCH /v1/accounts/:accountId/preferences` returns reading, notification, shelf fields and version; account/Auth and Library own their separate management/privacy operations. [access routes][access-route], [preference model][preferences-model], [personal routes][personal-route]. | [SettingsPage][settings-page] and [settings preference adapter][settings-preferences] render the relevant cards and security destination. Not every historical reader option is admitted by this native preference contract. |
+| Set/inspect persistent shelf layout, size, column and sort defaults. **I06, P2; owner Web.** | The native preference object includes the shelf configuration. [access routes][access-route], [preference model][preferences-model]. | [Settings preference adapter][settings-preferences] omits `shelf`; [SettingsPage][settings-page] offers no shelf-default control tied to it. The Library uses URL choices instead. Preserve the difference between a saved preference and a sort that the Library API can actually execute. |
+| List all my watches and stop one, including a subscription whose target I can no longer enter. **A07, P1; owner Content.** | Per-thread watch state/set/clear exists in [Content routes][content-route]/[watch implementation][watch-api], but those operations require an already known thread identity. There is no account watch-list/continuation/management disclosure in this contract. Native unwatch can remove an owned edge even when its thread is inaccessible, so target concealment need not prevent removal. | [Settings Watches][settings-watches] defaults to [unavailableWatchManagement][settings-watch-native]. Its proposed managed-subscription model has no mounted producer. A list screen cannot be completed from point watch APIs alone; do not claim this is only a missing client type. |
+| Understand load/save conflict, permission loss and unknown command outcome without losing unsaved edits. **Covered in source.** | Native version/revision and admitted command/failure contracts in [access routes][access-route]. | [SettingsPage][settings-page] and [settings preference adapter][settings-preferences] preserve current-owner state and feedback; production watch-management availability remains the explicit exception above. |
+
+## Creator sales
+
+Need evidence: native offers/sales/statements, with the general reference pattern of linked identity and explicit
+state. Catalogue platforms and earlier REZICS screens do not establish payout or buyer-information requirements.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| See my sales, item, amount/currency/tax interpretation, settlement, ordered date and reference; continue or refresh a preparing projection. **Covered in source.** | `GET /v1/commerceSales` returns own-account sale rows with order/offer/subject IDs, title, captured money/tax interpretation, settlement, time, `next` and `projectionState`. [Commerce routes][commerce-route], [sales adapter][sales-read]. | [CreatorSalesPage][sales-page] renders item title, amount/currency, tax wording, settlement, ordered time, order reference and pagination/preparing feedback. It does not infer revenue from a public product count. |
+| Reopen the sold work and inspect the corresponding offer without transcribing identifiers. **I07, P2; owner Web.** | Each sale already supplies `targetSubjectId` and `offerId`. [creatorSaleSchema in Commerce routes][commerce-route]. These do not authorize reading the buyer's private order. | [CreatorSalesPage][sales-page] renders title as a heading and order ID as text; the offer/work IDs are retained in [the adapter][sales-read] but have no per-sale destination. Link to supported offer/work readers; do not turn this into buyer-order disclosure. |
+| Separate sales from deductions, creator share and payout statement/payment evidence. **Covered in source.** | Dedicated statement/line reads carry gross/tax/fees/refunds/chargebacks/net/shares and payment information; [statement adapter][statement-read]. A sale row itself is not a payout statement. | [CreatorSalesPage][sales-page] links statements/offers; [CreatorStatementPage][statement-page] renders statement totals, lines and payment state from those dedicated reads. Lack of every finance field on the sales row is not an API gap. |
+| Reach offer authoring and handle denied/unavailable/stale ownership safely. **Covered in source.** | Creator offer and own sales operations in [Commerce routes][commerce-route], with owner-bound admission and preparation states. | [CreatorSalesPage][sales-page]/[sales adapter][sales-read] distinguish denied/unavailable/loading/stale/preparing, and link the offer management journey. This audit does not certify provider deployment or paid settlement execution. |
+
+## Checkout
+
+Need evidence: the current fixed-content-edition Commerce contract and Stripe's official separation of payment
+completion and fulfillment. This page includes offer review, provider checkout entry and the returning order page.
+
+| What a user needs to see and do | What the API returns, route and contract | What the web renders, component |
+| --- | --- | --- |
+| Know what I am buying: fixed benefit, creator, source licence, acquisition limits, current offer price/currency and tax interpretation. **Covered in source.** | `GET /v1/offers/:id` returns offer revision/state, captured money/tax facts and sanitized content-edition benefit/creator/source/acquisition data. [Commerce routes][commerce-route], [Commerce model][commerce-model]. The opaque sale-terms reference identifies native publication/version, not a user-facing legal document. | [OfferPage][offer-page]/[offer adapter][offer-read] render price/tax status and [BenefitDetails][benefit-details] renders fixed-version/acquisition/creator/licence facts. Unknown benefit/money data stays unavailable rather than guessed. |
+| Buy the version/price I reviewed, avoid duplicate acquisition, and recover an existing pending order or ownership. **Covered in source.** | `POST /v1/orders` accepts reviewed offer identity/revision and command identity; native conflict disclosure distinguishes existing ownership/pending order. Order reads expose safe checkout URL/expiry. [Commerce routes][commerce-route]. | [OfferPage][offer-page] submits `expectedOfferRevision`, handles conflict/recovery and links to the native order flow. It does not create a second purchase just because a provider return was delayed. |
+| Continue to the supported provider; return to an order whose pending/paid/failed/unknown status is honest. **Covered in source.** | `GET /v1/orders/:id`, order history and `POST /v1/orders/:id:reconcile` separate observed settlement and immutable captured terms from checkout session facts. [Commerce routes][commerce-route], [Commerce model][commerce-model]. | [OrderPage][order-page] renders settlement, resume/reconcile/history and captured receipt/charge facts. A provider redirect is not treated as sufficient proof of settlement. |
+| Use the purchased edition only when current entitlement permits it, and distinguish paid history from present access. **Covered in source.** | Native order/entitlement reads disclose current entitlement and captured edition separately; [Commerce routes][commerce-route]. Content remains the protected resource owner. | [OrderPage][order-page] and [benefit adapter][benefit-read] compare captured benefit identity and construct a reader destination only with current usable entitlement. [BenefitDetails][benefit-details] distinguishes access/reader state from the receipt. This matches Stripe's fulfillment distinction without claiming a live paid transaction was checked. |
+| Revisit purchase history and understand an unavailable/deleted benefit without replacing historical terms with today's offer. **Covered in source.** | Historical order captures and order-history continuation are distinct from mutable current offers. [Commerce routes][commerce-route], [Commerce model][commerce-model]. | [OrderPage][order-page]/[benefit adapter][benefit-read] preserve historical absence and validate the actual capture. No additional checkout API/interface gap is established by this static comparison. |
+
+## Ranked API design gaps
+
+The rank is user impact, then breadth. Each owner is an existing Goal, not a proposed new team. For A03,
+Content owns the feed/public-discovery outcome; Search owns registration/serialization and Library supplies
+Collection disclosure. For A05/A06, the owner shown for each affected list owns its bounded read composition.
+
+| Rank | Gap and affected pages | Owning Goal and adoptable next outcome |
+| --- | --- | --- |
+| 1 — P1 | **A01:** Home cannot disclose reactions/current selection. | [Content][goal-content]: add disclosed per-kind reaction state/counts to the feed page, with a private viewer portion where needed. Consume the existing commands; do not add per-card reads or count placeholders. |
+| 2 — P1 | **A02:** Home reviews/replies lose target, cited score and parent context. | [Content][goal-content]: project a bounded reviewed-subject/citation or reply-context summary from current readable native content. Keep citation distinct from the author's current vote. |
+| 3 — P1 | **A05:** Library and discovery/member rows lack a bounded own-entry/score view; chronological shelf API cannot sort by personal score. | [Library][goal-library], with [Content][goal-content] for ratings: provide an authorized identity-batch/private page overlay and deliberate owner-side score ordering. A public Search cache must never contain this viewer state. |
+| 4 — P1 | **A07:** Settings cannot enumerate/remove owned watches. | [Content][goal-content]: publish own-account watch pages and removal identity, including concealed-target removal. Reuse the native edge; no browser-maintained subscription registry. |
+| 5 — P2 | **A03:** Home and mixed Search cannot deliver public Space/Collection/review discovery consistently. | [Content][goal-content], [Search][goal-search], [Library][goal-library]: finish owner registration, current-summary disclosure and closed wire union together. Following Collections alone do not satisfy discovery. |
+| 6 — P2 | **A08:** Board, thread, Home and subject community rows lack authoritative conversation size/last activity. | [Content][goal-content]: return disclosed `replyCount`/`lastActivityAt` or an equivalent activity summary with defined freshness. Count only admitted content; do not count a loaded page or use edit time as a reply clock. |
+| 7 — P2 | **A06:** Mixed semantic search and generic Library/Collection summaries are too thin for creator/date/description comparison. | [Search][goal-search] owns mixed-search projection; [Library][goal-library] owns shelf/member projection; [Semantic][goal-semantic] supplies meaning. Define bounded, type-aware discriminators and reuse the existing rich fact rendering. Preserve missing/withheld/unsupported distinctions. |
+| 8 — P2 | **A04:** Notification context requires distinct target point reads and separate identity hydration. | [Content][goal-content], [Accounts][goal-accounts] dependency: return a bounded current target/actor summary, or a page-owned bounded composition read, without persisting stale privileged text. Preserve current target admission and safe tombstones. |
+| 9 — P2 | **A10:** Inbox cannot acknowledge one chosen notice independently. | [Content][goal-content]: add an owned-notice acknowledgment operation with defined idempotence and badge consequences; retain the existing through-boundary operation. |
+| 10 — P2 | **A09:** Work-specific character identity lacks the released related/main-character meaning. | [Semantic][goal-semantic]: adopt a typed, sourced relationship and its permitted contexts in the definition release before exposing it in reads/editors. Do not infer it from appearance role or import a provider ID as semantic truth. |
+
+## Ranked interface gaps
+
+| Rank | Returned/available capability and loss | Owning Goal and next outcome |
+| --- | --- | --- |
+| 1 — P1 | **I02:** `thread_watch` is a native notice kind, but the default decoder rejects it and fails the whole inbox page. | [Web][goal-web]: bind the actual native notice shape and current thread/post destinations; retain strict failure for malformed rows. Do not weaken decoding by silently discarding notices. |
+| 2 — P1 | **I03:** Thread watch GET/PUT/DELETE is mounted, but the default UI transport always reports unavailable and expects a foreign revision shape. | [Web][goal-web]: replace the unavailable default with the mounted owner contract and its real outcome semantics. No backend revision requirement follows merely from the local seam. |
+| 3 — P1 | **I01:** Subject review/discussion reads include citation/reaction slots, but projection discards them across works, characters and people. | [Web][goal-web]: preserve the native slots and compose the existing review/reaction presentation. Optional undisclosed counts must remain unknown, not zero. |
+| 4 — P2 | **I04:** Realm-scoped search/facets/rating sort exist, but Realm/Space home has no full catalogue handoff. | [Web][goal-web]: provide a visible scoped browse/rank destination and preserve Realm context in subsequent navigation. Avoid conflating the publications shelf with the whole population. |
+| 5 — P2 | **I05:** Personal shelf rows already carry progress and the table component supports it, but allowed columns omit it. | [Web][goal-web]: expose an admitted progress column and preserve the existing native progress value; no new read is needed. |
+| 6 — P2 | **I06:** Account shelf preferences are returned, then omitted by the settings projection and unused as Library defaults. | [Web][goal-web], [Accounts][goal-accounts] dependency: connect saved defaults with explicit URL overrides. Only offer sorts/columns that the page's native data supports; A05/A06 remain separate API work. |
+| 7 — P2 | **I07:** Sales rows retain offer/work IDs but render neither as a destination. | [Web][goal-web]: link supported offer/work readers from each sale while preserving the private buyer-order boundary. |
+
+## Primary-source patterns and recommendation
+
+| Primary source, pin/path and licence | Observed pattern and relevance |
+| --- | --- |
+| Open Library, reuse `.reference/partitioned-sitemap-feeds/openlibrary`, `37e446827465be2febad416de1bc18753b66997d`; [work template](https://github.com/internetarchive/openlibrary/blob/37e446827465be2febad416de1bc18753b66997d/openlibrary/templates/type/work/view.html), local `openlibrary/templates/type/work/view.html`; [AGPL-3.0 licence](https://github.com/internetarchive/openlibrary/blob/37e446827465be2febad416de1bc18753b66997d/LICENSE). | The template receives a prepared work/edition/lending context, and presents authors, descriptive context and ratings/reading statistics. Preparing page needs before rendering is compatible with REZICS owner reads; arbitrary template I/O is not required. Work identity and an available edition/benefit remain distinct. Database/content rights are separate from source-code licensing. |
+| AniList official docs, reuse `.reference/api-first-platform-coverage/anilist-docs`, `03281c0a4bbf0c7f2097e0c935cddaed1096aa65`; local `docs/reference/object/{medialist,character,staff,activityreplynotification}.md`; [pinned docs tree](https://github.com/AniList/docs/tree/03281c0a4bbf0c7f2097e0c935cddaed1096aa65/docs/reference/object). No repository-wide licence found; inspection only, no text/code copied. | MediaList brings status, score, progress, privacy, notes and dates together; character/staff distinguish biography from linked media/credits; reply notifications include context plus actor/activity connections. The useful lesson is a bounded page/result model, not one universal object. [MediaList reference](https://docs.anilist.co/reference/object/medialist), [reply-notification reference](https://docs.anilist.co/reference/object/activityreplynotification). |
+| Bangumi server, reuse `.reference/shelves/bangumi-server`, `1997713eafc51487cbea705b37011442f35539fa`; local `web/handler/user/{list_subject_collections,get_subject_collection}.go`; [pinned handler](https://github.com/bangumi/server/blob/1997713eafc51487cbea705b37011442f35539fa/web/handler/user/get_subject_collection.go); [AGPL licence](https://github.com/bangumi/server/blob/1997713eafc51487cbea705b37011442f35539fa/LICENSE.txt), source SPDX `AGPL-3.0-only`. | Collection reads combine an entry and slim subject disclosure, while checking whether the accessor owns private collection data. REZICS should similarly join the fields the private Library needs without leaking them into public Search or Collections. No clone code was installed, built or executed. |
+| [VNDB Kana official API](https://api.vndb.org/kana), especially character/staff queries and user-list management. Documentation/API usage terms apply; API data has its separately linked VNDB data licence. No material imported. | Catalogue relations and authenticated personal lists are separately addressable. Character appearances/identity and staff credits require their actual meaning; a generic label/image summary does not meet those needs. The API explicitly does not expose every website function, so provider API coverage is not proof of full interface coverage. |
+| [MusicBrainz official API](https://musicbrainz.org/doc/MusicBrainz_API), lookup/browse/search and authenticated data sections; documentation/service terms and linked database licences apply, with no source/data copied. | Search finds identities; browse follows relationships; detail lookup supplies entity context. REZICS should retain paged credits/relations and private facts rather than forcing every task through one search summary or loading every related entity into a giant subject response. |
+| [TMDb movie account states](https://developer.themoviedb.org/reference/movie-account-states) and [movie detail/append support](https://developer.themoviedb.org/reference/movie-details). Proprietary service/documentation terms; no API data or code reused. | Rating, watchlist and favourite state have explicit account semantics, and supported detail expansions can group related page data. This supports a private REZICS viewer overlay while keeping public catalogue summaries cacheable. It does not justify mixing private state into a shared public response cache. |
+| [Stripe fulfillment documentation](https://docs.stripe.com/checkout/fulfillment.md?ui=full-page). Official service documentation; no example code copied. | Redirect completion and actual fulfillment are different observations. The current order page's settlement/entitlement split is a sound interface contract; this audit finds no reason to replace it with a success-page boolean. This is a comparison of design, not verification of provider behavior. |
+
+The sources share three useful patterns: page preparation joins the identities and facts a reader actually uses;
+viewer state has explicit ownership/privacy; related collections and conversations remain bounded and independently
+continuable. They differ in transport and data model, so GraphQL, a foreign schema or a foreign service is not the
+recommendation.
+
+For this repository's Bun/Elysia kernel, TypeBox contracts, typed client and React/TanStack Query web stack:
+
+1. **Start with the P1 seams.** Web can bind native watches/notices and retain subject review fields now. Content
+   should deliver the Home reaction/context projection; Library should define bounded private entry/vote reads.
+   Keep these outcomes separately ownable; do not wait for a new general-purpose page framework.
+2. **Extend existing owner reads before adding transports.** Feed, shelf, mixed-search and notification contracts
+   should name their actual card/row needs and limits. Where several owners contribute, assemble bounded results
+   through current owner ports, with current disclosure and explicit source failures. Reuse `pages:read` for the
+   supported composition cases; do not create a second identity, reaction, progress or subscription store.
+3. **Separate public shape from a prepared private overlay.** Carry viewer/session identity through Query ownership
+   and retirement as existing personal readers do. Batch the admitted page identities, avoid per-row requests and
+   cache no viewer vote, subscription or Library membership with public catalogue data.
+4. **Close the generated contract and production binding together.** A mounted route can outlive an unavailable
+   web seam; a local renderer can precede its API. Deliver the TypeBox schema, typed-client surface, actual default
+   adapter and visible component behavior as one owner-to-Web outcome. Stale comments and fake revision models
+   must not define the native API.
+5. **Keep ownership of decisions in existing documents after adoption.** Content owns feed/activity/watch/notice
+   meanings and ratings; Library owns personal-list and Collection read composition; Semantic owns released fact
+   and relationship meaning; Search owns discovery transport/plans; Accounts owns identity/preferences. Web owns
+   consumption and interaction. This report proposes priorities and designs; it is not a second authority for them.
+
+The only file outside the declared report path updated for this research is the shared reference
+`/home/edge/projects/rezics/rezics-next/.reference/INDEX.md`, to record reuse/pins/licences for the three inspected
+clones. No clone was executed and no upstream implementation was copied. No workspace source or test changed;
+workspace typechecks and changed-test runs therefore do not apply. Frozen acceptance and integration checks are
+deferred to the controller as instructed.
+
+[feed-route]: ../../services/kernel/src/content/feed-routes.ts
+[feed-contract]: ../../services/kernel/src/content/feed-contract.ts
+[summaries]: ../../services/kernel/src/semantic/http/summaries.ts
+[content-route]: ../../services/kernel/src/content/routes.ts
+[content-schema]: ../../services/kernel/src/content/schemas.ts
+[content-model]: ../../services/kernel/src/content/model.ts
+[home-route]: ../../apps/web/src/routes/index.tsx
+[home-feed]: ../../apps/web/src/features/pages/home-feed.tsx
+[home-read]: ../../apps/web/src/features/pages/home-feed-read.ts
+[home-item]: ../../apps/web/src/features/feed/home-feed-item.tsx
+[home-actions]: ../../apps/web/src/features/feed/action-bar.tsx
+[vote-control]: ../../apps/web/src/features/feed/vote-control.tsx
+[community-route]: ../../services/kernel/src/community/routes.ts
+[realm-model]: ../../services/kernel/src/community/realm.ts
+[space-model]: ../../services/kernel/src/community/space.ts
+[realm-route]: ../../apps/web/src/routes/realms/$id.tsx
+[space-read]: ../../apps/web/src/community/space.ts
+[space-page]: ../../apps/web/src/community/space-page.tsx
+[realm-header]: ../../apps/web/src/community/realm-home-header.tsx
+[subject-api]: ../../services/kernel/src/semantic/http/subjects.ts
+[definitions-api]: ../../services/kernel/src/semantic/http/definitions.ts
+[page-contract]: ../../services/kernel/src/presentation/http/page-contract.ts
+[page-route]: ../../services/kernel/src/presentation/http/pages.ts
+[subject-loader]: ../../apps/web/src/features/pages/subject.tsx
+[subject-frame]: ../../apps/web/src/features/pages/subject-frame.tsx
+[composition-render]: ../../apps/web/src/features/pages/render.tsx
+[page-values]: ../../apps/web/src/features/pages/values.tsx
+[page-data]: ../../apps/web/src/features/pages/data.tsx
+[rating-route]: ../../services/kernel/src/rating/routes.ts
+[ratings-view]: ../../apps/web/src/features/pages/subject-ratings-view.tsx
+[reaction-view]: ../../apps/web/src/features/pages/subject-reactions-view.tsx
+[personal-reader]: ../../apps/web/src/features/pages/subject-personal-reader.tsx
+[library-leaf]: ../../apps/web/src/features/pages/subject-library-leaf.tsx
+[subject-community]: ../../apps/web/src/features/pages/subject-community.ts
+[subject-community-view]: ../../apps/web/src/features/pages/subject-community-view.tsx
+[subject-slots]: ../../apps/web/src/features/pages/subject-slots.tsx
+[character-profile]: ../../apps/web/src/features/catalogue/character-profile-view.tsx
+[character-reading]: ../../apps/web/src/features/catalogue/character-relationships/reading.ts
+[character-groups]: ../../apps/web/src/features/pages/character-relationships.tsx
+[people-profile]: ../../apps/web/src/features/catalogue/people-profile-view.tsx
+[people-read]: ../../apps/web/src/features/catalogue/people-profile.ts
+[search-route]: ../../services/kernel/src/search/http/routes.ts
+[discovery-http]: ../../services/kernel/src/search/discovery-http.ts
+[default-discovery]: ../../services/kernel/src/search/default-discovery.ts
+[account-discovery]: ../../services/kernel/src/search/account-discovery.ts
+[discovery-registry]: ../../services/kernel/src/search/discovery-registry.ts
+[search-page]: ../../apps/web/src/routes/search.tsx
+[discovery-reader]: ../../apps/web/src/search/discovery.ts
+[discovery-results]: ../../apps/web/src/search/discovery-results.tsx
+[search-results]: ../../apps/web/src/search/results.tsx
+[public-discovery-rows]: ../../apps/web/src/search/discovery-public-rows.tsx
+[personal-route]: ../../services/kernel/src/library/personal-routes.ts
+[progress-route]: ../../services/kernel/src/library/progress-routes.ts
+[shelf-contract]: ../../services/kernel/src/library/shelf-contract.ts
+[entries-read]: ../../apps/web/src/library/entries-read.ts
+[library-page]: ../../apps/web/src/library/entries-page.tsx
+[shelf-view]: ../../apps/web/src/library/shelf-view.tsx
+[shelf-params]: ../../apps/web/src/library/shelf-params.ts
+[shelf-table]: ../../packages/ui/src/components/shelf-table.tsx
+[collection-route]: ../../services/kernel/src/library/collection-routes.ts
+[collection-model]: ../../services/kernel/src/library/collection-model.ts
+[collection-views]: ../../services/kernel/src/library/views.ts
+[collection-page]: ../../apps/web/src/library/collection-page.tsx
+[collection-load]: ../../apps/web/src/library/collection-load.ts
+[board-read]: ../../apps/web/src/threads/board-feed-data.ts
+[board-feed]: ../../apps/web/src/threads/board-feed.tsx
+[thread-activity]: ../../apps/web/src/threads/activity.ts
+[board-pin-native]: ../../apps/web/src/threads/board-pins/native.ts
+[board-pin-server]: ../../apps/web/src/threads/board-pins/server.ts
+[thread-loader]: ../../apps/web/src/threads/thread-page.ts
+[thread-reading]: ../../apps/web/src/threads/thread-reading.tsx
+[watch-api]: ../../services/kernel/src/content/watch.ts
+[thread-watch]: ../../apps/web/src/threads/thread-watch.tsx
+[thread-watch-native]: ../../apps/web/src/threads/thread-watch-native.ts
+[notice-route]: ../../services/kernel/src/content/notice-routes.ts
+[inbox-read]: ../../apps/web/src/inbox/inbox-read.ts
+[inbox-page]: ../../apps/web/src/inbox/inbox-page.tsx
+[inbox-watch]: ../../apps/web/src/inbox/watch-notices.ts
+[inbox-query]: ../../apps/web/src/inbox/inbox-query.ts
+[access-route]: ../../services/kernel/src/access/routes.ts
+[preferences-model]: ../../services/kernel/src/access/preferences.ts
+[settings-page]: ../../apps/web/src/settings/settings-page.tsx
+[settings-preferences]: ../../apps/web/src/settings/preferences.ts
+[settings-watches]: ../../apps/web/src/settings/watches.tsx
+[settings-watch-native]: ../../apps/web/src/settings/watch-native.ts
+[commerce-route]: ../../services/kernel/src/commerce/routes.ts
+[commerce-model]: ../../services/kernel/src/commerce/model.ts
+[sales-read]: ../../apps/web/src/checkout/creator-sales.ts
+[sales-page]: ../../apps/web/src/checkout/creator-sales-page.tsx
+[statement-read]: ../../apps/web/src/checkout/creator-statements.ts
+[statement-page]: ../../apps/web/src/checkout/creator-statement-page.tsx
+[subject-offers-view]: ../../apps/web/src/checkout/subject-offers-region.tsx
+[offer-page]: ../../apps/web/src/checkout/offer-page.tsx
+[offer-read]: ../../apps/web/src/checkout/offer.ts
+[benefit-details]: ../../apps/web/src/checkout/benefit-details.tsx
+[benefit-read]: ../../apps/web/src/checkout/benefit.ts
+[order-page]: ../../apps/web/src/checkout/order-page.tsx
+[goal-web]: ../goals/web.md
+[goal-content]: ../goals/content.md
+[goal-semantic]: ../goals/semantic.md
+[goal-search]: ../goals/search.md
+[goal-library]: ../goals/library.md
+[goal-commerce]: ../goals/commerce.md
+[goal-accounts]: ../goals/accounts.md
