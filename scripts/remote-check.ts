@@ -3518,7 +3518,7 @@ export function workspaceFiles(workspace: string): string[] {
     const parts = file.split('/');
     if (
       parts[0] === '.git' ||
-      parts[0] === '.temp' ||
+      parts.includes('.temp') ||
       parts.includes('node_modules') ||
       parts.some((part) =>
         ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),

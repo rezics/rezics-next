@@ -276,7 +276,7 @@ function excludedTransferPath(file: string): boolean {
   const parts = file.split('/');
   return (
     parts[0] === '.git' ||
-    parts[0] === '.temp' ||
+    parts.includes('.temp') ||
     parts.includes('node_modules') ||
     parts.some((part) =>
       ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),
