@@ -1,7 +1,8 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
+import type { AccessClient } from '../request/access.ts';
 import { PARTITIONS } from '../route/route.ts';
 import repairThreads from './conversation-activity-repair-threads.sql';
 import repairPosts from './conversation-activity-repair-posts.sql';
@@ -168,7 +169,7 @@ export async function repairConversationActivityPage(
 }
 
 async function ensureFrontier(
-  client: PoolClient,
+  client: AccessClient,
   partitionNo: number,
   epoch: number,
   position: bigint,
@@ -192,7 +193,7 @@ async function ensureFrontier(
 }
 
 async function repairSourcePage(
-  client: PoolClient,
+  client: AccessClient,
   partitionNo: number,
   frontier: RepairFrontier,
 ): Promise<{ scannedThreads: number; sourceComplete: boolean }> {
@@ -221,7 +222,7 @@ async function repairSourcePage(
 }
 
 async function seedOpenings(
-  client: PoolClient,
+  client: AccessClient,
   threads: readonly ThreadRow[],
   cutEpoch: number,
   cutPosition: string,
@@ -265,7 +266,7 @@ async function seedOpenings(
 }
 
 async function repairBoardPage(
-  client: PoolClient,
+  client: AccessClient,
   partitionNo: number,
 ): Promise<Pick<ConversationActivityRepairPage, 'scannedThreads' | 'repairedPosts' | 'completedThreads' | 'more'> | null> {
   const { rows } = await client.query<BoardFrontier>(
@@ -327,7 +328,7 @@ async function repairBoardPage(
   return { scannedThreads: page.length, repairedPosts: 0, completedThreads: 0, more: hasMore };
 }
 
-async function nextOpening(client: PoolClient, partitionNo: number): Promise<OpeningRow | null> {
+async function nextOpening(client: AccessClient, partitionNo: number): Promise<OpeningRow | null> {
   const { rows: cursors } = await client.query<Pick<RepairFrontier, 'repair_after_route' | 'repair_after_thread_id'>>(
     `SELECT repair_after_route, repair_after_thread_id
        FROM content.conversation_activity_repair_frontier
@@ -349,7 +350,7 @@ async function nextOpening(client: PoolClient, partitionNo: number): Promise<Ope
 }
 
 async function dirtyOpening(
-  client: PoolClient,
+  client: AccessClient,
   partitionNo: number,
   afterRoute: number | null,
   afterThreadId: string | null,
@@ -377,7 +378,7 @@ async function dirtyOpening(
 }
 
 async function repairThreadPage(
-  client: PoolClient,
+  client: AccessClient,
   partitionNo: number,
   epoch: number,
   position: bigint,
@@ -514,7 +515,7 @@ function isLater(
   return currentAt === null || candidateAt > currentAt || (candidateAt === currentAt && candidateId > (currentId ?? ''));
 }
 
-async function boardGeneration(client: PoolClient, route: number, boardId: string): Promise<string> {
+async function boardGeneration(client: AccessClient, route: number, boardId: string): Promise<string> {
   const { rows } = await client.query<{ generation: string }>(
     `SELECT COALESCE((SELECT generation FROM content.conversation_activity_board_frontier
                        WHERE route=$1 AND board_id=$2),0)::text AS generation`,

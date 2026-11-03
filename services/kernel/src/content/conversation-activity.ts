@@ -1,5 +1,6 @@
 import { Value } from 'typebox/value';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
+import type { AccessClient } from '../request/access.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { CommandUnavailableError, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -320,7 +321,7 @@ function targets(event: CloudEvent): Targets {
 
 class UnchangedActivity extends Error {}
 
-async function proveEnvelope(client: PoolClient, event: CloudEvent, id: string) {
+async function proveEnvelope(client: AccessClient, event: CloudEvent, id: string) {
   const identity = source(event, id);
   const proof = await sourceEvent.run(client, {
     partition_no: identity.partition,
@@ -337,7 +338,7 @@ async function proveEnvelope(client: PoolClient, event: CloudEvent, id: string) 
 }
 
 async function invalidateActivityCoverage(
-  client: PoolClient,
+  client: AccessClient,
   threadIds: readonly string[],
   identity: Readonly<{ partition: number; epoch: number; position: bigint; eventSeq: number }>,
   force = false,
@@ -385,7 +386,7 @@ async function invalidateActivityCoverage(
 }
 
 async function invalidateBoardCoverage(
-  client: PoolClient,
+  client: AccessClient,
   boardId: string,
   identity: Readonly<{ epoch: number; position: bigint; eventSeq: number }>,
 ): Promise<void> {
@@ -458,7 +459,7 @@ type ActivityChange = {
  * The opening row remains current for a bounded delta; deleting its latest
  * contribution asks the live episode index for exactly one replacement. */
 async function adjustActivityCoverage(
-  client: PoolClient,
+  client: AccessClient,
   input: Targets,
   identity: Readonly<{ partition: number; epoch: number; position: bigint; eventSeq: number }>,
 ): Promise<void> {
@@ -534,7 +535,7 @@ async function adjustActivityCoverage(
     await applyActivityChange(client, change, identity);
 }
 
-async function openingSummary(client: PoolClient, route: number, threadId: string): Promise<ActivitySummary | null> {
+async function openingSummary(client: AccessClient, route: number, threadId: string): Promise<ActivitySummary | null> {
   const { rows } = await client.query<ActivitySummary>(
     `SELECT coverage_state, coverage_generation::text, coverage_reply_count::text,
             coverage_latest_post_id,
@@ -549,7 +550,7 @@ async function openingSummary(client: PoolClient, route: number, threadId: strin
 }
 
 async function applyActivityChange(
-  client: PoolClient,
+  client: AccessClient,
   change: ActivityChange,
   identity: Readonly<{ epoch: number; position: bigint; eventSeq: number }>,
 ): Promise<void> {
