@@ -27,6 +27,7 @@ import {
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
+import { assertConsolidationGuard, consolidationSubject, type ConsolidationGuard } from './label-consolidation-binding.ts';
 import { setLabelAssignment } from './label-assignment-store.ts';
 import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './label-assignment-lifecycle-store.ts';
 import { admitShelfRead } from './shelf-admission.ts';
@@ -126,6 +127,7 @@ export function createLabelAssignmentCommands(deps: {
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
     guard?: AniListLabelGuard,
+    consolidation?: ConsolidationGuard,
   ) {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
@@ -134,7 +136,9 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed, ...(guard ? { importReview: guard } : {}) },
+      input: { labelId, ...parsed, ...(guard ? { importReview: guard } : {}),
+        ...(consolidation ? { consolidation: { id: consolidation.id, digest: consolidation.digest, ordinal: consolidation.ordinal,
+          phase: consolidation.phase, ...(consolidation.target ? { target: consolidation.target } : {}) } } : {}) },
       requestKey: key,
     };
     const execute = async (
@@ -151,6 +155,10 @@ export function createLabelAssignmentCommands(deps: {
         subjectId: operation === 'assign' ? prepared.subjectId! : parsed.subjectId,
       };
       const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
+      if (consolidation) {
+        if (consolidation.receiptOnly) throw new LibraryConflictError();
+        await assertConsolidationGuard(tx, account, consolidation, context.time);
+      }
       if (operation === 'assign') {
         if (guard) {
           await assertAniListLabel(tx, account, guard);
@@ -210,13 +218,19 @@ export function createLabelAssignmentCommands(deps: {
           return { value: minimal(result.assignment), events: events(account, labelId) };
       }
     };
-    if (operation === 'unassign') return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
-    return (guard ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
+    if (operation === 'unassign' && !consolidation) return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
+    return ((guard || consolidation) ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
         async prepare(attempt) {
           try {
+            if (consolidation) {
+              const item = consolidation.binding.items[consolidation.ordinal];
+              if (!item || (await consolidationSubject(deps, account, item.evidence.selected.subjectId, attempt.time)) !== item.subject)
+                throw new LibraryConflictError();
+              return { subjectId: item.evidence.selected.subjectId };
+            }
             if (guard) {
               const prepared = await prepareAniListLabel(deps, account, guard, attempt.time);
               if (prepared.error !== undefined) throw prepared.error;
@@ -242,6 +256,7 @@ export function createLabelAssignmentCommands(deps: {
     value: { subjectId: string },
     key: string,
     guard?: AniListLabelGuard,
+    consolidation?: ConsolidationGuard,
   ) {
     return (await mutate(
       actor,
@@ -250,10 +265,11 @@ export function createLabelAssignmentCommands(deps: {
       key,
       'assign',
       guard,
+      consolidation,
     )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
-  async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
-    return (await mutate(actor, labelId, value, key, 'unassign')) as import('../command/command.ts').CommandOutcome<{
+  async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string, consolidation?: ConsolidationGuard) {
+    return (await mutate(actor, labelId, value, key, 'unassign', undefined, consolidation)) as import('../command/command.ts').CommandOutcome<{
       deleted: true;
       revision: number;
     }>;

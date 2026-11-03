@@ -531,3 +531,14 @@ artifacts and expose owner-only holding pages, cancellation and bounded removal.
 stable effect outcomes, scheduled expiry removal, client generation and Web adoption remain a continuation.
 The focused native scenario is `services/kernel/test/library/copy-archive.test.ts`; full recovery acceptance and
 native64/512/4096 executed caller growth are not claimed.
+
+## Explicit selected label consolidation
+
+The existing Labels module mounts pure review, finite selection capture, immutable explicit confirmation,
+ordered per-item native apply/retry, accepted partial results, cancellation and removal; see the
+[owner contract](../library-label-consolidation.md) for transport and Web handoff. One 15-minute retained binding
+per owner preserves exact parent/assignment identities, Subject security evidence and original native operation
+keys. Existing assignment readers reopen both labels, and shared label expiry/owner erasure remove retained roots.
+Focused native coverage: `services/kernel/test/library/label-consolidation.test.ts`; original pure review coverage
+remains `services/kernel/test/library/label-consolidation-review.test.ts`. Complete-caller native64/512/4096 growth,
+Web adoption and broader integration acceptance remain pending; authored code is not measurement evidence.

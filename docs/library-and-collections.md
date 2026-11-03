@@ -21,6 +21,8 @@ The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [C
 [filtered lists](filtered-lists.md), [Collection presentation and editor](collection-presentation.md),
 [independent labels](library-labels.md),
 [selected label consolidation](library-label-consolidation.md),
+with finite owner-local selection capture, immutable confirmation, original native move/retry receipts, partial
+results/cancellation and native label reopening,
 [profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and source-scoped
 concurrent identity currentness below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
 those adoption surfaces and earlier research. Their ABI revisions belong to their owners; this adoption creates no
