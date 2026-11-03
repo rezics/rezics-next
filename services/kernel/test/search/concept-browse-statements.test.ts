@@ -51,9 +51,21 @@ function fixture(
       retired++;
     },
   } as unknown as ConceptBrowseStore;
-  const reader: ConceptStatementReader = async () => ({
+  const reader: ConceptStatementReader = async (_partition, _request, after) => ({
     status: 'current',
-    page: { statements, examined: statements.length, after: null, terminal: true, complete },
+    page: {
+      statements,
+      examined: statements.length,
+      after: statements.length
+        ? {
+            slot: '00000000-0000-4000-8000-000000000001',
+            candidate: '00000000-0000-4000-8000-000000000002',
+            observation: 'a'.repeat(64),
+          }
+        : after,
+      terminal: true,
+      complete,
+    },
     revalidate: async () => {
       revalidated++;
       return current;
@@ -166,6 +178,26 @@ test('native resumption replacement retires the cut without publishing a cursor 
     match: 'not_proven',
   });
   expect(f.retired()).toBe(1);
+});
+
+test('a terminal empty seek must preserve the full native cursor, including its observation', async () => {
+  const after = {
+    slot: '00000000-0000-4000-8000-000000000001',
+    candidate: '00000000-0000-4000-8000-000000000002',
+    observation: 'a'.repeat(64),
+  };
+  for (const replacement of [null, { ...after, observation: 'b'.repeat(64) }]) {
+    const f = fixture([], 'current', true);
+    const reader: ConceptStatementReader = async (...args) => {
+      const read = await f.reader(...args);
+      return read.status === 'current' ? { ...read, page: { ...read.page, after: replacement } } : read;
+    };
+    expect(await matchNativeConceptStatements(reader, graph, f.store, state, 0, request, after)).toEqual({
+      status: 'restart',
+      match: 'not_proven',
+    });
+    expect(f.retired()).toBe(1);
+  }
 });
 
 test('admission owns conditions before native IO and rejects over-budget statement dispatch', async () => {

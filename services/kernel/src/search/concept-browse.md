@@ -227,6 +227,15 @@ all native revalidators. A changed candidate in an earlier, rejected leaf theref
 attempt's cuts even if another leaf already matched. Unavailable native evidence discards the
 whole provisional expression. A lost retained cut leaves the expression unknown.
 
+Decision: interrupted traversal still revalidates every visited native window; mutation takes precedence over unavailable evidence and retires the cut, and an empty terminal seek preserves its full native cursor.
+
+The same cursor checks apply to single-window and multi-window reads. A full raw window cannot
+claim termination. A short empty continuation must retain the previous slot, candidate and
+observation. Dropped or replaced continuations restart rather than supplying negative evidence.
+Final revalidation drains all visited windows even when an earlier validator is unavailable or
+changed, or a later native read stops preparing or unavailable. No provisional Boolean verdict
+escapes those paths, and no membership I/O follows native revalidation.
+
 The single-prefix matcher uses the same bounded scanner and finalization. This internal Boolean
 port accepts only concept leaves; callers must use the current native owner for other conditions.
 It retains no permissions or public cursor. Native all-pool reservations, retained ownership of

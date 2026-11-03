@@ -114,6 +114,25 @@ test('a rejected candidate mutation during later-leaf membership invalidates the
   expect(f.retired()).toBeGreaterThan(0);
 });
 
+test('a later unavailable leaf cannot conceal mutation in an earlier rejected exact leaf', async () => {
+  const f = fixture();
+  const reader: ConceptStatementReader = async (...args) => {
+    if (args[1].selection.includeChildren) return { status: 'unavailable' };
+    const read = await f.reader(...args);
+    return read.status === 'current' ? { ...read, revalidate: async () => 'changed' as const } : read;
+  };
+  expect(
+    await matchNativeConceptFilter(
+      reader,
+      0,
+      { subject, filter: { and: [{ not: condition(false) }, condition(true)] } },
+      () => f.cut,
+      { windows: 2, rows: 128 },
+    ),
+  ).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+  expect(f.retired()).toBeGreaterThan(0);
+});
+
 test('native allowance is shared across leaves and concealed evidence cannot satisfy NOT', async () => {
   const full = fixture({ full: true });
   expect(await full.match({ and: [condition(true), { not: condition(false) }] }, 1, 64)).toMatchObject({
