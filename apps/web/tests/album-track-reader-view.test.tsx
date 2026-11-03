@@ -29,6 +29,7 @@ async function ui() {
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
+    Event: window.Event,
     MouseEvent: window.MouseEvent,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
