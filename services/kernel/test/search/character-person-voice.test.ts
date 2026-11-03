@@ -8,6 +8,8 @@ import {
 import { collectRetainedUsefulPage, type SearchConsumedWindow } from '../../src/search/useful-page.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
+import { withPublicRatings } from '../../src/search/rating-subject-source.ts';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import type {
   IndexedStatement,
   IndexedSubject,
@@ -248,7 +250,7 @@ test('a changed retained cut before or during dispatch retires the complete page
   }
 });
 
-test('first next and final retained pages stay ordered through dense current voice rejections', async () => {
+test('rated first next and final retained pages stay ordered through dense current voice rejections', async () => {
   const accepted = new Set([3, 7, 10, 14, 18].map((n) => id(n + 100)));
   const subjects: IndexedSubject[] = Array.from({ length: 20 }, (_, n) => ({
     id: id(n + 100),
@@ -274,11 +276,20 @@ test('first next and final retained pages stay ordered through dense current voi
         },
       },
     );
-  const source: SubjectSource = {
+  const semantic: SubjectSource = {
     read: async (partition, ids) => ({ partition, position: 1n, subjects: subjects.filter((s) => ids.includes(s.id)) }),
     count: async () => ({ position: 1n, count: subjects.length }),
     prepareRelationFacets: (probes) => prepareCharacterPersonPage(probes, f.prepare),
   };
+  const binding = { questionId: id(9), populationId: GLOBAL_CONTEXT.id };
+  const source = withPublicRatings(
+    semantic,
+    {
+      read: async (partition) => ({ partition, position: 1n, figures: new Map() }),
+      epoch: async () => ({ ...binding, priorEpoch: null }),
+    },
+    binding,
+  );
   let offset = 0;
   let consumed = 0;
   let continuation: SearchConsumedWindow | undefined;

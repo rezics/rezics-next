@@ -93,6 +93,7 @@ export function withPublicRatings(
       throw new SearchUnavailableError(`Public rating snapshot mismatch after ${MAX_ATTEMPTS} attempts: ${mismatch}`);
     },
     count: source.count.bind(source),
+    ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
     ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
   };
 }
