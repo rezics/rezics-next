@@ -116,9 +116,9 @@ export async function checkHits(
             const clause = plan.leaves[leaf]!;
             const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
             const live =
-              clause.facet === 'statement' && relationProperties.has(clause.property) && plan.positive.has(leaf);
-            if (clause.facet === 'statement' && (overflow || live) && clause.qualifiers !== undefined)
-              throw new Error('Qualified relation overflow cannot be checked by unqualified probes');
+              clause.facet === 'statement' &&
+              relationProperties.has(clause.property) &&
+              (plan.positive.has(leaf) || !!clause.qualifiers?.length);
             if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live)) {
               values[leaf] =
                 clause.facet === 'type'
@@ -131,6 +131,7 @@ export async function checkHits(
                 subject: subject.id,
                 property: clause.property,
                 value,
+                ...(clause.qualifiers ? { qualifiers: clause.qualifiers } : {}),
               };
               const key = JSON.stringify(probe);
               let point = points.get(key);

@@ -6,7 +6,9 @@ red until the production source and bounded rebuild runner exist. It introduces 
 A relation facet is a `(property, value)` pair on a declared outgoing relation facet of the source's current type.
 Book `schema:author` remains a facet. Incoming relations, undeclared relations and descriptive statements do not
 enter this path. Descriptive source behavior stays unchanged. Existing slotKey qualifiers remain stored statement
-data; they are never predicates. Search refuses qualified relation filtering.
+data. The compatible [qualified credit evidence extension](../search/character-person.md) admits released
+item/string qualifier predicates and rechecks each conjunction on one native statement. Qualified variants share
+the existing value seek and cursor; absent witnesses remain unknown rather than becoming negative evidence.
 
 ## Source and disclosure
 

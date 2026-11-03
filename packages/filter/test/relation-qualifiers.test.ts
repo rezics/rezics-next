@@ -46,15 +46,15 @@ function refuses(input: unknown, release: FilterRelease, pointer: string, proble
   expect((error as FilterError).errors).toEqual([{ pointer, code: 'unsupported' }]);
 }
 
-test('exactly the supported relation groups refuse qualifiers while unqualified Book author is admitted', () => {
+test('released relation qualifiers and unqualified membership share ordinary admission', () => {
   for (const group of groups) {
     const release = releaseFor(group);
     expect(relationFacetProperty(release, 'schema:author')).toBe(true);
     expect(parseFilter(qualified)).toEqual(qualified);
     const filter = parseFilter({ and: [book, plain] });
     expect(admitFilter(filter, release)).toEqual(filter);
-    refuses(qualified, release, '/statement/qualifiers');
-    refuses({ and: [book, qualified] }, release, '/and/1/statement/qualifiers');
+    expect(admitFilter(parseFilter(qualified), release)).toEqual(qualified);
+    expect(admitFilter(parseFilter({ and: [book, qualified] }), release)).toEqual({ and: [book, qualified] });
   }
 });
 
@@ -80,12 +80,19 @@ test('classification, missing metadata and other groups retain descriptive quali
   }
 });
 
-test('relation refusal keeps nested and saved source pointers and declaration/type anchors', () => {
+test('qualified relations retain nested/saved meaning and declaration/type anchors', () => {
   const release = releaseFor('credit');
-  refuses({ and: [book, { not: qualified }] }, release, '/and/1/not/statement/qualifiers');
-  refuses({ or: [plain, { and: [qualified] }] }, release, '/or/1/and/0/statement/qualifiers');
-  refuses({ saved: 'books/qualified' }, release, '/saved');
-  refuses({ and: [book, { saved: 'books/qualified' }] }, release, '/and/1/saved');
+  for (const input of [{ and: [book, { not: qualified }] }, { or: [plain, { and: [qualified] }] }])
+    expect(admitFilter(parseFilter(input), release)).toEqual(input);
+  expect(admitFilter(parseFilter({ saved: 'books/qualified' }), release)).toEqual({ and: [book, qualified] });
+  release.properties['schema:author']!.qualifiers = [];
+  refuses(
+    { and: [book, { not: qualified }] },
+    release,
+    '/and/1/not/statement/qualifiers/0/property',
+    'unsupported_query',
+  );
+  refuses({ saved: 'books/qualified' }, release, '/saved', 'unsupported_query');
   refuses(
     { and: [{ type: { in: ['schema:Recipe'] } }, qualified] },
     release,

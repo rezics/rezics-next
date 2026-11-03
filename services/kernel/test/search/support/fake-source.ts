@@ -1,4 +1,5 @@
 import { PARTITIONS } from '../../../src/route/route.ts';
+import { holdsCurrentStatements } from '../../../src/search/current-leaf.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
@@ -37,16 +38,18 @@ export function createFakeSource(): SubjectSource & {
       if (probes.length > MAX_RELATION_FACET_PROBES)
         throw new RangeError(`Relation facet matching accepts at most ${MAX_RELATION_FACET_PROBES} probes`);
       for (const probe of probes) {
-        if ('qualifiers' in probe) throw new TypeError('Relation facet probes do not accept qualifiers');
         if (subjectPartition(probe.subject) !== partition)
           throw new RangeError('Subject id routes to a different partition');
       }
       return probes.map((probe) => {
         const subject = subjects.get(probe.subject);
         if (!subject || subject.visibility !== 'visible' || subject.redirect !== null) return false;
-        return subject.statements.some(
-          (statement) => statement.property === probe.property && statement.value === probe.value,
-        );
+        return holdsCurrentStatements(subject.statements, {
+          facet: 'statement',
+          property: probe.property,
+          values: [probe.value],
+          ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
+        });
       });
     },
     async read(partition, ids) {

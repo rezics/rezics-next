@@ -1137,15 +1137,16 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   returned raw hits, with the 200-hit budget shared across phases per round. Native sorting and counting remain
   match-dependent engine work. Valid text is <= 512 bytes/64 leaves/depth 4; filters <= 32 leaves/depth 4, OR <= 16,
   `IN` <= 64 (bounded scalar sizes). Parsing rejected raw input still depends on input length. Nested leaves touch
-  candidate subjects' facts only. Text syntax errors remain typed 422 errors. Qualified relation facets return 400
-  `invalid_request` at the filter qualifier pointer; descriptive qualifiers retain their existing meaning. Code
+  candidate subjects' facts only. Text syntax errors remain typed 422 errors. Released relation qualifiers use
+  [bounded same-statement native evidence](character-person.md); undeclared qualifiers return 422
+  `unsupported_query` at the qualifier property pointer. Descriptive qualifiers retain their existing meaning. Code
   facets cost what item facets cost, minus value-subject reads. `descriptions` and `languages` project from the
   subject the final check already holds (no read; per hit, work linear in that subject's labels and descriptions,
   each description cut to 200 grapheme clusters).
 - Growth check: [test/search/filter-overflow.test.ts](../../test/search/filter-overflow.test.ts): “overflow candidate
   queries retain true positive and negated matches beyond the sampled prefix” and “overflow candidate queries
   preserve boolean grouping and same-statement qualifiers”; [test/search/relation-qualifier-admission.test.ts](../../test/search/relation-qualifier-admission.test.ts):
-  “qualified relation facet filters are 400 invalid_request without reaching the engine” and “unqualified relation
+  “undeclared relation qualifiers are unsupported without reaching the engine” and “unqualified relation
   facets and descriptive qualifiers retain their semantics”; [test/search/service.test.ts](../../test/search/service.test.ts):
   “each request makes at most three index requests and reads only the partitions of examined hits” for the existing
   non-rating path; rating phase runtime outcomes remain pending. [test/search/overflow-service.test.ts](../../test/search/overflow-service.test.ts):
