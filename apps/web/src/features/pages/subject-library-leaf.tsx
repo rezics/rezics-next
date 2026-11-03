@@ -57,6 +57,7 @@ export function subjectLibraryLeafQuery(
           ...unavailable,
           publicCollections: data.publicCollections,
           publicCollectionsNext: data.publicCollectionsNext,
+          ...(data.publicCollectionsCount ? { publicCollectionsCount: data.publicCollectionsCount } : {}),
         };
   return queryOptions({
     queryKey: [
@@ -160,14 +161,16 @@ export function SubjectLibraryLeaf({
     address: publicAddress,
     collections: unavailable.publicCollections,
     next: unavailable.publicCollectionsNext,
+    count: unavailable.publicCollectionsCount,
   });
   if (publicPage.current.address !== publicAddress)
-    publicPage.current = { address: publicAddress, collections: null, next: null };
-  if (data?.publicCollections)
+    publicPage.current = { address: publicAddress, collections: null, next: null, count: undefined };
+  if (data?.publicCollections || data?.publicCollectionsCount)
     publicPage.current = {
       address: publicAddress,
       collections: data.publicCollections,
       next: data.publicCollectionsNext,
+      count: data.publicCollectionsCount,
     };
   // SSR and unprepared viewers reserve the control space without exposing cached personal values or a sign-in flash.
   const retained = accepted.current?.lifetime === addressScope ? accepted.current.data : unavailable;
@@ -183,6 +186,7 @@ export function SubjectLibraryLeaf({
     ...privateData,
     publicCollections: publicPage.current.collections,
     publicCollectionsNext: publicPage.current.next,
+    ...(publicPage.current.count ? { publicCollectionsCount: publicPage.current.count } : {}),
   };
   return (
     <div className="min-h-9">

@@ -8,7 +8,6 @@ import { Exposure, operationIsAdmitted, useOperation } from '../kernel/exposure'
 import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
-import { ContentItem } from '@rezics/ui/content-item';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
 import {
@@ -27,16 +26,18 @@ import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
 import { subjectSlotReturnTo } from './subject-slot-return-context';
 import { useSession } from '../session/query';
-import { AccountRef } from './account-ref';
-import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
 import {
   mutateSubjectLabelAction,
   mutateSubjectLibrarySlot,
   readSubjectLibraryCollections,
+  readSubjectPublicCollections,
   searchSubjectLabelsAction,
   restoreSubjectLibrarySlot,
 } from './subject-slot-actions';
+import { CollectionChooserPanel } from './subject-collection-journey/chooser';
+import { PublicCollectionsPanel } from './subject-collection-journey/public';
+import { publicCountOf, type CapturedChooserTarget } from './subject-collection-journey';
 import type {
   LibraryEntryStateWrite,
   SubjectLibraryMutation,
@@ -196,7 +197,8 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     if (provenance) observed.seen.add(provenance.readId);
     ready[family] = accepted;
   }
-  const memberResult = data.result === 'added' || data.result === 'collection-full';
+  const memberResult =
+    data.result === 'added' || data.result === 'collection-full' || data.result === 'dynamic';
   const current: SubjectLibrarySlotData = !browser
     ? data
     : {
@@ -216,8 +218,10 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
         ...(ready.entry && data.restore ? { restore: data.restore } : {}),
         publicCollections: data.publicCollections,
         publicCollectionsNext: data.publicCollectionsNext,
+        publicCollectionsCount: data.publicCollectionsCount,
         collectionsLoaded: ready.collections && data.collectionsLoaded,
         collections: ready.collections ? data.collections : null,
+        collectionsNext: ready.collections ? (data.collectionsNext ?? null) : null,
         labels: ready.labels ? data.labels : null,
         ...(ready.labels
           ? {
@@ -355,7 +359,10 @@ function SubjectLibrarySlotView({
   const [removeKey] = useState(() => crypto.randomUUID());
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
-  const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
+  const [collectionsNext, setCollectionsNext] = useState(data.collectionsNext ?? null);
+  const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | 'expired' | null>(null);
+  const [chooserTarget, setChooserTarget] = useState<CapturedChooserTarget | null>(null);
+  const chooserTargetRef = useRef<CapturedChooserTarget | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const captureRestore = (receipt: LibraryRestoreReceipt): LibraryRestoreInput => ({
     ...receipt,
@@ -459,9 +466,14 @@ function SubjectLibrarySlotView({
     labelFlight.current = false;
   }
   if (collectionOrigin !== collectionLifetime) {
+    if (collectionOrigin.seed !== collectionLifetime.seed) {
+      setChooserTarget(null);
+      chooserTargetRef.current = null;
+    }
     setCollectionOrigin(collectionLifetime);
     setCollections(data.collections);
     setCollectionsLoaded(data.collectionsLoaded);
+    setCollectionsNext(data.collectionsNext ?? null);
     setCollectionsProblem(null);
     setMemberResult(undefined);
     memberFlight.current = false;
@@ -486,7 +498,8 @@ function SubjectLibrarySlotView({
     if (!collectionLifetime.current()) return;
     setCollections(data.collections);
     setCollectionsLoaded(data.collectionsLoaded);
-  }, [data.collections, data.collectionsLoaded, collectionLifetime]);
+    setCollectionsNext(data.collectionsNext ?? null);
+  }, [data.collections, data.collectionsLoaded, data.collectionsNext, collectionLifetime]);
   useEffect(() => {
     if (labelLifetime.current()) setLabels(data.labels ?? []);
   }, [data.labels, labelLifetime]);
@@ -562,15 +575,17 @@ function SubjectLibrarySlotView({
           ? m.library_subject_collection_added()
           : result === 'collection-full'
             ? m.library_subject_collection_full()
-            : result === 'closed'
-              ? m.library_subject_closed()
-              : result === 'unsupported_library_profile'
-                ? m.library_entry_profile_unsupported()
-                : result === 'conflict'
-                  ? m.library_conflict()
-                  : result === 'unavailable'
-                    ? m.library_subject_unavailable()
-                    : null;
+            : result === 'dynamic'
+              ? m.library_subject_collection_dynamic()
+              : result === 'closed'
+                ? m.library_subject_closed()
+                : result === 'unsupported_library_profile'
+                  ? m.library_entry_profile_unsupported()
+                  : result === 'conflict'
+                    ? m.library_conflict()
+                    : result === 'unavailable'
+                      ? m.library_subject_unavailable()
+                      : null;
 
   const discardRestore = () => {
     uncertainRestore.current = null;
@@ -828,7 +843,7 @@ function SubjectLibrarySlotView({
   function addToCollection(collectionId: string) {
     if (
       !collectionLifetime.current('collection.list', 'collection_member.create') ||
-      !collections?.some((row) => row.id === collectionId)
+      (uncertainMember.current ? uncertainMember.current.input.collectionId !== collectionId : chooserTargetRef.current?.id !== collectionId)
     )
       return;
     return mutate({
@@ -839,27 +854,40 @@ function SubjectLibrarySlotView({
     });
   }
 
-  async function loadCollections(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    if (!hydrated || !collectionLifetime.current('collection.list') || pickerFlight.current) return;
+  async function readChooserPage(cursor?: string) {
+    if (!hydrated || !collectionLifetime.current('collection.list'))
+      return { state: 'unavailable' as const, collections: null, next: null };
     pickerFlight.current = true;
     try {
-      const response = await readSubjectLibraryCollections({ data: { subjectId: subject.id } });
-      if (!collectionLifetime.current()) return;
+      const response = await readSubjectLibraryCollections({
+        data: { subjectId: subject.id, ...(cursor ? { cursor } : {}) },
+      });
+      if (!collectionLifetime.current()) return { state: 'unavailable' as const, collections: null, next: null };
       if (!response.provenance || response.provenance.viewer !== data.provenance?.viewer) {
         setCollections(null);
         setCollectionsLoaded(false);
+        setCollectionsNext(null);
         setCollectionsProblem('unavailable');
-        return;
+        return { state: 'unavailable' as const, collections: null, next: null };
       }
       setCollections(response.collections);
       setCollectionsLoaded(response.state === 'loaded');
+      setCollectionsNext(response.next ?? null);
       setCollectionsProblem(response.state === 'loaded' ? null : response.state);
+      return { collections: response.collections, next: response.next ?? null, state: response.state };
     } catch {
       if (collectionLifetime.current()) setCollectionsProblem('unavailable');
+      return { state: 'unavailable' as const, collections: null, next: null };
     } finally {
       if (collectionLifetime.current()) pickerFlight.current = false;
     }
+  }
+
+  async function readPublicPage(cursor?: string) {
+    const response = await readSubjectPublicCollections({
+      data: { subjectId: subject.id, ...(cursor ? { cursor } : {}) },
+    });
+    return response;
   }
 
   function labelFailure(reason: string) {
@@ -1218,44 +1246,30 @@ function SubjectLibrarySlotView({
             }
             entries={[]}
             content={
-              <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-72">
-                <p className="mb-3 text-sm text-muted-foreground">
-                  {m.library_subject_add_subject()} <SubjectRef subject={subject} />
-                </p>
-                {collectionsLoaded && collections ? (
-                  collections.length ? (
-                    <ul className="space-y-2">
-                      {collections.map((collection) => (
-                        <li key={collection.id}>
-                          <button
-                            className={`${linkClass} inline-flex min-h-[44px] w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-start whitespace-normal hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 ${controlFocusClass}`}
-                            type="button"
-                            disabled={!hydrated || !data.csrfToken || !memberCreateAdmitted}
-                            onClick={() => void addToCollection(collection.id)}
-                          >
-                            <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
-                            <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
-                  )
-                ) : (
-                  <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
-                    <input type="hidden" name="slot" value="collections" />
-                    <button className={labelButtonClass} type="submit">
-                      {m.library_subject_load_collections()}
-                    </button>
-                  </form>
-                )}
-                {collectionsProblem ? (
-                  <p role="alert" className="mt-3 text-sm text-muted-foreground">
-                    {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
-                  </p>
-                ) : null}
-              </div>
+              <CollectionChooserPanel
+                key={collectionLifetime.seed}
+                subject={subject}
+                locale={locale}
+                action={action}
+                readerHref={returnTo}
+                csrfToken={data.csrfToken}
+                admitted={memberCreateAdmitted}
+                hydrated={hydrated}
+                loaded={collectionsLoaded}
+                collections={collections}
+                next={collectionsNext}
+                problem={collectionsProblem}
+                pending={memberFlight.current}
+                addedId={memberResult === 'added' ? (chooserTarget?.id ?? null) : null}
+                current={() => collectionLifetime.current('collection.list')}
+                readPage={readChooserPage}
+                onSelect={(target) => {
+                  if (uncertainMember.current) return;
+                  chooserTargetRef.current = target;
+                  setChooserTarget(target);
+                }}
+                onConfirm={(collectionId) => void addToCollection(collectionId)}
+              />
             }
           />
         </Exposure>
@@ -1289,43 +1303,17 @@ function SubjectLibrarySlotView({
           </Exposure>
         </nav>
       ) : null}
-      {data.publicCollections ? (
+      {data.publicCollections !== null || data.publicCollectionsCount ? (
         <Exposure operation="subject_collection.list">
-          <details data-public-collections className="relative">
-            <summary className={`${buttonClass} cursor-pointer list-none`}>
-              {m.library_subject_public_collections({ count: data.publicCollections.length })}
-            </summary>
-            <div className="absolute end-0 z-20 mt-2 w-80 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
-              {data.publicCollections.length ? (
-                <ul className="space-y-3">
-                  {data.publicCollections.map((collection) => (
-                    <ContentItem
-                      key={collection.id}
-                      title={collection.title}
-                      headingLevel={3}
-                      href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
-                      metadata={
-                        <>
-                          {collection.curator?.handle ? (
-                            <a
-                              href={`/${encodeURIComponent(locale)}/@${encodeURIComponent(collection.curator.handle)}`}
-                            >
-                              <AccountRef account={collection.curator} />
-                            </a>
-                          ) : (
-                            <AccountRef account={collection.curator} />
-                          )}
-                          <span>{m.library_subject_multiplicity({ count: collection.multiplicity })}</span>
-                        </>
-                      }
-                    />
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">{m.library_subject_no_public_collections()}</p>
-              )}
-            </div>
-          </details>
+          <PublicCollectionsPanel
+            key={`${subject.id}:${locale}`}
+            locale={locale}
+            collections={data.publicCollections}
+            next={data.publicCollectionsNext}
+            count={data.publicCollectionsCount ?? publicCountOf(undefined)}
+            current={() => true}
+            readPage={readPublicPage}
+          />
         </Exposure>
       ) : null}
       {data.session === 'signed-in' && data.labels === null ? (

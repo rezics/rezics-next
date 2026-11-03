@@ -73,6 +73,12 @@ mock.module('../src/library/subject-slot-actions', () => ({
   mutateSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(entries, input),
   mutateSubjectLabelAction: (input: Parameters<typeof hold>[1]) => hold(labels, input),
   readSubjectLibraryCollections: (input: Parameters<typeof hold>[1]) => hold(pickers, input),
+  readSubjectPublicCollections: async () => ({
+    state: 'unavailable',
+    collections: null,
+    next: null,
+    count: { kind: 'unknown' },
+  }),
   searchSubjectLabelsAction: (input: Parameters<typeof hold>[1]) => hold(prefixes, input),
   restoreSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(restores, input),
 }));
@@ -530,6 +536,7 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
     });
   });
   await click('A private Collection2');
+  await click(m.library_subject_add_confirm());
   expect(entries[2]!.data).toEqual({
     intent: 'member',
     subjectId: subject.id,
@@ -541,6 +548,7 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
   });
   expect(host.textContent).toContain(m.library_subject_collection_added());
   await click('A private Collection2');
+  await click(m.library_subject_add_confirm());
   await openLabels();
   await act(async () => {
     prefixes

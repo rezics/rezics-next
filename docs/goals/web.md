@@ -16,6 +16,9 @@ capabilities and disclosure rules on every page and device.
 - The Collection editor supports bounded destination and occurrence-anchor browsing, exact duplicate-preserving
   transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and
   consumer authorities are recorded in the [placement journey](../../apps/web/src/library/collection-placement-journey.md).
+- A Subject reader inspects public Collections that contain that Subject with the native exact total and opaque
+  continuation, opens a disclosed Collection, returns to the same reader, and adds the Subject to a later owned
+  curated Collection through the existing member command. Details: [Subject Collection journey](../../apps/web/src/library/subject-collection-journey.md).
 - Checkout start/return and entitlements expose the commerce outcomes without treating a redirect as fulfilment.
   Creator Sales extends that existing visit with one supplied-sale inspection, canonical localized offer and Subject
   readers, and browser return to the same opaque sales cursor. Exact charged unit price, captured unit/tax meaning,

@@ -110,6 +110,12 @@ mock.module('../src/library/subject-slot-actions', () => ({
   mutateSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(entries, input),
   mutateSubjectLabelAction: (input: Parameters<typeof hold>[1]) => hold(labels, input),
   readSubjectLibraryCollections: (input: Parameters<typeof hold>[1]) => hold(pickers, input),
+  readSubjectPublicCollections: async () => ({
+    state: 'unavailable',
+    collections: null,
+    next: null,
+    count: { kind: 'unknown' },
+  }),
   searchSubjectLabelsAction: (input: Parameters<typeof hold>[1]) => hold(prefixes, input),
   restoreSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(restores, input),
 }));
@@ -386,6 +392,7 @@ test('Complete Collection names, native order, literal zero and exact button tex
   }
   await focusOnly(buttons);
   await click(longCollection + '0');
+  await click(m.library_subject_add_confirm());
   const original = entries[0]!.data;
   expect(original).toEqual({
     intent: 'member',
@@ -553,6 +560,7 @@ test('Viewer replacement and admission/address ABA retire held choices, remove a
   await openCollections();
   const oldChoice = button(longCollection + '0');
   await click(longCollection + '0');
+  await click(m.library_subject_add_confirm());
   await submit('[data-subject-label-remove]');
   await openLabels();
   await observe('B');

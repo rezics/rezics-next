@@ -274,6 +274,16 @@ its separate notice, and current viewer/address retirement applies through malfo
 
 Decision: Collection owner pages, saved rules and publication preview/review refresh use authenticated read identity without CSRF; writes require a current token, uncertain retries retain their original sender, credential, key and operands, and publication previews exclude occurrence notes.
 
+The Subject Library slot owns one complete Subject-to-Collection visit: the public Collections that contain the
+current Subject, opaque continuation of that public list, return to the same reader, and adding the exact Subject to
+a later owned curated Collection. Native `GET /v1/subjects/{id}/collections` supplies `count:{value,exact:true}` and
+`next`; Web copies a valid exact count and never substitutes zero or this page's row count. The private chooser loads
+only when opened, pages the owner list at 20 rows, and writes only through the existing member command. Dynamic and
+built-in identities are not curated destinations. Details, caps and cost live in the
+[Subject Collection journey](../apps/web/src/library/subject-collection-journey.md).
+Decision: browse visits retain the current page plus one previous cursor; Previous steps back once; Restart rereads
+page one; native page size is 20.
+
 Decision: The embedded Subject Library slot, Copies, Labels, Following and private follow counts admit authorized
 current-subject reads, detail, cursor navigation and read-only retry
 without a CSRF token; commands require the actual current token, while uncertain retries retain their original

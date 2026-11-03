@@ -80,6 +80,8 @@ export async function applySubjectLibraryMutation(
     if (added.error) {
       if (isPlatformClosedProblem(added.status, added.error.value)) return { result: 'closed' };
       if (added.status === 409 && problemCode(added.error) === 'collection_full') return { result: 'collection-full' };
+      if (added.status === 409 && problemCode(added.error) === 'dynamic_membership_immutable')
+        return { result: 'dynamic' };
       return { result: 'unavailable' };
     }
     return { result: 'added' };

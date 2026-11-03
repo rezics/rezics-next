@@ -108,6 +108,12 @@ mock.module('../src/library/subject-slot-actions', () => ({
   mutateSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(entries, input),
   mutateSubjectLabelAction: (input: Parameters<typeof hold>[1]) => hold(labels, input),
   readSubjectLibraryCollections: (input: Parameters<typeof hold>[1]) => hold(pickers, input),
+  readSubjectPublicCollections: async () => ({
+    state: 'unavailable',
+    collections: null,
+    next: null,
+    count: { kind: 'unknown' },
+  }),
   searchSubjectLabelsAction: (input: Parameters<typeof hold>[1]) => hold(prefixes, input),
   restoreSubjectLibrarySlot: (input: Parameters<typeof hold>[1]) => hold(restores, input),
 }));
@@ -567,6 +573,7 @@ test('Healthy rotation and equivalent refresh preserve independent uncertain ent
   await submit('[data-subject-label-remove]');
   await openCollections();
   await click('A private Collection2');
+  await click(m.library_subject_add_confirm());
   const entry = entries[0]!.data;
   const member = entries[1]!.data;
   const label = labels[0]!.data;

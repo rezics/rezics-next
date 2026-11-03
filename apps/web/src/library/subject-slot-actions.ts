@@ -5,9 +5,11 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   loadSubjectLibraryCollections,
+  loadSubjectPublicCollections,
   type SubjectLibraryMutation,
   type SubjectLibraryMutationResponse,
 } from './subject-slot';
+import { collectionCursor } from './subject-collection-journey';
 import { libraryEntryStateWrite } from './entries-read';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 import { restorePersonalLibraryEntry, validateLibraryRestoreInput } from './entries-read';
@@ -62,7 +64,7 @@ function validateMutation(input: unknown): SubjectLibraryMutation {
   return input as SubjectLibraryMutation;
 }
 
-function validateCollectionsInput(input: unknown): { subjectId: string } {
+function validateCollectionsInput(input: unknown): { subjectId: string; cursor?: string } {
   if (
     !input ||
     typeof input !== 'object' ||
@@ -72,7 +74,8 @@ function validateCollectionsInput(input: unknown): { subjectId: string } {
     input.subjectId.length > 128
   )
     throw new Error('Invalid subject library collections input');
-  return { subjectId: input.subjectId };
+  const cursor = 'cursor' in input ? collectionCursor(input.cursor) : undefined;
+  return { subjectId: input.subjectId, ...(cursor ? { cursor } : {}) };
 }
 
 function validateSubjectLabelSearch(input: unknown): { query: string } {
@@ -157,9 +160,16 @@ export function validateSubjectLabelMutation(input: unknown): SubjectLabelMutati
 
 export const readSubjectLibraryCollections = createServerFn({ method: 'GET' })
   .validator(validateCollectionsInput)
-  .handler(async (): Promise<Awaited<ReturnType<typeof loadSubjectLibraryCollections>>> => {
+  .handler(async ({ data }): Promise<Awaited<ReturnType<typeof loadSubjectLibraryCollections>>> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadSubjectLibraryCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>);
+    return loadSubjectLibraryCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data.cursor);
+  });
+
+export const readSubjectPublicCollections = createServerFn({ method: 'GET' })
+  .validator(validateCollectionsInput)
+  .handler(async ({ data }): Promise<Awaited<ReturnType<typeof loadSubjectPublicCollections>>> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadSubjectPublicCollections(kernelClient(), data.subjectId, data.cursor);
   });
 
 export const mutateSubjectLibrarySlot = createServerFn({ method: 'POST' })

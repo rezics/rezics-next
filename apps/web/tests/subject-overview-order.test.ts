@@ -20,6 +20,12 @@ import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 mock.module('../src/library/subject-slot-actions.ts', () => ({
   mutateSubjectLibrarySlot: async () => ({ result: 'unavailable' }),
   readSubjectLibraryCollections: async () => ({ state: 'unavailable', collections: null }),
+  readSubjectPublicCollections: async () => ({
+    state: 'unavailable',
+    collections: null,
+    next: null,
+    count: { kind: 'unknown' },
+  }),
 }));
 // So do the router links of the references.
 mock.module('../src/library/subject-ref.tsx', () => ({ SubjectRef: () => null }));

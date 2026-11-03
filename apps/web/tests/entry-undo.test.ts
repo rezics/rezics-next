@@ -213,6 +213,12 @@ test('rendered shelf and subject removal feedback carries a real POST Undo form,
   mock.module('../src/library/subject-slot-actions', () => ({
     mutateSubjectLibrarySlot: () => {},
     readSubjectLibraryCollections: () => {},
+    readSubjectPublicCollections: async () => ({
+      state: 'unavailable',
+      collections: null,
+      next: null,
+      count: { kind: 'unknown' },
+    }),
     restoreSubjectLibrarySlot: () => {},
   }));
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
