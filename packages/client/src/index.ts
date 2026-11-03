@@ -82,9 +82,7 @@ export type BanReviewPageItem = {
 export type BanReviewPage = {
   items: BanReviewPageItem[];
   next: string | null;
-  context:
-    | { state: 'available'; realmTitle: string; spaceId: string; spaceTitle: string }
-    | { state: 'concealed' };
+  context: { state: 'available'; realmTitle: string; spaceId: string; spaceTitle: string } | { state: 'concealed' };
   viewer: {
     accountId: string;
     clientId: string;
