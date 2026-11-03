@@ -1,35 +1,38 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/rating/question-label*.ts",
-    "services/kernel/src/rating/question-label*.sql",
-    "services/kernel/src/rating/routes.ts",
-    "services/kernel/src/rating/schemas.ts",
-    "services/kernel/src/rating/README.md",
-    "services/kernel/test/rating/*question-label*.ts",
-    "services/kernel/test/rating/support/*question-label*.ts",
-    "packages/client/src/kernel/**",
-    "packages/client/src/index.ts",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "94d8bd6a-0882-43d2-8207-302ca0797fb9",
-    "becbb252-5e94-4d80-92a6-b5e967a49c61",
-    "4eb719ca-83ba-40ce-9172-5d91df345bbf"
-  ],
-  "acceptance": [
-    "The complete-input admitted database-backed generator installs closed caption DTOs, stale_cursor, OpenAPI and KernelClient exports.",
-    "The existing consumer receives exact installed factory/DTO/source/generated heads and populated, empty, concealed, unavailable and retry examples; its real correction/history/restart/retry flow is reviewed with its owner.",
-    "The original connected native command/readback, disclosure races, movement/fence, credential replacement and independent 256/1024/4096 all-pool access-path/byte/authority growth outcomes are reached. Failed setup reaches zero native cases."
-  ],
-  "estimate": { "lines": 500, "files": 8 },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/rating/question-label*.ts',
+      'services/kernel/src/rating/question-label*.sql',
+      'services/kernel/src/rating/routes.ts',
+      'services/kernel/src/rating/schemas.ts',
+      'services/kernel/src/rating/README.md',
+      'services/kernel/test/rating/*question-label*.ts',
+      'services/kernel/test/rating/support/*question-label*.ts',
+      'packages/client/src/kernel/**',
+      'packages/client/src/index.ts',
+      'contracts/openapi.json',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after':
+    [
+      '94d8bd6a-0882-43d2-8207-302ca0797fb9',
+      'becbb252-5e94-4d80-92a6-b5e967a49c61',
+      '4eb719ca-83ba-40ce-9172-5d91df345bbf',
+    ],
+  'acceptance':
+    [
+      'The complete-input admitted database-backed generator installs closed caption DTOs, stale_cursor, OpenAPI and KernelClient exports.',
+      'The existing consumer receives exact installed factory/DTO/source/generated heads and populated, empty, concealed, unavailable and retry examples; its real correction/history/restart/retry flow is reviewed with its owner.',
+      'The original connected native command/readback, disclosure races, movement/fence, credential replacement and independent 256/1024/4096 all-pool access-path/byte/authority growth outcomes are reached. Failed setup reaches zero native cases.',
+    ],
+  'estimate': { 'lines': 500, 'files': 8 },
+  'inseparable': true,
 }
 ---
 
