@@ -308,6 +308,7 @@ export function RevisionSummaryRow({
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">{m.exact_revision_read_only()}</p>
+            {entry.revision.parentId ? <p>{m.post_history_reply()}</p> : null}
             <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
               <div>
                 <dt className="font-medium">{m.exact_revision_id()}</dt>
