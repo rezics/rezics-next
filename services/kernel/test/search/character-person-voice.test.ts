@@ -327,3 +327,47 @@ test('first next and final retained pages stay ordered through dense current voi
   }
   expect(pages).toEqual([[id(103), id(107)], [id(110), id(114)], [id(118)]]);
 });
+
+test('source cuts and release activation retire the entire Boolean window even when another branch passes', async () => {
+  for (const change of ['source', 'release']) {
+    const subject: IndexedSubject = {
+      id: id(1),
+      type: 'schema:Movie',
+      visibility: 'visible',
+      redirect: null,
+      securityRevision: 1,
+      labels: [],
+      aliases: [],
+      descriptions: [],
+      statements: [],
+    };
+    let position = 1n;
+    let head = 1;
+    const source: SubjectSource = {
+      read: async () => ({ partition: 10, position, subjects: [subject] }),
+      count: async () => ({ position, count: 1 }),
+      prepareRelationFacets: async (probes) => ({
+        bounds: [{ partition: 10, probeBatchBound: 1 }],
+        revalidate: async () => true,
+        async match() {
+          if (change === 'source') position++;
+          else head += 2;
+          return probes.map(() => true);
+        },
+      }),
+    };
+    const result = await checkHits(
+      source,
+      [{ id: id(1), partition: 10, securityRevision: 1, matched: [] }],
+      new Map(),
+      {
+        filter: { or: [{ type: { in: ['schema:Movie'] } }, { statement: { property: 'wdt:P725', in: [id(2)] } }] },
+        relationProperties: ['wdt:P725'],
+        spoilerThreshold: 0,
+        observeRelationRelease: async () => ({ digest: 'same-release', head, release: { types: {}, properties: {} } }),
+      },
+    );
+    expect(result.passed).toEqual([]);
+    expect(result.relationRejected).toBe(true);
+  }
+});

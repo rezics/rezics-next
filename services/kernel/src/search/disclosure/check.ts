@@ -61,6 +61,7 @@ export async function checkHits(
   if (observeRelease && !releaseBefore) return { passed: [], dropped: hits.length, relationRejected: true };
   const relationProperties = new Set(options?.relationProperties);
   let relationRejected = false;
+  let sourceChanged = false;
   const hints = new Map<string, number>();
   if (plan) {
     for (const [name, clause] of clauses) {
@@ -261,7 +262,7 @@ export async function checkHits(
         // Reanchor the complete inverse window, including changes between separate native batches
         // and the gap between the original candidate read and the seam's first read.
         const retired = new Set<string>();
-        if (pending.some((point) => point.inverse)) {
+        if (pending.length) {
           for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
             const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
             const read = await lifetime.start(async () => {
@@ -288,6 +289,7 @@ export async function checkHits(
             }
           }
         }
+        sourceChanged ||= retired.size > 0;
         for (const { hit, subject, index } of eligible) {
           const result = evaluations.get(subject.id)!();
           if (retired.has(subject.id)) {
@@ -319,7 +321,9 @@ export async function checkHits(
     retained = await source.prepareRelationFacets(forward);
     const values = await retained.match();
     if (
+      !Array.isArray(values) ||
       values.length !== forward.length ||
+      forward.some((_, index) => !Object.hasOwn(values, index)) ||
       values.some((value) => value !== true && value !== false && value !== 'not_proven')
     )
       throw new Error('Malformed relation facet probe results');
@@ -334,7 +338,8 @@ export async function checkHits(
   }
   for (const dispatch of dispatches) await dispatch();
   lifetime.throwIfFailed();
-  if (retained && !(await retained.revalidate())) return { passed: [], dropped: hits.length, relationRejected: true };
+  if (sourceChanged || (retained && !(await retained.revalidate())))
+    return { passed: [], dropped: hits.length, relationRejected: true };
   if (observeRelease) {
     const releaseAfter = await observeRelease();
     if (releaseAfter?.digest !== releaseBefore!.digest || releaseAfter?.head !== releaseBefore!.head)
