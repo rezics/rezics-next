@@ -127,8 +127,16 @@ async function runExpansionWorker(expansion: number): Promise<ExpansionReport> {
     runCounts.set(key, (runCounts.get(key) ?? 0) + 1);
   };
   const definitions = [
-    ...matchingNames.map((name) => ({ name, types: [CREATED], run: async (value: CloudEvent) => recordRun(name, value) })),
-    ...nonmatchingNames.map((name) => ({ name, types: [CONTEXT], run: async (value: CloudEvent) => recordRun(name, value) })),
+    ...matchingNames.map((name) => ({
+      name,
+      types: [CREATED],
+      run: async (value: CloudEvent) => recordRun(name, value),
+    })),
+    ...nonmatchingNames.map((name) => ({
+      name,
+      types: [CONTEXT],
+      run: async (value: CloudEvent) => recordRun(name, value),
+    })),
     {
       name: 'ordered',
       types: [CREATED],
@@ -194,7 +202,9 @@ async function runExpansionWorker(expansion: number): Promise<ExpansionReport> {
 
     const expectedNames = [...matchingNames, 'ordered'];
     const matchedIds = measuredItems.flatMap((item) => expectedNames.map((name) => effectWorkflowId(item, 0, name)));
-    const unmatchedIds = measuredItems.flatMap((item) => nonmatchingNames.map((name) => effectWorkflowId(item, 0, name)));
+    const unmatchedIds = measuredItems.flatMap((item) =>
+      nonmatchingNames.map((name) => effectWorkflowId(item, 0, name)),
+    );
     const persisted = await admin.query<{ workflow_uuid: string }>(
       'SELECT workflow_uuid FROM dbos.workflow_status WHERE workflow_uuid = ANY($1::text[])',
       [matchedIds],
@@ -217,7 +227,9 @@ async function runExpansionWorker(expansion: number): Promise<ExpansionReport> {
     const replayIds = expectedNames.map((name) => effectWorkflowId(replay, 0, name));
     await effects.enqueue([replay]);
     await Promise.all(
-      expectedNames.map((name) => within(DBOS.retrieveWorkflow(effectWorkflowId(replay, 0, name)).getResult(), 'first replay result')),
+      expectedNames.map((name) =>
+        within(DBOS.retrieveWorkflow(effectWorkflowId(replay, 0, name)).getResult(), 'first replay result'),
+      ),
     );
     const beforeReplay = await admin.query<{ status_rows: number; input_rows: number }>(
       `SELECT
@@ -227,7 +239,9 @@ async function runExpansionWorker(expansion: number): Promise<ExpansionReport> {
     );
     await effects.enqueue([replay]);
     await Promise.all(
-      expectedNames.map((name) => within(DBOS.retrieveWorkflow(effectWorkflowId(replay, 0, name)).getResult(), 'replayed result')),
+      expectedNames.map((name) =>
+        within(DBOS.retrieveWorkflow(effectWorkflowId(replay, 0, name)).getResult(), 'replayed result'),
+      ),
     );
     const afterReplay = await admin.query<{ status_rows: number; input_rows: number }>(
       `SELECT
@@ -266,54 +280,50 @@ if (workerScale !== undefined) {
     console.log(`${REPORT_PREFIX}${JSON.stringify(report)}`);
   }, 1_200_000);
 } else {
-  test(
-    'Effect registration expansion, deterministic enqueue replay and failed ordered progress retain derived native bounds',
-    async () => {
-      const reports: ExpansionReport[] = [];
-      for (const expansion of REGISTRATION_SCALES) {
-        const child = Bun.spawn([process.execPath, 'test', fileURLToPath(import.meta.url)], {
-          cwd: process.cwd(),
-          env: { ...process.env, EFFECT_EXPANSION_CHILD: String(expansion) },
-          stdout: 'pipe',
-          stderr: 'pipe',
-        });
-        const [stdout, stderr, exitCode] = await Promise.all([
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-          child.exited,
-        ]);
-        if (exitCode !== 0) throw new Error(`Expansion worker ${expansion} failed:\n${stdout}\n${stderr}`);
-        const line = stdout.split(/\r?\n/).find((entry) => entry.startsWith(REPORT_PREFIX));
-        if (!line) throw new Error(`Expansion worker ${expansion} returned no report:\n${stdout}`);
-        reports.push(JSON.parse(line.slice(REPORT_PREFIX.length)) as ExpansionReport);
-      }
+  test('Effect registration expansion, deterministic enqueue replay and failed ordered progress retain derived native bounds', async () => {
+    const reports: ExpansionReport[] = [];
+    for (const expansion of REGISTRATION_SCALES) {
+      const child = Bun.spawn([process.execPath, 'test', fileURLToPath(import.meta.url)], {
+        cwd: process.cwd(),
+        env: { ...process.env, EFFECT_EXPANSION_CHILD: String(expansion) },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      if (exitCode !== 0) throw new Error(`Expansion worker ${expansion} failed:\n${stdout}\n${stderr}`);
+      const line = stdout.split(/\r?\n/).find((entry) => entry.startsWith(REPORT_PREFIX));
+      if (!line) throw new Error(`Expansion worker ${expansion} returned no report:\n${stdout}`);
+      reports.push(JSON.parse(line.slice(REPORT_PREFIX.length)) as ExpansionReport);
+    }
 
-      expect(reports.map(({ registrations }) => registrations)).toEqual([5, 9, 17]);
-      expect(reports.map(({ typeComparisonsPerEvent }) => typeComparisonsPerEvent)).toEqual([5, 9, 17]);
-      expect(reports.map(({ matchingJobs }) => matchingJobs)).toEqual([3, 5, 9]);
-      for (const report of reports) {
-        expect(report.samples.map(({ scale }) => scale)).toEqual(HISTORY_SCALES);
-        for (const sample of report.samples) {
-          expect(sample.statusInserts.every((count) => count === report.matchingJobs)).toBe(true);
-          expect(sample.inputInserts.every((count) => count === report.matchingJobs)).toBe(true);
-        }
-        console.log(
-          'Effect registration expansion',
-          JSON.stringify({
-            registrations: report.registrations,
-            typeComparisonsPerEvent: report.typeComparisonsPerEvent,
-            matchingJobs: report.matchingJobs,
-            samples: report.samples.map(({ scale, rows, blocks, statements, backgroundStatements }) => ({
-              scale,
-              rows,
-              blocks,
-              statements,
-              backgroundStatements,
-            })),
-          }),
-        );
+    expect(reports.map(({ registrations }) => registrations)).toEqual([5, 9, 17]);
+    expect(reports.map(({ typeComparisonsPerEvent }) => typeComparisonsPerEvent)).toEqual([5, 9, 17]);
+    expect(reports.map(({ matchingJobs }) => matchingJobs)).toEqual([3, 5, 9]);
+    for (const report of reports) {
+      expect(report.samples.map(({ scale }) => scale)).toEqual(HISTORY_SCALES);
+      for (const sample of report.samples) {
+        expect(sample.statusInserts.every((count) => count === report.matchingJobs)).toBe(true);
+        expect(sample.inputInserts.every((count) => count === report.matchingJobs)).toBe(true);
       }
-    },
-    3_600_000,
-  );
+      console.log(
+        'Effect registration expansion',
+        JSON.stringify({
+          registrations: report.registrations,
+          typeComparisonsPerEvent: report.typeComparisonsPerEvent,
+          matchingJobs: report.matchingJobs,
+          samples: report.samples.map(({ scale, rows, blocks, statements, backgroundStatements }) => ({
+            scale,
+            rows,
+            blocks,
+            statements,
+            backgroundStatements,
+          })),
+        }),
+      );
+    }
+  }, 3_600_000);
 }
