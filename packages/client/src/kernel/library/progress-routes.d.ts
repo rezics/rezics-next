@@ -7605,5 +7605,47 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
     };
-}>;
+}> & ProgressSessionJournalRoute;
+type ProgressSessionJournalRoute = {
+    "~Routes": {
+        v1: {
+            progressSessions: {
+                ":sessionId": {
+                    journal: {
+                        get: {
+                            body: unknown;
+                            params: { sessionId: string };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: { journal: import("./progress-model.ts").ProgressSessionJournal };
+                                401: unknown;
+                                404: unknown;
+                                409: unknown;
+                                503: unknown;
+                            };
+                            error: never;
+                        };
+                        patch: {
+                            body: import("./progress-model.ts").ProgressSessionJournalPatch;
+                            params: { sessionId: string };
+                            query: unknown;
+                            headers: { "idempotency-key": string };
+                            response: {
+                                200: { journal: import("./progress-model.ts").ProgressSessionJournalWrite };
+                                400: unknown;
+                                401: unknown;
+                                403: unknown;
+                                404: unknown;
+                                409: unknown;
+                                503: unknown;
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+};
 export {};

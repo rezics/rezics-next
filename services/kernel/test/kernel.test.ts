@@ -64,6 +64,8 @@ const typed = [
   'POST /v1/progressSessions',
   'GET /v1/progressSessions',
   'GET /v1/progressSessions/:sessionId',
+  'GET /v1/progressSessions/:sessionId/journal',
+  'PATCH /v1/progressSessions/:sessionId/journal',
   'POST /v1/progressSessions/:sessionId/$record',
   'POST /v1/progressSessions/:sessionId/$complete',
   'POST /v1/progressSessions/:sessionId/$abandon',

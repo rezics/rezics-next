@@ -29,6 +29,31 @@ export type ProgressSession = Omit<ProgressSessionRow, 'route' | 'mode' | 'unit'
     state: ProgressState;
     measures?: ProgressScalarMeasure[];
 };
+/** A private, session-addressed journal with a revision independent of progress values. */
+export type ProgressSessionJournalDate = Readonly<{
+    year: number;
+    month?: number;
+    day?: number;
+}>;
+export type ProgressSessionJournal = Readonly<{
+    sessionId: string;
+    revision: number;
+    startDate: ProgressSessionJournalDate | null;
+    finishDate: ProgressSessionJournalDate | null;
+    reflection: string | null;
+}>;
+export type ProgressSessionJournalPatch = Readonly<{
+    revision: number;
+    startDate?: ProgressSessionJournalDate | null;
+    finishDate?: ProgressSessionJournalDate | null;
+    reflection?: string | null;
+}>;
+/** Receipt-safe journal edit result; private fields are read on the session route. */
+export type ProgressSessionJournalWrite = Readonly<{
+    sessionId: string;
+    revision: number;
+    changed: boolean;
+}>;
 /** A scalar value keeps its exact profile unit, total and nullable amount. */
 export type ProgressScalarMeasure = {
     unit: ProgressUnit;
