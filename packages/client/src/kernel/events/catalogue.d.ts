@@ -7,6 +7,11 @@ declare const productEventTypes: {
         phase: Type.TUnion<Type.TLiteral<string>[]>;
         transactionId: Type.TString;
     }>;
+    readonly "com.rezics.semantic.identity-scope.directory-enrolled.v1": Type.TObject<{
+        sourceKey: Type.TString;
+        scope: Type.TString;
+        transactionId: Type.TString;
+    }>;
     readonly 'com.rezics.semantic.public-output.capture.v1': Type.TObject<{
         captureId: Type.TString;
     }>;
@@ -1271,6 +1276,17 @@ declare const productEventTypes: {
         threadId: Type.TString;
         authorId: Type.TString;
     }>;
+    readonly 'com.rezics.content.report-locator.installed.v1': Type.TObject<{
+        partition: Type.TInteger;
+        epoch: Type.TInteger;
+        position: Type.TString;
+        expected: Type.TString;
+        applied: Type.TString;
+        complete: Type.TBoolean;
+    }>;
+    readonly 'com.rezics.content.report-locator.coverage.v1': Type.TObject<{
+        partition: Type.TInteger;
+    }>;
     readonly 'com.rezics.content.catalogue-report.projected.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
@@ -1279,13 +1295,13 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.content.report.created.v1': Type.TObject<{
         reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">, Type.TLiteral<"space">, Type.TLiteral<"realm">]>;
         targetId: Type.TString;
         revisionId: Type.TOptional<Type.TString>;
     }>;
     readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
         reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">, Type.TLiteral<"space">, Type.TLiteral<"realm">]>;
         targetId: Type.TString;
     }>;
     readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
@@ -1297,6 +1313,23 @@ declare const productEventTypes: {
         takenDownAt: Type.TOptional<Type.TString>;
         takedownId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.conversation-activity.projected.v1': Type.TObject<{
+        postIds: Type.TArray<Type.TString>;
+        sourceEpoch: Type.TInteger;
+        sourcePosition: Type.TString;
+    }>;
+    readonly 'com.rezics.content.board.watch.changed.v1': Type.TObject<{
+        accountId: Type.TString;
+        boardId: Type.TString;
+        watching: Type.TBoolean;
+        revision: Type.TInteger;
+    }>;
+    readonly 'com.rezics.content.watch.removed.v1': Type.TObject<{
+        accountId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
+        watchId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.own-drafts.repaired.v1': Type.TObject<{}>;
     readonly 'com.rezics.content.board.slow-mode.changed.v1': Type.TObject<{
         boardId: Type.TString;
         intervalSeconds: Type.TInteger;
@@ -1418,6 +1451,10 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.export.requested.v1': Type.TObject<{
         exportId: Type.TString;
     }>;
+    readonly 'com.rezics.library.anilist.changed.v1': Type.TObject<{
+        importId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.personal-import.changed.v1': Type.TObject<{}>;
     readonly 'com.rezics.library.bulk.confirmed.v1': Type.TObject<{
         operationId: Type.TString;
     }>;
@@ -1467,6 +1504,15 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.entry.updated.v1': Type.TObject<{
         subjectId: Type.TString;
     }>;
+    readonly 'com.rezics.library.entry.annotations.updated.v1': Type.TObject<{
+        subjectId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.entry.source-observation.admitted.v1': Type.TObject<{
+        subjectId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.entry.source-observation.corrected.v1': Type.TObject<{
+        subjectId: Type.TString;
+    }>;
     readonly 'com.rezics.library.entry.purged.v1': Type.TObject<{
         deletionId: Type.TString;
     }>;
@@ -1478,6 +1524,9 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.library.label.changed.v1': Type.TObject<{
         labelId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.label.consolidation.changed.v1': Type.TObject<{
+        confirmationId: Type.TString;
     }>;
     readonly 'com.rezics.library.progress_session.updated.v1': Type.TObject<{
         sessionId: Type.TString;
@@ -1514,6 +1563,12 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
+    }>;
+    readonly 'com.rezics.rating.source_classification.changed.v1': Type.TObject<{
+        subjectId: Type.TString;
+        associationKey: Type.TString;
+        observationDigest: Type.TString;
+        state: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cleared">]>;
     }>;
     readonly 'com.rezics.rating.question.label-changed.v1': Type.TObject<{
         questionId: Type.TString;
@@ -1573,6 +1628,27 @@ declare const productEventTypes: {
         serial: Type.TString;
         action: Type.TLiteral<"received">;
     }>]>;
+    readonly "com.rezics.rating.classification-ballot.changed.v1": Type.TObject<{
+        actorId: Type.TString;
+        subjectId: Type.TString;
+        associationId: Type.TString;
+        bindingHash: Type.TString;
+        assessment: Type.TUnion<[Type.TLiteral<"support">, Type.TLiteral<"oppose">, Type.TNull]>;
+        falsePositive: Type.TBoolean;
+        revision: Type.TString;
+        eligibilityGeneration: Type.TString;
+        eligible: Type.TBoolean;
+    }>;
+    readonly "com.rezics.rating.classification-ballot.cleanup.v1": Type.TObject<{
+        actorId: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.rating.classification-aggregate.changed.v1": Type.TObject<{
+        subjectId: Type.TString;
+        associationId: Type.TString;
+        generation: Type.TString;
+        asOf: Type.TString;
+    }>;
     readonly 'com.rezics.rating.erasure-page.applied.v1': Type.TObject<{
         voterId: Type.TString;
         pageId: Type.TString;
@@ -1664,7 +1740,8 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.rating.source_statistic.changed.v1': Type.TObject<{
         subjectId: Type.TString;
-        source: Type.TLiteral<"vndb">;
+        source: Type.TUnion<[Type.TLiteral<"vndb">, Type.TLiteral<"bangumi">]>;
+        observationDigest: Type.TOptional<Type.TString>;
         sourceRecordId: Type.TString;
     }>;
     readonly 'com.rezics.rating.subject-merge.page.v1': Type.TObject<{

@@ -2,7 +2,7 @@ import type { FilterRelease } from '@rezics/filter';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type MixedDiscoveryRequest } from './discovery-request.ts';
-import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryKey } from './discovery.ts';
+import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryOwnerRegistry, DiscoveryKey } from './discovery.ts';
 import type { PublicFilterConsumerJob, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 type Principal = 'anonymous' | `account:${string}`;
 export type DiscoverySearch = (principal: Principal, request: MixedDiscoveryRequest, context: DiscoveryReadContext) => Promise<DiscoveryPage>;
@@ -18,7 +18,7 @@ type DiscoveryConfiguration = {
     source: PublicFilterSource;
     keys: KeyRing;
     resolve(request: MixedDiscoveryRequest): Promise<{
-        registry: DiscoveryRegistry;
+        registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
         release: FilterRelease;
         digest: string;
     }>;

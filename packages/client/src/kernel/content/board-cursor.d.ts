@@ -10,6 +10,8 @@ export type BoardCursorBinding = {
     boardId: string;
     query: string;
     sort: BoardCursorSort;
+    /** Decimal board-home pin-set counter, read with the candidate range. */
+    pinRevision: string;
     /** The caller supplies an authenticated account identity or an anonymous actor. */
     viewer: BoardCursorViewer;
 };

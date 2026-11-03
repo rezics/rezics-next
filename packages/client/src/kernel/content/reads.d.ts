@@ -9,6 +9,7 @@ import { type Access, type AccessClient, type Actor, type ReadDecisions, type Re
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ReviewVoteCitation, ThreadId, ThreadView as StoredThreadView, Visibility } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
+import { type NativePostRevisionPage } from './history-page.ts';
 declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
 export type RealmDisclosureScope = {
     realmId?: string | null;
@@ -62,6 +63,30 @@ export type ContentReadDependencies = Readonly<{
     access: Access;
     tokens: KeyRing;
     clock?: () => Date;
+}>;
+/** Retain the initial source and prepared native authority across foreign work.
+ * The optional qualifier evaluates already-prepared native checks in the same
+ * source snapshot; it must not prepare authority or open a foreign checkout.
+ */
+export type RetainContentRead<T> = (current: (qualify?: (client: AccessClient) => Promise<void>) => Promise<Anchored<T | null>>) => void;
+export type NativeDraftMetadata = Readonly<{
+    id: string;
+    threadId: string;
+    firstPostId: string;
+    revisionId: string;
+    authorId: string;
+    kind: 'discussion' | 'review';
+    documentKind: 'opening' | 'reply';
+    title: string | null;
+    savedAt: string;
+    licence: string;
+    subjectIds: readonly string[];
+    mediaIds: readonly string[];
+    board: {
+        id: string;
+        title: string | null;
+        realmId: string | null;
+    };
 }>;
 export type { Actor };
 type Kind = 'board' | 'thread' | 'post' | 'revision';
@@ -133,6 +158,20 @@ export declare function discloseBoardPageThreads(dependencies: ContentReadDepend
     boardAnchor: AnchoredPosition;
     parentAllowed: boolean;
 }>>;
+export type BoardPageActionEvidence = Readonly<{
+    createThread: boolean;
+    threads: ReadonlyMap<string, Readonly<{
+        reply: boolean;
+        react: boolean;
+    }>>;
+    anchors: readonly AnchoredPosition[];
+}>;
+/** Batch current action checks for the exact mounted Board and disclosed threads.
+ * Commands still repeat these checks inside their write transactions. */
+export declare function readBoardPageActionEvidence(dependencies: ContentReadDependencies, boardId: BoardId, baseline: BoardView, threadIds: readonly string[], context: ReadContext): Promise<BoardPageActionEvidence>;
+/** The public context projector may distinguish a missing citation from one
+ * removed by native question disclosure without exposing a private question. */
+export declare function readCitationDisclosure(value: PostEntry | ThreadView): 'absent' | 'visible' | 'withheld';
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
 export declare function withViewerReactions<T extends {
     readonly id: string;
@@ -155,6 +194,18 @@ type Counted<T> = T extends ErasedPlaceholder & {
 } ? T : T & {
     readonly reactions: ReactionCountMap;
 };
+type ReactionCountProjection<T extends {
+    readonly id: string;
+}> = Readonly<{
+    items: readonly Counted<T>[];
+    reactionsAsOf: ReactionCountFreshness | null;
+    /** Targets with at least one installed aggregate row and its oldest row watermark.
+     * An absent target row does not prove a zero count and remains unavailable. */
+    targetFreshness: readonly Readonly<{
+        id: string;
+        source: ReactionCountFreshness;
+    }>[];
+}>;
 /** One index seek per partition over the page's targets. Zero kinds are omitted.
  * The freshness is the oldest source watermark among the count rows actually read. */
 export declare function withReactionCounts<T extends {
@@ -163,6 +214,11 @@ export declare function withReactionCounts<T extends {
     readonly items: readonly Counted<T>[];
     readonly reactionsAsOf: ReactionCountFreshness | null;
 }>;
+/** The native page projection exposes each target's aggregate watermark without
+ * treating a missing aggregate row as an exact zero. Existing feed callers keep their established return shape. */
+export declare function withReactionCountsAndCoverage<T extends {
+    readonly id: string;
+}>(dependencies: ContentReadDependencies, targets: readonly T[], deadline: number): Promise<ReactionCountProjection<T>>;
 /** Read at most five relayed subject totals per id with one statement per target partition. */
 export declare function readSubjectReactionCounts(dependencies: Pick<ContentReadDependencies, 'pool'>, subjectIds: readonly string[], deadline?: number): Promise<Map<string, SubjectReactionCounts>>;
 export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
@@ -189,17 +245,47 @@ export declare function prepareRealmSubjectThreadDisclosure(dependencies: Pick<C
 /** Send-time disclosure uses the ordinary read resources and current account standing,
  * without constructing a bearer principal. Release every observation before Access checks. */
 export declare function postReadableByAccount(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, accountId: string, threadId: string, postId: string, context: Pick<ReadContext, 'deadline'>): Promise<boolean>;
-export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<PostEntry | null>>;
+export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId, retain?: RetainContentRead<PostEntry>): Promise<Anchored<PostEntry | null>>;
+/** Private inventory projection of ordinary source disclosure. This path never
+ * requests revision bytes; account ownership does not replace container Access.
+ */
+export declare function readOwnDraftMetadata(dependencies: ContentReadDependencies, threadId: string, postId: string, context: ReadContext, retain?: RetainContentRead<NativeDraftMetadata>): Promise<Anchored<NativeDraftMetadata | null>>;
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
-export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<RevisionView>>;
+export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<NativePostRevisionPage>;
 export declare function discloseThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;
 /** Exact native rules reader. It shares the ordinary row, ancestry and Access
  * formula; the immutable requested revision never becomes the current head. */
 export declare function readExactPublishedRules(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, references: readonly (import('./community-presentation-rules.ts').RulesReference & {
     realmId: string;
 })[], context: ReadContext): Promise<ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>>;
-/** Current bounded board response composition. The native internal reader stays
- * independent, so exact post/rules reads cannot recurse into presentation. */
+export type NoticePostReference = Readonly<{
+    threadId: string;
+    postId: string | null;
+}>;
+export type NoticePostContext = Readonly<{
+    threadId: string;
+    postId: string | null;
+    boardId: string;
+    threadTitle: string | null;
+    boardTitle: string | null;
+}>;
+/** Current header-only disclosure for one bounded Inbox candidate page.
+ * Target keys are processed by native partition. Bodies and revisions are not read. */
+export declare function readNoticePostContexts(dependencies: ContentReadDependencies, references: readonly NoticePostReference[], context: ReadContext): Promise<ReadonlyMap<string, NoticePostContext>>;
+export type NoticeBoardContext = Readonly<{
+    boardId: string;
+    boardTitle: string | null;
+}>;
+/** Current header-only disclosure for report outcomes that target a board. */
+export declare function readNoticeBoardContexts(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<ReadonlyMap<string, NoticeBoardContext>>;
+/** Exact native board records for a containing page that owns presentation.
+ * This uses the ordinary batch disclosure round and retains its private source
+ * rows, not equality of public JSON. No connection survives either round.
+ */
+export declare function observeBoardRecords(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<Readonly<{
+    records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
+    current: () => Promise<boolean>;
+}>>;
 export declare function readBoards(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;
 /** Edition publication enrolls just the selected source post. Ancestors keep their
  * ordinary read formula; this port cannot authorize an ordinary post route. */

@@ -6331,6 +6331,136 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 realmId: string;
                                 name: string;
                                 role: "member";
+                                current: {
+                                    description: string;
+                                    avatar: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    banner: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    destination: {
+                                        kind: "realm";
+                                        realmId: string;
+                                    };
+                                    spaceId: string;
+                                    viewer: {
+                                        readability: "allowed";
+                                        membership: {
+                                            state: "member";
+                                            since: string;
+                                            reservationId: string;
+                                            transactionId: string;
+                                        };
+                                        participation: "allowed" | "denied";
+                                    };
+                                    actions: {
+                                        state: "current";
+                                        enter: {
+                                            state: "available";
+                                            method: "DELETE" | "GET";
+                                            path: string;
+                                            body: null;
+                                            expectedStatus: 200 | 202;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "owner_invariant_observation_unavailable";
+                                        };
+                                        manage: {
+                                            state: "available";
+                                            method: "DELETE" | "GET";
+                                            path: string;
+                                            body: null;
+                                            expectedStatus: 200 | 202;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "owner_invariant_observation_unavailable";
+                                        };
+                                        leave: {
+                                            state: "available";
+                                            method: "DELETE" | "GET";
+                                            path: string;
+                                            body: null;
+                                            expectedStatus: 200 | 202;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "owner_invariant_observation_unavailable";
+                                        };
+                                    };
+                                };
                             }[];
                             next: string | null;
                         };
@@ -7490,6 +7620,728 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     v1: {
         realms: {
             ":realmId": {
+                home: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: {
+                            languages?: string[];
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                realm: {
+                                    realmId: string;
+                                    spaceId: string;
+                                    state: "active";
+                                    visibility: "protected" | "public";
+                                    contextId: string;
+                                    boardSchemeId: string | null;
+                                    ownershipState: "orphaned" | "owned";
+                                    orphanedAt: string | null;
+                                    claimEligibleAt: string | null;
+                                    governanceReadOnly: boolean;
+                                    headRevisionId: string;
+                                    createdAt: string;
+                                    creator: string;
+                                    predecessor: string | null;
+                                    title: string;
+                                    summary: string;
+                                    revisionCreatedAt: string;
+                                    author: string;
+                                    votes: {
+                                        upvote?: -1 | 1;
+                                        downvote?: -1 | 1;
+                                        like?: -1 | 1;
+                                        love?: -1 | 1;
+                                        laugh?: -1 | 1;
+                                        insightful?: -1 | 1;
+                                        sad?: -1 | 1;
+                                    };
+                                    presentation: {
+                                        avatarMediaId: string | null;
+                                        bannerMediaId: string | null;
+                                        rules: {
+                                            postId: string;
+                                            revisionId: string;
+                                        } | null;
+                                    };
+                                };
+                                space: {
+                                    spaceId: string;
+                                    realmId: string | null;
+                                    state: "active";
+                                    headRevisionId: string;
+                                    createdAt: string;
+                                    creator: string;
+                                    predecessor: string | null;
+                                    address: string | null;
+                                    title: string;
+                                    summary: string;
+                                    revisionCreatedAt: string;
+                                    author: string;
+                                };
+                                presentation: {
+                                    realmId: string;
+                                    spaceId: string;
+                                    contextId: string;
+                                    name: string;
+                                    description: string;
+                                    avatar: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    banner: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    members: {
+                                        state: "current";
+                                        count: number;
+                                        version: string;
+                                    } | {
+                                        state: "unknown";
+                                        count: null;
+                                        version: null;
+                                    };
+                                    rules: {
+                                        state: "available";
+                                        value: {
+                                            postId: string;
+                                            revisionId: string;
+                                            body: unknown;
+                                            licence: string;
+                                            sha256: string;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                };
+                                boards: {
+                                    items: {
+                                        id: string;
+                                        route: number;
+                                        visibility: never;
+                                        securityRevision: string;
+                                        createdAt: string;
+                                        realmId: string | null;
+                                        title: string | null;
+                                        purpose: "discussion" | "reviews";
+                                        availability: "available" | "erased";
+                                    }[];
+                                    next: string | null;
+                                };
+                                publications: {
+                                    items: {
+                                        publication: {
+                                            realmId: string;
+                                            subjectId: string;
+                                            publicationId: string;
+                                            verdict: "adopt";
+                                            subjectRevisionId: null;
+                                            publishedAt: string;
+                                        };
+                                        summary: {
+                                            id: string;
+                                            type: string;
+                                            types: string[];
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                            creativeWork: boolean;
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                        };
+                                    }[];
+                                    next: string | null;
+                                };
+                                viewer: {
+                                    readability: "allowed";
+                                    membership: {
+                                        state: "member";
+                                        since: string;
+                                        reservationId: string;
+                                        transactionId: string;
+                                    } | {
+                                        state: "none";
+                                        since: null;
+                                        reservationId: null;
+                                        transactionId: null;
+                                    };
+                                    participation: "allowed" | "denied";
+                                } | {
+                                    state: "anonymous";
+                                };
+                                actions: {
+                                    state: "current";
+                                    enter: {
+                                        state: "available";
+                                        method: "DELETE" | "GET";
+                                        path: string;
+                                        body: null;
+                                        expectedStatus: 200 | 202;
+                                    } | {
+                                        state: "prohibited";
+                                        reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "owner_invariant_observation_unavailable";
+                                    };
+                                    manage: {
+                                        state: "available";
+                                        method: "DELETE" | "GET";
+                                        path: string;
+                                        body: null;
+                                        expectedStatus: 200 | 202;
+                                    } | {
+                                        state: "prohibited";
+                                        reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "owner_invariant_observation_unavailable";
+                                    };
+                                    leave: {
+                                        state: "available";
+                                        method: "DELETE" | "GET";
+                                        path: string;
+                                        body: null;
+                                        expectedStatus: 200 | 202;
+                                    } | {
+                                        state: "prohibited";
+                                        reason: "governance_read_only" | "not_authorized" | "not_member" | "signed_out";
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "owner_invariant_observation_unavailable";
+                                    };
+                                } | {
+                                    state: "sign-in";
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    } & {
+                        '~handled': {
+                            error: Error;
+                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
+                                500: Response;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                boardShelf: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: {
+                            cursor?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                items: {
+                                    id: string;
+                                    route: number;
+                                    visibility: never;
+                                    securityRevision: string;
+                                    createdAt: string;
+                                    realmId: string | null;
+                                    title: string | null;
+                                    purpose: "discussion" | "reviews";
+                                    availability: "available" | "erased";
+                                }[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    } & {
+                        '~handled': {
+                            error: Error;
+                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
+                                500: Response;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                settings: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                snapshot: {
+                                    realmId: string;
+                                    head: string;
+                                    title: string;
+                                    summary: string;
+                                    contextId: string;
+                                    visibility: "protected" | "public";
+                                    state: "active";
+                                    ownershipState: "orphaned" | "owned";
+                                    governanceReadOnly: boolean;
+                                    canManage: boolean;
+                                    boardSchemeId: string | null;
+                                    votes: Record<string, -1 | 1>;
+                                    presentation: {
+                                        avatarMediaId: string | null;
+                                        bannerMediaId: string | null;
+                                        rules: {
+                                            postId: string;
+                                            revisionId: string;
+                                        } | null;
+                                    };
+                                    avatar: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    banner: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    rules: {
+                                        state: "available";
+                                        value: {
+                                            postId: string;
+                                            revisionId: string;
+                                            title: string;
+                                            summary: string;
+                                            body: unknown;
+                                            licence: string;
+                                            sha256: string;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                };
+                                host: {
+                                    spaceId: string;
+                                    head: string;
+                                    title: string;
+                                    summary: string;
+                                };
+                                operations: {
+                                    update: {
+                                        method: "PATCH" | "POST" | "PUT";
+                                        path: string;
+                                        available: boolean;
+                                        reason: "governance_read_only" | null;
+                                        headers: string[];
+                                        ifMatch: string | null;
+                                        requirements: string[];
+                                    };
+                                    boardScheme: {
+                                        method: "PATCH" | "POST" | "PUT";
+                                        path: string;
+                                        available: boolean;
+                                        reason: "governance_read_only" | null;
+                                        headers: string[];
+                                        ifMatch: string | null;
+                                        requirements: string[];
+                                    };
+                                    reserveMedia: {
+                                        method: "PATCH" | "POST" | "PUT";
+                                        path: string;
+                                        available: boolean;
+                                        reason: "governance_read_only" | null;
+                                        headers: string[];
+                                        ifMatch: string | null;
+                                        requirements: string[];
+                                    };
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
                 presentation: {
                     get: {
                         body: unknown;
@@ -7820,7 +8672,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     orphanedAt: string;
                                     claimEligibleAt: string;
                                     requestedAt: string;
-                                    claimant: { label: string; href: string | null };
+                                    claimant: {
+                                        label: string;
+                                        href: string | null;
+                                    };
                                     approvalAdvice: {
                                         method: "POST";
                                         destination: string;
@@ -7837,7 +8692,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     claimEligibleAt: string;
                                     requestedAt: string;
                                     currentEpisode: true;
-                                    claimant: { label: string; href: string | null };
+                                    claimant: {
+                                        label: string;
+                                        href: string | null;
+                                    };
                                     approvalAdvice: {
                                         method: "POST";
                                         destination: string;
@@ -7852,7 +8710,13 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     approvedAt: string;
                                     currentEpisode: false;
                                 } | null;
-                                realmPresentation: { state: "available"; name: string; description: string } | { state: "unavailable" };
+                                realmPresentation: {
+                                    state: "available";
+                                    name: string;
+                                    description: string;
+                                } | {
+                                    state: "unavailable";
+                                };
                             };
                             400: Response | {
                                 type: unknown;
@@ -8104,17 +8968,17 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         currentEpisode: boolean;
                                     } | null;
                                     currentRealm: {
-                                        claimEligibleAt: string | null;
+                                        ownershipState: "orphaned" | "owned";
                                         orphanedAt: string | null;
-                                        ownershipState: "owned" | "orphaned";
+                                        claimEligibleAt: string | null;
                                     };
                                     requestAdvice: {
                                         available: boolean;
-                                        body: {};
-                                        destination: string;
                                         method: "POST";
+                                        destination: string;
                                         requiredAction: "realm:participate";
                                         requiredHeader: "Idempotency-Key";
+                                        body: object;
                                     };
                                 };
                                 400: Response | {
@@ -8221,17 +9085,17 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         currentEpisode: boolean;
                                     };
                                     currentRealm: {
-                                        claimEligibleAt: string | null;
+                                        ownershipState: "orphaned" | "owned";
                                         orphanedAt: string | null;
-                                        ownershipState: "owned" | "orphaned";
+                                        claimEligibleAt: string | null;
                                     };
                                     requestAdvice: {
                                         available: boolean;
-                                        body: {};
-                                        destination: string;
                                         method: "POST";
+                                        destination: string;
                                         requiredAction: "realm:participate";
                                         requiredHeader: "Idempotency-Key";
+                                        body: object;
                                     };
                                 };
                                 400: Response | {
@@ -9079,6 +9943,354 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                publicationShelf: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            languages?: string[];
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                items: {
+                                    publication: {
+                                        realmId: string;
+                                        subjectId: string;
+                                        publicationId: string;
+                                        verdict: "adopt";
+                                        subjectRevisionId: null;
+                                        publishedAt: string;
+                                    };
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
+                                }[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                publications: {
+                    ":subjectId": {
+                        preparation: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    realmId: string;
+                                    subjectId: string;
+                                };
+                                query: unknown;
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        preparation: {
+                                            realm: {
+                                                realmId: string;
+                                                spaceId: string;
+                                                contextId: string;
+                                                title: string;
+                                                hostTitle: string;
+                                            };
+                                            subject: {
+                                                originalId: string;
+                                                currentId: string;
+                                                presentation: {
+                                                    label: {
+                                                        state: "available";
+                                                        value: string;
+                                                        language: string;
+                                                    } | {
+                                                        state: "empty";
+                                                    } | {
+                                                        state: "concealed";
+                                                    } | {
+                                                        state: "unavailable";
+                                                    };
+                                                    cover: {
+                                                        state: "available";
+                                                        value: {
+                                                            media: string;
+                                                            width: number;
+                                                            height: number;
+                                                            placeholder: {
+                                                                thumbhash: string;
+                                                                color: string;
+                                                            };
+                                                            variants: {
+                                                                format: "avif" | "webp";
+                                                                width: number;
+                                                            }[];
+                                                            focalPoint: {
+                                                                x: number;
+                                                                y: number;
+                                                            } | null;
+                                                            credit: {
+                                                                rightsHolder: string;
+                                                                via: {
+                                                                    name: string;
+                                                                    url: string;
+                                                                };
+                                                                license: string;
+                                                                obligations: string[];
+                                                            };
+                                                        };
+                                                    } | {
+                                                        state: "empty";
+                                                    } | {
+                                                        state: "concealed";
+                                                    } | {
+                                                        state: "unavailable";
+                                                    };
+                                                };
+                                            };
+                                            current: {
+                                                publicationId: string;
+                                                verdict: "adopt" | "reject" | "withdraw";
+                                                decidedAt: string;
+                                            } | null;
+                                            commands: {
+                                                publish: {
+                                                    method: "POST";
+                                                    href: string;
+                                                    subjectId: string;
+                                                    expectedHead: string | null;
+                                                    ifMatch: string | null;
+                                                };
+                                                withdraw: {
+                                                    method: "POST";
+                                                    href: string;
+                                                    subjectId: string;
+                                                    expectedHead: string | null;
+                                                    ifMatch: string | null;
+                                                } | null;
+                                                reject: {
+                                                    method: "POST";
+                                                    href: string;
+                                                    subjectId: string;
+                                                    expectedHead: string | null;
+                                                    ifMatch: string | null;
+                                                } | null;
+                                            };
+                                            recovery: {
+                                                requestIdentity: "unknown";
+                                                replay: "original-command";
+                                            };
+                                            viewer: {
+                                                accountId: string;
+                                                clientId: string;
+                                                authnEpoch: number;
+                                            };
+                                        };
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -9977,6 +11189,376 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     v1: {
         realms: {
             ":realmId": {
+                members: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            accountId?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                realmId: string;
+                                state: "preparing" | "ready";
+                                items: {
+                                    accountId: string;
+                                    episode: string;
+                                    membership: "member";
+                                    identity: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "active";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                    } | {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "deleted";
+                                    } | null;
+                                    displayName: string;
+                                    banState: "banned" | "clear" | "unknown";
+                                    actions: {
+                                        addMember: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        ban: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        unban: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        removeMember: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        reviseRole: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                    };
+                                }[];
+                                next: string | null;
+                                selected: {
+                                    accountId: string;
+                                    episode: string;
+                                    membership: "member" | "none";
+                                    identity: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "active";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                    } | {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "deleted";
+                                    } | null;
+                                    displayName: string;
+                                    banState: "banned" | "clear" | "unknown";
+                                    actions: {
+                                        addMember: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        ban: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        unban: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        removeMember: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                        reviseRole: {
+                                            state: "available";
+                                            method: "DELETE" | "POST" | "PUT";
+                                            path: string;
+                                            body: {
+                                                accountId: string;
+                                            } | {
+                                                reason: string;
+                                            } | null;
+                                            expectedStatus: 200 | 202 | 204;
+                                            outcome: string;
+                                        } | {
+                                            state: "prohibited";
+                                            reason: "already_banned" | "already_member" | "deleted_account" | "identity_unavailable" | "not_authorized" | "not_banned" | "protected_owner_or_moderator";
+                                        } | {
+                                            state: "uncertain";
+                                            reason: "authority_unavailable" | "identity_unavailable";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "no_mounted_method";
+                                        };
+                                    };
+                                } | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
                 bans: {
                     ":accountId": {
                         put: {
@@ -10262,6 +11844,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<import("typebox").TInteger>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        selectedAccountId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -10331,8 +11914,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                     output: {
                         items: {
@@ -10340,8 +12046,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                 } | undefined;
                 validate(value: unknown): {
@@ -10351,8 +12180,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                     issues?: never;
                 } | {
@@ -10368,8 +12320,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: import("typebox").TString;
                             actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                            moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>, import("typebox").TNull]>;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                realmId: import("typebox").TString;
+                                accountId: import("typebox").TString;
+                                observedAt: import("typebox").TString;
+                                membershipRestored: import("typebox").TLiteral<false>;
+                            }>;
+                            removal: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        context: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            realmTitle: import("typebox").TString;
+                            spaceId: import("typebox").TString;
+                            spaceTitle: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"concealed">;
+                        }>]>;
+                        viewer: import("typebox").TObject<{
+                            accountId: import("typebox").TString;
+                            clientId: import("typebox").TString;
+                            requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            authnEpoch: import("typebox").TInteger;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                operationId: import("typebox").TLiteral<"realm.unban">;
+                                action: import("typebox").TLiteral<"realm:ban">;
+                                resource: import("typebox").TObject<{
+                                    route: import("typebox").TInteger;
+                                    id: import("typebox").TString;
+                                }>;
+                                reauthorizes: import("typebox").TLiteral<true>;
+                            }>;
+                        }>;
+                        selected: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"not-requested">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"current">;
+                            ban: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                reason: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
+                            }>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"absent">;
+                            accountId: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                        }>]>;
                     }>;
                     output: () => import("typebox").TObject<{
                         items: import("typebox").TArray<import("typebox").TObject<{
@@ -10377,8 +12452,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: import("typebox").TString;
                             actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                            moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>, import("typebox").TNull]>;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                realmId: import("typebox").TString;
+                                accountId: import("typebox").TString;
+                                observedAt: import("typebox").TString;
+                                membershipRestored: import("typebox").TLiteral<false>;
+                            }>;
+                            removal: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        context: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            realmTitle: import("typebox").TString;
+                            spaceId: import("typebox").TString;
+                            spaceTitle: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"concealed">;
+                        }>]>;
+                        viewer: import("typebox").TObject<{
+                            accountId: import("typebox").TString;
+                            clientId: import("typebox").TString;
+                            requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            authnEpoch: import("typebox").TInteger;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                operationId: import("typebox").TLiteral<"realm.unban">;
+                                action: import("typebox").TLiteral<"realm:ban">;
+                                resource: import("typebox").TObject<{
+                                    route: import("typebox").TInteger;
+                                    id: import("typebox").TString;
+                                }>;
+                                reauthorizes: import("typebox").TLiteral<true>;
+                            }>;
+                        }>;
+                        selected: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"not-requested">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"current">;
+                            ban: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                reason: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
+                            }>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"absent">;
+                            accountId: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                        }>]>;
                     }>;
                 };
             };
@@ -10496,8 +12694,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                 reason: string;
                 actor: string | null;
                 at: string;
+                account: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                };
+                moderator: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                } | null;
+                unban: {
+                    state: "permitted";
+                    realmId: string;
+                    accountId: string;
+                    observedAt: string;
+                    membershipRestored: false;
+                };
+                removal: {
+                    state: "unavailable";
+                };
             }[];
             next: string | null;
+            context: {
+                state: "available";
+                realmTitle: string;
+                spaceId: string;
+                spaceTitle: string;
+            } | {
+                state: "concealed";
+            };
+            viewer: {
+                accountId: string;
+                clientId: string;
+                requestedBy: string | null;
+                authnEpoch: number;
+                unban: {
+                    state: "permitted";
+                    operationId: "realm.unban";
+                    action: "realm:ban";
+                    resource: {
+                        route: number;
+                        id: string;
+                    };
+                    reauthorizes: true;
+                };
+            };
+            selected: {
+                state: "not-requested";
+            } | {
+                state: "current";
+                ban: {
+                    accountId: string;
+                    reason: string;
+                    actor: string | null;
+                    at: string;
+                    account: {
+                        state: "available";
+                        accountId: string;
+                        displayName: string | null;
+                        handle: string | null;
+                        label: string;
+                        destination: string | null;
+                    } | {
+                        state: "concealed";
+                        accountId: string;
+                        label: "Account";
+                        destination: null;
+                    };
+                    moderator: {
+                        state: "available";
+                        accountId: string;
+                        displayName: string | null;
+                        handle: string | null;
+                        label: string;
+                        destination: string | null;
+                    } | {
+                        state: "concealed";
+                        accountId: string;
+                        label: "Account";
+                        destination: null;
+                    } | null;
+                    unban: {
+                        state: "permitted";
+                        realmId: string;
+                        accountId: string;
+                        observedAt: string;
+                        membershipRestored: false;
+                    };
+                    removal: {
+                        state: "unavailable";
+                    };
+                };
+            } | {
+                state: "absent";
+                accountId: string;
+                account: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                };
+            };
         };
         403: {
             type: unknown;
@@ -10584,8 +12905,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                 reason: string;
                 actor: string | null;
                 at: string;
+                account: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                };
+                moderator: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                } | null;
+                unban: {
+                    state: "permitted";
+                    realmId: string;
+                    accountId: string;
+                    observedAt: string;
+                    membershipRestored: false;
+                };
+                removal: {
+                    state: "unavailable";
+                };
             }[];
             next: string | null;
+            context: {
+                state: "available";
+                realmTitle: string;
+                spaceId: string;
+                spaceTitle: string;
+            } | {
+                state: "concealed";
+            };
+            viewer: {
+                accountId: string;
+                clientId: string;
+                requestedBy: string | null;
+                authnEpoch: number;
+                unban: {
+                    state: "permitted";
+                    operationId: "realm.unban";
+                    action: "realm:ban";
+                    resource: {
+                        route: number;
+                        id: string;
+                    };
+                    reauthorizes: true;
+                };
+            };
+            selected: {
+                state: "not-requested";
+            } | {
+                state: "current";
+                ban: {
+                    accountId: string;
+                    reason: string;
+                    actor: string | null;
+                    at: string;
+                    account: {
+                        state: "available";
+                        accountId: string;
+                        displayName: string | null;
+                        handle: string | null;
+                        label: string;
+                        destination: string | null;
+                    } | {
+                        state: "concealed";
+                        accountId: string;
+                        label: "Account";
+                        destination: null;
+                    };
+                    moderator: {
+                        state: "available";
+                        accountId: string;
+                        displayName: string | null;
+                        handle: string | null;
+                        label: string;
+                        destination: string | null;
+                    } | {
+                        state: "concealed";
+                        accountId: string;
+                        label: "Account";
+                        destination: null;
+                    } | null;
+                    unban: {
+                        state: "permitted";
+                        realmId: string;
+                        accountId: string;
+                        observedAt: string;
+                        membershipRestored: false;
+                    };
+                    removal: {
+                        state: "unavailable";
+                    };
+                };
+            } | {
+                state: "absent";
+                accountId: string;
+                account: {
+                    state: "available";
+                    accountId: string;
+                    displayName: string | null;
+                    handle: string | null;
+                    label: string;
+                    destination: string | null;
+                } | {
+                    state: "concealed";
+                    accountId: string;
+                    label: "Account";
+                    destination: null;
+                };
+            };
         };
         403: {
             type: unknown;
@@ -10628,6 +13072,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
         query: import("typebox").TObject<{
             limit: import("typebox").TOptional<import("typebox").TInteger>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
+            selectedAccountId: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -10697,8 +13142,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 reason: string;
                                 actor: string | null;
                                 at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
                             }[];
                             next: string | null;
+                            context: {
+                                state: "available";
+                                realmTitle: string;
+                                spaceId: string;
+                                spaceTitle: string;
+                            } | {
+                                state: "concealed";
+                            };
+                            viewer: {
+                                accountId: string;
+                                clientId: string;
+                                requestedBy: string | null;
+                                authnEpoch: number;
+                                unban: {
+                                    state: "permitted";
+                                    operationId: "realm.unban";
+                                    action: "realm:ban";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    reauthorizes: true;
+                                };
+                            };
+                            selected: {
+                                state: "not-requested";
+                            } | {
+                                state: "current";
+                                ban: {
+                                    accountId: string;
+                                    reason: string;
+                                    actor: string | null;
+                                    at: string;
+                                    account: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    };
+                                    moderator: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    } | null;
+                                    unban: {
+                                        state: "permitted";
+                                        realmId: string;
+                                        accountId: string;
+                                        observedAt: string;
+                                        membershipRestored: false;
+                                    };
+                                    removal: {
+                                        state: "unavailable";
+                                    };
+                                };
+                            } | {
+                                state: "absent";
+                                accountId: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                            };
                         };
                         output: {
                             items: {
@@ -10706,8 +13274,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 reason: string;
                                 actor: string | null;
                                 at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
                             }[];
                             next: string | null;
+                            context: {
+                                state: "available";
+                                realmTitle: string;
+                                spaceId: string;
+                                spaceTitle: string;
+                            } | {
+                                state: "concealed";
+                            };
+                            viewer: {
+                                accountId: string;
+                                clientId: string;
+                                requestedBy: string | null;
+                                authnEpoch: number;
+                                unban: {
+                                    state: "permitted";
+                                    operationId: "realm.unban";
+                                    action: "realm:ban";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    reauthorizes: true;
+                                };
+                            };
+                            selected: {
+                                state: "not-requested";
+                            } | {
+                                state: "current";
+                                ban: {
+                                    accountId: string;
+                                    reason: string;
+                                    actor: string | null;
+                                    at: string;
+                                    account: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    };
+                                    moderator: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    } | null;
+                                    unban: {
+                                        state: "permitted";
+                                        realmId: string;
+                                        accountId: string;
+                                        observedAt: string;
+                                        membershipRestored: false;
+                                    };
+                                    removal: {
+                                        state: "unavailable";
+                                    };
+                                };
+                            } | {
+                                state: "absent";
+                                accountId: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                            };
                         };
                     } | undefined;
                     validate(value: unknown): {
@@ -10717,8 +13408,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 reason: string;
                                 actor: string | null;
                                 at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
                             }[];
                             next: string | null;
+                            context: {
+                                state: "available";
+                                realmTitle: string;
+                                spaceId: string;
+                                spaceTitle: string;
+                            } | {
+                                state: "concealed";
+                            };
+                            viewer: {
+                                accountId: string;
+                                clientId: string;
+                                requestedBy: string | null;
+                                authnEpoch: number;
+                                unban: {
+                                    state: "permitted";
+                                    operationId: "realm.unban";
+                                    action: "realm:ban";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    reauthorizes: true;
+                                };
+                            };
+                            selected: {
+                                state: "not-requested";
+                            } | {
+                                state: "current";
+                                ban: {
+                                    accountId: string;
+                                    reason: string;
+                                    actor: string | null;
+                                    at: string;
+                                    account: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    };
+                                    moderator: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string | null;
+                                        handle: string | null;
+                                        label: string;
+                                        destination: string | null;
+                                    } | {
+                                        state: "concealed";
+                                        accountId: string;
+                                        label: "Account";
+                                        destination: null;
+                                    } | null;
+                                    unban: {
+                                        state: "permitted";
+                                        realmId: string;
+                                        accountId: string;
+                                        observedAt: string;
+                                        membershipRestored: false;
+                                    };
+                                    removal: {
+                                        state: "unavailable";
+                                    };
+                                };
+                            } | {
+                                state: "absent";
+                                accountId: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                            };
                         };
                         issues?: never;
                     } | {
@@ -10734,8 +13548,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 reason: import("typebox").TString;
                                 actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
                             }>>;
                             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            context: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                realmTitle: import("typebox").TString;
+                                spaceId: import("typebox").TString;
+                                spaceTitle: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                            }>]>;
+                            viewer: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                clientId: import("typebox").TString;
+                                requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                authnEpoch: import("typebox").TInteger;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    operationId: import("typebox").TLiteral<"realm.unban">;
+                                    action: import("typebox").TLiteral<"realm:ban">;
+                                    resource: import("typebox").TObject<{
+                                        route: import("typebox").TInteger;
+                                        id: import("typebox").TString;
+                                    }>;
+                                    reauthorizes: import("typebox").TLiteral<true>;
+                                }>;
+                            }>;
+                            selected: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"not-requested">;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"current">;
+                                ban: import("typebox").TObject<{
+                                    accountId: import("typebox").TString;
+                                    reason: import("typebox").TString;
+                                    actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    at: import("typebox").TString;
+                                    account: import("typebox").TUnion<[import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"available">;
+                                        accountId: import("typebox").TString;
+                                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        label: import("typebox").TString;
+                                        destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    }>, import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"concealed">;
+                                        accountId: import("typebox").TString;
+                                        label: import("typebox").TLiteral<"Account">;
+                                        destination: import("typebox").TNull;
+                                    }>]>;
+                                    moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"available">;
+                                        accountId: import("typebox").TString;
+                                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        label: import("typebox").TString;
+                                        destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    }>, import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"concealed">;
+                                        accountId: import("typebox").TString;
+                                        label: import("typebox").TLiteral<"Account">;
+                                        destination: import("typebox").TNull;
+                                    }>]>, import("typebox").TNull]>;
+                                    unban: import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"permitted">;
+                                        realmId: import("typebox").TString;
+                                        accountId: import("typebox").TString;
+                                        observedAt: import("typebox").TString;
+                                        membershipRestored: import("typebox").TLiteral<false>;
+                                    }>;
+                                    removal: import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"unavailable">;
+                                    }>;
+                                }>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"absent">;
+                                accountId: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                            }>]>;
                         }>;
                         output: () => import("typebox").TObject<{
                             items: import("typebox").TArray<import("typebox").TObject<{
@@ -10743,8 +13680,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 reason: import("typebox").TString;
                                 actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                                 at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
                             }>>;
                             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            context: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                realmTitle: import("typebox").TString;
+                                spaceId: import("typebox").TString;
+                                spaceTitle: import("typebox").TString;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                            }>]>;
+                            viewer: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                clientId: import("typebox").TString;
+                                requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                authnEpoch: import("typebox").TInteger;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    operationId: import("typebox").TLiteral<"realm.unban">;
+                                    action: import("typebox").TLiteral<"realm:ban">;
+                                    resource: import("typebox").TObject<{
+                                        route: import("typebox").TInteger;
+                                        id: import("typebox").TString;
+                                    }>;
+                                    reauthorizes: import("typebox").TLiteral<true>;
+                                }>;
+                            }>;
+                            selected: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"not-requested">;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"current">;
+                                ban: import("typebox").TObject<{
+                                    accountId: import("typebox").TString;
+                                    reason: import("typebox").TString;
+                                    actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    at: import("typebox").TString;
+                                    account: import("typebox").TUnion<[import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"available">;
+                                        accountId: import("typebox").TString;
+                                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        label: import("typebox").TString;
+                                        destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    }>, import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"concealed">;
+                                        accountId: import("typebox").TString;
+                                        label: import("typebox").TLiteral<"Account">;
+                                        destination: import("typebox").TNull;
+                                    }>]>;
+                                    moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"available">;
+                                        accountId: import("typebox").TString;
+                                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                        label: import("typebox").TString;
+                                        destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    }>, import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"concealed">;
+                                        accountId: import("typebox").TString;
+                                        label: import("typebox").TLiteral<"Account">;
+                                        destination: import("typebox").TNull;
+                                    }>]>, import("typebox").TNull]>;
+                                    unban: import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"permitted">;
+                                        realmId: import("typebox").TString;
+                                        accountId: import("typebox").TString;
+                                        observedAt: import("typebox").TString;
+                                        membershipRestored: import("typebox").TLiteral<false>;
+                                    }>;
+                                    removal: import("typebox").TObject<{
+                                        state: import("typebox").TLiteral<"unavailable">;
+                                    }>;
+                                }>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"absent">;
+                                accountId: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                            }>]>;
                         }>;
                     };
                 };
@@ -10829,6 +13889,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     query: {
         limit?: number;
         cursor?: string;
+        selectedAccountId?: string;
     };
     params: {
         realmId: string;
@@ -10855,8 +13916,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
         reason: string;
         actor: string | null;
         at: string;
+        account: {
+            state: "available";
+            accountId: string;
+            displayName: string | null;
+            handle: string | null;
+            label: string;
+            destination: string | null;
+        } | {
+            state: "concealed";
+            accountId: string;
+            label: "Account";
+            destination: null;
+        };
+        moderator: {
+            state: "available";
+            accountId: string;
+            displayName: string | null;
+            handle: string | null;
+            label: string;
+            destination: string | null;
+        } | {
+            state: "concealed";
+            accountId: string;
+            label: "Account";
+            destination: null;
+        } | null;
+        unban: {
+            state: "permitted";
+            realmId: string;
+            accountId: string;
+            observedAt: string;
+            membershipRestored: false;
+        };
+        removal: {
+            state: "unavailable";
+        };
     }[];
     next: string | null;
+    context: {
+        state: "available";
+        realmTitle: string;
+        spaceId: string;
+        spaceTitle: string;
+    } | {
+        state: "concealed";
+    };
+    viewer: {
+        accountId: string;
+        clientId: string;
+        requestedBy: string | null;
+        authnEpoch: number;
+        unban: {
+            state: "permitted";
+            operationId: "realm.unban";
+            action: "realm:ban";
+            resource: {
+                route: number;
+                id: string;
+            };
+            reauthorizes: true;
+        };
+    };
+    selected: {
+        state: "not-requested";
+    } | {
+        state: "current";
+        ban: {
+            accountId: string;
+            reason: string;
+            actor: string | null;
+            at: string;
+            account: {
+                state: "available";
+                accountId: string;
+                displayName: string | null;
+                handle: string | null;
+                label: string;
+                destination: string | null;
+            } | {
+                state: "concealed";
+                accountId: string;
+                label: "Account";
+                destination: null;
+            };
+            moderator: {
+                state: "available";
+                accountId: string;
+                displayName: string | null;
+                handle: string | null;
+                label: string;
+                destination: string | null;
+            } | {
+                state: "concealed";
+                accountId: string;
+                label: "Account";
+                destination: null;
+            } | null;
+            unban: {
+                state: "permitted";
+                realmId: string;
+                accountId: string;
+                observedAt: string;
+                membershipRestored: false;
+            };
+            removal: {
+                state: "unavailable";
+            };
+        };
+    } | {
+        state: "absent";
+        accountId: string;
+        account: {
+            state: "available";
+            accountId: string;
+            displayName: string | null;
+            handle: string | null;
+            label: string;
+            destination: string | null;
+        } | {
+            state: "concealed";
+            accountId: string;
+            label: "Account";
+            destination: null;
+        };
+    };
 }>, {
     params: import("typebox").TObject<{
         realmId: import("typebox").TString;
@@ -10864,6 +14048,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<import("typebox").TInteger>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        selectedAccountId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -10933,8 +14118,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                     output: {
                         items: {
@@ -10942,8 +14250,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                 } | undefined;
                 validate(value: unknown): {
@@ -10953,8 +14384,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: string;
                             actor: string | null;
                             at: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                            moderator: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            } | null;
+                            unban: {
+                                state: "permitted";
+                                realmId: string;
+                                accountId: string;
+                                observedAt: string;
+                                membershipRestored: false;
+                            };
+                            removal: {
+                                state: "unavailable";
+                            };
                         }[];
                         next: string | null;
+                        context: {
+                            state: "available";
+                            realmTitle: string;
+                            spaceId: string;
+                            spaceTitle: string;
+                        } | {
+                            state: "concealed";
+                        };
+                        viewer: {
+                            accountId: string;
+                            clientId: string;
+                            requestedBy: string | null;
+                            authnEpoch: number;
+                            unban: {
+                                state: "permitted";
+                                operationId: "realm.unban";
+                                action: "realm:ban";
+                                resource: {
+                                    route: number;
+                                    id: string;
+                                };
+                                reauthorizes: true;
+                            };
+                        };
+                        selected: {
+                            state: "not-requested";
+                        } | {
+                            state: "current";
+                            ban: {
+                                accountId: string;
+                                reason: string;
+                                actor: string | null;
+                                at: string;
+                                account: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                };
+                                moderator: {
+                                    state: "available";
+                                    accountId: string;
+                                    displayName: string | null;
+                                    handle: string | null;
+                                    label: string;
+                                    destination: string | null;
+                                } | {
+                                    state: "concealed";
+                                    accountId: string;
+                                    label: "Account";
+                                    destination: null;
+                                } | null;
+                                unban: {
+                                    state: "permitted";
+                                    realmId: string;
+                                    accountId: string;
+                                    observedAt: string;
+                                    membershipRestored: false;
+                                };
+                                removal: {
+                                    state: "unavailable";
+                                };
+                            };
+                        } | {
+                            state: "absent";
+                            accountId: string;
+                            account: {
+                                state: "available";
+                                accountId: string;
+                                displayName: string | null;
+                                handle: string | null;
+                                label: string;
+                                destination: string | null;
+                            } | {
+                                state: "concealed";
+                                accountId: string;
+                                label: "Account";
+                                destination: null;
+                            };
+                        };
                     };
                     issues?: never;
                 } | {
@@ -10970,8 +14524,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: import("typebox").TString;
                             actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                            moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>, import("typebox").TNull]>;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                realmId: import("typebox").TString;
+                                accountId: import("typebox").TString;
+                                observedAt: import("typebox").TString;
+                                membershipRestored: import("typebox").TLiteral<false>;
+                            }>;
+                            removal: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        context: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            realmTitle: import("typebox").TString;
+                            spaceId: import("typebox").TString;
+                            spaceTitle: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"concealed">;
+                        }>]>;
+                        viewer: import("typebox").TObject<{
+                            accountId: import("typebox").TString;
+                            clientId: import("typebox").TString;
+                            requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            authnEpoch: import("typebox").TInteger;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                operationId: import("typebox").TLiteral<"realm.unban">;
+                                action: import("typebox").TLiteral<"realm:ban">;
+                                resource: import("typebox").TObject<{
+                                    route: import("typebox").TInteger;
+                                    id: import("typebox").TString;
+                                }>;
+                                reauthorizes: import("typebox").TLiteral<true>;
+                            }>;
+                        }>;
+                        selected: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"not-requested">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"current">;
+                            ban: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                reason: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
+                            }>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"absent">;
+                            accountId: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                        }>]>;
                     }>;
                     output: () => import("typebox").TObject<{
                         items: import("typebox").TArray<import("typebox").TObject<{
@@ -10979,8 +14656,131 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             reason: import("typebox").TString;
                             actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             at: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                            moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>, import("typebox").TNull]>;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                realmId: import("typebox").TString;
+                                accountId: import("typebox").TString;
+                                observedAt: import("typebox").TString;
+                                membershipRestored: import("typebox").TLiteral<false>;
+                            }>;
+                            removal: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>;
                         }>>;
                         next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        context: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            realmTitle: import("typebox").TString;
+                            spaceId: import("typebox").TString;
+                            spaceTitle: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"concealed">;
+                        }>]>;
+                        viewer: import("typebox").TObject<{
+                            accountId: import("typebox").TString;
+                            clientId: import("typebox").TString;
+                            requestedBy: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            authnEpoch: import("typebox").TInteger;
+                            unban: import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"permitted">;
+                                operationId: import("typebox").TLiteral<"realm.unban">;
+                                action: import("typebox").TLiteral<"realm:ban">;
+                                resource: import("typebox").TObject<{
+                                    route: import("typebox").TInteger;
+                                    id: import("typebox").TString;
+                                }>;
+                                reauthorizes: import("typebox").TLiteral<true>;
+                            }>;
+                        }>;
+                        selected: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"not-requested">;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"current">;
+                            ban: import("typebox").TObject<{
+                                accountId: import("typebox").TString;
+                                reason: import("typebox").TString;
+                                actor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                at: import("typebox").TString;
+                                account: import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>;
+                                moderator: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"available">;
+                                    accountId: import("typebox").TString;
+                                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    label: import("typebox").TString;
+                                    destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                }>, import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"concealed">;
+                                    accountId: import("typebox").TString;
+                                    label: import("typebox").TLiteral<"Account">;
+                                    destination: import("typebox").TNull;
+                                }>]>, import("typebox").TNull]>;
+                                unban: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"permitted">;
+                                    realmId: import("typebox").TString;
+                                    accountId: import("typebox").TString;
+                                    observedAt: import("typebox").TString;
+                                    membershipRestored: import("typebox").TLiteral<false>;
+                                }>;
+                                removal: import("typebox").TObject<{
+                                    state: import("typebox").TLiteral<"unavailable">;
+                                }>;
+                            }>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"absent">;
+                            accountId: import("typebox").TString;
+                            account: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                accountId: import("typebox").TString;
+                                displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                label: import("typebox").TString;
+                                destination: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"concealed">;
+                                accountId: import("typebox").TString;
+                                label: import("typebox").TLiteral<"Account">;
+                                destination: import("typebox").TNull;
+                            }>]>;
+                        }>]>;
                     }>;
                 };
             };

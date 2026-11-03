@@ -1,6 +1,7 @@
+import type { OwnMediaDependencies } from './own-media.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { type MediaDependencies } from './media.ts';
-type Dependencies = MediaDependencies & {
+type Dependencies = MediaDependencies & OwnMediaDependencies & {
     routeKey: Uint8Array;
 };
 export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -5154,6 +5155,132 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                         error: never;
                     };
                 };
+            };
+        };
+    };
+} & {
+    v1: {
+        media: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        availability: "available";
+                        entries: {
+                            id: string;
+                            purpose: "avatar" | "cover" | "post-image" | "realm-banner" | "realm-icon";
+                            state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
+                            declaredMediaType: string | null;
+                            actualMediaType: string | null;
+                            declaredByteCount: number | null;
+                            actualByteCount: number | null;
+                            createdAt: string;
+                            claimedAt: string | null;
+                            collectionPending: boolean;
+                            takenDown: boolean;
+                            container: {
+                                id: string;
+                                kind: "account" | "post" | "realm" | "thread";
+                            } | null;
+                            actions: {
+                                read: {
+                                    operationId: "media.authorize_download";
+                                    variants: string[];
+                                    recheckAtUse: true;
+                                } | null;
+                                remove: {
+                                    operationId: string;
+                                } | null;
+                                resume: {
+                                    operationId: "media.read_reservation";
+                                    mode: "processing" | "same-reservation";
+                                    requiresOriginalFile: true;
+                                } | null;
+                                retry: {
+                                    operationId: "media.create";
+                                    guidance: "choose-new-file";
+                                } | null;
+                            };
+                        }[];
+                        nextCursor: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    500: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
             };
         };
     };

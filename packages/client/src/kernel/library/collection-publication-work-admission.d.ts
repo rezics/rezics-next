@@ -46,6 +46,8 @@ export type CollectionPublicationWorkDefinition = Readonly<{
 }> & Extract<CollectionPublicationPhase, {
     phase: 'staging' | 'awaiting_activation';
 }>;
+/** Preparation may advance only an original committed episode, before any private Source IO. */
+export declare function admitCollectionPublicationSourcePreparation(tx: OperationalTransaction, locator: CollectionPublicationLocator): Promise<boolean>;
 /** Getter data alone is never admission or completion. Recheck the SAME native client on each use.
  * Missing original provenance is unavailable, never ready-empty. Source initialization cannot
  * start from a bare locator while its owning episode reader is absent.

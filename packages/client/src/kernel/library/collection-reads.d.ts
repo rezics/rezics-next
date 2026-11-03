@@ -88,6 +88,12 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
+    withViewerFacts: <T extends {
+        members: readonly {
+            subjectId: string;
+            id?: string;
+        }[];
+    }>(viewer: Actor, result: T, deadline?: number) => Promise<T>;
     readSitemapCollection: (collectionId: string, deadline: number) => Promise<{
         id: string;
         lastModified: string;

@@ -532,6 +532,61 @@ async function selectRecording(
     const subjectLinks = /^\/v1\/subjects\/([^/]+)\/links$/.exec(pathname);
     if (subjectLinks?.[1] && decodeURIComponent(subjectLinks[1]) === resourceId(recordings.subject, 'subject'))
       return recordings['subject-links'];
+    const boardOpening = /^\/v1\/boards\/([^/]+)\/page$/.exec(pathname);
+    const boardId = boardOpening?.[1] ? decodeURIComponent(boardOpening[1]) : undefined;
+    const boardKey = ['board', 'board-realm'].find((key) => resourceId(recordings[key], 'board') === boardId);
+    if (boardId && boardKey) {
+      const boardRecord = recordings[boardKey];
+      const boardPage = recordings[boardKey === 'board-realm' ? 'board-realm-threads' : 'board-threads'];
+      const identities = Array.isArray(recordings.accounts?.accounts) ? recordings.accounts.accounts : [];
+      const cards = (values: unknown) =>
+        (Array.isArray(values) ? values : []).map((value) => {
+          const thread = isRecord(value) ? value : {};
+          const firstPost = isRecord(thread.firstPost) ? thread.firstPost : {};
+          const author = (id: unknown) => {
+            const identity = identities.find((item) => isRecord(item) && item.id === id);
+            return isRecord(identity) && identity.state === 'active'
+              ? {
+                  state: 'available',
+                  id: identity.id,
+                  kind: identity.kind,
+                  handle: identity.handle,
+                  displayName: identity.displayName,
+                  automated: identity.automated,
+                }
+              : { state: 'unavailable' };
+          };
+          const hasMedia = Array.isArray(firstPost.mediaIds) && firstPost.mediaIds.length > 0;
+          return {
+            thread,
+            target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
+            authors: { thread: author(thread.authorId), openingPost: author(firstPost.authorId) },
+            media: hasMedia ? { state: 'unavailable', images: [] } : { state: 'none', images: [] },
+            interaction: {
+              target: { kind: 'thread', id: thread.id },
+              counts: { state: 'unavailable' },
+              viewer: { state: 'not-applicable' },
+            },
+            comments: { state: 'unavailable' },
+            actions: {
+              reply: request.headers.has('authorization') ? 'allowed' : 'sign-in',
+              react: request.headers.has('authorization') ? 'allowed' : 'sign-in',
+              share: 'available',
+            },
+          };
+        });
+      return {
+        status: 200,
+        board: boardRecord?.board,
+        pinnedThreads: cards(boardPage?.pinnedThreads),
+        threads: cards(boardPage?.threads),
+        next: typeof boardPage?.next === 'string' ? boardPage.next : null,
+        rankRefreshedAt: typeof boardPage?.rankRefreshedAt === 'string' ? boardPage.rankRefreshedAt : null,
+        reactionsAsOf: null,
+        viewer: { participation: request.headers.has('authorization') ? 'allowed' : 'sign-in' },
+        actions: { createThread: request.headers.has('authorization') ? 'allowed' : 'sign-in' },
+      };
+    }
     const boardThreads = /^\/v1\/boards\/([^/]+)\/threads$/.exec(pathname);
     if (boardThreads?.[1] && decodeURIComponent(boardThreads[1]) === resourceId(recordings.board, 'board'))
       return recordings['board-threads'];

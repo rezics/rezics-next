@@ -1,3 +1,5 @@
+import { type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { type AnchoredPosition, type ReadContext } from './model.ts';
 import { type ItemView, type ContentReadDependencies, type ThreadView } from './reads.ts';
 export type AuthorThreadKind = 'discussion' | 'review';
@@ -24,5 +26,12 @@ export type AuthorPage<T> = {
     nextCursor: string | null;
     anchors: readonly AnchoredPosition[];
 };
+type Key = {
+    createdAt: string;
+    itemId: string;
+};
+export declare function encodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, key: Key, epoch: number, now: number): string;
+export declare function decodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, token: string, epoch: number, now: number): Key;
 export declare function listAuthorThreads(dependencies: AuthorItemDependencies, accountId: string, context: ReadContext, input?: AuthorThreadPageInput): Promise<AuthorPage<ThreadView>>;
 export declare function listAuthorPosts(dependencies: AuthorItemDependencies, accountId: string, context: ReadContext, input?: AuthorPageInput): Promise<AuthorPage<AuthorPostEntry>>;
+export {};

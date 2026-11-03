@@ -15,6 +15,12 @@ export type ReportTarget = Readonly<{
 }> | Readonly<{
     kind: 'subject';
     id: string;
+}> | Readonly<{
+    kind: 'space';
+    id: string;
+}> | Readonly<{
+    kind: 'realm';
+    id: string;
 }>;
 export declare const CATALOGUE_REPORT_PAGE_LIMIT = 50;
 export declare const SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE = 4;
@@ -75,7 +81,33 @@ export declare class ReportProofUnavailableError extends Error {
 export declare function createReport(dependencies: ReportDependencies, actor: Actor, input: ReportInput, context: ReportRequestContext): Promise<CommandOutcome<Readonly<{
     reportId: ReportId;
 }>>>;
+/** Reporter retention uses the native current account policy independently of
+ * target readership and inspection. This is also the own-inventory admission. */
+export declare function reporterHistoryAuthority(dependencies: ReportDependencies, context: ReadContext): Promise<Anchored<boolean>>;
+/** Private submitted fields come from the original cases, grouped by native
+ * home, only after current recipient authorization on every fill/recheck. */
+export declare function readReporterHistoryCases(dependencies: ReportDependencies, ids: readonly string[], context: ReadContext): Promise<ReadonlyMap<string, ReportView>>;
 export declare function readReport(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<Anchored<ReportView | null>>;
+/** Minimal current projection for an outcome notice owned by its reporter.
+ * It does not load report reason/evidence or inspect the target body. */
+export declare function readReporterNoticeOutcome(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<{
+    anchor: Readonly<{
+        partition: import("../partition/partition.ts").Partition;
+        epoch: number;
+        position: bigint;
+    }>;
+    value: {
+        id: string;
+        target: {
+            kind: "board" | "post" | "realm" | "space" | "subject" | "thread";
+            id: string;
+        };
+        threadId: string | null;
+        outcome: "actioned" | "dismissed" | null;
+        resolvedAt: string | null;
+        reporterId: string | null;
+    };
+} | null>;
 /** Closed reporter projection, independent of the required moderator/list fields. */
 export declare function reportReadView(report: ReportView): ReportReadView;
 export declare function listTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ReportView>>;

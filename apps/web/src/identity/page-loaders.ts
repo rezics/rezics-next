@@ -1,9 +1,8 @@
-import type { KernelClient } from '@rezics/client';
+import type { BoardPageResponse, KernelClient } from '@rezics/client';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
-import { boardRealmId, readBoardRealm, type BoardRealm } from '../threads/board-context';
 import { boardCommunitySource, type BoardCommunitySource } from '../threads/board-community-source';
 import { readThreadSubjects, type ThreadSubject } from '../threads/subjects';
 import { loadThreadPage, type LoadedThreadPage, type ThreadSlugRedirect } from '../threads/thread-page';
@@ -11,8 +10,9 @@ import { BoardPageCursorError, disclosedBoardAuthorIds, isInvalidBoardCursor } f
 import { readPageAuthors, type PageAuthors } from './read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
-type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
+export type BoardPageAuthor = Extract<BoardPageResponse['threads'][number]['authors']['thread'], { state: 'available' }>;
+export type BoardPageAuthors = Record<string, BoardPageAuthor> | null;
 export type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
 
 function checkRead<T>(
@@ -34,48 +34,53 @@ export async function loadBoardPageWithAuthors(
   data: PageInput,
   authorization?: string | null,
 ): Promise<{
-  board: Board['board'];
+  board: BoardPageResponse['board'];
   community: BoardCommunitySource;
-  realm?: BoardRealm;
+  openingCards: Readonly<Record<string, BoardPageResponse['threads'][number]>>;
+  viewer: BoardPageResponse['viewer'];
+  actions: BoardPageResponse['actions'];
   threads: ThreadPage;
-  authors: PageAuthors;
+  authors: BoardPageAuthors;
   now: string;
 }> {
   const now = new Date().toISOString();
-  // Active is the default; New is the kernel's own order and sends no sort.
-  const sort: 'active' | 'hot' | undefined = data.sort === 'new' ? undefined : (data.sort ?? 'active');
+  const sort: 'new' | 'active' | 'hot' = data.sort ?? 'active';
   const query = {
-    query: { ...(data.cursor ? { cursor: data.cursor } : {}), ...(sort ? { sort } : {}) },
+    query: { ...(data.cursor ? { cursor: data.cursor } : {}), sort },
+    ...(authorization ? { headers: { authorization } } : {}),
   };
-  // The Realm read follows the board read, beside the thread list.
-  const boardRead = client
-    .boards({ id: data.id })
-    .get(authorization ? { headers: { authorization } } : {})
-    .then(async (result) => ({
-      result,
-      realm:
-        result.data?.board.id === data.id
-          ? await readBoardRealm(client, boardRealmId(result.data.board), authorization)
-          : undefined,
-    }));
-  const [{ result: boardResult, realm }, threadsResult] = await Promise.all([
-    boardRead,
-    client.boards({ id: data.id }).threads.get({
-      ...query,
-      ...(authorization ? { headers: { authorization } } : {}),
-    }),
-  ]);
-  const board = checkRead<Board>(boardResult, 'board');
-  const threads = checkRead<ThreadPage>(threadsResult, 'board threads', {
-    boardId: data.id,
-    ...(data.sort === undefined ? {} : { sort: data.sort }),
-  });
-  if (board.board.id !== data.id) throw notFound();
-  const authors = await readPageAuthors(client, disclosedBoardAuthorIds(threads.pinnedThreads, threads.threads));
+  const response = checkRead<BoardPageResponse>(
+    await client.boards({ id: data.id }).page.get(query),
+    'board opening page',
+    {
+      boardId: data.id,
+      ...(data.sort === undefined ? {} : { sort: data.sort }),
+    },
+  );
+  if (response.board.id !== data.id) throw notFound();
+  const threads: ThreadPage = {
+    pinnedThreads: response.pinnedThreads.map((card) => card.thread),
+    threads: response.threads.map((card) => card.thread),
+    next: response.next,
+    rankRefreshedAt: response.rankRefreshedAt,
+  };
+  const openingCards: Record<string, BoardPageResponse['threads'][number]> = {};
+  for (const card of [...response.pinnedThreads, ...response.threads])
+    openingCards[card.thread.id] ??= card;
+  const authors: Record<string, BoardPageAuthor> = {};
+  for (const card of Object.values(openingCards)) {
+    for (const author of [card.authors.thread, card.authors.openingPost]) {
+      if (author.state === 'available') authors[author.id] ??= author;
+    }
+  }
+  const board = response.board;
+  const community = boardCommunitySource(board);
   return {
-    board: board.board,
-    community: boardCommunitySource(board.board),
-    ...(realm ? { realm } : {}),
+    board,
+    community,
+    openingCards,
+    viewer: response.viewer,
+    actions: response.actions,
     threads,
     authors,
     now,

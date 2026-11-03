@@ -183,19 +183,8 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
     fetch: async (inputUrl, init) => {
       const request = new Request(inputUrl, init);
       const { pathname } = new URL(request.url);
-      if (pathname === `/v1/boards/${input.id}`)
-        return Response.json({
-          ...boardRecording,
-          board: {
-            ...boardRecording.board,
-            id: input.id,
-            title: `${label} Board`,
-            visibility: input.credentialMode === 'session' ? 'protected' : 'public',
-          },
-        });
-      if (pathname === `/v1/boards/${input.id}/threads`)
-        return Response.json({
-          threads: threadsRecording.threads.map((thread) => ({
+      if (pathname === `/v1/boards/${input.id}/page`) {
+        const threads = threadsRecording.threads.map((thread) => ({
             ...thread,
             boardId: input.id,
             title: `${label} Thread`,
@@ -204,10 +193,49 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
               boardId: input.id,
               body: fromPlainText(`${label} opening text`, 'blocks'),
             },
+          }));
+        const author = (id: string) => {
+          const account = accountsRecording.accounts.find((entry) => entry.id === id);
+          return account
+            ? {
+                state: 'available',
+                id: account.id,
+                kind: account.kind,
+                handle: account.handle,
+                displayName: account.displayName,
+                automated: false,
+              }
+            : { state: 'unavailable' };
+        };
+        const advice = request.headers.has('authorization') ? 'allowed' : 'sign-in';
+        return Response.json({
+          board: {
+            ...boardRecording.board,
+            id: input.id,
+            title: `${label} Board`,
+            visibility: input.credentialMode === 'session' ? 'protected' : 'public',
+          },
+          pinnedThreads: [],
+          threads: threads.map((thread) => ({
+            thread,
+            target: { kind: 'thread', id: thread.id, boardId: input.id },
+            authors: { thread: author(thread.authorId), openingPost: author(thread.firstPost.authorId) },
+            media: { state: 'none', images: [] },
+            interaction: {
+              target: { kind: 'thread', id: thread.id },
+              counts: { state: 'unavailable' },
+              viewer: { state: 'not-applicable' },
+            },
+            comments: { state: 'unavailable' },
+            actions: { reply: advice, react: advice, share: 'available' },
           })),
           next: null,
+          rankRefreshedAt: null,
+          reactionsAsOf: null,
+          viewer: { participation: advice },
+          actions: { createThread: advice },
         });
-      if (pathname === '/v1/accounts') return Response.json(accountsRecording);
+      }
       throw new Error(`Unexpected Board fixture request ${pathname}`);
     },
   });

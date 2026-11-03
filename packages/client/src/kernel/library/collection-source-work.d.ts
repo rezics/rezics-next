@@ -81,6 +81,11 @@ export declare class CollectionSourceLedger {
     bounded<T>(cost: Partial<WorkDimensions>, operation: () => Promise<T>, actual?: (result: T) => Partial<WorkDimensions>): Promise<T>;
 }
 import type { WorkContext } from '../work/registry.ts';
+type SourceLocator = {
+    accounts: [string];
+    collectionId: string;
+};
+export declare function advanceCollectionSourceWork(context: WorkContext, input: SourceLocator): Promise<'ready' | 'more' | 'unavailable'>;
 /** The existing Library worker owns native checkpoints. No Source GET writes, scheduler or new participant. */
 export declare function registerCollectionSourceWork(context: WorkContext): Promise<void>;
 export { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION, declareLibraryIdentityStatement, assembleLibraryIdentityOriginalComponents, LIBRARY_IDENTITY_CHECKOUT_WORK, LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS, assembleLibraryIdentitySelectedBodies, LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES, LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS, } from './identity-original-work.ts';

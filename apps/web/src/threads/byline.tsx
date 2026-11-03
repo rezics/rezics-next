@@ -8,6 +8,16 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthor } from '../identity/read';
 import { coverSrc } from '../media/cover-src';
 
+type BoardBylineAuthor = Readonly<{
+  state: 'available';
+  id: string;
+  kind: 'actor' | 'organization';
+  handle: string | null;
+  displayName: string | null;
+  automated: boolean;
+}>;
+type BylineAuthor = PageAuthor | BoardBylineAuthor;
+
 const minute = 60_000;
 const hour = 60 * minute;
 const day = 24 * hour;
@@ -49,7 +59,7 @@ export function Byline({
   className,
   children,
 }: {
-  author: PageAuthor | undefined;
+  author: BylineAuthor | undefined;
   createdAt: string;
   revisedAt?: string | null | undefined;
   now: string;

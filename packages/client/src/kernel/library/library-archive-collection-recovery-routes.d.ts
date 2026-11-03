@@ -5190,7 +5190,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                             expiresAt: string;
                             privacy: "private";
                             completeness: "supported-native-facts";
-                            sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                             omissions: {
                                 trash: string;
                                 providerIdentifiers: string;
@@ -5202,9 +5202,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                             fullExport: false;
                             rows: number;
                             recordBytes: number;
+                        } | {
+                            format: "https://rezics.com/formats/library-export";
+                            exportId: string;
+                            capturedAt: string;
+                            expiresAt: string;
+                            privacy: "private";
+                            completeness: "supported-native-facts";
+                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                            omissions: {
+                                trash: string;
+                                providerIdentifiers: string;
+                                personalImportEvidence: string;
+                                commerce: string;
+                                publication: string;
+                                reimport: string;
+                            };
+                            fullExport: false;
+                            rows: number;
+                            recordBytes: number;
+                            version: 2;
+                            coverage: "private-library-owner-facts-v2";
+                            sectionTotals: {
+                                [x: string]: {
+                                    rows: number;
+                                    recordBytes: number;
+                                };
+                                [x: number]: {
+                                    rows: number;
+                                    recordBytes: number;
+                                };
+                            };
                         } | null;
                         coverage: {
-                            section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                            section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                             capture: "empty" | "present";
                             treatment: "requires-explicit-mapping" | "retained-unsupported";
                             rows: number;
@@ -5219,6 +5250,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                             reviewId: string;
                             digest: string;
                         } | null;
+                        fullRestoration: false;
+                        presentation: {
+                            state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                            kind: string | null;
+                            source: "alternative" | "archived" | "mixed" | null;
+                            releaseDigest: string | null;
+                            reason: string | null;
+                        };
                         pin: {
                             state: "applied" | "none" | "pending" | "unsupported";
                             reason: string | null;
@@ -5332,7 +5371,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                 expiresAt: string;
                                 privacy: "private";
                                 completeness: "supported-native-facts";
-                                sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                 omissions: {
                                     trash: string;
                                     providerIdentifiers: string;
@@ -5344,9 +5383,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                 fullExport: false;
                                 rows: number;
                                 recordBytes: number;
+                            } | {
+                                format: "https://rezics.com/formats/library-export";
+                                exportId: string;
+                                capturedAt: string;
+                                expiresAt: string;
+                                privacy: "private";
+                                completeness: "supported-native-facts";
+                                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                omissions: {
+                                    trash: string;
+                                    providerIdentifiers: string;
+                                    personalImportEvidence: string;
+                                    commerce: string;
+                                    publication: string;
+                                    reimport: string;
+                                };
+                                fullExport: false;
+                                rows: number;
+                                recordBytes: number;
+                                version: 2;
+                                coverage: "private-library-owner-facts-v2";
+                                sectionTotals: {
+                                    [x: string]: {
+                                        rows: number;
+                                        recordBytes: number;
+                                    };
+                                    [x: number]: {
+                                        rows: number;
+                                        recordBytes: number;
+                                    };
+                                };
                             } | null;
                             coverage: {
-                                section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                 capture: "empty" | "present";
                                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                                 rows: number;
@@ -5361,6 +5431,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                 reviewId: string;
                                 digest: string;
                             } | null;
+                            fullRestoration: false;
+                            presentation: {
+                                state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                kind: string | null;
+                                source: "alternative" | "archived" | "mixed" | null;
+                                releaseDigest: string | null;
+                                reason: string | null;
+                            };
                             pin: {
                                 state: "applied" | "none" | "pending" | "unsupported";
                                 reason: string | null;
@@ -5479,7 +5557,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -5491,9 +5569,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    omissions: {
+                                        trash: string;
+                                        providerIdentifiers: string;
+                                        personalImportEvidence: string;
+                                        commerce: string;
+                                        publication: string;
+                                        reimport: string;
+                                    };
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    version: 2;
+                                    coverage: "private-library-owner-facts-v2";
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                                 coverage: {
-                                    section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -5508,6 +5617,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     reviewId: string;
                                     digest: string;
                                 } | null;
+                                fullRestoration: false;
+                                presentation: {
+                                    state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                    kind: string | null;
+                                    source: "alternative" | "archived" | "mixed" | null;
+                                    releaseDigest: string | null;
+                                    reason: string | null;
+                                };
                                 pin: {
                                     state: "applied" | "none" | "pending" | "unsupported";
                                     reason: string | null;
@@ -5648,7 +5765,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             expiresAt: string;
                                             privacy: "private";
                                             completeness: "supported-native-facts";
-                                            sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                             omissions: {
                                                 trash: string;
                                                 providerIdentifiers: string;
@@ -5660,9 +5777,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             fullExport: false;
                                             rows: number;
                                             recordBytes: number;
+                                        } | {
+                                            format: "https://rezics.com/formats/library-export";
+                                            exportId: string;
+                                            capturedAt: string;
+                                            expiresAt: string;
+                                            privacy: "private";
+                                            completeness: "supported-native-facts";
+                                            sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                            omissions: {
+                                                trash: string;
+                                                providerIdentifiers: string;
+                                                personalImportEvidence: string;
+                                                commerce: string;
+                                                publication: string;
+                                                reimport: string;
+                                            };
+                                            fullExport: false;
+                                            rows: number;
+                                            recordBytes: number;
+                                            version: 2;
+                                            coverage: "private-library-owner-facts-v2";
+                                            sectionTotals: {
+                                                [x: string]: {
+                                                    rows: number;
+                                                    recordBytes: number;
+                                                };
+                                                [x: number]: {
+                                                    rows: number;
+                                                    recordBytes: number;
+                                                };
+                                            };
                                         } | null;
                                         coverage: {
-                                            section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                            section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                             capture: "empty" | "present";
                                             treatment: "requires-explicit-mapping" | "retained-unsupported";
                                             rows: number;
@@ -5677,6 +5825,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             reviewId: string;
                                             digest: string;
                                         } | null;
+                                        fullRestoration: false;
+                                        presentation: {
+                                            state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                            kind: string | null;
+                                            source: "alternative" | "archived" | "mixed" | null;
+                                            releaseDigest: string | null;
+                                            reason: string | null;
+                                        };
                                         pin: {
                                             state: "applied" | "none" | "pending" | "unsupported";
                                             reason: string | null;
@@ -5700,6 +5856,8 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                             visibilityDisposition: string;
                                             unsupported: string | null;
                                             presentationDisposition: string;
+                                            presentationAdmissible: boolean;
+                                            presentationReleaseDigest: string | null;
                                         } | null;
                                         occurrences: {
                                             sourceOccurrenceId: string;
@@ -5807,6 +5965,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     post: {
                         body: {
                             collectionId: string;
+                            presentationKind?: string | null;
                             selectedOccurrenceIds: string[];
                             mappings: {
                                 sourceSubjectId: string;
@@ -5834,7 +5993,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -5846,9 +6005,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    omissions: {
+                                        trash: string;
+                                        providerIdentifiers: string;
+                                        personalImportEvidence: string;
+                                        commerce: string;
+                                        publication: string;
+                                        reimport: string;
+                                    };
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    version: 2;
+                                    coverage: "private-library-owner-facts-v2";
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                                 coverage: {
-                                    section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -5863,11 +6053,24 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     reviewId: string;
                                     digest: string;
                                 } | null;
+                                fullRestoration: false;
+                                presentation: {
+                                    state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                    kind: string | null;
+                                    source: "alternative" | "archived" | "mixed" | null;
+                                    releaseDigest: string | null;
+                                    reason: string | null;
+                                };
                                 sectionReasons: Record<string, string>;
                                 review: {
                                     reviewId: string;
                                     digest: string;
                                     epoch: number;
+                                    presentation: {
+                                        kind: string | null;
+                                        releaseDigest: string | null;
+                                        source: "alternative" | "archived" | "mixed";
+                                    };
                                     completeOrder: boolean;
                                     completeMembership: boolean;
                                     selectedOccurrences: number;
@@ -6005,7 +6208,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -6017,9 +6220,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    omissions: {
+                                        trash: string;
+                                        providerIdentifiers: string;
+                                        personalImportEvidence: string;
+                                        commerce: string;
+                                        publication: string;
+                                        reimport: string;
+                                    };
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    version: 2;
+                                    coverage: "private-library-owner-facts-v2";
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                                 coverage: {
-                                    section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -6034,6 +6268,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     reviewId: string;
                                     digest: string;
                                 } | null;
+                                fullRestoration: false;
+                                presentation: {
+                                    state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                    kind: string | null;
+                                    source: "alternative" | "archived" | "mixed" | null;
+                                    releaseDigest: string | null;
+                                    reason: string | null;
+                                };
                                 pin: {
                                     state: "applied" | "none" | "pending" | "unsupported";
                                     reason: string | null;
@@ -6153,7 +6395,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                                     omissions: {
                                         trash: string;
                                         providerIdentifiers: string;
@@ -6165,9 +6407,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                                    omissions: {
+                                        trash: string;
+                                        providerIdentifiers: string;
+                                        personalImportEvidence: string;
+                                        commerce: string;
+                                        publication: string;
+                                        reimport: string;
+                                    };
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    version: 2;
+                                    coverage: "private-library-owner-facts-v2";
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                                 coverage: {
-                                    section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                    section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                                     capture: "empty" | "present";
                                     treatment: "requires-explicit-mapping" | "retained-unsupported";
                                     rows: number;
@@ -6182,6 +6455,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                                     reviewId: string;
                                     digest: string;
                                 } | null;
+                                fullRestoration: false;
+                                presentation: {
+                                    state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                                    kind: string | null;
+                                    source: "alternative" | "archived" | "mixed" | null;
+                                    releaseDigest: string | null;
+                                    reason: string | null;
+                                };
                                 pin: {
                                     state: "applied" | "none" | "pending" | "unsupported";
                                     reason: string | null;
@@ -6423,7 +6704,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
             state: import("typebox").TUnion<[import("typebox").TLiteral<"preview">, import("typebox").TLiteral<"reviewed">, import("typebox").TLiteral<"applying">, import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">]>;
             createdAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             expiresAt: import("typebox").TString;
-            manifest: import("typebox").TUnion<[import("typebox").TObject<{
+            manifest: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                 format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                 version: import("typebox").TLiteral<1>;
                 exportId: import("typebox").TString;
@@ -6431,7 +6712,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -6443,9 +6724,36 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-            }>, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+                exportId: import("typebox").TString;
+                capturedAt: import("typebox").TString;
+                expiresAt: import("typebox").TString;
+                privacy: import("typebox").TLiteral<"private">;
+                completeness: import("typebox").TLiteral<"supported-native-facts">;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                omissions: import("typebox").TObject<{
+                    trash: import("typebox").TString;
+                    providerIdentifiers: import("typebox").TString;
+                    personalImportEvidence: import("typebox").TString;
+                    commerce: import("typebox").TString;
+                    publication: import("typebox").TString;
+                    reimport: import("typebox").TString;
+                }>;
+                fullExport: import("typebox").TLiteral<false>;
+                rows: import("typebox").TInteger;
+                recordBytes: import("typebox").TInteger;
+                version: import("typebox").TLiteral<2>;
+                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                sectionTotals: import("typebox").TObject<{
+                    [k: string]: import("typebox").TObject<{
+                        rows: import("typebox").TInteger;
+                        recordBytes: import("typebox").TInteger;
+                    }>;
+                }>;
+            }>]>, import("typebox").TNull]>;
             coverage: import("typebox").TArray<import("typebox").TObject<{
-                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
                 capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                 treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                 rows: import("typebox").TInteger;
@@ -6460,6 +6768,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 reviewId: import("typebox").TString;
                 digest: import("typebox").TString;
             }>, import("typebox").TNull]>;
+            fullRestoration: import("typebox").TLiteral<false>;
+            presentation: import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"adopted">, import("typebox").TLiteral<"unsupported_or_stale">, import("typebox").TLiteral<"unattempted">]>;
+                kind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"archived">, import("typebox").TLiteral<"alternative">]>, import("typebox").TNull]>;
+                releaseDigest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>;
             pin: import("typebox").TObject<{
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unsupported">]>;
                 reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -6473,9 +6789,11 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         'x-exposure': string;
         'x-authority-anchor': string;
         'x-authority-resource-types': string[];
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
+        } | {
+            bearerAuth?: never;
+        })[];
         'x-body-limit'?: number;
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
@@ -6579,7 +6897,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: string;
                 privacy: "private";
                 completeness: "supported-native-facts";
-                sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                 omissions: {
                     trash: string;
                     providerIdentifiers: string;
@@ -6591,9 +6909,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: false;
                 rows: number;
                 recordBytes: number;
+            } | {
+                format: "https://rezics.com/formats/library-export";
+                exportId: string;
+                capturedAt: string;
+                expiresAt: string;
+                privacy: "private";
+                completeness: "supported-native-facts";
+                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                omissions: {
+                    trash: string;
+                    providerIdentifiers: string;
+                    personalImportEvidence: string;
+                    commerce: string;
+                    publication: string;
+                    reimport: string;
+                };
+                fullExport: false;
+                rows: number;
+                recordBytes: number;
+                version: 2;
+                coverage: "private-library-owner-facts-v2";
+                sectionTotals: {
+                    [x: string]: {
+                        rows: number;
+                        recordBytes: number;
+                    };
+                    [x: number]: {
+                        rows: number;
+                        recordBytes: number;
+                    };
+                };
             } | null;
             coverage: {
-                section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                 capture: "empty" | "present";
                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                 rows: number;
@@ -6608,6 +6957,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 reviewId: string;
                 digest: string;
             } | null;
+            fullRestoration: false;
+            presentation: {
+                state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                kind: string | null;
+                source: "alternative" | "archived" | "mixed" | null;
+                releaseDigest: string | null;
+                reason: string | null;
+            };
             pin: {
                 state: "applied" | "none" | "pending" | "unsupported";
                 reason: string | null;
@@ -6706,7 +7063,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: string;
                 privacy: "private";
                 completeness: "supported-native-facts";
-                sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
                 omissions: {
                     trash: string;
                     providerIdentifiers: string;
@@ -6718,9 +7075,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: false;
                 rows: number;
                 recordBytes: number;
+            } | {
+                format: "https://rezics.com/formats/library-export";
+                exportId: string;
+                capturedAt: string;
+                expiresAt: string;
+                privacy: "private";
+                completeness: "supported-native-facts";
+                sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+                omissions: {
+                    trash: string;
+                    providerIdentifiers: string;
+                    personalImportEvidence: string;
+                    commerce: string;
+                    publication: string;
+                    reimport: string;
+                };
+                fullExport: false;
+                rows: number;
+                recordBytes: number;
+                version: 2;
+                coverage: "private-library-owner-facts-v2";
+                sectionTotals: {
+                    [x: string]: {
+                        rows: number;
+                        recordBytes: number;
+                    };
+                    [x: number]: {
+                        rows: number;
+                        recordBytes: number;
+                    };
+                };
             } | null;
             coverage: {
-                section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
                 capture: "empty" | "present";
                 treatment: "requires-explicit-mapping" | "retained-unsupported";
                 rows: number;
@@ -6735,6 +7123,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 reviewId: string;
                 digest: string;
             } | null;
+            fullRestoration: false;
+            presentation: {
+                state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+                kind: string | null;
+                source: "alternative" | "archived" | "mixed" | null;
+                releaseDigest: string | null;
+                reason: string | null;
+            };
             pin: {
                 state: "applied" | "none" | "pending" | "unsupported";
                 reason: string | null;
@@ -6850,7 +7246,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"preview">, import("typebox").TLiteral<"reviewed">, import("typebox").TLiteral<"applying">, import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">]>;
                 createdAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 expiresAt: import("typebox").TString;
-                manifest: import("typebox").TUnion<[import("typebox").TObject<{
+                manifest: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                     format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                     version: import("typebox").TLiteral<1>;
                     exportId: import("typebox").TString;
@@ -6858,7 +7254,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     expiresAt: import("typebox").TString;
                     privacy: import("typebox").TLiteral<"private">;
                     completeness: import("typebox").TLiteral<"supported-native-facts">;
-                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>>;
+                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
                     omissions: import("typebox").TObject<{
                         trash: import("typebox").TString;
                         providerIdentifiers: import("typebox").TString;
@@ -6870,9 +7266,36 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     fullExport: import("typebox").TLiteral<false>;
                     rows: import("typebox").TInteger;
                     recordBytes: import("typebox").TInteger;
-                }>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+                    exportId: import("typebox").TString;
+                    capturedAt: import("typebox").TString;
+                    expiresAt: import("typebox").TString;
+                    privacy: import("typebox").TLiteral<"private">;
+                    completeness: import("typebox").TLiteral<"supported-native-facts">;
+                    sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                    omissions: import("typebox").TObject<{
+                        trash: import("typebox").TString;
+                        providerIdentifiers: import("typebox").TString;
+                        personalImportEvidence: import("typebox").TString;
+                        commerce: import("typebox").TString;
+                        publication: import("typebox").TString;
+                        reimport: import("typebox").TString;
+                    }>;
+                    fullExport: import("typebox").TLiteral<false>;
+                    rows: import("typebox").TInteger;
+                    recordBytes: import("typebox").TInteger;
+                    version: import("typebox").TLiteral<2>;
+                    coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                    sectionTotals: import("typebox").TObject<{
+                        [k: string]: import("typebox").TObject<{
+                            rows: import("typebox").TInteger;
+                            recordBytes: import("typebox").TInteger;
+                        }>;
+                    }>;
+                }>]>, import("typebox").TNull]>;
                 coverage: import("typebox").TArray<import("typebox").TObject<{
-                    section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+                    section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
                     capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                     treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                     rows: import("typebox").TInteger;
@@ -6887,6 +7310,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                     reviewId: import("typebox").TString;
                     digest: import("typebox").TString;
                 }>, import("typebox").TNull]>;
+                fullRestoration: import("typebox").TLiteral<false>;
+                presentation: import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"adopted">, import("typebox").TLiteral<"unsupported_or_stale">, import("typebox").TLiteral<"unattempted">]>;
+                    kind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    source: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"archived">, import("typebox").TLiteral<"alternative">]>, import("typebox").TNull]>;
+                    releaseDigest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
                 pin: import("typebox").TObject<{
                     state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unsupported">]>;
                     reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -6900,9 +7331,11 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
             'x-exposure': string;
             'x-authority-anchor': string;
             'x-authority-resource-types': string[];
-            security: {
+            security: ({
                 bearerAuth: never[];
-            }[];
+            } | {
+                bearerAuth?: never;
+            })[];
             'x-body-limit'?: number;
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         };
@@ -6963,7 +7396,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         expiresAt: string;
         privacy: "private";
         completeness: "supported-native-facts";
-        sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
+        sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
         omissions: {
             trash: string;
             providerIdentifiers: string;
@@ -6975,9 +7408,40 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         fullExport: false;
         rows: number;
         recordBytes: number;
+    } | {
+        format: "https://rezics.com/formats/library-export";
+        exportId: string;
+        capturedAt: string;
+        expiresAt: string;
+        privacy: "private";
+        completeness: "supported-native-facts";
+        sections: ("annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units")[];
+        omissions: {
+            trash: string;
+            providerIdentifiers: string;
+            personalImportEvidence: string;
+            commerce: string;
+            publication: string;
+            reimport: string;
+        };
+        fullExport: false;
+        rows: number;
+        recordBytes: number;
+        version: 2;
+        coverage: "private-library-owner-facts-v2";
+        sectionTotals: {
+            [x: string]: {
+                rows: number;
+                recordBytes: number;
+            };
+            [x: number]: {
+                rows: number;
+                recordBytes: number;
+            };
+        };
     } | null;
     coverage: {
-        section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+        section: "annotations" | "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "journals" | "labels" | "malEvidence" | "malImports" | "occurrences" | "provenance" | "sessions" | "units";
         capture: "empty" | "present";
         treatment: "requires-explicit-mapping" | "retained-unsupported";
         rows: number;
@@ -6992,6 +7456,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         reviewId: string;
         digest: string;
     } | null;
+    fullRestoration: false;
+    presentation: {
+        state: "adopted" | "mixed" | "unattempted" | "unsupported_or_stale";
+        kind: string | null;
+        source: "alternative" | "archived" | "mixed" | null;
+        releaseDigest: string | null;
+        reason: string | null;
+    };
     pin: {
         state: "applied" | "none" | "pending" | "unsupported";
         reason: string | null;
@@ -7105,7 +7577,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
             state: import("typebox").TUnion<[import("typebox").TLiteral<"preview">, import("typebox").TLiteral<"reviewed">, import("typebox").TLiteral<"applying">, import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">]>;
             createdAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             expiresAt: import("typebox").TString;
-            manifest: import("typebox").TUnion<[import("typebox").TObject<{
+            manifest: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
                 format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
                 version: import("typebox").TLiteral<1>;
                 exportId: import("typebox").TString;
@@ -7113,7 +7585,7 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 expiresAt: import("typebox").TString;
                 privacy: import("typebox").TLiteral<"private">;
                 completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>>;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
                 omissions: import("typebox").TObject<{
                     trash: import("typebox").TString;
                     providerIdentifiers: import("typebox").TString;
@@ -7125,9 +7597,36 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 fullExport: import("typebox").TLiteral<false>;
                 rows: import("typebox").TInteger;
                 recordBytes: import("typebox").TInteger;
-            }>, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+                exportId: import("typebox").TString;
+                capturedAt: import("typebox").TString;
+                expiresAt: import("typebox").TString;
+                privacy: import("typebox").TLiteral<"private">;
+                completeness: import("typebox").TLiteral<"supported-native-facts">;
+                sections: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>>;
+                omissions: import("typebox").TObject<{
+                    trash: import("typebox").TString;
+                    providerIdentifiers: import("typebox").TString;
+                    personalImportEvidence: import("typebox").TString;
+                    commerce: import("typebox").TString;
+                    publication: import("typebox").TString;
+                    reimport: import("typebox").TString;
+                }>;
+                fullExport: import("typebox").TLiteral<false>;
+                rows: import("typebox").TInteger;
+                recordBytes: import("typebox").TInteger;
+                version: import("typebox").TLiteral<2>;
+                coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+                sectionTotals: import("typebox").TObject<{
+                    [k: string]: import("typebox").TObject<{
+                        rows: import("typebox").TInteger;
+                        recordBytes: import("typebox").TInteger;
+                    }>;
+                }>;
+            }>]>, import("typebox").TNull]>;
             coverage: import("typebox").TArray<import("typebox").TObject<{
-                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">]>;
+                section: import("typebox").TUnion<[import("typebox").TLiteral<"entries">, import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"assignments">, import("typebox").TLiteral<"sessions">, import("typebox").TLiteral<"holdings">, import("typebox").TLiteral<"collections">, import("typebox").TLiteral<"collectionPins">, import("typebox").TLiteral<"bangumiUploads">, import("typebox").TLiteral<"bangumiEvidence">, import("typebox").TLiteral<"malImports">, import("typebox").TLiteral<"units">, import("typebox").TLiteral<"history">, import("typebox").TLiteral<"occurrences">, import("typebox").TLiteral<"malEvidence">, import("typebox").TLiteral<"annotations">, import("typebox").TLiteral<"provenance">, import("typebox").TLiteral<"journals">]>;
                 capture: import("typebox").TUnion<[import("typebox").TLiteral<"present">, import("typebox").TLiteral<"empty">]>;
                 treatment: import("typebox").TUnion<[import("typebox").TLiteral<"requires-explicit-mapping">, import("typebox").TLiteral<"retained-unsupported">]>;
                 rows: import("typebox").TInteger;
@@ -7142,6 +7641,14 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
                 reviewId: import("typebox").TString;
                 digest: import("typebox").TString;
             }>, import("typebox").TNull]>;
+            fullRestoration: import("typebox").TLiteral<false>;
+            presentation: import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"adopted">, import("typebox").TLiteral<"unsupported_or_stale">, import("typebox").TLiteral<"unattempted">]>;
+                kind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"mixed">, import("typebox").TLiteral<"archived">, import("typebox").TLiteral<"alternative">]>, import("typebox").TNull]>;
+                releaseDigest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>;
             pin: import("typebox").TObject<{
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"applied">, import("typebox").TLiteral<"unsupported">]>;
                 reason: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -7155,9 +7662,11 @@ export declare function libraryArchiveCollectionRecoveryRoutes(app: ReturnType<t
         'x-exposure': string;
         'x-authority-anchor': string;
         'x-authority-resource-types': string[];
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
+        } | {
+            bearerAuth?: never;
+        })[];
         'x-body-limit'?: number;
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };

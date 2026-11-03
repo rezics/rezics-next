@@ -175,6 +175,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         population?: {
                             realm: string;
                         };
+                        spoilerThreshold?: number;
                         sort?: "collections" | "id" | "name" | "rating" | "relevance";
                         limit?: number;
                         cursor?: string;
@@ -234,6 +235,26 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         } | null;
                                     };
                                 };
+                                labels?: Record<string, string>;
+                                aliases?: Record<string, string[]>;
+                                contexts?: {
+                                    credits: {
+                                        items: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            aliases?: Record<string, string[]>;
+                                        }[];
+                                        next: boolean;
+                                    };
+                                    appearances: {
+                                        items: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            aliases?: Record<string, string[]>;
+                                        }[];
+                                        next: boolean;
+                                    };
+                                };
                             } | {
                                 key: {
                                     owner: "accounts";
@@ -272,6 +293,65 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                             id: string;
                                             label: string;
                                             type: string;
+                                        } | null;
+                                    };
+                                };
+                            } | {
+                                key: {
+                                    owner: "library";
+                                    kind: "collection";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "collection";
+                                    value: {
+                                        id: string;
+                                        title: string;
+                                        description: string | null;
+                                    };
+                                };
+                            } | {
+                                key: {
+                                    owner: "content";
+                                    kind: "review";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "review";
+                                    value: {
+                                        id: string;
+                                        kind: "review";
+                                        title: string | null;
+                                        author?: {
+                                            displayName: string | null;
+                                            handle: string | null;
+                                        };
+                                        excerpt?: string;
+                                        subject?: {
+                                            id: string;
+                                            title: string | null;
+                                        } | null;
+                                    };
+                                };
+                            } | {
+                                key: {
+                                    owner: "community";
+                                    kind: "space";
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "space";
+                                    value: {
+                                        id: string;
+                                        title: string;
+                                        address: string;
+                                        summary?: string;
+                                        realm?: {
+                                            id: string;
+                                            title: string | null;
                                         } | null;
                                     };
                                 };
@@ -519,7 +599,12 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                     body: {
                         text?: string;
                         filter?: any;
+                        conditions?: any;
                         languages?: string[];
+                        scope?: {
+                            kind: "collection" | "realm";
+                            id: string;
+                        };
                         facets: {
                             property: string;
                             size?: number;

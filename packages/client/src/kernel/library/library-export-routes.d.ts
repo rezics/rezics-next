@@ -5176,7 +5176,35 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         expiresAt: string;
                         privacy: "private";
                         completeness: "supported-native-facts";
-                        sections: string[];
+                        sections: [];
+                        omissions: Record<string, string>;
+                        fullExport: false;
+                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                        first: string | null;
+                    } | {
+                        format: "https://rezics.com/formats/library-export";
+                        version: 2;
+                        coverage: "private-library-owner-facts-v2";
+                        exportId: string;
+                        capturedAt: string;
+                        expiresAt: string;
+                        privacy: "private";
+                        completeness: "supported-native-facts";
+                        sections: [];
+                        omissions: Record<string, string>;
+                        fullExport: false;
+                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                        first: string | null;
+                    } | {
+                        format: "https://rezics.com/formats/library-export";
+                        version: 3;
+                        coverage: "private-library-owner-facts-v3";
+                        exportId: string;
+                        capturedAt: string;
+                        expiresAt: string;
+                        privacy: "private";
+                        completeness: "supported-native-facts";
+                        sections: [];
                         omissions: Record<string, string>;
                         fullExport: false;
                         state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -5248,6 +5276,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         detail: unknown;
                         errors: unknown;
                     };
+                    500: Response;
                     503: Response | {
                         type: unknown;
                         title: unknown;
@@ -5261,6 +5290,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                     };
                 };
                 error: never;
+            } & {
+                '~handled': {
+                    error: Error;
+                    response: import("elysia/types").ExtractErrorFromHandle<Response> & {
+                        500: Response;
+                    };
+                };
             };
         };
     };
@@ -5284,7 +5320,35 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             expiresAt: string;
                             privacy: "private";
                             completeness: "supported-native-facts";
-                            sections: string[];
+                            sections: [];
+                            omissions: Record<string, string>;
+                            fullExport: false;
+                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                            first: string | null;
+                        } | {
+                            format: "https://rezics.com/formats/library-export";
+                            version: 2;
+                            coverage: "private-library-owner-facts-v2";
+                            exportId: string;
+                            capturedAt: string;
+                            expiresAt: string;
+                            privacy: "private";
+                            completeness: "supported-native-facts";
+                            sections: [];
+                            omissions: Record<string, string>;
+                            fullExport: false;
+                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                            first: string | null;
+                        } | {
+                            format: "https://rezics.com/formats/library-export";
+                            version: 3;
+                            coverage: "private-library-owner-facts-v3";
+                            exportId: string;
+                            capturedAt: string;
+                            expiresAt: string;
+                            privacy: "private";
+                            completeness: "supported-native-facts";
+                            sections: [];
                             omissions: Record<string, string>;
                             fullExport: false;
                             state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
@@ -5356,6 +5420,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             detail: unknown;
                             errors: unknown;
                         };
+                        500: Response;
                         503: Response | {
                             type: unknown;
                             title: unknown;
@@ -5369,6 +5434,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         };
                     };
                     error: never;
+                } & {
+                    '~handled': {
+                        error: Error;
+                        response: import("elysia/types").ExtractErrorFromHandle<Response> & {
+                            500: Response;
+                        };
+                    };
                 };
             };
         };
@@ -5391,7 +5463,146 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             200: {
                                 exportId: string;
                                 state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-                                records: Record<string, unknown>[];
+                                records: ({
+                                    section: "assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units";
+                                } | {
+                                    section: "annotations";
+                                    accountId: string;
+                                    subjectId: string;
+                                    entryIncarnationId: string | null;
+                                    libraryProfilePin: unknown;
+                                    annotationRevision: number;
+                                    note: string | null;
+                                    priority: number | null;
+                                    annotationUpdatedAt: string | null;
+                                } | {
+                                    section: "provenance";
+                                    accountId: string;
+                                    subjectId: string;
+                                    entryIncarnationId: string | null;
+                                    libraryProfilePin: unknown;
+                                    observation: {
+                                        provider: string;
+                                        recordId: string;
+                                        revision: number;
+                                        privacy: {
+                                            status: "absent";
+                                        } | {
+                                            status: "cleared";
+                                        } | {
+                                            status: "unknown";
+                                            sourceValue?: string;
+                                        } | {
+                                            status: "known";
+                                            meaning: "private" | "source_visible";
+                                        };
+                                        sourceCreated: {
+                                            status: "absent";
+                                        } | {
+                                            status: "cleared";
+                                        } | {
+                                            status: "unknown";
+                                            sourceValue?: string;
+                                        } | {
+                                            status: "known";
+                                            value: string;
+                                            precision: "day" | "fraction" | "minute" | "month" | "second" | "year";
+                                            zone: "offset" | "unknown" | "utc";
+                                        };
+                                        sourceUpdated: {
+                                            status: "absent";
+                                        } | {
+                                            status: "cleared";
+                                        } | {
+                                            status: "unknown";
+                                            sourceValue?: string;
+                                        } | {
+                                            status: "known";
+                                            value: string;
+                                            precision: "day" | "fraction" | "minute" | "month" | "second" | "year";
+                                            zone: "offset" | "unknown" | "utc";
+                                        };
+                                        recordedAt: string;
+                                    };
+                                } | {
+                                    section: "journals";
+                                    accountId: string;
+                                    sessionId: string;
+                                    subjectId: string;
+                                    versionSubjectId: string | null;
+                                    state: string;
+                                    progressRevision: number;
+                                    libraryProfilePin: unknown;
+                                    startedAt: string;
+                                    completedAt: string | null;
+                                    lastChangedAt: string | null;
+                                    journal: {
+                                        sessionId: string;
+                                        revision: number;
+                                        startDate: {
+                                            year: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                            day: number;
+                                        } | null;
+                                        finishDate: {
+                                            year: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                            day: number;
+                                        } | null;
+                                        reflection: string | null;
+                                    };
+                                } | {
+                                    section: "journals";
+                                    accountId: string;
+                                    sessionId: string;
+                                    subjectId: string;
+                                    versionSubjectId: string | null;
+                                    state: string;
+                                    progressRevision: number;
+                                    libraryProfilePin: unknown;
+                                    startedAt: string;
+                                    completedAt: string | null;
+                                    lastChangedAt: string | null;
+                                    journal: {
+                                        sessionId: string;
+                                        revision: number;
+                                        startDate: {
+                                            year: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                            day: number;
+                                        } | null;
+                                        finishDate: {
+                                            year: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                        } | {
+                                            year: number;
+                                            month: number;
+                                            day: number;
+                                        } | null;
+                                        reflection: string | null;
+                                        assessment: {
+                                            meaningRevision: 1;
+                                            units: number | null;
+                                        };
+                                    };
+                                })[];
                                 next: string | null;
                                 manifest: {
                                     format: "https://rezics.com/formats/library-export";
@@ -5401,11 +5612,59 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                     expiresAt: string;
                                     privacy: "private";
                                     completeness: "supported-native-facts";
-                                    sections: string[];
+                                    sections: [];
                                     omissions: Record<string, string>;
                                     fullExport: false;
                                     rows: number;
                                     recordBytes: number;
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    version: 2;
+                                    coverage: "private-library-owner-facts-v2";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: [];
+                                    omissions: Record<string, string>;
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    version: 3;
+                                    coverage: "private-library-owner-facts-v3";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: [];
+                                    omissions: Record<string, string>;
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                             };
                             400: Response | {
@@ -5474,6 +5733,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                 detail: unknown;
                                 errors: unknown;
                             };
+                            500: Response;
                             503: Response | {
                                 type: unknown;
                                 title: unknown;
@@ -5487,6 +5747,13 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             };
                         };
                         error: never;
+                    } & {
+                        '~handled': {
+                            error: Error;
+                            response: import("elysia/types").ExtractErrorFromHandle<Response> & {
+                                500: Response;
+                            };
+                        };
                     };
                 };
             };
@@ -5616,7 +5883,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
+        200: import("typebox").TUnion<[import("typebox").TObject<{
             format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
             version: import("typebox").TLiteral<1>;
             exportId: import("typebox").TString;
@@ -5624,12 +5891,40 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TArray<import("typebox").TString>;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
             first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<2>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<3>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>]>;
     };
     detail: {
         operationId: string;
@@ -5642,395 +5937,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/libraryExports/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ request, actor, params, admission, job, set }: {
-    server: import("elysia").Server | null;
-    redirect: import("elysia").redirect;
-    set: {
-        headers: import("elysia").HTTPHeaders;
-        status?: number | keyof import("elysia").StatusMap;
-        cookie?: Record<string, import("elysia").BaseCookie>;
-        redirect?: never;
-    };
-    status: import("elysia").SelectiveStatus<{
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        401: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        404: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        409: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        422: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        503: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        200: {
-            format: "https://rezics.com/formats/library-export";
-            version: 1;
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: string[];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        };
-    }>;
-    problem: import("elysia").SelectiveProblem<{
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        401: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        404: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        409: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        422: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        503: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
-        200: {
-            format: "https://rezics.com/formats/library-export";
-            version: 1;
-            exportId: string;
-            capturedAt: string;
-            expiresAt: string;
-            privacy: "private";
-            completeness: "supported-native-facts";
-            sections: string[];
-            omissions: Record<string, string>;
-            fullExport: false;
-            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-            first: string | null;
-        };
-    }>;
-    defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-        params: import("typebox").TObject<{
-            id: import("typebox").TString;
-        }>;
-        response: {
-            400: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            401: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            403: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            404: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            409: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            422: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            503: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            200: import("typebox").TObject<{
-                format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
-                version: import("typebox").TLiteral<1>;
-                exportId: import("typebox").TString;
-                capturedAt: import("typebox").TString;
-                expiresAt: import("typebox").TString;
-                privacy: import("typebox").TLiteral<"private">;
-                completeness: import("typebox").TLiteral<"supported-native-facts">;
-                sections: import("typebox").TArray<import("typebox").TString>;
-                omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-                fullExport: import("typebox").TLiteral<false>;
-                state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
-                first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>;
-        };
-        detail: {
-            operationId: string;
-            'x-action': string;
-            'x-exposure': string;
-            'x-authority-anchor': string;
-            'x-authority-resource-types': string[];
-            security: {
-                bearerAuth: never[];
-            }[];
-            'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-        };
-    }, {}, "/v1/libraryExports/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
-        derive: {
-            readonly admission: import("../http/admission.ts").Admission;
-            readonly job: {
-                deadline: number;
-                signal: AbortSignal;
-            };
-            readonly actor: import("../request/access.ts").AccountActor | {
-                kind: 'anonymous';
-            };
-            readonly session: {
-                readonly components: import("../tokens/session.ts").SessionComponent[];
-                record(component: import("../tokens/session.ts").SessionComponent): void;
-            };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-        };
-    }>>) => import("elysia/types").MaybePromise<void>;
-    readonly path: string;
-    route?: string;
-    rid?: string;
-    request: Request;
-    store: {};
-    body: unknown;
-    query: Record<string, string | undefined>;
-    params: {
-        id: string;
-    };
-    headers: Record<string, string | undefined>;
-    cookie: Record<string, import("elysia").Cookie<unknown>>;
-    readonly admission: import("../http/admission.ts").Admission;
-    readonly job: {
-        deadline: number;
-        signal: AbortSignal;
-    };
-    readonly actor: import("../request/access.ts").AccountActor | {
-        kind: 'anonymous';
-    };
-    readonly session: {
-        readonly components: import("../tokens/session.ts").SessionComponent[];
-        record(component: import("../tokens/session.ts").SessionComponent): void;
-    };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<{
-    format: 'https://rezics.com/formats/library-export';
-    version: 1;
-    exportId: string;
-    capturedAt: string;
-    expiresAt: string;
-    privacy: 'private';
-    completeness: 'supported-native-facts';
-    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
-    omissions: {
-        trash: string;
-        providerIdentifiers: string;
-        personalImportEvidence: string;
-        commerce: string;
-        publication: string;
-        reimport: string;
-    };
-    state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
-    fullExport: false;
-    first: string | null;
-}>, {
+}, {}, "/v1/libraryExports/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, import("elysia/types").InlineHandlerNonMacro<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
     }>;
@@ -6133,7 +6040,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
+        200: import("typebox").TUnion<[import("typebox").TObject<{
             format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
             version: import("typebox").TLiteral<1>;
             exportId: import("typebox").TString;
@@ -6141,12 +6048,214 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TArray<import("typebox").TString>;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
             first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<2>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<3>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>]>;
+    };
+    detail: {
+        operationId: string;
+        'x-action': string;
+        'x-exposure': string;
+        'x-authority-anchor': string;
+        'x-authority-resource-types': string[];
+        security: {
+            bearerAuth: never[];
+        }[];
+        'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+    };
+}, {}, "/v1/libraryExports/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    derive: {
+        readonly admission: import("../http/admission.ts").Admission;
+        readonly job: {
+            deadline: number;
+            signal: AbortSignal;
+        };
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
+        readonly session: {
+            readonly components: import("../tokens/session.ts").SessionComponent[];
+            record(component: import("../tokens/session.ts").SessionComponent): void;
+        };
+        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    };
+}>>, {
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+    }>;
+    response: {
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
         }>;
+        401: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        200: import("typebox").TUnion<[import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<1>;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<2>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v2">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<3>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v3">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>]>;
     };
     detail: {
         operationId: string;

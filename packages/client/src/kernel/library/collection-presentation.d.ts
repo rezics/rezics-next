@@ -26,7 +26,7 @@ export declare function presentationSelection(input: PresentationSelection): Pre
 /** Facts and authority are independent. Each Content operation releases its own anchor before the next. */
 export declare function readablePresentationCover(dependencies: PresentationDependencies, actor: Actor, id: string, deadline: number): Promise<CoverSummary | null>;
 /** Preparation returns business errors as data: exact receipts still follow current Collection authorization. */
-export declare function preparePresentationSelection(dependencies: PresentationDependencies, actor: Actor, selection: PresentationSelection, deadline: number): Promise<ProblemError | null>;
+export declare function preparePresentationSelection(dependencies: PresentationDependencies, actor: Actor, selection: PresentationSelection, deadline: number, reviewedReleaseDigest?: string): Promise<ProblemError | null>;
 /** Kind presentation is immediate; ordered cover readiness keeps its independent contract. */
 export declare function collectionPresentation(row: {
     presentationKind: string | null;

@@ -17,6 +17,16 @@ export type FeedDependencies = {
     discovery?: DiscoverySearch;
     search?: SearchService;
 };
+/** The native factory and mounted route share this query and response contract. */
+export type FeedReadQuery = {
+    stream?: 'home' | 'following';
+    limit?: number;
+    cursor?: string;
+    kind?: string;
+} & FeedSelection;
+export type FeedReads = {
+    list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>;
+};
 export declare const FEED_PAGE_LIMIT = 20;
 export declare const FEED_CANDIDATE_LIMIT = 160;
 export declare const FEED_CONTINUE_WIDTH = 6;
@@ -28,11 +38,4 @@ export declare const FEED_AUTHOR_KEYS_PER_CANDIDATE = 3;
 export declare const FEED_SPACE_FIXED_KEYS = 4;
 export declare const FEED_SPACE_BOARD_KEYS_PER_CANDIDATE = 1;
 export declare const feedCandidateBound: (discovery: number, following: number, continued: boolean) => number;
-export declare function createFeedReads(deps: FeedDependencies): {
-    list(actor: Actor, query: {
-        stream?: 'home' | 'following';
-        limit?: number;
-        cursor?: string;
-        kind?: string;
-    } & FeedSelection, deadline: number, languages: readonly string[]): Promise<FeedPage>;
-};
+export declare function createFeedReads(deps: FeedDependencies): FeedReads;

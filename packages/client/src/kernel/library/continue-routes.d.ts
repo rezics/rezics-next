@@ -20,7 +20,7 @@ export declare const continuePageSchema: import("typebox").TObject<{
             locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             completedUnitCount: import("typebox").TInteger;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+            state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
             revision: import("typebox").TInteger;
             startedAt: import("typebox").TString;
             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5291,7 +5291,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     completedUnitCount: import("typebox").TInteger;
-                    state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                    state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                     revision: import("typebox").TInteger;
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5459,7 +5459,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     locator: string | null;
                     position: string | null;
                     completedUnitCount: number;
-                    state: "abandoned" | "active" | "completed";
+                    state: "abandoned" | "active" | "completed" | "retired";
                     revision: number;
                     startedAt: string;
                     completedAt: string | null;
@@ -5595,7 +5595,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     locator: string | null;
                     position: string | null;
                     completedUnitCount: number;
-                    state: "abandoned" | "active" | "completed";
+                    state: "abandoned" | "active" | "completed" | "retired";
                     revision: number;
                     startedAt: string;
                     completedAt: string | null;
@@ -5739,7 +5739,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                        state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                         revision: import("typebox").TInteger;
                         startedAt: import("typebox").TString;
                         completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5961,7 +5961,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         locator: string | null;
                         position: string | null;
                         completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
+                        state: "abandoned" | "active" | "completed" | "retired";
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
@@ -6097,7 +6097,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         locator: string | null;
                         position: string | null;
                         completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
+                        state: "abandoned" | "active" | "completed" | "retired";
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
@@ -6243,7 +6243,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             locator: string | null;
                             position: string | null;
                             completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
+                            state: "abandoned" | "active" | "completed" | "retired";
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
@@ -6403,7 +6403,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     completedUnitCount: import("typebox").TInteger;
-                    state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                    state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                     revision: import("typebox").TInteger;
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;

@@ -5262,6 +5262,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>, import("typebox").TObject<{
                 id: import("typebox").TString;
                 occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"commerce">;
+                    kind: import("typebox").TLiteral<"collection">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    title: string;
+                    description: string | null;
+                }>>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"collection">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"content">;
+                    kind: import("typebox").TLiteral<"review">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    kind: 'review';
+                    title: string | null;
+                    author?: Readonly<{
+                        displayName: string | null;
+                        handle: string | null;
+                    }>;
+                    excerpt?: string;
+                    subject?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"thread">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"content">;
+                    kind: import("typebox").TLiteral<"space">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    title: string;
+                    address: string;
+                    summary?: string;
+                    realm?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }>>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"space">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    address: import("typebox").TString;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 source: import("typebox").TLiteral<"continue">;
                 key: import("typebox").TObject<{
                     owner: import("typebox").TLiteral<"semantic">;
@@ -5325,7 +5400,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                        state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                         revision: import("typebox").TInteger;
                         startedAt: import("typebox").TString;
                         completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5463,7 +5538,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
+                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                    parentContext?: import("./model.ts").FeedParentContext;
+                }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"post">;
                     id: import("typebox").TString;
@@ -5490,6 +5567,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>]>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             asOf: import("typebox").TString;
+            reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                epoch: number;
+                position: string;
+            }>>, import("typebox").TNull]>>;
             sources: import("typebox").TObject<{
                 discovery: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
                 following: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
@@ -5686,6 +5767,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             } | {
                 id: string;
                 occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "commerce";
+                    kind: "collection";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    title: string;
+                    description: string | null;
+                }>;
+                destination: {
+                    kind: "collection";
+                    id: string;
+                    title: string | null;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "content";
+                    kind: "review";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    kind: 'review';
+                    title: string | null;
+                    author?: Readonly<{
+                        displayName: string | null;
+                        handle: string | null;
+                    }>;
+                    excerpt?: string;
+                    subject?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                destination: {
+                    kind: "thread";
+                    id: string;
+                    title: string | null;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "content";
+                    kind: "space";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    title: string;
+                    address: string;
+                    summary?: string;
+                    realm?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }>;
+                destination: {
+                    kind: "space";
+                    id: string;
+                    title: string | null;
+                    address: string;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
                 source: "continue";
                 key: {
                     owner: "semantic";
@@ -5749,7 +5905,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         locator: string | null;
                         position: string | null;
                         completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
+                        state: "abandoned" | "active" | "completed" | "retired";
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
@@ -5887,7 +6043,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                    parentContext?: import("./model.ts").FeedParentContext;
+                };
                 destination: {
                     kind: "post";
                     id: string;
@@ -5914,6 +6072,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             })[];
             next: string | null;
             asOf: string;
+            reactionsAsOf?: Readonly<{
+                epoch: number;
+                position: string;
+            }> | null;
             sources: {
                 discovery: "not_requested" | "preparing" | "ready" | "unavailable";
                 following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -6070,6 +6232,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             } | {
                 id: string;
                 occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "commerce";
+                    kind: "collection";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    title: string;
+                    description: string | null;
+                }>;
+                destination: {
+                    kind: "collection";
+                    id: string;
+                    title: string | null;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "content";
+                    kind: "review";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    kind: 'review';
+                    title: string | null;
+                    author?: Readonly<{
+                        displayName: string | null;
+                        handle: string | null;
+                    }>;
+                    excerpt?: string;
+                    subject?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                destination: {
+                    kind: "thread";
+                    id: string;
+                    title: string | null;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
+                source: "discovery";
+                key: {
+                    owner: "content";
+                    kind: "space";
+                    route: number;
+                    id: string;
+                };
+                summary: Readonly<{
+                    id: string;
+                    title: string;
+                    address: string;
+                    summary?: string;
+                    realm?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }>;
+                destination: {
+                    kind: "space";
+                    id: string;
+                    title: string | null;
+                    address: string;
+                };
+            } | {
+                id: string;
+                occurredAt: string | null;
                 source: "continue";
                 key: {
                     owner: "semantic";
@@ -6133,7 +6370,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         locator: string | null;
                         position: string | null;
                         completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
+                        state: "abandoned" | "active" | "completed" | "retired";
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
@@ -6271,7 +6508,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                    parentContext?: import("./model.ts").FeedParentContext;
+                };
                 destination: {
                     kind: "post";
                     id: string;
@@ -6298,6 +6537,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             })[];
             next: string | null;
             asOf: string;
+            reactionsAsOf?: Readonly<{
+                epoch: number;
+                position: string;
+            }> | null;
             sources: {
                 discovery: "not_requested" | "preparing" | "ready" | "unavailable";
                 following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -6464,6 +6707,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 }>, import("typebox").TObject<{
                     id: import("typebox").TString;
                     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    source: import("typebox").TLiteral<"discovery">;
+                    key: import("typebox").TObject<{
+                        owner: import("typebox").TLiteral<"commerce">;
+                        kind: import("typebox").TLiteral<"collection">;
+                        route: import("typebox").TInteger;
+                        id: import("typebox").TString;
+                    }>;
+                    summary: import("typebox").TUnsafe<Readonly<{
+                        id: string;
+                        title: string;
+                        description: string | null;
+                    }>>;
+                    destination: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"collection">;
+                        id: import("typebox").TString;
+                        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    source: import("typebox").TLiteral<"discovery">;
+                    key: import("typebox").TObject<{
+                        owner: import("typebox").TLiteral<"content">;
+                        kind: import("typebox").TLiteral<"review">;
+                        route: import("typebox").TInteger;
+                        id: import("typebox").TString;
+                    }>;
+                    summary: import("typebox").TUnsafe<Readonly<{
+                        id: string;
+                        kind: 'review';
+                        title: string | null;
+                        author?: Readonly<{
+                            displayName: string | null;
+                            handle: string | null;
+                        }>;
+                        excerpt?: string;
+                        subject?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                    destination: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"thread">;
+                        id: import("typebox").TString;
+                        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    source: import("typebox").TLiteral<"discovery">;
+                    key: import("typebox").TObject<{
+                        owner: import("typebox").TLiteral<"content">;
+                        kind: import("typebox").TLiteral<"space">;
+                        route: import("typebox").TInteger;
+                        id: import("typebox").TString;
+                    }>;
+                    summary: import("typebox").TUnsafe<Readonly<{
+                        id: string;
+                        title: string;
+                        address: string;
+                        summary?: string;
+                        realm?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }>>;
+                    destination: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"space">;
+                        id: import("typebox").TString;
+                        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        address: import("typebox").TString;
+                    }>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     source: import("typebox").TLiteral<"continue">;
                     key: import("typebox").TObject<{
                         owner: import("typebox").TLiteral<"semantic">;
@@ -6527,7 +6845,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                             completedUnitCount: import("typebox").TInteger;
-                            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                            state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                             revision: import("typebox").TInteger;
                             startedAt: import("typebox").TString;
                             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -6665,7 +6983,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: import("typebox").TInteger;
                         id: import("typebox").TString;
                     }>;
-                    summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
+                    summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                        parentContext?: import("./model.ts").FeedParentContext;
+                    }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"post">;
                         id: import("typebox").TString;
@@ -6692,6 +7012,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 }>]>>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 asOf: import("typebox").TString;
+                reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                    epoch: number;
+                    position: string;
+                }>>, import("typebox").TNull]>>;
                 sources: import("typebox").TObject<{
                     discovery: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
                     following: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
@@ -6927,6 +7251,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     } | {
         id: string;
         occurredAt: string | null;
+        source: "discovery";
+        key: {
+            owner: "commerce";
+            kind: "collection";
+            route: number;
+            id: string;
+        };
+        summary: Readonly<{
+            id: string;
+            title: string;
+            description: string | null;
+        }>;
+        destination: {
+            kind: "collection";
+            id: string;
+            title: string | null;
+        };
+    } | {
+        id: string;
+        occurredAt: string | null;
+        source: "discovery";
+        key: {
+            owner: "content";
+            kind: "review";
+            route: number;
+            id: string;
+        };
+        summary: Readonly<{
+            id: string;
+            kind: 'review';
+            title: string | null;
+            author?: Readonly<{
+                displayName: string | null;
+                handle: string | null;
+            }>;
+            excerpt?: string;
+            subject?: Readonly<{
+                id: string;
+                title: string | null;
+            }> | null;
+        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+        destination: {
+            kind: "thread";
+            id: string;
+            title: string | null;
+        };
+    } | {
+        id: string;
+        occurredAt: string | null;
+        source: "discovery";
+        key: {
+            owner: "content";
+            kind: "space";
+            route: number;
+            id: string;
+        };
+        summary: Readonly<{
+            id: string;
+            title: string;
+            address: string;
+            summary?: string;
+            realm?: Readonly<{
+                id: string;
+                title: string | null;
+            }> | null;
+        }>;
+        destination: {
+            kind: "space";
+            id: string;
+            title: string | null;
+            address: string;
+        };
+    } | {
+        id: string;
+        occurredAt: string | null;
         source: "continue";
         key: {
             owner: "semantic";
@@ -6990,7 +7389,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 locator: string | null;
                 position: string | null;
                 completedUnitCount: number;
-                state: "abandoned" | "active" | "completed";
+                state: "abandoned" | "active" | "completed" | "retired";
                 revision: number;
                 startedAt: string;
                 completedAt: string | null;
@@ -7128,7 +7527,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             route: number;
             id: string;
         };
-        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+            parentContext?: import("./model.ts").FeedParentContext;
+        };
         destination: {
             kind: "post";
             id: string;
@@ -7155,6 +7556,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     })[];
     next: string | null;
     asOf: string;
+    reactionsAsOf?: Readonly<{
+        epoch: number;
+        position: string;
+    }> | null;
     sources: {
         discovery: "not_requested" | "preparing" | "ready" | "unavailable";
         following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -7250,6 +7655,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 } | {
                     id: string;
                     occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "commerce";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        description: string | null;
+                    }>;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "review";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        kind: 'review';
+                        title: string | null;
+                        author?: Readonly<{
+                            displayName: string | null;
+                            handle: string | null;
+                        }>;
+                        excerpt?: string;
+                        subject?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "space";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        address: string;
+                        summary?: string;
+                        realm?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }>;
+                    destination: {
+                        kind: "space";
+                        id: string;
+                        title: string | null;
+                        address: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
                     source: "continue";
                     key: {
                         owner: "semantic";
@@ -7313,7 +7793,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             locator: string | null;
                             position: string | null;
                             completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
+                            state: "abandoned" | "active" | "completed" | "retired";
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
@@ -7451,7 +7931,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                        parentContext?: import("./model.ts").FeedParentContext;
+                    };
                     destination: {
                         kind: "post";
                         id: string;
@@ -7478,6 +7960,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 })[];
                 next: string | null;
                 asOf: string;
+                reactionsAsOf?: Readonly<{
+                    epoch: number;
+                    position: string;
+                }> | null;
                 sources: {
                     discovery: "not_requested" | "preparing" | "ready" | "unavailable";
                     following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -7634,6 +8120,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 } | {
                     id: string;
                     occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "commerce";
+                        kind: "collection";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        description: string | null;
+                    }>;
+                    destination: {
+                        kind: "collection";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "review";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        kind: 'review';
+                        title: string | null;
+                        author?: Readonly<{
+                            displayName: string | null;
+                            handle: string | null;
+                        }>;
+                        excerpt?: string;
+                        subject?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    destination: {
+                        kind: "thread";
+                        id: string;
+                        title: string | null;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
+                    source: "discovery";
+                    key: {
+                        owner: "content";
+                        kind: "space";
+                        route: number;
+                        id: string;
+                    };
+                    summary: Readonly<{
+                        id: string;
+                        title: string;
+                        address: string;
+                        summary?: string;
+                        realm?: Readonly<{
+                            id: string;
+                            title: string | null;
+                        }> | null;
+                    }>;
+                    destination: {
+                        kind: "space";
+                        id: string;
+                        title: string | null;
+                        address: string;
+                    };
+                } | {
+                    id: string;
+                    occurredAt: string | null;
                     source: "continue";
                     key: {
                         owner: "semantic";
@@ -7697,7 +8258,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             locator: string | null;
                             position: string | null;
                             completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
+                            state: "abandoned" | "active" | "completed" | "retired";
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
@@ -7835,7 +8396,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                        parentContext?: import("./model.ts").FeedParentContext;
+                    };
                     destination: {
                         kind: "post";
                         id: string;
@@ -7862,6 +8425,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 })[];
                 next: string | null;
                 asOf: string;
+                reactionsAsOf?: Readonly<{
+                    epoch: number;
+                    position: string;
+                }> | null;
                 sources: {
                     discovery: "not_requested" | "preparing" | "ready" | "unavailable";
                     following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -8030,6 +8597,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     } | {
                         id: string;
                         occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "commerce";
+                            kind: "collection";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            title: string;
+                            description: string | null;
+                        }>;
+                        destination: {
+                            kind: "collection";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "content";
+                            kind: "review";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            kind: 'review';
+                            title: string | null;
+                            author?: Readonly<{
+                                displayName: string | null;
+                                handle: string | null;
+                            }>;
+                            excerpt?: string;
+                            subject?: Readonly<{
+                                id: string;
+                                title: string | null;
+                            }> | null;
+                        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                        destination: {
+                            kind: "thread";
+                            id: string;
+                            title: string | null;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
+                        source: "discovery";
+                        key: {
+                            owner: "content";
+                            kind: "space";
+                            route: number;
+                            id: string;
+                        };
+                        summary: Readonly<{
+                            id: string;
+                            title: string;
+                            address: string;
+                            summary?: string;
+                            realm?: Readonly<{
+                                id: string;
+                                title: string | null;
+                            }> | null;
+                        }>;
+                        destination: {
+                            kind: "space";
+                            id: string;
+                            title: string | null;
+                            address: string;
+                        };
+                    } | {
+                        id: string;
+                        occurredAt: string | null;
                         source: "continue";
                         key: {
                             owner: "semantic";
@@ -8093,7 +8735,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 locator: string | null;
                                 position: string | null;
                                 completedUnitCount: number;
-                                state: "abandoned" | "active" | "completed";
+                                state: "abandoned" | "active" | "completed" | "retired";
                                 revision: number;
                                 startedAt: string;
                                 completedAt: string | null;
@@ -8231,7 +8873,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             route: number;
                             id: string;
                         };
-                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
+                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                            parentContext?: import("./model.ts").FeedParentContext;
+                        };
                         destination: {
                             kind: "post";
                             id: string;
@@ -8258,6 +8902,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     })[];
                     next: string | null;
                     asOf: string;
+                    reactionsAsOf?: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
                     sources: {
                         discovery: "not_requested" | "preparing" | "ready" | "unavailable";
                         following: "not_requested" | "preparing" | "ready" | "unavailable";
@@ -8440,6 +9088,81 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>, import("typebox").TObject<{
                 id: import("typebox").TString;
                 occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"commerce">;
+                    kind: import("typebox").TLiteral<"collection">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    title: string;
+                    description: string | null;
+                }>>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"collection">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"content">;
+                    kind: import("typebox").TLiteral<"review">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    kind: 'review';
+                    title: string | null;
+                    author?: Readonly<{
+                        displayName: string | null;
+                        handle: string | null;
+                    }>;
+                    excerpt?: string;
+                    subject?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"thread">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                source: import("typebox").TLiteral<"discovery">;
+                key: import("typebox").TObject<{
+                    owner: import("typebox").TLiteral<"content">;
+                    kind: import("typebox").TLiteral<"space">;
+                    route: import("typebox").TInteger;
+                    id: import("typebox").TString;
+                }>;
+                summary: import("typebox").TUnsafe<Readonly<{
+                    id: string;
+                    title: string;
+                    address: string;
+                    summary?: string;
+                    realm?: Readonly<{
+                        id: string;
+                        title: string | null;
+                    }> | null;
+                }>>;
+                destination: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"space">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    address: import("typebox").TString;
+                }>;
+            }>, import("typebox").TObject<{
+                id: import("typebox").TString;
+                occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 source: import("typebox").TLiteral<"continue">;
                 key: import("typebox").TObject<{
                     owner: import("typebox").TLiteral<"semantic">;
@@ -8503,7 +9226,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                        state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                         revision: import("typebox").TInteger;
                         startedAt: import("typebox").TString;
                         completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -8641,7 +9364,9 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
+                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary & {
+                    parentContext?: import("./model.ts").FeedParentContext;
+                }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"post">;
                     id: import("typebox").TString;
@@ -8668,6 +9393,10 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>]>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             asOf: import("typebox").TString;
+            reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                epoch: number;
+                position: string;
+            }>>, import("typebox").TNull]>>;
             sources: import("typebox").TObject<{
                 discovery: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
                 following: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;

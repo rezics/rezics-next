@@ -28,6 +28,11 @@ export type CurrentRealmFilterPlan = CurrentPlan<CurrentRealmLeaf>;
 export declare function compileCurrentRealmFilter(filter: DiscoveryFilterDocument): CurrentRealmFilterPlan;
 /** OR current evidence, preserving not_proven when no alternative is true; empty evidence is false. */
 export declare function anyCurrentMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch;
+/** Each pair is evidence about one native statement, including its own qualifier witness. */
+export declare function currentConceptStatementsMatch(statements: readonly Readonly<{
+    membership: RelationFacetMatch;
+    witness: RelationFacetMatch;
+}>[], complete: boolean): RelationFacetMatch;
 /** The existing disclosure clause key, including set-normalized values and qualifier clauses. */
 export declare function currentClauseKey(clause: FactClause): string;
 /** Tagged native keys preserve exact owner pins; only state.in has set semantics. */

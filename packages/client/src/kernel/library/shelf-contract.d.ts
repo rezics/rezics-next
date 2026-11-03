@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { PersonalScoreCurrentness } from '../rating/personal-score.ts';
 import { type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -23,7 +24,7 @@ export type LegacyEntryState = (typeof ENTRY_STATES)[number];
 export declare function isLegacyEntryState(value: string): value is LegacyEntryState;
 /** Original profile vocabulary grammar; chronological reads preserve the exact state identifier. */
 export declare function isShelfEntryState(value: string): boolean;
-export declare const SHELF_ORDERS: readonly ['lastActivity', 'finishedAt', 'createdAt'];
+export declare const SHELF_ORDERS: readonly ['lastActivity', 'finishedAt', 'createdAt', 'personalScore'];
 export declare const SHELF_DIRECTIONS: readonly ['desc', 'asc'];
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
@@ -61,10 +62,24 @@ export type ShelfEntry = {
     lastActivityAt: string;
     finishedAt: string | null;
     activeProgressSession: ShelfSession | null;
+    /** Native standard-question units; present only for personalScore order. */
+    personalScore?: number | null;
+};
+export type ShelfScoreQuestion = {
+    id: string;
+    meaning: string | null;
+    revision: number;
+    grain: string;
+    minimumUnits: number;
+    maximumUnits: number;
+    stepUnits: number;
+    lifecycleState: string;
+    lifecycleRevision: number;
 };
 export type ShelfPage = {
     entries: ShelfEntry[];
     next: string | null;
+    scoreQuestion?: ShelfScoreQuestion;
 };
 export type ShelfTab = LegacyEntryState | 'all' | 'collections';
 export type ShelfTabCount = {
@@ -248,6 +263,7 @@ export type ShelfReads = {
     }): Promise<ShelfTypePage>;
 };
 export type ShelfReadDependencies = {
+    scoreCurrentness?: PersonalScoreCurrentness;
     pool: Pool;
     access: Access;
     tokens: KeyRing;

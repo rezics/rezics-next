@@ -1,9 +1,12 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Release } from '@rezics/definitions';
-import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
+import { type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
 import { type AccountDiscoverySource, type AccountFrontier, type AccountPage, type AccountSnapshot } from './discovery.ts';
+import { type DiscoveryMetadataKind, type DiscoveryMetadataProducers } from './generations.ts';
+import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import type { SubjectSource } from './source.ts';
 /** Admit the whole native chunk before sort preparation or engine I/O; omission means keyed deletion. */
 export declare function validateAccountSnapshot(value: unknown, partition: number, ids: readonly string[], atLeast: bigint): AccountSnapshot;
@@ -29,8 +32,9 @@ export type DiscoveryCensus = {
 export declare function readDiscoveryCensus(subjects: SubjectSource, accounts: AccountDiscoverySource, partition: number): Promise<DiscoveryCensus>;
 /** The production registry uses each owner's real current-summary reader. No summary is indexed. */
 export declare function nativeDiscoveryRegistry(pool: Pool, routeKey: Uint8Array, subjects: SubjectSource, options?: {
-    release: Release;
+    release?: Release;
     languages?: readonly string[];
+    ownerAdapters?: DiscoveryOwnerAdapterSlots;
 }): Promise<DiscoveryRegistry & import("./discovery.ts").DiscoveryOwnerRegistry>;
 export type DiscoveryTarget = {
     prefix: string;
@@ -58,9 +62,9 @@ export type DiscoveryRepairEffect = Readonly<{
     }>;
 }>;
 /** Search visibility belongs to the exact keyed winner; copy settlement is insufficient. */
-export declare function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: DiscoveryIndexAction): Promise<unknown>;
+export declare function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: AnyDiscoveryIndexAction): Promise<unknown>;
 /** The original search-visible winner remains part of the retained native repair provenance. */
-export declare function validateDiscoveryRepairWinner(index: string, action: DiscoveryIndexAction, body: unknown): void;
+export declare function validateDiscoveryRepairWinner(index: string, action: AnyDiscoveryIndexAction, body: unknown): void;
 /** Session custody spans the external effect, but no database transaction/row lock does. */
 export declare function withDiscoveryTarget<T>(pool: Pool, search: OpenSearch, target: DiscoveryTarget, work: (client: PoolClient, index: string) => Promise<T>, purge?: boolean): Promise<T>;
 export declare const copyLocator: (target: DiscoveryTarget) => string;
@@ -71,6 +75,7 @@ export declare function createDiscoveryProjection(options: {
     registry: DiscoveryRegistry;
     listing: SubjectListingSource;
     target: DiscoveryTarget;
+    metadataProducers?: DiscoveryMetadataProducers;
 }): {
     project: (partition: number, input: readonly DiscoveryKey[], atLeast?: bigint, repair?: boolean) => Promise<void>;
     prepareRepair: (id: string, obligation: bigint, owner?: DiscoveryKey['owner']) => Promise<DiscoveryIndexAction[]>;
@@ -86,6 +91,75 @@ export declare function createDiscoveryProjection(options: {
             refresh: unknown;
         }>;
     }>[]>;
+    prepareReviews: (refresh: ReviewDiscoveryRefresh, ids: readonly string[]) => Promise<SecondScopeDiscoveryIndexAction[]>;
+    applyReviews: (actions: readonly SecondScopeDiscoveryIndexAction[], held: {
+        client: PoolClient;
+        index: string;
+        acknowledge(): Promise<void>;
+    }) => Promise<void>;
+    applyNativeActions: (actions: readonly AnyDiscoveryIndexAction[]) => Promise<Readonly<{
+        key: DiscoveryKey;
+        action: DiscoveryIndexAction;
+        winner: unknown;
+        evidence: Readonly<{
+            kind: 'bulk';
+            bulk: unknown;
+        }> | Readonly<{
+            kind: 'recovered';
+            refresh: unknown;
+        }>;
+    }>[]>;
+    hasMetadataPopulation: (kind: DiscoveryMetadataKind) => Promise<boolean>;
+    prepareOwnerPageActions: (kind: DiscoveryMetadataKind, partition: number, snapshot: {
+        position: bigint;
+        keys: readonly import('./discovery-documents.ts').SecondScopeDiscoveryKey[];
+        records: readonly import('./discovery-documents.ts').SecondScopeDiscoveryRecord[];
+    }) => SecondScopeDiscoveryIndexAction[];
+    prepareOwnerActions: (kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) => Promise<{
+        position: bigint;
+        keys: any[];
+        records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+        actions: SecondScopeDiscoveryIndexAction[];
+    }>;
+    projectOwner: (kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) => Promise<Readonly<{
+        key: DiscoveryKey;
+        action: DiscoveryIndexAction;
+        winner: unknown;
+        evidence: Readonly<{
+            kind: 'bulk';
+            bulk: unknown;
+        }> | Readonly<{
+            kind: 'recovered';
+            refresh: unknown;
+        }>;
+    }>[] | undefined>;
+    ownerPosition: (kind: DiscoveryMetadataKind, partition: number) => Promise<bigint>;
+    metadataProducers: Readonly<Partial<Record<"collection" | "review" | "space", Readonly<{
+        kind: DiscoveryMetadataKind;
+        owner: 'commerce' | 'content';
+        readiness(): Promise<'ready' | 'preparing' | 'unavailable' | import("../community/space-discovery-dependencies.ts").SpaceDiscoveryDependencyReadiness>;
+        page(partition: number, after: Readonly<{
+            route: number;
+            id: string;
+        }> | null, continuation: string | null, limit: number): Promise<Readonly<{
+            position: bigint;
+            epoch?: number;
+            next: Readonly<{
+                route: number;
+                id: string;
+            }> | null;
+            continuation: string | null;
+            keys: readonly import("./discovery-documents.ts").SecondScopeDiscoveryKey[];
+            records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+        }>>;
+        read(partition: number, ids: readonly string[]): Promise<Readonly<{
+            position: bigint;
+            epoch?: number;
+            keys: readonly import("./discovery-documents.ts").SecondScopeDiscoveryKey[];
+            records: readonly import("./discovery-documents.ts").SecondScopeDiscoveryRecord[];
+        }>>;
+        position(partition: number): Promise<bigint>;
+    }>>>>;
     registry: DiscoveryRegistry;
     target: DiscoveryTarget;
     listing: SubjectListingSource;

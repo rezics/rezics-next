@@ -1,3 +1,5 @@
+import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
+import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
 export type LanguageValue = {
     language: string;
@@ -5,14 +7,30 @@ export type LanguageValue = {
 };
 export declare const MAX_RELATION_FACET_VALUES = 128;
 export declare const MAX_RELATION_FACET_PROBES = 256;
-/** Unqualified adopted Global relation membership for one subject, property and value. */
+/** Adopted Global relation membership; all qualifiers constrain the same native statement. */
 export type RelationFacetProbe = {
     subject: string;
     property: string;
     value: string;
+    qualifiers?: readonly FilterQualifier[];
+    /** Journey policy: voice credits also need permitted appearances of their own characters. */
+    spoilerThreshold?: SpoilerThreshold;
 };
 /** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
 export type RelationFacetMatch = boolean | 'not_proven';
+/** Complete current work-link evidence. Concealed or malformed values carry no identity. */
+export type NativeWorkLinkValue = {
+    kind: 'work';
+    id: string;
+} | {
+    kind: 'unknown';
+};
+export type NativeWorkLinkEvidence = Readonly<{
+    /** False means this bounded observation did not prove a complete current selection. */
+    complete: boolean;
+    /** An empty complete list proves no current work link. */
+    values: readonly NativeWorkLinkValue[];
+}>;
 /**
  * Filterable form of a statement value.
  * Time keeps its astronomical year and only the month/day represented by native precision.
@@ -23,12 +41,9 @@ export type FacetValue = {
     kind: 'item';
 } | {
     kind: 'code';
-} | {
+} | ({
     kind: 'time';
-    year: number;
-    month?: number;
-    day?: number;
-} | {
+} & CalendarDate) | {
     kind: 'quantity';
     amount: number;
     unit: string;
@@ -40,7 +55,7 @@ export type IndexedStatement = {
     value: string;
     /** Present when the value's datatype can be a facet. */
     facet?: FacetValue;
-    /** Concrete adopted item (target subject id) or string qualifiers, preserved exactly on this statement.
+    /** Concrete adopted item (target subject id), string or canonical spoiler-level qualifiers on this statement.
      * Unknown snaks are omitted; absence here is not complete negative evidence. */
     qualifiers?: {
         property: string;
@@ -80,6 +95,15 @@ export type SubjectSnapshot = {
     position: bigint;
     subjects: IndexedSubject[];
 };
+/** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
+export type RetainedRelationFacetPage = Readonly<{
+    bounds: readonly Readonly<{
+        partition: number;
+        probeBatchBound: number;
+    }>[];
+    match(): Promise<RelationFacetMatch[]>;
+    revalidate(): Promise<boolean>;
+}>;
 export interface SubjectSource {
     /** Unknown ids are omitted. Every id must route to `partition`. */
     read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
@@ -89,17 +113,24 @@ export interface SubjectSource {
         count: number;
     }>;
     /**
-     * Match unqualified membership in full adopted Global relations, applying current source fences and moderation.
+     * Match membership in full adopted Global relations, applying current source fences and moderation.
      * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;
-     * invalid input, including a qualifiers field, rejects. The aligned boolean array preserves probe order
-     * and duplicates; each result matches only the probe's subject, property and value.
+     * Invalid structural input rejects. Qualifiers use the bounded shared filter grammar and must be
+     * admitted by the subject's current release; unsupported evidence remains not_proven. The aligned
+     * array preserves order and duplicates. Value and every qualifier must hold on one statement;
+     * evidence from repeated credits must never be combined. Qualified probes sharing a value share
+     * one bounded native seek, retaining separate truth results.
      * Missing, hidden, taken-down and redirected subjects return false.
      * `true` and `false` are definitive current truth and absence. `not_proven` is bounded witness
      * uncertainty: the source could not prove membership within its bound, and it is never `false`.
      * Optional for historical mocks. Search must fail closed
      * when an overflow probe is needed and this method is absent.
      */
+    /** Gather all indexed keys and current cuts before authorizing any page witness dispatch. */
+    prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
     matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
+    /** Read the complete adopted Global exampleOfWork selection for current visible releases. */
+    readCompleteWorkLinks?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 /** Active public Collection counts for subjects in one partition. Only the count is read. */
 export interface SubjectListingSource {

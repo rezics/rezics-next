@@ -1,16 +1,13 @@
 import type { Pool } from 'pg';
-import { type CommandEvent, type CommandOutcome, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import { type CommandEvent, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type ShelfTypeDigest } from './shelf-type-keys.ts';
 import type { Entry, EntryState, EntryDeletion } from './entry-model.ts';
-import type {
-    EntryStateChangeReview,
-    EntryStateHistoryOptions,
-    EntryStateHistoryPage,
-    EntryStateRestoreRequest,
-} from './entry-state-history.ts';
+import { type VndbEntryReview } from './list-import-vndb-admission.ts';
+import { LibraryConflictError } from './entry-errors.ts';
+export { LibraryConflictError } from './entry-errors.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
@@ -40,11 +37,12 @@ type ListEntryOptions = {
     cursor?: string;
     limit?: number;
 };
+type EntryStateHistoryOptions = {
+    cursor?: string;
+    limit?: number;
+};
 export declare class LibraryEntryInvalidError extends TypeError {
     constructor(message?: string);
-}
-export declare class LibraryConflictError extends Error {
-    constructor();
 }
 export declare class LibraryEntryLifecycleConflictError extends LibraryConflictError {
     readonly reason: 'stale' | 'occupied' | 'expired';
@@ -54,6 +52,7 @@ export declare class LibraryEntryStateRestoreConflictError extends LibraryConfli
     readonly reason: 'stale' | 'unavailable' | 'unchanged';
     constructor(reason: 'stale' | 'unavailable' | 'unchanged');
 }
+type EntryStateCommandKind = 'library.entry.put' | 'library.entry.state.restore';
 /** Ordinary deletion transition, on the caller's authorized native owner transaction. */
 export declare function deleteLibraryEntryInTransaction(tx: CommandTransaction, command: {
     transactionId: string;
@@ -64,16 +63,114 @@ export declare function deleteLibraryEntryInTransaction(tx: CommandTransaction, 
 }>;
 /** Private account library entry writes and signed, account-scoped keyset reads. */
 export declare function createEntryCommands(config: Dependencies): {
-    putEntry: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string, guard?: import('./list-import-bangumi-model.ts').BangumiGuard | ReviewedEntrySource) => Promise<import("../command/command.ts").CommandOutcome<{
+    readPersonalEntry: (actor: Actor, subjectId: string) => Promise<import("./entry-personal-model.ts").PersonalEntry>;
+    saveAnnotations: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+        subjectId: string;
+        annotationRevision: number;
+        note: string | null;
+        priority: number | null;
+        annotationUpdatedAt: string | null;
+        sourceObservations: readonly import("./entry-personal-model.ts").PersonalEntryObservation[];
+    }>>>>) => Promise<import("../command/command.ts").CommandOutcome<Readonly<{
+        subjectId: string;
+        annotationRevision: number;
+        note: string | null;
+        priority: number | null;
+        annotationUpdatedAt: string | null;
+        sourceObservations: readonly import("./entry-personal-model.ts").PersonalEntryObservation[];
+    }>>>;
+    admitSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
+        sourceObservation: Readonly<{
+            provider: string;
+            recordId: string;
+            revision: number;
+            privacy: import("./entry-personal-model.ts").PrivacyFact;
+            sourceCreated: import("./entry-personal-model.ts").TimestampFact;
+            sourceUpdated: import("./entry-personal-model.ts").TimestampFact;
+            recordedAt: string;
+        }>;
+    }>>>) => Promise<import("../command/command.ts").CommandOutcome<{
+        sourceObservation: Readonly<{
+            provider: string;
+            recordId: string;
+            revision: number;
+            privacy: import("./entry-personal-model.ts").PrivacyFact;
+            sourceCreated: import("./entry-personal-model.ts").TimestampFact;
+            sourceUpdated: import("./entry-personal-model.ts").TimestampFact;
+            recordedAt: string;
+        }>;
+    }>>;
+    correctSourceObservation: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
+        sourceObservation: Readonly<{
+            provider: string;
+            recordId: string;
+            revision: number;
+            privacy: import("./entry-personal-model.ts").PrivacyFact;
+            sourceCreated: import("./entry-personal-model.ts").TimestampFact;
+            sourceUpdated: import("./entry-personal-model.ts").TimestampFact;
+            recordedAt: string;
+        }>;
+    }>>>) => Promise<import("../command/command.ts").CommandOutcome<{
+        sourceObservation: Readonly<{
+            provider: string;
+            recordId: string;
+            revision: number;
+            privacy: import("./entry-personal-model.ts").PrivacyFact;
+            sourceCreated: import("./entry-personal-model.ts").TimestampFact;
+            sourceUpdated: import("./entry-personal-model.ts").TimestampFact;
+            recordedAt: string;
+        }>;
+    }>>;
+    putEntry: (...args: Parameters<(actor: Actor, subjectId: string, input: unknown, requestKey: string, guard?: import('./list-import-bangumi-model.ts').BangumiGuard | VndbEntryReview | ReviewedEntrySource | {
+        subjectId: string;
+        pin: unknown;
+        epoch: string;
+    }) => Promise<import("../command/command.ts").CommandOutcome<{
         entry: Entry;
         created: boolean;
     }>>>) => Promise<import("../command/command.ts").CommandOutcome<{
         entry: Entry;
         created: boolean;
     }>>;
-    listEntryStateHistory: (actor: Actor, subjectId: string, options?: EntryStateHistoryOptions) => Promise<EntryStateHistoryPage>;
-    reviewEntryStateChange: (actor: Actor, subjectId: string, selectedRevision: number) => Promise<EntryStateChangeReview>;
-    restoreEntryState: (actor: Actor, subjectId: string, selectedRevision: number, input: EntryStateRestoreRequest, requestKey: string) => Promise<CommandOutcome<{
+    listEntryStateHistory: (actor: Actor, subjectId: string, options?: EntryStateHistoryOptions) => Promise<{
+        incarnationId: null;
+        currentRevision: number;
+        changes: never[];
+        coverage: 'unknown';
+        next: null;
+    } | {
+        incarnationId: string;
+        currentRevision: number;
+        changes: {
+            revision: number;
+            priorRevision: number | null;
+            beforeState: string | null;
+            afterState: string;
+            commandId: string;
+            commandKind: EntryStateCommandKind;
+            changedAt: string;
+        }[];
+        coverage: "complete" | "partial" | "unknown";
+        next: string | null;
+    }>;
+    reviewEntryStateChange: (actor: Actor, subjectId: string, selectedRevision: number) => Promise<{
+        change: {
+            revision: number;
+            priorRevision: number | null;
+            beforeState: string | null;
+            afterState: string;
+            commandId: string;
+            commandKind: EntryStateCommandKind;
+            changedAt: string;
+        };
+        current: {
+            incarnationId: string | null;
+            revision: number;
+            state: string;
+        };
+        availability: "available" | "no_prior_state" | "state_unavailable";
+    }>;
+    restoreEntryState: (actor: Actor, subjectId: string, selectedRevision: number, input: unknown, requestKey: string) => Promise<import("../command/command.ts").CommandOutcome<{
         entry: Entry;
     }>>;
     deleteEntry: (actor: Actor, subjectId: string, expectedRevision: number, requestKey: string, expectedIncarnationId?: string) => Promise<import("../command/command.ts").CommandOutcome<{
@@ -89,4 +186,3 @@ export declare function createEntryCommands(config: Dependencies): {
         next: string | null;
     }>;
 };
-export {};

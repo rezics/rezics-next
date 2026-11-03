@@ -5560,6 +5560,10 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             finishedAt: string | null;
                             reason: import("./bulk-contract.ts").BulkReason | null;
                         }>;
+                        preparing?: never;
+                    } | {
+                        operation?: never;
+                        preparing: true;
                     };
                     201: {
                         operation: {
@@ -5569,7 +5573,17 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             selectionKind: "explicit" | "occurrences" | "query";
                             state: string | null;
                             collectionId: string | null;
-                            selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
+                            selectionSource: {
+                                id: string;
+                                revision: number;
+                                membershipKind: "curated" | "dynamic";
+                                exposure: "private" | "public" | "unlisted";
+                                sourceDigest: string;
+                                filter: string | null;
+                                sort: "id" | null;
+                                scannedCandidates: number;
+                                selectedSubjects: number;
+                            } | null;
                             phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                             selectionComplete: boolean;
                             occurrencesComplete: boolean;
@@ -5707,7 +5721,17 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 selectionKind: "explicit" | "occurrences" | "query";
                                 state: string | null;
                                 collectionId: string | null;
-                                selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
+                                selectionSource: {
+                                    id: string;
+                                    revision: number;
+                                    membershipKind: "curated" | "dynamic";
+                                    exposure: "private" | "public" | "unlisted";
+                                    sourceDigest: string;
+                                    filter: string | null;
+                                    sort: "id" | null;
+                                    scannedCandidates: number;
+                                    selectedSubjects: number;
+                                } | null;
                                 phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                 selectionComplete: boolean;
                                 occurrencesComplete: boolean;
@@ -5968,7 +5992,17 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     selectionKind: "explicit" | "occurrences" | "query";
                                     state: string | null;
                                     collectionId: string | null;
-                                    selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
+                                    selectionSource: {
+                                        id: string;
+                                        revision: number;
+                                        membershipKind: "curated" | "dynamic";
+                                        exposure: "private" | "public" | "unlisted";
+                                        sourceDigest: string;
+                                        filter: string | null;
+                                        sort: "id" | null;
+                                        scannedCandidates: number;
+                                        selectedSubjects: number;
+                                    } | null;
                                     phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                     selectionComplete: boolean;
                                     occurrencesComplete: boolean;
@@ -6108,7 +6142,17 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     selectionKind: "explicit" | "occurrences" | "query";
                                     state: string | null;
                                     collectionId: string | null;
-                                    selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
+                                    selectionSource: {
+                                        id: string;
+                                        revision: number;
+                                        membershipKind: "curated" | "dynamic";
+                                        exposure: "private" | "public" | "unlisted";
+                                        sourceDigest: string;
+                                        filter: string | null;
+                                        sort: "id" | null;
+                                        scannedCandidates: number;
+                                        selectedSubjects: number;
+                                    } | null;
                                     phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                     selectionComplete: boolean;
                                     occurrencesComplete: boolean;
@@ -8683,6 +8727,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | {
                                         kind: "time";
                                         year: number;
+                                        month?: number;
+                                        day?: number;
                                     } | {
                                         kind: "quantity";
                                         amount: number;
@@ -8743,6 +8789,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | {
                                         kind: "time";
                                         year: number;
+                                        month?: number;
+                                        day?: number;
                                     } | {
                                         kind: "quantity";
                                         amount: number;
@@ -8753,6 +8801,49 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     })[]>;
                                 })[];
                                 next: string | null;
+                                viewerFacts?: {
+                                    state: "current";
+                                    question: {
+                                        id: string;
+                                        revision: number;
+                                        grain: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        meaning: string;
+                                    } | null;
+                                    rows: {
+                                        rowKey: string;
+                                        subjectId: string;
+                                        entry: {
+                                            state: "present";
+                                            incarnationId: string | null;
+                                            entryState: string | null;
+                                            revision: number;
+                                        } | {
+                                            state: "absent";
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "scope";
+                                        };
+                                        vote: {
+                                            state: "present";
+                                            questionId: string;
+                                            questionRevision: number;
+                                            units: number;
+                                            revision: number;
+                                        } | {
+                                            state: "absent";
+                                            questionId: string;
+                                            questionRevision: number;
+                                        } | {
+                                            state: "unavailable";
+                                            reason: "question" | "scope";
+                                        };
+                                    }[];
+                                };
                             };
                             202: {
                                 preparing: true;

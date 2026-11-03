@@ -1,5 +1,5 @@
 import { type DiscoveryFilterDocument, type FilterRelease } from '@rezics/filter';
-import type { DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
+import type { DiscoveryOwnerRegistry, DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
 export type MixedDiscoveryRequest = DiscoveryRequest & {
     kindPage?: {
         limit: number;
@@ -10,7 +10,7 @@ export type MixedDiscoveryRequest = DiscoveryRequest & {
 /** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
 export declare function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscoveryRequest;
 /** Admission precedes any native enumeration. Saved/private domains remain closed here. */
-export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, registry: DiscoveryRegistry, release: FilterRelease): {
+export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>, release: FilterRelease): {
     text: import("./text.ts").TextNode | undefined;
     filter: DiscoveryFilterDocument | undefined;
     countFilter: DiscoveryFilterDocument | undefined;

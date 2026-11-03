@@ -3,6 +3,9 @@ import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/discovery.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
+import type { ViewerReactionKind } from './reads.ts';
+import type { ReactionTarget } from './reactions.ts';
+import type { FeedParentContext, FeedReviewContext } from './model.ts';
 export declare const FeedSelectionIdSchema: import("typebox").TString;
 export type FeedSelection = {
     spaceId?: string;
@@ -14,9 +17,18 @@ export declare const FeedKindSchema: import("typebox").TString;
 export declare function readFeedKind(kind: string | undefined): string | undefined;
 export declare const FeedAuthorSchema: import("typebox").TUnsafe<Pick<AccountDiscoverySummary, "avatar" | "displayName" | "handle">>;
 export type FeedAuthor = Static<typeof FeedAuthorSchema>;
+export type FeedReactionTarget = Readonly<{
+    targetKind: Extract<ReactionTarget['targetKind'], 'thread' | 'post'>;
+    targetId: ReactionTarget['targetId'];
+}>;
+export type FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>;
 export type FeedContentSummary = {
     author?: FeedAuthor;
     excerpt?: string;
+    reviewContext?: FeedReviewContext;
+    reactionTarget?: FeedReactionTarget;
+    reactions?: FeedReactionCounts;
+    viewerReaction?: ViewerReactionKind | null;
 };
 export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
@@ -88,6 +100,81 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
 }>, import("typebox").TObject<{
     id: import("typebox").TString;
     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    source: import("typebox").TLiteral<"discovery">;
+    key: import("typebox").TObject<{
+        owner: import("typebox").TLiteral<"commerce">;
+        kind: import("typebox").TLiteral<"collection">;
+        route: import("typebox").TInteger;
+        id: import("typebox").TString;
+    }>;
+    summary: import("typebox").TUnsafe<Readonly<{
+        id: string;
+        title: string;
+        description: string | null;
+    }>>;
+    destination: import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"collection">;
+        id: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    source: import("typebox").TLiteral<"discovery">;
+    key: import("typebox").TObject<{
+        owner: import("typebox").TLiteral<"content">;
+        kind: import("typebox").TLiteral<"review">;
+        route: import("typebox").TInteger;
+        id: import("typebox").TString;
+    }>;
+    summary: import("typebox").TUnsafe<Readonly<{
+        id: string;
+        kind: 'review';
+        title: string | null;
+        author?: Readonly<{
+            displayName: string | null;
+            handle: string | null;
+        }>;
+        excerpt?: string;
+        subject?: Readonly<{
+            id: string;
+            title: string | null;
+        }> | null;
+    }> & Pick<FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+    destination: import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"thread">;
+        id: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    source: import("typebox").TLiteral<"discovery">;
+    key: import("typebox").TObject<{
+        owner: import("typebox").TLiteral<"content">;
+        kind: import("typebox").TLiteral<"space">;
+        route: import("typebox").TInteger;
+        id: import("typebox").TString;
+    }>;
+    summary: import("typebox").TUnsafe<Readonly<{
+        id: string;
+        title: string;
+        address: string;
+        summary?: string;
+        realm?: Readonly<{
+            id: string;
+            title: string | null;
+        }> | null;
+    }>>;
+    destination: import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"space">;
+        id: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        address: import("typebox").TString;
+    }>;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     source: import("typebox").TLiteral<"continue">;
     key: import("typebox").TObject<{
         owner: import("typebox").TLiteral<"semantic">;
@@ -151,7 +238,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
             locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             completedUnitCount: import("typebox").TInteger;
-            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+            state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
             revision: import("typebox").TInteger;
             startedAt: import("typebox").TString;
             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -289,7 +376,9 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
         route: import("typebox").TInteger;
         id: import("typebox").TString;
     }>;
-    summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary>;
+    summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary & {
+        parentContext?: FeedParentContext;
+    }>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"post">;
         id: import("typebox").TString;
@@ -386,6 +475,81 @@ export declare const FeedPageSchema: import("typebox").TObject<{
     }>, import("typebox").TObject<{
         id: import("typebox").TString;
         occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        source: import("typebox").TLiteral<"discovery">;
+        key: import("typebox").TObject<{
+            owner: import("typebox").TLiteral<"commerce">;
+            kind: import("typebox").TLiteral<"collection">;
+            route: import("typebox").TInteger;
+            id: import("typebox").TString;
+        }>;
+        summary: import("typebox").TUnsafe<Readonly<{
+            id: string;
+            title: string;
+            description: string | null;
+        }>>;
+        destination: import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"collection">;
+            id: import("typebox").TString;
+            title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+    }>, import("typebox").TObject<{
+        id: import("typebox").TString;
+        occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        source: import("typebox").TLiteral<"discovery">;
+        key: import("typebox").TObject<{
+            owner: import("typebox").TLiteral<"content">;
+            kind: import("typebox").TLiteral<"review">;
+            route: import("typebox").TInteger;
+            id: import("typebox").TString;
+        }>;
+        summary: import("typebox").TUnsafe<Readonly<{
+            id: string;
+            kind: 'review';
+            title: string | null;
+            author?: Readonly<{
+                displayName: string | null;
+                handle: string | null;
+            }>;
+            excerpt?: string;
+            subject?: Readonly<{
+                id: string;
+                title: string | null;
+            }> | null;
+        }> & Pick<FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+        destination: import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"thread">;
+            id: import("typebox").TString;
+            title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>;
+    }>, import("typebox").TObject<{
+        id: import("typebox").TString;
+        occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        source: import("typebox").TLiteral<"discovery">;
+        key: import("typebox").TObject<{
+            owner: import("typebox").TLiteral<"content">;
+            kind: import("typebox").TLiteral<"space">;
+            route: import("typebox").TInteger;
+            id: import("typebox").TString;
+        }>;
+        summary: import("typebox").TUnsafe<Readonly<{
+            id: string;
+            title: string;
+            address: string;
+            summary?: string;
+            realm?: Readonly<{
+                id: string;
+                title: string | null;
+            }> | null;
+        }>>;
+        destination: import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"space">;
+            id: import("typebox").TString;
+            title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            address: import("typebox").TString;
+        }>;
+    }>, import("typebox").TObject<{
+        id: import("typebox").TString;
+        occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         source: import("typebox").TLiteral<"continue">;
         key: import("typebox").TObject<{
             owner: import("typebox").TLiteral<"semantic">;
@@ -449,7 +613,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                 locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 completedUnitCount: import("typebox").TInteger;
-                state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
                 revision: import("typebox").TInteger;
                 startedAt: import("typebox").TString;
                 completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -587,7 +751,9 @@ export declare const FeedPageSchema: import("typebox").TObject<{
             route: import("typebox").TInteger;
             id: import("typebox").TString;
         }>;
-        summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary>;
+        summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary & {
+            parentContext?: FeedParentContext;
+        }>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"post">;
             id: import("typebox").TString;
@@ -614,6 +780,10 @@ export declare const FeedPageSchema: import("typebox").TObject<{
     }>]>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     asOf: import("typebox").TString;
+    reactionsAsOf: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+        epoch: number;
+        position: string;
+    }>>, import("typebox").TNull]>>;
     sources: import("typebox").TObject<{
         discovery: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
         following: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;

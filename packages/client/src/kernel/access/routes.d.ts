@@ -6423,7 +6423,7 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 gridSize?: "large" | "medium" | "small" | null;
                                 tableColumns?: ("added" | "cover" | "creator" | "finished" | "last_activity" | "progress" | "rating" | "started" | "status" | "title" | "type")[] | null;
                             } | null;
-                            notifications?: Partial<Record<"mention" | "reply", boolean | null>> | null;
+                            notifications?: Partial<Record<"board_activity" | "mention" | "reply" | "thread_watch", boolean | null>> | null;
                         };
                         params: {
                             accountId: string;

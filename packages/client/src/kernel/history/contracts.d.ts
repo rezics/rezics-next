@@ -58,6 +58,8 @@ export type EventClassification = Readonly<{
 /** Payload/native owner associations, never inferred from UUIDs or JSON. Command scope is added even for
  * non-personal payloads; an owner's private association overrides a public-resource disposition. */
 export declare const EVENT_CLASSIFICATIONS: Readonly<{
+    'com.rezics.content.board.watch.changed.v1': EventClassification;
+    'com.rezics.content.watch.removed.v1': EventClassification;
     'com.rezics.access.account-display-name-changed.v1': EventClassification;
     'com.rezics.access.account-handle-published.v1': EventClassification;
     'com.rezics.access.account-tombstoned.v1': EventClassification;
@@ -224,6 +226,10 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     }>;
     'com.rezics.content.author-erasure.requested.v1': EventClassification;
     'com.rezics.content.author-item.projected.v1': EventClassification;
+    'com.rezics.content.own-drafts.repaired.v1': Readonly<{
+        kind: 'non-personal';
+        roles: readonly [];
+    }>;
     'com.rezics.content.edition.created.v1': EventClassification;
     'com.rezics.content.edition.published.v1': EventClassification;
     'com.rezics.content.edition.unpublished.v1': EventClassification;
@@ -275,6 +281,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         roles: readonly [];
     }>;
     'com.rezics.library.bulk.confirmed.v1': EventClassification;
+    'com.rezics.library.anilist.changed.v1': EventClassification;
     'com.rezics.library.bulk.changed.v1': EventClassification;
     'com.rezics.library.account-facts.purged.v1': EventClassification;
     'com.rezics.library.collection.deleted.v1': EventClassification;
@@ -285,8 +292,12 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.library.copy.updated.v1': EventClassification;
     'com.rezics.library.entry.deleted.v1': EventClassification;
     'com.rezics.library.entry.updated.v1': EventClassification;
+    'com.rezics.library.entry.annotations.updated.v1': EventClassification;
+    'com.rezics.library.entry.source-observation.admitted.v1': EventClassification;
+    'com.rezics.library.entry.source-observation.corrected.v1': EventClassification;
     'com.rezics.library.follow.updated.v1': EventClassification;
     'com.rezics.library.label.changed.v1': EventClassification;
+    'com.rezics.library.label.consolidation.changed.v1': EventClassification;
     'com.rezics.library.label.retention-purged.v1': EventClassification;
     'com.rezics.library.entry.purged.v1': EventClassification;
     'com.rezics.library.progress_session.updated.v1': EventClassification;
@@ -366,7 +377,6 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     }>;
     'com.rezics.semantic.erasure.progress.v1': EventClassification;
     'com.rezics.semantic.links.changed.v1': EventClassification;
-    'com.rezics.semantic.subject_page.dependencies_changed.v1': EventClassification;
     'com.rezics.semantic.links.keys-changed.v1': EventClassification;
     'com.rezics.semantic.links.moving.v1': EventClassification;
     'com.rezics.semantic.links.projected.v1': Readonly<{

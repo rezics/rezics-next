@@ -9,10 +9,10 @@ import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf
 import { type ScopeLeafPosition } from './scope-progress.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
-import { type RealmSubjectCapabilities } from './realm-scope.ts';
+import { type PreparedRealmScope, type RealmSubjectCapabilities } from './realm-scope.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
-import { type RelationFacetMatch, type SubjectSource } from './source.ts';
-import { type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
+import { type IndexedSubject, type RelationFacetMatch, type SubjectSource } from './source.ts';
+import { type ScopeNameSortTuple, type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
 export type { ScopeNativeOrder, ScopeNameSortTuple, ScopeCollectionsSortTuple, ScopeOrderedPrefixRequest, SearchScopeOrderedPrefix, } from './scope-ordered.ts';
 /** Independent native work reservation; none of these units are candidate keys. */
 export type ScopeNativeBudget = Omit<LeafWork, 'keys'>;
@@ -92,32 +92,80 @@ export type SearchScopeEvaluation = {
 /** Native service runtime, immutable admission and factory-local handles. Native producers
  * own structural capture, current authorization and evidence; this module owns execution.
  */
-export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, evidence, realmSubjects, realmSubjectCapabilities, clock, }: {
+export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, realmRelease, evidence, realmSubjects, realmSubjectCapabilities, clock, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     release?: () => Promise<FilterRelease | null>;
+    realmRelease?: (digest?: string) => Promise<Readonly<{
+        digest: string;
+        release: FilterRelease;
+    }> | null>;
     evidence?: LeafOptions;
     realmSubjects?: RealmSubjectSource;
     realmSubjectCapabilities?: RealmSubjectCapabilities;
     clock?: KernelClock;
 }): {
     realm: {
+        realms(scope: PreparedRealmScope): readonly string[];
         prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
-            scope: import("./realm-scope.ts").PreparedRealmScope;
+            scope: PreparedRealmScope;
             work: WorkReceipt;
         }>>;
-        sourcePrefix(scope: import("./realm-scope.ts").PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
+        sourcePrefix(scope: PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
             subjects: readonly string[];
             after: string | null;
             exhausted: boolean;
             basis: string;
             work: WorkReceipt;
         }>;
-        evaluate(scope: import("./realm-scope.ts").PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
+        evaluate(scope: PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
             basis: string;
             values: RelationFacetMatch[];
+            work: WorkReceipt;
+        }>;
+        refinePrefix(scope: PreparedRealmScope, frontier: import("./realm-scope.ts").RealmRefinementFrontier | null, allowance: WorkAllowance): Promise<Readonly<{
+            readiness: 'refined_input';
+            basis: string;
+            subjects: readonly string[];
+            frontier: import("./realm-scope.ts").RealmRefinementFrontier | null;
+            exhausted: boolean;
+            work: WorkReceipt;
+        }>>;
+        revalidate(scope: PreparedRealmScope, allowance: WorkAllowance): Promise<WorkReceipt>;
+        searchBasis: (prepared: PreparedRealmScope, request: {
+            text?: string;
+            textQuery?: Record<string, unknown>;
+            textBoost?: string;
+            generation: number;
+            indexUuid: string;
+        }) => ScopeBasis;
+        searchPage: (prepared: PreparedRealmScope, request: {
+            basis: ScopeBasis;
+            text?: string;
+            textQuery?: Record<string, unknown>;
+            textBoost?: string;
+            generation: number;
+            indexUuid: string;
+            after: ScopeNameSortTuple | null;
+            quota: number;
+            allowance: WorkAllowance;
+        }) => Promise<{
+            status: 'preparing';
+            basis: ScopeBasis;
+            work: WorkReceipt;
+            hits?: never;
+            subjects?: never;
+            after?: never;
+            exhausted?: never;
+        } | {
+            status: 'ready';
+            basis: ScopeBasis;
+            hits: SearchHit[];
+            subjects: IndexedSubject[];
+            after: ScopeNameSortTuple | null;
+            exhausted: boolean;
             work: WorkReceipt;
         }>;
     };
