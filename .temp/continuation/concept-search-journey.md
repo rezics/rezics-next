@@ -40,8 +40,8 @@ waiting: []
 acceptance:
   tests:
     - "Connect the retained hierarchy worker to Semantic's current admitted indexed relations, release/source observations and statement witnesses; bind exact/descendant selections, exclusion and Boolean branches to universal Search with three-valued same-statement disclosure/spoiler evidence."
-    - "Mount bounded scheme, breadcrumb, parent and child APIs with authorized labels, native destinations and supported viewer actions; install the complete localized /search/concepts URL/back-navigation and useful-results journey with accessible repair states in all eight locales."
-    - "Derive complete native preparation and useful-result-page work before dispatch, including all nested owner calls, physical predicates, rows, bytes and working sets. Preserve useful-page bounds through retained-cut invalidation; never lower closures to in:64."
+    - 'Mount bounded scheme, breadcrumb, parent and child APIs with authorized labels, native destinations and supported viewer actions; install the complete localized /search/concepts URL/back-navigation and useful-results journey with accessible repair states in all eight locales.'
+    - 'Derive complete native preparation and useful-result-page work before dispatch, including all nested owner calls, physical predicates, rows, bytes and working sets. Preserve useful-page bounds through retained-cut invalidation; never lower closures to in:64.'
     - Run focused tests and workspace typing under launch policy; leave integrated native hierarchy/classified-subject 1x/4x/16x growth and connected browser acceptance to the controller when authorized.
   workerOwned: true
 estimate:
