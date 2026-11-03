@@ -1601,6 +1601,85 @@ CREATE TABLE content.realm_discovery_operation (
 
 
 --
+-- Name: realm_subject_candidate; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_candidate (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    opening_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    board_id uuid NOT NULL,
+    kind text NOT NULL,
+    terminal_id uuid,
+    identity_epoch bigint,
+    active boolean NOT NULL,
+    live boolean NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT realm_subject_candidate_check CHECK (((terminal_id IS NULL) = (identity_epoch IS NULL))),
+    CONSTRAINT realm_subject_candidate_identity_epoch_check CHECK (((identity_epoch IS NULL) OR (identity_epoch >= 0))),
+    CONSTRAINT realm_subject_candidate_kind_check CHECK ((kind = ANY (ARRAY['discussion'::text, 'review'::text]))),
+    CONSTRAINT realm_subject_candidate_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT realm_subject_candidate_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: realm_subject_census; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_census (
+    route integer NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    cut_epoch integer NOT NULL,
+    cut_position bigint NOT NULL,
+    upper_id uuid,
+    after_id uuid,
+    pending jsonb,
+    ordinal integer DEFAULT 0 NOT NULL,
+    exhausted boolean DEFAULT false NOT NULL,
+    CONSTRAINT realm_subject_census_cut_epoch_check CHECK ((cut_epoch > 0)),
+    CONSTRAINT realm_subject_census_cut_position_check CHECK ((cut_position >= 0)),
+    CONSTRAINT realm_subject_census_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 128))),
+    CONSTRAINT realm_subject_census_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: realm_subject_generation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_generation (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    unresolved bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT realm_subject_generation_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT realm_subject_generation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_subject_generation_unresolved_check CHECK ((unresolved >= 0))
+);
+
+
+--
+-- Name: realm_subject_thread_fence; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_thread_fence (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT realm_subject_thread_fence_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT realm_subject_thread_fence_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: report; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2223,6 +2302,38 @@ ALTER TABLE ONLY content.realm_discovery_operation
 
 
 --
+-- Name: realm_subject_candidate realm_subject_candidate_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_candidate
+    ADD CONSTRAINT realm_subject_candidate_pkey PRIMARY KEY (route, realm_id, original_id, thread_id);
+
+
+--
+-- Name: realm_subject_census realm_subject_census_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_census
+    ADD CONSTRAINT realm_subject_census_pkey PRIMARY KEY (route);
+
+
+--
+-- Name: realm_subject_generation realm_subject_generation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_generation
+    ADD CONSTRAINT realm_subject_generation_pkey PRIMARY KEY (route, realm_id);
+
+
+--
+-- Name: realm_subject_thread_fence realm_subject_thread_fence_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_thread_fence
+    ADD CONSTRAINT realm_subject_thread_fence_pkey PRIMARY KEY (route, realm_id, thread_id);
+
+
+--
 -- Name: report_outcome_delivery report_outcome_delivery_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2555,6 +2666,27 @@ CREATE INDEX reaction_liked_subject ON content.reaction USING btree (route, acto
 --
 
 CREATE INDEX realm_discovery_operation_recovery ON content.realm_discovery_operation USING btree (route, intent, generation) WHERE ((NOT projected) AND (phase = ANY (ARRAY['applied'::text, 'aborted'::text])));
+
+
+--
+-- Name: realm_subject_candidate_prefix; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX realm_subject_candidate_prefix ON content.realm_subject_candidate USING btree (route, realm_id, terminal_id, original_id, thread_id) WHERE (active AND (terminal_id IS NOT NULL));
+
+
+--
+-- Name: realm_subject_candidate_thread; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX realm_subject_candidate_thread ON content.realm_subject_candidate USING btree (route, realm_id, thread_id, original_id);
+
+
+--
+-- Name: realm_subject_candidate_unresolved; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX realm_subject_candidate_unresolved ON content.realm_subject_candidate USING btree (route, realm_id, original_id, thread_id) WHERE (active AND (terminal_id IS NULL));
 
 
 --
