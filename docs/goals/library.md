@@ -106,6 +106,36 @@ The source stage uses only foreground local kernel typing. Acceptance, useful na
 integration, promotion and Goal proof remain pending; wrapper discoverability and compiler success establish none of
 those results.
 
+The adopted quality reports leave every Done-when clause and interface evidence open. They are source inventories
+with their own immutable revision bindings, not measurements on this or a later integrated commit:
+
+- [Personal facts/lifecycle](../research/library-outcomes-quality.md): clauses 2, 5, 6 and 7, independent union,
+  private counts, actual cleanup ownership and the original Library/Undo/terminal commands.
+- [Profiles/labels](../research/profiles-labels-quality.md): clauses 2 and 3, existing native adapters and HTTP,
+  historical migration DATA/receipts, missing observations and the original profile/label commands.
+- [Collections](../research/collections-outcomes-quality.md): clauses 1 and 4, installed curated/private built-in
+  ready-source and Liked interfaces, missing composed fixtures and the original dynamic/shelf/source/Zone commands.
+- [Growth](../research/library-growth-quality.md): clauses 1, 4, 5 and 6, authored populations/repetitions,
+  corrected static bounds and missing physical attribution.
+- [Page review](../research/library-page-review-quality.md): clause 7 and interface bars, with the exact existing
+  [route inventory](../research/library-page-review-quality.md#routed-surface-inventory) and
+  [story file/export appendix](../research/library-page-review-quality.md#complete-owned-story-family-inventory).
+
+The page appendix records 53 owned families and 456 exports; the two private-count files sharing a title remain
+separate families. There is no `/library/history` route; History uses the existing progress/log surfaces. Bulk
+operation status/Undo routes have no dedicated family in that inventory. The absent `library.capabilities.md`
+manifest and stale planned page-story ledger need the separate mapping brief; this adoption creates neither.
+Existing Progress continuation-target and historical-meaning repairs need rendered remeasurement, not another
+implementation assignment. Stories/JSON recordings prove inventory only, not native provenance or reviewed quality.
+
+Web's runner owns page execution. Capture matching clean source/build identity and actual native API recordings,
+original-size phone/desktop images with actual dimensions, light/dark, all eight locales, per-story completion/font
+readiness, fine/coarse pointer, keyboard and touch behavior. Measure truthful Continue/counts, exact occurrence
+identity/order/notes, publication uncertainty and original intent, private labels, 44px coarse-pointer targets,
+single-line progress bar/number, Menu Escape/focus return and cover treatment. Use actual exports rather than
+invented viewport-suffix IDs. Native/acceptance/browser execution remains deferred to integration; there are no
+current measured exits, screenshots, visual defects, growth passes or promotion proof from these reports.
+
 ## External conditions
 
 Applicable retention schedules and external source licensing follow their owners. No live payment setup is needed

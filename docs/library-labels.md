@@ -304,7 +304,8 @@ semantic identity allowance. No emitted-row count can substitute for these charg
 
 - Touches: bounded raw due/owner-label keys, account barrier, episode CAS/locks, child then parent and owned private payload.
 - Bound: <=100 raw keys per durable page, O(P) memory/O(N) total; effects/checkpoint/next intent commit together.
-- Growth check: [outcome acceptance][outcomes] requires crash/replay/terminal traces; runnable integration is unimplemented.
+- Growth check: [outcome acceptance][outcomes] requires crash/replay/terminal traces; native retention source exists,
+  while complete cleanup/inspection bindings and execution evidence remain missing.
 
 An ordinary create, rename, assignment, or unassignment touches a fixed set of keys in one owner partition: the
 exact label or assignment key, its bounded reservation/parent keys, the generic owner fact-source fence,
@@ -407,17 +408,20 @@ provide metadata CAS/undo. The [assignment DAO](../services/kernel/src/library/l
 [reclaim CAS](../services/kernel/src/library/label-assignment-reclaim.sql) implement native set admission and original-deadline reclaim.
 [Native admission tests][admission-tests] and [plan tests][admission-plans] exist; they do not prove shipped HTTP or purge.
 
-Label HTTP routes, native command/receipt integration, assignment unassign/undo/pages, q seek, FULL owner tile batch,
-source cutover/fence producers and automatic whole-purge/private receipt/outbox/workflow payload cleanup remain unimplemented.
-The [current personal routes](../services/kernel/src/library/personal-routes.ts), [OpenAPI](../contracts/openapi.json) and
-[generated client](../packages/client/src/kernel/library/personal-routes.d.ts) do not publish these label endpoints.
+The [label HTTP routes](../services/kernel/src/library/label-routes.ts) are mounted by
+[kernel composition](../services/kernel/src/http/kernel.ts). Native catalogue commands, assignment lifecycle routes,
+prefix paging and retention source now exist, with a
+[native label adapter](../services/kernel/test/library/support/native-labels-driver.ts) importing the original
+outcomes. They are installed interfaces, not a completed API/cleanup acceptance result. Complete source cutover,
+whole-purge and shared private receipt/outbox/workflow minimization still require their native evidence.
 The [restore problem definitions](../services/kernel/src/http/problem.ts) and their
 [schema test](../services/kernel/test/http/library-label-restore-problems.test.ts) establish error shapes only.
 The [standard summary reader](../services/kernel/src/library/views.ts) and [shared cursor](../services/kernel/src/tokens/list-cursor.ts)
 are existing integration surfaces. Implementation briefs are requirements, not evidence of shipped producers.
 
-The remaining implementation needs separate storage/cutover, assignment lifecycle/pages, parent/source integration, command/receipt
-and durable-cleanup slices, each <=400 production lines/eight files plus native acceptance. Use the existing IDs/slots/indexes;
+Remaining integration must reuse installed storage, lifecycle/pages, commands/receipts and retention work rather than
+rebuild them. Bind missing source/cutover and durable-cleanup observations in bounded slices with native acceptance.
+Use the existing IDs/slots/indexes;
 backfill <=100 raw keys before filtering with same-transaction checkpoints, preserve logical keys,
 values/times/revisions, and block activation on 33 live facts. Fence writers/parent changes and prove source
 completeness before enabling the one source; incomplete is unavailable. No copied parent-generation catalogue.
@@ -435,6 +439,15 @@ The accepted profile ABI uses immutable release digests and a closed type-to-pro
 not fall back to the unattached legacy migration profile. It defines no owner-created label vocabulary. This contract
 adds no profile field or compiler behavior, and adopts the decided unprofiled assignment policy above.
 
+The source-bound [profile/label review](research/profiles-labels-quality.md) and
+[Library outcome review](research/library-outcomes-quality.md) retain their original native entry points and leave
+independence, privacy, retention and whole-graph cleanup unmeasured. The label adapter's unavailable inspection
+needs actual native Collection grants, receipts/outbox/work and cleanup run/page/crash observations, not fabricated
+empty arrays. Source-declared unavailable latches are fixture gaps, not observed thrown errors or failing exits.
+Clearing state preserves effective labels, retained sessions/history and holdings in Everything; labels require no
+profile and create no other personal fact. Local cleanup or dispatched work cannot acknowledge shared Source/DBOS
+minimization. Native/acceptance/browser execution remains deferred to integration.
+
 The read-only reference sources consulted were BookWyrm's `bookwyrm/models/shelf.py` and Bangumi's
 `openapi/components/user_subject_collection.yaml` and `user_subject_collection_modify_payload.yaml`, at the commits
 listed in `/home/edge/projects/rezics/rezics-next/.reference/INDEX.md`. BookWyrm has owner-local shelves and enforces
@@ -444,7 +457,8 @@ inform the distinction only; their model and field limits are not copied.
 The live-cap reconciliation adopts [both](research/library-label-cap-independent-current.md)
 [independent reports](research/library-label-cap-independent-deep.md): same-row reservations, unchanged-claim parent
 undo and finite assignment identity with ID-bound CAS. Alternative revision allocators, extra visibility generations
-and duplicated source tables are not adopted. Native admission plan tests exist; complete source/HTTP/cleanup proof remains outstanding.
+and duplicated source tables are not adopted. Native admission plan tests and HTTP source exist; complete
+source/HTTP/cleanup acceptance proof remains outstanding.
 
 [catalogue-tests]: ../services/kernel/test/library/label-store.test.ts
 [admission-tests]: ../services/kernel/test/library/label-assignment-store.test.ts

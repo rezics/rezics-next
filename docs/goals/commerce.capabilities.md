@@ -5,6 +5,11 @@ This is the parent checklist for the complete [Commerce Goal](commerce.md), reco
 Its historical inspection was at revision `6557c8ae6379cb0f5f9dbcbd849339530bc87bbb`.
 Shared fixture delivery, credential reachability, profile writers and ordinary entry deletion are reconciled below
 against integration base `21a2c4bbb75a3d17f3d25666a61cfd6c0eb0f679`; unrelated capability evidence remains historical.
+The current quality adoption corrects the named Commerce/Library source inventories below against retained base
+`9af617622e95add1ffa390e110f4e7168726ea13`. It does not rebind earlier reports or refresh unrelated Search,
+Content or Accounts guidance. The [Commerce](commerce.md#acceptance) and [Library](library.md#acceptance) Goals
+link all eight source-bound reports and their exact original commands. Commerce Done-when 1–6, Library 1–7 and
+interface evidence remain unmeasured; no current failure exit or passing stage is inferred from source inspection.
 It does not validate product completion, execute native cases, or replace the full Goal with a smaller test list.
 Product authority remains in the linked owning specifications; the audit's suggested transports are not adopted APIs.
 The existing per-capability Markdown format is used; no manifest schema or validator is introduced.
@@ -26,9 +31,10 @@ Each **Stages** field lists these five distinct stages, in order:
 4. **User-case accepted at revision:** `unknown` everywhere in this initial inventory; there is no named passing revision.
 5. **Promoted:** `pending` everywhere; main/root/integration proof is separate and has not been supplied.
 
-All 276 exact literal scenarios in the eleven requested suites are indexed below. Only the Library and Commerce
-suite wrappers are located: 47 literal registrations in source, not 47 passes. The other 229 declarations have no
-located production wrapper. Primitive native tests are useful supporting evidence, never substitutes for those
+All 276 exact literal scenarios in the eleven requested suites retain their original index below. The historical
+47-registration count is not a current wrapper census or pass count. Library profile, label, dynamic and follow-count
+wrappers/adapters now exist, as does the separate shelf wrapper; remaining historical register entries are not
+refreshed by this adoption. Primitive native tests are useful supporting evidence, never substitutes for those
 bindings or the composed jobs. No count, source-shape check, missing-driver verifier, historical partial run,
 manifest/file-presence acceptance or integrated change advances a product acceptance stage.
 
@@ -42,14 +48,14 @@ native dependencies; directly importing an unbound spec is not equivalent.
 | ------------------- | ------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Library             |                  24 | `services/kernel/test/library/outcomes.test.ts` sets `LIBRARY_DRIVER` to `services/kernel/test/library/support/outcome-driver.ts`, exporting `createLibraryDriver`     | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/outcomes.test.ts"]`  |
 | Commerce            |                  23 | `services/kernel/test/commerce/outcomes.test.ts` sets `COMMERCE_DRIVER` to `services/kernel/test/commerce/support/outcome-driver.ts`, exporting `createCommerceDriver` | `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/outcomes.test.ts"]` |
-| Library profiles    |                  37 | `specs/library-profiles-driver.ts`; native wrapper/implementation of the complete driver NOTPRESENT                                                                    | NOTREGISTERED                                                                           |
-| Library labels      |                  29 | `specs/library-labels-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                            | NOTREGISTERED                                                                           |
-| Dynamic Collections |                  30 | `specs/dynamic-collections-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                       | NOTREGISTERED                                                                           |
+| Library profiles    |                  37 | `services/kernel/test/library/profiles-outcomes.test.ts` and `support/native-profiles-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/profiles-outcomes.test.ts"]` |
+| Library labels      |                  29 | `services/kernel/test/library/labels-outcomes.test.ts` and `support/native-labels-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/labels-outcomes.test.ts"]` |
+| Dynamic Collections |                  30 | `services/kernel/test/library/dynamic-outcomes.test.ts` and `support/native-dynamic-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/dynamic-outcomes.test.ts"]` |
 | Library bulk        |                  38 | `specs/library-bulk-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                              | NOTREGISTERED                                                                           |
 | Collection source   |                  30 | `specs/collection-source-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                         | NOTREGISTERED                                                                           |
 | Listing freshness   |                  14 | `specs/library-listing-freshness-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                 | NOTREGISTERED                                                                           |
 | Library deletion    |                  18 | `specs/library-deletion-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                          | NOTREGISTERED                                                                           |
-| Follow counts       |                  17 | `specs/follow-counts-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                             | NOTREGISTERED                                                                           |
+| Follow counts       |                  17 | `services/kernel/test/library/follow-counts-outcomes.test.ts` and `support/follow-counts-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/follow-counts-outcomes.test.ts"]` |
 | Viewer actions      |                  16 | `specs/viewer-actions-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                            | NOTREGISTERED                                                                           |
 
 The two bound drivers use isolated migrated PostgreSQL, native Auth/Access and `createKernel.handle` returning raw
@@ -58,15 +64,15 @@ a real final member command; its volume seeding is not evidence every fixture wa
 the official Stripe adapter against `test/commerce/support/fake-stripe.ts`, signed webhook bytes, native commands,
 outbox and a separate production worker executor. Neither driver currently supplies the released composed jobs.
 `test/library/canonical-source-fixture.ts` calls the real source factory, and conditionally loads
-`DYNAMIC_COLLECTIONS_DRIVER`; it does not register or implement that missing driver. Its prospective DDL is not a
-migration. Missing-driver contract/verifier suites are specification checks only.
+`DYNAMIC_COLLECTIONS_DRIVER`; the current dynamic wrapper registers the existing native adapter. The helper's
+prospective DDL alone is not a migration or acceptance result. Missing-driver contract/verifier suites are specification checks only.
 
 Supporting native entry points include these existing argv, with their narrower scope preserved:
 
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/library/profile-entry-command.test.ts", "test/library/profile-session-command.test.ts", "test/library/profile-copy-command.test.ts"]`:
-  prospective native data-defined command/HTTP acceptance using compiled **test** releases and
-  `test/library/support/profile-entry-fixture.ts`. These tests exist, but their profile-aware writers are absent
-  at the integration base; file existence proves neither passing admission nor the bundled vertical journey.
+  native data-defined command/HTTP acceptance source using compiled **test** releases and
+  `test/library/support/profile-entry-fixture.ts`. Current entry/session/copy writers consume profiles and pins;
+  source presence proves neither passing admission nor the bundled vertical journey.
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/revise-offer-target-replay.test.ts"]`:
   native target-bound receipt regression, not offer discovery or the complete offer lifecycle.
 - `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/payouts.test.ts", "test/commerce/payout-mark-paid.test.ts"]`:
@@ -158,8 +164,9 @@ curated occurrences preserves permitted duplicates, notes and order.
 - [Labels](../library-labels.md) owns `POST /v1/libraryLabels/{labelId}:assign` and minimal label/assignment DTOs;
   the audit's PUT example is not adopted. [Library deletion](../../services/kernel/src/library/README.md) owns
   per-subject `POST /v1/libraryEntries/{subjectId}:restore` and addressed deletion/incarnation CAS. No aggregate
-  restore or invented endpoint is selected here. Continue/export/offer discovery/offer revision exposure and the
-  common owner-query wire remain PENDING owner contracts, not false dependencies on workflow documentation.
+  restore or invented endpoint is selected here. Public subject-offer discovery and revision HTTP are installed;
+  whole-journey evidence and the existing Continue/export/common owner-query obligations remain separate gaps,
+  not false dependencies on workflow documentation.
 - The two old label-only/trash state-support hypotheses need precise correction: a profiled or unprofiled
   label-only subject supports Everything but supplies NO accepted state-set tuple; do not inspect its current type
   to synthesize a state sibling. To test empty membership of a still-supported sibling after clearing an entry,
@@ -178,7 +185,8 @@ curated occurrences preserves permitted duplicates, notes and order.
   protected-context ban barrier. These frozen files are not edited by this inventory.
 - [Commerce's native refresh protocol](../../services/kernel/src/commerce/README.md) supersedes the audit's time
   watermark proposal. Times are metadata. Receipt-aware native order-revision admission/fresh provider read/apply,
-  the shared metadata-only completion helper, default queue composition and repair producers remain missing.
+  metadata-only completion, default queue composition and buyer reconcile now exist in source; current native
+  ordering/recovery results and full repair-operator evidence remain missing.
   Conversely, current `commands.ts` already includes `offerId` in revise intent and has the native same-partition
   regression; the audit's old digest defect is not reported as still unfixed.
 - Semantic projection/reduction-log/identity-epoch contracts are not delivered runtime ports. Required local and
@@ -241,12 +249,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `released-profile-journey` with actual bundled choices, historical consumers and two immutable releases.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. The three profile primitive argv above are existing and narrower.
+**Native wrapper/driver and acceptance:** Profile register above: existing original wrapper/native adapter and exact argv; historical and observation bindings remain incomplete. Primitive command suites are narrower.
 
-**Coverage gap:** Full profile driver, bundled Book/game/recipe/record producer and historical end-to-end consumer binding are missing. At the integration base, `entries.ts` still validates the fixed five `ENTRY_STATES` through `state()` before the command body, with no profile import or accepted pin. `copies.ts` has fixed statuses and no kind/profile/pin admission; `sessions.ts` calls `parseSessionCreate`/`parseRecord` from `progress.ts` with fixed units. Profile source/compiler/decimal helpers and prospective command tests exist; the missing profile-aware writers are not implemented by those artifacts.
+**Coverage gap:** Current entry/session/copy commands consume compiled profiles and stored accepted pins, and the native adapter calls the installed migration runtime. Authentic pre-profile DATA/receipts, page/receipt instrumentation, persistence faults and complete privacy/growth observations remain unavailable or unmeasured. Reuse the accepted native historical fixture seam; current writes cannot create pre-profile history. See [profile/label review](../research/profiles-labels-quality.md).
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: legacy fixed entry/copy/session commands/HTTP exist; profile helpers/compiler exist, profile-aware writers and released composed journey missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: provisional profile adapter; implementation exposed: profile-aware writers/compiler/runtime exist; complete historical/released journey evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## independent-labels
 
 **User job:** Organize an own library with private labels, including a label-only subject, without creating an exclusive state or public classification.
@@ -255,7 +262,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Personas:** P; Alice assigns, Bob has an independent `vegetarian` label; anonymous diet discovery never consumes either label.
 
-**Released fixture data:** L, R, Q; labels have native metadata/reservation/lifecycle DAOs, but no complete HTTP driver.
+**Released fixture data:** L, R, Q; native metadata/reservation/lifecycle commands, mounted HTTP and a provisional label adapter; missing inspection bindings remain explicit.
 
 **Surface cells:**
 
@@ -272,12 +279,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `label-only-library`, including removal of the last support and public diet isolation.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. `library-labels-driver.ts` requires real native HTTP/Access, not DAO-normalized responses.
+**Native wrapper/driver and acceptance:** Label register above: existing original wrapper/native adapter and exact argv. The driver requires real HTTP/Access and native observations, not DAO-normalized responses.
 
-**Coverage gap:** Adopted POST :assign/minimal DTO transport, individual lifecycle/pages, command/purge integration and all source consumers still need binding. A label definition alone supports nothing.
+**Coverage gap:** POST :assign/minimal DTOs, lifecycle routes/pages and retention source exist. Complete Collection grant/outbox/work and cleanup run/page/crash inspections remain unavailable; source cutover and complete shared cleanup still need native evidence. A label definition alone supports nothing; fabricated empty arrays cannot satisfy inspection. See [profile/label review](../research/profiles-labels-quality.md).
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: metadata/reservation/lifecycle stores exist; full API composition missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: provisional label adapter; implementation exposed: label commands/HTTP and retention source exist; composed source/cleanup evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## typed-progress-and-continue
 
 **User job:** Record bounded typed progress, correct sparse units, finish/restart sessions, and find Continue items by their pinned active role.
@@ -305,10 +311,9 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Native wrapper/driver and acceptance:** Library register above: existing production wrapper/driver and exact Library argv. Complete profiles/Continue composition is NOTREGISTERED; native profile-session primitive argv exists.
 
-**Coverage gap:** Continue still has a literal in_progress consumer. Session creation/recording uses the legacy fixed mode/unit parser, without profile lookup or accepted pin; prospective profile-session tests do not establish admission, Continue or the released recipe absence job. No completion infers state/holding/purchase.
+**Coverage gap:** Session creation/recording now consumes current profile metadata and accepted pins. Native profile and Library wrappers exist, while the composed Continue/released recipe journey remains unmeasured. No completion infers state/holding/purchase; the current Continue owner contract remains authoritative.
 
-**Stages:** Specification validated red: unknown; native driver registered: Library suite only; implementation exposed: native legacy session modes/history exist; profile-aware admission missing; Continue journey incomplete; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: Library/profile adapters; implementation exposed: profile-aware session commands/history; composed Continue evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## independent-holdings
 
 **User job:** Keep two physical/digital holdings of one edition with distinct kind/status/history and delete/undo one without inferring acquisition, progress or rights.
@@ -334,12 +339,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `holdings-are-independent`, including typed invalid-pair atomicity and copy ordinary Undo.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Existing Library two-copy scenario and profile-copy native primitive argv remain supporting coverage.
+**Native wrapper/driver and acceptance:** Library/profile registers above: existing original wrappers/native adapters and argv; primitive Copy suites remain supporting coverage, not the complete released journey.
 
-**Coverage gap:** `copies.ts` and the HTTP create DTO accept legacy fixed statuses, without a declared kind, profile lookup or accepted pin. Profile-copy tests are prospective acceptance, not implementation proof. Complete released journey/Undo binding is missing. Copies are neither purchase evidence nor a rights grant.
+**Coverage gap:** Current Copy commands/HTTP admit declared kind/status with profile lookup and accepted pins. Historical kindless receipts and retained-copy Undo keep their owner semantics; complete historical fixture and composed journey evidence remain missing. Copies are neither purchase evidence nor a rights grant.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: legacy fixed-status copy commands/HTTP exist; profile-aware kind/status/pin admission missing; ordinary retained copy/Undo and composed journey incomplete; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: Library/profile adapters; implementation exposed: profile-aware Copy commands/HTTP and retained Undo; complete historical/composed evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## builtin-discovery-and-population
 
 **User job:** Discover stable read-only Everything/state/Liked logical identities and browse supported unique subjects without materializing a header on GET.
@@ -365,12 +369,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `everything-population`, released Liked identity/Content subject-reaction consumer acceptance and support lifetime corrections.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Dynamic/profile/label/source driver contracts participate; deterministic identity/schema tests are not full bindings.
+**Native wrapper/driver and acceptance:** Dynamic register above: existing original wrapper/native adapter and argv, plus the existing shelf wrapper. Profile/label/source drivers participate; source/identity tests alone do not establish the composed job.
 
-**Coverage gap:** Logical revision 0, first owner-write materialization revision 1, native grants/fact fence and terminal-safe reference repair still need composed runtime. Liked native DTO/identity/source adapter is missing; do not equate it with Everything support.
+**Coverage gap:** Native built-in identity and Content Liked raw membership/version source exist, as does ready curated/private built-in Collection Source support. Useful pages, positive reaction-only membership, complete current disclosure and original dynamic/shelf outcomes remain unmeasured. Preserve the full Everything union and accepted state-support lifetime. See [Collection review](../research/collections-outcomes-quality.md).
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: identity/reference helpers exist; full discovery/materialization/source and Liked composition missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: provisional dynamic/shelf adapters; implementation exposed: native built-in/Liked/source interfaces; useful-page and whole-outcome evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## canonical-own-state-order
 
 **User job:** See one canonical state after alias/merge changes, deterministically select the newest owner write and Undo as a new write while preserving original facts and pins.
@@ -799,12 +802,11 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Missing-to-freeze scenarios:** `follow-owner-counts`; bind the frozen suspended-token fixture to the native pre-suspension credential barrier before native binding.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. Native Library outgoing follows are existing; complete count projection/source protocol and HTTP binding are missing.
+**Native wrapper/driver and acceptance:** Follow-count register above: existing original wrapper/native driver and exact argv, with explicit operated/organization host and native account-delete fixture gaps.
 
-**Coverage gap:** Collection uses collection:update; Space space:manage; agent resolves actual active reciprocal account then self/account:manage, no guessed ID/operator authority. No follower list or public count. Source observations/apply ordering, source-account coverage and erasure are missing, not satisfied by stamps.
+**Coverage gap:** Counts use actual Collection/Space management or current actual-account management through existing Access. Reuse installed Accounts/Auth operated/organization host bindings and native approve/execute deletion at committed T. Preserve anonymous 401, suspended old bearer 401 invalid_credentials, missing scope 403, concealed 404 and unavailable 503; unavailable is never zero. Native ordering/privacy/growth and whole shared cleanup remain unmeasured. See [Library outcome review](../research/library-outcomes-quality.md).
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: private outgoing edges/pages exist; owner-count runtime missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: provisional follow-count driver; implementation exposed: private count/follow HTTP and native projection; host fixtures and full native evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## current-viewer-actions-and-delegation
 
 **User job:** Discover operations actually allowed now and execute them under current actor AND principal grants, consent and containing authority.
@@ -859,14 +861,13 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Frozen scenarios:** [commerce outcomes](../../specs/commerce-outcomes.test.ts): `anonymous reads an offer but cannot create orders list entitlements or discover private IDs`; `buyer checkout snapshots the offer at T in the buyer partition and sends inline Stripe prices`; `signed paid completion grants once and other sees only the same 404 as an unknown ID`; `refunded buyer keeps a listed inactive entitlement after a full Stripe-originated refund`.
 
-**Missing-to-freeze scenarios:** `offer-to-benefit`: subject detail offer-discovery link and actual usable-benefit journey, owner-approved transport MISSING.
+**Missing-to-freeze scenarios:** `offer-to-benefit`: compose the adopted subject discovery, payment and final protected-use journey; preserve original frozen outcomes and supplement their missing final-use observation.
 
 **Native wrapper/driver and acceptance:** Commerce register above: existing production wrapper/driver and exact Commerce argv. Primitive offer/order/entitlement APIs are bound; complete discovery/usable-access journey NOTREGISTERED.
 
-**Coverage gap:** Subject detail is APPLICABLE to discovery/factual projection and final benefit resource is APPLICABLE to access. Offer-by-known-ID and listed entitlement do not show discovery or usable access; no subject-to-offer discovery/history boundary is approved here. Purchase creates no Library state/session/copy.
+**Coverage gap:** Subject detail is APPLICABLE to discovery/factual projection and the final benefit resource to access. GET /v1/subjects/:id/offers, its generated Web caller, WorkerAuthorization factory/getter and native Content edition-sale producer exist. The retained native/revision/Web purchase fixtures still use subject-only provisioning: this is a source-inferred gap, not an observed failed exit. One journey owner must bind published native editions and real sale authority, then join payment/entitlement/navigation to exact revision/hash/bytes, with refund, foreign/anonymous and current ancestry denials. No manual grant substitutes. See [buyer/creator review](../research/commerce-outcomes-quality.md). Purchase creates no Library state/session/copy.
 
-**Stages:** Specification validated red: unknown; native driver registered: Commerce suite only; implementation exposed: known-ID offer/checkout/entitlement APIs exist; discovery and usable-benefit composition missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: Commerce suite; implementation exposed: public discovery/native sale/buyer fact interfaces; paid-to-protected-use and reviewed-page evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## offer-lifecycle-and-target-receipts
 
 **User job:** Hide a delisted offer publicly, reject new purchase with 409, preserve captured existing order/benefit history and bind exact authorized revise target in receipt intent.
@@ -890,14 +891,13 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Frozen scenarios:** [commerce outcomes](../../specs/commerce-outcomes.test.ts): `delisting prevents new checkout but preserves an existing entitlement`.
 
-**Missing-to-freeze scenarios:** `offer-lifecycle-receipts`: public GET delisted 404/new purchase409/captured history and owner-approved revision HTTP exposure.
+**Missing-to-freeze scenarios:** `offer-lifecycle-receipts`: retain original delisting assertions and current revision HTTP cases; repair their native edition fixture and measure captured history and explicit renewed consent.
 
 **Native wrapper/driver and acceptance:** Commerce register above: existing production wrapper/driver and exact Commerce argv. Also existing revise-offer-target-replay primitive argv above: `offer revise canonical intent binds the exact authorized target so a same-partition different offer cannot replay another offers receipt`.
 
-**Coverage gap:** Current revise command already canonicalizes `{offerId,unitAmountMinor}` and reauthorizes before receipt; the inspected regression uses distinct offer IDs with the same benefit subject (the shared fixture still needs distinct benefit targets); do not claim its old digest defect persists. Public GET still tests existence rather than active state; revision HTTP route is absent/PENDING. Subject detail discovery must omit delisted offers.
+**Coverage gap:** Current revise intent binds offerId and reauthorizes before receipt. Delisted public GET concealment and revision-bound HTTP tests exist; offer-revision-http.test.ts still provisions subject-only sales. Preserve expectedOfferRevision, original intent/key and captured history; measure the repaired fixture rather than claim a current failure or absent route. Subject discovery must omit delisted offers.
 
-**Stages:** Specification validated red: unknown; native driver registered: Commerce suite only; implementation exposed: target-bound revise command exists; public delist disclosure and revision/discovery transport incomplete; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: Commerce suite and supporting revision cases; implementation exposed: target-bound revision HTTP and public delist concealment; current fixture/journey evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## receipt-aware-native-provider-refresh
 
 **User job:** Keep older/abandoned observations from revoking or restoring newer admitted truth, including a newer business no-op and retry of already completed work.
@@ -921,14 +921,13 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Frozen scenarios:** [commerce outcomes](../../specs/commerce-outcomes.test.ts): `dispute needs_response revokes and won restores the same entitlement`; `lost dispute stays revoked and does not emit a restoration`; `lost Stripe create records unknown then same-key retry recovers the single session`.
 
-**Missing-to-freeze scenarios:** `checkout-observation-order`: all claim/read/apply/no-op/replay/recovery races remain MISSING to freeze and bind natively.
+**Missing-to-freeze scenarios:** `checkout-observation-order`: retain existing claim/read/apply/no-op/replay/default-queue/recovery cases; current results and complete repair-operator coverage remain missing.
 
-**Native wrapper/driver and acceptance:** Commerce register above: existing production wrapper/driver and exact Commerce argv. Existing snapshot/work tests are supporting only; approved combined native protocol/helper/default serial queue producers are NOTPRESENT.
+**Native wrapper/driver and acceptance:** Commerce register above: existing original wrapper/driver and exact argv. Native admission/session-refresh/default-work/recovery cases now exist; source presence is not execution. See the buyer/creator review C4/C7 commands.
 
-**Coverage gap:** Under SAME order lock check metadata-only stable apply completion BEFORE claiming, so completed A retry cannot suppress B; a matching completion exits without a claim or provider read. Uncompleted physical attempt claims native revision via real UPDATE+event/receipt, commits/releases then freshly reads full provider truth. Apply under same order lock validates captured revision/session and stable wf:{id}:apply intent; superseded attempt has no apply receipt. Never recapture during SQL retry. No-op admission persists. One provider-account/mode/session serial queue, distinct triggers, independent sessions concurrent; compatible cached-history drain/fork/rewind, no SDK patch. Known late-paid repair must work after expiry/reconcile stop. Provider send/byte/deadline/retry bounds include abandoned work; times are metadata only. Shared hasOwnCommandCompletion helper/claim implementation remains missing.
+**Coverage gap:** Under SAME order lock check metadata-only stable apply completion BEFORE claiming, so completed A retry cannot suppress B; a matching completion exits without a claim or provider read. Uncompleted physical attempt claims native revision via real UPDATE+event/receipt, commits/releases then freshly reads full provider truth. Apply under same order lock validates captured revision/session and stable wf:{id}:apply intent; superseded attempt has no apply receipt. Never recapture during SQL retry. No-op admission persists. One provider-account/mode/session serial queue, distinct triggers, independent sessions concurrent; compatible cached-history drain/fork/rewind, no SDK patch. Known late-paid repair must work after expiry/reconcile stop. Provider send/byte/deadline/retry bounds include abandoned work; times are metadata only. The completion helper, beginCheckoutRefresh/applyClaimedCheckoutSnapshot, default queues and buyer reconcile are installed; current native race/recovery evidence remains missing.
 
-**Stages:** Specification validated red: unknown; native driver registered: Commerce suite only; implementation exposed: current split durable clock/read/apply exists; approved receipt-aware revision protocol missing; user-case accepted at revision: unknown; promoted: pending.
-
+**Stages:** Specification validated red: unknown; native driver registered: Commerce suite and focused admission/refresh/recovery cases; implementation exposed: receipt-aware revision protocol/default work/buyer reconcile; full execution/operator evidence missing; user-case accepted at revision: unknown; promoted: pending.
 ## signed-webhook-replay-and-provider-truth
 
 **User job:** Accept authentic retried provider events once, reject forged/stale/tampered bytes and derive settlement from current provider truth rather than claimed payload state.
@@ -958,7 +957,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Coverage gap:** Existing native signature/provider-truth scenarios are registered, with no run evidence here. They do not prove newer-admission safety, full queue recovery or terminal no-resurrection. Subject benefit read participates after settlement, not six duplicate checkouts.
 
-**Stages:** Specification validated red: unknown; native driver registered: Commerce suite only; implementation exposed: signed webhook/current provider reads exist; new protocol/terminal composition missing; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Specification validated red: unknown; native driver registered: Commerce suite only; implementation exposed: signed webhook/current provider reads exist; current protocol/terminal execution evidence missing; user-case accepted at revision: unknown; promoted: pending.
 
 ## incremental-creator-statements
 
@@ -1071,9 +1070,9 @@ lists are not the abstraction. Shared Search, Semantic, Definitions, Accounts, C
 participants remain visible obligations; absent composition is never permanent unsupported scope.
 
 Known contracts can proceed acceptance-first without waiting for a workflow-document dependency. Remaining released fixture
-producer gaps, pending owner-query and Continue/export/offer transports, missing native driver registration,
-owner-sequence runtime, source/preparation/query-safety producers, native provider protocol and financial closure are
-separate exact gaps. Do not invent a producer signature or route to turn a gap into apparent completion.
+producer/fixture gaps, owner-query and Continue/export composition, incomplete native observation bindings,
+owner-sequence and source/preparation/query-safety obligations, native provider evidence and financial closure remain
+separate gaps. Installed public offer/revision transports and native refresh source must not be redispatched as absent. Do not invent a producer signature or route to turn a gap into apparent completion.
 
 This reconciliation advances inventory accuracy only; fixture/test-source delivery does not advance product acceptance. Specification red execution remains
 unknown, native acceptance requires zero skips/todos and the named real bindings at a named revision, and promotion/

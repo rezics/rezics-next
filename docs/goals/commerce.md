@@ -71,6 +71,17 @@ Connect entry/offer/return/history/owned-benefit/use and creator views to actual
 Web review and screenshots under [verification](../development/verification.md). Native storage, bounded execution,
 reviewed interface and promoted-main evidence remain required. Docs-only adoption is not that test campaign.
 
+The source-bound [buyer/creator review](../research/commerce-outcomes-quality.md),
+[financial lifecycle/cost review](../research/commerce-cost-lifecycle-quality.md) and
+[page review](../research/commerce-page-review-quality.md) leave Done-when 1–6 and interface evidence unmeasured.
+Each report retains its inspected revision, persona distinctions, unavailable measurements and original runner
+commands; their integration commits do not rebind those observations to later source. Current public offer
+discovery, WorkerAuthorization factory/getter and Content edition-sale production are installed. The remaining
+subject-only native/revision/Web purchase fixtures need actual published editions and sale authority, separately
+from the missing paid-purchase-to-protected-bytes measurement. These are source-inferred gaps, not failing exits.
+Original frozen outcomes and the owner interfaces remain unchanged; native, acceptance and browser execution are
+deferred to integration and no current passing status or promotion follows from this adoption.
+
 ### Native Library outcome binding readiness
 
 The kernel runner entry points import the original outcome specifications through their expected environment
@@ -79,10 +90,10 @@ variables. They do not rewrite assertions, normalize responses, or treat a missi
 | Specification                                                           | Kernel entry point                                                                | Native source status                                                                                                |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | [Library](../../specs/library-outcomes.test.ts)                         | [outcomes](../../services/kernel/test/library/outcomes.test.ts)                   | Existing [driver](../../services/kernel/test/library/support/outcome-driver.ts); whole-suite acceptance unverified. |
-| [Labels](../../specs/library-labels-outcomes.test.ts)                   | [labels-outcomes](../../services/kernel/test/library/labels-outcomes.test.ts)     | Existing entry point; `support/native-labels-driver.ts` is absent.                                                  |
-| [Profiles](../../specs/library-profiles-outcomes.test.ts)               | [profiles-outcomes](../../services/kernel/test/library/profiles-outcomes.test.ts) | Existing entry point; `support/native-profiles-driver.ts` is absent.                                                |
-| [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts)   | Existing entry point; `support/native-dynamic-driver.ts` is absent.                                                 |
-| [Shelves](../../specs/library-shelves-outcomes.test.ts)                 | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts)   | Existing entry point; `support/native-shelves-driver.ts` is absent.                                                 |
+| [Labels](../../specs/library-labels-outcomes.test.ts)                   | [labels-outcomes](../../services/kernel/test/library/labels-outcomes.test.ts)     | Existing entry point and `support/native-labels-driver.ts`; provisional source binding, acceptance unmeasured.                                                  |
+| [Profiles](../../specs/library-profiles-outcomes.test.ts)               | [profiles-outcomes](../../services/kernel/test/library/profiles-outcomes.test.ts) | Existing entry point and `support/native-profiles-driver.ts`; provisional source binding, acceptance unmeasured.                                                |
+| [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts)   | Existing entry point and `support/native-dynamic-driver.ts`; provisional source binding, acceptance unmeasured.                                                 |
+| [Shelves](../../specs/library-shelves-outcomes.test.ts)                 | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts)   | Existing entry point and `support/native-shelves-driver.ts`; provisional source binding, acceptance unmeasured.                                                 |
 
 The authorized [entry lifecycle reconciliation](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration)
 is now represented in the original Library, profile and shelf specifications. The two historical-profile clear cases
@@ -107,38 +118,20 @@ native handle reservation, pending registration, Auth provisioning evidence, han
 production Auth/Access binding. Positive accounts and active definitions are no longer installed by fixture SQL.
 
 The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
-first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
-closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
-skipping these frozen cases. No suite is skipped here. All five kernel entry points import the original specifications,
-but the four additional native driver modules are absent, so their original suites are not yet bound to production.
-The profile migration worker itself is now present: `profile-migration-runtime.ts` exports the closed start, resume
-and progress-read operations, and `work-module.ts` registers its workflow. This removes the former worker prerequisite,
-but does not supply a native profile fixture/driver. Current production dependencies still prevent complete binding:
+first-public coverage, not proof of the broader custom-profile or migration suite. All five kernel entry points
+and native adapters now exist; the profile migration runtime and registered worker also exist. Current kernel
+composition mounts label HTTP routes and default shelf reads, while Collection Source supports ready curated and
+private built-in authority. None of those source bindings establishes a useful-page or whole-suite result.
 
-- Shelf routes require `ShelfReads`, but [kernel composition](../../services/kernel/src/http/kernel.ts) does not supply
-  it, and [createShelfReads](../../services/kernel/src/library/shelf-contract.ts) still throws for all three reads.
-- The [Collection source factory](../../services/kernel/src/library/collection-source.ts) still returns
-  `dependency_unavailable` for every operation. Logical built-in discovery and dynamic members are not supplied by
-  the current curated [routes](../../services/kernel/src/library/collection-routes.ts).
-- [Personal label commands](../../services/kernel/src/library/label-commands.ts) provide the label catalogue, but
-  kernel composition mounts no label action/HTTP boundary or complete assignment command/page provider. The label
-  suite also requires the same unavailable logical built-ins.
-- The profile suite still needs its native fixture adapter to publish the unattached legacy destination through the
-  ordinary Definitions API, provision genuine historical facts through the accepted test fixture boundary, invoke
-  the closed migration runtime, and observe stored rows. The runtime and registered worker are available; no
-  production legacy-fact write endpoint or test-side migration engine is authorized.
-
-These are production prerequisites for their existing outcomes. Supplying successful test providers, wrapping
-maintenance pages in a test-side migration engine, or skipping the broader suites would violate native binding.
-Runtime owner integration, complete adapters, native acceptance, regression evidence and promotion remain outstanding.
-
-Foreground local kernel typing passed (exit `0`), including the command's construction check. The first invocation
-of `env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` unexpectedly selected the shared remote queue;
-that owned invocation was cancelled before compilation. To keep compilation local, the existing
-`withThrowawayDatabase` compiler lifecycle supplied `DATABASE_URL` to the same foreground command from a temporary
-worktree script. No compiler substitutions or SQL typing changes were used. No acceptance, native, browser or
-regression checks ran. Typing does not establish native outcome evidence; whole-suite acceptance remains required
-after integration.
+The [Library Goal acceptance](library.md#acceptance) owns the current fixture dependencies. In particular, authentic
+historical pre-profile DATA/receipts must enter through the accepted native test seam; current profile-aware writes
+cannot manufacture that history. Existing Accounts/Auth operated/organization bindings and native approve/execute
+deletion must be reused by follow-count/terminal fixtures. Label inspection still needs actual grants, outbox/work
+and cleanup/retention observations. Explicit unavailable latches and physical cross-pool attribution stay unavailable,
+never fabricated empty arrays or zero. The [Library outcome review](../research/library-outcomes-quality.md),
+[profile/label review](../research/profiles-labels-quality.md) and
+[Collection review](../research/collections-outcomes-quality.md) distinguish these source gaps from observed failures.
+Their original entry points remain required; native acceptance and promotion remain unmeasured.
 
 ## External conditions
 

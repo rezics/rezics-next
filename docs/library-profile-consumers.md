@@ -424,10 +424,11 @@ those episodes cannot create uncharged pending-filter work.
 The focused `profile-migration-runtime.test.ts` uses existing native profile fixtures and the default worker
 for preservation, restart on both sides of native commit, obsolete checkpoint replay, fresh-writer pin
 preservation and terminal-owner refusal. These cases and the source-page bounds still require the controller's
-native gate; a local typecheck is not their proof. The older profile driver asks an HTTP-only interface to
-create pre-profile historical facts. Current production commands require current pins/copy kinds and cannot
-satisfy that fixture request. Acceptance ownership must amend historical setup to the existing test-only
-pre-profile native command fixture boundary; no production legacy-write endpoint/default is introduced.
+native gate; a local typecheck is not their proof. The current
+[profile outcome adapter](../services/kernel/test/library/support/native-profiles-driver.ts) calls this runtime,
+but its historical setup and migration page/receipt observations remain incomplete. Historical pre-profile
+DATA/receipts must use the existing test-only native command fixture boundary. Current production commands require
+current pins/copy kinds and cannot manufacture that history; no production legacy-write endpoint/default is introduced.
 
 ### Legacy command compatibility and retirement
 
@@ -448,6 +449,14 @@ preparation routes/helpers/tests only in the same cutover that replaces their re
 that retirement and does not remove an endpoint or alter those production files.
 
 ## Privacy and scale acceptance
+
+The [profile/label quality review](research/profiles-labels-quality.md) retains its own source binding and exact
+original profile/label runner entry points. Current profile-aware entry/session/copy commands and HTTP, compiled
+fixtures, native adapters and the migration worker are installed; their presence supplies no passing case.
+Authentic historical DATA/receipts, before/after-commit faults, racing writes, actual all-phase page costs,
+receipt preservation and complete privacy observations remain unmeasured. Unsupported fixture/inspection latches
+must remain explicitly unavailable. These source-inferred gaps are separate from observed failures: this review
+has no current native exit. Native/acceptance/browser execution remains deferred to integration.
 
 The native driver records actual database rows, bytes, statements, owner lock/CAS decisions, and fact effects. It must
 use real `createKernel(...).handle`, production Access and signed fixture tokens; provision subjects, publish

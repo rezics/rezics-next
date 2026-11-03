@@ -48,8 +48,10 @@ and current delivery inventory.
   membership; clearing or another kind removes it. Thread/post reactions do not qualify. A reaction alone adds
   nothing to Everything or explicit state. Every account has a stable logical Liked that is always private, including a genuine
   empty `200`. Content owns the owner-scoped reaction adapter; copying into a curated Collection creates independent
-  occurrences. Logical identity, shared members integration and complete Content source-version coverage remain
-  implementation requirements, not delivered Liked runtime.
+  occurrences. Native [logical identity](../services/kernel/src/library/builtin-identity.ts) and the
+  [Content reaction source adapter](../services/kernel/src/library/liked-source.ts) are installed. Complete useful
+  members pages, current disclosure/source-version coverage and positive reaction-only outcome evidence remain
+  unmeasured; source presence does not establish that journey.
 
 The [native owner plan](library-owner-queries.md#native-candidate-support-and-complete-observations) owns the ONE
 private OWNER candidate/support directory shared by built-ins and admitted owner queries, native indexed truth,
@@ -317,11 +319,47 @@ entry/copy/follow removal alone is not whole-graph erasure. Every directory/supp
 prepared/intent store and identity first-apply/ACK custody joins that A5 inventory and terminal fence. Shared
 artifacts retain exact locators under their actual store owners; the [native owner plan](library-owner-queries.md#shared-operational-identity-and-disclosure-producers)
 does not certify missing whole-role cleanup or Source2a disclosure producers.
+The [personal-fact/lifecycle review](research/library-outcomes-quality.md) distinguishes owned cleanup from shared
+Source/DBOS minimization and durable acknowledgement. Empty local stores, queued or dispatched work establish
+neither. Reuse Accounts' coordinator and actual store-owner minimizers with exact locators, fenced late inputs,
+child-before-parent crash/replay and no-resurrection evidence; no Library-local service or completion writer replaces
+those interfaces. Its fixture gaps are source findings, not observed native failures.
 The private owner counter and stored live/archive `owner_write_seq` belong to that inventory. T immediately fences
 state writers; bounded participant cleanup erases ordering metadata after its dependent private facts. Late repair
 must never recreate it. This adds neither account restore nor a public activity counter.
 
 ## Acceptance and cost evidence still required
+
+Decision: adopt the eight linked quality reports as source-bound evidence inventories; keep behavior in its existing
+owner documents and every unmeasured acceptance clause open.
+
+The [Collection review](research/collections-outcomes-quality.md) records installed curated/private built-in
+ready-source support and native Liked identity/source. It does not establish a useful-page or original-outcome pass.
+Preserve genuine empty `200`, exactly committed Members preparation `202 {preparing:true}` with `Retry-After` and
+private/no-store, absent authority `503`, and unsupported `422` before enumeration. Zone `202 {next}` is a separate
+wire contract. Duplicate occurrence editing and unique canonical browsing remain distinct; removing a Zone mount
+does not delete the Collection. Original dynamic/shelf/source/Zone entry points remain in that report.
+
+The [growth review](research/library-growth-quality.md) retains every authored triple, relation population,
+same/other-partition history and repetition, including filtering at 64/512/4096. Apply corrected static C3: derive
+the entire finite additive declaration before admission, including at least 16 Members + 464 History + 429 receiving
+= 909 before executor, cleanup, Source and Access costs. That lower bound is not completed preparation evidence.
+The live Members checkpoint remains `bd18969f/current10`; cancelled `97ef` supplies no completion. Export/filter
+consumers remain held until that checkpoint supplies actual remaining scope, installed Source/read-work interfaces,
+finite bounds and check evidence. This adoption changes no Members implementation or completion assignment.
+
+Keep direct source pages within 100 candidates, at most 32 leaves and common pages within 16 reads/128 output slots.
+The [filter owner](filtered-lists.md#budgets) derives `c <= min(600, 6s + 3)` for admitted per-read size `s <= 100`.
+For `P=2,c=15`, the two-read bound is 608 rows, 3648 blocks, 161792 request bytes and 155648 response bytes.
+The looser existing growth assertion is insufficient proof, not an observed failed exit; preserve frozen assertions
+and measure the tighter owner bound. Performance owns cross-pool attribution, original attempt/phase and physical
+measurements; unavailable counters are never zero. No growth measurement was supplied by these reports.
+
+The [Library Goal](goals/library.md#acceptance) links all five Library reviews and the exact page route/story appendix;
+the [Commerce Goal](goals/commerce.md#acceptance) links the three Commerce reviews. Preserve each report's original
+source binding and runner commands. Stories and recordings are inventory, not native or rendered approval. Native,
+acceptance and browser execution remain deferred to integration; Library Done-when 1–7 and interface evidence remain
+unmeasured. Capability-manifest and page-stories mapping belong to the separate mapping brief.
 
 One capability suite varies definitions and fixtures across curated, Everything, state, public/unlisted/private and
 mounted Zone surfaces. It covers membership, filtering, bulk, export, follow, mount, lifecycle and actual cost.
@@ -378,10 +416,9 @@ metadata remain in existing terminal retention until real control handoff.
 - Bound: literal SQL and complete eight-axis operation declarations are in the
   [Library module](../services/kernel/src/library/README.md#native-identity-scope-planning-and-current-seals).
   Limits are 1..100 raw keys, inclusive indexed EOF/FK/control work, schema-bounded bytes or actual
-  same-snapshot size admission. One unchanged genuine cumulative reservation charges successful, unavailable,
-  failed, repeated and rolled-back work without refill. A local cap is not Source funding. Accounts' local
-  selected admission is fully spent; Source/Library remainders and the complete authentic parent price remain
-  unknown until their actual owners supply all additive terms and exact normal receiving recognition.
+  same-snapshot size admission. One finite static additive declaration includes successful, unavailable,
+  failed, repeated and rolled-back work. A local cap cannot establish the complete parent bound; Source/Library
+  terms remain unknown until their actual owners supply every additive cost and exact normal receiving recognition.
 - Growth check: focused native scope-effects outcomes are authored for six-driver positive pages, omitted
   effect, exhaustive zero, late first apply, changed fences/rekey and failure/repeat/rollback accounting.
   Source delivery defers integrated native, database, browser and whole-feature/growth acceptance; typing
