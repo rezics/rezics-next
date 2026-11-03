@@ -6,6 +6,7 @@ import type {
   SpaceDiscoverySource as NativeSpaceDiscoverySource,
   SpaceDiscoverySummary,
 } from '../community/space-discovery.ts';
+import type { SpaceDiscoveryDependencyReadiness } from '../community/space-discovery-dependencies.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 
@@ -61,6 +62,7 @@ export type SpaceDiscoveryAdapter = Readonly<{
   owner: 'content';
   kind: typeof SPACE_DISCOVERY_KIND;
   source: Readonly<{
+    dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
     count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
     page(partition: number, after: NativeSpaceDiscoveryKey | null, limit: number): Promise<SpaceDiscoveryPage>;
@@ -273,6 +275,9 @@ export function createSpaceDiscoveryAdapter(
   hydrateCurrent: SpaceDiscoveryHydration,
 ): SpaceDiscoveryAdapter {
   const source = Object.freeze({
+    dependencies() {
+      return native.dependencies();
+    },
     async read(partition: number, ids: readonly string[]) {
       assertPartition(partition);
       if (!Array.isArray(ids) || ids.length > MAX_BATCH)

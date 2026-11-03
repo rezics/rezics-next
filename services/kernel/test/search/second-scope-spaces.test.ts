@@ -21,6 +21,15 @@ const indexed = (id: string, realmId: string | null = null, revision = id) => ({
   description: 'Owner-approved public summary',
   revision,
 });
+const nativeReadiness = (state: 'preparing' | 'unavailable'): Awaited<ReturnType<NativeSource['dependencies']>> => ({
+  state,
+  capabilities: {
+    context: 'connected',
+    media: 'connected',
+    exposure: 'connected',
+    'source-fence': 'unavailable',
+  },
+});
 const summary = (id: string, realmId: string | null = null): SpaceDiscoverySummary => ({
   id,
   realmId,
@@ -37,6 +46,29 @@ function adapterFor(
 }
 
 describe('second-scope Space discovery adapter', () => {
+  it('forwards native readiness without treating empty pages or censuses as complete coverage', async () => {
+    let readiness = nativeReadiness('preparing');
+    const source: NativeSource = {
+      dependencies: async () => readiness,
+      async read(p) {
+        return { partition: p, position: 1n, spaces: [] };
+      },
+      async count(p) {
+        return { partition: p, position: 1n, count: 0 };
+      },
+      async page(p) {
+        return { partition: p, position: 1n, spaces: [], next: null };
+      },
+    };
+    const adapter = adapterFor(source, async () => new Map());
+
+    expect(await adapter.source.dependencies()).toBe(readiness);
+    expect(await adapter.source.page(partition, null, 10)).toMatchObject({ spaces: [], next: null });
+    readiness = nativeReadiness('unavailable');
+    expect(await adapter.source.count(partition)).toMatchObject({ count: 0 });
+    expect(await adapter.source.dependencies()).toBe(readiness);
+  });
+
   it('projects one canonical Space identity and hydrates current authorized summaries', async () => {
     const source: NativeSource = {
       dependencies,

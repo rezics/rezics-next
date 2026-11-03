@@ -27,3 +27,15 @@ these summaries are display hydration, not indexed permission evidence.
 The shared Search discovery registry, hydration union and generation writer own mixed-pipeline registration and
 publication. This adapter exports the validated source, projection and current hydration leaf for that assembly and
 does not create another route, feed lane or client merge.
+
+## Native dependency readiness handoff
+
+`SpaceDiscoveryAdapter.source.dependencies()` forwards the Content source's exact `SpaceDiscoveryDependencyReadiness` observation. Search does not synthesize a ready state from a zero census, an empty page, or settled inverse installation. The current Content export reports `preparing` or `unavailable`; its source-fence capability remains unavailable until the native Space tuple producer is delivered. The generation owner must use this observation before claiming complete Space coverage, and the query owner must keep current anonymous hydration authoritative. The existing generation and query owners retain publication and result ownership; this method is the single capability seam for their caller binding.
+
+Decision: keep Content dependency readiness unchanged at the Search source boundary; absent a complete native source-fence capability, no Search observation certifies complete Space coverage.
+
+## Cost touch and growth check
+
+Search validates full raw pages and admits at most 100 candidate keys per page/read/hydration call. Page progress follows examined keys, including sparse ineligible windows. A complete admitted step must satisfy `C_dependency(D) + C_seek(B) + ceil(B / H) * C_summary(H, D) + C_final(D)` for `B <= 100`; `H <= 100` at the Search adapter boundary. `D` and the native statement/row terms are not admitted or measured while Content has no complete source-fence capability and exact final dependency reobservation contract. Census and current summary reads do not fill that gap.
+
+The required installed-path 1x/4x/16x growth run, including sparse rejection and currentness invalidation, remains unmeasured until Content supplies that native capability. Record statements, examined/returned rows, seeks, actions, retained candidates, and total resumable preparation/catch-up separately when it can run. The worker's focused adapter test covers only the constructed preparing/unavailable contract case; it is not native growth evidence.
