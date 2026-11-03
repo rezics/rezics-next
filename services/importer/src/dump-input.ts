@@ -120,9 +120,18 @@ async function assertDumpUnchanged(handle: FileHandle): Promise<void> {
 
 export async function openDump(path: string, handleCount: { value: number }): Promise<FileHandle | undefined> {
   if (path === '-') return undefined;
+  return openRegularFile(path, handleCount, constants.O_RDONLY | constants.O_NONBLOCK);
+}
+
+/** Regular-file open that refuses symlinks, directories and devices. */
+export async function openRegularFile(
+  path: string,
+  handleCount: { value: number },
+  flags: number = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK,
+): Promise<FileHandle> {
   let handle: FileHandle;
   try {
-    handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK);
+    handle = await open(path, flags | (constants.O_NOFOLLOW ?? 0));
   } catch {
     throw new DumpInputError();
   }
