@@ -34,7 +34,6 @@ import { subjectPartition } from '../../src/search/source.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { populateControlledSubjects } from './support/controlled-population.ts';
 
 export type CoverageFixtureResources = {
