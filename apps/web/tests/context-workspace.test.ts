@@ -150,7 +150,7 @@ describe('An editor finds current readable Contexts creates one and follows nati
     expect(await unavailableContextDirectory.lifecycle(fixtureId, {})).toEqual({ kind: 'unavailable' });
     const fixture = contextFixture('active');
     const api = createContextApi(fixture.client, auth);
-    expect((await api.list(active)).page).toEqual({ kind: 'unavailable' });
+    expect((await api.list(active)).page).toEqual({ kind: 'unavailable', session: 'current-context-session' });
     expect(await api.detail(fixtureId)).toMatchObject({
       kind: 'ready',
       value: { lifecycle: null, lifecycleUnavailable: true },
