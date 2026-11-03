@@ -30,7 +30,7 @@ The private fixture composes `createNativeContentSystemWithWriteRateOverrides`, 
 Auth registration, client consent and credentials. A fresh native account supplies an independent expired-grant
 history recipient. Creation permissions originate in the native fixture's governance workflow. The measured
 kernel uses the real current-consent reader and the existing receipt keys; authentication forwards its application
-database work to the observed pool. Native Auth's separate service database and JWT/JWKS transport are outside
+database work to the observed pool. Native author credentials renew during setup without changing viewer, client or scopes. Native Auth's separate service database and JWT/JWKS transport are outside
 these application SQL metrics. No permission evaluator or consent decision is replaced.
 
 Subjects, a Space, public Realm, board, thread and reply are created through supported HTTP commands. The
@@ -83,8 +83,9 @@ statements for authentication, the creator-home range, owning metadata readers, 
 Reports emit costs, per-repetition relation work and classifier verdicts when executed; this document contains
 no substitute estimates presented as observations.
 
-A SQL trace asserts exactly one native candidate range with limit two. Relation costs assert exactly two raw
-candidate rows (zero for terminal-empty), including hidden candidates, with no refill or lookahead. The selected
+A SQL trace asserts exactly one native candidate range with limit two. Relation costs retain all examined and filtered
+rows, including the shared classifier's existing tiny-relation scan allowance. Native key and range assertions
+retain exactly two candidates (zero for terminal-empty), including hidden candidates, with no refill or lookahead. The selected
 exact metadata IDs match those raw candidates. Each successful candidate prepares ordinary `edition:read` twice;
 each candidate permits at most two owning metadata reads, each with an initial and two final metadata points.
 The real owning reader performs its source, original-subject, ancestry and Access checks in both passes.

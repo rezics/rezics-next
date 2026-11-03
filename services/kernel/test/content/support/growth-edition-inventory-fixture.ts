@@ -193,10 +193,17 @@ export async function createGrowthEditionInventoryFixture() {
       const eventSeq = envelope.events.findIndex((event) => event.type === 'com.rezics.content.edition.created.v1');
       expect(envelope.events[eventSeq]?.subject).toBe(edition.editionId);
       await work!.effects.enqueue([envelope]);
-      await workerClient!.retrieveWorkflow(effectWorkflowId(envelope, eventSeq, indexEffect!.name)).getResult();
+      await workerClient!.retrieveWorkflow(effectWorkflowId(envelope, eventSeq, indexEffect!.name)).getResult({ pollingIntervalMs: 10 });
     }
     const editions = new Map<string, ContentEditionView>();
+    async function renewAuthor() {
+      const credential = await native.auth.issue({
+        accountId: author.accountId, clientId: native.auth.ordinaryClient.id, scopes: native.auth.ordinaryScopes,
+      });
+      author.bearer = credential.bearer;
+    }
     async function addEdition() {
+      if (editions.size > 0 && editions.size % 128 === 0) await renewAuthor();
       const key = randomUUID();
       const edition = await command<Edition>('/v1/contentEditions', {
         postId: selectedSource.postId, revisionId: selectedSource.revisionId, targetSubjectId: subject.id,
@@ -236,6 +243,7 @@ export async function createGrowthEditionInventoryFixture() {
     const historyPosts = [selectedSource.postId];
     async function grow(axis: InventoryAxis, shape: InventoryPage, scale: number, previous: number) {
       expect(previous).toBe(grown);
+      await renewAuthor();
       if (axis === 'creator-candidates') {
         if (hidden) selectedSource = await source();
         while (editions.size < scale) await addEdition();
@@ -250,6 +258,7 @@ export async function createGrowthEditionInventoryFixture() {
         }, { from: previous, to: scale });
       } else {
         for (let i = previous; i < scale; i++) {
+          if (i > previous && i % 128 === 0) await renewAuthor();
           if (axis === 'source-history') {
           const revised = await command<{ post: { revisionId: string } }>(`/v1/posts/${historySource.postId}/revisions`, {
             body, subjectIds: [subject.id],
@@ -282,7 +291,12 @@ export async function createGrowthEditionInventoryFixture() {
         [routeOf(author.accountId), author.accountId],
       );
       expect(candidateCount.rows[0]!.n).toBe(axis === 'creator-candidates' ? scale : 4);
-      if (axis === 'subject-history') {
+      if (axis === 'unrelated-homes') {
+        const unrelated = await database.admin.query<{ n: number }>(
+          'SELECT count(*)::integer AS n FROM content.creator_edition WHERE creator_account_id<>$1', [author.accountId],
+        );
+        expect(unrelated.rows[0]!.n).toBe(scale);
+      } else if (axis === 'subject-history') {
         const revisions = await database.admin.query<{ n: number }>(
           'SELECT count(*)::integer AS n FROM semantic.revision WHERE route=$1 AND subject_id=$2',
           [routeOf(subject.id), subject.id],
@@ -307,6 +321,7 @@ export async function createGrowthEditionInventoryFixture() {
       if (shape === 'deep' || shape === 'terminal-empty') {
         let current: string | undefined;
         for (let offset = 0; offset < ids.length; offset += inventoryLimit) {
+          if (offset > 0 && offset % 128 === 0) await renewAuthor();
           if (shape === 'deep' && offset === ids.length - inventoryLimit) break;
           const next = await page(current);
           expect(next.editions.map(({ editionId }) => editionId)).toEqual(ids.slice(offset, offset + inventoryLimit));
@@ -318,6 +333,8 @@ export async function createGrowthEditionInventoryFixture() {
       rawIds = shape === 'terminal-empty' ? [] : shape === 'deep' ? ids.slice(-inventoryLimit) : ids.slice(0, inventoryLimit);
       expected = hidden ? [] : rawIds.map((id) => editions.get(id)!);
       expectsNext = shape !== 'terminal-empty';
+      await renewAuthor();
+      cursorNow = Date.now();
       grown = scale;
     }
     async function observedPage() {
