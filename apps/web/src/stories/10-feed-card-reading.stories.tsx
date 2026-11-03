@@ -90,6 +90,17 @@ const journey: Story['play'] = async ({ canvasElement }) => {
   await expect(links[1]).toHaveFocus();
   await userEvent.tab();
   await expect(within(work).getByRole('button')).toHaveFocus();
+  const discussion = canvas.getAllByRole('listitem')[1]!;
+  const discussionLinks = within(discussion).getAllByRole('link');
+  discussionLinks[0]!.focus();
+  await userEvent.tab();
+  await expect(discussionLinks[1]).toHaveFocus();
+  await expect(discussionLinks[1]).toHaveAttribute('href', `/${getLocale()}/@prepared_reader`);
+  await userEvent.tab();
+  await expect(within(discussion).getByRole('button')).toHaveFocus();
+  await expect(
+    canvasElement.querySelector('[data-feed-source="continue"] [data-content-item-slot="actions"] a'),
+  ).toHaveAttribute('href', expect.stringContaining('/library/progress/'));
   await expect(canvasElement.querySelector('a a, a button, button a')).toBeNull();
   await expect(canvasElement.querySelector('[data-feed-card-reviewed-subject] a')).toHaveAttribute(
     'href',

@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act } from 'react';
+import { HomeFeed } from '../src/features/pages/home-feed';
 import { ContentItem } from '@rezics/ui/content-item';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
 import { homeFeedDestination, homeFeedResume } from '../src/features/pages/home-feed-destination';
@@ -79,6 +81,11 @@ test('each mixed-feed kind preserves source, occurrence, identity, preview and e
     );
     expect(rows[7]!.querySelector('[data-content-item-slot="state"]')?.textContent).toBeTruthy();
     expect(rows[5]!.textContent).toContain(m.home_card_automated({}, { locale }));
+    const followedWork = render([{ ...items[0]!, source: 'following' } as FeedItem], locale);
+    expect(followedWork.document.querySelector('[data-feed-card-source]')?.textContent).toBe(
+      m.home_card_source_following({}, { locale }),
+    );
+    followedWork.happyDOM.abort();
     expect(rows[5]!.querySelector('[data-feed-card-account] a')?.getAttribute('href')).toContain(
       `/${locale}/subjects/`,
     );
@@ -222,6 +229,7 @@ test('independent primary, cover, author and action keyboard stops survive long 
     Document: window.Document,
     ShadowRoot: window.ShadowRoot,
     getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -250,9 +258,35 @@ test('independent primary, cover, author and action keyboard stops survive long 
       expect(window.document.activeElement).toBe(rows[1]!.querySelector('button'));
       expect(window.document.querySelector('a a, a button, button a')).toBeNull();
     }
-    window.document.body.innerHTML = '<p>Source retired</p>';
-    expect(window.document.querySelectorAll('a, img, li')).toHaveLength(0);
-    expect(window.document.body.textContent).not.toContain('Prepared reader');
+    const { createRoot } = await import('react-dom/client');
+    const host = window.document.createElement('div');
+    window.document.body.append(host);
+    const root = createRoot(host as unknown as HTMLElement);
+    try {
+      await act(async () =>
+        root.render(
+          <HomeFeed
+            locale="en"
+            result={{
+              state: 'ready',
+              page: {
+                feedItems: preparedFeedCardReading(),
+                next: null,
+                asOf: '2026-11-03T00:00:00Z',
+                sources: { discovery: 'ready', following: 'ready', continue: 'ready' },
+              },
+            }}
+          />,
+        ),
+      );
+      expect(host.querySelectorAll('li[data-feed-id]')).toHaveLength(8);
+      await act(async () => root.render(<HomeFeed locale="en" result={{ state: 'loading', code: 'loading' }} />));
+      expect(host.querySelectorAll('li[data-feed-id], img, a')).toHaveLength(0);
+      expect(host.textContent).not.toContain('Prepared reader');
+      expect(host.textContent).not.toContain('Prepared carrier Realm');
+    } finally {
+      await act(async () => root.unmount());
+    }
   } finally {
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
