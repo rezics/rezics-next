@@ -241,6 +241,15 @@ function resumeInvocation(
       'Resume re-hashes every original file and replays the production decoder from the start of each member to verify the committed prefix. Inspection does not establish authorization or remote effect.',
     ];
   }
+  if (status === 'retiring' || status === 'retired') {
+    return [
+      status === 'retiring'
+        ? 'Retirement cleanup is in progress. Re-run the same local retirement apply to finish that exact plan; do not resume this generation.'
+        : 'This generation was deliberately retired and cannot be resumed or recreated under its old ID. Start a separate ordinary import with the desired input:',
+      `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${terminalString(source)} --dump <complete-input-path> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
+      'Inspection does not establish authorization or remote effect.',
+    ];
+  }
   if (status === 'ready' || status === 'finalizing') {
     return [
       'This generation is already sealed. Resume with the ordinary import command; do not replace input or use --resume-staging:',

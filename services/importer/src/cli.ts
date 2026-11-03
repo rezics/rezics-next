@@ -65,6 +65,7 @@ import {
   throwAdmissionRefusal,
   unboundMessage,
 } from './source-destination.ts';
+import { runStagingRetirementCli, stagingRetirementUsage } from './staging-retirement-cli.ts';
 import {
   admitDumpCompression,
   decodeBudgetLimit,
@@ -193,6 +194,9 @@ function usage(): string {
     '       rezics-import retention --state <sqlite-path> --source <configured-source-id> [--after <id>] [--limit 1..100]',
     '       rezics-import retention --state <sqlite-path> --source <configured-source-id> --generation <id> [--generation <id> ...] --output <plan-path>',
     '       rezics-import retention --state <sqlite-path> --plan <plan-path> --confirm <plan-id> --apply',
+    '       rezics-import retire-staging --state <sqlite-path> --source <configured-source-id> --generation <id>',
+    '       rezics-import retire-staging --state <sqlite-path> --source <configured-source-id> --generation <id> --output <plan-path>',
+    '       rezics-import retire-staging --state <sqlite-path> --plan <plan-path> --confirm <plan-id> --apply',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
@@ -570,6 +574,21 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     });
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'retention')
     return { code: 0, stdout: `${retentionUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'retire-staging')
+    return runStagingRetirementCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      ...(options.observer?.onDatabaseOpen || options.observer?.beforeRetentionPage
+        ? {
+            observer: {
+              ...(options.observer.onDatabaseOpen ? { onDatabaseOpen: options.observer.onDatabaseOpen } : {}),
+              ...(options.observer.beforeRetentionPage ? { beforePage: options.observer.beforeRetentionPage } : {}),
+            },
+          }
+        : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'retire-staging')
+    return { code: 0, stdout: `${stagingRetirementUsage()}\n`, stderr: '', openHandles: 0 };
   let config: Config;
   try {
     const parsed = parse(argv);
@@ -1365,7 +1384,13 @@ function resultFor(
     return {
       code: 5,
       stdout: '',
-      stderr: diagnostic('This source already has an active import.', counts, run.skipped),
+      stderr: diagnostic(
+        run.diagnostic.startsWith('Local importer history cleanup')
+          ? run.diagnostic
+          : 'This source already has an active import.',
+        counts,
+        run.skipped,
+      ),
       openHandles: 0,
     };
   if (run.status === 'interrupted' || signal.aborted)

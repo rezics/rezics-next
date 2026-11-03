@@ -472,9 +472,9 @@ function resumeGuidance(
   if (status === 'complete')
     return 'This generation is the retained completed baseline; a later import still uses ordinary ownership and current authority checks.';
   if (status === 'retiring')
-    return 'Retirement of this generation is in progress. Re-run the same retention apply to finish the exact selected plan; this generation cannot be reopened.';
+    return 'Retirement of this generation is in progress. Re-run the same local retirement apply to finish the exact selected plan; this generation cannot be reopened.';
   if (status === 'retired')
-    return 'This generation was deliberately retired. Per-run envelopes, commands and diagnostics are gone. The current baseline, acknowledgements, bindings and payloads remain; ordinary import continues under current credentials.';
+    return 'This generation was deliberately retired and cannot be resumed or recreated under its old generation ID. Per-run envelopes, commands, checkpoints and diagnostics are gone. The current baseline, acknowledgements, bindings and payloads remain; a later import is a separate ordinary command under current credentials.';
   return 'The stored status is not recognized by this inspector; resume behavior is not inferred and the existing importer remains responsible for admission.';
 }
 

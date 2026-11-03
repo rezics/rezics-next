@@ -277,7 +277,13 @@ function resultFor(run: ImportRunResult, httpStatus: number | undefined, signal:
     return {
       code: 5,
       stdout: '',
-      stderr: diagnostic('This source already has an active import.', counts, run.skipped),
+      stderr: diagnostic(
+        run.diagnostic.startsWith('Local importer history cleanup')
+          ? run.diagnostic
+          : 'This source already has an active import.',
+        counts,
+        run.skipped,
+      ),
       openHandles: 0,
     };
   if (run.status === 'invalid-dump')

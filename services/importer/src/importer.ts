@@ -72,11 +72,13 @@ import {
   STAGING_ACTIVE_GENERATION,
   STAGING_INCOMPATIBLE,
   STAGING_MISSING_GENERATION,
+  STAGING_RETIRED_GENERATION,
   StagingCheckpointError,
   evaluateResume,
   isStagingStreamEvent,
   type StagingStreamEvent,
 } from './staging-checkpoint.ts';
+import { RETENTION_LOCAL_MAINTENANCE } from './retention.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
@@ -2383,6 +2385,8 @@ export class Importer {
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
+      if (this.session.store.localMaintenanceWork(registration.source))
+        return finish('busy', RETENTION_LOCAL_MAINTENANCE);
       const peeked = this.session.peekActive(ownership);
       if (!peeked)
         return finish(
@@ -2506,12 +2510,18 @@ export class Importer {
     const store = this.session.store;
     if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
+      if (store.localMaintenanceWork(registration.source)) return finish('busy', RETENTION_LOCAL_MAINTENANCE);
       let run = this.session.reopen(ownership);
       let resumed = !!run;
       let skipped = 0;
       let checkpointed = false;
       if (checkpoint?.action === 'resume') {
-        if (!run || run.id !== checkpoint.generation) return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        if (!run || run.id !== checkpoint.generation) {
+          const named = checkpoint.generation ? store.peekGeneration(registration.source, checkpoint.generation) : null;
+          if (named?.status === 'retired') return finish('invalid-dump', STAGING_RETIRED_GENERATION);
+          if (named?.status === 'retiring') return finish('busy', RETENTION_LOCAL_MAINTENANCE);
+          return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        }
         options.progress?.onRun?.(run.id, true);
         runId = run.id;
         const state = store.stagingResumeState(run);

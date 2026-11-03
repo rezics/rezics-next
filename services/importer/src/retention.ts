@@ -14,6 +14,8 @@ export const RETENTION_DEFAULT_PAGE = 20;
 export const RETENTION_MAX_PAGE = 100;
 export const RETENTION_MAX_SELECTED = 100;
 export const RETENTION_DELETE_PAGE = 100;
+export const RETENTION_LOCAL_MAINTENANCE =
+  'Local importer history cleanup is in progress for this source. Finish the exact retention or retire-staging apply; this source cannot start or resume another capture until that plan completes.';
 const MAX_PLAN_BYTES = 262_144;
 const GENERATION_ID = /^[1-9][0-9]*$/u;
 const SOURCE_ID = /^[a-z][a-z0-9_-]{0,31}$/u;
@@ -1553,3 +1555,28 @@ export function applyRetentionOnDatabase(
 export function inspectOwnerBusy(owner: { pid: number; birth: string }): boolean {
   return importOwnerIsBusy(owner);
 }
+
+export {
+  SQLITE_NOTE as RETENTION_SQLITE_NOTE,
+  snapshotAdvice as retentionSnapshotAdvice,
+  sourcePins as retentionSourcePins,
+  ownershipRow as retentionOwnershipRow,
+  requireKnownSchema as assertRetentionKnownSchema,
+  ensureRetentionWork,
+  workRow as retentionWorkRow,
+  runPhasePage as runRetentionDeletePhase,
+  openReadonly as openRetentionReadonly,
+  openWritable as openRetentionWritable,
+  throwIfAborted as throwIfRetentionAborted,
+  admitSource as admitRetentionSource,
+  admitGenerationId as admitRetentionGenerationId,
+  admitPlanId as admitRetentionPlanId,
+  exactObject as exactRetentionObject,
+  integer as retentionInteger,
+  countRows as retentionCountRows,
+  existsFlag as retentionExistsFlag,
+  optionalCount as retentionOptionalCount,
+  userVersion as retentionUserVersion,
+  PRESERVED as RETENTION_PRESERVED,
+  MAX_PLAN_BYTES as RETENTION_MAX_PLAN_BYTES,
+};

@@ -1098,6 +1098,57 @@ export class RunStore<Projection = BatchStatement[]> {
       return 'abandoned';
     });
   }
+  /** Exact generation header without requiring an active lease. */
+  peekGeneration(source: string, id: string): { status: string; prepared: number } | null {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    return this.get<{ status: string; prepared: number }>(
+      'SELECT status,prepared FROM run_generations WHERE source=? AND id=?',
+      source,
+      id,
+    );
+  }
+  /**
+   * Source-correct unpublished staging release for deliberate retirement.
+   * Clears the active lease without synthesizing a successful generation or using abandon.
+   */
+  releaseStagingForRetirement(source: string, id: string): void {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    this.transaction(() => {
+      const g = this.get<Generation>('SELECT * FROM run_generations WHERE source=? AND id=?', source, id);
+      if (!g || g.status !== 'staging' || g.prepared)
+        throw new Error('Generation is not an unpublished staging capture');
+      const updated = this.write(
+        'UPDATE run_generations SET status=? WHERE source=? AND id=? AND status=?',
+        'retiring',
+        source,
+        id,
+        'staging',
+      );
+      if (!updated.changes) throw new Error('Generation is not an unpublished staging capture');
+      this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', source, id);
+    });
+  }
+  /**
+   * Incomplete local retirement/retention cleanup with no live generation lease.
+   * A live recoverable generation stays independently usable.
+   */
+  localMaintenanceWork(source: string): { planId: string; generationId: string } | null {
+    sourceId(source);
+    const live = this.get<{ lease_run: string | null }>('SELECT lease_run FROM run_sources WHERE source=?', source);
+    if (live?.lease_run) return null;
+    const found = this.get<{ found: number }>(
+      "SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='run_retention_work'",
+    );
+    if (!found) return null;
+    const work = this.get<{ plan_id: string; generation_id: string }>(
+      'SELECT plan_id,generation_id FROM run_retention_work WHERE source=? AND status=? LIMIT 1',
+      source,
+      'applying',
+    );
+    return work ? { planId: work.plan_id, generationId: work.generation_id } : null;
+  }
   stage(run: Run, record: Staged<Projection>): void {
     exact(record, ['row', 'projection']);
     validateRow(record.row);

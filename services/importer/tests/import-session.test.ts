@@ -143,7 +143,7 @@ test('guard release permits capability rotation and fences old RunStore handles'
     b.release(other);
     a.store.database
       .prepare('INSERT INTO import_owners VALUES(?,?,?,?)')
-      .run('wikidata', process.pid, 'different-birth', 'old');
+      .run('wikidata', process.pid, '00000000-0000-0000-0000-000000000000:1', 'old');
     const reused = a.acquire('wikidata');
     expect(reused).not.toBe('busy');
     if (reused !== 'busy') a.release(reused);

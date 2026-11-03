@@ -43,21 +43,23 @@ function wellFormedOwner(owner: { pid: number; birth: string }): boolean {
   );
 }
 
-function alive(owner: Ownership): boolean {
+/** Linux /proc birth+boot identity. Unverifiable evidence is busy; this is not an ownership rotation. */
+export function importOwnerAvailability(
+  owner: Readonly<{ pid: number; birth: string }>,
+): 'live' | 'stale' | 'uninspectable' {
+  if (!wellFormedOwner(owner)) return 'uninspectable';
   try {
     const identity = processIdentity(owner.pid);
-    return identity.live && identity.birth === owner.birth;
+    if (identity.live && identity.birth === owner.birth) return 'live';
+    return 'stale';
   } catch (error) {
-    // Failure to inspect a live owner is not permission to steal its guard.
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    return true;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'stale';
+    return 'uninspectable';
   }
 }
 
-/** Linux /proc birth+boot identity. Unverifiable evidence is busy; this is not an ownership rotation. */
 export function importOwnerIsBusy(owner: Readonly<{ pid: number; birth: string }>): boolean {
-  if (!wellFormedOwner(owner)) return true;
-  return alive({ pid: owner.pid, birth: owner.birth, capability: '' });
+  return importOwnerAvailability(owner) !== 'stale';
 }
 
 /** Same-file, exact-source ownership protects RunStore's capability rotation. */
@@ -123,7 +125,7 @@ export class ImportSession {
         const prior = db
           .prepare('SELECT pid,birth,capability FROM import_owners WHERE source=?')
           .get(source) as Ownership | null;
-        if (prior && alive(prior)) return 'busy' as const;
+        if (prior && importOwnerIsBusy(prior)) return 'busy' as const;
         const capability = randomBytes(24).toString('hex');
         db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
         ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(

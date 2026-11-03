@@ -104,6 +104,9 @@ export const STAGING_MISSING_STATE = 'No importer state database exists at the g
 export const STAGING_MISSING_GENERATION =
   'The named source/generation is not the current staging capture. Resume names an exact existing generation and never starts a replacement.';
 
+export const STAGING_RETIRED_GENERATION =
+  'This unpublished capture was deliberately retired and cannot be resumed or recreated under its old generation ID. Start a separate ordinary import with the desired input.';
+
 export const STAGING_ACTIVE_GENERATION =
   'This source already has an active generation. Resume a compatible checkpoint with --resume-staging, or use ordinary import for sealed work.';
 
