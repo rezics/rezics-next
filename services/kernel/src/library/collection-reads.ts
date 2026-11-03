@@ -46,7 +46,6 @@ import {
 import type { SearchService } from '../search/service-scope.ts';
 import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
-import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { readCollectionSourceMembers } from './owner-index-members.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
