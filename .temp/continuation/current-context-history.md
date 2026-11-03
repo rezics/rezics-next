@@ -32,8 +32,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/post-history-current.test.tsx
@@ -42,10 +42,10 @@ acceptance:
   placement: default
   failing: true
   tests:
-    - "Open History with admitted conversation/Board/place and current author presentation, select an immutable revision, visit its exact/comparison destinations and return only while admitted."
-    - "Associate native context and enrichment by exact revision identity; preserve historical zero, question/revision/scale and original versus terminal target; distinguish withheld/absent/failed context and citations."
-    - "Exercise actual actor/account/session/CSRF/exposure/locale/post/thread/cursor/source replacement, first-render disclosure and delayed retirement without trusting URL equality or unobserved ABA."
-    - "Consume generated native envelope variants at1/20/100 in O(N+K), one replacing page and no duplicate hydration; native growth256/1024/4096 remains producer evidence."
+    - 'Open History with admitted conversation/Board/place and current author presentation, select an immutable revision, visit its exact/comparison destinations and return only while admitted.'
+    - 'Associate native context and enrichment by exact revision identity; preserve historical zero, question/revision/scale and original versus terminal target; distinguish withheld/absent/failed context and citations.'
+    - 'Exercise actual actor/account/session/CSRF/exposure/locale/post/thread/cursor/source replacement, first-render disclosure and delayed retirement without trusting URL equality or unobserved ABA.'
+    - 'Consume generated native envelope variants at1/20/100 in O(N+K), one replacing page and no duplicate hydration; native growth256/1024/4096 remains producer evidence.'
 ---
 
 Complete the current-context history visit using the generated Kernel client response for `GET /v1/posts/:id/revisions`. The Kernel handler now returns a closed `page` context beside the compatible `revisions` and `next`, and its recorded history-page tests cover current context, score scale, zero, and same-cursor retry. The generated client declaration in `packages/client/src/kernel/content/routes.d.ts` still exposes only `revisions` and `next`; do not hand-write or guess the missing response variant. Regenerate from the published Kernel route once its database URL is available, then consume that exact generated type.
