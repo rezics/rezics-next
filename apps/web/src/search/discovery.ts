@@ -106,15 +106,64 @@ const legacyPage = v.object({
   next: v.nullable(v.string()),
   as_of: v.string(),
 });
+const route = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535));
+const resourceId = v.pipe(v.string(), v.minLength(1));
+const publicCollectionSummary = v.strictObject({
+  id: resourceId,
+  title: v.pipe(v.string(), v.minLength(1)),
+  description: v.nullable(v.string()),
+});
+const reviewSubject = v.strictObject({
+  id: resourceId,
+  title: v.exactOptional(v.nullable(v.string())),
+});
+const reviewAuthor = v.strictObject({
+  displayName: v.nullable(v.string()),
+  handle: v.nullable(v.string()),
+});
+const publicReviewSummary = v.strictObject({
+  id: resourceId,
+  kind: v.literal('review'),
+  title: v.nullable(v.string()),
+  author: v.exactOptional(reviewAuthor),
+  excerpt: v.exactOptional(v.pipe(v.string(), v.maxLength(320))),
+  subject: v.exactOptional(v.nullable(reviewSubject)),
+});
+const publicSpaceSummary = v.strictObject({
+  id: resourceId,
+  title: v.pipe(v.string(), v.minLength(1)),
+  address: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+  summary: v.exactOptional(v.string()),
+  realm: v.exactOptional(
+    v.nullable(
+      v.strictObject({
+        id: resourceId,
+        title: v.exactOptional(v.nullable(v.string())),
+      }),
+    ),
+  ),
+});
 const hit = v.union([
   v.object({
-    key: v.object({ owner: v.literal('semantic'), kind: v.string(), route: v.number(), id: v.string() }),
+    key: v.strictObject({ owner: v.literal('semantic'), kind: v.string(), route, id: resourceId }),
     summary: v.object({ kind: v.literal('subject'), value: subjectSummary }),
     ...catalogueFields,
   }),
   v.object({
-    key: v.object({ owner: v.literal('accounts'), kind: v.literal('account'), route: v.number(), id: v.string() }),
+    key: v.strictObject({ owner: v.literal('accounts'), kind: v.literal('account'), route, id: resourceId }),
     summary: v.object({ kind: v.literal('account'), value: accountSummary }),
+  }),
+  v.strictObject({
+    key: v.strictObject({ owner: v.literal('library'), kind: v.literal('collection'), route, id: resourceId }),
+    summary: v.strictObject({ kind: v.literal('collection'), value: publicCollectionSummary }),
+  }),
+  v.strictObject({
+    key: v.strictObject({ owner: v.literal('content'), kind: v.literal('review'), route, id: resourceId }),
+    summary: v.strictObject({ kind: v.literal('review'), value: publicReviewSummary }),
+  }),
+  v.strictObject({
+    key: v.strictObject({ owner: v.literal('community'), kind: v.literal('space'), route, id: resourceId }),
+    summary: v.strictObject({ kind: v.literal('space'), value: publicSpaceSummary }),
   }),
 ]);
 const count = v.union([
@@ -145,6 +194,10 @@ export type LegacySearchPage = v.InferOutput<typeof legacyPage>;
 export type DiscoveryKinds = v.InferOutput<typeof kinds>;
 export type DiscoveryHit = DiscoveryPage['hits'][number];
 export type AccountDiscoverySummary = v.InferOutput<typeof accountSummary>;
+export type PublicCollectionSummary = v.InferOutput<typeof publicCollectionSummary>;
+export type PublicReviewSummary = v.InferOutput<typeof publicReviewSummary>;
+export type PublicSpaceSummary = v.InferOutput<typeof publicSpaceSummary>;
+export type PublicDiscoveryHit = Extract<DiscoveryHit, { summary: { kind: 'collection' | 'review' | 'space' } }>;
 export type DiscoveryRequest = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   representation: 'discovery-v1';
   languages: string[];
@@ -169,17 +222,34 @@ export type DiscoveryState =
   | { status: 'ready'; page: DiscoveryPage };
 
 export function discoveryKey(hit: DiscoveryHit): string {
-  return `${hit.key.kind}:${hit.key.id}`;
+  const { owner, kind, route, id } = hit.key;
+  return JSON.stringify([owner, kind, route, id]);
 }
 
-/** Retain native order and identity. Missing summaries or mismatched owners fail the whole page. */
+/** Retain native order and full owner-kind-route-id identity. Incomplete owner summaries fail the whole page. */
 export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   const parsed = v.safeParse(page, value);
   if (!parsed.success) return;
   const result = parsed.output;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
-    if (hit.summary.kind === 'subject' && hit.key.kind !== hit.summary.value.type) return;
+    switch (hit.summary.kind) {
+      case 'subject':
+        if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
+        break;
+      case 'account':
+        if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account') return;
+        break;
+      case 'collection':
+        if (hit.key.owner !== 'library' || hit.key.kind !== 'collection') return;
+        break;
+      case 'review':
+        if (hit.key.owner !== 'content' || hit.key.kind !== 'review' || hit.summary.value.kind !== 'review') return;
+        break;
+      case 'space':
+        if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;
+        break;
+    }
   }
   if (new Set(result.hits.map(discoveryKey)).size !== result.hits.length || !validKinds(result.kinds)) return;
   return result;
@@ -300,4 +370,12 @@ export async function readDiscoveryKinds(
 
 export function isCatalogueHit(hit: DiscoveryHit): hit is Extract<DiscoveryHit, { summary: { kind: 'subject' } }> {
   return hit.summary.kind === 'subject';
+}
+
+export function isAccountHit(hit: DiscoveryHit): hit is Extract<DiscoveryHit, { summary: { kind: 'account' } }> {
+  return hit.summary.kind === 'account';
+}
+
+export function isPublicDiscoveryHit(hit: DiscoveryHit): hit is PublicDiscoveryHit {
+  return hit.summary.kind === 'collection' || hit.summary.kind === 'review' || hit.summary.kind === 'space';
 }

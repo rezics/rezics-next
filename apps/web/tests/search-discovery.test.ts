@@ -21,10 +21,10 @@ test('the mixed journey uses one current native response and keeps Person, Accou
   expect(discovery.status).toBe('ready');
   if (discovery.status !== 'ready') throw new Error('Mixed results unavailable');
   expect(discovery.page.hits.map(discoveryKey)).toEqual([
-    `schema:Person:${discoveryExample.hits[0]!.key.id}`,
-    `account:${discoveryExample.hits[0]!.key.id}`,
-    `account:${discoveryExample.hits[2]!.key.id}`,
-    `schema:Book:${discoveryExample.hits[3]!.key.id}`,
+    JSON.stringify(['semantic', 'schema:Person', 0, discoveryExample.hits[0]!.key.id]),
+    JSON.stringify(['accounts', 'account', 0, discoveryExample.hits[0]!.key.id]),
+    JSON.stringify(['accounts', 'account', 0, discoveryExample.hits[2]!.key.id]),
+    JSON.stringify(['semantic', 'schema:Book', 0, discoveryExample.hits[3]!.key.id]),
   ]);
   const html = renderToStaticMarkup(createElement(DiscoveryResults, { state: discovery, locale: 'en' }));
   expect(html.match(/data-slot="list-row"/g)).toHaveLength(4);

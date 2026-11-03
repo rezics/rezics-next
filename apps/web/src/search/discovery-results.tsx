@@ -7,7 +7,14 @@ import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { ResultRow, localizedLabel } from './results';
-import { discoveryKey, isCatalogueHit, type AccountDiscoverySummary, type DiscoveryState } from './discovery';
+import {
+  discoveryKey,
+  isAccountHit,
+  isPublicDiscoveryHit,
+  type AccountDiscoverySummary,
+  type DiscoveryState,
+} from './discovery';
+import { DiscoveryPublicRow } from './discovery-public-rows';
 
 function messageOptions(locale?: string) {
   return locale === undefined ? {} : { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -128,8 +135,10 @@ export function DiscoveryResults({
     <ul role="list" className="space-y-2" data-slot="discovery-results">
       {state.page.hits.map((hit) => {
         const kind = localizedLabel(kinds[hit.key.kind] ?? {}, locale).text || hit.key.kind;
-        if (!isCatalogueHit(hit))
+        if (isAccountHit(hit))
           return <AccountRow key={discoveryKey(hit)} account={hit.summary.value} kind={kind} locale={locale} />;
+        if (isPublicDiscoveryHit(hit))
+          return <DiscoveryPublicRow key={discoveryKey(hit)} hit={hit} kind={kind} locale={locale} />;
         const summary = hit.summary.value;
         const label = summary.label;
         return (
