@@ -345,11 +345,10 @@ units (including zero), original Subject keys and opaque continuation. Transport
 that same address; unavailable disclosure is not empty history. Its prepared caller still owns provenance,
 private no-store responses and retirement.
 
-Decision: use only the installed revisions/next response until Content publishes generated current-context
-and historical-enrichment variants. Current names are presentation, never immutable authorship; current votes
-cannot supply an absent recorded citation or denominator. The existing exact reader retains authorization and
-media inspection. Native context, historical scales and original/terminal target disclosure, comparison return and connected
-current-context stories remain integration gaps, not inferred capabilities.
+Decision: consume the generated closed history page context as the authority for current presentation and
+revision-keyed enrichment; exact and admitted comparison links open in a separate tab to retain selection and focus.
+Current names never change immutable authorship, and current votes cannot replace recorded citations or scales.
+Concealed, absent and failed context retain their native meanings; failed context retries the same history address.
 
 Decision: requesting a new cursor retires the previous page immediately; failed and denied pages retry that
 exact cursor, while account/provenance replacement starts a new visit.
