@@ -28,7 +28,11 @@ type MeasuredCommand = Readonly<{
   presentation: RealmPresentationInput;
 }>;
 
-function presentationFor(changes: 0 | 1 | 2, icon: RealmPresentationAsset | null, banner: RealmPresentationAsset | null) {
+function presentationFor(
+  changes: 0 | 1 | 2,
+  icon: RealmPresentationAsset | null,
+  banner: RealmPresentationAsset | null,
+) {
   return {
     avatarMediaId: changes >= 1 ? icon!.id : null,
     bannerMediaId: changes >= 2 ? banner!.id : null,
@@ -344,7 +348,12 @@ test('native Realm presentation claims stay bounded across unrelated and retaine
   const one = await commandSeries(1, oneTarget, oneIcon, null, warmupRealm, warmupIcon, null);
   const oneNew = await verifyReplayAndNewCommand(one, oneTarget, [oneIcon.id]);
   expect(await fixture.mediaRows([oneIcon.id])).toMatchObject([
-    { container_id: oneTarget.realmId, uploader_id: fixture.actor.accountId, purpose: 'realm-icon', state: 'available' },
+    {
+      container_id: oneTarget.realmId,
+      uploader_id: fixture.actor.accountId,
+      purpose: 'realm-icon',
+      state: 'available',
+    },
   ]);
   await assertClearRetainsOldClaims(oneNew, [oneIcon.id]);
 
@@ -355,14 +364,7 @@ test('native Realm presentation claims stay bounded across unrelated and retaine
   const historyTarget = await fixture.createRealm('presentation claim history');
   const historyIcon = await fixture.upload(historyTarget.realmId, 'realm-icon');
   const historyBanner = await fixture.upload(historyTarget.realmId, 'realm-banner');
-  const history = await historySeries(
-    historyTarget,
-    historyIcon,
-    historyBanner,
-    warmupRealm,
-    warmupIcon,
-    warmupBanner,
-  );
+  const history = await historySeries(historyTarget, historyIcon, historyBanner, warmupRealm, warmupIcon, warmupBanner);
   const historyNew = await verifyReplayAndNewCommand(history, historyTarget, [historyIcon.id, historyBanner.id]);
   await assertClearRetainsOldClaims(historyNew, [historyIcon.id, historyBanner.id]);
 
@@ -447,9 +449,7 @@ test('native Realm presentation claims stay bounded across unrelated and retaine
   expect(await fixture.revisionCount(staleTarget.realmId)).toBe(staleRevisionCount);
   expect((await fixture.read(invalidTarget.realmId)).headRevisionId).toBe(invalidInitialHead);
   expect((await fixture.read(staleTarget.realmId)).headRevisionId).toBe(staleMovedHead);
-  expect(await Promise.all(refusalKeys.map((key) => fixture.keyExists(key)))).toEqual(
-    refusalKeys.map(() => false),
-  );
+  expect(await Promise.all(refusalKeys.map((key) => fixture.keyExists(key)))).toEqual(refusalKeys.map(() => false));
   const rejectedRows = await fixture.mediaRows(refusals.map(({ id }) => id).concat(staleIcon.id));
   expect(rejectedRows.every((row) => row.claimed_at === null && row.claimed_realm_id === null)).toBe(true);
 

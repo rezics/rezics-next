@@ -28,12 +28,12 @@ bun run --cwd services/kernel check test/content/growth-realm-presentation-claim
 
 The focused command stopped in the kernel schema-dump preflight, before loading the test file or reaching a test assertion. Its exact error was `error: Schema dump differs from db/library/schema.sql.` The preflight named `native_public_output_binding` as the expected first object and `members_preparation` as the actual first object. Neither schema file is changed by this work. No three-scale physical sample was produced:
 
-| Case | 256 | 1024 | 4096 |
-| --- | --- | --- | --- |
+| Case                                     | 256         | 1024        | 4096        |
+| ---------------------------------------- | ----------- | ----------- | ----------- |
 | 0 changed slots vs unrelated Realm/media | not reached | not reached | not reached |
-| 1 changed slot vs unrelated Realm/media | not reached | not reached | not reached |
+| 1 changed slot vs unrelated Realm/media  | not reached | not reached | not reached |
 | 2 changed slots vs unrelated Realm/media | not reached | not reached | not reached |
-| 2 changed slots vs retained history | not reached | not reached | not reached |
-| media and stale-CAS refusals | not reached | not reached | not reached |
+| 2 changed slots vs retained history      | not reached | not reached | not reached |
+| media and stale-CAS refusals             | not reached | not reached | not reached |
 
 The attempted kernel typecheck first failed in shared check preparation with `reason: absolute preparation deadline exceeded` during `source-artifact-publication`. Its retry reached TypeScript and reported existing diagnostics in unrelated, unmodified kernel files; it reported none in the new acceptance or fixture. The schema preflight and typecheck diagnostics remain integration execution limits, not passing acceptance evidence. This binding does not claim a promotion or add a proof-registration gate.
