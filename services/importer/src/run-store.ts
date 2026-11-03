@@ -260,14 +260,7 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'threshold',
     'input_complete',
   ],
-  run_disappearance_missing: [
-    'source',
-    'run_id',
-    'record_key',
-    'record_revision',
-    'digest',
-    'converter_revision',
-  ],
+  run_disappearance_missing: ['source', 'run_id', 'record_key', 'record_revision', 'digest', 'converter_revision'],
 };
 
 const REQUIRED_EXISTING_INDEXES = [

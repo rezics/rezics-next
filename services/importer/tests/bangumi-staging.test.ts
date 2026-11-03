@@ -282,7 +282,12 @@ test('CLI interrupt names the Bangumi generation and resume finishes without imp
   const input = dump();
   await writeFile(
     keyPath,
-    JSON.stringify({ ...pair.privateKey.export({ format: 'jwk' }), kid: 'bangumi-staging', alg: 'ES256', key_ops: ['sign'] }),
+    JSON.stringify({
+      ...pair.privateKey.export({ format: 'jwk' }),
+      kid: 'bangumi-staging',
+      alg: 'ES256',
+      key_ops: ['sign'],
+    }),
     { mode: 0o600 },
   );
   await writeFile(dumpPath, input);

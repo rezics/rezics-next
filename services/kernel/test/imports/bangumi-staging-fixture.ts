@@ -146,34 +146,37 @@ export async function runBangumiStagingJourney() {
     const preSealNative = native;
     conversions = 0;
     native = 0;
-    const resumed = await runImportCli(argv('resume-staging', interrupted.stderr.match(/generation (\d+)/)?.[1] ?? '1'), {
-      testOrigin: api,
-      observer: {
-        onCoordinator({ registration }) {
-          const convert = registration.convert.bind(registration);
-          (registration as { convert: typeof convert }).convert = (input, context) => {
-            if (!context.subjectId) conversions++;
-            return convert(input, context);
-          };
+    const resumed = await runImportCli(
+      argv('resume-staging', interrupted.stderr.match(/generation (\d+)/)?.[1] ?? '1'),
+      {
+        testOrigin: api,
+        observer: {
+          onCoordinator({ registration }) {
+            const convert = registration.convert.bind(registration);
+            (registration as { convert: typeof convert }).convert = (input, context) => {
+              if (!context.subjectId) conversions++;
+              return convert(input, context);
+            };
+          },
         },
+        fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+          const request = input instanceof Request ? input : new Request(input, init);
+          const url = new URL(request.url);
+          if (url.origin === auth) return support.host.service.handler(request);
+          expect(url.origin).toBe(api);
+          const claims = decodeJwt(request.headers.get('authorization')!.slice(7));
+          expect(claims.sub).toBe(runtime.identity.bulk.accountId);
+          expect(String(claims.scope).split(' ').sort()).toEqual([...scopes].sort());
+          const text = await request.clone().text();
+          bodies.push(text);
+          if (url.pathname === '/v1/subjects:batchWrite') {
+            const body = JSON.parse(text) as BatchWriteRequest;
+            expect(body.commands.length).toBeGreaterThan(0);
+          }
+          return runtime.replay(request);
+        }) as typeof fetch,
       },
-      fetch: (async (input: Request | string | URL, init?: RequestInit) => {
-        const request = input instanceof Request ? input : new Request(input, init);
-        const url = new URL(request.url);
-        if (url.origin === auth) return support.host.service.handler(request);
-        expect(url.origin).toBe(api);
-        const claims = decodeJwt(request.headers.get('authorization')!.slice(7));
-        expect(claims.sub).toBe(runtime.identity.bulk.accountId);
-        expect(String(claims.scope).split(' ').sort()).toEqual([...scopes].sort());
-        const text = await request.clone().text();
-        bodies.push(text);
-        if (url.pathname === '/v1/subjects:batchWrite') {
-          const body = JSON.parse(text) as BatchWriteRequest;
-          expect(body.commands.length).toBeGreaterThan(0);
-        }
-        return runtime.replay(request);
-      }) as typeof fetch,
-    });
+    );
     const observer = await openApiObserver(runtime);
     const session = new ImportSession(state, { create: false });
     const subjects: { id: string; type: string; sourceRecords: boolean }[] = [];
