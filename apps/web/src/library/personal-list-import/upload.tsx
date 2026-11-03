@@ -40,9 +40,13 @@ export function VndbUploadForm({
     >
       <p>{m.library_vndb_intro()}</p>
       <p>{m.library_vndb_own_export()}</p>
-      <p id={helpId} className="text-sm text-muted-foreground">{m.library_vndb_bounds()}</p>
+      <p id={helpId} className="text-sm text-muted-foreground">
+        {m.library_vndb_bounds()}
+      </p>
       <Field>
-        <FieldLabel htmlFor={inputId} className="min-h-11 items-center">{m.library_vndb_file_label()}</FieldLabel>
+        <FieldLabel htmlFor={inputId} className="min-h-11 items-center">
+          {m.library_vndb_file_label()}
+        </FieldLabel>
         <input
           ref={input}
           id={inputId}

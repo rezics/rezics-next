@@ -66,7 +66,11 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
   return (
     <main ref={main} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_vndb_title()}</PageHeading>
-      {noticeText(snap.notice) ? <p role="status" aria-live="polite">{noticeText(snap.notice)}</p> : null}
+      {noticeText(snap.notice) ? (
+        <p role="status" aria-live="polite">
+          {noticeText(snap.notice)}
+        </p>
+      ) : null}
       {snap.notice?.kind === 'unknown' ? (
         <VndbAction type="button" disabled={snap.busy} onClick={() => void act((current) => current.retryUnknown())}>
           {m.library_bangumi_retry_command()}
@@ -74,11 +78,25 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
       ) : null}
       {showSourceRetry ? <p className="text-sm">{m.library_vndb_source_retry_help()}</p> : null}
       {snap.stage === 'upload' ? (
-        <VndbUploadForm busy={snap.busy} disabled={locked} onUpload={(xml) => void act((current) => current.preview(xml))} onReadFailure={() => void act((current) => current.fileReadFailed())} />
+        <VndbUploadForm
+          busy={snap.busy}
+          disabled={locked}
+          onUpload={(xml) => void act((current) => current.preview(xml))}
+          onReadFailure={() => void act((current) => current.fileReadFailed())}
+        />
       ) : null}
       {snap.stage === 'review' ? (
         <>
-          {snap.limits ? <p className="text-sm text-muted-foreground">{m.library_vndb_native_limits({ xml: snap.limits.bytes, wire: snap.limits.wireBytes, rows: snap.limits.rows, page: snap.limits.page })}</p> : null}
+          {snap.limits ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_vndb_native_limits({
+                xml: snap.limits.bytes,
+                wire: snap.limits.wireBytes,
+                rows: snap.limits.rows,
+                page: snap.limits.page,
+              })}
+            </p>
+          ) : null}
           <VndbReviewPage
             snap={snap}
             busy={snap.busy || locked}
@@ -90,28 +108,71 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
           />
         </>
       ) : null}
-      {snap.stage === 'confirm' ? <VndbConfirmPage snap={snap} busy={snap.busy || locked} onBack={() => void act((current) => current.backToReview())} onConfirm={() => void act((current) => current.confirm())} /> : null}
-      {snap.stage === 'applying' ? <VndbApplying applied={snap.applied} applying={snap.applying} total={snap.selection.length + snap.outcomes.length} /> : null}
-      {snap.stage === 'results' ? <VndbResultPage snap={snap} busy={snap.busy} onResume={() => void act((current) => current.resume())} onReview={() => void act((current) => current.backToReview())} onDiscard={() => void act((current) => current.discard())} /> : null}
+      {snap.stage === 'confirm' ? (
+        <VndbConfirmPage
+          snap={snap}
+          busy={snap.busy || locked}
+          onBack={() => void act((current) => current.backToReview())}
+          onConfirm={() => void act((current) => current.confirm())}
+        />
+      ) : null}
+      {snap.stage === 'applying' ? (
+        <VndbApplying
+          applied={snap.applied}
+          applying={snap.applying}
+          total={snap.selection.length + snap.outcomes.length}
+        />
+      ) : null}
+      {snap.stage === 'results' ? (
+        <VndbResultPage
+          snap={snap}
+          busy={snap.busy}
+          onResume={() => void act((current) => current.resume())}
+          onReview={() => void act((current) => current.backToReview())}
+          onDiscard={() => void act((current) => current.discard())}
+        />
+      ) : null}
       {snap.stage === 'removed' ? <VndbRemoved outcomes={snap.outcomes} /> : null}
-      {snap.sourceVisible && snap.sourceXML !== null ? <VndbAction type="button" variant="outline" onClick={() => download(snap.sourceXML!)}>{m.library_vndb_download_source()}</VndbAction> : null}
+      {snap.sourceVisible && snap.sourceXML !== null ? (
+        <VndbAction type="button" variant="outline" onClick={() => download(snap.sourceXML!)}>
+          {m.library_vndb_download_source()}
+        </VndbAction>
+      ) : null}
       {snap.uploadId && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
           {snap.stage !== 'results' || !snap.cancelled ? (
-            <VndbAction type="button" variant="outline" disabled={locked && snap.stage !== 'applying'} onClick={() => void act((current) => current.cancelAdmission())}>
+            <VndbAction
+              type="button"
+              variant="outline"
+              disabled={locked && snap.stage !== 'applying'}
+              onClick={() => void act((current) => current.cancelAdmission())}
+            >
               {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
             </VndbAction>
           ) : null}
-          {snap.stage !== 'results' ? <VndbAction type="button" variant="outline" disabled={locked} onClick={() => void act((current) => current.discard())}>{m.library_bangumi_discard()}</VndbAction> : null}
+          {snap.stage !== 'results' ? (
+            <VndbAction
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void act((current) => current.discard())}
+            >
+              {m.library_bangumi_discard()}
+            </VndbAction>
+          ) : null}
         </div>
       ) : null}
-      <VndbDeparture active={!!snap.uploadId && snap.stage !== 'removed'} locked={locked} onLeave={async () => {
-        if (snap.notice?.kind === 'unknown' || snap.busy) return false;
-        if (snap.cancelled) return true;
-        const result = await journey.current?.cancelAdmission();
-        if (result) setSnap(result);
-        return result?.cancelled === true;
-      }} />
+      <VndbDeparture
+        active={!!snap.uploadId && snap.stage !== 'removed'}
+        locked={locked}
+        onLeave={async () => {
+          if (snap.notice?.kind === 'unknown' || snap.busy) return false;
+          if (snap.cancelled) return true;
+          const result = await journey.current?.cancelAdmission();
+          if (result) setSnap(result);
+          return result?.cancelled === true;
+        }}
+      />
     </main>
   );
 }

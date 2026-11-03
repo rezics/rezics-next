@@ -6,13 +6,7 @@ import { requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { readRelease } from '../../subject/definitions';
 import { libraryStateOptions } from '../profiles';
-import {
-  VNDB_APPLY,
-  VNDB_ID,
-  VNDB_ROWS,
-  type VndbCommand,
-  type VndbReviewInput,
-} from './contract';
+import { VNDB_APPLY, VNDB_ID, VNDB_ROWS, type VndbCommand, type VndbReviewInput } from './contract';
 import { kernelVndbPort } from './native';
 
 function originConfigured(): boolean {
@@ -88,7 +82,10 @@ export const reviewVndbImport = createServerFn({ method: 'POST' })
     if (!input || typeof input !== 'object' || !('uploadId' in input) || !('key' in input) || !('body' in input))
       throw new Error('Invalid VNDB import');
     return {
-      kind: 'review', uploadId: requireId(input.uploadId), key: requireKey(input.key), body: reviewBody(input.body),
+      kind: 'review',
+      uploadId: requireId(input.uploadId),
+      key: requireKey(input.key),
+      body: reviewBody(input.body),
       sender: requireSender(input),
     };
   })
@@ -98,8 +95,14 @@ export const applyVndbImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<VndbCommand, { kind: 'apply' }> & { sender: string } => {
     if (!input || typeof input !== 'object' || !('uploadId' in input) || !('body' in input))
       throw new Error('Invalid VNDB import');
-    if (!input.body || typeof input.body !== 'object' || !('rows' in input.body) || !Array.isArray(input.body.rows) ||
-      input.body.rows.length === 0 || input.body.rows.length > VNDB_APPLY)
+    if (
+      !input.body ||
+      typeof input.body !== 'object' ||
+      !('rows' in input.body) ||
+      !Array.isArray(input.body.rows) ||
+      input.body.rows.length === 0 ||
+      input.body.rows.length > VNDB_APPLY
+    )
       throw new Error('Invalid VNDB import');
     const rows = input.body.rows.map((item) => {
       if (!item || typeof item !== 'object' || !('ordinal' in item) || !('reviewId' in item))
@@ -114,7 +117,12 @@ export const cancelVndbImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<VndbCommand, { kind: 'cancel' }> & { sender: string } => {
     if (!input || typeof input !== 'object' || !('uploadId' in input) || !('key' in input))
       throw new Error('Invalid VNDB import');
-    return { kind: 'cancel', uploadId: requireId(input.uploadId), key: requireKey(input.key), sender: requireSender(input) };
+    return {
+      kind: 'cancel',
+      uploadId: requireId(input.uploadId),
+      key: requireKey(input.key),
+      sender: requireSender(input),
+    };
   })
   .handler(async ({ data }) => port(data.sender).cancel(data));
 
@@ -122,15 +130,26 @@ export const deleteVndbImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<VndbCommand, { kind: 'delete' }> & { sender: string } => {
     if (!input || typeof input !== 'object' || !('uploadId' in input) || !('key' in input))
       throw new Error('Invalid VNDB import');
-    return { kind: 'delete', uploadId: requireId(input.uploadId), key: requireKey(input.key), sender: requireSender(input) };
+    return {
+      kind: 'delete',
+      uploadId: requireId(input.uploadId),
+      key: requireKey(input.key),
+      sender: requireSender(input),
+    };
   })
   .handler(async ({ data }) => port(data.sender).delete(data));
 
 /** State labels come only from the currently released profile for the explicitly searched catalogue type. */
 export const readVndbTargetStates = createServerFn({ method: 'GET' })
   .validator((input: unknown): string => {
-    if (!input || typeof input !== 'object' || !('type' in input) || typeof input.type !== 'string' ||
-      input.type.length === 0 || input.type.length > 128)
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('type' in input) ||
+      typeof input.type !== 'string' ||
+      input.type.length === 0 ||
+      input.type.length > 128
+    )
       throw new Error('Invalid VNDB target type');
     return input.type;
   })

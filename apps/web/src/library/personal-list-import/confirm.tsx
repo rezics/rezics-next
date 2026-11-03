@@ -28,15 +28,30 @@ export function VndbConfirmPage({
         {snap.selection.map((row) => (
           <li key={row.ordinal} className="min-w-0 rounded-md border p-3" data-vndb-confirm={row.ordinal}>
             <p className="break-words font-medium">{row.title}</p>
-            {row.identifier ? <p className="break-words text-sm">{m.library_vndb_identifier({ value: row.identifier.value })}</p> : null}
-            <p className="break-words text-sm">{selectionLabel(row.decision!.status, row.decision!.state, row.decision!.replace)}</p>
-            {row.decision?.targetId ? <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.decision.targetId })}</p> : null}
-            {row.decision?.baseline ? <p className="text-sm">{m.library_bangumi_current({ state: row.decision.baseline.state, revision: row.decision.baseline.revision })}</p> : null}
+            {row.identifier ? (
+              <p className="break-words text-sm">{m.library_vndb_identifier({ value: row.identifier.value })}</p>
+            ) : null}
+            <p className="break-words text-sm">
+              {selectionLabel(row.decision!.status, row.decision!.state, row.decision!.replace)}
+            </p>
+            {row.decision?.targetId ? (
+              <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.decision.targetId })}</p>
+            ) : null}
+            {row.decision?.baseline ? (
+              <p className="text-sm">
+                {m.library_bangumi_current({
+                  state: row.decision.baseline.state,
+                  revision: row.decision.baseline.revision,
+                })}
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>
       <div className="flex flex-wrap gap-3">
-        <VndbAction type="button" variant="outline" disabled={busy} onClick={onBack}>{m.library_bangumi_return_review()}</VndbAction>
+        <VndbAction type="button" variant="outline" disabled={busy} onClick={onBack}>
+          {m.library_bangumi_return_review()}
+        </VndbAction>
         <VndbAction type="button" disabled={busy || snap.selection.length === 0} onClick={onConfirm} aria-busy={busy}>
           {m.library_vndb_apply_selection({ count: snap.selection.length })}
         </VndbAction>

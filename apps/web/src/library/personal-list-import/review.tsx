@@ -25,13 +25,19 @@ export function VndbReviewPage({
   const reviewed = snap.rows.filter((row) => row.decision).length;
   return (
     <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
-      <p role="status">{m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}</p>
+      <p role="status">
+        {m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}
+      </p>
       {snap.page?.state === 'cancelled' ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
       <div className="flex flex-wrap gap-3">
         <VndbAction type="button" variant="outline" disabled={busy || snap.sourceVisible} onClick={onSource}>
           {m.library_vndb_source_button()}
         </VndbAction>
-        {snap.sourceVisible ? <VndbAction type="button" variant="outline" disabled={busy} onClick={onHideSource}>{m.library_vndb_source_hide()}</VndbAction> : null}
+        {snap.sourceVisible ? (
+          <VndbAction type="button" variant="outline" disabled={busy} onClick={onHideSource}>
+            {m.library_vndb_source_hide()}
+          </VndbAction>
+        ) : null}
       </div>
       {snap.sourceVisible && snap.sourceXML !== null ? (
         <details open className="rounded-md border p-3" data-vndb-source-xml>
@@ -49,7 +55,9 @@ export function VndbReviewPage({
       </ul>
       <div className="flex flex-wrap gap-3">
         {snap.page?.next !== null && snap.page ? (
-          <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>{m.library_vndb_next_page()}</VndbAction>
+          <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
+            {m.library_vndb_next_page()}
+          </VndbAction>
         ) : null}
         <VndbAction type="button" disabled={busy || snap.cancelled || snap.selection.length === 0} onClick={onConfirm}>
           {m.library_vndb_confirm_selection({ count: snap.selection.length })}

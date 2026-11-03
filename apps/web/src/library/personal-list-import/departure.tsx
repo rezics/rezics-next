@@ -13,7 +13,15 @@ import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { vndbActionClass } from './controls';
 
-export function VndbDeparture({ active, locked, onLeave }: { active: boolean; locked: boolean; onLeave: () => Promise<boolean> }) {
+export function VndbDeparture({
+  active,
+  locked,
+  onLeave,
+}: {
+  active: boolean;
+  locked: boolean;
+  onLeave: () => Promise<boolean>;
+}) {
   const stay = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState(false);
   const blocker = useBlocker({ shouldBlockFn: () => active, withResolver: true, enableBeforeUnload: active });
@@ -37,13 +45,26 @@ export function VndbDeparture({ active, locked, onLeave }: { active: boolean; lo
         <AlertDialogContent initialFocus={stay}>
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_vndb_leave_title()}</AlertDialogTitle>
-            <AlertDialogDescription>{locked ? m.library_vndb_leave_pending() : m.library_vndb_leave_help()}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {locked ? m.library_vndb_leave_pending() : m.library_vndb_leave_help()}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stay} className={vndbActionClass} onClick={() => blocker.reset?.()}>{m.library_bangumi_stay()}</AlertDialogCancel>
-            {!locked ? <AlertDialogAction className={vndbActionClass} disabled={leaving || !active} onClick={(event) => { event.preventDefault(); void leave(); }}>
-              {leaving ? m.library_vndb_stopping() : m.library_bangumi_leave()}
-            </AlertDialogAction> : null}
+            <AlertDialogCancel ref={stay} className={vndbActionClass} onClick={() => blocker.reset?.()}>
+              {m.library_bangumi_stay()}
+            </AlertDialogCancel>
+            {!locked ? (
+              <AlertDialogAction
+                className={vndbActionClass}
+                disabled={leaving || !active}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void leave();
+                }}
+              >
+                {leaving ? m.library_vndb_stopping() : m.library_bangumi_leave()}
+              </AlertDialogAction>
+            ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>
       ) : null}

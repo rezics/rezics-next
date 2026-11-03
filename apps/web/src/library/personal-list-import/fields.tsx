@@ -5,12 +5,13 @@ function valueText(value: VndbSourceValue): string {
   if (value.kind === 'missing') return m.library_vndb_value_missing();
   if (value.kind === 'unknown') return m.library_vndb_value_unknown();
   if (value.kind === 'invalid') return m.library_vndb_value_invalid();
-  return value.value === undefined ? value.raw ?? '' : String(value.value);
+  return value.value === undefined ? (value.raw ?? '') : String(value.value);
 }
 
 function fieldLabel(name: string): string {
   if (name === 'vote') return m.library_vndb_field_score();
-  if (name === 'started' || name === 'finished') return name === 'started' ? m.library_vndb_field_started() : m.library_vndb_field_finished();
+  if (name === 'started' || name === 'finished')
+    return name === 'started' ? m.library_vndb_field_started() : m.library_vndb_field_finished();
   if (name === 'notes') return m.library_vndb_field_notes();
   if (name === 'private') return m.library_vndb_field_privacy();
   if (name === 'labels') return m.library_vndb_field_labels();
@@ -25,7 +26,9 @@ function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
       <span className="font-medium">{fieldLabel(name)}: </span>
       <span className={privateNote ? 'whitespace-pre-wrap' : 'whitespace-normal'}>{valueText(value)}</span>
       {value.raw !== null && value.kind !== 'value' ? (
-        <span className="block text-sm text-muted-foreground [overflow-wrap:anywhere]">{m.library_vndb_raw({ value: value.raw })}</span>
+        <span className="block text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {m.library_vndb_raw({ value: value.raw })}
+        </span>
       ) : null}
       {value.scale ? (
         <span className="block text-sm text-muted-foreground">
@@ -33,7 +36,9 @@ function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
         </span>
       ) : null}
       {value.precision ? (
-        <span className="block text-sm text-muted-foreground">{m.library_vndb_date_precision({ precision: value.precision })}</span>
+        <span className="block text-sm text-muted-foreground">
+          {m.library_vndb_date_precision({ precision: value.precision })}
+        </span>
       ) : null}
     </li>
   );
@@ -49,13 +54,19 @@ export function VndbEvidence({ row }: { row: VndbRow }) {
       {row.suggestedRole ? <p>{m.library_vndb_role_suggestion({ role: row.suggestedRole })}</p> : null}
       {ordinary.length ? (
         <ul className="space-y-2">
-          {ordinary.map(([name, value]) => <FieldValue key={name} name={name} value={value} />)}
+          {ordinary.map(([name, value]) => (
+            <FieldValue key={name} name={name} value={value} />
+          ))}
         </ul>
       ) : null}
       {notes.length ? (
         <details className="rounded-md border p-3">
           <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_vndb_notes_summary()}</summary>
-          <ul className="space-y-2">{notes.map(([name, value]) => <FieldValue key={name} name={name} value={value} />)}</ul>
+          <ul className="space-y-2">
+            {notes.map(([name, value]) => (
+              <FieldValue key={name} name={name} value={value} />
+            ))}
+          </ul>
           <p className="mt-2 text-sm text-muted-foreground">{m.library_vndb_notes_private()}</p>
         </details>
       ) : null}

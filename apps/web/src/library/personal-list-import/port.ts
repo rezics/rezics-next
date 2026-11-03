@@ -18,9 +18,11 @@ function serverPort(visit: VndbVisit): VndbPort {
     preview: (command) => previewVndbImport({ data: { ...data, xml: command.xml, key: command.key }, headers }),
     page: (command) => readVndbImportPage({ data: { ...data, uploadId: command.uploadId, offset: command.offset } }),
     source: (command) => readVndbImportSource({ data: { ...data, uploadId: command.uploadId } }),
-    review: (command) => reviewVndbImport({
-      data: { ...data, uploadId: command.uploadId, key: command.key, body: command.body }, headers,
-    }),
+    review: (command) =>
+      reviewVndbImport({
+        data: { ...data, uploadId: command.uploadId, key: command.key, body: command.body },
+        headers,
+      }),
     apply: (command) => applyVndbImport({ data: { ...data, uploadId: command.uploadId, body: command.body }, headers }),
     cancel: (command) => cancelVndbImport({ data: { ...data, uploadId: command.uploadId, key: command.key }, headers }),
     delete: (command) => deleteVndbImport({ data: { ...data, uploadId: command.uploadId, key: command.key }, headers }),

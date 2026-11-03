@@ -24,7 +24,8 @@ export const Route = createFileRoute('/library/import-vndb')({
   },
   staleTime: 0,
   gcTime: 0,
-  head: ({ match }) => pageHead({ title: m.library_vndb_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+  head: ({ match }) =>
+    pageHead({ title: m.library_vndb_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: VndbImportRoute,
 });
 

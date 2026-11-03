@@ -25,7 +25,9 @@ export function VndbTargetSearch({
           onChange(subject);
         }}
       />
-      {value ? <p className="break-words">{m.library_vndb_target_selected({ title: value.title, id: value.id })}</p> : null}
+      {value ? (
+        <p className="break-words">{m.library_vndb_target_selected({ title: value.title, id: value.id })}</p>
+      ) : null}
     </div>
   );
 }

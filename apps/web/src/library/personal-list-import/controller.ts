@@ -44,13 +44,19 @@ function sameCommand(left: VndbCommand, right: VndbCommand): boolean {
 }
 
 function isVndbUnknown(value: unknown): value is VndbUnknown {
-  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'unknown' && 'command' in value;
+  return (
+    typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'unknown' && 'command' in value
+  );
 }
 
 function chooseRows(rows: VndbRow[], outcomes: Map<string, { ordinal: number; reviewId: string; status: string }>) {
   return rows
-    .filter((row) => row.decision && !outcomes.has(receiptKey(row.ordinal, row.decision.reviewId)) &&
-      ['reviewed', 'skipped', 'unsupported'].includes(row.decision.status))
+    .filter(
+      (row) =>
+        row.decision &&
+        !outcomes.has(receiptKey(row.ordinal, row.decision.reviewId)) &&
+        ['reviewed', 'skipped', 'unsupported'].includes(row.decision.status),
+    )
     .sort((a, b) => a.ordinal - b.ordinal);
 }
 
@@ -193,7 +199,10 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     return snapshot();
   }
 
-  async function sendPreview(command: Extract<VndbCommand, { kind: 'preview' }>, retry = false): Promise<VndbJourneySnapshot> {
+  async function sendPreview(
+    command: Extract<VndbCommand, { kind: 'preview' }>,
+    retry = false,
+  ): Promise<VndbJourneySnapshot> {
     pendingPreview = command;
     const response = await run(command, () => port.preview(command), { retry });
     if (!response || response.kind !== 'previewed' || !live()) return snapshot();
@@ -213,7 +222,9 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     if (uploadId) {
       replacementXML = xml;
       const remove: Extract<VndbCommand, { kind: 'delete' }> = {
-        kind: 'delete', uploadId, key: newVndbKey(),
+        kind: 'delete',
+        uploadId,
+        key: newVndbKey(),
       };
       const response = await run(remove, () => port.delete(remove));
       if (!response || response.kind !== 'deleted' || !live()) {
@@ -244,8 +255,12 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     return snapshot();
   }
 
-  async function review(body: VndbReviewInput, retryCommand?: Extract<VndbCommand, { kind: 'review' }>): Promise<VndbJourneySnapshot> {
-    if (!uploadId || !live() || stage === 'applying' || (pending > 0 && !retryCommand) || (unknown && !retryCommand)) return snapshot();
+  async function review(
+    body: VndbReviewInput,
+    retryCommand?: Extract<VndbCommand, { kind: 'review' }>,
+  ): Promise<VndbJourneySnapshot> {
+    if (!uploadId || !live() || stage === 'applying' || (pending > 0 && !retryCommand) || (unknown && !retryCommand))
+      return snapshot();
     const row = rows.get(body.ordinal);
     if (!row || (row.kind === 'retained' && body.action === 'state')) return snapshot();
     if (body.action === 'state' && (!VNDB_ID.test(body.targetId) || !body.state)) return snapshot();
@@ -254,7 +269,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     if (response?.kind !== 'reviewed' || !live()) return snapshot();
     const updated: VndbRow = { ...row, decision: response.value };
     rows.set(row.ordinal, updated);
-    if (page) page = { ...page, rows: page.rows.map((item) => item.ordinal === row.ordinal ? updated : item) };
+    if (page) page = { ...page, rows: page.rows.map((item) => (item.ordinal === row.ordinal ? updated : item)) };
     return snapshot();
   }
 
@@ -319,7 +334,11 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const selected = selection();
     if (!selected.length) return snapshot();
     const bodyRows = selected.map((row) => ({ ordinal: row.ordinal, reviewId: row.decision!.reviewId }));
-    applyQueue = chunkVndbRows(bodyRows).map((batch) => ({ kind: 'apply', uploadId: uploadId!, body: { rows: batch } }));
+    applyQueue = chunkVndbRows(bodyRows).map((batch) => ({
+      kind: 'apply',
+      uploadId: uploadId!,
+      body: { rows: batch },
+    }));
     currentApply = applyQueue[0] ?? null;
     stopApply = false;
     stopped = null;

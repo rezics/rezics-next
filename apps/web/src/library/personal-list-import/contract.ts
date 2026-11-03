@@ -33,10 +33,12 @@ export type VndbRow = {
   fields: Record<string, VndbSourceValue>;
   retainedReason: string;
   evidence: VndbJson;
-  match: { status: 'unsupported'; candidates: string[] } | {
-    status: 'ambiguous' | 'matched' | 'unavailable' | 'unmatched';
-    candidates: string[];
-  };
+  match:
+    | { status: 'unsupported'; candidates: string[] }
+    | {
+        status: 'ambiguous' | 'matched' | 'unavailable' | 'unmatched';
+        candidates: string[];
+      };
   target: { targetId: string; states: VndbState[]; baseline: VndbBaseline } | null;
   decision: {
     reviewId: string;
@@ -108,11 +110,21 @@ export type VndbFailure = { kind: VndbFailureKind; status: number; code?: string
 export type VndbUnknown = { kind: 'unknown'; command: VndbCommand };
 
 export type VndbPort = {
-  preview(command: Extract<VndbCommand, { kind: 'preview' }>): Promise<{ kind: 'previewed'; value: VndbPreview } | VndbFailure | VndbUnknown>;
-  page(command: Extract<VndbCommand, { kind: 'page' }>): Promise<{ kind: 'page'; value: VndbPage } | VndbFailure | VndbUnknown>;
-  source(command: Extract<VndbCommand, { kind: 'source' }>): Promise<{ kind: 'source'; xml: string } | VndbFailure | VndbUnknown>;
-  review(command: Extract<VndbCommand, { kind: 'review' }>): Promise<{ kind: 'reviewed'; value: VndbDecision } | VndbFailure | VndbUnknown>;
-  apply(command: Extract<VndbCommand, { kind: 'apply' }>): Promise<{ kind: 'applied'; value: VndbApplyResult } | VndbFailure | VndbUnknown>;
+  preview(
+    command: Extract<VndbCommand, { kind: 'preview' }>,
+  ): Promise<{ kind: 'previewed'; value: VndbPreview } | VndbFailure | VndbUnknown>;
+  page(
+    command: Extract<VndbCommand, { kind: 'page' }>,
+  ): Promise<{ kind: 'page'; value: VndbPage } | VndbFailure | VndbUnknown>;
+  source(
+    command: Extract<VndbCommand, { kind: 'source' }>,
+  ): Promise<{ kind: 'source'; xml: string } | VndbFailure | VndbUnknown>;
+  review(
+    command: Extract<VndbCommand, { kind: 'review' }>,
+  ): Promise<{ kind: 'reviewed'; value: VndbDecision } | VndbFailure | VndbUnknown>;
+  apply(
+    command: Extract<VndbCommand, { kind: 'apply' }>,
+  ): Promise<{ kind: 'applied'; value: VndbApplyResult } | VndbFailure | VndbUnknown>;
   cancel(command: Extract<VndbCommand, { kind: 'cancel' }>): Promise<{ kind: 'cancelled' } | VndbFailure | VndbUnknown>;
   delete(command: Extract<VndbCommand, { kind: 'delete' }>): Promise<{ kind: 'deleted' } | VndbFailure | VndbUnknown>;
 };

@@ -90,8 +90,14 @@ function bounds(value: unknown): value is VndbPreview['limits'] {
 }
 
 function preview(value: unknown): value is VndbPreview {
-  return record(value) && typeof value.uploadId === 'string' && VNDB_ID.test(value.uploadId) &&
-    Number.isInteger(value.rows) && (value.rows as number) >= 0 && bounds(value.limits);
+  return (
+    record(value) &&
+    typeof value.uploadId === 'string' &&
+    VNDB_ID.test(value.uploadId) &&
+    Number.isInteger(value.rows) &&
+    (value.rows as number) >= 0 &&
+    bounds(value.limits)
+  );
 }
 
 function sourceValue(value: unknown): value is VndbSourceValue {
@@ -103,41 +109,100 @@ function sourceValue(value: unknown): value is VndbSourceValue {
 }
 
 function state(value: unknown): value is VndbState {
-  return record(value) && typeof value.id === 'string' && record(value.labels) &&
-    Object.values(value.labels).every((label) => typeof label === 'string');
+  return (
+    record(value) &&
+    typeof value.id === 'string' &&
+    record(value.labels) &&
+    Object.values(value.labels).every((label) => typeof label === 'string')
+  );
 }
 
 function row(value: unknown): value is VndbRow {
-  if (!record(value) || !Number.isInteger(value.ordinal) || !['vn', 'retained'].includes(String(value.kind))) return false;
-  if (typeof value.title !== 'string' || !Array.isArray(value.labels) || !value.labels.every((label) => typeof label === 'string')) return false;
-  if (value.identifier !== null && (!record(value.identifier) || value.identifier.provider !== 'vndb' || value.identifier.kind !== 'vn' || typeof value.identifier.value !== 'string')) return false;
+  if (!record(value) || !Number.isInteger(value.ordinal) || !['vn', 'retained'].includes(String(value.kind)))
+    return false;
+  if (
+    typeof value.title !== 'string' ||
+    !Array.isArray(value.labels) ||
+    !value.labels.every((label) => typeof label === 'string')
+  )
+    return false;
+  if (
+    value.identifier !== null &&
+    (!record(value.identifier) ||
+      value.identifier.provider !== 'vndb' ||
+      value.identifier.kind !== 'vn' ||
+      typeof value.identifier.value !== 'string')
+  )
+    return false;
   if (value.suggestedRole !== null && typeof value.suggestedRole !== 'string') return false;
-  if (!record(value.fields) || !Object.values(value.fields).every(sourceValue) || typeof value.retainedReason !== 'string' || !jsonValue(value.evidence)) return false;
+  if (
+    !record(value.fields) ||
+    !Object.values(value.fields).every(sourceValue) ||
+    typeof value.retainedReason !== 'string' ||
+    !jsonValue(value.evidence)
+  )
+    return false;
   if (!record(value.match) || !Array.isArray(value.match.candidates)) return false;
-  if (!['unsupported', 'ambiguous', 'matched', 'unavailable', 'unmatched'].includes(String(value.match.status))) return false;
-  if (value.target !== null && (!record(value.target) || typeof value.target.targetId !== 'string' || !Array.isArray(value.target.states) || !value.target.states.every(state))) return false;
-  if (value.decision !== null && (!record(value.decision) || typeof value.decision.reviewId !== 'string' || typeof value.decision.status !== 'string')) return false;
+  if (!['unsupported', 'ambiguous', 'matched', 'unavailable', 'unmatched'].includes(String(value.match.status)))
+    return false;
+  if (
+    value.target !== null &&
+    (!record(value.target) ||
+      typeof value.target.targetId !== 'string' ||
+      !Array.isArray(value.target.states) ||
+      !value.target.states.every(state))
+  )
+    return false;
+  if (
+    value.decision !== null &&
+    (!record(value.decision) ||
+      typeof value.decision.reviewId !== 'string' ||
+      typeof value.decision.status !== 'string')
+  )
+    return false;
   return record(value.fieldsTreatment);
 }
 
 function page(value: unknown): value is VndbPage {
-  return record(value) && typeof value.uploadId === 'string' && VNDB_ID.test(value.uploadId) &&
-    (value.state === 'active' || value.state === 'cancelled') && typeof value.expiresAt === 'string' &&
-    Number.isInteger(value.total) && Array.isArray(value.rows) && value.rows.length <= 8 && value.rows.every(row) &&
-    (value.next === null || Number.isInteger(value.next));
+  return (
+    record(value) &&
+    typeof value.uploadId === 'string' &&
+    VNDB_ID.test(value.uploadId) &&
+    (value.state === 'active' || value.state === 'cancelled') &&
+    typeof value.expiresAt === 'string' &&
+    Number.isInteger(value.total) &&
+    Array.isArray(value.rows) &&
+    value.rows.length <= 8 &&
+    value.rows.every(row) &&
+    (value.next === null || Number.isInteger(value.next))
+  );
 }
 
 function decision(value: unknown): value is VndbDecision {
-  return record(value) && typeof value.reviewId === 'string' &&
+  return (
+    record(value) &&
+    typeof value.reviewId === 'string' &&
     ['applied', 'applying', 'failed', 'reviewed', 'skipped', 'stale', 'unsupported'].includes(String(value.status)) &&
-    (value.targetId === null || typeof value.targetId === 'string') && (value.state === null || typeof value.state === 'string');
+    (value.targetId === null || typeof value.targetId === 'string') &&
+    (value.state === null || typeof value.state === 'string')
+  );
 }
 
 function applied(value: unknown): value is VndbApplyResult {
-  return record(value) && typeof value.uploadId === 'string' && Array.isArray(value.outcomes) &&
-    value.outcomes.length <= 8 && value.outcomes.every((outcome) => record(outcome) && Number.isInteger(outcome.ordinal) &&
-      typeof outcome.reviewId === 'string' && typeof outcome.status === 'string') &&
-    (value.stopped === null || value.stopped === 'cancelled' || value.stopped === 'deadline');
+  return (
+    record(value) &&
+    typeof value.uploadId === 'string' &&
+    Array.isArray(value.outcomes) &&
+    value.outcomes.length <= 8 &&
+    value.outcomes.every(
+      (outcome) =>
+        record(outcome) &&
+        Number.isInteger(outcome.ordinal) &&
+        typeof outcome.reviewId === 'string' &&
+        typeof outcome.status === 'string',
+    ) &&
+    (value.stopped === null || value.stopped === 'cancelled' || value.stopped === 'deadline')
+  );
 }
 
 function responseData(value: unknown): { status: number; data: unknown; error: unknown } | null {
@@ -200,39 +265,73 @@ export function kernelVndbPort(
 
   return {
     preview(command) {
-      return call(command, (authorization) => route!.$preview.post(
-        { xml: command.xml }, { headers: headers(authorization, command.key) },
-      ), (data) => preview(data) ? data : undefined, (value) => ({ kind: 'previewed', value }));
+      return call(
+        command,
+        (authorization) => route!.$preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) }),
+        (data) => (preview(data) ? data : undefined),
+        (value) => ({ kind: 'previewed', value }),
+      );
     },
     page(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).get({
-        query: { offset: command.offset }, headers: headers(authorization),
-      }), (data) => page(data) ? data : undefined, (value) => ({ kind: 'page', value }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).get({
+            query: { offset: command.offset },
+            headers: headers(authorization),
+          }),
+        (data) => (page(data) ? data : undefined),
+        (value) => ({ kind: 'page', value }),
+      );
     },
     source(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).source.get({
-        headers: headers(authorization),
-      }), (data) => record(data) && typeof data.xml === 'string' ? data.xml : undefined, (xml) => ({ kind: 'source', xml }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).source.get({
+            headers: headers(authorization),
+          }),
+        (data) => (record(data) && typeof data.xml === 'string' ? data.xml : undefined),
+        (xml) => ({ kind: 'source', xml }),
+      );
     },
     review(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).$review.post(
-        command.body, { headers: headers(authorization, command.key) },
-      ), (data) => decision(data) ? data : undefined, (value) => ({ kind: 'reviewed', value }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).$review.post(command.body, {
+            headers: headers(authorization, command.key),
+          }),
+        (data) => (decision(data) ? data : undefined),
+        (value) => ({ kind: 'reviewed', value }),
+      );
     },
     apply(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).$apply.post(
-        command.body, { headers: headers(authorization) },
-      ), (data) => applied(data) ? data : undefined, (value) => ({ kind: 'applied', value }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).$apply.post(command.body, { headers: headers(authorization) }),
+        (data) => (applied(data) ? data : undefined),
+        (value) => ({ kind: 'applied', value }),
+      );
     },
     cancel(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).$cancel.post(
-        {}, { headers: headers(authorization, command.key) },
-      ), (data) => record(data) && data.state === 'cancelled' ? true : undefined, () => ({ kind: 'cancelled' }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).$cancel.post({}, { headers: headers(authorization, command.key) }),
+        (data) => (record(data) && data.state === 'cancelled' ? true : undefined),
+        () => ({ kind: 'cancelled' }),
+      );
     },
     delete(command) {
-      return call(command, (authorization) => route!({ uploadId: command.uploadId }).delete(
-        undefined, { headers: headers(authorization, command.key) },
-      ), (data) => record(data) && data.state === 'deleted' ? true : undefined, () => ({ kind: 'deleted' }));
+      return call(
+        command,
+        (authorization) =>
+          route!({ uploadId: command.uploadId }).delete(undefined, { headers: headers(authorization, command.key) }),
+        (data) => (record(data) && data.state === 'deleted' ? true : undefined),
+        () => ({ kind: 'deleted' }),
+      );
     },
   };
 }
