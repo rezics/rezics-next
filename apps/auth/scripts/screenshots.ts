@@ -353,7 +353,7 @@ export function redactCaptureError(message: string): string {
       '$1[redacted]',
     )
     .replace(
-      /(["']?(?:auth_session|authorization|cookie|set-cookie|password|passcode|token|access_token|refresh_token|client_secret|session|secret|credential|code|state)["']?\s*[:=]\s*["']?)[^"',;\s}&]+["']?/gi,
+      /(["']?(?:auth_session|authorization|cookie|set-cookie|password|passcode|token|access_token|refresh_token|client_secret|session|secret|credential|code|state)["']?\s*[:=]\s*)["']?[^"',;\s}&]+["']?/gi,
       '$1[redacted]',
     );
 }
