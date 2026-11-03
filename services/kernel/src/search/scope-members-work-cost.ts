@@ -16,6 +16,47 @@ const zero = (): { -readonly [Axis in keyof WorkDimensions]: number } => ({
   bytes: 0,
   emptySeeks: 0,
 });
+
+/** Fixed projection terms used by the actual Members-definition meter below.
+ * Bytes remain SQL/parameter bytes plus these literal producer ceilings. */
+export const MEMBERS_DEFINITION_QUERY_BOUNDS = Object.freeze({
+  point: Object.freeze({
+    candidateKeys: 0,
+    nativeRows: 4,
+    identityMetadataRows: 0,
+    nativePoints: 1,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: 512,
+    emptySeeks: 1,
+  } satisfies WorkDimensions),
+  preparation: Object.freeze({
+    candidateKeys: 0,
+    nativeRows: 32,
+    identityMetadataRows: 0,
+    nativePoints: 4,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: 65536,
+    emptySeeks: 1,
+  } satisfies WorkDimensions),
+  canonicalScope: Object.freeze({
+    candidateKeys: 0,
+    nativeRows: 64,
+    identityMetadataRows: 0,
+    nativePoints: 8,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: 65536,
+    emptySeeks: 1,
+  } satisfies WorkDimensions),
+  releaseProjection: Object.freeze({
+    maxExpandedVarlenaBytes: 1024 ** 3,
+    byteMultiplier: 6,
+    fixedBytes: 1024,
+  }),
+});
+
 const budgets = new AsyncLocalStorage<NativeCollectionWork>();
 const admission = new AsyncLocalStorage<boolean>();
 const installed = new WeakSet<OperationalTransaction>();
@@ -90,7 +131,10 @@ export function meterMembersDefinition<T>(tx: OperationalTransaction, body: () =
             'SELECT pg_column_size(body)::text AS bytes, pg_column_compression(body) IS NOT NULL AS compressed FROM semantic.definition_release WHERE route=0 AND digest=$1';
           const size = await membersBounded(
             active,
-            { statements: 1, nativeRows: 4, nativePoints: 1, emptySeeks: 1, bytes: Buffer.byteLength(sizeSQL) + 512 },
+            {
+              ...MEMBERS_DEFINITION_QUERY_BOUNDS.point,
+              bytes: Buffer.byteLength(sizeSQL) + MEMBERS_DEFINITION_QUERY_BOUNDS.point.bytes,
+            },
             () => original(sizeSQL, [digest]),
           );
           const row = size.rows[0] as { bytes: string; compressed: boolean } | undefined;
@@ -98,17 +142,28 @@ export function meterMembersDefinition<T>(tx: OperationalTransaction, body: () =
           if (!Number.isSafeInteger(stored) || stored < 0) throw new ProblemError('dependency_unavailable');
           // PostgreSQL compressed varlena can expand to 1 GiB. A too-large projection refuses before reading it.
           bound = {
-            nativeRows: 4,
-            nativePoints: 1,
-            statements: 1,
-            emptySeeks: 1,
-            bytes: bytes + 6 * (row?.compressed ? 1024 ** 3 : stored) + 1024,
+            ...MEMBERS_DEFINITION_QUERY_BOUNDS.point,
+            bytes:
+              bytes +
+              MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection.byteMultiplier *
+                (row?.compressed ? MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection.maxExpandedVarlenaBytes : stored) +
+              MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection.fixedBytes,
           };
-        } else bound = { nativeRows: 4, nativePoints: 1, statements: 1, emptySeeks: 1, bytes: bytes + 512 };
+        } else
+          bound = {
+            ...MEMBERS_DEFINITION_QUERY_BOUNDS.point,
+            bytes: bytes + MEMBERS_DEFINITION_QUERY_BOUNDS.point.bytes,
+          };
       } else if (/library\.members_preparation\b/.test(sql)) {
-        bound = { nativeRows: 32, nativePoints: 4, statements: 1, emptySeeks: 1, bytes: bytes + 65536 };
+        bound = {
+          ...MEMBERS_DEFINITION_QUERY_BOUNDS.preparation,
+          bytes: bytes + MEMBERS_DEFINITION_QUERY_BOUNDS.preparation.bytes,
+        };
       } else if (/library\.canonical_source_scope\b/.test(sql) && /library\.collection\b/.test(sql)) {
-        bound = { nativeRows: 64, nativePoints: 8, statements: 1, emptySeeks: 1, bytes: bytes + 65536 };
+        bound = {
+          ...MEMBERS_DEFINITION_QUERY_BOUNDS.canonicalScope,
+          bytes: bytes + MEMBERS_DEFINITION_QUERY_BOUNDS.canonicalScope.bytes,
+        };
       } else throw new ProblemError('dependency_unavailable');
       return membersBounded(active, bound, () => original(config as string, values));
     };
