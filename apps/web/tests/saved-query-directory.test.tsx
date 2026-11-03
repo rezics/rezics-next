@@ -43,7 +43,9 @@ test('lists only current-owner saved queries with result and rule routes, withou
   });
   expect(html).toContain('Saved queries');
   expect(html).toContain(m.library_collection_open());
-  expect(html).toContain('href="/en/collections/saved%2Fquery"');
+  expect(html).toContain(
+    `href="/en/collections/saved%2Fquery?returnTo=${encodeURIComponent('/en/library/collections?layout=rows')}"`,
+  );
   expect(html).toContain('href="/en/collections/saved%2Fquery/rule"');
   expect(html).not.toContain('other-owner');
   expect(html).not.toContain('state-view');

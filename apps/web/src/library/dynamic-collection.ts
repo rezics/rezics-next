@@ -7,6 +7,7 @@ import type { CollectionFilterParams } from './collection-filter-params';
 import type { LibraryPinsRead } from './pins-read';
 import type { MineCollection } from './mine-collections';
 import type { CollectionMember } from './reads';
+import type { CollectionViewerActions } from './collection-records';
 
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
 export type DynamicCollectionRead = {
@@ -15,6 +16,7 @@ export type DynamicCollectionRead = {
   membershipKind: 'dynamic';
   builtinKind?: DynamicBuiltinKind;
   revision?: number;
+  visibility?: 'private' | 'public' | 'unlisted';
   builtinLabels?: Record<string, string>;
   title?: string | null;
   description?: string | null;
@@ -46,6 +48,10 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   builtinKind?: DynamicBuiltinKind | undefined;
   revision?: number;
   curatorAccountId?: string;
+  /** Present only in the authenticated owner's current detail read. */
+  visibility?: 'private' | 'public' | 'unlisted' | null;
+  /** Current resource actions from the existing Collection action read. */
+  viewerActions?: CollectionViewerActions;
   description: string | null;
   curator: { handle: string | null; displayName: string | null } | null;
   members: { subjectId?: string; subject: LibrarySubject | null; facts?: CollectionMember['facts'] }[];

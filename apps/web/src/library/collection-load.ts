@@ -427,6 +427,10 @@ export async function loadEditableCollectionPage(
       ...collectionPresentationOf(collectionEnvelope.collection),
       ...(collection.revision === undefined ? {} : { revision: collection.revision }),
       ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
+      ...(viewer !== undefined && viewer === collection.curatorAccountId && 'visibility' in collection
+        ? { visibility: collection.visibility }
+        : {}),
+      ...(authorization && viewerActions ? { viewerActions } : {}),
       ...(input.filter ? { filter: input.filter } : {}),
       ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
       ...(input.filterType ? { filterType: input.filterType } : {}),

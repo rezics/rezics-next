@@ -16,8 +16,9 @@ export function ownedSavedQueries(collections: readonly MineCollection[], viewer
   );
 }
 
-function collectionHref(id: string): string {
-  return `/${getLocale()}/collections/${encodeURIComponent(id)}`;
+function collectionHref(id: string, returnTo: string): string {
+  const search = new URLSearchParams({ returnTo });
+  return `/${getLocale()}/collections/${encodeURIComponent(id)}?${search}`;
 }
 
 function nextPageHref(next: string, layout: SavedQueryLayout): string {
@@ -63,7 +64,7 @@ export function SavedQueryDirectory({
       ) : queries.length ? (
         <ul className="mt-3 space-y-3">
           {queries.map((collection) => {
-            const href = collectionHref(collection.id);
+            const href = collectionHref(collection.id, currentHref);
             return (
               <ContentItem
                 key={collection.id}

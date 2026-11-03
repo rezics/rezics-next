@@ -16,11 +16,17 @@ import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { isOrdinarySavedQuery, RuleEditLink } from './saved-query-results';
+import { SavedQueryManagement } from './saved-query-management';
+import type { ManagedSavedQuery } from './saved-query-management/controller';
+import type { QueryKey } from '@tanstack/react-query';
 
 type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
   search?: Record<string, string | string[]>;
   readMembers?: (id: string, cursor?: string) => Promise<DynamicMembersResult>;
+  readCurrent?: (() => Promise<DynamicCollectionPageData>) | undefined;
+  queryKey?: QueryKey | undefined;
+  returnTo?: string | undefined;
   viewerId?: string | null;
 };
 
@@ -54,6 +60,9 @@ function DynamicCollectionPageLifetime({
   page,
   readMembers,
   search,
+  readCurrent,
+  queryKey,
+  returnTo,
   viewerId = null,
   pins,
   pinActions,
@@ -151,6 +160,29 @@ function DynamicCollectionPageLifetime({
           <CollectionDescriptionReader description={current.description} className="mt-3" />
           <FollowTargetControl targetId={current.id} following={current.following ?? null} />
         </header>
+        <SavedQueryManagement
+          page={current}
+          viewerId={viewerId}
+          queryKey={queryKey}
+          readCurrent={readCurrent}
+          returnTo={returnTo}
+          onMetadata={(metadata: ManagedSavedQuery) => {
+            if (!active.current || metadata.id !== id) return;
+            setCurrent((value) =>
+              value.id !== metadata.id
+                ? value
+                : {
+                    ...value,
+                    title: metadata.title,
+                    description: metadata.description ?? null,
+                    revision: metadata.revision,
+                    curatorAccountId: metadata.curatorAccountId,
+                    visibility: metadata.visibility,
+                    viewerActions: metadata.viewerActions,
+                  },
+            );
+          }}
+        />
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
         {saved ? null : <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>}

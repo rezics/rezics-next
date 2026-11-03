@@ -4,6 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import { deleteCollection, updateCollection } from './collection-edit';
 import {
   asSession,
   fromKernel,
@@ -23,6 +24,45 @@ export type CollectionTransfer = Selection & {
 type Failure = Extract<CollectionWriteResult, { ok: false }>;
 export type CollectionBatchResult = Failure | { ok: true; revision: number; undo: CollectionMemberUndo[] };
 export type CollectionTransferResult = Failure | { ok: true; revision: number; destinationRevision: number };
+
+type CsrfHeaders = Readonly<{ 'X-CSRF-Token': string }>;
+type CapturedRequest<Data> = Readonly<{ data: Readonly<Data>; headers: CsrfHeaders }>;
+
+/** A retry keeps the original request object and sender for the full command lifetime. */
+export type CapturedCollectionCommand<Data> = Readonly<{
+  request: CapturedRequest<Data>;
+  send: () => Promise<CollectionWriteResult>;
+}>;
+
+export function captureCollectionCommand<Data extends object>(
+  data: Data,
+  csrfToken: string,
+  sender: (request: CapturedRequest<Data>) => Promise<CollectionWriteResult>,
+): CapturedCollectionCommand<Data> {
+  if (!csrfToken) throw new Error('Collection command credential unavailable');
+  const request = Object.freeze({
+    data: Object.freeze({ ...data }),
+    headers: Object.freeze({ 'X-CSRF-Token': csrfToken }),
+  });
+  return Object.freeze({ request, send: () => sender(request) });
+}
+
+type CollectionUpdateData = Parameters<typeof updateCollection>[0]['data'];
+type CollectionDeleteData = Parameters<typeof deleteCollection>[0]['data'];
+
+/** Binds the installed metadata command; it does not create a second route or writer. */
+export function captureCollectionUpdate(data: CollectionUpdateData, csrfToken: string) {
+  return captureCollectionCommand(data, csrfToken, (request) =>
+    updateCollection(request as Parameters<typeof updateCollection>[0]),
+  );
+}
+
+/** Binds the installed revisioned delete command; a retry reuses its exact delete operands. */
+export function captureCollectionDelete(data: CollectionDeleteData, csrfToken: string) {
+  return captureCollectionCommand(data, csrfToken, (request) =>
+    deleteCollection(request as Parameters<typeof deleteCollection>[0]),
+  );
+}
 
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 128;

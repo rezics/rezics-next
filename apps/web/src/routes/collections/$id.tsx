@@ -37,6 +37,7 @@ export const Route = createFileRoute('/collections/$id')({
       search,
     );
     const filters: Record<string, string | string[]> = {};
+    const returnTo = typeof search.returnTo === 'string' && search.returnTo.length <= 4096 ? search.returnTo : undefined;
     for (const [key, value] of Object.entries(search))
       if (key === 'type' && typeof value === 'string' && value.length <= 128) filters[key] = value;
       else if (
@@ -49,6 +50,7 @@ export const Route = createFileRoute('/collections/$id')({
     return {
       ...(cursor === undefined ? {} : { cursor }),
       ...(layout ? { layout } : {}),
+      ...(returnTo ? { returnTo } : {}),
       ...(Object.keys(filters).length ? { filters } : {}),
     };
   },
@@ -215,6 +217,7 @@ function CollectionContentLifetime({
       key={JSON.stringify([mode, authority])}
       page={page}
       input={input}
+      returnTo={search.returnTo}
       layout={search.layout ?? 'list'}
       mode={mode}
       viewerId={viewerId}
@@ -231,6 +234,7 @@ function CollectionContentLifetime({
 function CollectionResultLifetime({
   page,
   input,
+  returnTo,
   layout,
   mode,
   viewerId,
@@ -239,6 +243,7 @@ function CollectionResultLifetime({
 }: {
   page: CollectionPageResult;
   input: CollectionReadAddress;
+  returnTo?: string;
   layout: 'grid' | 'list';
   mode: 'session' | 'anonymous';
   viewerId: string | null;
@@ -280,11 +285,25 @@ function CollectionResultLifetime({
       throw new Error('Collection members do not match the current viewer and request');
     return result;
   }
+  async function readCurrentDynamicPage() {
+    assertCurrent(true);
+    const result = await readCollectionPage({ data: { ...input, credentialMode: 'session' } });
+    assertCurrent(true);
+    if (
+      !collectionResultMatches(result, input, 'session', viewerId) ||
+      !('preparing' in result)
+    )
+      throw new Error('Current dynamic Collection read does not match this viewer and page');
+    return result;
+  }
   return 'preparing' in page ? (
     <DynamicCollectionPage
       page={page}
       {...(input.search ? { search: input.search } : {})}
       readMembers={readMembers}
+      readCurrent={readCurrentDynamicPage}
+      queryKey={queryKey}
+      returnTo={returnTo}
       viewerId={mode === 'session' ? viewerId : null}
     />
   ) : (
