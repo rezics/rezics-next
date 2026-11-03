@@ -2131,7 +2131,8 @@ retention includes board source progress.
 - Bound: `Q_self + Q_partition + Q_range(B) + B*(Q_native_disclosure + Q_point)`. The range is one data statement
   and at most 100 physical subscription rows; presence is one statement/one row. P≤20 outputs are retained. Native
   source, board, Realm/place and presentation dependencies and their transaction controls remain additive, including
-  unavailable results. Memory is O(B+P+D), with the existing native ancestry ceiling D≤33; no all-partition query.
+  unavailable results. Memory is O(B+P+D); D includes the existing 33-post ancestry ceiling and Access's finite
+  membership preparation (at most 1,000 memberships per identity, two identities). No all-partition query is used.
 - Growth check: the native growth journey grows both actor-home ranges, verifies physical rows/statements/blocks,
   rejects large sequential scans, and reads both explicit selections with available and unavailable rows. Connected
   outcome tests cover cursor refusal, current denial and exact self-removal.
@@ -2148,7 +2149,7 @@ retention includes board source progress.
   account, account/preferences join, active edge, three-kind notice overlap, decision INSERT and notice INSERT.
   Those statements touch at most eleven original rows; duplicates, unavailable and suppressed recipients retain all
   dispatched work. Native post disclosure expands to four released snapshots (each BEGIN/COMMIT plus partition),
-  two chains (thread, at most D=33 posts, selected revision), two board points, and at most D+4 native
+  two chains (thread, at most H=33 posts, selected revision), two board points, and at most H+4 native
   `accountStandingCheck` invocations (board twice, thread, posts, optional Realm). Each post point joins its current
   revision and optional moderation decision; thread/board/revision points are unique-key reads. Shared Access's
   dependencies and query/control statements remain charged through those original callees.
@@ -2168,5 +2169,6 @@ retention includes board source progress.
 - Bound: one data statement plus the existing BEGIN, partition fence and COMMIT; at most 50 selected and 50 deleted
   original rows with fixed index maintenance. Retention has the same shape at its remaining finite budget. Deleting
   the original row atomically removes the inverse index. Each finite page releases its checkout before continuing.
-- Growth check: connected native outcomes exhaust cleanup and replay prior publication after removal; integration
-  verification also owns full erasure growth within this journey.
+- Growth check: the same three-scale native journey erases 50 original board rows, including tombstones, per
+  measured step using the actual erasure participant's page method. Connected outcomes exhaust cleanup and replay
+  prior publication after removal. Integration verification retains the broader account-lifecycle acceptance.

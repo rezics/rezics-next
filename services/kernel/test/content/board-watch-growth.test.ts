@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { processBoardWatchNoticePage, BOARD_WATCH_RECIPIENT_BUDGET } from '../../src/content/board-watch-notices.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
+import { eraseAccountNoticesPage } from '../../src/content/notices.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
@@ -11,6 +12,7 @@ test('native watch commands, both management selections and durable sparse openi
   try {
     const owner = f.accounts.actor;
     const ownerRoute = routeOf(owner)!;
+    const erasing = newId(0x7655);
     const boardPath = `/v1/boards/${f.boardId}/watch`;
     for (const account of [owner, f.accounts.principal, f.accounts.recipient])
       expect((await f.call(account, 'PUT', boardPath, { watching: true, expectedRevision: 0 })).status).toBe(200);
@@ -41,14 +43,41 @@ test('native watch commands, both management selections and durable sparse openi
         expect(result.status).toBe(200);
         expect(result.value.items.map((item: { state: string }) => item.state)).toEqual(['available', 'unavailable']);
         expect(result.value.next).toBeString();
+        const hidden = result.value.items[1];
+        const removeKey = crypto.randomUUID();
+        for (let retry = 0; retry < 2; retry++)
+          expect(
+            (
+              await f.call(
+                owner,
+                'DELETE',
+                `/v1/accounts/${owner}/watches/${hidden.id}?kind=${kind}`,
+                { expectedRevision: hidden.revision },
+                removeKey,
+              )
+            ).status,
+          ).toBe(200);
       }
       const first = await processBoardWatchNoticePage(f.db.pool, access, source!);
       const second = await processBoardWatchNoticePage(f.db.pool, access, source!);
       expect(first).toEqual({ done: false, scanned: BOARD_WATCH_RECIPIENT_BUDGET });
       expect(second).toEqual({ done: false, scanned: BOARD_WATCH_RECIPIENT_BUDGET });
+      const erased = await eraseAccountNoticesPage(
+        { pool: f.db.pool },
+        erasing,
+        JSON.stringify({
+          version: 1,
+          accountId: erasing,
+          stage: 'board-watches',
+          noticeAfter: null,
+          finalizationAfter: null,
+        }),
+      );
+      expect(erased).toMatchObject({ found: 50, pending: 1, next: expect.any(String) });
       return {
         recipientCandidates: first.scanned + second.scanned,
         residentRecipients: Math.max(first.scanned, second.scanned),
+        erasedSubscriptions: erased.found,
       };
     }
     const report = await checkGrowth(f.db, {
@@ -59,12 +88,14 @@ test('native watch commands, both management selections and durable sparse openi
       repetitions: 1,
       warmups: 1,
       counted: {
-        read: (value) => value as { recipientCandidates: number; residentRecipients: number },
+        read: (value) =>
+          value as { recipientCandidates: number; residentRecipients: number; erasedSubscriptions: number },
         limits: {
           recipientCandidates: 2 * BOARD_WATCH_RECIPIENT_BUDGET,
           residentRecipients: BOARD_WATCH_RECIPIENT_BUDGET,
+          erasedSubscriptions: 50,
         },
-        bounds: { recipientCandidates: 'constant', residentRecipients: 'constant' },
+        bounds: { recipientCandidates: 'constant', residentRecipients: 'constant', erasedSubscriptions: 'constant' },
       },
       async grow(db, scale, previous) {
         const count = scale - previous;
@@ -81,6 +112,11 @@ test('native watch commands, both management selections and durable sparse openi
           `INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
           SELECT $1,$2,thread,watch,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`,
           [ownerRoute, owner, resources, ownIds],
+        );
+        await db.admin.query(
+          `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+          SELECT $1,$2,board,watch,false,2,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
+          [routeOf(erasing), erasing, resources, Array.from({ length: count }, () => newId(routeOf(erasing)!))],
         );
         // Missing recipients exercise both native current authority and terminal recipient finalization.
         await db.admin.query(
