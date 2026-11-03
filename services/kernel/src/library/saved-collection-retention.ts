@@ -50,7 +50,8 @@ export async function purgeSavedCollectionPage(
   tx: CommandTransaction,
   input: { accountId: string; collectionId: string },
 ): Promise<CollectionCleanupPage | null> {
-  const keys = [routeOf(input.collectionId), input.collectionId];
+  const route = routeOf(input.collectionId)!;
+  const keys = [route, input.collectionId];
   const row = (await tx.query<{
     membership_kind: string; state: string; visibility: string; source_generation: string;
   }>(`SELECT membership_kind,state,visibility,source_generation::text FROM library.collection
@@ -73,6 +74,10 @@ export async function purgeSavedCollectionPage(
   const cleared = await tx.query(`UPDATE library.collection SET rule_filter=NULL,rule_sort=NULL,
     rule_release_digest=NULL,rule_revision=0 WHERE route=$1 AND collection_id=$2 AND rule_filter IS NOT NULL`, keys);
   if (cleared.rowCount) return { status: 'progress', removed: 1 };
+  // Native identity plans retain exact old/new generation authority until their real control handoff.
+  const identity = await tx.query(`SELECT 1 FROM library.identity_scope_plan
+    WHERE route=$1 AND collection_id=$2 LIMIT 1`, keys);
+  if (identity.rowCount) return { status: 'retained', removed: 0, custody: 'native_source_capture' };
   for (const sql of privatePages) {
     const result = await tx.query(sql, keys);
     if (result.rowCount) return { status: 'progress', removed: result.rowCount };
@@ -132,6 +137,6 @@ export async function purgeSavedCollectionPage(
     AND curator_account_id=$3`, [...keys, input.accountId]);
   // The ordinary delete trigger writes local identity history; terminal disposition consumes that exact key.
   await tx.query('DELETE FROM library.collection_listing_history WHERE route=$1 AND collection_id=$2', keys);
-  await retireFence.run(tx, { route: keys[0]!, collection_id: input.collectionId, account_id: input.accountId });
+  await retireFence.run(tx, { route, collection_id: input.collectionId, account_id: input.accountId });
   return { status: 'purged', removed: 1 };
 }

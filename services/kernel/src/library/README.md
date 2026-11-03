@@ -1220,8 +1220,8 @@ rule or private fact. It preserves A's original ID and subjects; pending B never
 headers/members/head reject writes. After native custody settles, A's output account attribution and original
 private publication reference are removed, then its Collection curator is cleared. Private/unlisted/deleted and
 unpublished saved views have no retained set and drain through the existing physical parent disposer. Native
-capture retirement includes saved working sources under terminal fences. Real capture/identity/receiving holds
-remain pending and keep their authority intact; local exhaustion never acknowledges shared Core/DBOS history,
+capture retirement includes saved working sources under terminal fences. `identity_scope_plan/effect/seal` retain their generation/capture authority until the real control handoff.
+Real capture/identity/receiving holds remain pending and keep their authority intact; local exhaustion never acknowledges shared Core/DBOS history,
 receipts, work payloads or foreign Source disposition. Terminal reads hide nonpublic views and public authorship
 immediately. Decision: live native custody keeps physical deidentification pending while rules and unrelated
 private references drain, using only a proven selected output for the account-free retained locator.
