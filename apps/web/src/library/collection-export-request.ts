@@ -22,13 +22,38 @@ export type CollectionExportResult =
   | { state: 'unavailable' | 'changed' | 'preparation-required' | 'cancelled' };
 export type CollectionExportRead = (capture: CollectionExportCapture) => Promise<CollectionPageResult>;
 
+/** Revision zero belongs to a native logical identity, never a curated revision or anonymous claim. */
+function validExportRevision(capture: Pick<
+  CollectionExportCapture,
+  'id' | 'revision' | 'provenance' | 'dynamic'
+>): boolean {
+  if (!Number.isSafeInteger(capture.revision) || capture.revision < 0) return false;
+  if (capture.revision > 0) return true;
+  const identity = capture.provenance?.logicalBuiltin;
+  if (
+    !capture.dynamic ||
+    capture.provenance?.mode !== 'session' ||
+    !identity ||
+    identity.id !== capture.id ||
+    typeof identity.curatorAccountId !== 'string' ||
+    !identity.curatorAccountId ||
+    capture.provenance.viewerId !== identity.curatorAccountId ||
+    !identity.builtin
+  ) return false;
+  const key = identity.builtin;
+  if (key.kind === 'everything' || key.kind === 'liked') return true;
+  return key.kind === 'state' && [key.profileId, key.stateSetId, key.stateId].every(
+    (id) => typeof id === 'string' && /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(id),
+  );
+}
+
 /** Only a whole native page is admitted here; preparation must never be replaced with browser pagination. */
 export function captureCollectionExport(page: CollectionPageResult): CollectionExportCapture | null {
   const dynamic = 'preparing' in page;
   if (
     !page.provenance ||
-    !Number.isSafeInteger(page.revision) ||
-    page.revision! < 1 ||
+    !validExportRevision({ id: page.id, revision: page.revision!, provenance: page.provenance, dynamic }) ||
+    (page.revision === 0 && (!dynamic || page.builtinKind !== page.provenance.logicalBuiltin?.builtin.kind)) ||
     page.cursor ||
     page.next !== null ||
     page.members.length > LIBRARY_PAGE_LIMIT ||
@@ -42,9 +67,9 @@ export function captureCollectionExport(page: CollectionPageResult): CollectionE
   const population: ExportPopulation[number][] = [];
   for (const member of page.members) {
     if (!member.subject) return null;
-    const id = 'id' in member ? member.id : member.subject.id;
+    const id = dynamic ? member.subject.id : 'id' in member ? member.id : null;
     if (!id || !member.subject.id || population.some((entry) => entry.id === id)) return null;
-    population.push({ id, subjectId: member.subject.id, note: 'note' in member ? member.note : null });
+    population.push({ id, subjectId: member.subject.id, note: !dynamic && 'note' in member ? member.note : null });
   }
   // A detached copy keeps retry bound to the admitted request, even if a caller mutates its page.
   return structuredClone({
@@ -66,8 +91,7 @@ export function validateCollectionExportCapture(value: unknown): CollectionExpor
     typeof capture.id !== 'string' ||
     !capture.id ||
     capture.id.length > 128 ||
-    !Number.isSafeInteger(capture.revision) ||
-    capture.revision < 1 ||
+    !validExportRevision(capture) ||
     typeof capture.dynamic !== 'boolean' ||
     !capture.provenance ||
     !['anonymous', 'session'].includes(capture.provenance.mode) ||
@@ -87,6 +111,7 @@ export function validateCollectionExportCapture(value: unknown): CollectionExpor
         (entry.note !== null && typeof entry.note !== 'string'),
     ) ||
     new Set(capture.population.map((entry) => entry.id)).size !== capture.population.length ||
+    (capture.dynamic && capture.population.some((entry) => entry.id !== entry.subjectId || entry.note !== null)) ||
     (!capture.dynamic && capture.filter !== undefined)
   )
     throw new Error('Invalid Collection export capture');
@@ -112,9 +137,9 @@ export async function finishCollectionExport(
     const origin = validatePublicOrigin(context.origin);
     const items = terminal.members.map((member, index) => ({
       '@type': 'ListItem',
-      identifier: capture.population[index]!.id,
+      ...(!capture.dynamic ? { identifier: capture.population[index]!.id } : {}),
       position: index + 1,
-      ...('note' in member && member.note !== null ? { description: member.note } : {}),
+      ...(!capture.dynamic && 'note' in member && member.note !== null ? { description: member.note } : {}),
       url: new URL(
         subjectHref(
           {

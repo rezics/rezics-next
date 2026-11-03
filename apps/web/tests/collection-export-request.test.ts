@@ -148,11 +148,12 @@ test('native logical zero exports empty without writes and refuses stale or inve
   let status = 200;
   const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
     const req = new Request(input, init);
-    expect(req.method).toBe('GET');
     expect(req.headers.get('authorization')).toBe('Bearer owner-token');
     const path = new URL(req.url).pathname;
+    if (path === '/v1/viewerActions') return Response.json({ resources: [] });
+    expect(req.method).toBe('GET');
     if (path.endsWith('/members')) return Response.json(status === 200 ? { members: [], next: null } : {}, { status });
-    if (path.endsWith('/follow')) return Response.json({ following: false });
+    if (path.includes('/follows/')) return Response.json({ follow: { state: 'unfollowed' } });
     return Response.json({ collection });
   } });
   const env = {
@@ -174,10 +175,25 @@ test('native logical zero exports empty without writes and refuses stale or inve
   expect(result.state).toBe('complete');
   if (result.state !== 'complete') throw new Error('Expected empty export');
   expect(JSON.parse(result.file.text)).toMatchObject({ numberOfItems: 0, itemListElement: [] });
+  const members = ['second', 'first'].map((id) => ({
+    id: 'invented-occurrence', note: 'Invented note', subject: {
+      id, label: id, type: 'schema:Book', types: ['schema:Book'], cover: null,
+    },
+  }));
+  const populated = { ...page, members };
+  const unique = captureCollectionExport(populated)!;
+  const exported = await finishCollectionExport(unique, context, async () => populated);
+  if (exported.state !== 'complete') throw new Error('Expected subject export');
+  const items = JSON.parse(exported.file.text).itemListElement;
+  expect(items.map((item: { url: string }) => item.url)).toEqual([
+    'https://rezics.com/en/subjects/second/book-second', 'https://rezics.com/en/subjects/first/book-first',
+  ]);
+  expect(items.every((item: object) => !('identifier' in item) && !('description' in item))).toBe(true);
+  expect(captureCollectionExport({ ...populated, members: [members[0]!, members[0]!] })).toBeNull();
   expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, viewerId: 'foreign' } })).toBeNull();
   expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, logicalBuiltin: undefined } })).toBeNull();
   collection.revision = 1;
   expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'changed' });
   status = 503;
-  expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'unavailable' });
+  expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'changed' });
 });

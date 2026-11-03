@@ -41,10 +41,19 @@ export type CollectionReadAddress = {
 };
 
 /** Nonsecret evidence of the prepared server viewer and the exact addressed read. */
+type NativeCollection = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
+>['collection'];
+type LogicalBuiltinIdentity = Pick<
+  Extract<NativeCollection, { builtin: unknown }>,
+  'id' | 'curatorAccountId' | 'builtin'
+>;
 export type CollectionReadProvenance = {
   mode: ReadCredentialMode;
   viewerId: string | null;
   request: string;
+  /** Only an actual native logical descriptor can supply a revision-zero identity. */
+  logicalBuiltin?: LogicalBuiltinIdentity;
 };
 
 export function collectionRequestVariant(input: CollectionReadAddress, kind: 'page' | 'members' = 'page'): string {
@@ -349,6 +358,14 @@ export async function loadEditableCollectionPage(
   // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
   const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
   if (collection.id !== input.id) throw notFound();
+  const nativeCollection = collectionEnvelope.collection;
+  if ('builtin' in nativeCollection && nativeCollection.revision === 0) {
+    provenance.logicalBuiltin = {
+      id: nativeCollection.id,
+      curatorAccountId: nativeCollection.curatorAccountId,
+      builtin: structuredClone(nativeCollection.builtin),
+    };
+  }
   // Unfiltered public browsing uses the anonymous member/facet population.
   const publicMembership = 'visibility' in collection && collection.visibility !== 'private';
   const editor =

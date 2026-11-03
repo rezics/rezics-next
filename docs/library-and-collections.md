@@ -257,6 +257,8 @@ integration obligations; focused tests and typing do not establish whole-feature
 
 Decision: A complete admitted export is retained only within its mounted capture for explicit Copy or Download retries; local delivery failure keeps that exact file available, and Cancel or capture retirement clears it.
 
+Decision: Revision-zero export admission requires the current owner's native logical built-in identity in read provenance; complete bounded dynamic reads emit unique Subject URLs in native order without occurrence identifiers or notes, while larger prepared consumption remains held for the final Members and export interfaces.
+
 Tracked-entry state actions retain unattempted targets for explicit per-entry recovery with their captured state,
 revision, incarnation and command key, independent of later selection; a refused unknown replay keeps its exact intent.
 
