@@ -1,5 +1,8 @@
 # Library and Collections
 
+[Personal-score shelf ordering](library-personal-score-order.md) defines the native standard-question order,
+bounded explicit installation and Content currentness prerequisite.
+
 The [private reported-year summary](library-reported-year-summary.md) extends native completed occurrences with
 explicit journal finish-year membership, twelve months and a year-only bucket, preserving separate all-time semantics.
 

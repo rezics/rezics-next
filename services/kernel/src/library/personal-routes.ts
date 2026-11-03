@@ -1,3 +1,4 @@
+import { createShelfScorePreparation } from './shelf-score.ts';
 import { createFollowCountReads } from './follow-count-reads.ts';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
@@ -61,6 +62,8 @@ export type {
   PersonalEntryTimestampValue,
 } from './entry-personal-model.ts';
 import {
+  shelfScoreQuestionSchema,
+  shelfScorePreparationSchema,
   shelfEntrySchema,
   shelfListQuerySchema,
   shelfSummaryQuerySchema,
@@ -488,6 +491,7 @@ function shelfEntryView(entry: ShelfEntry) {
   const { lastActivityAt, finishedAt, activeProgressSession: session } = entry;
   return {
     ...entryView(entry),
+    ...(entry.personalScore === undefined ? {} : { personalScore: entry.personalScore }),
     lastActivityAt,
     finishedAt,
     activeProgressSession:
@@ -650,6 +654,21 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         return review;
       },
     )
+    .post(
+      '/v1/libraryShelfScorePreparation',
+      {
+        headers,
+        response: { 200: shelfScorePreparationSchema, ...shelfFailures },
+        detail: detail('library_shelf.score.prepare', 'library_entry:list', true),
+      },
+      async ({ actor, headers: requestHeaders, admission, job, set }) => {
+        shelfOwner(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders))),
+        );
+      },
+    )
     .get(
       '/v1/libraryEntries',
       {
@@ -665,6 +684,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           200: t.Object(
             {
               libraryEntries: t.Array(t.Union([shelfEntrySchema, embedded(entrySchema, subjectFields)])),
+              scoreQuestion: t.Optional(shelfScoreQuestionSchema),
               next: nullable,
             },
             closed,
@@ -683,6 +703,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           });
           return fullView(config(), actor, query.view, {
             libraryEntries: result.entries.map(shelfEntryView),
+            ...(result.scoreQuestion ? { scoreQuestion: result.scoreQuestion } : {}),
             next: result.next,
           });
         }

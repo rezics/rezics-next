@@ -30,6 +30,7 @@ import {
   type ShelfReads,
   type ShelfSeek,
 } from './shelf-contract.ts';
+import { shelfScoreBinding, validShelfScoreKey } from './shelf-score.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 function owner(actor: Actor, progress: boolean): AccountActor {
@@ -252,6 +253,8 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         (value.state !== undefined && (typeof value.state !== 'string' || !isShelfEntryState(value.state)))
       )
         throw new ProblemError('invalid_argument');
+      if (value.orderBy === 'personalScore' && (actor.kind !== 'account' || !actor.scopes.includes('rating:vote')))
+        throw new ProblemError('forbidden');
       const selected = page(value);
       const type = publicType(value.type);
       return snapshot(actor, true, async (client, route, accountId, epoch, generation) => {
@@ -264,7 +267,11 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
           direction: (value.direction as 'asc' | 'desc' | undefined) ?? 'desc',
         });
         const base = shelfCursorBinding(accountId, query);
-        const binding = { ...base, query: { ...base.query, ...generation } };
+        const score =
+          query.orderBy === 'personalScore'
+            ? await shelfScoreBinding(client, route, accountId, deps.scoreCurrentness)
+            : null;
+        const binding = { ...base, query: { ...base.query, ...generation, ...score?.binding } };
         const keys = await decode(binding, selected.cursor, epoch);
         let after: ShelfSeek | null = null;
         if (keys !== null) {
@@ -273,7 +280,9 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
             typeof keys[0] !== 'string' ||
             typeof keys[1] !== 'string' ||
             routeOf(keys[1]) === null ||
-            !(timestamp(keys[0]) || (query.orderBy === 'finishedAt' && keys[0] === ''))
+            !(query.orderBy === 'personalScore'
+              ? validShelfScoreKey(keys[0])
+              : timestamp(keys[0]) || (query.orderBy === 'finishedAt' && keys[0] === ''))
           )
             throw new ProblemError('invalid_cursor');
           after = { key: keys[0], subjectId: keys[1] };
@@ -282,13 +291,18 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         const last = result.entries.at(-1);
         const key =
           last &&
-          (query.orderBy === 'lastActivity'
-            ? last.lastActivityAt
-            : query.orderBy === 'createdAt'
-              ? last.createdAt
-              : (last.finishedAt ?? ''));
+          (query.orderBy === 'personalScore'
+            ? last.personalScore === null
+              ? ''
+              : String(last.personalScore)
+            : query.orderBy === 'lastActivity'
+              ? last.lastActivityAt
+              : query.orderBy === 'createdAt'
+                ? last.createdAt
+                : (last.finishedAt ?? ''));
         return {
           entries: result.entries,
+          ...(score ? { scoreQuestion: score.question } : {}),
           next:
             result.more && last && key !== undefined
               ? await deps.cursors.encode(deps.tokens, binding, { epoch, after: [key, last.subjectId] }, deps.clock())

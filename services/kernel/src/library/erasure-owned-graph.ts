@@ -72,6 +72,7 @@ export const OWNED_PHASES = [
   'collection_archive_recovery',
   'entry_annotation_review',
   'library_archive_merge',
+  'shelf_score_head',
 ] as const;
 const childQueries: {
   units: typeof units;
