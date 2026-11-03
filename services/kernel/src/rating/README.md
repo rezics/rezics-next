@@ -1533,11 +1533,19 @@ Decision: support fraction is support divided by support plus oppose, false-posi
 
 **Growth check:** One aggregate and one retained contribution per actor/association; actor cleanup visits at most 50 indexed slots per durable step.
 
+### Cost: read own classification assessments
+
+- **Touches:** The Kernel pool reads the acting account, actor eligibility and home epoch in three released account-home snapshots. Each of at most 21 exact original `(subject, association)` keys receives own-disclosure preparation and final witness; with the scopes, each also receives current SET clear/set preparation and aggregate preparation with their final witnesses. Subject and target summaries, retained contributions and five-ballot aggregates are read from their owning pools. Access is prepared and evaluated for each source and target observation. This GET invokes no command or receipt transaction, emits no event and has zero registered effect-runner phases.
+- **Bound:** The raw seek returns at most 21 slot rows and exposes at most 20; one selected key adds at most one point row and item. The final slot witness reads at most 21 rows, for at most 43 returned retained-slot rows across the page. At most 21 exact keys reach each association observation and each contribution or aggregate batch; summary selection has at most 42 exact identities. Raw and materialized payloads are bounded by those row counts and existing row schemas; retained bytes are zero. The serialized response is capped at 1 MiB. There is no actor or Subject scan and no request-time count.
+- **Growth check:** Keep 20 raw slots, selected keys, represented homes and the byte cap fixed while independently growing unrelated actor slots, association history and native aggregate history at 256/1024/4096. Capture every actor and Semantic pool, Access preparation/evaluation, repeated association witness, transaction, physical row, raw/materialized/retained/serialized byte and runner phase. Require strict route+actor+raw-key and supplied-identity physical prefixes; output limits alone do not bound examined work.
+
 ### Return to classification assessments
 
 `GET /v1/me/classification-assessments` returns only the authenticated account's current retained classification slots.
-The cursor is sealed to the account, client, authentication epoch, actor lifecycle generation, selected exact slot and
-raw `(subject, association)` order. Each response selects at most 20 raw slots. `selectedSubjectId` and
+The cursor is sealed to the acting account, client, current delegator, authentication epoch, sorted effective scopes,
+actor lifecycle generation, selected exact slot and raw `(subject, association)` order; its signed epoch is the
+observed native account-home epoch. A moved or changed home makes continuation unavailable or stale instead of an
+empty page. Each response selects at most 20 raw slots. `selectedSubjectId` and
 `selectedAssociationId` may independently promote one exact owned slot; the selected key is excluded from the raw
 page so it appears once in a traversal. The response says `complete: false` for lifetime coverage: withdrawn,
 superseded and removed inventory is not reconstructed. `traversal` and `next` describe only the current retained
@@ -1554,6 +1562,9 @@ rules.
 Decision: When current Semantic disclosure is absent, return a retained own slot without labels, qualifiers,
 destinations or aggregate only when the existing own-account clear action is available; otherwise omit it while
 advancing the raw continuation.
+
+Decision: A readable association whose current binding differs from the retained slot uses the existing withheld
+item with no clear link, so the page does not promise a withdrawal the native clear precondition will refuse.
 
 Native classification counts use the existing five-ballot suppression rule. The provider's confidence and lie flag
 remain source data from `POST /v1/subjects/:id/source-classifications:read`; this page returns no source figure and

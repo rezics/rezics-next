@@ -116,6 +116,14 @@ function hashBytes(value: Buffer): string {
   return value.toString('hex');
 }
 
+/** The clear writer and own-page advice share the same retained-slot binding precondition. */
+export function classificationBallotClearPrecondition(
+  retainedBinding: Buffer | null,
+  current: Pick<CurrentClassificationAssociation, 'bindingHash'> | null,
+): boolean {
+  return current === null || retainedBinding === null || hashBytes(retainedBinding) === current.bindingHash;
+}
+
 function nextRevision(value: string | undefined): string {
   const revision = BigInt(value ?? '0') + 1n;
   if (revision > 9_223_372_036_854_775_807n) throw new Error('Classification ballot revision exhausted');
@@ -348,7 +356,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
         })) as BallotSlot | null;
         if (expectedRevision !== undefined && prior?.revision !== expectedRevision)
           throw new ClassificationBallotConflictError();
-        if (current && prior && hashBytes(prior.binding_hash) !== current.bindingHash)
+        if (!classificationBallotClearPrecondition(prior?.binding_hash ?? null, current))
           throw new ClassificationBallotNotFoundError();
         if (!prior || prior.assessment === null) {
           if (activation.event) return { value: null, events: [activation.event] };

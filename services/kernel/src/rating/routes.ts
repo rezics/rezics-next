@@ -101,6 +101,10 @@ const aggregateFailures = {
   404: problemSchema('not_found'),
   503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
 };
+const ownClassificationPageFailures = {
+  ...aggregateFailures,
+  409: problemSchema('stale_cursor'),
+};
 
 function detail(operationId: string, write = false) {
   return {
@@ -229,7 +233,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/me/classification-assessments',
       {
         query: ClassificationBallotOwnPageQuerySchema,
-        response: { 200: ClassificationBallotOwnPageSchema, ...aggregateFailures },
+        response: { 200: ClassificationBallotOwnPageSchema, ...ownClassificationPageFailures },
         detail: classificationDetail('classification_ballot.own_page', CLASSIFICATION_BALLOT_READ_OWN, {
           personal: true,
         }),

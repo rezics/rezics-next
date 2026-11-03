@@ -1,12 +1,13 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { readPartition } from '../partition/partition.ts';
 import {
   readCurrentClassificationAssociation,
   type CurrentClassificationAssociation,
@@ -20,6 +21,7 @@ import {
   CLASSIFICATION_BALLOT_READ_AGGREGATE,
   CLASSIFICATION_BALLOT_READ_OWN,
   CLASSIFICATION_BALLOT_SET,
+  classificationBallotClearPrecondition,
   classificationAggregateView,
   type Assessment,
 } from './classification-ballot.ts';
@@ -179,9 +181,11 @@ function binding(owner: AccountActor, actorState: ActorState | null, selected: K
   return {
     operation: 'rating.own-classification-ballots-page',
     parameters: {
-      account: owner.accountId,
+      actor: owner.accountId,
       client: owner.clientId,
+      delegator: owner.requestedBy,
       authnEpoch: owner.authnEpoch,
+      scopes: JSON.stringify([...owner.scopes].sort()),
       actorGeneration: actorState?.generation ?? null,
       selectedSubject: selected?.subjectId ?? null,
       selectedAssociation: selected?.associationId ?? null,
@@ -197,13 +201,14 @@ function parseCursor(
   cursor: string | undefined,
   scope: CursorBinding,
   now: number,
+  homeEpoch: number,
   hasSelected: boolean,
 ): Continuation {
   if (cursor === undefined) return { after: null, selectedShown: false };
   const decoded = decodeCursor(tokens, scope, cursor, now);
+  if (!decoded.ok) throw new ProblemError('invalid_cursor');
+  if (decoded.epoch !== homeEpoch) throw new ProblemError('stale_cursor');
   if (
-    !decoded.ok ||
-    decoded.epoch !== 1 ||
     decoded.after.length !== (hasSelected ? 3 : 2) ||
     decoded.after.slice(0, 2).some((value) => typeof value !== 'string') ||
     (hasSelected && decoded.after[2] !== '0' && decoded.after[2] !== '1')
@@ -218,16 +223,24 @@ async function readAccountSnapshot<T>(
   deps: Dependencies,
   owner: AccountActor,
   deadline: number,
-  read: (client: PoolClient, state: ActorState | null) => Promise<T>,
+  read: (client: PoolClient, state: ActorState | null, homeEpoch: number) => Promise<T>,
+  expectedHomeEpoch?: number,
 ): Promise<T> {
   const actorRoute = routeOf(owner.accountId)!;
   const home = partitionOf(actorRoute)!;
   return withReadTransaction(
     deps.pool,
     async (client) => {
-      await partitionReadClient(client, home);
+      const currentHome = await readPartition(client, home);
+      if (!currentHome) throw new CommandUnavailableError('deadline', home);
+      if (currentHome.writeState === 'moved')
+        throw new CommandUnavailableError('moved', home, currentHome.movedTo);
+      if (!Number.isSafeInteger(currentHome.epoch) || currentHome.epoch < 1)
+        throw new CommandUnavailableError('contention', home);
+      if (expectedHomeEpoch !== undefined && currentHome.epoch !== expectedHomeEpoch)
+        throw new ProblemError('stale_cursor');
       assertCurrentAccount(owner, await readAccount(client, actorRoute, owner.accountId));
-      return read(client, await currentActor(client, owner));
+      return read(client, await currentActor(client, owner), currentHome.epoch);
     },
     deadline,
   );
@@ -318,9 +331,14 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const now = () => (deps.clock?.() ?? new Date()).getTime();
       const selected = input.selected ?? null;
       if (selected) validateKey(selected);
-      const initialState = await readAccountSnapshot(deps, owner, deadline, async (_client, state) => state);
+      const initial = await readAccountSnapshot(deps, owner, deadline, async (_client, state, homeEpoch) => ({
+        state,
+        homeEpoch,
+      }));
+      const initialState = initial.state;
+      const initialHomeEpoch = initial.homeEpoch;
       const scope = binding(owner, initialState, selected);
-      const continuation = parseCursor(deps.tokens, input.cursor, scope, now(), selected !== null);
+      const continuation = parseCursor(deps.tokens, input.cursor, scope, now(), initialHomeEpoch, selected !== null);
 
       // Read the raw selection and continuation together so sparse visibility can never move its frontier.
       const pageResult = await readAccountSnapshot(deps, owner, deadline, async (client, state) => {
@@ -360,7 +378,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           selectedShown: continuation.selectedShown || selectedSlot !== null,
           hasMore: rawRows.length > rawPage.length,
         };
-      });
+      }, initialHomeEpoch);
       const rawSlots = pageResult.raw;
       const seedSlots = [...(pageResult.selectedSlot ? [pageResult.selectedSlot] : []), ...rawSlots];
       for (const slot of seedSlots) validateSlot(slot);
@@ -368,7 +386,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       if (!seedSlots.length) {
         await readAccountSnapshot(deps, owner, deadline, async (_client, state) => {
           if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
-        });
+        }, initialHomeEpoch);
         return {
           viewer: { accountId: owner.accountId },
           inventory: {
@@ -386,7 +404,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const initialAssociations = await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_READ_OWN, deadline);
       const readableSlots = seedSlots.filter((slot) => initialAssociations.get(keyOf(slot)) !== null);
       const setAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_SET)
-        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_SET, deadline)
+        ? await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_SET, deadline)
         : new Map<string, CurrentClassificationAssociation | null>();
       const aggregateAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_READ_AGGREGATE)
         ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline)
@@ -456,7 +474,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
 
       const finalAssociations = await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_READ_OWN, deadline);
       const finalSetAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_SET)
-        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_SET, deadline)
+        ? await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_SET, deadline)
         : new Map<string, CurrentClassificationAssociation | null>();
       const finalAggregateAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_READ_AGGREGATE)
         ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline)
@@ -465,9 +483,10 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const key = keyOf(slot);
         if (!sameAssociation(initialAssociations.get(key) ?? null, finalAssociations.get(key) ?? null))
           throw new AccessUnavailableError('contention');
+        if (owner.scopes.includes(CLASSIFICATION_BALLOT_SET) &&
+            !sameAssociation(setAssociations.get(key) ?? null, finalSetAssociations.get(key) ?? null))
+          throw new AccessUnavailableError('contention');
         if (readableSlots.includes(slot)) {
-          if (!sameAssociation(setAssociations.get(key) ?? null, finalSetAssociations.get(key) ?? null))
-            throw new AccessUnavailableError('contention');
           if (!sameAssociation(aggregateAssociations.get(key) ?? null, finalAggregateAssociations.get(key) ?? null))
             throw new AccessUnavailableError('contention');
         }
@@ -485,18 +504,25 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             seedSlots.map(({ subjectId, associationId }) => ({ subject_id: subjectId, association_id: associationId })),
           ),
         })) as Slot[];
-      });
+      }, initialHomeEpoch);
       const currentSlots = currentSlotMap(finalSlots);
       const items: PageItem[] = [];
       for (const selectedSlot of seedSlots) {
         const key = keyOf(selectedSlot);
         const slot = currentSlots.get(key);
         if (!slot) continue;
-        const association = initialAssociations.get(key) ?? null;
+        const observedAssociation = initialAssociations.get(key) ?? null;
         const current =
-          association && slot.bindingHash.toString('hex') === association.bindingHash ? association : null;
-        const canClear = owner.scopes.includes(CLASSIFICATION_BALLOT_SET);
-        const canSet = current !== null && setAssociations.get(key)?.bindingHash === current.bindingHash;
+          observedAssociation && slot.bindingHash.toString('hex') === observedAssociation.bindingHash
+            ? observedAssociation
+            : null;
+        const clearPreparation = finalSetAssociations.get(key) ?? null;
+        const visibleBindingMismatch = observedAssociation !== null && current === null;
+        const canClear =
+          owner.scopes.includes(CLASSIFICATION_BALLOT_SET) &&
+          !visibleBindingMismatch &&
+          classificationBallotClearPrecondition(slot.bindingHash, clearPreparation);
+        const canSet = current !== null && finalSetAssociations.get(key)?.bindingHash === current.bindingHash;
         const path = actionPath(selectedSlot, slot.revision);
         const readback = current ? actionPath(selectedSlot) : null;
         const actions = {
@@ -521,7 +547,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             : ('pending' as const)
           : ('unknown' as const);
         if (!current) {
-          if (!canClear) continue;
+          if (!canClear && !visibleBindingMismatch) continue;
           items.push({
             state: 'withheld',
             subjectId: slot.subjectId,
@@ -617,7 +643,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
               deps.tokens,
               scope,
               {
-                epoch: 1,
+                epoch: initialHomeEpoch,
                 after: selected
                   ? [last.subjectId, last.associationId, pageResult.selectedShown ? '1' : '0']
                   : [last.subjectId, last.associationId],
