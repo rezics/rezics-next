@@ -823,10 +823,10 @@ Responses are private/no-store and the history is not a public feed or search so
   statements including four transaction controls. Missing source or anonymous/invalid selection stops earlier;
   failed snapshots additionally attempt ROLLBACK and discard a connection if rollback fails. The source query binds
   both `(route, decision_id)` columns, the appeal's unique `(route, decision_id)` prefix, and each target's full
-  `(route, id)` key; a post includes its exact containing thread. There are at most ten live relation keys across
+  `(route, id)` key; a post includes its exact containing thread. Including empty probes for inactive kind branches, there are at most fourteen relation keys across
   the two observations, including partition keys. This is a key bound, not proof of physical scans through retained
   versions; strict plans and independent retained-history growth remain required. The author-only wrapper has at
-  most four snapshots, sixteen Content statements, eight controls and twenty live relation keys. Moderator Access
+  most four snapshots, sixteen Content statements, eight controls and twenty-eight relation keys. Moderator Access
   adds one preparation and one final formula, including its nested identity, assignment, inverse-membership,
   candidate and organization/Realm work described below. It is prepared outside checkout and has no cached positive
   result. Author reads add none of that moderator work. Raw decision/appeal statements are capped by SQL at
@@ -848,8 +848,8 @@ Responses are private/no-store and the history is not a public feed or search so
   range, and hydrates each admitted raw key through current target Access, `moderation-history-target.sql` and the exact reader.
 - Bound: let L be the requested limit (1–100), B=L+1 (at most 101 raw keys), and H≤L the selected raw candidates.
   There are at most `3+3H` anchored snapshots, `12+12H` Content statements including `6+6H` controls, and
-  `5+B+13H` live relation keys: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
-  and at most `8H` decision/appeal/target/parent keys across exact-reader selection and final observation. Board existence adds two PK statements/rows across initial/final checks;
+  `5+B+17H` relation keys: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
+  and at most `12H` decision/appeal/target/parent keys across exact-reader selection and final observation. Board existence adds two PK statements/rows across initial/final checks;
   each selected target uses one placement statement with at most two PK relation rows for posts. Plan intermediates add only bounded scalar inputs and singleton equality joins;
   physical plan/tuple evidence, including withholding, is retained by the native growth harness.
   Access adds `1+2H` preparations and `2+2H` final formulas. Preparation calls the actual `permission.ts` callees:
