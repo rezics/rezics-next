@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -722,8 +723,9 @@ export function createLabelConsolidationCommands(deps: {
       items: await readItems(client, owner, plan.sourceLabelId, plan.confirmationId),
     }));
     if (!initial.plan) throw new LibraryNotFoundError();
-    let item = initial.items[itemNo];
-    if (!item) throw new LibraryNotFoundError();
+    const selectedItem = initial.items[itemNo];
+    if (!selectedItem) throw new LibraryNotFoundError();
+    let item: PlanItem = selectedItem;
     if (item.status !== 'applying') return;
     const currentPlan = initial.plan;
 
@@ -946,9 +948,9 @@ export function createLabelConsolidationCommands(deps: {
     }
   }
 
-  async function beginApply(ownerActor: Actor, sourceLabelId: string, confirmationIdValue: string, key: string) {
+  async function beginApply(ownerActor: Actor, sourceLabelIdValue: string, confirmationIdValue: string, key: string) {
     const owner = actor(ownerActor, 'library_entry:update'),
-      sourceLabelId = id(sourceLabelId),
+      sourceLabelId = id(sourceLabelIdValue),
       confirmationId = id(confirmationIdValue, false),
       deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     actor(ownerActor, 'library_entry:read');
