@@ -330,6 +330,9 @@ test('an empty exact source and an account switch remain indistinguishable', asy
 
 test('suspending the independent author during selection retires disclosure and session provenance', async () => {
   const { path } = await decide('Revoked native author session');
+  // Pending appeals bypass advice preparation: independent decision disclosure
+  // must still reauthenticate the author rather than depend on that advice gate.
+  await fixture.command('POST', `${path}:appeal`, { statement: 'Pending before suspension' });
   await changeDuringRead(path, fixture.author.bearer, () =>
     fixture.command(
       'POST',
