@@ -8,6 +8,9 @@ import type { ItemView } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/discovery.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import { continuePageSchema } from '../library/continue-routes.ts';
+import { REACTION_KINDS } from './events.ts';
+import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
+import type { ReactionTarget } from './reactions.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -66,10 +69,51 @@ export const FeedAuthorSchema = t.Unsafe<Pick<AccountDiscoverySummary, 'displayN
   t.Object({ displayName: nullable, handle: nullable, avatar: t.Union([avatar, t.Null()]) }, closed),
 );
 export type FeedAuthor = Static<typeof FeedAuthorSchema>;
-export type FeedContentSummary = { author?: FeedAuthor; excerpt?: string };
+export type FeedReactionTarget = Readonly<{
+  targetKind: Extract<ReactionTarget['targetKind'], 'thread' | 'post'>;
+  targetId: ReactionTarget['targetId'];
+}>;
+export type FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>;
+const reactionKind = t.Union(REACTION_KINDS.map((kind) => t.Literal(kind)));
+const reactionTarget = t.Unsafe<FeedReactionTarget>(
+  t.Object({ targetKind: t.Union([t.Literal('thread'), t.Literal('post')]), targetId: uuid }, closed),
+);
+const reactionCounts = t.Unsafe<FeedReactionCounts>(
+  t.Object(
+    {
+      upvote: t.Optional(t.Integer({ minimum: 1 })),
+      downvote: t.Optional(t.Integer({ minimum: 1 })),
+      like: t.Optional(t.Integer({ minimum: 1 })),
+      love: t.Optional(t.Integer({ minimum: 1 })),
+      laugh: t.Optional(t.Integer({ minimum: 1 })),
+      insightful: t.Optional(t.Integer({ minimum: 1 })),
+      sad: t.Optional(t.Integer({ minimum: 1 })),
+    },
+    closed,
+  ),
+);
+const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
+  t.Object(
+    {
+      epoch: t.Integer({ minimum: 1 }),
+      position: t.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    closed,
+  ),
+);
+export type FeedContentSummary = {
+  author?: FeedAuthor;
+  excerpt?: string;
+  reactionTarget?: FeedReactionTarget;
+  reactions?: FeedReactionCounts;
+  viewerReaction?: ViewerReactionKind | null;
+};
 const contentSummaryFields = {
   author: t.Optional(FeedAuthorSchema),
   excerpt: t.Optional(t.String({ maxLength: 160 })),
+  reactionTarget: t.Optional(reactionTarget),
+  reactions: t.Optional(reactionCounts),
+  viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
 };
 const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
   t.Object(
@@ -217,6 +261,7 @@ export const FeedPageSchema = t.Object(
     feedItems: t.Array(FeedItemSchema, { maxItems: 20 }),
     next: nullable,
     asOf: t.String({ format: 'date-time' }),
+    reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
     sources: t.Object(
       { discovery: FeedSourceStateSchema, following: FeedSourceStateSchema, continue: FeedSourceStateSchema },
       closed,

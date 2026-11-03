@@ -284,6 +284,86 @@ Home Next retains the current page while one same-selection request is pending; 
 its completion. The replacement page focuses and scrolls to the existing results boundary on desktop and
 phone. Decision: changing any selection or refreshing the head cancels a pending Next's focus intent.
 
+## Content reaction summaries
+
+Only selected, currently disclosed Content thread/post cards receive `summary.reactionTarget` and `summary.reactions`.
+The target uses the installed command spelling: `{targetKind:'thread',targetId:<thread id>}` for a thread and
+`{targetKind:'post',targetId:<post id>}` for a post. The feed verifies target, key and destination identities before
+projecting; an ambiguous identity makes Following unavailable rather than redirecting a reaction to a parent.
+Counts come from `withReactionCounts` and use all seven native `REACTION_KINDS`. Sparse `reactions` is the native
+positive-count map; `{}` is a successful empty map. `reactionsAsOf` is an optional page field with the helper's oldest
+count-row watermark, not feed `asOf`. A successful read with no count rows returns `reactionsAsOf:null`; it does not
+claim a converged source. The count source remains unavailable if the batch fails.
+
+The exported feed types are `FeedReactionTarget = { targetKind: 'thread' | 'post'; targetId: string }`,
+`FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>`, and
+`FeedContentSummary` adds optional `reactionTarget`, `reactions`, and `viewerReaction: ViewerReactionKind | null`.
+`FeedPage.reactionsAsOf` is `ReactionCountFreshness | null` when present. The generated closed schema accepts only the
+installed seven reaction kinds, positive sparse counts, a current native target and the native freshness fields.
+
+An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
+Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
+requests. `GET /v1/feedItems?stream=following&limit=20&kind=thread` can return:
+
+```json
+{
+  "feedItems": [{
+    "id": "feed-event-id",
+    "source": "following",
+    "key": {"owner": "content", "kind": "thread", "route": 12, "id": "00000000-0000-7000-8000-000c00000000"},
+    "occurredAt": null,
+    "summary": {
+      "id": "00000000-0000-7000-8000-000c00000000",
+      "kind": "discussion",
+      "title": "A disclosed thread",
+      "createdAt": "2026-11-03T10:00:00.000Z",
+      "reactionTarget": {"targetKind": "thread", "targetId": "00000000-0000-7000-8000-000c00000000"},
+      "reactions": {"like": 3},
+      "viewerReaction": null
+    },
+    "destination": {"kind": "thread", "id": "00000000-0000-7000-8000-000c00000000", "title": "A disclosed thread"}
+  }],
+  "next": null,
+  "asOf": "2026-11-03T10:01:00.000Z",
+  "reactionsAsOf": {"epoch": 4, "position": "812"},
+  "sources": {"discovery": "not_requested", "following": "ready", "continue": "not_requested"}
+}
+```
+
+When either native batch fails, the response marks Following unavailable (or retains the native `preparing` state),
+omits all Following items, and does not advance its input frontier; repeating the same request retries that page. It
+never returns a partial count/slot summary. Existing admission refusals remain their native problem response.
+Decision: keep reaction-summary failure lane-local and retryable by withholding the whole Following page, so mixed
+source positions cannot skip a content card or expose partial viewer state.
+
+### Cost: Content reaction summaries
+
+Let `P` be emitted rows (at most 20), `T` the distinct eligible Content target IDs among those rows, `H` the represented
+target partitions, `B` the existing raw candidate reservation (160), and `K=7` the installed `REACTION_KINDS` count.
+The merge and existing selection keep their original `B` meaning and candidate/author/Space reservation (123 for mixed
+Home and 104 for Following at `P=20`); reaction projection adds no candidate, refill, identity, Space or authority read.
+`T≤P≤20`; the existing helper cap remains 100 and targets are deduplicated before calling it.
+
+`withReactionCounts` groups those IDs by their actual route partition and runs one `reaction-count-page.sql` statement
+per represented partition, so there are at most `H≤T` count statements. Each requested `(route,target_id)` performs an
+ordered `reaction_total` primary-key seek on `(route,target_id,kind)` and reads at most `K` kind rows: at most `T×K`
+physical count rows and `O(T×K)` result memory, independent of total reaction history. The SQL uses an unnested finite
+target array and does not scan other partitions. A successful empty result has zero rows and null `reactionsAsOf`;
+freshness is the minimum stored `(source_epoch,source_position)` among rows actually read and adds no statement.
+
+For an account actor with `T>0`, `withViewerReactions` runs one current account-home statement, with one
+`reaction` primary-key seek on `(route,actor_account_id,target_id)` per target and at most `T` physical slot rows.
+Anonymous actors run no viewer statement and receive no viewer field. The projector uses `H` count-pool checkouts plus
+one viewer checkout when authenticated, no transaction-control
+statements, and linear map/serialization work bounded by `T×K`; no SQL, checkout or result memory grows with global
+reaction rows. A dependency failure discards the page's Content summaries as described above.
+
+The added call chain is the feed-local projector, `withReactionCounts` → one connection/query per represented target
+partition, then (for an account) `withViewerReactions` → one connection/query on the current actor home. It performs no
+new Access preparation or final authority check; existing Following support, Content disclosure and selected Space
+revalidation still run for the entire output before return. The native reaction command, relay and source watermark
+remain their existing authorities.
+
 ## Native review question witnesses
 
 Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)
