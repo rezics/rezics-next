@@ -110,15 +110,16 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     'SELECT board_id,subject_id,opening_id,source_version,eligible FROM content.review_census_episode WHERE route=$1 AND thread_id=$2',
     [routeOf(written.value.threadId), written.value.threadId],
   );
-  expect(retained.rows).toEqual([
-    expect.objectContaining({
+  expect(retained.rows).toHaveLength(2);
+  expect(new Set(retained.rows.map((row) => row.source_version)).size).toBe(2);
+  for (const row of retained.rows)
+    expect(row).toMatchObject({
       board_id: board.board_id,
       subject_id: subject,
       opening_id: written.value.itemId,
       source_version: expect.stringMatching(/^rv1_/),
       eligible: true,
-    }),
-  ]);
+    });
   await revisePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
     author,
@@ -142,7 +143,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
         [routeOf(written.value.threadId), written.value.threadId],
       )
     ).rows[0]?.count,
-  ).toBe(1);
+  ).toBe(2);
   expect(await maintainReviewCensusBatch(partition, resumed.maintainCensus)).toMatchObject({ state: 'exhausted' });
   expect(
     (
