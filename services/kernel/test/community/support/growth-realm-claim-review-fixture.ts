@@ -17,18 +17,26 @@ export async function claimReviewGrowthFixture() {
     const caller = { id: owner.accountId, bearer: owner.bearer };
     async function post<T>(path: string, body: unknown, actor = caller): Promise<T> {
       const response = await driver.request({
-        method: 'POST', path, actor, body, key: JSON.stringify(crypto.randomUUID()),
+        method: 'POST',
+        path,
+        actor,
+        body,
+        key: JSON.stringify(crypto.randomUUID()),
       });
       const value: unknown = await response.json();
       expect({ status: response.status, value }).toMatchObject({ status: 201 });
       return value as T;
     }
-    await post('/v1/grants', {
-      resource: PLATFORM_RESOURCE,
-      subject: { kind: 'account', id: owner.accountId },
-      actions: ['space:create', 'realm:create'],
-      valid: '(,)',
-    }, { id: governance.actor.accountId, bearer: governance.bearer });
+    await post(
+      '/v1/grants',
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: owner.accountId },
+        actions: ['space:create', 'realm:create'],
+        valid: '(,)',
+      },
+      { id: governance.actor.accountId, bearer: governance.bearer },
+    );
     const { space } = await post<{ space: { spaceId: string } }>('/v1/spaces', {
       title: 'Native claim review growth host',
     });
