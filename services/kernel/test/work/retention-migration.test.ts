@@ -103,6 +103,7 @@ test(
     const up = readFileSync(migrationFile, 'utf8').split('-- migrate:up')[1]?.split('-- migrate:down')[0];
     expect(up).toBeDefined();
     await withClient(url, async (client) => {
+      await client.query('CREATE SCHEMA dbos');
       await expect(client.query(up!)).rejects.toMatchObject({ code: '42P01' });
     });
   },
