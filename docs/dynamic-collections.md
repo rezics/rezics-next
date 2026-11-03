@@ -220,6 +220,10 @@ nor purge timing, and this contract adds no lifecycle engine or synchronous wait
 
 ## Saved queries and execution admission
 
+Decision: second-scope saved queries use the installed rule, Source, Members and explicit Publication contracts
+with `id` order; private meaning stays private, with no new grammar, sort family or publication engine. The
+[second-scope plan](research/commerce-second-scope-plan.md) owns the delivery slices and their composition.
+
 Saved dynamic Collections use `POST /v1/collections` with the closed body
 `{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}`.
 `PUT /v1/collections/{collectionId}/rule` takes the closed body `{revision,filter,sort?}` and returns
@@ -248,18 +252,17 @@ AST and no new work payload retains it. Existing terminal header deidentificatio
 row mutation. No public Collection projection selects its AST, release or private family operands. Dynamic
 metadata omits curated counts and timestamps; it never turns an unavailable source into ready-empty output.
 
-In this checkout `createCollectionSource` remains explicitly unavailable and has no saved-filter execution
-admission declaration. `createMembersPreparation` remains unimplemented. The saved commands therefore reach an
-explicit `503 dependency_unavailable` boundary **before any rule/resource write or receipt replay**. BASIC and
-FULL dynamic member reads also stay unavailable, instead of reading the curated occurrence table. The HTTP
-outcome suite requires real saved creation, CAS/replay and useful member/clear/Undo outcomes; those outcomes are
-not claimed delivered by the helper code or typing. No replacement evaluator, scheduler or admission callback
-is introduced. The common Source owner must supply its exact saved-rule admission/member types for binding.
+`createCollectionSource`, `createMembersPreparation`, saved-rule admission and native owner-read binding now
+have production implementations. Their presence does not establish a complete executable saved-source plan:
+current native source, identity and whole-query disclosure evidence remain required. Missing evidence returns
+explicit `503 dependency_unavailable`; dynamic reads never fall back to curated occurrences or false empty output.
+The HTTP outcome suite still requires actual saved creation, CAS/replay and useful member/clear/Undo outcomes.
 
-Public dynamic execution additionally needs the actual complete explicit Publication provider. That producer is
-absent here. Public/unlisted requests, including an editor's public request, cannot evaluate current private
-curator facts. A successful public saved membership delivery is not claimed. Generated OpenAPI/client/schema
-artifacts and native outcome checks are owned by the controller after integration.
+Public dynamic execution requires the actual complete explicit Publication provider. Native episode, work,
+staging and final-command bodies are present; their saved-source composition and complete output must be proved.
+Non-private saved creation currently refuses with `dependency_unavailable`. Public/unlisted requests, including an
+editor's public request, cannot evaluate current private curator facts. Source presence is no successful public
+membership claim. Generated artifacts and native outcome checks remain controller-owned after integration.
 
 Saved-rule drafts compare exact title, description and filter structure (including operand order) with their initial
 or confirmed-save baseline. Stay preserves the draft; Leave discards local edits without cancelling an original
@@ -328,8 +331,9 @@ output hooks; Core basis, receipt, event and complete B selection commit atomica
 final command authority. Existing output hooks currently require ordinary command authority even for appends;
 bounded operational staging bodies must supply their own native admitted integration, without bypassing them.
 
-Native episode/provenance/admission, bounded staging and restored final-command bodies remain absent. Source,
-receiving, publication, control, late-writer and creation-evidence retention must join the existing native inventory
+Native episode/provenance/admission, bounded staging and restored final-command bodies are present in source;
+their complete runtime binding and native outcome proof remain required. Source, receiving, publication, control,
+late-writer and creation-evidence retention must join the existing native inventory
 and disposition obligations. These declarations claim no receiving/frozen/root support, NoData, cleanup authority
 or native/runtime pass. Original public dynamic C5, whole-query, replay/revocation and terminal outcomes remain
 the unmet acceptance basis; the controller retains native proof and ordinary runtime recovery work.
