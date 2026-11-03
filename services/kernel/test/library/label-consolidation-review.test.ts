@@ -2,11 +2,18 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
-import { createLabelConsolidationReview, LABEL_CONSOLIDATION_REVIEW_LIMITS } from '../../src/library/label-consolidation-review.ts';
+import {
+  createLabelConsolidationReview,
+  LABEL_CONSOLIDATION_REVIEW_LIMITS,
+} from '../../src/library/label-consolidation-review.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
-beforeAll(async () => { f = await createProfileEntryFixture(); }, 120000);
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await createProfileEntryFixture();
+}, 120000);
+afterAll(async () => {
+  await f?.close();
+});
 const catalogue = () => createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
 const assignments = () => createLabelAssignmentCommands({ pool: f.pool, tokens: f.tokens, access: f.access });
 const label = async (name: string) => (await catalogue().createLabel(f.owner.actor, { name }, entryKey())).value.label;
@@ -15,7 +22,8 @@ const select = async (labelId: string, subjectId: string) => {
   return { subjectId, assignmentId: a.id, revision: a.revision };
 };
 test('supplied-ID review returns exact identities, bounded final pages and stale selection conflicts without changing native facts', async () => {
-  const source = await label('Review source'), target = await label('😀'.repeat(100));
+  const source = await label('Review source'),
+    target = await label('😀'.repeat(100));
   const items = [];
   for (let n = 0; n < 6; n++) items.push(await select(source.id, await f.createSubject('unprofiled')));
   const both = await select(target.id, items[0]!.subjectId);
@@ -32,10 +40,19 @@ test('supplied-ID review returns exact identities, bounded final pages and stale
   const page = await first.json();
   expect(page.sourceLabel).toEqual({ ...source, name: 'Review source' });
   expect(page.targetLabel).toEqual({ ...target, name: '😀'.repeat(100) });
-  expect(page.items.map((i: { outcome: string }) => i.outcome)).toEqual(['already_on_target', 'changed', 'movable', 'movable']);
+  expect(page.items.map((i: { outcome: string }) => i.outcome)).toEqual([
+    'already_on_target',
+    'changed',
+    'movable',
+    'movable',
+  ]);
   expect(page.items[0].target).toEqual({ id: both.assignmentId, revision: both.revision, effective: true });
   expect(page.items[1].selected).toEqual(old);
-  expect(page.items[1].source).toEqual({ id: replacement.assignmentId, revision: replacement.revision, effective: true });
+  expect(page.items[1].source).toEqual({
+    id: replacement.assignmentId,
+    revision: replacement.revision,
+    effective: true,
+  });
   expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(LABEL_CONSOLIDATION_REVIEW_LIMITS.responseBytes);
   const lastResponse = await f.send('owner', 'POST', path, { ...selection, cursor: page.next });
   expect(lastResponse.status).toBe(200);
@@ -47,15 +64,26 @@ test('supplied-ID review returns exact identities, bounded final pages and stale
   expect(await f.inspect()).toEqual(before);
   const changed = await f.send('owner', 'POST', path, { ...selection, items: [...items].reverse(), cursor: page.next });
   expect(changed.status).toBe(400);
-  await catalogue().renameLabel(f.owner.actor, target.id, { name: 'Renamed review target', revision: target.revision }, entryKey());
+  await catalogue().renameLabel(
+    f.owner.actor,
+    target.id,
+    { name: 'Renamed review target', revision: target.revision },
+    entryKey(),
+  );
   expect((await f.send('owner', 'POST', path, { ...selection, cursor: page.next })).status).toBe(409);
   const refreshed = await f.send('owner', 'POST', path, selection);
   expect(refreshed.status).toBe(200);
-  expect((await refreshed.json()).targetLabel).toMatchObject({ id: target.id, revision: 2, name: 'Renamed review target' });
+  expect((await refreshed.json()).targetLabel).toMatchObject({
+    id: target.id,
+    revision: 2,
+    name: 'Renamed review target',
+  });
 }, 120000);
 test('native32capacity refusal and deleted-label reclaim eligibility are advisory and never remove the selected source', async () => {
-  const source = await label('Capacity source'), target = await label('Capacity target');
-  const subjectId = await f.createSubject('unprofiled'), item = await select(source.id, subjectId);
+  const source = await label('Capacity source'),
+    target = await label('Capacity target');
+  const subjectId = await f.createSubject('unprofiled'),
+    item = await select(source.id, subjectId);
   const labels = [];
   for (let n = 0; n < 31; n++) {
     const parent = await label('Capacity reservation ' + n);
@@ -75,11 +103,15 @@ test('native32capacity refusal and deleted-label reclaim eligibility are advisor
   await select(target.id, subjectId);
   expect((await review(f.owner.actor, source.id, input)).items[0]!.outcome).toBe('already_on_target');
   expect((await assignments().listAssignments(f.owner.actor, { labelId: source.id })).assignments).toContainEqual({
-    id: item.assignmentId, revision: item.revision, labelId: source.id, subjectId,
+    id: item.assignmentId,
+    revision: item.revision,
+    labelId: source.id,
+    subjectId,
   });
 }, 120000);
 test('selection validation, inaccessible supplied IDs and foreign/deleted/recreated labels preserve native owner boundaries', async () => {
-  const source = await label('Identity source'), target = await label('Identity target');
+  const source = await label('Identity source'),
+    target = await label('Identity target');
   const item = await select(source.id, await f.createSubject('unprofiled'));
   const path = '/v1/libraryLabels/' + source.id + ':reviewConsolidation';
   const input = { targetLabelId: target.id, items: [item] };
@@ -87,10 +119,16 @@ test('selection validation, inaccessible supplied IDs and foreign/deleted/recrea
   await expect(review({ ...f.owner.actor, scopes: ['library_entry:read'] }, source.id, input)).rejects.toThrow();
   await expect(review({ ...f.owner.actor, scopes: ['library_entry:update'] }, source.id, input)).rejects.toThrow();
   for (const body of [
-    { ...input, targetLabelId: source.id }, { ...input, items: [] }, { ...input, limit: 5 },
-    { ...input, items: [item, item] }, { ...input, q: 'all' }, { ...input, items: Array(17).fill(item) },
-    { ...input, items: [{ ...item, revision: '1' }] }, { ...input, items: [{ ...item, labelName: 'Identity source' }] },
-  ]) expect((await f.send('owner', 'POST', path, body)).status).toBe(400);
+    { ...input, targetLabelId: source.id },
+    { ...input, items: [] },
+    { ...input, limit: 5 },
+    { ...input, items: [item, item] },
+    { ...input, q: 'all' },
+    { ...input, items: Array(17).fill(item) },
+    { ...input, items: [{ ...item, revision: '1' }] },
+    { ...input, items: [{ ...item, labelName: 'Identity source' }] },
+  ])
+    expect((await f.send('owner', 'POST', path, body)).status).toBe(400);
   expect((await f.send('other', 'POST', path, input)).status).toBe(404);
   expect([401, 403]).toContain((await f.send('anonymous', 'POST', path, input)).status);
   const inaccessible = await f.send('owner', 'POST', path, { ...input, items: [{ ...item, subjectId: target.id }] });

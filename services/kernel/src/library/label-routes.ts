@@ -61,9 +61,7 @@ const assignmentPage = t.Union([
   ),
 ]);
 const expected = t.Object({ subjectId: id, assignmentId: id, revision }, closed);
-const reviewAssignment = t.Union([
-  t.Object({ ...identity.properties, effective: t.Boolean() }, closed), t.Null(),
-]);
+const reviewAssignment = t.Union([t.Object({ ...identity.properties, effective: t.Boolean() }, closed), t.Null()]);
 const reviewLabel = t.Object({ ...identity.properties, name: t.String() }, closed);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -323,32 +321,57 @@ export function personalLabelRoutes(
       customMethod('/v1/libraryLabels/:id', 'reviewConsolidation'),
       {
         params,
-        body: t.Object({
-          targetLabelId: id,
-          items: t.Array(expected, { minItems: 1, maxItems: LABEL_CONSOLIDATION_REVIEW_LIMITS.selection }),
-          limit: t.Optional(t.Integer({ minimum: 1, maximum: LABEL_CONSOLIDATION_REVIEW_LIMITS.page })),
-          cursor: t.Optional(t.String({ maxLength: 4096 })),
-        }, closed),
+        body: t.Object(
+          {
+            targetLabelId: id,
+            items: t.Array(expected, { minItems: 1, maxItems: LABEL_CONSOLIDATION_REVIEW_LIMITS.selection }),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: LABEL_CONSOLIDATION_REVIEW_LIMITS.page })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+          },
+          closed,
+        ),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: t.Object({
-          selection: t.String(), sourceLabel: reviewLabel, targetLabel: reviewLabel,
-          items: t.Array(t.Object({
-            selected: expected, source: reviewAssignment, target: reviewAssignment,
-            outcome: t.Union([
-              t.Literal('movable'), t.Literal('already_on_target'), t.Literal('missing'),
-              t.Literal('changed'), t.Literal('inaccessible'), t.Literal('capacity_limited'),
-            ]),
-          }, closed), { maxItems: LABEL_CONSOLIDATION_REVIEW_LIMITS.page }), next,
-        }, closed), ...failures },
+        response: {
+          200: t.Object(
+            {
+              selection: t.String(),
+              sourceLabel: reviewLabel,
+              targetLabel: reviewLabel,
+              items: t.Array(
+                t.Object(
+                  {
+                    selected: expected,
+                    source: reviewAssignment,
+                    target: reviewAssignment,
+                    outcome: t.Union([
+                      t.Literal('movable'),
+                      t.Literal('already_on_target'),
+                      t.Literal('missing'),
+                      t.Literal('changed'),
+                      t.Literal('inaccessible'),
+                      t.Literal('capacity_limited'),
+                    ]),
+                  },
+                  closed,
+                ),
+                { maxItems: LABEL_CONSOLIDATION_REVIEW_LIMITS.page },
+              ),
+              next,
+            },
+            closed,
+          ),
+          ...failures,
+        },
         detail: {
           ...detail('consolidation_review', 'library_entry:read', false),
-          description: 'Pure review of at most 16 explicit assignments, four per page. Also requires library_entry:update. No confirmation or movement is performed.',
+          description:
+            'Pure review of at most 16 explicit assignments, four per page. Also requires library_entry:update. No confirmation or movement is performed.',
         },
       },
       async ({ actor, params, body, admission, job, set }) => {
-        const result = await admission.run('normal', job, () => command(() =>
-          createLabelConsolidationReview({ ...deps, access: deps.access() })(actor, params.id, body),
-        ));
+        const result = await admission.run('normal', job, () =>
+          command(() => createLabelConsolidationReview({ ...deps, access: deps.access() })(actor, params.id, body)),
+        );
         set.headers['Cache-Control'] = 'private, no-store';
         return result;
       },

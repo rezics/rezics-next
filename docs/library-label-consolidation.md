@@ -24,14 +24,14 @@ Response: `{selection,sourceLabel,targetLabel,items,next}`. Both labels contain 
 the final page. Each item contains the exact `selected` triple, `source` and `target` observations (null or
 `{id,revision,effective}`), and one outcome:
 
-| Outcome | Meaning |
-| --- | --- |
-| `movable` | Exact effective source, no effective target, and native admission currently has a free or reclaimable slot. |
-| `already_on_target` | Exact effective source and an effective assignment to the exact target already exists. |
-| `missing` | No source tuple, or the same selected incarnation/revision is ineffective. |
-| `changed` | The current source tuple has another incarnation or revision; selection is never rebased. |
-| `inaccessible` | Native Subject admission does not admit this exact stored ID, including unknown IDs and redirects. Both observations are withheld. |
-| `capacity_limited` | Exact source, no effective target, and all 32 reserved slots have live parents. |
+| Outcome             | Meaning                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `movable`           | Exact effective source, no effective target, and native admission currently has a free or reclaimable slot.                        |
+| `already_on_target` | Exact effective source and an effective assignment to the exact target already exists.                                             |
+| `missing`           | No source tuple, or the same selected incarnation/revision is ineffective.                                                         |
+| `changed`           | The current source tuple has another incarnation or revision; selection is never rebased.                                          |
+| `inaccessible`      | Native Subject admission does not admit this exact stored ID, including unknown IDs and redirects. Both observations are withheld. |
+| `capacity_limited`  | Exact source, no effective target, and all 32 reserved slots have live parents.                                                    |
 
 Retained target tombstones expose only the owner's addressed identity, revision and ineffective state. An
 unidentified legacy live assignment is unavailable (`index_not_ready`), never silently missing or movable.

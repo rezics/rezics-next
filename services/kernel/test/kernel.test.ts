@@ -325,6 +325,7 @@ const typed = [
   'DELETE /v1/libraryLabels/:id',
   'POST /v1/libraryLabels/:id/$restore',
   'POST /v1/libraryLabels/:id/$assign',
+  'POST /v1/libraryLabels/:id/$reviewConsolidation',
   'POST /v1/libraryLabels/:id/$unassign',
   'POST /v1/libraryLabels/:id/$restoreAssignment',
   'GET /v1/libraryLabelAssignments',
