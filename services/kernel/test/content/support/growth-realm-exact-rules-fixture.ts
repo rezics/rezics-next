@@ -103,7 +103,7 @@ export async function createRulesFixture() {
       // no SQL-created selected claims and no HTTP limiter budget override.
       const result = await createPost({ pool: system.database.pool, access: system.access, routeKey: system.routeKey },
         author.actor, {
-          threadId: target.threadId, parentId, body: textAtBytes(bytes), licence: 'MIT', subjectIds: [], visibility: 'published',
+          threadId: target.threadId, parentId, body: textAtBytes(bytes), licence: 'MIT', subjectIds: [],
         }, { idempotencyKey: randomUUID(), deadline: Date.now() + 90_000 });
       return { realmId: target.realmId, postId: result.value.itemId, revisionId: result.value.revisionId };
     }
