@@ -241,6 +241,7 @@ export async function createGrowthAppealBoundariesFixture() {
       boardId: string,
       target: ThreadTarget,
       deliver = true,
+      targetKind: 'thread' | 'post' = 'thread',
     ): Promise<{
       record: QueueRecord;
       reportReceipt: Awaited<ReturnType<typeof call>>;
@@ -249,20 +250,21 @@ export async function createGrowthAppealBoundariesFixture() {
       authorDecision: Awaited<ReturnType<typeof call>>;
       appealKey: string;
     }> {
-      await grant(target.threadId, people.reporter.accountId, ['report:create']);
+      const targetId = targetKind === 'post' ? target.postId : target.threadId;
+      await grant(targetId, people.reporter.accountId, ['report:create']);
       const report = await command<{ reportId: string }>(
         'POST',
         '/v1/reports',
-        { target: { kind: 'thread', id: target.threadId }, reason: 'spam' },
+        { target: { kind: targetKind, id: targetId }, reason: 'spam' },
         { bearer: people.reporter.bearer, expectedStatus: 201 },
       );
       await completeRegisteredCommand(people.reporter.accountId, report.key, 'content.report.create');
 
-      await grant(target.threadId, people.decider.accountId, ['moderation:takedown']);
-      await grant(target.threadId, people.reviewer.accountId, ['moderation:takedown']);
+      await grant(targetId, people.decider.accountId, ['moderation:takedown']);
+      await grant(targetId, people.reviewer.accountId, ['moderation:takedown']);
       const takenDown = await command(
         'POST',
-        `/v1/threads/${target.threadId}:takeDown`,
+        `/v1/${targetKind === 'post' ? 'posts' : 'threads'}/${targetId}:takeDown`,
         { reason: 'Policy violation' },
         { bearer: people.decider.bearer, expectedStatus: 200 },
       );
@@ -272,7 +274,7 @@ export async function createGrowthAppealBoundariesFixture() {
         await db!.admin.query<{ decision_id: string }>(
           `SELECT decision_id FROM content.moderation_decision
            WHERE route=$1 AND target_id=$2 ORDER BY security_revision DESC LIMIT 1`,
-          [routed(target.threadId), target.threadId],
+          [routed(targetId), targetId],
         )
       ).rows[0];
       if (!decision) throw new Error(`Takedown did not create a moderation decision for ${target.threadId}`);
@@ -456,6 +458,13 @@ export async function createGrowthAppealBoundariesFixture() {
       },
       async deleteReviewer() {
         await deletePersona({ pool: db!.pool, auth: accountDeletionRuntime(system).auth }, people.reviewer);
+      },
+      async deleteAppellant() {
+        const clientId = `appeal_deletion_${randomUUID().replaceAll('-', '')}`;
+        const scopes = [...new Set([...system.auth.ordinaryScopes, 'account:delete'])];
+        await system.nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes });
+        await system.auth.issue({ accountId: people.author.accountId, clientId, scopes });
+        return deletePersona({ pool: db!.pool, auth: accountDeletionRuntime(system).auth }, people.author);
       },
       async createBoard(label: string) {
         return (await base.createRealmTarget(label, 'public')).boardId;
