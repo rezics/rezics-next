@@ -42,22 +42,22 @@ test('selected question pages requalify the caller and lifecycle after native so
     const deadline = () => Date.now() + 30_000;
     const actor = (account: Account) =>
       system.access.authenticate(account.bearer, { pool: system.database.pool, deadline: deadline() });
-    const page = (
-      access: Access,
-      caller: Actor,
-      realmId?: string,
-      after: string | null = null,
-      generation?: string,
-    ) =>
+    const page = (access: Access, caller: Actor, realmId?: string, after: string | null = null, generation?: string) =>
       readSelectedQuestionDirectory(
         { pool: system.database.pool, access },
         caller,
-        { after, limit: 20, ...(realmId === undefined ? {} : { realmId }), ...(generation === undefined ? {} : { lifecycleGeneration: generation }) },
+        {
+          after,
+          limit: 20,
+          ...(realmId === undefined ? {} : { realmId }),
+          ...(generation === undefined ? {} : { lifecycleGeneration: generation }),
+        },
         deadline(),
       );
 
-    const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Directory observations' }), 201))
-      .space as { spaceId: string };
+    const space = (
+      await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Directory observations' }), 201)
+    ).space as { spaceId: string };
     const realm = (
       await json(
         await call('POST', '/v1/realms', fixture.owner, {
@@ -154,10 +154,9 @@ test('selected question pages requalify the caller and lifecycle after native so
 
     const globalCaller = await actor(fixture.member);
     const globalAccess = afterSecondPreparation(system.access, 'definitions:read', async () => {
-      await system.database.pool.query(
-        `UPDATE access.account SET state = 'suspended' WHERE account_id = $1`,
-        [fixture.member.id],
-      );
+      await system.database.pool.query(`UPDATE access.account SET state = 'suspended' WHERE account_id = $1`, [
+        fixture.member.id,
+      ]);
     });
     await expect(
       page(globalAccess, globalCaller, undefined, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),
