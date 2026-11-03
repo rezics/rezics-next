@@ -439,11 +439,8 @@ test('Write wait deadline refusal stays bounded at three receipt history scales'
     }
   });
   expect(phases).toEqual({ prepared: 18, authorized: 18, finalized: 18 });
-  const receipts = await db.admin.query(
-    'SELECT count(*)::int AS count FROM core.receipt WHERE command_kind = $1 AND idempotency_key LIKE $2',
-    [kind, `${prefix}wait-%`],
-  );
-  expect(receipts.rows).toEqual([{ count: 0 }]);
+  const receipts = await db.admin.query('SELECT count(*)::int AS count FROM core.receipt WHERE command_kind = $1', [kind]);
+  expect(receipts.rows).toEqual([{ count: scales.at(-1)! * ordinalsPerScale }]);
   const outbox = await db.admin.query('SELECT count(*)::int AS count FROM core.outbox WHERE subject = $1', [
     `${prefix}command`,
   ]);
