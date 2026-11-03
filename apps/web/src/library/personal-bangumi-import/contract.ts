@@ -32,10 +32,17 @@ export type BangumiApplyState = 'preserve' | 'replace' | 'omit';
 export type BangumiOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
 export type BangumiFieldMeaning = 'known' | 'unknown' | 'invalid';
 
-export type BangumiRecord = Record<string, unknown>;
+export type BangumiJson =
+  | string
+  | number
+  | boolean
+  | null
+  | BangumiJson[]
+  | { readonly [key: string]: BangumiJson };
+export type BangumiRecord = { readonly [key: string]: BangumiJson };
 export type BangumiRetainedField = {
   field: string;
-  value: unknown;
+  value: BangumiJson;
   meaning: BangumiFieldMeaning;
   reason: string;
 };

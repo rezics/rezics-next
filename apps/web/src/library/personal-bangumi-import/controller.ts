@@ -354,13 +354,13 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     if (command.kind === 'apply') {
       const done = await applyBatch(command.body.rows, true);
-      if (notice?.kind === 'unknown') return snapshot();
+      if (notice && 'kind' in notice && notice.kind === 'unknown') return snapshot();
       applyQueue.shift();
       const token = generation;
       while (applyQueue.length && token === generation && live() && !stopApply) {
         const batch = applyQueue[0]!;
         const nextDone = await applyBatch(batch);
-        if (notice?.kind === 'unknown') return snapshot();
+        if (notice && 'kind' in notice && notice.kind === 'unknown') return snapshot();
         applyQueue.shift();
         if (!nextDone && remaining.length) break;
       }

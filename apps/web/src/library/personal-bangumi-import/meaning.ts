@@ -13,7 +13,7 @@ import type {
 export function bangumiTitle(source: BangumiRecord, fallback: string): string {
   const subject = source.subject;
   if (subject && typeof subject === 'object' && !Array.isArray(subject)) {
-    const labels = subject as Record<string, unknown>;
+    const labels = subject;
     if (typeof labels.name === 'string' && labels.name.trim()) return labels.name.trim();
     if (typeof labels.name_cn === 'string' && labels.name_cn.trim()) return labels.name_cn.trim();
   }

@@ -127,14 +127,23 @@ function isMatch(value: unknown): value is BangumiMatch {
   return typeof value === 'string' && (matches as readonly string[]).includes(value);
 }
 
+function isJson(value: unknown): value is import('./contract').BangumiJson {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.every(isJson);
+  if (!record(value)) return false;
+  return Object.values(value).every(isJson);
+}
+
 function isField(value: unknown): value is BangumiRetainedField {
   if (!record(value) || typeof value.field !== 'string' || typeof value.reason !== 'string') return false;
+  if (!('value' in value) || !isJson(value.value)) return false;
   return value.meaning === 'known' || value.meaning === 'unknown' || value.meaning === 'invalid';
 }
 
 function isEvidence(value: unknown): value is BangumiEvidence {
-  if (!record(value) || !record(value.source) || !Array.isArray(value.fields) || typeof value.medium !== 'string')
+  if (!record(value) || !isJson(value.source) || typeof value.source !== 'object' || value.source === null || Array.isArray(value.source))
     return false;
+  if (!Array.isArray(value.fields) || typeof value.medium !== 'string') return false;
   if (value.stateRole !== null && typeof value.stateRole !== 'string') return false;
   return value.fields.every(isField);
 }

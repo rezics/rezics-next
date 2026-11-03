@@ -30,17 +30,20 @@ export function BangumiReviewPage({
       </p>
       {snap.cancelled ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
       <ul className="space-y-6">
-        {snap.page.map((row) => (
-          <li key={row.ordinal}>
-            <BangumiRowReview
-              row={row}
-              meta={snap.meta.find((item) => item.ordinal === row.ordinal)}
-              busy={busy || snap.cancelled}
-              onSave={onSave}
-              onChoose={onChoose}
-            />
-          </li>
-        ))}
+        {snap.page.map((row) => {
+          const meta = snap.meta.find((item) => item.ordinal === row.ordinal);
+          return (
+            <li key={row.ordinal}>
+              <BangumiRowReview
+                row={row}
+                {...(meta ? { meta } : {})}
+                busy={busy || snap.cancelled}
+                onSave={onSave}
+                onChoose={onChoose}
+              />
+            </li>
+          );
+        })}
       </ul>
       <div className="flex flex-wrap gap-3">
         {snap.next !== null ? (
