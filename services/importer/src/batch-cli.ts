@@ -128,7 +128,12 @@ function validateApiOrigin(api: string, testOrigin?: string): string {
     return url.origin;
   }
   const test = new URL(parseOrigin(testOrigin, 'test origin'));
-  if (test.protocol !== 'http:' || test.hostname !== '127.0.0.1' || test.origin !== testOrigin || url.origin !== test.origin)
+  if (
+    test.protocol !== 'http:' ||
+    test.hostname !== '127.0.0.1' ||
+    test.origin !== testOrigin ||
+    url.origin !== test.origin
+  )
     throw new UsageFailure('--api must match the exact loopback test origin.');
   return url.origin;
 }
@@ -137,15 +142,7 @@ export function parseBatchArgs(argv: readonly string[], testOrigin?: string): Pa
   boundedArguments(argv);
   if (argv.length === 0 || (argv.length === 1 && argv[0] === '--help')) return 'help';
   const values = new Map<string, string>();
-  const valueFlags = new Set([
-    '--manifest',
-    '--api',
-    '--account-key',
-    '--account',
-    '--client',
-    '--auth',
-    '--progress',
-  ]);
+  const valueFlags = new Set(['--manifest', '--api', '--account-key', '--account', '--client', '--auth', '--progress']);
   let json = false;
   let run = false;
   for (let index = 0; index < argv.length; index++) {
@@ -179,7 +176,9 @@ export function parseBatchArgs(argv: readonly string[], testOrigin?: string): Pa
   if (run && present.length !== credentialFlags.length)
     throw new UsageFailure('batch --run requires --api --account-key --account --client --auth.');
   if (!run && present.length !== 0 && present.length !== credentialFlags.length)
-    throw new UsageFailure('Credential flags must be supplied together; preview still does not open the key or contact the network.');
+    throw new UsageFailure(
+      'Credential flags must be supplied together; preview still does not open the key or contact the network.',
+    );
   let credentials: Credentials | undefined;
   if (present.length === credentialFlags.length) {
     const account = values.get('--account')!;
@@ -330,7 +329,10 @@ function renderPreview(plan: BatchManifestPlan): string {
       `${job.index}/${plan.jobs.length} ${terminalSafe(job.name)}  source ${job.sourceKind} alias ${terminalSafe(job.sourceAlias)}  ${job.inputMode}  dump ${terminalSafe(job.dump.path)}  state ${terminalSafe(job.state.path)}`,
     );
   }
-  lines.push('', 'Execute with the same manifest and --run after supplying credentials. Preview does not cache a plan token.');
+  lines.push(
+    '',
+    'Execute with the same manifest and --run after supplying credentials. Preview does not cache a plan token.',
+  );
   return `${lines.join('\n')}\n`;
 }
 
@@ -388,7 +390,13 @@ function wrapProgressSink(
     write(frame, signal) {
       const event = parseProgressFrame(frame);
       if (event) capture.event = event;
-      const context = { index: job.index, jobs, name: job.name, sourceKind: job.sourceKind, sourceAlias: job.sourceAlias };
+      const context = {
+        index: job.index,
+        jobs,
+        name: job.name,
+        sourceKind: job.sourceKind,
+        sourceAlias: job.sourceAlias,
+      };
       if (mode === 'jsonl' && event) {
         return sink.write(`${jsonSafe({ ...event, batch: context })}\n`, signal);
       }
@@ -413,11 +421,7 @@ function failure(error: unknown): BatchCliResult {
         ? 'Batch interrupted before a job started; durable per-source state is unchanged.'
         : 'Invalid batch arguments.';
   const code =
-    error instanceof Error && error.name === 'AbortError'
-      ? 130
-      : error instanceof BatchManifestError
-        ? 2
-        : 2;
+    error instanceof Error && error.name === 'AbortError' ? 130 : error instanceof BatchManifestError ? 2 : 2;
   return resultOf(code, '', `${terminalSafe(message)}\n`);
 }
 
@@ -485,13 +489,7 @@ export async function runBatchCli(argv: readonly string[], options: BatchCliOpti
       break;
     }
     const capture: { event: ImportProgressEvent | null } = { event: null };
-    const progressSink = wrapProgressSink(
-      options.progressSink,
-      job,
-      plan.jobs.length,
-      parsed.progressMode,
-      capture,
-    );
+    const progressSink = wrapProgressSink(options.progressSink, job, plan.jobs.length, parsed.progressMode, capture);
     const result = await runSingleSource(ordinaryImportArgv(job, parsed.credentials, parsed.progressMode), {
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.signal ? { signal: options.signal } : {}),

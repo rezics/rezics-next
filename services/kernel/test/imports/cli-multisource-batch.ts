@@ -269,7 +269,10 @@ export async function openMultisourceBatchCli() {
           state,
           ...credentials,
         ],
-        { fetch: ((input: Request | string | URL, init?: RequestInit) => authorizedFetch(input, init)) as unknown as typeof fetch },
+        {
+          fetch: ((input: Request | string | URL, init?: RequestInit) =>
+            authorizedFetch(input, init)) as unknown as typeof fetch,
+        },
       );
       expect(result.openHandles).toBe(0);
       return result;

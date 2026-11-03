@@ -27,7 +27,7 @@ const JOB_KEYS = new Set([
 const MANIFEST_KEYS = new Set(['version', 'jobs']);
 const FORBIDDEN_JOB_KEYS: Readonly<Record<string, string>> = {
   dumpSet:
-    'An Open Library dump-set manifest is one job\'s complete --dump input, not a batch job list. The ordinary single-source CLI has not delivered a dump-set flag.',
+    "An Open Library dump-set manifest is one job's complete --dump input, not a batch job list. The ordinary single-source CLI has not delivered a dump-set flag.",
   include: 'Batch manifests cannot include other files.',
   glob: 'Batch jobs require an exact local path; globs are not expanded.',
   command: 'Batch jobs cannot declare shell commands or executable hooks.',
@@ -132,9 +132,7 @@ export function sameFileIdentity(
 }
 
 export function identityChanged(expected: BatchFileIdentity, actual: BatchFileIdentity): boolean {
-  return (
-    !sameFileIdentity(expected, actual) || expected.size !== actual.size || expected.mtimeMs !== actual.mtimeMs
-  );
+  return !sameFileIdentity(expected, actual) || expected.size !== actual.size || expected.mtimeMs !== actual.mtimeMs;
 }
 
 async function admitRegularFile(path: string, role: string, declared: string): Promise<BatchFileIdentity> {
@@ -205,7 +203,9 @@ function parseCompression(value: unknown, index: number, sourceKind: SourceId): 
     return parsed;
   } catch (error) {
     throw new BatchManifestError(
-      error instanceof DumpInputError ? error.message : `Job ${index} compression is not a delivered single-source option.`,
+      error instanceof DumpInputError
+        ? error.message
+        : `Job ${index} compression is not a delivered single-source option.`,
     );
   }
 }
@@ -303,7 +303,11 @@ function refuseConflicts(jobs: readonly BatchJobPlan[]): void {
     for (let right = left + 1; right < jobs.length; right++) {
       const a = jobs[left]!;
       const b = jobs[right]!;
-      if (a.state.declared !== b.state.declared && sameFileIdentity(a.state, b.state) && a.sourceAlias === b.sourceAlias)
+      if (
+        a.state.declared !== b.state.declared &&
+        sameFileIdentity(a.state, b.state) &&
+        a.sourceAlias === b.sourceAlias
+      )
         throw new BatchManifestError(
           `Jobs ${a.index} and ${b.index} name different state paths that are the same file for ${JSON.stringify(a.sourceAlias)}.`,
         );

@@ -14,7 +14,9 @@ test('An operator previews and deliberately runs a bounded explicit local manife
 
     const first = await f.runBatch();
     expect(first.code, first.stderr).toBe(0);
-    expect(first.document.jobs.map((job: { sourceAlias: string; status: string }) => [job.sourceAlias, job.status])).toEqual([
+    expect(
+      first.document.jobs.map((job: { sourceAlias: string; status: string }) => [job.sourceAlias, job.status]),
+    ).toEqual([
       ['bangumi', 'completed'],
       ['catalogue-ol', 'completed'],
       ['wikidata', 'completed'],

@@ -42,18 +42,7 @@ async function writeManifest(directory: string, jobs: unknown[], name = 'batch.j
 }
 
 function credentials(key: string) {
-  return [
-    '--api',
-    origin,
-    '--account-key',
-    key,
-    '--account',
-    account,
-    '--client',
-    'batch-cli',
-    '--auth',
-    authOrigin,
-  ];
+  return ['--api', origin, '--account-key', key, '--account', account, '--client', 'batch-cli', '--auth', authOrigin];
 }
 
 const clock = { now: () => 1_000, sleep: async () => {} };
@@ -71,7 +60,11 @@ function importFetch(options: { loseOpenLibrary?: boolean; requests?: string[]; 
       if (url.pathname === '/signin/key') {
         const body = (await request.json()) as { scope?: string[] };
         const scopes = body.scope ?? [];
-        const allowed = [IMPORTER_SCOPES, [...IMPORTER_SCOPES, 'subject:read'], [...VNDB_IMPORTER_SCOPES, 'subject:read']];
+        const allowed = [
+          IMPORTER_SCOPES,
+          [...IMPORTER_SCOPES, 'subject:read'],
+          [...VNDB_IMPORTER_SCOPES, 'subject:read'],
+        ];
         if (!allowed.some((expected) => JSON.stringify(expected) === JSON.stringify(scopes)))
           return new Response('', { status: 401 });
         session = `batch-${++tokens}`;
@@ -92,7 +85,9 @@ function importFetch(options: { loseOpenLibrary?: boolean; requests?: string[]; 
     const body = (await request.json()) as BatchWriteRequest;
     if (
       options.loseOpenLibrary &&
-      body.commands.some((command) => command.source.source === 'openlibrary' || command.source.source === 'catalogue-ol')
+      body.commands.some(
+        (command) => command.source.source === 'openlibrary' || command.source.source === 'catalogue-ol',
+      )
     ) {
       throw new DOMException('Lost Open Library write response', 'AbortError');
     }
@@ -229,9 +224,9 @@ test('run executes independent jobs serially, reimports idempotently and stops l
     clock,
   });
   expect(repeat.code).toBe(0);
-  expect(JSON.parse(repeat.stdout).jobs.every((job: { diagnostic: string }) => job.diagnostic.includes('unchanged'))).toBe(
-    true,
-  );
+  expect(
+    JSON.parse(repeat.stdout).jobs.every((job: { diagnostic: string }) => job.diagnostic.includes('unchanged')),
+  ).toBe(true);
 
   await writeFile(join(directory, 'openlibrary.tsv'), 'not-a-dump\n', { mode: 0o600 });
   const stopped = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
