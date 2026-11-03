@@ -82,8 +82,8 @@ test('one disclosure-aware projection bounds authored occurrences and preserves 
     'https://source.example/article?edition=a#quoted',
     'https://source.example/article?edition=b#quoted',
   ]);
-  expect(projection.references.entries[0]).toMatchObject({ destination: 'email', location: '' });
-  expect(projection.references.entries[1]).toMatchObject({ destination: 'web', location: 'source.example' });
+  expect(projection.references.entries[0]).toMatchObject({ destination: 'email' });
+  expect(projection.references.entries[1]).toMatchObject({ destination: 'web' });
   expect(JSON.stringify(projection.references)).not.toContain(hidden);
   expect(JSON.stringify(projection.references)).not.toContain(hiddenHref);
   expect(JSON.stringify(projection.references)).not.toContain('mention.example');
@@ -249,6 +249,7 @@ test('published reader inspects one occurrence, returns without changing its fra
     await act(async () => launcher.click());
     const navigation = mounted.document.querySelector<HTMLElement>(`nav[aria-label="${m.post_references_title()}"]`)!;
     expect(navigation.textContent).not.toContain('Hidden source');
+    expect(navigation.textContent).toContain('source.example');
     const rows = Array.from(navigation.querySelectorAll<HTMLButtonElement>('button'));
     expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
       entryName(1, 'Same authored label'),

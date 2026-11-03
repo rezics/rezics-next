@@ -30,7 +30,6 @@ export type PostReferenceEntry = Readonly<{
   label: string;
   href: string;
   destination: 'web' | 'email';
-  location: string;
 }>;
 
 export type PostReferenceList = Readonly<{
@@ -107,11 +106,7 @@ function referenceDestination(value: unknown) {
   if (!href) return null;
   const parsed = new URL(href);
   const destination = parsed.protocol === 'mailto:' ? 'email' : 'web';
-  return {
-    href,
-    destination,
-    location: destination === 'email' ? '' : parsed.hostname,
-  } as const;
+  return { href, destination } as const;
 }
 
 /**

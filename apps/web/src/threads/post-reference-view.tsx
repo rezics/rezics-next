@@ -14,6 +14,10 @@ type CopyState = 'idle' | 'pending' | 'success' | 'denied' | 'unavailable';
 const activeReferences = new WeakMap<Document, () => void>();
 const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
+function webLocation(entry: PostReferenceEntry) {
+  return new URL(entry.href).hostname;
+}
+
 export function PostReferenceView({
   references,
   position,
@@ -169,7 +173,7 @@ export function PostReferenceView({
               <span>{m.post_references_email_destination({}, options)}</span>
             ) : (
               <bdi dir="ltr" className="[unicode-bidi:plaintext]">
-                {selected.location}
+                {webLocation(selected)}
               </bdi>
             )}
           </p>
@@ -252,7 +256,7 @@ export function PostReferenceView({
                         m.post_references_email_destination({}, options)
                       ) : (
                         <bdi dir="ltr" className="[unicode-bidi:plaintext]">
-                          {entry.location}
+                          {webLocation(entry)}
                         </bdi>
                       )}
                     </span>
