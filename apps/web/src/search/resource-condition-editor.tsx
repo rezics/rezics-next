@@ -74,7 +74,9 @@ function ResourceConditionFields({
           {...(fieldIssues.length ? { 'aria-describedby': errorId } : {})}
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) => onChange({ [kind]: { id: event.currentTarget.value } } as FilterDocument)}
+          onChange={(event) =>
+            onChange({ [kind]: { id: event.currentTarget.value } } as unknown as FilterDocument)
+          }
         />
         {fieldIssues.length > 0 && (
           <p id={errorId} className="text-sm text-destructive">
@@ -103,7 +105,7 @@ export function createRequestResourceConditionExtension(
   return {
     choices: kinds.map((kind) => ({
       label: `${m.condition_add({}, options)}: ${resourceLabel(kind, options)}`,
-      value: { [kind]: { id: '' } } as FilterDocument,
+      value: { [kind]: { id: '' } } as unknown as FilterDocument,
     })),
     label(value, context) {
       const kind = requestResourceKind(value);
