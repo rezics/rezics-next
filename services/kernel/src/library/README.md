@@ -1675,9 +1675,11 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 - Operation/touches: `readMembers -> readDynamicMembers`, stored rule/release, both saved-rule authority brackets,
   native Source and complete original/fact closure, scoped currentness and repeated Collection revision/generation.
-- Bound/test: [the composed derivation](cost-saved-query-evaluation.md) identifies finite expansion and ordered
-  seeks, but the unidentified-label negative probe lacks an indexed history-independent row bound. Dedicated
-  64/512/4096 first/deep/terminal/refusal growth remains unmeasured; ad-hoc and command suites do not cover it.
+- Bound/test: [the composed derivation](cost-saved-query-evaluation.md) identifies the existing ordered partial
+  `owner_index_label_legacy` seek, which excludes retained deleted assignments from the unidentified-label
+  witness. The canonical schema and timestamped migration already provide this path; do not duplicate it. Its
+  selected native plan and the dedicated 64/512/4096 first/deep/terminal/refusal growth remain unmeasured.
+  Ad-hoc and command suites do not cover the composed wrapper.
 
 ### Native entry incarnation cutover page
 
