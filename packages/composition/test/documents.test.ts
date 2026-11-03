@@ -100,21 +100,13 @@ test('document selection follows current best rank, unknown snaks and the reader
   ]);
 });
 
-test('the shipped Recipe configuration selects instructions and its shared summary without another renderer', () => {
-  const page = resolveTemplate(profile as PresentationProfile, { type: 'schema:Recipe' }).document;
-  expect(documentRead(page, id, [], candidate)).toEqual({
+test('the shipped Recipe page uses the generic template and its shared summary', () => {
+  const resolved = resolveTemplate(profile as PresentationProfile, { type: 'schema:Recipe' });
+  expect(resolved).toMatchObject({ scope: 'generic', key: null });
+  expect(documentRead(resolved.document, id, [], candidate)).toEqual({
     kind: 'documents',
     id,
     context: candidate,
-    properties: [
-      'schema:abstract',
-      'schema:author',
-      'schema:cookTime',
-      'schema:datePublished',
-      'schema:recipeIngredient',
-      'schema:recipeInstructions',
-      'schema:recipeYield',
-      'schema:suitableForDiet',
-    ],
+    properties: ['schema:abstract'],
   });
 });

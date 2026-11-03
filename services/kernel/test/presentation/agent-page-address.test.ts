@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import {
@@ -156,33 +155,10 @@ async function post(path: string, token: string | undefined, body?: unknown, ide
 }
 
 async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', label: string): Promise<string> {
-  const id = newId(catalogueRoute);
-  const resource = { route: catalogueRoute, id };
-  await createSubject(pool, {
-    actor: {
-      kind: 'account',
-      accountId: staff.id,
-      clientId: 'fixture',
-      requestedBy: null,
-      scopes: ['subject:create'],
-      authnEpoch: 1,
-    },
-    target: resource,
-    idempotencyKey: key(),
-    digest: createHash('sha256').update(key()).digest(),
-    item: { type, labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorization: {
-      action: 'subject:create',
-      resource,
-      denied: () => new Error('Fixture subject authorization denied'),
-      async authorize() {
-        return 'execute';
-      },
-    },
-  });
+  const created = await post('/v1/subjects', await bearer(staff), { type, labels: { en: label } });
+  expect(created.response.status, JSON.stringify(created.body)).toBe(201);
   await drain();
-  return id;
+  return created.body.subject.id as string;
 }
 
 beforeAll(async () => {
