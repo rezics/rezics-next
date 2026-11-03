@@ -1049,7 +1049,7 @@ export async function retireNativeCollectionCapturePage(
       candidateKeys: 100,
       nativeRows: 10000,
       nativePoints: 256,
-      identityMetadataRows: 0,
+      identityMetadataRows: 2, // The existing retirement step reads the partition and completed receipt.
       witnessKeys: 0,
       statements: 32,
       bytes: 1024 * 1024,
