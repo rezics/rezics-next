@@ -35,8 +35,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/post-history-current.test.tsx
@@ -45,10 +45,10 @@ acceptance:
   placement: default
   failing: true
   tests:
-    - "Open History with admitted conversation/Board/place and current author presentation, select an immutable revision, visit its exact/comparison destinations and return only while admitted."
-    - "Associate native context and enrichment by exact revision identity; preserve historical zero, question/revision/scale and original versus terminal target; distinguish withheld/absent/failed context and citations."
-    - "Exercise actual actor/account/session/CSRF/exposure/locale/post/thread/cursor/source replacement, first-render disclosure and delayed retirement without trusting URL equality or unobserved ABA."
-    - "Consume generated native envelope variants at1/20/100 in O(N+K), one replacing page and no duplicate hydration; native growth256/1024/4096 remains producer evidence."
+    - 'Open History with admitted conversation/Board/place and current author presentation, select an immutable revision, visit its exact/comparison destinations and return only while admitted.'
+    - 'Associate native context and enrichment by exact revision identity; preserve historical zero, question/revision/scale and original versus terminal target; distinguish withheld/absent/failed context and citations.'
+    - 'Exercise actual actor/account/session/CSRF/exposure/locale/post/thread/cursor/source replacement, first-render disclosure and delayed retirement without trusting URL equality or unobserved ABA.'
+    - 'Consume generated native envelope variants at1/20/100 in O(N+K), one replacing page and no duplicate hydration; native growth256/1024/4096 remains producer evidence.'
 ---
 
 # Finish the current-context History visit after installed publication
