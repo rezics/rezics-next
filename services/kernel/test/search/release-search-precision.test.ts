@@ -64,9 +64,8 @@ test('unknown and invalid native time never acquires a guessed filterable year',
 });
 
 test('precise compilation needs active physical identity and complete unique population in every pool', async () => {
-  const { calendarFormatForReadyGeneration, calendarIndexDefinition, CALENDAR_INDEX_FORMAT } = await import(
-    '../../src/search/release-search-calendar.ts'
-  );
+  const { calendarFormatForReadyGeneration, calendarIndexDefinition, CALENDAR_INDEX_FORMAT } =
+    await import('../../src/search/release-search-calendar.ts');
   const definition = calendarIndexDefinition({
     mappings: {
       _meta: { index_format: 1 },
@@ -80,7 +79,9 @@ test('precise compilation needs active physical identity and complete unique pop
   const ready = { mappings, physical, active: physical, population, requiredPartitionsByPool };
 
   expect(calendarFormatForReadyGeneration(ready)).toBe(CALENDAR_INDEX_FORMAT);
-  expect(calendarFormatForReadyGeneration({ ...ready, active: { ...physical, indexUuid: 'replaced' } })).toBeUndefined();
+  expect(
+    calendarFormatForReadyGeneration({ ...ready, active: { ...physical, indexUuid: 'replaced' } }),
+  ).toBeUndefined();
   expect(
     calendarFormatForReadyGeneration({ ...ready, population: { ...population, incarnation: 'stale-incarnation' } }),
   ).toBeUndefined();

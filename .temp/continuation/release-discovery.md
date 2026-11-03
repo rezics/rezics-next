@@ -49,9 +49,9 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Calendar precision survives prepared physical generation population, publication, current matching, API and display; stale or incomplete generations cannot compile precise ranges."
-    - "Disclosure, redirect, date and producer changes invalidate stale group and child evidence; missing, unknown, conflicting and duplicate work links never fabricate dates or leak children."
-    - "Reload/back navigation, filters, expansion, and both continuations preserve request meaning across all eight locales with accessible loading, repair, unavailable, empty, and terminal states."
+    - 'Calendar precision survives prepared physical generation population, publication, current matching, API and display; stale or incomplete generations cannot compile precise ranges.'
+    - 'Disclosure, redirect, date and producer changes invalidate stale group and child evidence; missing, unknown, conflicting and duplicate work links never fabricate dates or leak children.'
+    - 'Reload/back navigation, filters, expansion, and both continuations preserve request meaning across all eight locales with accessible loading, repair, unavailable, empty, and terminal states.'
     - Native 1x/4x/16x release/work and high-fanout growth exercise every all-pool seek and preparation bound; absent execution remains unmeasured.
   workerOwned: true
 estimate:
