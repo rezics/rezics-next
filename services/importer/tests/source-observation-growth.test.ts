@@ -94,17 +94,25 @@ test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fi
         database.prepare = ((sql: string) => {
           const statement = original(sql);
           if (sql.includes('run_aggregate_operations') || sql.includes('run_aggregate_heads')) {
-            const wrap = (method: 'get' | 'all' | 'run') => {
-              const prior = statement[method].bind(statement);
-              statement[method] = ((...args: never[]) => {
-                journal++;
-                if (sql.includes('ORDER BY operation_id LIMIT')) pages++;
-                return prior(...args);
-              }) as typeof statement.get;
+            const count = () => {
+              journal++;
+              if (sql.includes('ORDER BY operation_id LIMIT')) pages++;
             };
-            wrap('get');
-            wrap('all');
-            wrap('run');
+            const get = statement.get.bind(statement);
+            const all = statement.all.bind(statement);
+            const run = statement.run.bind(statement);
+            statement.get = ((...args: Parameters<typeof get>) => {
+              count();
+              return get(...args);
+            }) as typeof statement.get;
+            statement.all = ((...args: Parameters<typeof all>) => {
+              count();
+              return all(...args);
+            }) as typeof statement.all;
+            statement.run = ((...args: Parameters<typeof run>) => {
+              count();
+              return run(...args);
+            }) as typeof statement.run;
           }
           expect(sql).not.toMatch(/FROM run_aggregate_operations(?!.*WHERE)/);
           return statement;

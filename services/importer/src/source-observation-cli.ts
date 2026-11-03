@@ -9,6 +9,9 @@ import {
   nativeReason,
   parseObservationReason,
   safeObservationSummary,
+  type AggregateOperationStatus,
+  type IntendedObservation,
+  type RetainedObservationHead,
 } from './source-observation.ts';
 
 const SOURCE = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -172,7 +175,16 @@ function origin(value: string, testOrigin?: string): string {
   return url.origin;
 }
 
-function render(operation: Parameters<typeof safeObservationSummary>[0] & { nativeReason?: string | null }): string {
+function render(operation: {
+  operationId: string;
+  recordKey: string;
+  subjectId: string;
+  sourceAlias: string;
+  intended: IntendedObservation;
+  reviewedHead: RetainedObservationHead | null;
+  status: AggregateOperationStatus;
+  nativeReason: string | null;
+}): string {
   const reason = parseObservationReason(operation.nativeReason);
   return `${JSON.stringify(
     safeObservationSummary({

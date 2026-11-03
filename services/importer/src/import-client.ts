@@ -35,7 +35,6 @@ import {
 } from './import-contract.ts';
 
 type SubjectAPI = ReturnType<KernelClient['subjects']>;
-type StatisticPoint = ReturnType<ReturnType<SubjectAPI['source-statistics']>>;
 export type ReviewedSubjectRead = NonNullable<Awaited<ReturnType<SubjectAPI['get']>>['data']>;
 export type ReviewedCandidatePage = NonNullable<Awaited<ReturnType<SubjectAPI['candidates']['get']>>['data']>;
 type CandidateAPI = ReturnType<SubjectAPI['candidates']>;
@@ -401,7 +400,7 @@ function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceSta
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<ImportSourceStatisticFigure> {
+  ): Promise<void> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const body = sourceStatisticBody(input.value);
     const reply = await response(
@@ -409,14 +408,14 @@ function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceSta
         client
           .subjects({ id: input.subjectId })
           ['source-statistics']({ source: input.source })
-          .put(body as Parameters<StatisticPoint['put']>[0], {
+          .put(body as never, {
             headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
             ...fetchOptions(signal),
           }),
       200,
       signal,
     );
-    return statisticFigure(reply.body, input.source, body);
+    statisticFigure(reply.body, input.source, body);
   }
   async function clearSourceStatistic(
     input: {
@@ -453,7 +452,7 @@ function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceSta
         client
           .subjects({ id: input.subjectId })
           ['source-statistics']({ source: input.source })
-          .$clear.post(value as Parameters<StatisticPoint['$clear']['post']>[0], {
+          .$clear.post(value as never, {
             headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
             ...fetchOptions(signal),
           }),

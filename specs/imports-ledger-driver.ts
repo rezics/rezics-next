@@ -59,7 +59,7 @@ export interface RunInput {
   disappearanceThreshold?: number;
 }
 export interface RunResult {
-  status: 'committed' | 'invalid-dump' | 'mass-disappearance' | 'bulk-failed' | 'interrupted' | 'busy';
+  status: 'committed' | 'invalid-dump' | 'mass-disappearance' | 'bulk-failed' | 'interrupted' | 'busy' | 'observation-conflict';
   new: string[];
   changed: string[];
   unchanged: string[];

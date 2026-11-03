@@ -239,7 +239,7 @@ export function headFromStatistic(
   const digest =
     row.observation?.digest ??
     observationDigest(subjectId, {
-      sourceAlias: row.sourceAlias,
+      ...(row.sourceAlias === undefined ? {} : { sourceAlias: row.sourceAlias }),
       sourceRecordId: row.sourceRecordId,
       scale: row.scale,
       mean: row.mean,

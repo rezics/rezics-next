@@ -652,7 +652,11 @@ export class Importer {
         error instanceof ImportTransportError &&
         (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 503)
       )
-        return { kind: 'unavailable', status: error.status, code: error.code };
+        return {
+          kind: 'unavailable',
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.code === undefined ? {} : { code: error.code }),
+        };
       throw error;
     }
   }
@@ -946,7 +950,7 @@ export class Importer {
       }
       const confirmed = await this.confirmObservation(prior.subjectId, prior.intended, signal, write);
       const retained =
-        prior.kind === 'clear'
+        prior.intended.kind === 'clear'
           ? headFromClear(prior.subjectId, prior.intended)
           : (confirmed.head ?? headFromStatistic(prior.subjectId, { source: 'vndb', ...prior.intended } as never));
       this.session.store.retainAggregateHead(source, { ...retained, subjectId: prior.subjectId });

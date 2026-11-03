@@ -60,7 +60,7 @@ export interface ImportTransport {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<ImportSourceStatisticFigure>;
+  ): Promise<void>;
   readSourceStatistics?(
     input: { subjectId: string },
     signal?: AbortSignal,
