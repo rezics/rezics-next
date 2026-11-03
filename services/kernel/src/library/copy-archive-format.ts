@@ -62,7 +62,7 @@ export type ParsedCopyArchive = {
   holdings: { ordinal: number; evidence: ArchivedHolding }[];
 };
 
-const invalid = (): never => {
+const invalid: () => never = () => {
   throw new ProblemError('invalid_request');
 };
 function object(value: unknown): Record<string, unknown> {
@@ -236,7 +236,7 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   if (Object.keys(omissions).length > 32 || Object.entries(omissions).some(([k, v]) => !text(k, 200) || !text(v, 2000)))
     invalid();
   if (!Array.isArray(archive.records) || archive.records.length !== m.rows) invalid();
-  const coverage = new Map(exportSections.map((section) => [section, 0]));
+  const coverage = new Map<string, number>(exportSections.map((section) => [section, 0]));
   const holdings: ParsedCopyArchive['holdings'] = [];
   const ids = new Set<string>();
   let recordBytes = 0,
