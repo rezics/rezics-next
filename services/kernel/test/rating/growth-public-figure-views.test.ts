@@ -5,12 +5,15 @@ import { createViewGrowthFixture, VIEW_AXES, VIEW_SCALES } from './support/growt
 
 for (const axis of VIEW_AXES) {
   test(`fixed public figure views remain exact and bounded as unrelated ${axis} grow`, async () => {
-    console.info('public figure views source', JSON.stringify({
-      revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: import.meta.dir, encoding: 'utf8' }).trim(),
-      command: 'bun run --cwd services/kernel check test/rating/growth-public-figure-views.test.ts',
-      fixture: 'test/rating/support/figure-fixture.ts',
-      axis,
-    }));
+    console.info(
+      'public figure views source',
+      JSON.stringify({
+        revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: import.meta.dir, encoding: 'utf8' }).trim(),
+        command: 'bun run --cwd services/kernel check test/rating/growth-public-figure-views.test.ts',
+        fixture: 'test/rating/support/figure-fixture.ts',
+        axis,
+      }),
+    );
     const fixture = await createViewGrowthFixture();
     try {
       expect(fixture.ids).toHaveLength(4);
@@ -27,9 +30,11 @@ for (const axis of VIEW_AXES) {
         operation: () => fixture.read(),
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...VIEW_SCALES]);
-      const relations = [...new Set(report.samples.flatMap(({ repetitions }) =>
-        repetitions.flatMap(({ relations }) => Object.keys(relations)),
-      ))];
+      const relations = [
+        ...new Set(
+          report.samples.flatMap(({ repetitions }) => repetitions.flatMap(({ relations }) => Object.keys(relations))),
+        ),
+      ];
       expect(relations).toEqual(expect.arrayContaining(['rating.question', 'rating.public_figure']));
       assertGrowthAccessPaths(name, report.samples, relations);
       for (const sample of report.samples) {
@@ -43,17 +48,23 @@ for (const axis of VIEW_AXES) {
           expect(cost.blocks, evidence).toBeGreaterThan(0);
           const figures = Object.entries(cost.relations).filter(([name]) => name.endsWith('public_figure'));
           expect(figures.length, evidence).toBeGreaterThan(0);
-          expect(figures.reduce((sum, [, value]) => sum + value.rows, 0), evidence).toBeLessThanOrEqual(4);
+          expect(
+            figures.reduce((sum, [, value]) => sum + value.rows, 0),
+            evidence,
+          ).toBeLessThanOrEqual(4);
           for (const [, value] of figures) expect(value.sequentialScans, evidence).toBe(0);
         }
       }
-      console.info('public figure views observations', JSON.stringify({
-        axis,
-        selected: [...fixture.expected],
-        partitionCount: fixture.partitionCount,
-        samples: report.samples,
-        verdicts: report.verdicts,
-      }));
+      console.info(
+        'public figure views observations',
+        JSON.stringify({
+          axis,
+          selected: [...fixture.expected],
+          partitionCount: fixture.partitionCount,
+          samples: report.samples,
+          verdicts: report.verdicts,
+        }),
+      );
     } finally {
       await fixture.close();
     }

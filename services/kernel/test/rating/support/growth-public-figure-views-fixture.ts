@@ -102,10 +102,15 @@ export async function createViewGrowthFixture() {
           }
         }
         // Verify the actual independent axes, not just the requested seeding size.
-        const footprint = (await db.query<{
-          subjects: number; figures: number; populations: number; votes: number; components: number;
-        }>(
-          `SELECT
+        const footprint = (
+          await db.query<{
+            subjects: number;
+            figures: number;
+            populations: number;
+            votes: number;
+            components: number;
+          }>(
+            `SELECT
              (SELECT count(*)::int FROM semantic.subject WHERE route = $1 AND subject_id = ANY($2::uuid[])) AS subjects,
              (SELECT count(*)::int FROM rating.public_figure WHERE route = $1 AND question_id = $3
                 AND population_id = $4 AND subject_id = ANY($2::uuid[])) AS figures,
@@ -115,8 +120,9 @@ export async function createViewGrowthFixture() {
                 AND target_id = $5 AND population_id = ANY($2::uuid[])) AS votes,
              (SELECT count(*)::int FROM rating.aggregate_component WHERE route = $1 AND question_id = $3
                 AND target_id = $5 AND population_id = ANY($2::uuid[])) AS components`,
-          [route, pressureIds, STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id, ready],
-        )).rows[0]!;
+            [route, pressureIds, STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id, ready],
+          )
+        ).rows[0]!;
         expect(footprint).toEqual({
           subjects: axis === 'subjects' ? scale : 0,
           figures: axis === 'figures' ? scale : 0,
@@ -132,8 +138,7 @@ export async function createViewGrowthFixture() {
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           const views = await readPublicFigureViews(client, ids);
           expect(views).toEqual(expected);
-          for (const [index, id] of ids.entries())
-            expect(`"${views!.get(id)!.revision}"`).toBe(responses[index]!.etag);
+          for (const [index, id] of ids.entries()) expect(`"${views!.get(id)!.revision}"`).toBe(responses[index]!.etag);
           const serialized = JSON.stringify([...views!]);
           for (const secret of [native.realmId, ...native.realmMembers.map(({ id }) => id), 'histogram', 'units'])
             expect(serialized).not.toContain(secret);

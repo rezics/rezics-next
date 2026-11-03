@@ -39,10 +39,10 @@ Decision: use a fresh native fixture per axis so other unrelated axes remain fix
 Each axis uses 256, 1024 and 4096 retained keys, always within an existing selected partition. Pressure is seeded
 outside observation, never into a selected Global figure or its producer inputs.
 
-| Axis | Seeded pressure | Other axes |
-| --- | --- | --- |
-| Subjects | Unselected `semantic.subject` rows without figures | Figure/population history counts fixed |
-| Figures | Unselected Global `rating.public_figure` rows | Subject/population history counts fixed |
+| Axis               | Seeded pressure                                                                                                                | Other axes                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| Subjects           | Unselected `semantic.subject` rows without figures                                                                             | Figure/population history counts fixed           |
+| Figures            | Unselected Global `rating.public_figure` rows                                                                                  | Subject/population history counts fixed          |
 | Population history | Other populations of the selected ready Subject: figures at revision 99, five votes and one aggregate component per population | Subject and unrelated Global figure counts fixed |
 
 SQL cardinality assertions verify each independent footprint, including five population votes per history key.
