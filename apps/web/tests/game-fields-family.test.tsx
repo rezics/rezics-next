@@ -367,6 +367,9 @@ test('Game and Addon complete fields family preserves independent labels, native
     const readsBeforeCreate = creation.calls.filter((call) => call.method === 'GET').length;
     expect(readsBeforeCreate).toBe(2);
     await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
+    expect(host.querySelector('[data-game-create-review]')).not.toBeNull();
+    expect(gameCreations).toEqual([]);
+    await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(navigations).toEqual([`/en/subjects/${gameId}/the-lantern-game`]));
     expect(gameCreations).toHaveLength(1);
     expect(gameCreations[0]!.item).toEqual({
@@ -1068,7 +1071,11 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
       },
       read: async (id) => {
         expect(id).toBe(gameId);
-        return { state: 'ready', href: '/exact/returned-reader' };
+        return {
+          state: 'ready',
+          href: '/exact/returned-reader',
+          identity: { id: gameId, type: 'schema:VideoGame', label: 'Lantern' },
+        };
       },
     };
     const show = (reader?: string, session: 'signed-in' | 'unavailable' = 'signed-in', id?: string) =>
@@ -1122,6 +1129,8 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
     await act(async () => user.selectOptions(select, 'schema:VideoGame'));
     const term = host.querySelector<HTMLInputElement>('#create-label-1')!;
     await click(button(m.catalogue_create_submit()));
+    expect(host.querySelector('[data-game-create-review]')).not.toBeNull();
+    await click(button(m.catalogue_create_submit()));
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_unavailable()));
     expect(term.isConnected).toBe(true);
     expect(term.value).toBe('灯り');
@@ -1149,6 +1158,7 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
     await type(targets[1]!, 'https://example.test/corrected');
     mode = 'conflict';
     await click(button(m.catalogue_create_submit()));
+    await click(button(m.catalogue_create_submit()));
     expect((button(m.catalogue_create_submit()) as HTMLButtonElement).disabled).toBe(true);
     await click(button(m.catalogue_create_review_new()));
     mode = 'uncertain';
@@ -1160,6 +1170,7 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
           Object.keys(node).find((key) => key.startsWith('__reactProps'))!,
         ).onChange,
     );
+    await click(button(m.catalogue_create_submit()));
     await click(button(m.catalogue_create_submit()));
     const sealed = structuredClone(commands.at(-1));
     for (const pending of [true, false]) {

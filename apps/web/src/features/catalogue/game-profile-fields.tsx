@@ -9,9 +9,23 @@ import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { controlId, type StatementFeedback } from './statement-validation-presentation';
-import { gameGroups, gameTarget, type GameRead } from './game-profile';
+import { gameFields, gameGroups, gameTarget, type GameRead } from './game-profile';
 import { InitialFieldChoice } from './initial-field-choice';
-import { StatementFields, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
+import {
+  StatementFields,
+  EditorFailure,
+  PartValue,
+  statementHolderKey,
+  type StatementFieldsRead,
+} from './statement-editor-view';
+import { ReferenceReusePanel } from './reference-reuse-view';
+import {
+  applyGameCreateReuse,
+  captureGameCreateReuse,
+  gameCreateDrafts,
+  gameCreateHolder,
+  type GameCreateReuseState,
+} from './game-create-review-model';
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
 import {
   advanceChangedSetReview,
@@ -161,12 +175,15 @@ export function GameStatementFields({
     if (context.release.properties[part.property.id]?.datatype !== 'wikibase-item') return;
     const qualifier = statement.qualifiers?.indexOf(part) ?? -1;
     const reference = statement.references.findIndex((item) => item.parts.includes(part));
+    const nestedKey = part !== statement ? statementHolderKey(part) : undefined;
     const address =
       part === statement
         ? 'fact'
-        : qualifier >= 0
-          ? `qualifier-${qualifier}`
-          : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
+        : stablePartAddresses && nestedKey !== undefined
+          ? `part-${nestedKey}`
+          : qualifier >= 0
+            ? `qualifier-${qualifier}`
+            : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
     return (
       <div id={feedbackId ? controlId(feedbackId, address, 'value') : undefined}>
         <GameItemControl
@@ -325,9 +342,10 @@ export function GameInitialFacts({
   change,
   editAllowed,
   omitProperties = [],
-  reuse,
+  reuse: reuseControl,
   focusReference,
   stablePartAddresses,
+  enableReuse = false,
 }: {
   type: string;
   release: Release;
@@ -341,14 +359,18 @@ export function GameInitialFacts({
   reuse?: { onReuse: (key: string, index: number) => void } | undefined;
   focusReference?: { key: string; index: number; nonce: number } | undefined;
   stablePartAddresses?: boolean | undefined;
+  enableReuse?: boolean | undefined;
 }) {
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
+  const admitted = gameFields(release, type);
   const context: StatementFieldsRead = { release, source: null, public: { subject: { type }, related: {} } };
   const holder = useRef<HTMLFieldSetElement>(null);
   const observation = useMemo(() => ({}), [type, release, disabled, editAllowed]);
   const current = useRef({ observation, statements, change });
   current.current = { observation, statements, change };
+  const [copyReuse, setCopyReuse] = useState<GameCreateReuseState | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
   const editable = (row?: (typeof statements)[number]) =>
     current.current.observation === observation &&
     !disabled &&
@@ -361,7 +383,16 @@ export function GameInitialFacts({
   const publish = (next: typeof statements) => {
     current.current.statements = next;
     current.current.change(next);
+    setCopyReuse((open) =>
+      open && next.some((row) => gameCreateHolder(row.key) === open.source.holder) ? open : null,
+    );
   };
+  const factsRead = {
+    ok: true as const,
+    release,
+    source: null,
+    public: { subject: { type }, related: {} },
+  } as FactsCurrent;
   return (
     <fieldset ref={holder} disabled={disabled} className="min-w-0 max-w-full space-y-5">
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
@@ -410,6 +441,8 @@ export function GameInitialFacts({
       />
       {statements.map((row) => {
         const label = pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale);
+        const supported = admitted.includes(row.statement.property.id);
+        const holderId = gameCreateHolder(row.key);
         return (
           <section key={row.key} className="min-w-0 max-w-full">
             <ContentItemFrame as="div" data-slot="game-initial-fact" className={gameFieldFrameClass}>
@@ -418,31 +451,50 @@ export function GameInitialFacts({
                 className="min-w-0 max-w-full whitespace-normal break-words font-sans text-lg font-semibold"
                 lang={label.lang ?? undefined}
               >
-                {label.text}
+                {label.text || m.candidate_value_unavailable({}, o)}
               </ContentItemHeading>
-              <GameStatementFields
-                id={`game-initial-${row.key}`}
-                statement={row.statement}
-                context={context}
-                locale={locale}
-                search={search}
-                editAllowed={() => editable(row)}
-                change={(statement) => {
-                  if (!editable(row)) return;
-                  publish(current.current.statements.map((item) => (item === row ? { ...item, statement } : item)));
-                }}
-                reuse={
-                  reuse && statements.length > 1
-                    ? { disabled, onReuse: (index) => reuse.onReuse(row.key, index) }
-                    : undefined
-                }
-                focusReference={
-                  focusReference && focusReference.key === row.key
-                    ? { index: focusReference.index, nonce: focusReference.nonce }
-                    : undefined
-                }
-                {...(stablePartAddresses ? { stablePartAddresses: true } : {})}
-              />
+              {supported ? (
+                <GameStatementFields
+                  id={holderId}
+                  statement={row.statement}
+                  context={context}
+                  locale={locale}
+                  search={search}
+                  editAllowed={() => editable(row)}
+                  change={(statement) => {
+                    if (!editable(row)) return;
+                    publish(current.current.statements.map((item) => (item === row ? { ...item, statement } : item)));
+                  }}
+                  reuse={
+                    enableReuse && editable(row) && statements.length > 1
+                      ? {
+                          disabled,
+                          onReuse: (index) => {
+                            if (!editable(row)) return;
+                            const next = captureGameCreateReuse(current.current.statements, row.key, index);
+                            if (next) setCopyReuse(next);
+                          },
+                        }
+                      : reuseControl && statements.length > 1
+                        ? { disabled, onReuse: (index) => reuseControl.onReuse(row.key, index) }
+                        : undefined
+                  }
+                  focusReference={
+                    enableReuse && focusCopy && focusCopy.holder === holderId
+                      ? focusCopy
+                      : focusReference && focusReference.key === row.key
+                        ? { index: focusReference.index, nonce: focusReference.nonce }
+                        : undefined
+                  }
+                  {...(enableReuse || stablePartAddresses ? { stablePartAddresses: true } : {})}
+                />
+              ) : (
+                <>
+                  <EditorFailure reason="stale" locale={locale} />
+                  <PartValue part={row.statement} read={context} locale={locale} />
+                  <p className="text-sm text-muted-foreground">{m.correction_preserved({}, o)}</p>
+                </>
+              )}
               <GameInitialFactRemove
                 row={row}
                 disabled={disabled}
@@ -455,6 +507,39 @@ export function GameInitialFacts({
           </section>
         );
       })}
+      {enableReuse && copyReuse && (
+        <ReferenceReusePanel
+          source={copyReuse.source}
+          drafts={gameCreateDrafts(statements)}
+          selected={copyReuse.selected}
+          read={factsRead}
+          locale={locale}
+          capture={copyReuse.capture}
+          applied={copyReuse.applied}
+          refused={copyReuse.refused}
+          onSelected={(selected) => setCopyReuse({ ...copyReuse, selected, applied: [], refused: [] })}
+          onApply={() => {
+            if (!editable() || !copyReuse) return;
+            const result = applyGameCreateReuse(current.current.statements, copyReuse, release);
+            publish(result.rows);
+            setCopyReuse(result.reuse);
+            const first = result.reuse.applied[0];
+            if (first) setFocusCopy({ holder: first.holder, index: first.index, nonce: Date.now() });
+          }}
+          onCancel={() => setCopyReuse(null)}
+          onRefresh={() => {
+            if (!copyReuse) return;
+            const origin = current.current.statements.find(
+              (row) => gameCreateHolder(row.key) === copyReuse.source.holder,
+            );
+            const group = origin?.statement.references[copyReuse.source.groupIndex];
+            if (!origin || !group) return;
+            const next = captureGameCreateReuse(current.current.statements, origin.key, copyReuse.source.groupIndex);
+            if (next) setCopyReuse({ ...next, selected: copyReuse.selected });
+          }}
+          onOpen={(target, index) => setFocusCopy({ holder: target, index, nonce: Date.now() })}
+        />
+      )}
     </fieldset>
   );
 }

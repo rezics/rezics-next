@@ -113,9 +113,19 @@ export async function createGameProfile(
 }
 export function gameDefinitions(release: Release, locale: string) {
   return Object.entries(release.types).flatMap(([id, type]) => {
-    const label = pickText(type.labels, locale).text;
-    return gameType(release, id) && label
-      ? [{ id, label, description: pickText(type.descriptions ?? {}, locale).text }]
-      : [];
+    const label = pickText(type.labels, locale);
+    const description = pickText(type.descriptions ?? {}, locale);
+    if (!gameType(release, id) || !label.text) return [];
+    const bases = type.bases.filter((base) => typeof base === 'string' && base.length > 0);
+    return [
+      {
+        id,
+        label: label.text,
+        description: description.text,
+        ...(label.lang ? { labelLanguage: label.lang } : {}),
+        ...(description.lang ? { descriptionLanguage: description.lang } : {}),
+        ...(bases.length ? { bases } : {}),
+      },
+    ];
   });
 }

@@ -12,6 +12,8 @@ import { ViewHeading } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreatedReader, CreateResult } from './create-subject';
+import { GameCreateReview } from './game-create-review';
+import { gameAdmitCreatedReader } from './game-create-review-model';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
@@ -23,7 +25,15 @@ import { EditorFailure } from './statement-editor-view';
 import type { StatementInput } from './statement-editor';
 import { gameCreationAddress } from './game-creation-address';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
-import { gameDefinitions, gameDraft, gameGroups, gameUuid, type GameCommand, type GameRead } from './game-profile';
+import {
+  gameDefinitions,
+  gameDraft,
+  gameGroups,
+  gameUuid,
+  type GameCommand,
+  type GameItem,
+  type GameRead,
+} from './game-profile';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { GameDraftDeparture } from './game-classification-departure';
 
@@ -71,6 +81,7 @@ function GameProfileLive({
   const [readingRevision, setReadingRevision] = useState(0);
   const readingRevisionRef = useRef(0);
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
+  const [createdId, setCreatedId] = useState<string>();
   const [observed, setObserved] = useState(query.data);
   const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
     query.data?.ok && (!id || query.data.public) ? query.data : undefined,
@@ -281,17 +292,44 @@ function GameProfileLive({
         )}
       </article>
     );
+  const release = read.release;
+  function jump(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+    const focus = target.matches('input, select, textarea, button')
+      ? target
+      : target.querySelector<HTMLElement>(
+          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
+        );
+    if (focus) focus.focus();
+    else {
+      target.setAttribute('tabindex', '-1');
+      target.focus();
+    }
+  }
+  function admitReader(id: string, reader: CreatedReader): CreatedReader {
+    return gameAdmitCreatedReader(reader, id, release);
+  }
   if (!id)
     return (
       <div ref={creationResult} className="space-y-6">
         <p className="mx-auto max-w-3xl text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+        {createdId && (
+          <p role="status" className="mx-auto max-w-3xl">
+            {m.game_profile_created_id({}, o)} <code className="break-all">{createdId}</code>
+          </p>
+        )}
         <CreateSubjectForm
           locale={locale}
           session={session}
+          onCreated={(result) => setCreatedId(result.id)}
           onNavigate={onNavigate}
           profile={{
             title: m.game_profile_title({}, o),
             scope: 'game',
+            href: `/${locale}/catalogue/game`,
             control: (pointer, type) => gameCreationAddress(pointer, drafts[type] ?? [], read.release, locale),
             labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type) =>
@@ -302,7 +340,17 @@ function GameProfileLive({
                 initial,
                 (drafts[initial.type] ?? []).map((row) => row.statement),
               ),
-            fields: (type, disabled, editAllowed) => (
+            review: ({ item, stale }) => (
+              <GameCreateReview
+                item={item as GameItem}
+                rows={drafts[item.type] ?? []}
+                read={read}
+                locale={locale}
+                stale={stale}
+                onJump={jump}
+              />
+            ),
+            fields: (type, disabled, editAllowed, invalidate) => (
               <GameInitialFacts
                 key={type}
                 type={type}
@@ -312,7 +360,11 @@ function GameProfileLive({
                 statements={drafts[type] ?? []}
                 disabled={disabled}
                 editAllowed={editAllowed}
-                change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
+                enableReuse
+                change={(rows) => {
+                  setDrafts((previous) => ({ ...previous, [type]: rows }));
+                  invalidate?.();
+                }}
               />
             ),
           }}
@@ -323,12 +375,14 @@ function GameProfileLive({
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
             },
-            submit: (command) => {
+            submit: async (command) => {
               // The common form seals the augmented native ItemInput and its key before the first request.
               const item = command.item as GameCommand['item'];
-              return transport.create({ item, key: command.key });
+              const result = await transport.create({ item, key: command.key });
+              if (!result.ok) return result;
+              return { ...result, reader: admitReader(result.id, result.reader) };
             },
-            read: transport.read,
+            read: async (id) => admitReader(id, await transport.read(id)),
           }}
         />
       </div>

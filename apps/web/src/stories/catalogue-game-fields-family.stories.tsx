@@ -433,6 +433,8 @@ export const GameCreation: Story = {
     await userEvent.type(within(frame).getByRole('textbox', { name: m.correction_value() }), 'ja');
     await inspectFrames(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    await expect(canvasElement.querySelector('[data-game-create-review]')).not.toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
       'href',

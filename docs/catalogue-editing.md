@@ -341,9 +341,22 @@ referable add-ons remain separate subjects. Language/platform combinations never
 
 Creation composes the existing multilingual initial-terms form with optional native statement controls, target
 picker, qualifiers and references. Only explicitly added facts enter ordinary `POST /v1/subjects`; native initial
-facts are selected in Global. The exact returned UUID supplies the current reader, with read retry after concealment
-or unavailability. Draft facts are retained independently for each selected Type. Uncertain delivery preserves the
-exact augmented payload and key. Invalid current definitions refresh without discarding entered facts.
+facts are selected in Global. Contributors review the exact prepared item before confirmation: admitted type identity
+and its original label language, work versus add-on versus software-release grain from the current Type descriptor
+and bases, every language row and alias array, and every initial assertion with its native datatype, qualifiers,
+default `normal` rank and grouped references. Type-keyed drafts survive switches; only the current type's prepared
+item enters review or a sealed command. Contributors may copy one complete citation group onto up to sixteen other
+editable initial facts in this visit; copies are independent, leave existing groups intact, and convey no values,
+qualifiers, rank or authority. Source or destination edits while copy review is open invalidate it. Confirmation
+seals that reviewed item through the existing production validator. The exact returned UUID supplies the current
+reader, with read retry after concealment or unavailability. Uncertain delivery preserves the exact augmented payload
+and key. Invalid current definitions refresh without discarding entered facts. A later classification or relation
+review remains an independent native journey.
+Decision: Game creation review classifies grain from the current Type descriptor: software release when the type is
+or is based on `wd:Q20631656`, add-on when it is or is based on `wd:Q209163`, otherwise an underlying work.
+Admission stays `gameDefinitions`/`gameDraft`.
+Decision: GameInitialFacts keeps add-on reuse as parent-owned props; standalone Game creation opts into its own
+visit-private reuse panel and does not install that panel on AddonProfileCreate.
 
 Corrections compose the common multi-field scalar editor, qualified relation editor and per-field submission
 helpers. Classification claims use native item values in scalar competition slots; credits and work links retain

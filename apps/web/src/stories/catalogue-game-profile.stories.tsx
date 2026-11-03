@@ -140,6 +140,8 @@ export const Created: Story = {
     await userEvent.click(row.getByRole('button', { name: m.correction_add() }));
     await userEvent.type(row.getByRole('textbox', { name: m.correction_value() }), 'ja');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    await expect(canvasElement.querySelector('[data-game-create-review]')).not.toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
       'href',
@@ -152,6 +154,8 @@ export const Retry: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    await expect(canvasElement.querySelector('[data-game-create-review]')).not.toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_uncertain())).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('The Lantern Game');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
@@ -160,6 +164,8 @@ export const Retry: Story = {
 };
 async function refused(canvasElement: HTMLElement) {
   const canvas = await fill(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+  await expect(canvasElement.querySelector('[data-game-create-review]')).not.toBeNull();
   await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
   await expect(await canvas.findByRole('alert')).toBeVisible();
   await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('The Lantern Game');
@@ -171,6 +177,8 @@ export const ReaderUnavailable: Story = {
   args: { scenario: 'reader-unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    await expect(canvasElement.querySelector('[data-game-create-review]')).not.toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     await expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
   },
