@@ -132,7 +132,7 @@ test('saved member pages compose across source depth and retained-label growth',
     });
 
     for (const { report, settlements, cases } of [sourceDepth, retainedHistory]) {
-      expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
+      expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
       for (const sample of report.samples)
         for (const cost of sample.repetitions) {
           expect(cost.statements + (cost.backgroundStatements ?? 0)).toBeGreaterThan(0);
