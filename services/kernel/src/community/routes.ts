@@ -497,7 +497,10 @@ const memberAction = t.Union([
     closed,
   ),
   t.Object(
-    { state: t.Literal('uncertain'), reason: t.Union([t.Literal('authority_unavailable'), t.Literal('identity_unavailable')]) },
+    {
+      state: t.Literal('uncertain'),
+      reason: t.Union([t.Literal('authority_unavailable'), t.Literal('identity_unavailable')]),
+    },
     closed,
   ),
   t.Object({ state: t.Literal('unavailable'), reason: t.Literal('no_mounted_method') }, closed),
@@ -833,7 +836,14 @@ function publishedPublication(value: PublicationHead | PublicationResult) {
 type MemberBanPermission = boolean | null;
 
 function prohibitedMemberAction(
-  reason: 'already_member' | 'already_banned' | 'not_banned' | 'not_authorized' | 'protected_owner_or_moderator' | 'deleted_account' | 'identity_unavailable',
+  reason:
+    | 'already_member'
+    | 'already_banned'
+    | 'not_banned'
+    | 'not_authorized'
+    | 'protected_owner_or_moderator'
+    | 'deleted_account'
+    | 'identity_unavailable',
 ) {
   return { state: 'prohibited' as const, reason };
 }
@@ -2483,16 +2493,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               ...selection.members.map((member) => member.accountId),
               ...(selection.selected === null ? [] : [selection.selected.accountId]),
             ];
-            const identitiesBefore = await readRealmMemberIdentities(
-              dependencies.pool,
-              accountIds,
-              job.deadline,
-            );
+            const identitiesBefore = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
             const latestIdentities = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
             // A changed identity anchor means this read crossed account replacement or deletion.
             // Withhold private roster data and let the caller retry the same raw cursor.
             if (
-              accountIds.some((accountId) => !sameIdentityAnchor(identitiesBefore.get(accountId), latestIdentities.get(accountId)))
+              accountIds.some(
+                (accountId) => !sameIdentityAnchor(identitiesBefore.get(accountId), latestIdentities.get(accountId)),
+              )
             )
               return assertRealmMemberPageBytes({
                 realmId,
@@ -2560,7 +2568,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             const banState = (accountId: string) => {
               if (!banPermission) return 'unknown' as const;
               const action = banObservations.get(accountId);
-              return action ? (action.banned ? 'banned' as const : 'clear' as const) : 'unknown' as const;
+              return action ? (action.banned ? ('banned' as const) : ('clear' as const)) : ('unknown' as const);
             };
             const items = selection.members.map((member) => {
               const identity = present(member.accountId);

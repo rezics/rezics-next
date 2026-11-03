@@ -156,9 +156,7 @@ test.serial(
           'resource_role_grant',
           'resource_grant',
           'account',
-        ].includes(
-          String(node['Relation Name']),
-        ),
+        ].includes(String(node['Relation Name']))
       )
         expect(node['Node Type']).not.toBe('Seq Scan');
     }

@@ -1,10 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { readCurrentResourceRolePage } from '../access/current-resource-roles.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import {
-  readPublicIdentities,
-  type PublicIdentity,
-} from '../access/account-data.ts';
+import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -76,11 +73,7 @@ function checkedAnchor(row: Record<string, unknown>, realmRoute: number): Member
   )
     throw new MemberPageUnavailableError();
   const accountRoute = routeOf(row.accountId);
-  if (
-    accountRoute === null ||
-    routeOf(row.reservationId) !== accountRoute ||
-    routeOf(row.transactionId) !== realmRoute
-  )
+  if (accountRoute === null || routeOf(row.reservationId) !== accountRoute || routeOf(row.transactionId) !== realmRoute)
     throw new MemberPageUnavailableError();
   return { accountId: row.accountId, reservationId: row.reservationId, transactionId: row.transactionId };
 }
@@ -126,11 +119,7 @@ async function readCurrentMembers(
   return result;
 }
 
-async function readTransaction<T>(
-  pool: Pool,
-  deadline: number,
-  run: (client: PoolClient) => Promise<T>,
-): Promise<T> {
+async function readTransaction<T>(pool: Pool, deadline: number, run: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
     const bounded = deadlineClient(client, deadline);
     await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -175,11 +164,7 @@ export async function selectRealmMembers(
   if (request.cursor !== undefined) {
     const decoded = decodeCursor(input.tokens, binding, request.cursor);
     if (!decoded.ok) throw new PublicationCursorError(decoded.reason);
-    if (
-      decoded.after.length !== 1 ||
-      typeof decoded.after[0] !== 'string' ||
-      routeOf(decoded.after[0]) === null
-    )
+    if (decoded.after.length !== 1 || typeof decoded.after[0] !== 'string' || routeOf(decoded.after[0]) === null)
       throw new PublicationCursorError('invalid');
     after = decoded.after[0];
     cursorEpoch = decoded.epoch;
@@ -375,11 +360,7 @@ export async function readRealmMemberActions(
           });
           if (page.status !== 'ready') throw new MemberPageUnavailableError();
           for (const current of page.rows) {
-            if (
-              current.subjectKind === 'identity' &&
-              current.subjectRole === '' &&
-              ids.includes(current.subjectId)
-            )
+            if (current.subjectKind === 'identity' && current.subjectRole === '' && ids.includes(current.subjectId))
               protectedAccounts.add(current.subjectId);
           }
           incomplete ||= page.after !== null;
@@ -415,8 +396,7 @@ export function publicMemberIdentity(accountId: string, source: PublicIdentity |
       ? sourceName
       : null;
   const displayName = boundedName;
-  const handle =
-    source.handle !== null && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(source.handle) ? source.handle : null;
+  const handle = source.handle !== null && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(source.handle) ? source.handle : null;
   return {
     identity: {
       id: accountId,
