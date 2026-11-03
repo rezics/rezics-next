@@ -5,7 +5,12 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 import { seed, type Population } from '../support/growth.ts';
-import { axes, containerGrowthFixture, type Community, type ContainerGrowthFixture } from './growth-container-fixture.ts';
+import {
+  axes,
+  containerGrowthFixture,
+  type Community,
+  type ContainerGrowthFixture,
+} from './growth-container-fixture.ts';
 
 const scales = [256, 1024, 4096] as const;
 const pageSize = 2;
@@ -147,7 +152,7 @@ function publicationPopulation(
 ): (scale: number, previous: number) => Promise<void> {
   const realmId = selected.realm.realmId;
   const route = routeOf(realmId)!;
-  const idBase = Date.UTC(2030, 0, 1) + (++populationSeries * 100_000_000);
+  const idBase = Date.UTC(2030, 0, 1) + ++populationSeries * 100_000_000;
   let from = 0;
   let positionBase = 0;
   let epoch = 1;
@@ -244,7 +249,7 @@ async function retainedPublicationHistory(
   );
   if (!head.rows[0]) throw new Error('Publication history fixture must start from a withdrawn native slot');
   const firstPredecessor = head.rows[0].publication_id;
-  const baseTime = Date.UTC(2040, 0, 1) + (++historySeries * 1_000_000_000);
+  const baseTime = Date.UTC(2040, 0, 1) + ++historySeries * 1_000_000_000;
   const historyId = (ordinal: number) => idAt(route, baseTime + ordinal * 1000, ordinal + 1);
   let from = 0;
   let positionBase = 0;
@@ -302,7 +307,13 @@ async function retainedPublicationHistory(
           `UPDATE community.publication_head
            SET publication_id=$4, verdict='withdraw', published_at=$5
            WHERE route=$1 AND realm_id=$2 AND subject_id=$3`,
-          [route, realmId, subjectId, historyId(range.to - 1), new Date(baseTime + (range.to - 1) * 1000).toISOString()],
+          [
+            route,
+            realmId,
+            subjectId,
+            historyId(range.to - 1),
+            new Date(baseTime + (range.to - 1) * 1000).toISOString(),
+          ],
         );
       }
       await admin.query(
@@ -375,12 +386,9 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
   const emptyRealm = await createCommunity();
   const emptyHistorySubject = await createWithdrawnHistorySubject(emptyRealm, 'Withdrawn history for empty page');
   const emptyList = async () => {
-    const page = await listPublications(
-      publicationDependencies(),
-      emptyRealm.realm.realmId,
-      pageContext(),
-      { limit: pageSize },
-    );
+    const page = await listPublications(publicationDependencies(), emptyRealm.realm.realmId, pageContext(), {
+      limit: pageSize,
+    });
     expect(page).toEqual({ items: [], next: null });
   };
   await measureAxes('empty page', emptyRealm, emptyHistorySubject, emptyList);
@@ -391,12 +399,9 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
   const deniedHead = await adopted(protectedRealm.realm.realmId, deniedSubject);
   const denied = async () => {
     expect(
-      await listPublications(
-        publicationDependencies(),
-        protectedRealm.realm.realmId,
-        pageContext(f.outsider.actor),
-        { limit: pageSize },
-      ),
+      await listPublications(publicationDependencies(), protectedRealm.realm.realmId, pageContext(f.outsider.actor), {
+        limit: pageSize,
+      }),
     ).toBeNull();
     await expect(
       withdraw(
@@ -420,38 +425,29 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
     await adopted(deepRealm.realm.realmId, subjectId);
     deepSubjects.push(subjectId);
   }
-  let page = await listPublications(
-    publicationDependencies(),
-    deepRealm.realm.realmId,
-    pageContext(),
-    { limit: pageSize },
-  );
+  let page = await listPublications(publicationDependencies(), deepRealm.realm.realmId, pageContext(), {
+    limit: pageSize,
+  });
   expect(page?.items).toHaveLength(pageSize);
   expect(typeof page?.next).toBe('string');
-  page = await listPublications(
-    publicationDependencies(),
-    deepRealm.realm.realmId,
-    pageContext(),
-    { cursor: page!.next!, limit: pageSize },
-  );
+  page = await listPublications(publicationDependencies(), deepRealm.realm.realmId, pageContext(), {
+    cursor: page!.next!,
+    limit: pageSize,
+  });
   expect(page?.items).toHaveLength(pageSize);
   expect(typeof page?.next).toBe('string');
   const deepCursor = page!.next!;
-  const expectedDeepPage = await listPublications(
-    publicationDependencies(),
-    deepRealm.realm.realmId,
-    pageContext(),
-    { cursor: deepCursor, limit: pageSize },
-  );
+  const expectedDeepPage = await listPublications(publicationDependencies(), deepRealm.realm.realmId, pageContext(), {
+    cursor: deepCursor,
+    limit: pageSize,
+  });
   expect(expectedDeepPage?.items).toHaveLength(pageSize);
   expect(expectedDeepPage?.items.every((item: PublicationHead) => deepSubjects.includes(item.subjectId))).toBe(true);
   const deepList = async () => {
-    const actual = await listPublications(
-      publicationDependencies(),
-      deepRealm.realm.realmId,
-      pageContext(),
-      { cursor: deepCursor, limit: pageSize },
-    );
+    const actual = await listPublications(publicationDependencies(), deepRealm.realm.realmId, pageContext(), {
+      cursor: deepCursor,
+      limit: pageSize,
+    });
     expect(actual).toEqual(expectedDeepPage);
   };
   await measureAxes('deep cursor', deepRealm, deepHistorySubject, deepList, {
@@ -519,12 +515,9 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
       pageContext(),
     );
     expect(before?.publicationId).toBe(adoptedHead);
-    const visible = await listPublications(
-      publicationDependencies(),
-      disappearanceRealm.realm.realmId,
-      pageContext(),
-      { limit: pageSize },
-    );
+    const visible = await listPublications(publicationDependencies(), disappearanceRealm.realm.realmId, pageContext(), {
+      limit: pageSize,
+    });
     expect(visible?.items.map((item) => item.subjectId)).toContain(disappearingSubject);
     await f.call('POST', `/v1/subjects/${disappearingSubject}:takedown`, 200, f.owner, {
       notice: {
@@ -541,12 +534,9 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
         pageContext(),
       ),
     ).toBeNull();
-    const hidden = await listPublications(
-      publicationDependencies(),
-      disappearanceRealm.realm.realmId,
-      pageContext(),
-      { limit: pageSize },
-    );
+    const hidden = await listPublications(publicationDependencies(), disappearanceRealm.realm.realmId, pageContext(), {
+      limit: pageSize,
+    });
     expect(hidden?.items.map((item) => item.subjectId)).not.toContain(disappearingSubject);
     expect(hidden?.next).toBeNull();
     const slot = await f.db.pool.query<{ publication_id: string; verdict: string }>(
@@ -566,9 +556,9 @@ test('empty, denied, deep-cursor, decision, and subject-disappearance publicatio
     disappearanceHistorySubject,
     takeDown,
     {
-    warmup,
-    prepare: restore,
-    populationVerdict: 'withdraw',
+      warmup,
+      prepare: restore,
+      populationVerdict: 'withdraw',
     },
   );
 }, 1_200_000);
