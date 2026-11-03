@@ -83,7 +83,8 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function keyOf(id: string): CollectionDiscoveryPageKey {
   const route = routeOf(id);
-  if (route === null || id !== id.toLowerCase()) throw new TypeError('Collection discovery requires a canonical full UUID key');
+  if (route === null || id !== id.toLowerCase())
+    throw new TypeError('Collection discovery requires a canonical full UUID key');
   return { route, id };
 }
 
@@ -170,7 +171,12 @@ function validateCount(value: unknown, partition: number) {
 }
 
 function validatePageKey(value: unknown, partition: number): CollectionDiscoveryPageKey {
-  if (!record(value) || typeof value.route !== 'number' || !Number.isSafeInteger(value.route) || typeof value.id !== 'string')
+  if (
+    !record(value) ||
+    typeof value.route !== 'number' ||
+    !Number.isSafeInteger(value.route) ||
+    typeof value.id !== 'string'
+  )
     throw new TypeError('Invalid Collection discovery frontier key');
   const key = keyOf(value.id);
   if (key.route !== value.route || partitionOf(key.route) !== partition)
@@ -187,7 +193,8 @@ function validatePage(
   if (!record(value) || value.complete !== true)
     throw new CollectionDiscoveryReadinessError('preparing', 'Collection discovery producer page is incomplete');
   const snapshot = validateSnapshot(value, partition);
-  if (snapshot.collections.length > limit) throw new RangeError('Collection discovery producer exceeded its page bound');
+  if (snapshot.collections.length > limit)
+    throw new RangeError('Collection discovery producer exceeded its page bound');
 
   const keys = snapshot.collections.map(({ id }) => keyOf(id));
   for (let index = 0; index < keys.length; index++) {
