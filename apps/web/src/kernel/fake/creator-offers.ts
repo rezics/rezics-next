@@ -66,6 +66,7 @@ export const delistedCreatorOfferFixture: CreatorOffer = {
 export type CreatorOffersStory =
   | 'history'
   | 'second-page'
+  | 'later-empty'
   | 'empty'
   | 'denied'
   | 'unavailable'
@@ -79,6 +80,9 @@ let selectedStory: CreatorOffersStory | undefined;
 export function setCreatorOffersStory(state?: CreatorOffersStory): void {
   selectedStory = state;
 }
+
+export const creatorOffersLaterEmptyCursor = 'story-later-empty-cursor-placeholder';
+export const creatorOffersLaterEmptyContinuationCursor = 'story-later-empty-continuation-placeholder';
 
 export function creatorOffersStoryPage(state: CreatorOffersStory): CreatorOffersData {
   if (['denied', 'unavailable', 'error', 'stale', 'preparing'].includes(state)) {
@@ -117,7 +121,12 @@ export function creatorOffersStoryPage(state: CreatorOffersStory): CreatorOffers
                 title: 'Notes from the coast',
               },
             ],
-    next: state === 'empty' || state === 'second-page' ? null : 'story-signed-cursor-placeholder',
+    next:
+      state === 'empty' || state === 'second-page'
+        ? null
+        : state === 'later-empty'
+          ? creatorOffersLaterEmptyCursor
+          : 'story-signed-cursor-placeholder',
   };
 }
 // Story transport has no deployment sale configuration. Keep it unavailable rather than invent qualification.
@@ -132,9 +141,12 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: '/v1/offers',
     story: ({ request }) => {
-      const page = creatorOffersStoryPage(
-        new URL(request.url).searchParams.has('cursor') ? 'second-page' : (selectedStory ?? 'history'),
-      );
+      const search = new URL(request.url).searchParams;
+      const cursor = search.get('cursor');
+      const page =
+        selectedStory === 'later-empty' && cursor === creatorOffersLaterEmptyCursor
+          ? { kind: 'ready' as const, offers: [], next: creatorOffersLaterEmptyContinuationCursor }
+          : creatorOffersStoryPage(search.has('cursor') ? 'second-page' : (selectedStory ?? 'history'));
       return page.kind === 'ready' ? { status: 200, offers: page.offers, next: page.next } : undefined;
     },
   },

@@ -23,6 +23,7 @@ test('creator offer stories retain every fixture once and inherit shared viewpor
   expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
     'History',
     'SecondPage',
+    'LaterEmpty',
     'Empty',
     'Denied',
     'Unavailable',

@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { CreatorOffersPage } from '../checkout/creator-offers-page';
+import { CreatorOffersPage, creatorOffersHref } from '../checkout/creator-offers-page';
 import { formatMinorAmount } from '../checkout/money';
 import { recordedMoneyUnit } from '../checkout/money-schema';
 import {
   creatorOffersStoryPage,
   creatorOfferFixture,
+  creatorOffersLaterEmptyContinuationCursor,
+  creatorOffersLaterEmptyCursor,
   delistedCreatorOfferFixture,
   setCreatorOffersStory,
   type CreatorOffersStory,
@@ -30,7 +32,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 function render(state: CreatorOffersStory) {
-  if (state === 'history' || state === 'long-title') return <PageStory visitor="Signed In" path="/creator/offers" />;
+  if (state === 'history' || state === 'later-empty' || state === 'long-title')
+    return <PageStory visitor="Signed In" path="/creator/offers" />;
   return (
     <PatternStory visitor="Signed In" path="/creator/offers">
       <AppShell>
@@ -87,6 +90,41 @@ export const SecondPage: Story = {
       `/${getLocale()}/creator/offers`,
     );
     await expect(view.queryByRole('link', { name: m.creator_offers_next() })).toBeNull();
+  },
+};
+export const LaterEmpty: Story = {
+  beforeEach: () => {
+    setCreatorOffersStory('later-empty');
+    return () => setCreatorOffersStory();
+  },
+  render: () => render('later-empty'),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByRole('button', { name: m.account_menu() })).toBeVisible();
+
+    const firstPageNext = view.getByRole('link', { name: m.creator_offers_next() });
+    await expect(firstPageNext).toHaveAttribute(
+      'href',
+      creatorOffersHref(getLocale(), creatorOffersLaterEmptyCursor),
+    );
+    await userEvent.click(firstPageNext);
+
+    await expect(await view.findByText(m.creator_offers_page_empty(), { exact: true })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.creator_offers_restart() })).toHaveAttribute(
+      'href',
+      creatorOffersHref(getLocale()),
+    );
+    await expect(view.getByRole('link', { name: m.creator_offers_next() })).toHaveAttribute(
+      'href',
+      creatorOffersHref(getLocale(), creatorOffersLaterEmptyContinuationCursor),
+    );
+    await userEvent.click(view.getByRole('link', { name: m.creator_offers_restart() }));
+
+    await expect(await view.findByRole('link', { name: creatorOfferFixture.title })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.creator_offers_next() })).toHaveAttribute(
+      'href',
+      creatorOffersHref(getLocale(), creatorOffersLaterEmptyCursor),
+    );
   },
 };
 export const Empty: Story = { render: () => render('empty') };
