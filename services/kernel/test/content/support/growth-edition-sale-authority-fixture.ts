@@ -11,7 +11,7 @@ import {
 import { createKernel } from '../../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { capture, seed, type GrowthDatabase, type Population } from '../../support/growth.ts';
+import { capture, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../../support/growth.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { createNativeContentSystem, type NativeContentSystem } from '../support/native-system.ts';
 
@@ -581,19 +581,21 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
 
     const appUrl = await namedDatabaseUrl(templateUrl, native.database.pool);
     const authUrl = await namedDatabaseUrl(templateUrl, native.database.authPool);
-    app = await openGrowthDatabase(appUrl);
-    auth = await openGrowthDatabase(authUrl);
-    const currentConsent = createCurrentConsentReader({ database: auth.pool });
+    const appDb = await openGrowthDatabase(appUrl);
+    const authDb = await openGrowthDatabase(authUrl);
+    app = appDb;
+    auth = authDb;
+    const currentConsent = createCurrentConsentReader({ database: authDb.pool });
     let active: ActiveTrace | undefined;
     const assignedClients = new Map<PoolClient, ActiveTrace>();
-    app.pool.on('acquire', (client: PoolClient) => {
+    appDb.pool.on('acquire', (client: PoolClient) => {
       if (!active) return;
       active.acquired++;
       active.open++;
       active.maxOpen = Math.max(active.maxOpen, active.open);
       assignedClients.set(client, active);
     });
-    app.pool.on('release', (_error: Error | undefined, client: PoolClient) => {
+    appDb.pool.on('release', (_error: Error | undefined, client: PoolClient) => {
       const trace = assignedClients.get(client);
       if (!trace) return;
       assignedClients.delete(client);
@@ -625,7 +627,7 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
       },
     }) as Access;
     createKernel({
-      pool: app.pool,
+      pool: appDb.pool,
       routeKey: native.routeKey,
       tokens: native.tokenKeys,
       receiptKeys: testReceiptKeys(),
@@ -634,7 +636,7 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
         readConsent: async ({ actorAccountId, clientId }) => {
           active?.consents.push({ actorAccountId, clientId });
           return (
-            await capture(auth!, () => currentConsent.readCurrentConsent({ actorAccountId, clientId }))
+            await capture(authDb, () => currentConsent.readCurrentConsent({ actorAccountId, clientId }))
           ).value;
         },
       },
@@ -660,8 +662,8 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
 
     const fixture: SaleAuthorityGrowthFixture = {
       native,
-      app,
-      auth,
+      app: appDb,
+      auth: authDb,
       author,
       buyer,
       governanceBearer: governance,
@@ -691,12 +693,12 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
           const value =
             variant === 'mechanical'
               ? await readContentEditionMechanicalSaleAuthority(
-                  { pool: app!.pool, access: measuredAccess },
+                  { pool: appDb.pool, access: measuredAccess },
                   editionId,
                   { deadline },
                 )
               : await readContentEditionSaleAuthority(
-                  { pool: app!.pool, access: measuredAccess },
+                  { pool: appDb.pool, access: measuredAccess },
                   editionId,
                   { actor, deadline },
                 );
@@ -727,7 +729,7 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
             from: previous,
             to: scale,
           });
-          await seed({ pool: auth!.pool, admin: auth!.admin }, publisherGrantPopulation(fixture, 'auth'), {
+          await seed({ pool: authDb.pool, admin: authDb.admin }, publisherGrantPopulation(fixture, 'auth'), {
             from: previous,
             to: scale,
           });
