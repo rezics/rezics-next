@@ -4,6 +4,7 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { BoardSlowAdmissionUnavailableError, readBoardSlowMode } from './board-slow.ts';
@@ -1549,7 +1550,7 @@ export async function readContentReadingPage(
     replyState = 'unavailable';
   }
 
-  const output = {
+  const output: Static<typeof ReadingPageResponseSchema> = {
     target: { threadId, boardId: thread.boardId, boardSecurityRevision: finalBoard.value.securityRevision },
     viewer:
       actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
