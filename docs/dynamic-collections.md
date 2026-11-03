@@ -239,6 +239,74 @@ final revalidation. Pending affected foreign repair and unacknowledged reduction
 returned subjects pass Access. A direct private read with no such native execution remains unavailable; it does
 not create a capture, acknowledgement, certificate or private/public fact mirror.
 
+### Native public discovery card hydration
+
+Search supplies candidate identities; Commerce hydrates them before Content or Web displays a Collection card.
+The producer is `readPublicCollectionDiscoverySummaries(dependencies, ids, context)` in
+[`collection-discovery-summaries.ts`](../services/kernel/src/library/collection-discovery-summaries.ts).
+It does not depend on the candidate-source increment, query an index, or create a discovery engine.
+Index metadata, cached visibility, and caller eligibility flags never authorize disclosure.
+
+`dependencies: PublicCollectionDiscoveryDependencies` contains `pool`, installed `access`, and optional native
+`clock` and media `routeKey`. `ids: readonly string[]` contains at most 100 full routable Collection UUIDs,
+including duplicates. `context: PublicCollectionDiscoveryContext` requires `actor`, `partition` and a finite
+absolute millisecond `deadline`; optional `time` borrows an existing native `AuthoritativeTime`.
+Malformed keys, a key outside the declared partition, or an excessive batch throw `RangeError` before any I/O.
+Routes within that partition may differ; the full identity always selects the row. Duplicate work is removed;
+each returned identity appears once, in first-requested order. An empty request is ready with no reads.
+
+The exported `PublicCollectionDiscoveryResult` discriminates:
+
+- `{state:'ready', summaries: readonly PublicCollectionDiscoverySummary[]}`: every included card passed current
+  native eligibility, Access and final version checks. Unknown IDs, legitimate denials, nonpublic/deleted rows,
+  and candidates withdrawn or denied before final disclosure are omitted without existence details.
+- `{state:'unavailable', reason:'native_authority'|'changed'|'access'|'partition'|'deadline'}`: no partial list is
+  disclosed. Missing output/retention authority is `native_authority`; a still-public changed native observation
+  or owner partition epoch/node is `changed`. Access unavailability, unavailable partitions and exhausted
+  deadlines retain their separate reasons. Other errors, including unrelated SQL/media infrastructure errors,
+  propagate. Unavailable must never be converted into ready-empty or permission denial.
+
+**Decision:** discovery returns a deduplicated, ordered batch union; one unknown authorized native authority
+withholds the whole batch, while legitimate missing/denied/withdrawn identities are omitted.
+
+Each of two fresh repeatable-read snapshots uses an input-bounded native Collection/curator batch, one Access
+`collection:read` decision batch and one selected-output batch for authorized dynamic keys. Access preparation
+runs outside Library checkout and is repeated before the final snapshot. Each snapshot validates the current
+owner partition, public active header, lifecycle evidence and native versions. Media presentation runs between
+snapshots through Content's existing readable-cover producer. Hydration releases its own read-time capabilities
+and connections on success, denial, timeout and failure, and never releases a caller's `time`. There is no
+ordinary full Collection read per candidate, catalogue scan, rule evaluation, member preparation or publication.
+
+Curated cards use ordinary Collection presentation, including stored public occurrence count and timestamps.
+Dynamic cards require the actual selected complete native publication, validated against the existing activation
+receipt, native transaction, Core commit, incarnation and source/member fences. A building B cannot replace A;
+a complete empty A is valid, but absence of A is unavailable. Dynamic DTOs expose `outputGeneration` and omit
+counts, timestamps and ordering epochs. Unlisted is direct-read only, even for an authorized curator.
+
+All cards expose `kind:'collection'`, full `id`, canonical `destination:'/collections/<id>'`, `membershipKind`,
+title, description, public visibility, native revision and ordinary presentation fields. No card includes a
+curator account ID, editable media ID, private owner identity, saved AST, pins, expanded predicates, private
+counts, working output or custody data. A de-identified curated header uses existing native retention authority.
+Dynamic terminal retention needs its actual native selected-output authority; neither a deleted curator nor a
+de-identified header can manufacture that proof. The retained-output authority gap remains explicitly unavailable.
+
+Constructed response examples below illustrate the exported union; they are not recorded native executions:
+
+```ts
+{ state: 'ready', summaries: [{
+  kind: 'collection', id, destination: `/collections/${id}`, membershipKind: 'dynamic',
+  title: 'Reading list', description: null, visibility: 'public', revision: 2,
+  presentationKind: null, presentationKindSource: 'default', cover: null, coverSource: 'pending',
+  outputGeneration: completedGenerationA
+}] }
+{ state: 'unavailable', reason: 'native_authority' }
+```
+
+Search and Content consume this owner-local union, preserving its unavailable discrimination and canonical
+Collection destination rather than recasting a Collection as a Subject. The native fixture scenarios are in
+`services/kernel/test/library/collection-discovery-summaries.test.ts`; their execution is separate from these
+constructed shapes. Broader mixed Home and rendering integration belong to Content and Web respectively.
+
 ### Account deletion and adopted public output
 
 Account deletion is terminal at fresh authentication plus typed confirmation time `T`; only `account-tombstoned.v1`

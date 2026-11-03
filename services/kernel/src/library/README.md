@@ -1802,6 +1802,38 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: The Collection point is `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the account read when the viewer is an account, the Access check, and begin and commit.
 - Growth check: `test/library/growth-collections.test.ts`: `Collection read has constant rows and statements as collections and its members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe.
 
+### Public Collection discovery summaries
+
+`readPublicCollectionDiscoverySummaries(dependencies, ids, context)` is the native hydration producer for Search
+candidates, exported with owner-local request/context/dependency/summary/result types from
+[`collection-discovery-summaries.ts`](collection-discovery-summaries.ts). Content and Web must obtain a ready
+native card before displaying a Collection. It has no candidate-source import or dependency. See the precise
+[consumer union and omission contract](../../../../docs/dynamic-collections.md#native-public-discovery-card-hydration).
+
+- Input: at most 100 full routed Collection keys in one explicit partition, explicit actor and deadline;
+  optional borrowed native time. Validation precedes I/O; duplicate-inclusive limit, deduplicated work and
+  first-requested output order preserve full identity. Bad requests throw `RangeError`.
+- Native reads: two fresh snapshots each read one partition point, one full-key Collection/curator batch,
+  one bounded Access decision batch and one selected-output authority batch. The output batch reuses the
+  exact native `collection-source-output-head.sql` formula through correlated full-key probes. Header revisions,
+  source generations, incarnation, lifecycle evidence, presentation and publication/member fences are compared.
+  Access preparation is repeated outside owner checkout; native media reads run between the snapshots.
+- Disclosure: only active public, currently authorized rows. Missing, denied, private, unlisted and removed
+  candidates are omitted. Final withdrawal wins. A changed still-eligible observation withholds the batch;
+  output, retention or lifecycle uncertainty returns explicit unavailable rather than a successful empty list.
+  Access/partition/deadline failures have discriminated unavailable reasons; unrelated errors propagate.
+- Public metadata: ordinary curated presentation and occurrence count; dynamic presentation only with the actual
+  selected completed output A, including while B builds. No saved rule, private count, working population,
+  private curator identity or custody data. De-identified curated retention is native; dynamic terminal output
+  without native retention proof stays unavailable. Full IDs link to `/collections/<id>`.
+- Ownership and bound: all owned connections and minted read times are released on every path; caller times
+  are borrowed. Rows and bytes are `O(K)` and blocks `O(K log N)` for `K <= 100`; the number of Library batch
+  statements is constant. Optional cover work is bounded by the supplied keys and the existing Content producer.
+  No catalogue scan, ordinary full-read fanout, rule evaluation, preparation or publication occurs.
+- Focused native scenarios: `test/library/collection-discovery-summaries.test.ts` covers current metadata,
+  full-key validation, duplicate handling, hidden/missing/removed candidates, completed A with pending B,
+  absent native output, Access denial, terminal lifecycle change, withdrawal and final revision changes.
+
 ### Curator list
 
 - Touches: One `readPublicViews` account probe outside the page transaction hides the list when Collections are off, except for the existing live curator identity check. A hidden list skips the page read. Otherwise, the partition epoch read and `collection-reads-curator-public.sql` on `collection_curator_public_page`, or, for a live grant-capable curator with `collection:read`, the account read and `collection-reads-curator.sql` on `collection_curator_page`. Both statements page active Collections by `updated_at DESC, collection_id DESC`; the public statement also requires public visibility. Their literal predicates match the partial indexes under a generic plan. Each of the two `LIMIT` branches is one index range scan, at most `s + 1` rows, `s` at most 100. The final timestamp order allows a lazy merge of the branches; the exact UTC text remains the cursor key. The repeatable-read transaction still reads the partition epoch. `collection_curator_listing` remains for the store helper ordered by `collection_id`.

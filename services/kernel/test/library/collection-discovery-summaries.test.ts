@@ -47,7 +47,7 @@ test('current curated metadata, full identity and destination; hidden, removed a
   const privateRow = await f.collection();
   const unlisted = await f.collection({ visibility: 'unlisted' });
   const removed = await f.collection({ visibility: 'public' });
-  expect((await f.send('DELETE', `/v1/collections/${removed.id}`, { revision: removed.revision })).status).toBe(200);
+  expect((await f.send('DELETE', `/v1/collections/${removed.id}?revision=${removed.revision}`)).status).toBe(204);
   expect((await f.send('PATCH', `/v1/collections/${visible.id}`, { revision: visible.revision, title: 'Current title' })).status).toBe(200);
   const ids = [visible.id, privateRow.id, unlisted.id, removed.id, newId(routeOf(visible.id)!), visible.id];
   const result = await hydrate(deps(), ids, context(visible.id, actor));
@@ -87,25 +87,22 @@ test('withdrawal, removal and native revision changes between admission and disc
     const row = await f.collection({ visibility: 'public' });
     const access = betweenRounds(async () => {
       const response = change === 'deleted'
-        ? await f.send('DELETE', `/v1/collections/${row.id}`, { revision: row.revision })
+        ? await f.send('DELETE', `/v1/collections/${row.id}?revision=${row.revision}`)
         : await f.send('PATCH', `/v1/collections/${row.id}`, {
           revision: row.revision, ...(change === 'private' ? { visibility: 'private' } : { title: 'Changed' }),
         });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(change === 'deleted' ? 204 : 200);
     });
     expect(await hydrate(deps(access), [row.id], context(row.id))).toEqual(change === 'title'
       ? { state: 'unavailable', reason: 'changed' } : { state: 'ready', summaries: [] });
   }
 }, 120000);
 
-test('Access exposure denial and a terminal curator fence never disclose a public card', async () => {
+test('Access scope denial and a terminal curator fence never disclose a public card', async () => {
   const row = await f.collection({ visibility: 'public' });
-  expect((await f.send('POST', '/v1/platform/exposure/collections:close', {}, f.manager.bearer)).status).toBe(200);
-  try {
-    expect(await hydrate(deps(), [row.id], context(row.id))).toEqual({ state: 'ready', summaries: [] });
-  } finally {
-    expect((await f.send('POST', '/v1/platform/exposure/collections:open', {}, f.manager.bearer)).status).toBe(200);
-  }
+  const bearer = await f.credential('ordinary', ['subject:read']);
+  const denied = await f.runtime.identity.access.authenticate(bearer, { pool: f.database.pool, deadline: Date.now() + 30000 });
+  expect(await hydrate(deps(), [row.id], context(row.id, denied))).toEqual({ state: 'ready', summaries: [] });
   const access = betweenRounds(async () => {
     // Negative terminal evidence only; no retained output or positive authority is fabricated.
     await f.database.admin.query('UPDATE access.account SET state=\'deleted\' WHERE route=$1 AND account_id=$2',
