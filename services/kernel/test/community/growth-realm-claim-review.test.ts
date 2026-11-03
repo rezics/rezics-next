@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { checkGrowth } from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
 import reviewPage from '../../src/community/realm-claim-review-page.sql';
 import {
   claimReviewGrowthAxes,
@@ -129,6 +129,7 @@ test('registered owner erasure supplies the original episode and native HTTP req
           operation: () => fixture.measureListingPaths(expected),
         });
         expect(report.samples.map(({ scale }) => scale)).toEqual([...claimReviewGrowthScales]);
+        assertGrowthAccessPaths(report.name, report.samples, ['community.realm', 'community.realm_claim_request']);
         for (const sample of report.samples) {
           for (const cost of sample.repetitions) {
             expect(cost.statements).toBeGreaterThan(0);

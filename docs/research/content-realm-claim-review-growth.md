@@ -53,7 +53,8 @@ pending requests on an unrelated orphan Realm, and retained requests from older 
 at 256/1024/4096. The selected candidate neighbourhood stays fixed. The shared growth harness observes
 the actual registered Kernel route with production Access for populated, deep, terminal, fully filtered,
 empty-successor, denied, and mid-read revoked-authority paths with an allowed control. Population and authority setup
-are outside measurement. A native cursor also rejects a changed partition epoch; viewer and limit binding and raw-key
+are outside measurement. The growth assertion rejects sequential scans once either measured relation exceeds eight
+pages. A native cursor also rejects a changed partition epoch; viewer and limit binding and raw-key
 continuation remain outside measured work. Each source read retains the original head, deadline, lifecycle version
 and public-source epoch.
 
