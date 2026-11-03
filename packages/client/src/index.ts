@@ -61,7 +61,9 @@ type PersonalReadOptions = { headers?: Record<string, string> };
 type PersonalWriteOptions = { headers: Record<string, string> & { 'idempotency-key': string } };
 type PersonalEntryEndpoints = {
   personal: {
-    get(options?: PersonalReadOptions): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
+    get(
+      options?: PersonalReadOptions,
+    ): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
   };
   annotations: {
     put(

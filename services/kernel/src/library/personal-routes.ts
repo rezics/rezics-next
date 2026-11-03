@@ -191,8 +191,17 @@ const followSchema = t.Object(
 const entryResponse = t.Object({ libraryEntry: entrySchema }, closed);
 const personalPrivacyValue = t.Union([
   t.Object({ status: t.Literal('absent') }, closed),
-  t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })) }, closed),
-  t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
+  t.Object(
+    {
+      status: t.Literal('unknown'),
+      sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })),
+    },
+    closed,
+  ),
+  t.Object(
+    { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
+    closed,
+  ),
 ]);
 const personalTimestampPrecision = t.Union([
   t.Literal('year'),
@@ -204,8 +213,17 @@ const personalTimestampPrecision = t.Union([
 ]);
 const personalTimestampValue = t.Union([
   t.Object({ status: t.Literal('absent') }, closed),
-  t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
-  t.Object({ status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }) }, closed),
+  t.Object(
+    {
+      status: t.Literal('unknown'),
+      sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
+    },
+    closed,
+  ),
+  t.Object(
+    { status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }) },
+    closed,
+  ),
 ]);
 function personalChange(value: TSchema) {
   return t.Union([
@@ -221,42 +239,74 @@ const personalObservationSchema = t.Object(
     revision,
     privacy: t.Union([
       t.Object({ status: t.Literal('absent') }, closed),
-      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })) }, closed),
+      t.Object(
+        {
+          status: t.Literal('unknown'),
+          sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })),
+        },
+        closed,
+      ),
       t.Object({ status: t.Literal('cleared') }, closed),
-      t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
+      t.Object(
+        { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
+        closed,
+      ),
     ]),
     sourceCreated: t.Union([
       t.Object({ status: t.Literal('absent') }, closed),
-      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
+      t.Object(
+        {
+          status: t.Literal('unknown'),
+          sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
+        },
+        closed,
+      ),
       t.Object({ status: t.Literal('cleared') }, closed),
-      t.Object({
-        status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-        precision: personalTimestampPrecision,
-        zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
-      }, closed),
+      t.Object(
+        {
+          status: t.Literal('known'),
+          value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+          precision: personalTimestampPrecision,
+          zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+        },
+        closed,
+      ),
     ]),
     sourceUpdated: t.Union([
       t.Object({ status: t.Literal('absent') }, closed),
-      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
+      t.Object(
+        {
+          status: t.Literal('unknown'),
+          sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })),
+        },
+        closed,
+      ),
       t.Object({ status: t.Literal('cleared') }, closed),
-      t.Object({
-        status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-        precision: personalTimestampPrecision,
-        zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
-      }, closed),
+      t.Object(
+        {
+          status: t.Literal('known'),
+          value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+          precision: personalTimestampPrecision,
+          zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+        },
+        closed,
+      ),
     ]),
     recordedAt: id,
   },
   closed,
 );
-const personalEntrySchema = t.Object({
-  subjectId: id,
-  annotationRevision: personalRevision,
-  note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
-  priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
-  annotationUpdatedAt: nullable,
-  sourceObservations: t.Array(personalObservationSchema, { maxItems: MAX_SOURCE_OBSERVATIONS }),
-}, closed);
+const personalEntrySchema = t.Object(
+  {
+    subjectId: id,
+    annotationRevision: personalRevision,
+    note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
+    priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
+    annotationUpdatedAt: nullable,
+    sourceObservations: t.Array(personalObservationSchema, { maxItems: MAX_SOURCE_OBSERVATIONS }),
+  },
+  closed,
+);
 const personalEntryResponse = t.Object({ personalEntry: personalEntrySchema }, closed);
 const personalObservationResponse = t.Object({ sourceObservation: personalObservationSchema }, closed);
 const copyResponse = t.Object({ copy: copySchema }, closed);
@@ -607,7 +657,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 200: personalEntryResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        response: {
+          200: personalEntryResponse,
+          ...failures,
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+        },
         detail: personalDetail('library_entry_annotation.put', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -643,14 +698,24 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 201: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        response: {
+          201: personalObservationResponse,
+          ...failures,
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+        },
         detail: personalDetail('library_entry_source_observation.post', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
         const result = await admission.run('normal', job, () =>
           personalCommand(() =>
-            entries().admitSourceObservation(actor, params.subjectId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+            entries().admitSourceObservation(
+              actor,
+              params.subjectId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
           ),
         );
         session.record(result);
@@ -678,7 +743,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 200: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        response: {
+          200: personalObservationResponse,
+          ...failures,
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+        },
         detail: personalDetail('library_entry_source_observation.patch', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {

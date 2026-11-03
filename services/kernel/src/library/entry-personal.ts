@@ -7,7 +7,12 @@ import { withConnection } from '../database/pool.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId } from '../route/route.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import {
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  requireRoute,
+  WORK_STEP_DEADLINE_MS,
+} from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { LibraryConflictError } from './entry-errors.ts';
 import {
@@ -114,7 +119,8 @@ function parseObservationCorrection(value: unknown) {
 }
 
 function timestampColumns(value: TimestampFact): TimestampColumns {
-  if (value.status === 'known') return { status: value.status, value: value.value, precision: value.precision, zone: value.zone };
+  if (value.status === 'known')
+    return { status: value.status, value: value.value, precision: value.precision, zone: value.zone };
   if (value.status === 'unknown')
     return { status: value.status, value: value.sourceValue ?? null, precision: null, zone: null };
   return { status: value.status, value: null, precision: null, zone: null };
@@ -124,15 +130,14 @@ function privacyColumns(value: PrivacyFact): PrivacyColumns {
   return {
     privacyStatus: value.status,
     privacyMeaning: value.status === 'known' ? value.meaning : null,
-    privacySourceValue: value.status === 'unknown' ? value.sourceValue ?? null : null,
+    privacySourceValue: value.status === 'unknown' ? (value.sourceValue ?? null) : null,
   };
 }
 
 function decodePrivacy(status: string, meaning: string | null, sourceValue: string | null): PrivacyFact {
   if (status === 'known' && (meaning === 'private' || meaning === 'source_visible') && sourceValue === null)
     return { status, meaning };
-  if (status === 'unknown' && meaning === null)
-    return { status, ...(sourceValue === null ? {} : { sourceValue }) };
+  if (status === 'unknown' && meaning === null) return { status, ...(sourceValue === null ? {} : { sourceValue }) };
   if ((status === 'absent' || status === 'cleared') && meaning === null && sourceValue === null) return { status };
   throw new Error('Invalid stored personal entry privacy');
 }
@@ -154,7 +159,12 @@ function decodeTimestamp(value: TimestampColumns): TimestampFact {
   }
   if (value.status === 'unknown' && value.precision === null && value.zone === null)
     return { status: 'unknown', ...(value.value === null ? {} : { sourceValue: value.value }) };
-  if ((value.status === 'absent' || value.status === 'cleared') && value.value === null && value.precision === null && value.zone === null)
+  if (
+    (value.status === 'absent' || value.status === 'cleared') &&
+    value.value === null &&
+    value.precision === null &&
+    value.zone === null
+  )
     return { status: value.status as 'absent' | 'unknown' | 'cleared' };
   throw new Error('Invalid stored personal entry timestamp');
 }
@@ -181,7 +191,12 @@ function observation(row: ObservationRow): PersonalEntryObservation {
   };
 }
 
-async function readPersonal(client: QueryClient, route: number, accountId: string, subjectId: string): Promise<PersonalEntry> {
+async function readPersonal(
+  client: QueryClient,
+  route: number,
+  accountId: string,
+  subjectId: string,
+): Promise<PersonalEntry> {
   const parent = await client.query<{
     annotationRevision: number;
     note: string | null;
@@ -251,10 +266,15 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       try {
         const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
         if (
-          !current || current.kind !== 'actor' || current.state !== 'active' || current.fenced ||
-          !Number.isSafeInteger(account.authnEpoch) || account.authnEpoch < 1 ||
+          !current ||
+          current.kind !== 'actor' ||
+          current.state !== 'active' ||
+          current.fenced ||
+          !Number.isSafeInteger(account.authnEpoch) ||
+          account.authnEpoch < 1 ||
           current.minimumAuthnEpoch > BigInt(account.authnEpoch)
-        ) throw new GrantDeniedError();
+        )
+          throw new GrantDeniedError();
         const value = await readPersonal(client, requireRoute(account.accountId), account.accountId, canonical);
         await client.query('COMMIT');
         return value;
@@ -293,7 +313,14 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
             (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
              annotation_transaction_id,created_at,updated_at,transaction_id)
            VALUES($1,$2,$3,$4,0,NULL,NULL,NULL,NULL,$5,$5,$6) ON CONFLICT DO NOTHING`,
-          [route, account.accountId, prepared.subjectId, newFactId(route, prepared.subjectId), time, command.transactionId],
+          [
+            route,
+            account.accountId,
+            prepared.subjectId,
+            newFactId(route, prepared.subjectId),
+            time,
+            command.transactionId,
+          ],
         );
         const current = await tx.query<{ revision: number; note: string | null; priority: number | null }>(
           `SELECT annotation_revision AS revision,note,priority FROM library.entry_personal_fact
@@ -352,7 +379,14 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
             (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
              annotation_transaction_id,created_at,updated_at,transaction_id)
            VALUES($1,$2,$3,$4,0,NULL,NULL,NULL,NULL,$5,$5,$6) ON CONFLICT DO NOTHING`,
-          [route, account.accountId, prepared.subjectId, newFactId(route, prepared.subjectId), time, command.transactionId],
+          [
+            route,
+            account.accountId,
+            prepared.subjectId,
+            newFactId(route, prepared.subjectId),
+            time,
+            command.transactionId,
+          ],
         );
         await tx.query(
           'SELECT 1 FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE',
@@ -362,7 +396,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           'SELECT count(*)::text AS total FROM library.entry_source_observation WHERE route=$1 AND account_id=$2 AND subject_id=$3',
           [route, account.accountId, prepared.subjectId],
         );
-        if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS) throw new TypeError('Source observation limit reached');
+        if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS)
+          throw new TypeError('Source observation limit reached');
         const inserted = await tx.query(
           `INSERT INTO library.entry_source_observation
             (route,account_id,subject_id,provider,record_id,revision,privacy_status,privacy_meaning,privacy_source_value,
@@ -372,11 +407,24 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
            VALUES($1,$2,$3,$4,$5,1,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17,$18)
            ON CONFLICT DO NOTHING RETURNING provider`,
           [
-            route, account.accountId, prepared.subjectId, parsed.provider, parsed.recordId,
-            privacy.privacyStatus, privacy.privacyMeaning, privacy.privacySourceValue,
-            created.status, created.value, created.precision, created.zone,
-            updated.status, updated.value, updated.precision, updated.zone,
-            time, command.transactionId,
+            route,
+            account.accountId,
+            prepared.subjectId,
+            parsed.provider,
+            parsed.recordId,
+            privacy.privacyStatus,
+            privacy.privacyMeaning,
+            privacy.privacySourceValue,
+            created.status,
+            created.value,
+            created.precision,
+            created.zone,
+            updated.status,
+            updated.value,
+            updated.precision,
+            updated.zone,
+            time,
+            command.transactionId,
           ],
         );
         if (inserted.rowCount !== 1) throw new LibraryConflictError();
@@ -392,18 +440,15 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         if (!sourceObservation) throw new Error('Admitted source observation is missing');
         return {
           value: { sourceObservation },
-          events: [event('com.rezics.library.entry.source-observation.admitted.v1', account.accountId, prepared.subjectId)],
+          events: [
+            event('com.rezics.library.entry.source-observation.admitted.v1', account.accountId, prepared.subjectId),
+          ],
         };
       },
     );
   }
 
-  async function correctSourceObservation(
-    actor: Actor,
-    subjectId: string,
-    input: unknown,
-    requestKey: string,
-  ) {
+  async function correctSourceObservation(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
     const parsed = parseObservationCorrection(input);
@@ -443,12 +488,24 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         if (row.revision !== parsed.revision) throw new LibraryConflictError();
         if (row.revision >= 2_147_483_646) throw new LibraryConflictError();
         const currentValue = observation(row);
-        const privacy = parsed.privacy.op === 'unchanged' ? currentValue.privacy
-          : parsed.privacy.op === 'clear' ? { status: 'cleared' as const } : parsed.privacy.value;
-        const sourceCreated = parsed.sourceCreated.op === 'unchanged' ? currentValue.sourceCreated
-          : parsed.sourceCreated.op === 'clear' ? { status: 'cleared' as const } : parsed.sourceCreated.value;
-        const sourceUpdated = parsed.sourceUpdated.op === 'unchanged' ? currentValue.sourceUpdated
-          : parsed.sourceUpdated.op === 'clear' ? { status: 'cleared' as const } : parsed.sourceUpdated.value;
+        const privacy =
+          parsed.privacy.op === 'unchanged'
+            ? currentValue.privacy
+            : parsed.privacy.op === 'clear'
+              ? { status: 'cleared' as const }
+              : parsed.privacy.value;
+        const sourceCreated =
+          parsed.sourceCreated.op === 'unchanged'
+            ? currentValue.sourceCreated
+            : parsed.sourceCreated.op === 'clear'
+              ? { status: 'cleared' as const }
+              : parsed.sourceCreated.value;
+        const sourceUpdated =
+          parsed.sourceUpdated.op === 'unchanged'
+            ? currentValue.sourceUpdated
+            : parsed.sourceUpdated.op === 'clear'
+              ? { status: 'cleared' as const }
+              : parsed.sourceUpdated.value;
         const privacyValues = privacyColumns(privacy);
         const createdValues = timestampColumns(sourceCreated);
         const updatedValues = timestampColumns(sourceUpdated);
@@ -461,11 +518,25 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
            WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5 AND revision=$19
              RETURNING provider`,
           [
-            route, account.accountId, prepared.subjectId, parsed.provider, parsed.recordId,
-            privacyValues.privacyStatus, privacyValues.privacyMeaning, privacyValues.privacySourceValue,
-            createdValues.status, createdValues.value, createdValues.precision, createdValues.zone,
-            updatedValues.status, updatedValues.value, updatedValues.precision, updatedValues.zone,
-            time, command.transactionId, parsed.revision,
+            route,
+            account.accountId,
+            prepared.subjectId,
+            parsed.provider,
+            parsed.recordId,
+            privacyValues.privacyStatus,
+            privacyValues.privacyMeaning,
+            privacyValues.privacySourceValue,
+            createdValues.status,
+            createdValues.value,
+            createdValues.precision,
+            createdValues.zone,
+            updatedValues.status,
+            updatedValues.value,
+            updatedValues.precision,
+            updatedValues.zone,
+            time,
+            command.transactionId,
+            parsed.revision,
           ],
         );
         if (changed.rowCount !== 1) throw new LibraryConflictError();
@@ -481,7 +552,9 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         if (!sourceObservation) throw new Error('Corrected source observation is missing');
         return {
           value: { sourceObservation },
-          events: [event('com.rezics.library.entry.source-observation.corrected.v1', account.accountId, prepared.subjectId)],
+          events: [
+            event('com.rezics.library.entry.source-observation.corrected.v1', account.accountId, prepared.subjectId),
+          ],
         };
       },
     );

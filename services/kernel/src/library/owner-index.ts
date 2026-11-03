@@ -130,9 +130,11 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   }
   const [table, id, pin] = sources[current.phase];
   // Personal annotations and reviewed source observations are owner facts in the existing entry family.
-  const rows = current.phase === 'entry'
-    ? (await tx.query<Scope>(
-        `SELECT subject AS "subject",fact AS "fact",pin AS "pin" FROM (
+  const rows =
+    current.phase === 'entry'
+      ? (
+          await tx.query<Scope>(
+            `SELECT subject AS "subject",fact AS "fact",pin AS "pin" FROM (
           (SELECT e.subject_id AS subject,e.subject_id AS fact,COALESCE(e.library_profile_pin,'{}'::jsonb) AS pin
            FROM library.entry e WHERE e.route=$1 AND e.account_id=$2
              AND ($3::uuid IS NULL OR (e.subject_id,e.subject_id)>($3,$4::uuid))
@@ -146,14 +148,17 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
                  AND o.subject_id=p.subject_id))
            ORDER BY p.subject_id,p.fact_id LIMIT 100)
         ) facts ORDER BY subject,fact LIMIT 100`,
-        [...args, current.subject, current.fact],
-      )).rows
-    : (await tx.query<Scope>(
-        `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
+            [...args, current.subject, current.fact],
+          )
+        ).rows
+      : (
+          await tx.query<Scope>(
+            `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
         WHERE route=$1 AND account_id=$2${current.phase === 'session' ? " AND state <> 'retired'" : ''} AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
         ORDER BY subject_id,${id} LIMIT 100`,
-        [...args, current.subject, current.fact],
-      )).rows;
+            [...args, current.subject, current.fact],
+          )
+        ).rows;
   for (const row of rows)
     await tx.query('SELECT library.refresh_owner_member_scope($1,$2,$3,$4,$5::jsonb)', [
       ...args,

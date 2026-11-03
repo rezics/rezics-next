@@ -87,7 +87,9 @@ export function parsePersonalRevision(value: unknown, allowInitial = true): numb
 
 export function parsePersonalNote(value: unknown): string {
   if (
-    typeof value !== 'string' || value.length === 0 || value.includes('\u0000') ||
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.includes('\u0000') ||
     new TextEncoder().encode(value).byteLength > MAX_PERSONAL_NOTE_BYTES
   )
     throw new TypeError('Invalid personal note');
@@ -168,7 +170,8 @@ export function parseSourceTimestamp(value: unknown): Extract<TimestampValue, { 
   }
   match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (match) {
-    if (!validDate(Number(match[1]), Number(match[2]), Number(match[3]))) throw new TypeError('Invalid source timestamp');
+    if (!validDate(Number(match[1]), Number(match[2]), Number(match[3])))
+      throw new TypeError('Invalid source timestamp');
     return { status: 'known', value, precision: 'day', zone: 'unknown' };
   }
   match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,18}))?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
@@ -185,8 +188,7 @@ export function parseSourceTimestamp(value: unknown): Extract<TimestampValue, { 
   if (offset && offset !== 'Z') {
     const hours = Number(offset.slice(1, 3));
     const minutes = Number(offset.slice(4, 6));
-    if (hours > 14 || minutes > 59 || (hours === 14 && minutes !== 0))
-      throw new TypeError('Invalid source timestamp');
+    if (hours > 14 || minutes > 59 || (hours === 14 && minutes !== 0)) throw new TypeError('Invalid source timestamp');
   }
   return {
     status: 'known',
@@ -201,7 +203,10 @@ export function parsePrivacyValue(value: unknown): PrivacyValue {
   if (record.status === 'absent' && Object.keys(record).length === 1) return { status: 'absent' };
   if (record.status === 'unknown' && Object.keys(record).length === 1) return { status: 'unknown' };
   if (record.status === 'unknown' && Object.keys(record).length === 2 && 'sourceValue' in record)
-    return { status: 'unknown', sourceValue: parseSourceValue(record.sourceValue, MAX_SOURCE_PRIVACY_VALUE_BYTES, 'source privacy value') };
+    return {
+      status: 'unknown',
+      sourceValue: parseSourceValue(record.sourceValue, MAX_SOURCE_PRIVACY_VALUE_BYTES, 'source privacy value'),
+    };
   if (
     record.status === 'known' &&
     Object.keys(record).length === 2 &&
@@ -226,10 +231,12 @@ export function parseTimestampValue(value: unknown): TimestampValue {
 
 function parseSourceValue(value: unknown, maximumBytes: number, name: string): string {
   if (
-    typeof value !== 'string' || value.length === 0 ||
+    typeof value !== 'string' ||
+    value.length === 0 ||
     new TextEncoder().encode(value).byteLength > maximumBytes ||
     /[\u0000-\u001f\u007f]/.test(value)
-  ) throw new TypeError(`Invalid ${name}`);
+  )
+    throw new TypeError(`Invalid ${name}`);
   return value;
 }
 
@@ -246,8 +253,6 @@ export function parseConfirmation(value: unknown): true {
   return true;
 }
 
-export function factStatus<T extends { status: string }>(
-  value: T | null,
-): T | Readonly<{ status: 'cleared' }> {
+export function factStatus<T extends { status: string }>(value: T | null): T | Readonly<{ status: 'cleared' }> {
   return value ?? { status: 'cleared' };
 }

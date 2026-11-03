@@ -138,8 +138,7 @@ const scopeIdentitySQL =
   'SELECT identity FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3';
 const accountSQL =
   'SELECT route, account_id AS "accountId", kind, state, authn_fenced AS fenced, minimum_authn_epoch::text AS "minimumAuthnEpoch" FROM access.account WHERE route=$1 AND account_id=$2';
-const entrySQL =
-  `SELECT COALESCE(e.state IS NOT NULL, false) OR p.fact_id IS NOT NULL AS present, e.state=$4 AS matches,
+const entrySQL = `SELECT COALESCE(e.state IS NOT NULL, false) OR p.fact_id IS NOT NULL AS present, e.state=$4 AS matches,
     pg_column_size(e.library_profile_pin) AS bytes,
     pg_column_compression(e.library_profile_pin) IS NOT NULL AS compressed,
     COALESCE(e.subject_id,p.fact_id)::text AS "factId"
