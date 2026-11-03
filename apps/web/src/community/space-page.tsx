@@ -39,6 +39,7 @@ import {
   type RealmClaimSnapshot,
 } from './realm-claim';
 import { RealmHomeHeader } from './realm-home-header';
+import { RealmCatalogueCurrent } from './realm-catalogue-current';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
 import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
@@ -151,6 +152,7 @@ function Published({
         {m.realm_published_heading()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.realm_publication_open_view()}</p>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.realm_catalogue_publications_context()}</p>
       {editable ? <PublicationControls control={control} refresh={refresh} search={search} /> : null}
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
@@ -487,6 +489,10 @@ function SpaceHome({
           {spaceRemoved || realmRemoved ? m.container_lifecycle_removed_state() : m.container_lifecycle_orphaned()}
         </p>
       ) : null}
+      <RealmCatalogueCurrent
+        page={page}
+        available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
+      />
       {page.realm && !realmRemoved && readable ? (
         <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} />
       ) : null}
