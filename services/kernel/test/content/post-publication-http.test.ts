@@ -163,8 +163,9 @@ test('real denied actor, current ancestor loss, erasure and takedown refuse publ
   expect(await f.state(draft.id)).toEqual(before);
   expect((await f.revise(thread.firstPost, { visibility: 'published' }, { other: true })).status).toBe(403);
   await f.command(`/v1/threads/${thread.id}:takeDown`, { reason: 'Ancestor unavailable' }, 200);
+  const concealed = await f.state(draft.id);
   expect((await f.revise(draft, { visibility: 'published' })).status).toBe(404);
-  expect(await f.state(draft.id)).toEqual(before);
+  expect(await f.state(draft.id)).toEqual(concealed);
   expect(await publications(draft.id)).toEqual([]);
   for (const operation of ['erase', 'takeDown']) {
     const scope = await f.thread();
