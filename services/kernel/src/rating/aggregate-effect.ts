@@ -205,8 +205,11 @@ async function applyPartition(
       let received = 0;
       let figurePosition: string | undefined;
       const markFigurePending = async (change: RatingChange, route: number): Promise<void> => {
-        if (change.questionId !== STANDARD_QUESTION_ID &&
-            (change.populationId === GLOBAL_CONTEXT.id || !realmRankQuestionEligible(scales.get(change.questionId)!))) return;
+        if (
+          change.questionId !== STANDARD_QUESTION_ID &&
+          (change.populationId === GLOBAL_CONTEXT.id || !realmRankQuestionEligible(scales.get(change.questionId)!))
+        )
+          return;
         if (figurePosition === undefined) {
           const row = await readPublicFigurePosition.run(tx, { partition_no: partition });
           if (!row) throw new Error('Rating figure partition is unavailable');

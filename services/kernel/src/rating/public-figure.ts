@@ -214,8 +214,12 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
       })) as PriorEpochRow | undefined;
       // A changed measurement requires a new question ID, never a prior over the old votes.
       if (previous?.questionIdentity != null && previous.questionIdentity !== identity)
-        return { value: undefined, events: [priorEpochWorkEvent('check', population.questionId,
-          population.populationId, previous.generation, 0)] };
+        return {
+          value: undefined,
+          events: [
+            priorEpochWorkEvent('check', population.questionId, population.populationId, previous.generation, 0),
+          ],
+        };
       const count = BigInt(totals.count);
       let epoch = previous?.epoch ?? 0;
       let generation = BigInt(previous?.generation ?? '0');
@@ -467,11 +471,20 @@ async function drainFigurePage(
       const figures = rows.map(figureFromRow);
       return {
         value: figures.length,
-        events: figures.map((figure) => figure.questionId === STANDARD_QUESTION_ID
-          ? { type: FIGURE_CHANGED, subject: figure.subjectId, data: figure }
-          : { type: 'com.rezics.rating.realm_rank.changed.v1', subject: figure.subjectId,
-              data: { questionId: figure.questionId, populationId: figure.populationId,
-                subjectId: figure.subjectId, revision: figure.revision } }),
+        events: figures.map((figure) =>
+          figure.questionId === STANDARD_QUESTION_ID
+            ? { type: FIGURE_CHANGED, subject: figure.subjectId, data: figure }
+            : {
+                type: 'com.rezics.rating.realm_rank.changed.v1',
+                subject: figure.subjectId,
+                data: {
+                  questionId: figure.questionId,
+                  populationId: figure.populationId,
+                  subjectId: figure.subjectId,
+                  revision: figure.revision,
+                },
+              },
+        ),
       };
     });
     return outcome.value;

@@ -179,13 +179,19 @@ export function ratingQuestionIdentity(question: {
   stepUnits: number;
 }): string {
   return JSON.stringify([
-    question.revision, question.grain, question.minimumUnits, question.maximumUnits, question.stepUnits,
+    question.revision,
+    question.grain,
+    question.minimumUnits,
+    question.maximumUnits,
+    question.stepUnits,
   ]);
 }
 
 /** The released vote/event contract admits integer units in 0..20. */
 export function realmRankQuestionEligible(question: {
-  minimumUnits: number; maximumUnits: number; stepUnits: number;
+  minimumUnits: number;
+  maximumUnits: number;
+  stepUnits: number;
 }): boolean {
   return question.minimumUnits >= 0 && question.maximumUnits <= 20 && question.stepUnits > 0;
 }

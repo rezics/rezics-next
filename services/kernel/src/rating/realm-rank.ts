@@ -35,7 +35,9 @@ export type RealmRankCandidate = Readonly<{
   updating: boolean;
 }>;
 export type RealmRankQuestion = Readonly<{
-  id: string; revision: number; label: string;
+  id: string;
+  revision: number;
+  label: string;
   grain: 'work' | 'release' | 'episode' | 'character';
   scale: Readonly<{ min: number; max: number; displayStep: number }>;
 }>;
@@ -162,14 +164,22 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       };
       await authorizeRealm();
       const readQuestion = async () => {
-        const check = await accessCheck(deps.access, actor, 'definitions:read', {
-          route: GLOBAL_CONTEXT.route, id: GLOBAL_CONTEXT.id,
-          eligibility: globalReadEligibility('definitions:read'),
-        }, { pool: deps.pool, deadline });
+        const check = await accessCheck(
+          deps.access,
+          actor,
+          'definitions:read',
+          {
+            route: GLOBAL_CONTEXT.route,
+            id: GLOBAL_CONTEXT.id,
+            eligibility: globalReadEligibility('definitions:read'),
+          },
+          { pool: deps.pool, deadline },
+        );
         const readable = await withConnection(deps.pool, (client) => check(deadlineClient(client, deadline)));
         if (!readable) throw new ProblemError('not_found');
-        const question = await observe(deps.pool, partitionOf(routeOf(input.questionId)!), deadline,
-          (client) => questionRead.run(client, { question_id: input.questionId }));
+        const question = await observe(deps.pool, partitionOf(routeOf(input.questionId)!), deadline, (client) =>
+          questionRead.run(client, { question_id: input.questionId }),
+        );
         if (!question) throw new ProblemError('not_found');
         if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
         return question;
@@ -206,7 +216,14 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
           throw new ProblemError('invalid_cursor');
         if (!prior.active || prior.identity !== identity) return { generation: current, epoch, rows: [] as Row[] };
         // Separate first/continuation statements retain a strict composite B-tree seek without an OR filter.
-        const parameters: unknown[] = [input.partition, input.questionId, input.realmId, prior.generation, input.limit, identity];
+        const parameters: unknown[] = [
+          input.partition,
+          input.questionId,
+          input.realmId,
+          prior.generation,
+          input.limit,
+          identity,
+        ];
         if (after) parameters.push(after.score, after.subject);
         const result = await client.query<Row>(
           `SELECT rank.subject_id::text AS "subjectId",rank.count::text,rank.mean::text,rank.score::text,
@@ -273,8 +290,13 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       });
       const last = observed.rows.at(-1);
       return {
-        question: { id: question.id, revision: question.revision, label: question.label, grain: question.grain,
-          scale: { min: question.minimumUnits, max: question.maximumUnits, displayStep: question.stepUnits } },
+        question: {
+          id: question.id,
+          revision: question.revision,
+          label: question.label,
+          grain: question.grain,
+          scale: { min: question.minimumUnits, max: question.maximumUnits, displayStep: question.stepUnits },
+        },
         candidates,
         // No lookahead, counts or refill. A full consumed batch may lead to one empty terminal page.
         next:
