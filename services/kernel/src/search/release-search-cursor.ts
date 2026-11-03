@@ -99,8 +99,7 @@ async function decode<Cursor extends PrivateContinuation>(
     if (decoded.reason === 'expired') throw new ReleaseGroupingRestartRequired();
     throw new ReleaseSearchCursorInvalid();
   }
-  if (decoded.after.length !== 1 || typeof decoded.after[0] !== 'string')
-    throw new ReleaseSearchCursorInvalid();
+  if (decoded.after.length !== 1 || typeof decoded.after[0] !== 'string') throw new ReleaseSearchCursorInvalid();
   let value: unknown;
   try {
     value = JSON.parse(decoded.after[0]);
@@ -141,13 +140,7 @@ export async function readReleaseGroupsPage<Work, Release>(input: {
 }): Promise<ReleaseGroupsPage<Work, Release>> {
   const now = input.now ?? Date.now();
   const bound = binding(input.request, input.principal, 'groups');
-  const cursor = await decode<ReleaseGroupContinuation>(
-    input.cursors,
-    bound,
-    input.cursor,
-    'groups',
-    now,
-  );
+  const cursor = await decode<ReleaseGroupContinuation>(input.cursors, bound, input.cursor, 'groups', now);
   const page = await readReleaseGroups(input.source, input.request, cursor);
   return {
     status: page.status,

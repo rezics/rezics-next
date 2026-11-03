@@ -46,11 +46,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Install grouped discovery on POST /v1/subjects:search with independent authenticated and encrypted group/child cursors; current calendar precision, disclosure, redirects, dates and producer changes invalidate both."
-    - "Native complete work-link selection distinguishes missing, unknown, conflicting and duplicate links without leaking children; precise ranges require the exact ready physical generation and active release."
-    - "Mount /search/releases with active-release controls and contextual work/release cards; filters, language order, sort, spoilers, expansion, reload/back and both continuations preserve meaning across eight locales and accessible response-grounded states."
-    - "Native 1x/4x/16x first, next, final and empty pages measure every all-pool seek, high-fanout bound, preparation/resume and invalidation case."
-    - "Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including keyboard use and repair states."
+    - 'Install grouped discovery on POST /v1/subjects:search with independent authenticated and encrypted group/child cursors; current calendar precision, disclosure, redirects, dates and producer changes invalidate both.'
+    - 'Native complete work-link selection distinguishes missing, unknown, conflicting and duplicate links without leaking children; precise ranges require the exact ready physical generation and active release.'
+    - 'Mount /search/releases with active-release controls and contextual work/release cards; filters, language order, sort, spoilers, expansion, reload/back and both continuations preserve meaning across eight locales and accessible response-grounded states.'
+    - 'Native 1x/4x/16x first, next, final and empty pages measure every all-pool seek, high-fanout bound, preparation/resume and invalidation case.'
+    - 'Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including keyboard use and repair states.'
   workerOwned: true
 estimate:
   lines: 1500
