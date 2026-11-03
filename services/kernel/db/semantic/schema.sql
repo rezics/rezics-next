@@ -12105,15 +12105,19 @@ CREATE UNIQUE INDEX source_candidate_erasure_key ON semantic.source_candidate US
 
 CREATE INDEX source_candidate_provider_review ON semantic.source_candidate USING btree (route, source, erasure_key);
 
--- Name: source_candidate_review_discovery_tuple; Type: INDEX; Schema: semantic; Owner: -
-CREATE INDEX source_candidate_review_discovery_tuple ON semantic.source_candidate USING btree (route, source, external_id, field_group, subject_id);
-
 
 --
 -- Name: source_candidate_retract; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX source_candidate_retract ON semantic.source_candidate USING btree (route, subject_id, candidate_id, source, external_id, field_group);
+
+
+--
+-- Name: source_candidate_review_discovery_tuple; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX source_candidate_review_discovery_tuple ON semantic.source_candidate USING btree (route, source, external_id, field_group, subject_id);
 
 
 --
