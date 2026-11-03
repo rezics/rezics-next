@@ -3,6 +3,7 @@ import {
   classificationObservedInstant,
   classificationSourceVersion,
   projectSourceClassification,
+  validateSourceClassificationProjection,
 } from '../src/index.ts';
 
 const provenance = {
@@ -98,5 +99,17 @@ describe('source classification projection', () => {
       provenance: { sourceAssociationId: 'g12' },
       value: { kind: 'observation', confidence: 2.4, lie: false },
     });
+  });
+
+  test('validates trusted converter output including an optional source association member', () => {
+    const projected = projectSourceClassification({
+      ...provenance,
+      sourceAssociationId: 'g12',
+      value: { kind: 'observation', confidence: 2.4, lie: false },
+    });
+    expect(validateSourceClassificationProjection(projected)).toEqual(projected);
+    expect(() =>
+      validateSourceClassificationProjection({ state: 'available', provenance: {}, value: { kind: 'clear' } }),
+    ).toThrow(TypeError);
   });
 });
