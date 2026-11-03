@@ -37,7 +37,7 @@ type RatingChangeFields = {
   targetId: string;
   revision: number;
   at: string | Date;
-  source?: RatingSourcePosition;
+  source?: RatingSourcePosition | undefined;
   appliedAt?: string;
 };
 export type RatingChange = RatingChangeFields &

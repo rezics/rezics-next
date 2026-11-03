@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -292,7 +293,7 @@ export async function processRatingSegmentPage(
       actorAccountId: input.voterId,
       kind: 'rating.segment.page',
       key: `${input.transitionId}:${input.after?.questionId ?? ''}:${input.after?.targetId ?? ''}`,
-      digest: createHash('sha256').update(JSON.stringify(input)).digest(),
+      digest: createHash('sha256').update(canonicalize(input)!).digest(),
     } } : {}),
   };
   const producePage = async (
