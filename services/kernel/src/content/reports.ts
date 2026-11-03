@@ -786,6 +786,45 @@ export async function readReport(
   return inspectReport(dependencies, reportId, target, context);
 }
 
+/** Minimal current projection for an outcome notice owned by its reporter.
+ * It does not load report reason/evidence or inspect the target body. */
+export async function readReporterNoticeOutcome(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+) {
+  if (context.actor.kind !== 'account') return null;
+  const owner = context.actor.accountId;
+  const before = await loadReport(dependencies, reportId, context, false, owner);
+  if (!before.value || !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))) return null;
+  const after = await loadReport(dependencies, reportId, context, false, owner);
+  if (
+    !after.value ||
+    !sameReportReference(before.value, after.value) ||
+    !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
+  )
+    return null;
+  let threadId = after.value.target_kind === 'thread' ? after.value.target_id : null;
+  if (after.value.target_kind === 'post') {
+    const located = await snapshot(dependencies, after.value.target_id, context.deadline, (client) =>
+      readReportPostThread.run(client, { route: route(after.value.target_id), id: after.value.target_id }),
+    );
+    if (located.value && routeOf(located.value.thread_id) === route(after.value.target_id))
+      threadId = located.value.thread_id;
+  }
+  return {
+    anchor: after.anchor,
+    value: {
+      id: after.value.report_id,
+      target: { kind: after.value.target_kind, id: after.value.target_id },
+      threadId,
+      outcome: after.value.outcome,
+      resolvedAt: after.value.resolved_at,
+      reporterId: after.value.reporter_account_id,
+    },
+  };
+}
+
 /** Closed reporter projection, independent of the required moderator/list fields. */
 export function reportReadView(report: ReportView): ReportReadView {
   if (!('targetAvailability' in report)) return report;

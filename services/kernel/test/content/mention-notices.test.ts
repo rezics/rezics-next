@@ -188,7 +188,7 @@ async function notices() {
 }
 
 test("a mention in a post's first published revision notifies each mentioned account up to ten, and a later revision notifies nobody", async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   const recipient = fixture.recipient;
   await clearMentionPreference(recipient);
   const actor = fixture.actor;
@@ -210,7 +210,7 @@ test("a mention in a post's first published revision notifies each mentioned acc
 });
 
 test("a mentioned account who cannot read the post, turned mentions off, is deleted, is the actor or is the post's reply recipient receives no mention notice", async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   const actor = fixture.actor;
   const unreadable = newId(0x1234),
     deleted = newId(0x1234);
@@ -249,7 +249,7 @@ test("a mentioned account who cannot read the post, turned mentions off, is dele
 });
 
 test('replayed post events add no second notice', async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   await clearMentionPreference(fixture.recipient);
   const { thread, post, revision, actor } = await postWithMentions([fixture.recipient]);
   const source = event(thread, post, revision, actor);
@@ -274,7 +274,7 @@ test('mention effects accept only the closed first-publication source payload', 
 });
 
 test('mention notices use public Realm eligibility and withhold sends after Realm read authority is denied', async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   const recipient = fixture.principal;
   const realmId = await publicRealm();
   const effect = registeredMentionEffect();
@@ -294,7 +294,7 @@ test('mention notices use public Realm eligibility and withhold sends after Real
 });
 
 test('mention notices withhold a protected Realm post after its recipient is banned', async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   await clearMentionPreference(fixture.recipient);
   const realmId = await publicRealm();
   const protectedPost = await postWithMentions([fixture.recipient], {
@@ -334,7 +334,7 @@ test('mention notices withhold a protected Realm post after its recipient is ban
 });
 
 test('mention notices recheck current board and every post ancestor before sending', async () => {
-  await fixture.reader.query('TRUNCATE content.notice');
+  await fixture.reader.query('TRUNCATE content.notice_ack, content.notice');
   await clearMentionPreference(fixture.recipient);
   const effect = registeredMentionEffect();
 

@@ -2195,6 +2195,303 @@ export async function readExactPublishedRules(
   return output;
 }
 
+export type NoticePostReference = Readonly<{ threadId: string; postId: string | null }>;
+export type NoticePostContext = Readonly<{
+  threadId: string;
+  postId: string | null;
+  boardId: string;
+  threadTitle: string | null;
+  boardTitle: string | null;
+}>;
+
+/** Current header-only disclosure for one bounded Inbox candidate page.
+ * Target keys are processed by native partition. Bodies and revisions are not read. */
+export async function readNoticePostContexts(
+  dependencies: ContentReadDependencies,
+  references: readonly NoticePostReference[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, NoticePostContext>> {
+  if (references.length > 200) throw new RangeError('At most 200 notice post references');
+  const unique = [
+    ...new Map(
+      references
+        .filter(
+          (ref) =>
+            routeOf(ref.threadId) !== null &&
+            (ref.postId === null || routeOf(ref.postId) !== null) &&
+            (ref.postId === null || routeOf(ref.threadId) === routeOf(ref.postId)),
+        )
+        .map((ref) => [`${ref.threadId}/${ref.postId ?? ''}`, ref] as const),
+    ).values(),
+  ];
+  const partitions = new Map<number, NoticePostReference[]>();
+  for (const reference of unique) {
+    const partition = partitionOf(route(reference.threadId));
+    const rows = partitions.get(partition) ?? [];
+    rows.push(reference);
+    partitions.set(partition, rows);
+  }
+
+  async function rowsInPartitions(client: AccessClient, kind: Kind, keys: readonly BatchKey[]): Promise<Row[]> {
+    const groups = new Map<number, BatchKey[]>();
+    for (const key of keys) {
+      const partition = partitionOf(key.route);
+      const rows = groups.get(partition) ?? [];
+      rows.push(key);
+      groups.set(partition, rows);
+    }
+    const rows: Row[] = [];
+    for (const group of groups.values()) rows.push(...(await batchRows(client, kind, group)));
+    return rows;
+  }
+
+  async function realmsInPartitions(client: AccessClient, ids: readonly string[]): Promise<RealmBatchRow[]> {
+    const groups = new Map<number, string[]>();
+    for (const id of new Set(ids)) {
+      const routeValue = routeOf(id);
+      if (routeValue === null) continue;
+      const partition = partitionOf(routeValue);
+      const rows = groups.get(partition) ?? [];
+      rows.push(id);
+      groups.set(partition, rows);
+    }
+    const rows: RealmBatchRow[] = [];
+    for (const group of groups.values()) rows.push(...(await batchRealms(client, group)));
+    return rows;
+  }
+
+  const output = new Map<string, NoticePostContext>();
+  for (const referencesInPartition of partitions.values()) {
+    for (let offset = 0; offset < referencesInPartition.length; offset += 100) {
+      const chunk = referencesInPartition.slice(offset, offset + 100);
+      const ids = [...new Set(chunk.flatMap((ref) => [ref.threadId, ...(ref.postId ? [ref.postId] : [])]))];
+      const round = async () => {
+        const decisions = await prepareBoardPageDecisions(dependencies, context);
+        return batchSnapshot({ pool: dependencies.pool }, ids, context, async (client, anchors) => {
+          const posts = new Map<string, Row>();
+          let pending = [...new Set(chunk.flatMap((ref) => (ref.postId ? [ref.postId] : [])))];
+          for (let depth = 0; pending.length > 0 && depth < 33; depth++) {
+            const rows = await rowsInPartitions(
+              client,
+              'post',
+              pending
+                .filter((id) => routeOf(id) !== null)
+                .map((id) => batchKey(id)),
+            );
+            for (const row of rows) posts.set(row.id, row);
+            pending = [
+              ...new Set(
+                rows.flatMap((row) =>
+                  row.parent_id &&
+                  routeOf(row.parent_id) === routeOf(row.id) &&
+                  !posts.has(row.parent_id)
+                    ? [row.parent_id]
+                    : [],
+                ),
+              ),
+            ];
+          }
+          const threadIds = [...new Set(chunk.map((ref) => ref.threadId))];
+          const threads = await rowsInPartitions(
+            client,
+            'thread',
+            threadIds.map((id) => batchKey(id)),
+          );
+          const threadById = new Map(threads.map((row) => [row.id, row]));
+          const boardIds = [...new Set(threads.flatMap((row) => (row.board_id ? [row.board_id] : [])))];
+          const boards = await rowsInPartitions(client, 'board', boardIds.map((id) => batchKey(id)));
+          const boardById = new Map(boards.map((row) => [row.id, row]));
+          const realmIds = [...new Set(boards.flatMap((row) => (row.realm_id ? [row.realm_id] : [])))];
+          const realms = await realmsInPartitions(client, realmIds);
+          const extra = [
+            ...new Set([...boardIds, ...realmIds].map((id) => partitionOf(route(id)))),
+          ].filter((partition) => !anchors.has(partition));
+          const extraPartitions = await readPartitions(client, extra);
+          if (extraPartitions.length !== extra.length) {
+            const found = new Set(extraPartitions.map((partition) => partition.partitionNo));
+            const missing = extra.find((partition) => !found.has(partition));
+            throw new CommandUnavailableError('deadline', missing ?? extra[0]!);
+          }
+          const moved = extraPartitions.find((partition) => partition.writeState === 'moved');
+          if (moved) throw new CommandUnavailableError('moved', moved.partitionNo, moved.movedTo);
+
+          const parent = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
+          const permitted = new Map<string, boolean>();
+          for (const [kind, values] of [
+            ['thread', threads],
+            ['post', [...posts.values()]],
+          ] as const) {
+            const byId = new Map(values.map((row) => [row.id, row]));
+            const uniqueRows = [...byId.values()];
+            for (let start = 0; start < uniqueRows.length; start += 100) {
+              const batch = uniqueRows.slice(start, start + 100);
+              const allowed = await decisions.decide(client, {
+                action: `${kind}:read`,
+                resourceType: `content.${kind}`,
+                ids: batch.map((row) => row.id),
+                eligibility: async () =>
+                  Object.fromEntries(batch.map((row) => [row.id, contentFloor(row, false, false)])),
+              });
+              for (const row of batch)
+                permitted.set(
+                  row.id,
+                  row.availability === 'available' && decisionAllowed(row, allowed[row.id], context.actor, false),
+                );
+            }
+          }
+
+          const contexts = new Map<string, { value: NoticePostContext; witness: string }>();
+          for (const reference of chunk) {
+            const post = reference.postId === null ? null : posts.get(reference.postId);
+            const thread = threadById.get(reference.threadId);
+            const board = thread?.board_id ? boardById.get(thread.board_id) : undefined;
+            if (
+              !thread ||
+              !board ||
+              !permitted.get(thread.id) ||
+              !parent.boards.get(board.id) ||
+              (board.realm_id !== null && !parent.realms.get(board.realm_id))
+            )
+              continue;
+            const chain: Row[] = [];
+            const seen = new Set<string>();
+            if (post) {
+              if (post.thread_id !== reference.threadId) continue;
+              let current: Row | undefined = post;
+              let complete = false;
+              while (current && chain.length < 33 && !seen.has(current.id)) {
+                if (current.thread_id !== thread.id || !permitted.get(current.id)) break;
+                seen.add(current.id);
+                chain.push(current);
+                if (current.parent_id === null) {
+                  complete = true;
+                  break;
+                }
+                current = posts.get(current.parent_id);
+              }
+              if (!complete) continue;
+              if (chain.at(-1)?.id !== thread.first_post_id) continue;
+            }
+            const realm = board.realm_id ? realms.find((row) => row.realm_id === board.realm_id) ?? null : null;
+            const value = {
+              threadId: thread.id,
+              postId: post?.id ?? null,
+              boardId: board.id,
+              threadTitle: thread.title,
+              boardTitle: board.title,
+            } satisfies NoticePostContext;
+            const witness = JSON.stringify([
+              signature(thread),
+              thread.title,
+              signature(board),
+              board.title,
+              ...chain.map(signature),
+              realm,
+              [...anchors.values(), ...extraPartitions].map((partition) => [partition.partitionNo, partition.epoch]),
+            ]);
+            contexts.set(`${reference.threadId}/${reference.postId ?? ''}`, { value, witness });
+          }
+          return contexts;
+        });
+      };
+
+      const initial = await round();
+      const final = await round();
+      for (const reference of chunk) {
+        const key = `${reference.threadId}/${reference.postId ?? ''}`;
+        const before = initial.value.get(key);
+        const after = final.value.get(key);
+        if (before && after && before.witness === after.witness) output.set(key, after.value);
+      }
+    }
+  }
+  return output;
+}
+
+export type NoticeBoardContext = Readonly<{ boardId: string; boardTitle: string | null }>;
+
+/** Current header-only disclosure for report outcomes that target a board. */
+export async function readNoticeBoardContexts(
+  dependencies: ContentReadDependencies,
+  boardIds: readonly string[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, NoticeBoardContext>> {
+  if (boardIds.length > 200) throw new RangeError('At most 200 notice board references');
+  const groups = new Map<number, string[]>();
+  for (const id of new Set(boardIds)) {
+    const routeValue = routeOf(id);
+    if (routeValue === null) continue;
+    const partition = partitionOf(routeValue);
+    const ids = groups.get(partition) ?? [];
+    ids.push(id);
+    groups.set(partition, ids);
+  }
+  const output = new Map<string, NoticeBoardContext>();
+  for (const idsInPartition of groups.values()) {
+    for (let offset = 0; offset < idsInPartition.length; offset += 100) {
+      const ids = idsInPartition.slice(offset, offset + 100);
+      const round = async () => {
+        const decisions = await prepareBoardPageDecisions(dependencies, context);
+        return batchSnapshot({ pool: dependencies.pool }, ids, context, async (client, anchors) => {
+          const boards = await batchRows(client, 'board', ids.map((id) => batchKey(id)));
+          const realmIds = [...new Set(boards.flatMap((board) => (board.realm_id ? [board.realm_id] : [])))];
+          const realms = await batchRealms(client, realmIds);
+          const extra = [...new Set(realmIds.map((id) => partitionOf(route(id))))].filter(
+            (partition) => !anchors.has(partition),
+          );
+          const extraPartitions = await readPartitions(client, extra);
+          if (extraPartitions.length !== extra.length) {
+            const found = new Set(extraPartitions.map((partition) => partition.partitionNo));
+            const missing = extra.find((partition) => !found.has(partition));
+            throw new CommandUnavailableError('deadline', missing ?? extra[0]!);
+          }
+          const moved = extraPartitions.find((partition) => partition.writeState === 'moved');
+          if (moved) throw new CommandUnavailableError('moved', moved.partitionNo, moved.movedTo);
+          const parent = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
+          const allowed =
+            boards.length === 0
+              ? {}
+              : await decisions.decide(client, {
+                  action: 'board:read',
+                  resourceType: 'content.board',
+                  ids: boards.map((board) => board.id),
+                  eligibility: async () =>
+                    Object.fromEntries(boards.map((board) => [board.id, contentFloor(board, false, false)])),
+                });
+          const result = new Map<string, { value: NoticeBoardContext; witness: string }>();
+          for (const board of boards) {
+            if (
+              !decisionAllowed(board, allowed[board.id], context.actor, false) ||
+              !parent.boards.get(board.id) ||
+              (board.realm_id !== null && !parent.realms.get(board.realm_id))
+            )
+              continue;
+            const realm = board.realm_id ? realms.find((row) => row.realm_id === board.realm_id) ?? null : null;
+            result.set(board.id, {
+              value: { boardId: board.id, boardTitle: board.title },
+              witness: JSON.stringify([
+                signature(board),
+                board.title,
+                realm,
+                [...anchors.values(), ...extraPartitions].map((partition) => [partition.partitionNo, partition.epoch]),
+              ]),
+            });
+          }
+          return result;
+        });
+      };
+      const initial = await round();
+      const final = await round();
+      for (const id of ids) {
+        const before = initial.value.get(id);
+        const after = final.value.get(id);
+        if (before && after && before.witness === after.witness) output.set(id, after.value);
+      }
+    }
+  }
+  return output;
+}
+
 /** Current bounded board response composition. The native internal reader stays
  * independent, so exact post/rules reads cannot recurse into presentation. */
 export async function readBoards(

@@ -516,25 +516,45 @@ Delivery decisions share the existing 180-day retention and recipient-erasure pa
 remains separate from account lifecycle authority; a late redrive cannot recreate erased recipient state.
 
 `GET /v1/accounts/{accountId}/notifications?limit=&cursor=` lists the authenticated account's inbox;
-`GET /v1/accounts/{accountId}/notifications/count` returns its unread count, and
+`GET /v1/accounts/{accountId}/notifications/count` returns its bounded current-visible unread summary,
 `POST /v1/accounts/{accountId}/notifications:markSeen` advances its seen marker with `{ through: <notice id> }` and an
-`Idempotency-Key`. The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. The GET list returns newest
-first, using an immutable notice ordering to break time ties. `limit` is 1–50, default 20. Its opaque shared list
-cursor (`src/tokens/list-cursor.ts`) binds the viewer and list query. Each item contains `id`, `kind`, `createdAt`,
-`actorId`, target ids and `unread`. Reply, mention and thread-watch candidates pass the current native post disclosure check,
-including the full post ancestry and independently anchored board and Realm; unreadable ones are skipped without
-exposing their notice or post ids, including through a cursor. A page scans at most
-four times its limit, advancing past scanned candidates even when none can be returned, as subject threads do.
+`Idempotency-Key`. `POST /v1/accounts/{accountId}/notifications/{noticeId}:markSeen` acknowledges exactly one
+owned item; it never advances the bulk marker. The inbox is private to its account. Naming another account returns 404
+for list, count and either seen action. The GET list returns newest first, using an immutable notice ordering to break
+time ties. `limit` is 1–50, default 20. Its opaque shared list cursor (`src/tokens/list-cursor.ts`) binds the account,
+limit, current client and authentication epoch. It contains the last raw candidate examined, so retrying an unavailable
+source repeats the same page. An account replacement cannot reuse its old cursor.
 
-The unread count reads at most 101 index rows and returns `{ count, capped }`: `count` is at most 100, and
-`capped` is true only when more than 100 unread notices exist. Exactly 100 returns `{ count: 100, capped: false }`.
-Mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
+Each item contains its installed kind, a current actor projection, current board/thread labels where disclosed, an
+exact target action, a one-item seen action and `unread`. Current actor names and avatars come from Accounts on this
+request; deleted or unavailable actors have the explicit `Former or unavailable account` form. Moderation notices use
+the `Moderation team` actor. Reply, mention, thread-watch and board-watch candidates prove the exact source id, target,
+full bounded post ancestry, thread, board and Realm using header/reference reads without reading post bodies. The final
+target and Access witnesses are checked again before an item is returned. Moderation-decision notices require current
+author ownership; moderator inspection does not grant an Inbox notice. Report outcomes require the recipient's current
+reporter-owned record and never include its reason or evidence. A reporter's retained record can remain visible while
+its target context is withheld. Unreadable ordinary targets are omitted without exposing their notice or target ids.
+
+The page examines at most four times its limit (maximum 200) raw notice candidates. Sparse pages advance across the
+last candidate examined. A dependency failure returns an error without a cursor, so retry does not skip candidates.
+`GET .../count` applies the same current per-kind disclosure to unread candidates, examining at most 200 plus one row
+to detect truncation. It returns `{ count, capped, basis, witness }`; `count` is at most 100, `basis` is
+`current-visible-unread` when the candidate range was complete and `current-visible-lower-bound` when more raw
+candidates may remain. `capped` means the returned value is a lower bound because the candidate range or 100-visible
+cap was exceeded. The current-disclosure witness records the summary time. A failed source read is unavailable, never
+an invented zero.
+
+Decision: scan at most 200 unread candidates through current disclosure and return at most 100 visible; the summary is exact only for a complete range with up to 100 visible, otherwise `capped` marks a lower bound.
+
+Bulk mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
 Items at or before the marker are read; marking an older item cannot make newer seen items unread again.
 The frontier stores the owned notice's immutable `(created_at, notice_id)` tuple in `notice_seen`, independently
 of that notice's lifetime. PostgreSQL compares and copies the full timestamp precision; UUID breaks exact time
 ties. List cursor keys also retain database timestamp precision. Delivery time and UUID time never substitute for
 creation time: a delayed notice at or before the frontier is read even if its UUID is newer.
 Concurrent marks atomically keep the greater tuple; replaying an equal or older mark leaves `seen_at` unchanged.
+One-item acknowledgement stores the exact owned `notice_id` separately in `notice_ack`; concurrent replay is
+idempotent and does not change another item or the bulk frontier. Both seen states are removed with their notice.
 Unknown or foreign notice points remain concealed, including a formerly owned point removed by retention.
 
 Storage transition: the migration copies timestamps only from still-present, recipient-owned notice points and
@@ -542,7 +562,7 @@ removes legacy markers whose points are already absent (or not owned), restartin
 Unavailable history is not recovered, inferred from UUIDs or reconstructed by scanning an inbox. This one-time
 migration changes existing rows; requests never backfill, scan history or rewrite a recipient range.
 Notices and completed thread-watch progress older than 180 days are deleted in bounded batches. Account deletion
-erases the account's watches, notices and seen marker through Content's existing bounded recipient-erasure pages.
+erases the account's watches, notices and seen state through Content's existing bounded recipient-erasure pages.
 
 Notification costs are bounded independently of inbox or thread size:
 
@@ -555,13 +575,9 @@ Notification costs are bounded independently of inbox or thread size:
   pages, and inbox reads recheck current post disclosure.
 - Report outcomes write at most one notice per report, amortized against that report's creation. A takedown
   resolves open reports in bounded batches rather than requiring an unbounded synchronous fan-out.
-- List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply, mention or
-  thread-watch target
-  with native post disclosure in batches of eight. At most 200 candidates are checked; each read is bounded by the
-  fixed 33-post ancestry ceiling and checks the board and Realm at their independent anchors. Count reads at most 101
-  index rows after one frontier point read. Mark seen locks one owned notice point and atomically moves at most
-  one frontier row. List joins only the single frontier, never its old notice. These bounds hold after retention;
-  no inbox scan is needed.
+- List and current-visible summary use native partition-batched target disclosure, current Accounts identities and
+  separate one-item and bulk seen state; operation-specific bounds follow below. These bounds hold after retention;
+  no Inbox scan is needed.
 - Retention deletes bounded batches on recipient routes. The Content erasure participant removes notices, watch
   edges and the one seen marker in bounded batches; neither cleanup requires one transaction over an inbox or thread.
 
@@ -2311,11 +2327,29 @@ check uses scales [256, 1024, 4096] with the series rule.
 - **Bound:** Constant source rows and statements plus a bounded board point and bounded thread/board/Realm read checks per recipient; logarithmic blocks in their indexed histories.
 - **Growth check:** `test/content/growth-mention-notices.test.ts`; mention nodes per post at scales [16, 64, 256], with at most ten notices and constant database rows beyond ten. `test/content/mention-notices.test.ts` proves native first-publication delivery when board and thread routes differ.
 
-### Notification inbox projection
+### Cost: notification inbox projection
 
-- **Touches:** One recipient index range of at most `4 × limit` notice rows, then one current native post disclosure for each distinct reply or mention target in that range. Each disclosure checks the complete bounded post ancestry and the independently anchored board and Realm.
-- **Bound:** At most 200 candidates per page; rows and statements are bounded by candidate count and the fixed 33-post ancestry ceiling, with logarithmic blocks in indexed histories.
-- **Growth check:** `test/content/growth-notice-inbox.test.ts` keeps the existing [256, 1024, 4096] inbox range bound and captures a real independently anchored post notice at those same scales.
+- Touches: One recipient index range of C = 4 × limit <= 200 notice rows, one frontier lookup and up to C exact acknowledgement probes. D distinct source targets are grouped by native partition and chunks of 100. Each chunk runs two current witness passes; each pass reads up to 33 body-free post-header batches, one thread header batch, one board header batch and one Realm header batch. Author decisions use three exact decision/target snapshots each. Reporter outcomes use two report-reference snapshots, two reporter account:read proofs and at most one post-to-thread locator. Current actor labels use two Accounts identity batches per routed partition and up to two profile point reads per listed actor for avatars and stability checks. The viewer's active account/session check runs before and after hydration.
+- Bound: With D post/thread refs, G board refs, M decisions, R reporter outcomes and B = Σ ceil(D_partition / 100) + Σ ceil(G_partition / 100), at most 2B × 38 source/header/partition statements, 72D + 4G target-header rows, 3M decision/target reads and 5R report/account reads plus one locator per post report. Full-body and revision reads are zero. Access authority work is bounded by these keys and uses the shared Access Cost A. Actor rows, statements and profile bytes are bounded by 2 × limit <= 100. Inbox, acknowledgement and seen-frontier work examines at most C notice keys plus one frontier row; indexed blocks grow logarithmically.
+- Growth check: `test/content/growth-notice-inbox.test.ts` covers 256/1024/4096 unrelated Inbox rows, a current independently routed post and the 201-row summary truncation probe. `test/content/notice-inbox-http.test.ts` covers exact target withholding, retry cursor behavior and current actor/context output.
+
+### Cost: current-visible unread summary
+
+- Touches: One unread recipient index range of at most 201 rows, including the exact acknowledgement lookup and bulk frontier predicate, followed by the same source, target and current disclosure checks as the list. Actor profile hydration is not needed for counts.
+- Bound: At most 200 raw candidates are disclosed; the extra row only establishes truncation. The result counts at most 100 disclosed notices. A complete range with at most 100 visible notices is exact; otherwise `capped` declares the result a lower bound. Rows, source proofs, Access work and bytes are independent of older Inbox rows and post body size.
+- Growth check: `test/content/growth-notice-inbox.test.ts` holds the unread result fixed while growing unrelated rows at 256/1024/4096 and exercises exact, 100-capped and incomplete-coverage results. `test/content/notice-inbox-http.test.ts` proves hidden raw rows do not inflate the visible summary.
+
+### Cost: exact one-notice acknowledgement
+
+- Touches: Current `account:read` and account-state/fence check before every attempt; one exact recipient-owned notice point locked `FOR SHARE` and one `notice_ack` primary-key insert with `ON CONFLICT DO NOTHING`; notice retention cascades the acknowledgement.
+- Bound: Fixed route admission, one Access authorization and account-state point, then two statements in one recipient-route transaction, one notice row and at most one acknowledgement row; replay or a concurrent acknowledgement changes no other notice and does not touch `notice_seen`.
+- Growth check: `test/content/notice-inbox-http.test.ts` replays concurrent exact acknowledgements and verifies that only the selected item becomes read while the bulk frontier remains absent.
+
+### Cost: bulk seen frontier
+
+- Touches: Current `account:read` and account-state/fence check before every attempt; one exact recipient-owned notice point locked `FOR SHARE` and one `notice_seen` upsert that copies the immutable `(created_at, notice_id)` tuple.
+- Bound: Fixed route admission, one Access authorization and account-state point, then two statements in one recipient-route transaction, one notice row and at most one frontier row; tuple comparison keeps concurrent and replayed marks monotonic.
+- Growth check: `test/content/notice-inbox-http.test.ts` covers concurrent marks, older retries, delayed delivery and retention of the precise frontier.
 
 Derivations use the implemented adapters and SQL in `db/content/migrations/` and `db/content/schema.sql`. At fixed admitted input, unique-key B-tree probes examine constant rows and use O(log N) shared blocks; changing k indexed rows uses O(k log N) blocks. Rows include filtered candidates; blocks include bounded body access but exclude dead tuples, vacuum debt and lock waits. `C` is the command envelope (receipt/partition/outbox and bounded write-basis inserts), adding constant rows/statements and logarithmic blocks. `A` is an authenticated Access check, derived in [Access Cost](../access/README.md#cost). Transactions, settings, catalogue checks and time reads add fixed statement constants. Body and metadata byte caps bound read/write bytes.
 

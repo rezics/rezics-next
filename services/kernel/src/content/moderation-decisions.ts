@@ -132,6 +132,61 @@ export async function readModerationDecision(
   };
 }
 
+/** Inbox disclosure is limited to the current author of a post or thread.
+ * This deliberately does not treat a moderator's inspection grant as notice ownership. */
+export async function readModerationDecisionForAuthor(
+  deps: { pool: Pool; access: Access },
+  id: string,
+  context: { actor: Actor; deadline: number },
+) {
+  if (context.actor.kind !== 'account') return null;
+  const route = routeOf(id);
+  if (route === null) return null;
+  const reference = () =>
+    snapshot(deps.pool, route, context.deadline, async (client) => {
+      const decision = await readDecision.run(client, { route, decision_id: id });
+      if (!decision || decision.target_kind === 'board') return null;
+      const [target] = await currentTarget.run(client, {
+        route,
+        kind: decision.target_kind,
+        id: decision.target_id,
+      });
+      if (!target || target.author_account_id !== context.actor.accountId) return null;
+      return { decision, target };
+    });
+  const before = await reference();
+  if (!before.value) return null;
+  const current = await readModerationDecision(deps, id, context);
+  if (!current?.value) return null;
+  const after = await reference();
+  if (!after.value) return null;
+  const left = before.value.decision;
+  const right = after.value.decision;
+  const sameTime = (leftValue: Date | string | null, rightValue: Date | string | null) =>
+    leftValue === null || rightValue === null
+      ? leftValue === rightValue
+      : new Date(leftValue).getTime() === new Date(rightValue).getTime();
+  const sameDecision =
+    left.decision_id === right.decision_id &&
+    left.target_kind === right.target_kind &&
+    left.target_id === right.target_id &&
+    left.appeal_id === right.appeal_id &&
+    left.outcome === right.outcome &&
+    sameTime(left.resolved_at, right.resolved_at);
+  if (
+    !sameDecision ||
+    before.value.target.author_account_id !== after.value.target.author_account_id ||
+    current.value.id !== right.decision_id ||
+    current.value.targetId !== right.target_id ||
+    current.value.targetKind !== right.target_kind ||
+    (current.value.appeal?.id ?? null) !== right.appeal_id ||
+    (current.value.appeal?.outcome ?? null) !== right.outcome ||
+    !sameTime(current.value.appeal?.resolvedAt ?? null, right.resolved_at)
+  )
+    return null;
+  return current;
+}
+
 async function writeOnRoute<T>(
   pool: Pool,
   route: number,

@@ -507,7 +507,7 @@ test('author erasure preserves the complete account inbox and its seen marker', 
 
   expect((await readNotices()).rows).toEqual(noticesBefore.rows);
   expect((await readSeen()).rows).toEqual(seenBefore.rows);
-  await fixture.reader.query('TRUNCATE TABLE content.notice_seen, content.notice');
+  await fixture.reader.query('TRUNCATE TABLE content.notice_ack, content.notice_seen, content.notice');
 });
 
 for (const revocation of ['grant', 'consent'] as const) {

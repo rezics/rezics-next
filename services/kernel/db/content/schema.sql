@@ -1529,6 +1529,21 @@ CREATE TABLE content.notice_seen (
 
 
 --
+-- Name: notice_ack; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.notice_ack (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    notice_id uuid NOT NULL,
+    acknowledged_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    CONSTRAINT notice_ack_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT notice_ack_notice_route_check CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
+    CONSTRAINT notice_ack_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: operation; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2807,6 +2822,22 @@ ALTER TABLE ONLY content.notice
 
 ALTER TABLE ONLY content.notice_seen
     ADD CONSTRAINT notice_seen_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: notice_ack notice_ack_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice_ack
+    ADD CONSTRAINT notice_ack_pkey PRIMARY KEY (route, account_id, notice_id);
+
+
+--
+-- Name: notice_ack notice_ack_notice_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice_ack
+    ADD CONSTRAINT notice_ack_notice_fkey FOREIGN KEY (route, notice_id) REFERENCES content.notice(route, notice_id) ON DELETE CASCADE;
 
 
 --

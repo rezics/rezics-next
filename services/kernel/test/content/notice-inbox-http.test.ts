@@ -27,9 +27,8 @@ async function call(path: string, method = 'GET', body?: unknown) {
       method,
       headers: {
         authorization: `Bearer ${fixture.bearer()}`,
-        ...(body === undefined
-          ? {}
-          : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -38,7 +37,7 @@ async function call(path: string, method = 'GET', body?: unknown) {
 }
 
 async function seed(count: number) {
-  await db.admin.query('TRUNCATE TABLE content.notice, content.notice_seen');
+  await db.admin.query('TRUNCATE TABLE content.notice_ack, content.notice, content.notice_seen');
   const recipient = fixture.accountId;
   const r = routeOf(recipient)!;
   const ids = Array.from({ length: count }, (_, i) => newId(r));
@@ -67,8 +66,8 @@ test("the inbox lists only the viewer's notices newest first with an opaque curs
   const inaccessiblePost = newId(fixture.targetRoute);
   await db.admin.query(
     `INSERT INTO content.notice(route,recipient_id,notice_id,kind,thread_id,post_id,source_id,created_at)
-     VALUES ($1,$2,$3,'reply',$4,$5,$3,now()+interval '1 minute'),
-            ($1,$2,$6,'mention',$4,$5,$6,now()+interval '2 minutes')`,
+     VALUES ($1,$2,$3,'reply',$4,$5,$5,now()+interval '1 minute'),
+            ($1,$2,$6,'mention',$4,$5,$5,now()+interval '2 minutes')`,
     [
       routeOf(fixture.accountId),
       fixture.accountId,
@@ -89,13 +88,22 @@ test("the inbox lists only the viewer's notices newest first with an opaque curs
 });
 
 test('the Inbox and unread summary omit notices without a current disclosed source', async () => {
-  await seed(3);
+  const disclosed = await seed(3);
+  const hiddenIds = Array.from({ length: 5 }, () => newId(routeOf(fixture.accountId)!));
+  const hiddenPost = newId(fixture.targetRoute);
+  await db.admin.query(
+    `INSERT INTO content.notice(route,recipient_id,notice_id,kind,thread_id,post_id,source_id,created_at)
+     SELECT $1,$2,id,'reply',$3,$4,$4,now() + ordinality * interval '1 minute'
+     FROM unnest($5::uuid[]) WITH ORDINALITY AS notices(id,ordinality)`,
+    [routeOf(fixture.accountId), fixture.accountId, newId(fixture.targetRoute), hiddenPost, hiddenIds],
+  );
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
   const page = await call(`${base}?limit=50`);
   expect(page.response.status).toBe(200);
-  expect(page.value.items).toEqual([]);
+  expect(page.value.items.map((item: { id: string }) => item.id)).toEqual([...disclosed].reverse());
+  expect(JSON.stringify(page.value)).not.toContain(hiddenPost);
   expect((await call(`${base}/count`)).value).toMatchObject({
-    count: 0,
+    count: disclosed.length,
     capped: false,
     basis: 'current-visible-unread',
     witness: { kind: 'current-disclosure', at: expect.any(String) },
@@ -105,11 +113,39 @@ test('the Inbox and unread summary omit notices without a current disclosed sour
 test('the unread count stops at 100 and the seen marker never moves backward', async () => {
   const ids = await seed(102);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
-  expect((await call(`${base}/count`)).value).toEqual({ count: 100, capped: true });
+  expect((await call(`${base}/count`)).value).toMatchObject({
+    count: 100,
+    capped: false,
+    basis: 'current-visible-unread',
+  });
   const advanced = await call(`${base}:markSeen`, 'POST', { through: ids[80] });
   expect(advanced.response.status).toBe(204);
   expect((await call(`${base}:markSeen`, 'POST', { through: ids[12] })).response.status).toBe(204);
-  expect((await call(`${base}/count`)).value).toEqual({ count: 21, capped: false });
+  expect((await call(`${base}/count`)).value).toMatchObject({
+    count: 21,
+    capped: false,
+    basis: 'current-visible-unread',
+  });
+});
+
+test('one-item acknowledgement is exact, concurrent-safe and independent of the bulk frontier', async () => {
+  const ids = await seed(3);
+  const base = `/v1/accounts/${fixture.accountId}/notifications`;
+  const target = ids[1]!;
+  const path = `${base}/${target}:markSeen`;
+  const results = await Promise.all([call(path, 'POST'), call(path, 'POST')]);
+  expect(results.map((result) => result.response.status)).toEqual([204, 204]);
+  const page = await call(`${base}?limit=10`);
+  const flags = new Map(page.value.items.map((item: { id: string; unread: boolean }) => [item.id, item.unread]));
+  expect(flags.get(target)).toBe(false);
+  expect(ids.filter((id) => id !== target).every((id) => flags.get(id) === true)).toBe(true);
+  expect(
+    await db.admin.query('SELECT count(*)::integer AS count FROM content.notice_seen WHERE route=$1 AND account_id=$2', [
+      routeOf(fixture.accountId),
+      fixture.accountId,
+    ]),
+  ).toMatchObject({ rows: [{ count: 0 }] });
+  expect((await call(`${base}/count`)).value).toMatchObject({ count: 2, capped: false });
 });
 
 test('retention preserves the precise seen frontier across delayed delivery and concurrent marks', async () => {
@@ -241,6 +277,102 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
     expect(restoredPosts).toContain(publicReply.id);
     expect(restoredPosts).toContain(writtenReply.id);
     expect(restoredPosts).not.toContain(deniedReply.id);
+    const restoredItems = restoredInbox.value!.items as unknown as Array<{
+      id: string;
+      currentActor: { state: string; accountId?: string; displayName: string; avatarUrl: string | null };
+      currentTarget: {
+        state: string;
+        threadId: string | null;
+        postId: string | null;
+        boardId: string | null;
+        threadTitle: string | null;
+        boardTitle: string | null;
+      };
+      summary: string;
+      actions: {
+        open: { kind: string; threadId?: string; postId?: string } | null;
+        markSeen: { method: string; path: string };
+      };
+    }>;
+    const publicNotice = restoredItems.find((item) => item.target.postId === publicReply.id)!;
+    expect(publicNotice.currentActor).toMatchObject({ state: 'available', accountId: people.replier.id });
+    expect(publicNotice.currentActor.displayName.length).toBeGreaterThan(0);
+    expect(publicNotice.currentTarget).toMatchObject({
+      state: 'available',
+      threadId: publicThread.id,
+      postId: publicReply.id,
+      boardId: people.publicBoardId,
+      threadTitle: 'Notification test thread',
+    });
+    expect(publicNotice.currentTarget.boardTitle).toEqual(expect.any(String));
+    expect(publicNotice.summary).toEqual(expect.any(String));
+    expect(publicNotice.actions.open).toEqual({ kind: 'thread_post', threadId: publicThread.id, postId: publicReply.id });
+    expect(publicNotice.actions.markSeen).toMatchObject({
+      method: 'POST',
+      path: `/v1/accounts/${people.author.id}/notifications/${publicNotice.id}:markSeen`,
+    });
+  } finally {
+    await driver.close();
+  }
+}, 60_000);
+
+test('a reporter keeps the current outcome action when the reported target is withheld', async () => {
+  const driver = await createContentNotificationDriver();
+  try {
+    const people = await driver.provision();
+    const thread = await driver.createThread(
+      {
+        boardId: people.publicBoardId,
+        visibility: 'published',
+        body: {
+          version: 'rezics-document-v1',
+          profile: 'text',
+          doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'reported' }] }] },
+        },
+      },
+      { actor: people.author, key: JSON.stringify('report-notice-thread') },
+    );
+    expect(thread.response.status).toBe(201);
+    const post = await driver.createPost(
+      {
+        threadId: thread.value!.id,
+        parentId: thread.value!.firstPost.id,
+        visibility: 'published',
+        body: {
+          version: 'rezics-document-v1',
+          profile: 'text',
+          doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'reported reply' }] }] },
+        },
+      },
+      { actor: people.replier, key: JSON.stringify('report-notice-post') },
+    );
+    expect(post.response.status).toBe(201);
+    const report = await driver.report(
+      { kind: 'post', id: post.value!.id },
+      { actor: people.reporter, key: JSON.stringify('report-notice-report') },
+    );
+    expect(report.response.status).toBe(201);
+    const removed = await driver.takedown(
+      { kind: 'post', id: post.value!.id },
+      'Action on reported content',
+      { actor: people.moderator, key: JSON.stringify('report-notice-takedown') },
+    );
+    expect(removed.response.status).toBe(200);
+    await driver.effects('drain');
+
+    const inbox = await driver.inbox(people.reporter.id, people.reporter, { limit: 50 });
+    expect(inbox.response.status).toBe(200);
+    const item = (inbox.value!.items as unknown as Array<{
+      target: { reportId?: string };
+      currentTarget: { state: string };
+      summary: string;
+      actions: { open: unknown };
+    }>).find((notice) => notice.target.reportId === report.value!.reportId);
+    expect(item).toMatchObject({
+      currentTarget: { state: 'withheld' },
+      summary: 'your report was actioned',
+      actions: { open: { kind: 'report_outcome', reportId: report.value!.reportId } },
+    });
   } finally {
     await driver.close();
   }

@@ -551,6 +551,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
+    routeKey: dependencies.routeKey,
     get access() {
       return contentDependencies.access;
     },

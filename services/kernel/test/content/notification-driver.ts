@@ -80,7 +80,8 @@ function threadOf(value: unknown): Thread {
 function noticeOf(value: unknown): Notice {
   const raw = object(value, 'Notification');
   const kind = string(raw.kind, 'notification.kind');
-  if (!['reply', 'mention', 'moderation_decision'].includes(kind)) throw new TypeError('Notification kind is invalid');
+  if (!['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision'].includes(kind))
+    throw new TypeError('Notification kind is invalid');
   const actorId = raw.actorId;
   if (actorId !== null && typeof actorId !== 'string') throw new TypeError('Notification actorId is invalid');
   if (typeof raw.unread !== 'boolean') throw new TypeError('Notification unread flag is invalid');
@@ -91,7 +92,11 @@ function noticeOf(value: unknown): Notice {
     actorId,
     target: notificationTarget(raw),
     unread: raw.unread,
-  };
+    currentActor: raw.actor,
+    currentTarget: raw.target,
+    summary: raw.summary,
+    actions: raw.actions,
+  } as Notice;
 }
 
 function nullableString(value: unknown, label: string): string | null {
