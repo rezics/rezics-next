@@ -141,18 +141,19 @@ for manual copying and a Close action returning focus. Replacement visits retire
 Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
 and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
 
-The installed Kernel source emits optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
-thread/post summaries and optional `reactionsAsOf` on the page. The current generated Web client has not published
-those fields: its `FeedContentSummary` still has only author and excerpt, and its page type lacks `reactionsAsOf`.
-Until normal client generation publishes them, Home keeps reactions unavailable and binds none of these values.
-Publish with `bun run --cwd services/kernel typecheck --emit-client` before binding them. Do not add a browser DTO
-or cast, infer a thread target from `summary.id`, or read each row. Once present, bind the exact
-target: use `reactionTarget` verbatim. The installed thread projector supplies its thread ID; never infer it from
-`summary.id` or replace it with an opening post. A post target keeps its supplied post ID only after the native
-thread/destination relationship is admitted. The count map uses the seven native kinds and positive integer entries;
-an empty map means known zero, absent counts mean unavailable. Anonymous viewer-slot omission differs from
-authenticated `null`, and a null watermark does not prove a later write converged. Following projection failure
-withholds its rows and preserves its input frontier for retry.
+Kernel generation publishes optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
+thread/post summaries and optional `reactionsAsOf` on the page. Home consumes those generated fields directly and
+passes the exact target, count map, viewer slot and page watermark into the shared reaction engine. It does not add a
+browser DTO or infer a thread target from `summary.id`. A post target is admitted only when its supplied post ID
+matches the native destination. An empty count map means known zero, absent counts mean unavailable. Anonymous
+viewer-slot omission differs from authenticated `null`, and a null watermark does not prove a later write converged.
+Following projection failure withholds its rows and preserves its input frontier for retry.
+
+Home also renders the generated current review target and citation, including the cited question identity and
+revision, recorded units, and vote revision. A concealed target never falls back to the discovery label. Reply cards
+show only the immediate disclosed parent, its current author and excerpt, plus exact post and revision destinations.
+Spoiler-marked parent excerpts require a reveal tied to the current page origin; source or account replacement retires
+the reveal.
 
 `useHomeReactionCurrentness` binds one displayed page to its result, request/cursor, stream, filters, Space, source
 states and existing session-cache observation. Beginning a replacement read, changing any binding or observing

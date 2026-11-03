@@ -6,16 +6,36 @@ import { homeFeedDestination, homeFeedResume, homeFeedTitle } from '../pages/hom
 import type { FeedItem } from '../pages/home-feed-read';
 import type { FeedItemPresentation } from './feed-results';
 import { FeedCardAttribution } from './card-attribution';
-import { FeedCardContext, FeedCardPreview, FeedCardVisual, feedCardKind } from './card-presentation';
+import {
+  FeedCardContext,
+  FeedCardParentContext,
+  FeedCardPreview,
+  FeedCardVisual,
+  feedCardKind,
+} from './card-presentation';
+import type { FeedActionBarProps } from './action-bar';
 
 /** A current-page projection: no hydration, retained identity, source inference or reordering. */
-export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedItemPresentation {
+export function homeFeedItemPresentation(
+  item: FeedItem,
+  locale: string,
+  origin?: FeedActionBarProps['origin'],
+): FeedItemPresentation {
   const options = { locale: locale as Locale };
   const title = homeFeedTitle(item, locale);
   const href = homeFeedDestination(item, locale);
   const resume = homeFeedResume(item, locale);
   const summary = item.summary;
   const kind = feedCardKind(item);
+  const parentContext = 'parentContext' in summary ? summary.parentContext : undefined;
+  const parent = parentContext?.kind === 'reply' ? parentContext.parent : undefined;
+  const parentKey = [
+    origin?.key ?? '',
+    item.id,
+    parent?.state ?? parentContext?.kind ?? '',
+    parent && 'id' in parent ? parent.id : '',
+    parent?.state === 'available' ? parent.revisionId : '',
+  ].join(':');
   const progress =
     item.source === 'continue' ? progressView(continueProgress(item.continue.activeProgressSession), locale) : null;
   return {
@@ -28,7 +48,17 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     visual: FeedCardVisual({ item, title, href, locale }),
     context: <FeedCardContext item={item} kind={kind} locale={locale} />,
     metadata: <FeedCardAttribution item={item} kind={kind} locale={locale} />,
-    preview: <FeedCardPreview item={item} />,
+    preview: (
+      <>
+        <FeedCardPreview item={item} />
+        <FeedCardParentContext
+          key={parentKey}
+          item={item}
+          locale={locale}
+          origin={origin}
+        />
+      </>
+    ),
     state: progress?.text,
     actions:
       resume === undefined ? undefined : (

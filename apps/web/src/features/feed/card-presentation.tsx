@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   BookOpenIcon,
   BoxesIcon,
@@ -15,7 +15,9 @@ import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { FeedItem } from '../pages/home-feed-read';
-import { subjectHref } from '../../subject/subject-href';
+import { accountHref, subjectHref } from '../../subject/subject-href';
+import { exactRevisionHref } from '../../threads/exact-revision-href';
+import { threadLocation } from '../../threads/thread-href';
 
 export type FeedCardKind = 'work' | 'subject' | 'discussion' | 'reply' | 'review' | 'collection' | 'account' | 'space';
 
@@ -166,17 +168,73 @@ export function FeedCardPreview({ item }: { item: FeedItem }) {
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
-  if ('kind' in summary && summary.kind === 'review' && 'subject' in summary && summary.subject) {
-    const subject = summary.subject;
-    const title = subject.title ?? m.subject_value_unlabelled({}, options);
-    return (
-      <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
-        <span>{m.home_card_review_subject({}, options)}</span>
-        <a href={subjectHref({ id: subject.id, label: title }, locale).href} className={feedCardLinkClassName}>
-          <bdi>{title}</bdi>
-        </a>
-      </span>
-    );
+  if ('kind' in summary && summary.kind === 'review') {
+    const context = 'reviewContext' in summary ? summary.reviewContext : undefined;
+    if (context) {
+      const target = context.target;
+      const citation = context.citation;
+      return (
+        <div className="flex min-w-0 flex-col gap-1" data-feed-card-review-context>
+          {target.state === 'available' ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
+              <span>{m.home_card_review_subject({}, options)}</span>
+              <a
+                href={subjectHref(
+                  { id: target.subject.id, label: target.subject.label?.value || m.subject_value_unlabelled({}, options) },
+                  locale,
+                ).href}
+                className={feedCardLinkClassName}
+                {...(target.subject.label?.language ? { lang: target.subject.label.language } : {})}
+              >
+                <bdi>{target.subject.label?.value || m.subject_value_unlabelled({}, options)}</bdi>
+              </a>
+            </span>
+          ) : null}
+          {citation.state === 'available' ? (
+            <span
+              className="min-w-0 [overflow-wrap:anywhere]"
+              data-feed-review-citation
+              data-question-id={citation.question.id}
+              data-question-revision={citation.question.revision}
+              data-vote-revision={citation.voteRevision}
+              data-units={citation.units}
+            >
+              <bdi>{citation.question.label}</bdi>
+              <span> · </span>
+              {m.thread_provenance_vote(
+                {
+                  units: new Intl.NumberFormat(locale).format(citation.units),
+                  questionId: citation.question.id,
+                  revision: new Intl.NumberFormat(locale).format(citation.voteRevision),
+                },
+                options,
+              )}
+              <span> · </span>
+              {m.rating_question_revision(
+                { revision: new Intl.NumberFormat(locale).format(citation.question.revision) },
+                options,
+              )}
+            </span>
+          ) : citation.state === 'absent' ? (
+            <span data-feed-review-citation="absent">{m.library_my_ratings_review_missing({}, options)}</span>
+          ) : (
+            <span data-feed-review-citation="withheld">{m.post_history_score_concealed({}, options)}</span>
+          )}
+        </div>
+      );
+    }
+    if ('subject' in summary && summary.subject) {
+      const subject = summary.subject;
+      const title = subject.title ?? m.subject_value_unlabelled({}, options);
+      return (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
+          <span>{m.home_card_review_subject({}, options)}</span>
+          <a href={subjectHref({ id: subject.id, label: title }, locale).href} className={feedCardLinkClassName}>
+            <bdi>{title}</bdi>
+          </a>
+        </span>
+      );
+    }
   }
   if (item.destination.kind === 'space' && 'realm' in summary && summary.realm?.title) {
     return (
@@ -186,4 +244,89 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
     );
   }
   return null;
+}
+
+type FeedCardOrigin = { key: string; isCurrent(): boolean };
+
+/** Current immediate-parent context comes only from the native feed summary. */
+export function FeedCardParentContext({
+  item,
+  locale,
+  origin,
+}: {
+  item: FeedItem;
+  locale: string;
+  origin?: FeedCardOrigin;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  if (item.destination.kind !== 'post' || !('parentContext' in item.summary)) return null;
+  const context = item.summary.parentContext;
+  if (!context || context.kind !== 'reply') return null;
+  const parent = context.parent;
+  const options = { locale: locale as Locale };
+  if (parent.state === 'removed')
+    return <p data-feed-card-parent="removed">{m.thread_reply_parent_deleted({}, options)}</p>;
+  if (parent.state === 'withheld')
+    return <p data-feed-card-parent="withheld">{m.thread_reply_parent_unavailable({}, options)}</p>;
+
+  const destination = item.destination;
+  const parentHref = threadLocation(
+    locale,
+    { id: destination.threadId, title: destination.title },
+    undefined,
+    parent.id,
+  );
+  const exactHref = exactRevisionHref({ postId: parent.id, revisionId: parent.revisionId }, locale);
+  const authorName =
+    parent.author?.displayName ||
+    (parent.author?.handle ? `@${parent.author.handle}` : m.thread_author_unknown({}, options));
+  const authorHandle = parent.author?.handle;
+  const current = () => origin?.isCurrent() ?? true;
+  return (
+    <section className="flex min-w-0 flex-col gap-1" data-feed-card-parent="available">
+      <span>{m.thread_reply_parent({}, options)}</span>
+      {parent.author ? (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-parent-author={parent.author.id}>
+          {authorHandle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(authorHandle) ? (
+            <a href={accountHref(locale, authorHandle)} className={feedCardLinkClassName}>
+              <bdi>{authorName}</bdi>
+            </a>
+          ) : (
+            <bdi>{authorName}</bdi>
+          )}
+        </span>
+      ) : null}
+      {parent.excerpt ? (
+        parent.spoiler && !revealed ? (
+          <button
+            type="button"
+            className={feedCardLinkClassName}
+            disabled={!current()}
+            onClick={() => {
+              if (current()) setRevealed(true);
+            }}
+          >
+            {m.thread_reveal_spoiler({}, options)}
+          </button>
+        ) : (
+          <p className="whitespace-pre-line [overflow-wrap:anywhere]" lang={parent.language ?? undefined}>
+            <bdi>{parent.excerpt}</bdi>
+          </p>
+        )
+      ) : null}
+      <span className="flex min-w-0 flex-wrap gap-x-2">
+        <a href={parentHref} className={feedCardLinkClassName} data-feed-card-parent-post>
+          {m.thread_reply_parent_view({}, options)}
+        </a>
+        <a
+          href={exactHref}
+          className={feedCardLinkClassName}
+          aria-label={`${m.thread_reply_parent_view({}, options)} ${parent.revisionId}`}
+          data-feed-card-parent-revision={parent.revisionId}
+        >
+          <bdi>{parent.revisionId}</bdi>
+        </a>
+      </span>
+    </section>
+  );
 }
