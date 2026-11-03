@@ -13,6 +13,7 @@ export const nativeCopyScenarios = {
   secondDetail: ['independent-holding', 'alice'],
   currentAdvice: ['current-status-advice', 'alice'],
   firstEdit: ['first-independent-edit', 'alice'],
+  secondAfterFirstEdit: ['second-unchanged-after-first-edit', 'alice'],
   secondEdit: ['second-independent-edit', 'alice'],
   firstEditedDetail: ['retained-accepted-meaning', 'alice'],
   secondEditedDetail: ['second-edited-detail', 'alice'],
@@ -154,6 +155,22 @@ export function assertCopyRestored(original: CopyResponseExport, restored: CopyR
   requireFact(Number.isInteger(after.revision) && Number(after.revision) > Number(before.revision), 'Undo did not advance revision');
 }
 
+export function assertCopyRetainedMeaning(before: CopyResponseExport, after: CopyResponseExport): void {
+  requireFact(isDeepStrictEqual(copyOf(before).presentation, copyOf(after).presentation), 'accepted meaning reconstructed from current Advice');
+}
+
+export function assertCopyPersonalFacts(before: CopyResponseExport, after: CopyResponseExport): void {
+  requireFact(isDeepStrictEqual(before.response.body, after.response.body), 'independent personal facts changed');
+}
+
+function assertCopyWriteResult(exchange: CopyResponseExport): void {
+  const input = copyObject(exchange.command.input), copy = copyOf(exchange);
+  for (const [field, value] of Object.entries(input)) {
+    if (field === 'revision') requireFact(copy.revision === Number(value) + 1, 'edit did not advance observed revision');
+    else requireFact(isDeepStrictEqual(copy[field], value), `write response lost original ${field}`);
+  }
+}
+
 export function assertCopyIsolation(first: CopyResponseExport, second: CopyResponseExport, siblingAfter: CopyResponseExport): void {
   const a = copyOf(first), b = copyOf(second);
   requireFact(a.id !== b.id && a.subjectId === b.subjectId, 'two holdings were merged by Subject');
@@ -223,14 +240,20 @@ export function assertNativeCopyResponses(manifest: NativeCopyManifest): void {
   };
   const expectedRoutes = (Object.entries(nativeCopyScenarios) as [NativeCopyScenario, readonly [string, CopyPersona]][]).map(([name, [state, persona]]) => ({ route: `/en/library/copies?subjectId=${encodeURIComponent(manifest.subjectId)}`, state, persona, export: name, availability: manifest.outcomes[name].availability }));
   requireFact(isDeepStrictEqual(manifest.routeStates, expectedRoutes), 'route/state/persona/export map absent or changed');
+  for (const name of ['historicalAcceptedMeaning', 'expiredRestore', 'terminalRestore', 'noJsOperation'] as const)
+    requireFact(manifest.outcomes[name].availability === 'dependency_unavailable', `${name} has no installed compatible native producer`);
+  for (const name of ['firstCreate', 'secondCreate', 'firstEdit', 'secondEdit'] as const) assertCopyWriteResult(get(name));
   const first = get('firstDetail'), second = get('secondEditedDetail');
+  assertCopyPersonalFacts(get('secondDetail'), get('secondAfterFirstEdit'));
+  for (const [field, value] of Object.entries(copyOf(get('firstEdit'))))
+    requireFact(isDeepStrictEqual(copyOf(get('firstEditedDetail'))[field], value), 'second edit affected first holding');
   const edited = get('firstEditedDetail'), restored = get('restoredDetail');
   assertCopyIsolation(first, second, get('siblingRemoved'));
   assertCopyIsolation(first, second, get('siblingRestored'));
   assertCopyRestored(edited, get('restore'));
   assertCopyRestored(edited, restored);
-  requireFact(isDeepStrictEqual(copyOf(edited).presentation, copyOf(restored).presentation), 'Undo reconstructed accepted meaning from current Advice');
-  requireFact(isDeepStrictEqual(copyOf(first).presentation, copyOf(edited).presentation), 'note edit changed accepted meaning');
+  assertCopyRetainedMeaning(edited, restored);
+  assertCopyRetainedMeaning(first, edited);
   for (const name of ['firstDetail', 'secondDetail'] as const) {
     const detail = get(name), copy = copyOf(detail);
     requireFact(typeof copy.note === 'string' && copy.note.length >= 800, `${name} lacks long note`);
@@ -245,7 +268,7 @@ export function assertNativeCopyResponses(manifest: NativeCopyManifest): void {
   }
   for (const fact of ['entry', 'progress'] as const)
     for (const phase of ['Removed', 'Restored'] as const)
-      requireFact(isDeepStrictEqual(get(`${fact}Before`).response.body, get(`${fact}${phase}`).response.body), `${fact} changed during removal/Undo`);
+      assertCopyPersonalFacts(get(`${fact}Before`), get(`${fact}${phase}`));
   const removedRows = copyObject(get('listRemoved').response.body);
   const restoredRows = copyObject(get('listRestored').response.body);
   requireFact(Array.isArray(removedRows.copies) && removedRows.copies.length === 1 && copyObject(removedRows.copies[0]).id === copyOf(second).id && removedRows.next === null, 'removal affected the other holding');
@@ -324,6 +347,7 @@ export async function createNativeCopyResponsesFixture(): Promise<NativeCopyResp
       outcomes.currentAdvice = { ...outcomes.firstDetail, responseSource: 'firstDetail' };
     }
     await write('firstEdit', 'PATCH', firstPath, { revision: copyOf(firstCreate).revision, note: noteA + 'Edited first.' }, [200], { scenario: 'firstCreate', revision: Number(copyOf(firstCreate).revision) });
+    await read('secondAfterFirstEdit', detail(secondPath));
     await write('secondEdit', 'PATCH', secondPath, { revision: copyOf(secondCreate).revision, note: noteB + 'Edited second.' }, [200], { scenario: 'secondCreate', revision: Number(copyOf(secondCreate).revision) });
     const firstEdited = await read('firstEditedDetail', detail(firstPath));
     await read('secondEditedDetail', detail(secondPath));

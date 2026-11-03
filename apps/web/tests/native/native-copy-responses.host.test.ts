@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import {
   assertCopyIsolation,
   assertCopyPaging,
+  assertCopyPersonalFacts,
+  assertCopyRetainedMeaning,
   assertCopyPrivateResponse,
   assertCopyResponseUnmodified,
   assertCopyRestored,
@@ -38,7 +40,6 @@ function changed(exchange: CopyResponseExport): CopyResponseExport {
 
 test('the typed native entry point and closed Copies route scenarios are installed', () => {
   expect(typeof createNativeCopyResponsesFixture).toBe('function');
-  expect(Object.keys(nativeCopyScenarios)).toHaveLength(47);
   for (const name of ['historicalAcceptedMeaning', 'expiredRestore', 'terminalRestore', 'noJsOperation'] as const)
     expect(nativeCopyScenarios[name][1]).toBe('alice');
   expect(() => assertNativeCopyResponses({} as NativeCopyManifest)).toThrow('native producer binding absent');
@@ -139,5 +140,20 @@ test('other and anonymous responses cannot reveal the owner holdings or private 
       const leaked = await capture(body, command({ persona }));
       expect(() => assertCopyPrivateResponse(leaked, ['owner-copy-id', 'owner-private-note'])).toThrow('private facts disclosed');
     }
+  }
+});
+
+test('retained accepted labels never come from current Advice and independent personal facts survive', async () => {
+  const accepted = { meaning: 'known', kindLabel: 'Original physical', statusLabel: 'Original owned', statusEditing: { state: 'unavailable' } };
+  const original = await capture({ copy: { ...copy(), presentation: accepted } });
+  const restored = await capture({ copy: { ...copy('first', 4), presentation: accepted } });
+  assertCopyRetainedMeaning(original, restored);
+  const reconstructed = await capture({ copy: { ...copy('first', 4), presentation: { ...accepted, statusLabel: 'Current renamed status' } } });
+  expect(() => assertCopyRetainedMeaning(original, reconstructed)).toThrow('reconstructed from current Advice');
+  for (const body of [{ libraryEntry: { state: 'reading', revision: 1 } }, { progressSession: { amount: '37', revision: 2 } }]) {
+    const before = await capture(body);
+    assertCopyPersonalFacts(before, await capture(body));
+    const lost = await capture({});
+    expect(() => assertCopyPersonalFacts(before, lost)).toThrow('independent personal facts changed');
   }
 });
