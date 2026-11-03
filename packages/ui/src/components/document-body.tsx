@@ -1,6 +1,6 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import { type DocumentSnapshot } from '@rezics/document';
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -36,6 +36,15 @@ export type DocumentBodyLabels = {
 };
 
 export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
+
+const DocumentRenderContext = createContext<DocumentBodyLabels>(documentBodyLabels);
+
+/** Stable mark component so a parent re-render does not remount spoilers or drop keyboard focus. */
+function SpoilerMark({ children }: { children?: ReactNode }) {
+  const labels = useContext(DocumentRenderContext);
+  return <DocumentSpoiler label={labels.revealSpoiler}>{children}</DocumentSpoiler>;
+}
+
 type Props = {
   document: DocumentSnapshot;
   className?: string;
@@ -57,7 +66,6 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
   }
 
   const resolved = { ...documentBodyLabels, ...labels };
-  let spoilerPosition = 0;
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -137,17 +145,15 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
             <>{children}</>
           );
         },
-        spoiler: ({ children }: any) => (
-          <DocumentSpoiler key={`${visit.id}:${spoilerPosition++}`} label={resolved.revealSpoiler}>
-            {children}
-          </DocumentSpoiler>
-        ),
+        spoiler: SpoilerMark,
       },
     },
   });
   return (
-    <Prose className={className} data-slot="document-body">
-      {content}
-    </Prose>
+    <DocumentRenderContext.Provider value={resolved}>
+      <Prose className={className} data-slot="document-body">
+        {content}
+      </Prose>
+    </DocumentRenderContext.Provider>
   );
 }

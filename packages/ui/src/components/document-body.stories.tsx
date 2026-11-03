@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { act, useRef, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { waitForFocus } from '../test/focus.ts';
 import { DocumentBody } from './document-body.tsx';
 
 const snapshot = (profile: 'text' | 'blocks', content: DocumentSnapshot['doc']['content']): DocumentSnapshot => ({
@@ -224,9 +225,10 @@ const expectConcealed = async (button: HTMLElement, secret: string, canvas: HTML
 };
 
 const expectRevealed = async (canvas: ReturnType<typeof within>, secret: string, root: HTMLElement) => {
-  const revealed = canvas.getByText(secret);
+  const revealed = canvas.getByText(secret, { selector: '.document-spoiler-revealed' });
   const paragraph = revealed.closest('p');
   if (!paragraph) throw new Error('revealed spoiler left the paragraph');
+  await waitForFocus(revealed);
   await expect(revealed).toHaveFocus();
   expect(unreadable(revealed)).toBe(false);
   expect(getComputedStyle(revealed).color).toBe(getComputedStyle(paragraph).color);

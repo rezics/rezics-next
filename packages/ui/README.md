@@ -101,7 +101,7 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 `RichTextEditor` accepts an optional `lookupMention(handle, signal)` source. After a 200 ms typing pause, `@handle` offers one exact account match; stale lookups are aborted, keyboard or pointer selection inserts an inline `mention` with only its `accountId`, and Escape keeps the typed text. Without a source, `@` stays plain text. `DocumentBody` accepts a `mentions` map of account ids to current handles and a `locale` (English by default); it renders localized agent links, or a plain `@` for unresolved accounts. Handles are rendered as text, never HTML.
 
-`DocumentBody` derives visit identity from sorted-key structural JSON, so renderer-supported snapshots remain readable, equivalent property-key orderings keep disclosure, and changed document content resets it before paint.
+`DocumentBody` derives visit identity from sorted-key structural JSON, so renderer-supported snapshots remain readable, equivalent property-key orderings keep disclosure, and changed document content resets it before paint. Reader option, locale, class name and callback updates keep the current visit's disclosure; only a changed document snapshot remounts spoilers.
 
 `Prose` is the surface for documents, in the reading page (`DocumentBody`) and in the editor. Body text is interface text. Only a Work title, marked with the `work-title` class, takes the serif face. A line holds about 65 characters (36 em for Chinese, Japanese and Korean, where a character is an em wide), and CJK text gets more leading. The styles live in `src/prose.css`.
 
