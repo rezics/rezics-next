@@ -121,16 +121,22 @@ test('Library scope requests preserve the verified reader, Access, route key, de
   const collection = '018f0000-0000-7000-8000-00a000000010';
   const concealed = '018f0000-0000-7000-8000-00a000000011';
   grants.set(collection, true);
-  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
-    true,
-  );
+  expect(
+    await scope.access.authorize({} as never, actor, 'collection:read', {
+      route: routeOf(collection)!,
+      id: collection,
+    }),
+  ).toBe(true);
   grants.set(collection, false);
-  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
-    false,
-  );
-  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(concealed)!, id: concealed })).toBe(
-    false,
-  );
+  expect(
+    await scope.access.authorize({} as never, actor, 'collection:read', {
+      route: routeOf(collection)!,
+      id: collection,
+    }),
+  ).toBe(false);
+  expect(
+    await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(concealed)!, id: concealed }),
+  ).toBe(false);
 });
 
 test('a scoped cursor is bound to the current canonical source basis', async () => {
