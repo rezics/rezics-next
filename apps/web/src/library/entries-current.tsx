@@ -222,7 +222,7 @@ export function SortControls({
       <input type="hidden" name="layout" value={display.layout} />
       <input type="hidden" name="size" value={display.size} />
       {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
-      <label className="grid gap-1 text-sm">
+      <label className="grid min-w-0 max-w-full gap-1 text-sm">
         {m.library_sort_by()}
         <select
           name="orderBy"
@@ -240,7 +240,7 @@ export function SortControls({
           </option>
         </select>
       </label>
-      <label className="grid gap-1 text-sm">
+      <label className="grid min-w-0 max-w-full gap-1 text-sm">
         {m.library_sort_direction()}
         {scoreOrder ? <input type="hidden" name="direction" value={sort.direction} /> : null}
         <select
