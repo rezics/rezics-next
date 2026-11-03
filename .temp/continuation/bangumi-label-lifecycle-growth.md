@@ -1,27 +1,29 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/**",
-    "services/kernel/db/library/**",
-    "services/kernel/test/library/**",
-    "packages/client/src/kernel/library*",
-    "docs/library-import-bangumi-labels.md",
-    "docs/library-import-bangumi.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "estimate": { "lines": 1450, "files": 9 },
-  "after": ["fd3f1482-f0f5-4efd-952e-89b3dbcef992"],
-  "acceptance": [
-    "Generate the installed typed Bangumi label review/client methods and consume them through the existing upload-to-result interface.",
-    "Exercise bounded source expiry and terminal account erasure without undoing accepted native labels or assignments.",
-    "Measure the complete retained Bangumi tag-to-native-label caller at native64/512/4096 with fixed selection, page and byte limits, including receipts, History, locks, cancellation and cleanup."
-  ]
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/**',
+      'services/kernel/db/library/**',
+      'services/kernel/test/library/**',
+      'packages/client/src/kernel/library*',
+      'docs/library-import-bangumi-labels.md',
+      'docs/library-import-bangumi.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'estimate': { 'lines': 1450, 'files': 9 },
+  'after': ['fd3f1482-f0f5-4efd-952e-89b3dbcef992'],
+  'acceptance':
+    [
+      'Generate the installed typed Bangumi label review/client methods and consume them through the existing upload-to-result interface.',
+      'Exercise bounded source expiry and terminal account erasure without undoing accepted native labels or assignments.',
+      'Measure the complete retained Bangumi tag-to-native-label caller at native64/512/4096 with fixed selection, page and byte limits, including receipts, History, locks, cancellation and cleanup.',
+    ],
 }
 ---
 
