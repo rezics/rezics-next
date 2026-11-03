@@ -71,7 +71,7 @@ test('actual bounded adapters keep raw pages, opaque retries and exact selection
           }
           response = page(0, cursor); // sparse pages do not refill
         }
-        bytes += JSON.stringify(response).length;
+        bytes += new TextEncoder().encode(JSON.stringify(response)).byteLength;
         return Response.json(response);
       },
     });
@@ -224,4 +224,15 @@ test('native disclosure is closed; advice, exact episode and requester status ne
   expect(realmClaimStatusResponse({ claimRequest: null }, { realmId })).toBeNull();
   expect(realmClaimStatusResponse({ claimRequest: null }, { realmId, requestId: id(1) })).toBeUndefined();
   expect(realmClaimStatusResponse({ claimRequest: selected() }, { realmId, requestId: id(1) })).toBeUndefined();
+  const historical = {
+    realmId,
+    requestId: id(1),
+    state: 'approved',
+    orphanedAt: row().orphanedAt,
+    requestedAt: row().requestedAt,
+    approvedAt: '2026-10-31T11:00:00.000Z',
+    currentEpisode: false,
+  };
+  expect(realmClaimStatusResponse({ claimRequest: historical }, { realmId, requestId: id(1) })).toEqual(historical);
+  expect(realmClaimStatusResponse({ claimRequest: historical }, { realmId })).toBeUndefined();
 });

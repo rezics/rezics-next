@@ -41,7 +41,7 @@ performs one foreground point read per current mount or explicit check. Sparse r
 opaque continuation and advance by one explicit native page.
 
 The bounded costs remain one generated queue read per page, same-cursor retry or deliberate restart, one reviewer-qualified exact inspection for
-deliberate prepare, one original approval command per explicit confirmation or separate recovery action, and one first-page
+deliberate prepare, one read-only original-intent inspection per explicit check, one original approval command per explicit confirmation or separate recovery action, and one first-page
 refresh after a current approval. Each requester status check uses one generated mine/exact receipt read plus the
 existing before/after Realm and participation checks. There are no per-row identity reads, timers, polling, hidden
 refill or local authorization rule.

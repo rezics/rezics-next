@@ -154,7 +154,7 @@ test('Realm claim review prioritizes the human request and preserves visible app
     // be rejected, so the fixtures do not manufacture a long identifier or a claimant display name.
     for (const width of [390, 1280]) {
       for (const direction of ['ltr', 'rtl']) {
-        for (const locale of ['en', 'de', 'zh-Hant'] as const) {
+        for (const locale of ['en', 'de', 'fr', 'es', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const) {
           setLocale(locale, { reload: false });
           const example = observed('pending');
           await mount(example, width, direction);
@@ -176,6 +176,8 @@ test('Realm claim review prioritizes the human request and preserves visible app
           expect(host.textContent).toContain(m.realm_review_guidance_privacy());
           expect(row.textContent).toContain(m.realm_review_pending());
           identity(row);
+          expect(row.textContent).toContain(reviewRequest.claimant!.label);
+          expect(row.querySelector('a')?.getAttribute('href')).toBe(reviewRequest.claimant!.href);
           for (const value of [reviewRequest.requestedAt, reviewRequest.orphanedAt, reviewRequest.claimEligibleAt]) {
             const date = row.querySelector(`time[datetime="${value}"]`)!;
             expect(date).not.toBeNull();
