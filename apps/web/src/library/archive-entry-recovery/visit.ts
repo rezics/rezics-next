@@ -62,6 +62,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   #results: RecoveryPage<Result, ResultContext> | null = null;
   #review: Readonly<{ revision: number; operand: Confirm }> | null = null;
   #original: Confirm | null = null;
+  #cancelNeedsCheckpoint = false;
+  #cancelCheckpointed = false;
   #phase: Phase = 'idle';
 
   constructor(currentBinding: () => RecoveryBinding | null, deadline: number, now = Date.now) {
@@ -132,6 +134,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     this.#selection.clear();
     this.#review = null;
     this.#original = null;
+    this.#cancelNeedsCheckpoint = false;
+    this.#cancelCheckpointed = false;
   }
 
   #clearPrivate() {
@@ -236,14 +240,16 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   /** Explicit confirmation or original replay; recoverable/failed outcomes come from the native owner. */
   startApply(): Readonly<{ request: RecoveryRequest; operand: Confirm }> {
     this.#requireUpload();
+    const reconcilingCancellation =
+      this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed;
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
-    } else if (!retainsOriginal(this.#phase)) {
+    } else if (!retainsOriginal(this.#phase) && !reconcilingCancellation) {
       throw new Error('fresh_review_required');
     }
     if (this.#original === null) throw new Error('fresh_review_required');
     this.#abort('results');
-    this.#phase = 'applying';
+    if (!reconcilingCancellation) this.#phase = 'applying';
     return Object.freeze({ request: this.#begin('apply'), operand: this.#original });
   }
 
@@ -254,17 +260,20 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   ): boolean {
     if (!this.#accept('apply', request)) return false;
     this.#abort('results');
+    const reconcilingCancellation = this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint;
     let admitted: RecoveryPage<Result, ResultContext> | undefined;
     try {
       admitted = results === undefined ? undefined : ownRecoveryPage(results);
     } catch {
       // An unusable acknowledgement cannot release the original uncertain command identity.
-      this.#phase = 'uncertain';
+      if (!reconcilingCancellation) this.#phase = 'uncertain';
       throw new Error('invalid_result_page');
     }
-    this.#phase = outcome;
+    if (reconcilingCancellation) {
+      if (admitted !== undefined) this.#cancelCheckpointed = true;
+    } else this.#phase = outcome;
     if (admitted !== undefined) this.#results = admitted;
-    if (!retainsOriginal(outcome)) {
+    if (!reconcilingCancellation && !retainsOriginal(outcome)) {
       this.#original = null;
       this.#review = null;
     }
@@ -277,18 +286,30 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     return this.#begin('results');
   }
 
-  admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>): boolean {
+  admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>, checkpointed = false): boolean {
     if (!this.#accept('results', request)) return false;
     this.#results = ownRecoveryPage(results);
+    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed)
+      this.#cancelCheckpointed = true;
     return true;
   }
 
   startCancel(): RecoveryRequest {
     this.#requireUpload();
-    this.#abortAll();
-    this.#selection.clear();
-    this.#review = null;
-    this.#original = null;
+    if (this.#phase === 'cancelling' || this.#phase === 'cancelled') throw new Error('cancel_pending');
+    this.#cancelNeedsCheckpoint = this.#phase === 'applying' || retainsOriginal(this.#phase);
+    this.#cancelCheckpointed = false;
+    if (this.#cancelNeedsCheckpoint) {
+      // The claimed command may already have committed; keep its request and replay identity alive.
+      this.#abort('page');
+      this.#abort('review');
+      this.#abort('results');
+    } else {
+      this.#abortAll();
+      this.#selection.clear();
+      this.#review = null;
+      this.#original = null;
+    }
     this.#page = null;
     this.#phase = 'cancelling';
     // Native receipts already displayed stay visible; cancellation never rolls effects back.
@@ -296,8 +317,14 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   }
 
   admitCancel(request: RecoveryRequest): boolean {
+    if (this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed) return false;
     if (!this.#accept('cancel', request)) return false;
     this.#phase = 'cancelled';
+    this.#selection.clear();
+    this.#review = null;
+    this.#original = null;
+    this.#cancelNeedsCheckpoint = false;
+    this.#cancelCheckpointed = false;
     return true;
   }
 

@@ -17,7 +17,7 @@ const binding: RecoveryBinding = {
   route: '/library/recover-archive',
 };
 type Choice = { action: 'preserve' | 'update'; stateId?: string; labelIds?: string[] };
-type Confirm = { identity: string; operands: { ordinal: number; revision: number }[] };
+type Confirm = { identity: string; key?: string; operands: { ordinal: number; revision: number }[] };
 type Row = { ordinal: number; status: string };
 type Visit = ArchiveRecoveryVisit<{ unrelatedRows: number }, Row, Choice, Confirm, Row>;
 const page = (rows: Row[]) => ({ rows, context: null });
@@ -135,8 +135,12 @@ test('Uncertain retry keeps the original immutable intent; cancellation retains 
     expect(retry.operand).toBe(first.operand);
     expect(visit.settleApply(first.request, 'complete', page([]))).toBe(false);
     const cancel = visit.startCancel();
-    expect(retry.request.signal.aborted).toBe(true);
-    expect(visit.settleApply(retry.request, 'complete', page([]))).toBe(false);
+    expect(retry.request.signal.aborted).toBe(false);
+    expect(visit.admitCancel(cancel)).toBe(false);
+    expect(visit.settleApply(retry.request, 'complete')).toBe(true);
+    expect(visit.admitCancel(cancel)).toBe(false);
+    const checkpoint = visit.startResults();
+    expect(visit.admitResults(checkpoint, acknowledged, true)).toBe(true);
     expect(visit.admitCancel(cancel)).toBe(true);
     expect(visit.state?.results).toEqual(acknowledged);
     expect(visit.state?.choices).toEqual([]);
@@ -151,14 +155,23 @@ test('Native recoverable effects keep original operands; terminal failure requir
   const { visit } = fixture();
   try {
     visit.choose(1, 'entries', { action: 'preserve' });
-    visit.admitReview(visit.startReview(), { identity: 'original', operands: [{ ordinal: 1, revision: 2 }] });
+    visit.admitReview(visit.startReview(), {
+      identity: 'original',
+      key: 'original-apply-key',
+      operands: [{ ordinal: 1, revision: 2 }],
+    });
     const first = visit.startApply();
     visit.settleApply(first.request, 'recoverable', page([{ ordinal: 1, status: 'recoverable' }]));
     expect(visit.state?.phase).toBe('recoverable');
     expect(() => visit.startReview()).toThrow('selection_locked');
     const replay = visit.startApply();
     expect(replay.operand).toBe(first.operand);
-    visit.settleApply(replay.request, 'failed', page([{ ordinal: 1, status: 'failed' }]));
+    expect(replay.operand.key).toBe('original-apply-key');
+    visit.settleApply(replay.request, 'recoverable');
+    expect(visit.state?.phase).toBe('recoverable');
+    const repeated = visit.startApply();
+    expect(repeated.operand).toBe(first.operand);
+    visit.settleApply(repeated.request, 'failed', page([{ ordinal: 1, status: 'failed' }]));
     expect(visit.state?.phase).toBe('failed');
     expect(visit.state?.results?.rows[0]?.status).toBe('failed');
     expect(() => visit.startApply()).toThrow('fresh_review_required');

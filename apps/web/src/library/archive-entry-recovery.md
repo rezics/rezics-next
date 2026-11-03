@@ -66,9 +66,11 @@ merge DTOs and immutable native review confirmation are delivered.
 unsupported sections cannot enter that selection. `archive-entry-recovery/visit.ts` owns one upload identity,
 one projected page of at most one hundred rows, that selection, one confirmed operand and one result page.
 It copies and freezes JSON values, replaces pages, invalidates review on choice changes, preserves exact original
-uncertain operands and keeps acknowledged receipts during cancellation. Stale admission retains choices as context
-and requires a fresh review. Viewer, credential/CSRF epoch, source, route, replacement and visit deadline retire private
-callbacks. Decision: evidence expiry clears upload, preview, selection and replay operands while retaining accepted
+uncertain operands and keeps acknowledged receipts during cancellation. If cancellation overlaps a claimed apply,
+retain its original review and key until the native receipt is checkpointed, then show accepted partial results. Stale
+admission retains choices as context and requires a fresh review. Viewer, credential/CSRF epoch, source, route,
+replacement and visit deadline retire private callbacks. Decision: evidence expiry clears upload, preview, selection
+and replay operands while retaining accepted
 native result pages until session retirement, explicit upload replacement or unmount; expiry grants no retry permission.
 The mounted adapter must provide the current binding reader and retire the visit on unmount and session
 events; no private state is connected to the unavailable page yet.
