@@ -107,13 +107,9 @@ test('retention plan, apply and restart stay indexed as selected-capture rows an
       let selectedId: string;
       try {
         abandoned(writer, source, 8, 1_000_000);
-        selectedId = complete(
-          writer,
-          source,
-          Array.from({ length: scale }, (_, i) => `Q${i}`),
-          2_000_000,
-        ).id;
-        complete(writer, source, ['QBASE'], 3_000_000);
+        const keys = Array.from({ length: scale }, (_, i) => `Q${i}`);
+        selectedId = complete(writer, source, keys, 2_000_000).id;
+        complete(writer, source, keys, 3_000_000);
         complete(
           writer,
           unrelated,
@@ -202,7 +198,7 @@ test('retention plan, apply and restart stay indexed as selected-capture rows an
       try {
         abandoned(writer, source, scale, 5_000_000);
         complete(writer, source, ['Q0', 'Q1'], 6_000_000);
-        complete(writer, source, ['QBASE'], 7_000_000);
+        complete(writer, source, ['Q0', 'Q1'], 7_000_000);
       } finally {
         writer.close();
       }

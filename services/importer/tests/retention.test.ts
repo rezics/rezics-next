@@ -107,8 +107,14 @@ function seedJourney(path: string) {
     const otherRun = completeIgnored(store, other, ['B1']);
     const active = store.begin(source);
     if (active === 'busy') throw new Error('busy');
+    store.stage(active, staged(source, 'Q1', 'b'.repeat(64)));
+    store.stage(active, staged(source, 'Q2', 'b'.repeat(64)));
     store.stage(active, staged(source, 'Q3', 'c'.repeat(64)));
     expect(store.seal(active, { complete: true }).status).toBe('ready');
+    for (const key of ['Q1', 'Q2']) {
+      store.classify(active, key, { commands: [] });
+      store.acknowledgeNoEffects(active, key, { reason: 'no-owned-candidates' });
+    }
     store.prepare(active, 'Q3', { commands: [command(source, 'Q3')] });
     const payload = store.database
       .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
