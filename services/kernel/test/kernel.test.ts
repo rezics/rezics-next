@@ -431,7 +431,7 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   const served = app.routes.map(({ method, path }) => `${method} ${path}`);
   const journal = openApiDocument(app).paths['/v1/progressSessions/{sessionId}/journal'];
   expect(journal?.get?.operationId).toBe('progress_session_journal.read');
-  expect(journal?.put?.operationId).toBe('progress_session_journal.update');
+  expect(journal?.patch?.operationId).toBe('progress_session_journal.update');
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
 });
