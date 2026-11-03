@@ -46,7 +46,7 @@ const mediaId = '01a1a000-0000-7000-8000-000000000098';
 function row(index = 0, kind: 'review' | 'discussion' = 'review') {
   const thread = communityThread(kind);
   const post = thread.firstPost;
-  if (!('body' in post)) throw new Error('Expected an available opening');
+  if (post.availability !== 'available') throw new Error('Expected an available opening');
   thread.id = `01a1a000-0000-7000-8000-${String(index + 100).padStart(12, '0')}`;
   post.threadId = thread.id;
   post.voteCitation = { questionId: original, units: 0, revision: 7 };

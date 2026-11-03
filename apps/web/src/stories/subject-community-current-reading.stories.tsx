@@ -39,59 +39,66 @@ function CurrentCommunityReading({
     setData(undefined);
     const fallback = createStoryRecordedKernelFetch();
     const kernel = createKernelClient('https://kernel.invalid', {
-      fetch: async (input, init) => {
-        const url = new URL(input instanceof Request ? input.url : String(input));
-        if (!url.pathname.endsWith('/threads')) return fallback(input, init);
-        if (scenario === 'concealed') return Response.json({ code: 'not_found' }, { status: 404 });
-        const thread = communityThread(kind);
-        const post = thread.firstPost;
-        if (!('body' in post)) throw new Error('Expected an available opening');
-        const recorded = {
-          questionId: '01a1a000-0000-7000-8000-000000000085',
-          units: scenario === 'zero' ? 0 : 14,
-          revision: 2,
-        };
-        post.voteCitation = kind === 'review' ? recorded : null;
-        const card: CommunityCard = {
-          version: 1,
-          threadId: thread.id,
-          postRevisionId: post.revisionId,
-          citation:
-            kind === 'discussion'
-              ? { state: 'absent' }
-              : {
-                  state: 'available',
-                  postRevisionId: post.revisionId,
-                  recorded,
-                  question: {
-                    id: recorded.questionId,
-                    revision: 3,
-                    label: 'Rating when written',
-                    scale: { min: 0, max: 20, displayStep: 2 },
-                    lifecycle: { state: scenario === 'retired-target' ? 'retired' : 'active', revision: 4 },
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          if (!url.pathname.endsWith('/threads')) return fallback(input, init);
+          if (scenario === 'concealed') return Response.json({ code: 'not_found' }, { status: 404 });
+          const thread = communityThread(kind);
+          const post = thread.firstPost;
+          if (post.availability !== 'available') throw new Error('Expected an available opening');
+          const recorded = {
+            questionId: '01a1a000-0000-7000-8000-000000000085',
+            units: scenario === 'zero' ? 0 : 14,
+            revision: 2,
+          };
+          post.voteCitation = kind === 'review' ? recorded : null;
+          const card: CommunityCard = {
+            version: 1,
+            threadId: thread.id,
+            postRevisionId: post.revisionId,
+            citation:
+              kind === 'discussion'
+                ? { state: 'absent' }
+                : {
+                    state: 'available',
+                    postRevisionId: post.revisionId,
+                    recorded,
+                    question: {
+                      id: recorded.questionId,
+                      revision: 3,
+                      label: 'Rating when written',
+                      scale: { min: 0, max: 20, displayStep: 2 },
+                      lifecycle: { state: scenario === 'retired-target' ? 'retired' : 'active', revision: 4 },
+                    },
+                    originalTarget:
+                      scenario === 'retired-target'
+                        ? {
+                            id: '01a1a000-0000-7000-8000-000000000099',
+                            label: 'Original edition',
+                            mergedInto: communitySubject.id,
+                          }
+                        : { ...communitySubject, mergedInto: null },
                   },
-                  originalTarget:
-                    scenario === 'retired-target'
-                      ? {
-                          id: '01a1a000-0000-7000-8000-000000000099',
-                          label: 'Original edition',
-                          mergedInto: communitySubject.id,
-                        }
-                      : { ...communitySubject, mergedInto: null },
-                },
-          activity: { replyCount: 0, lastActivityAt: '2026-11-01T12:00:00Z' },
-          media: [],
-        };
-        // This consumer seam is deliberately independent of the installed current-question reviewContext.
-        const native = {
-          ...thread,
-          card,
-          ...(scenario === 'changed-scale'
-            ? { reviewContext: { citation: { state: 'available', units: 5, question: { scale: { min: 1, max: 5 } } } } }
-            : {}),
-        };
-        return Response.json(communityThreadPage(kind, communitySubject, [native], null, place));
-      },
+            activity: { replyCount: 0, lastActivityAt: '2026-11-01T12:00:00Z' },
+            media: [],
+          };
+          // This consumer seam is deliberately independent of the installed current-question reviewContext.
+          const native = {
+            ...thread,
+            card,
+            ...(scenario === 'changed-scale'
+              ? {
+                  reviewContext: {
+                    citation: { state: 'available', units: 5, question: { scale: { min: 1, max: 5 } } },
+                  },
+                }
+              : {}),
+          };
+          return Response.json(communityThreadPage(kind, communitySubject, [native], null, place));
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      ),
     });
     void readSubjectCommunity(kernel, communitySubject.id, [kind], true, undefined, reader, place).then((result) => {
       if (current) setData(result);
