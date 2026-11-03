@@ -25,21 +25,20 @@ import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError 
 import { AuthenticationError } from '../request/access.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 
-const fieldErrorCodes: readonly string[] = [
-  'required',
-  'unknown_field',
-  'invalid_type',
-  'invalid_format',
-  'out_of_range',
-  'unsupported',
-];
-const pointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/;
-
 function schemaUnion(schemas: TSchema[]): TSchema {
   return schemas.length === 1 ? schemas[0]! : t.Union(schemas as [TSchema, ...TSchema[]]);
 }
 
 function fieldErrorSchema() {
+  const fieldErrorCodes = [
+    'required',
+    'unknown_field',
+    'invalid_type',
+    'invalid_format',
+    'out_of_range',
+    'unsupported',
+  ] as const;
+  const pointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/;
   return t.Object(
     {
       pointer: t.String({ pattern: pointerPattern.source }),
