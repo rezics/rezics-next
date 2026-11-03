@@ -281,6 +281,7 @@ export type ScenarioEvidence = {
 
 /** Parity is a separate postintegration obligation; minimal smoke still runs the real provider path. */
 export async function gateParityScenario(options: {
+  policy?: ControlPolicy | undefined;
   root: string;
   scriptsRoot?: string;
   execute?: boolean;
@@ -297,6 +298,7 @@ export async function gateParityScenario(options: {
     throw new Error('Explicit parity execution requires --scripts-root <delivered-dev-checkout>');
   const result = await driveGateParity({
     inputRoot: options.root,
+    policy: options.policy,
     scriptsRoot: options.scriptsRoot,
     execute: true,
     report: (plan) => (options.report ?? console.log)(JSON.stringify({ phase: 'parity-plan', ...plan })),

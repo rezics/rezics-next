@@ -225,8 +225,8 @@ function reportFrozenFormatError(error: string | undefined): void {
   if (error) console.error(`Frozen acceptance formatter failed:\n${error}`);
 }
 
-export function git(cwd: string, args: string[]): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+export function git(cwd: string, args: string[], policy = defaultPolicy.merge): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes, timeout: policy.commandTimeoutMs });
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
     throw new Error(`git ${args[0]}: ${detail}`);
@@ -312,15 +312,15 @@ export class WorkerTasks {
   private branchHead(branch: string, createFromMain: boolean): string {
     const reference = `refs/heads/${branch}`;
     try {
-      return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
+      return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference], this.settings.policy?.merge);
     } catch {
       if (!createFromMain) throw new Error(`stabilize branch ${branch} does not exist`);
-      const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
+      const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`], this.settings.policy?.merge);
       try {
-        git(this.settings.mainCheckout, ['branch', '--', branch, main]);
+        git(this.settings.mainCheckout, ['branch', '--', branch, main], this.settings.policy?.merge);
       } catch (error) {
         try {
-          return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
+          return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference], this.settings.policy?.merge);
         } catch {
           throw error;
         }
@@ -373,7 +373,7 @@ export class WorkerTasks {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
     if (task.workspace) return;
-    const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]));
+    const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge));
     // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
     // task's lease, so a lock a minute old belongs to nobody.
     const lock = gitPath('index.lock');
@@ -385,7 +385,7 @@ export class WorkerTasks {
     ] as const) {
       if (!existsSync(gitPath(state))) continue;
       try {
-        git(task.worktree, [operation, '--abort']);
+        git(task.worktree, [operation, '--abort'], this.settings.policy?.merge);
       } catch (error) {
         if (operation !== 'rebase') throw error;
       }
@@ -395,26 +395,26 @@ export class WorkerTasks {
     // A setup that failed mid-rebase leaves HEAD detached at the commit it rebased onto. With no commit there that a
     // branch lacks, the branch checkout is the attempt's state.
     if (
-      !git(task.worktree, ['branch', '--show-current']) &&
-      !git(task.worktree, ['rev-list', 'HEAD', '--not', '--branches'])
+      !git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge) &&
+      !git(task.worktree, ['rev-list', 'HEAD', '--not', '--branches'], this.settings.policy?.merge)
     )
-      git(task.worktree, ['checkout', '-f', task.branch]);
-    const branch = git(task.worktree, ['branch', '--show-current']);
+      git(task.worktree, ['checkout', '-f', task.branch], this.settings.policy?.merge);
+    const branch = git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge);
     if (branch !== task.branch)
       throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
-    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return;
-    git(task.worktree, ['add', '-A']);
-    git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`]);
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)) return;
+    git(task.worktree, ['add', '-A'], this.settings.policy?.merge);
+    git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`], this.settings.policy?.merge);
   }
   /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
   commitFinishedWork(task: Task, attempt: number): boolean {
     if (task.brief.kind === 'verification') return false;
     if (task.workspace) return false;
     for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
-      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) return false;
-    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return false;
-    git(task.worktree, ['add', '-A']);
-    git(task.worktree, ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`]);
+      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], this.settings.policy?.merge)))) return false;
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)) return false;
+    git(task.worktree, ['add', '-A'], this.settings.policy?.merge);
+    git(task.worktree, ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`], this.settings.policy?.merge);
     return true;
   }
   private validateBrief(
@@ -524,13 +524,13 @@ export class WorkerTasks {
         briefText: brief.markdown,
         branch,
         worktree,
-        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
+        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base], this.settings.policy?.merge),
         ...(brief.kind !== 'verification'
           ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
           : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
-        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
-        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
+        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge),
+        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch], this.settings.policy?.merge),
       });
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
@@ -1264,12 +1264,12 @@ export class WorkerTasks {
     this.ensureWorktree(task);
     this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.taskBaseHead(task.brief);
-    const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
-    const branch = git(task.worktree, ['branch', '--show-current']);
+    const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge));
+    const branch = git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge);
     if (branch !== task.branch)
       throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
-      const common = git(task.worktree, ['merge-base', task.base, integration]);
+      const common = git(task.worktree, ['merge-base', task.base, integration], this.settings.policy?.merge);
       const branchName = `${this.taskBaseBranch(task.brief)} branch`;
       if (common !== task.base)
         throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
@@ -1288,16 +1288,16 @@ export class WorkerTasks {
           this.settings.policy?.brief,
         );
       } catch (error) {
-        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
+        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
           .split('\0')
           .filter(Boolean);
         if (!conflicts.length) throw error;
-        git(task.worktree, ['rebase', '--abort']);
+        git(task.worktree, ['rebase', '--abort'], this.settings.policy?.merge);
         const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts }, true);
         if (!worker) throw new Error('released task was unexpectedly held again');
         return worker;
       }
-    } else git(task.worktree, ['reset', '--hard', integration]);
+    } else git(task.worktree, ['reset', '--hard', integration], this.settings.policy?.merge);
     if (task.currentAttempt) {
       task = this.store.updateHeldRetryTask(
         { taskId, attempt: task.currentAttempt },
@@ -1326,10 +1326,10 @@ export class WorkerTasks {
     try {
       mkdirSync(dirname(task.worktree), { recursive: true });
       try {
-        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], this.settings.policy?.merge);
       } catch {
-        git(this.settings.mainCheckout, ['worktree', 'prune']);
-        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
+        git(this.settings.mainCheckout, ['worktree', 'prune'], this.settings.policy?.merge);
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], this.settings.policy?.merge);
       }
       if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, this.settings);
     } finally {
@@ -1364,23 +1364,23 @@ export class WorkerTasks {
   /** Prepare an authorized unreserved capture without rewriting retained empty-report branches. */
   private prepareProofWorktree(task: Task, ref: Attempt): Task {
     const captured = task.brief.proof!.sourceCommit;
-    const tip = git(task.worktree, ['rev-parse', 'HEAD']);
-    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']))
+    const tip = git(task.worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge);
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge))
       throw new Error('Proof source is read-only; worktree differs from captured commit');
     if (tip !== captured) {
       this.store.assertProofPreparation(ref);
       if (
-        git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
-        git(task.worktree, ['diff', '--name-only', task.base, tip])
+        git(task.worktree, ['merge-base', task.base, tip], this.settings.policy?.merge) !== task.base ||
+        git(task.worktree, ['diff', '--name-only', task.base, tip], this.settings.policy?.merge)
       )
         throw new Error(
           'Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture',
         );
       const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
-      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured]);
+      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured], this.settings.policy?.merge);
       if (
-        git(worktree, ['rev-parse', 'HEAD']) !== captured ||
-        git(worktree, ['status', '--porcelain', '--untracked-files=all'])
+        git(worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge) !== captured ||
+        git(worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)
       )
         throw new Error('Proof captured source preparation differs from its registered commit');
       this.store.event(ref, 'proof-source-prepared', {
@@ -1824,7 +1824,7 @@ export class WorkerTasks {
                 throw new Error(
                   `Cannot refresh dependencies in ${task.worktree}: workspace custody held by task ${peer.id}`,
                 );
-              if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']))
+              if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge))
                 throw new Error(`Cannot refresh dependencies in ${task.worktree}: unresolved workspace paths`);
               installWorktreeDependencies(task.worktree, this.settings);
             }
@@ -1869,13 +1869,13 @@ export class WorkerTasks {
         reportFrozenFormatError(frozen.formatterError);
         setupStep = `rebasing onto current ${this.taskBaseBranch(task.brief)}`;
         const integration = this.taskBaseHead(task.brief);
-        const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+        const tip = git(task.worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge);
         const workerCommit = previousConflict?.workerCommit ?? tip;
         const rebaseLog = `${next.logPath}.rebase`;
         mkdirSync(dirname(rebaseLog), { recursive: true });
         let files: string[] = [];
         if (task.base !== integration) {
-          const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
+          const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`], this.settings.policy?.merge));
           if (commits > 0) {
             try {
               // Integration derived files such as bun.lock are regenerated by rebaseOnto before the retry starts.
@@ -1889,25 +1889,25 @@ export class WorkerTasks {
                 this.settings.policy?.brief,
               );
             } catch (error) {
-              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge).split('\0').filter(Boolean);
               if (!files.length) throw error;
             }
-          } else git(task.worktree, ['reset', '--hard', integration]);
+          } else git(task.worktree, ['reset', '--hard', integration], this.settings.policy?.merge);
         }
         task = this.store.updateTask(next, (current) => {
           current.base = integration;
         });
         if (options.escalation === 'rebase-conflict') {
-          const controllerHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
+          const controllerHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`], this.settings.policy?.merge);
           this.store.event(next, 'worker-source-baseline', { workerCommit, controllerHead });
         }
         // Name conflicted files only while a rebase is really in progress here; otherwise the prompt sent the worker to
         // continue a rebase that did not exist (the retry's own rebase onto its base had applied cleanly).
         const rebasing = ['rebase-merge', 'rebase-apply'].some((name) =>
-          existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]))),
+          existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge))),
         );
         if (!files.length)
-          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge).split('\0').filter(Boolean);
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         if (!files.length && !rebasing) {
           setupStep = 'installing worktree dependencies';
@@ -2090,7 +2090,7 @@ export class WorkerTasks {
     const head = this.branchHead(this.settings.stabilizeBranch, false);
     if (!task.base) throw new Error('task has no recorded base commit');
     try {
-      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head]);
+      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head], this.settings.policy?.merge);
     } catch {
       throw new Error('recorded base commit is not an ancestor of the stabilize head');
     }

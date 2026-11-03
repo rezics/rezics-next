@@ -50,9 +50,9 @@ export function remoteCheckEnvironment(stateDirectory: string | undefined): { KE
   return hosts !== undefined && existsSync(hosts) ? { KERNEL_CHECK_REMOTE: hosts } : {};
 }
 /** Gates run in the main checkout's worktrees, so the state directory is the one the control plane itself defaults to. */
-function gateStateDirectory(cwd: string, parent: NodeJS.ProcessEnv): string | undefined {
+function gateStateDirectory(cwd: string, parent: NodeJS.ProcessEnv, policy = defaultPolicy.merge): string | undefined {
   try {
-    const main = dirname(git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'));
+    const main = dirname(policyGit(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'], policy));
     return resolve(main, parent.GOAL_STATE_DIRECTORY || '.temp/goal');
   } catch {
     return undefined;
@@ -150,7 +150,7 @@ export function processGroupRunner(
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)) : parent,
+        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy)) : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

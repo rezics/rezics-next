@@ -8,7 +8,7 @@ import { agentAdapter } from './agents.ts';
 import type { AttemptRef, LandingRequest } from './contracts.ts';
 import { recordFlow } from './flow.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
-import { ownerConflictGit, ownerConflictFiles, rerereAppliedFiles } from './owner-conflict.ts';
+import { policyOwnerConflictGit, ownerConflictFiles, rerereAppliedFiles } from './owner-conflict.ts';
 import { processIdentity, terminateProcessGroup, type ProcessIdentity } from './process.ts';
 import { measureLog } from './records.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -33,15 +33,16 @@ export type TrainConflict = AttemptRef & {
 export class TrainResolverInfrastructureError extends Error {}
 const profile: Profile = { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex' };
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
-function git(cwd: string, ...args: string[]): string {
-  const result = ownerConflictGit(cwd, ...args);
+function policyGit(cwd: string, args: string[], policy = defaultPolicy.merge): string {
+  const result = policyOwnerConflictGit(cwd, args, policy);
   if (result.status !== 0)
     throw new TrainResolverInfrastructureError(
       result.stderr.trim() || result.error?.message || `git ${args[0]} failed`,
     );
   return result.stdout.trimEnd();
 }
-function unresolved(tree: string): string[] {
+function unresolved(tree: string, policy = defaultPolicy.merge): string[] {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   return git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
 }
 /** Preserve native JSON key order and raw values; JSON.parse alone loses duplicate keys and large integers. */
@@ -187,7 +188,8 @@ export function additiveUnion(base: string, ours: string, theirs: string, file: 
   return merged ? base + merged.map(([, entry]) => entry).join('') : undefined;
 }
 
-function snapshot(tree: string, allowed: readonly string[]): string {
+function snapshot(tree: string, allowed: readonly string[], policy = defaultPolicy.merge): string {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   const paths = git(tree, 'ls-files', '-z').split('\0').filter(Boolean);
   const others = git(tree, 'ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean);
   return hash(
@@ -211,7 +213,8 @@ function snapshot(tree: string, allowed: readonly string[]): string {
     ),
   );
 }
-function refs(tree: string, except?: string): string {
+function refs(tree: string, except?: string, policy = defaultPolicy.merge): string {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   return git(tree, 'for-each-ref', '--format=%(refname) %(objectname)')
     .split('\n')
     .filter((line) => !except || !line.startsWith(`${except} `))
@@ -232,6 +235,9 @@ type Pass = {
 
 /** Train work has its own durable budget and process identity. It never touches worker sessions or attempts. */
 export class TrainResolver {
+  private git(cwd: string, ...args: string[]): string { return policyGit(cwd, args, this.store.policy.merge); }
+  private ownerGit(cwd: string, ...args: string[]) { return policyOwnerConflictGit(cwd, args, this.store.policy.merge); }
+
   constructor(
     readonly store: WorkerStore,
     readonly tasks?: WorkerTasks,
@@ -243,9 +249,9 @@ export class TrainResolver {
   private current(request: LandingRequest, conflict: TrainConflict, allowTargetMove = false): void {
     this.store.assertCurrent(request);
     const tree = this.tasks?.settings.mainCheckout ?? this.store.task(request.taskId).worktree;
-    if (git(tree, 'rev-parse', `${request.branch}^{commit}`) !== conflict.sourceCommit)
+    if (this.git(tree, 'rev-parse', `${request.branch}^{commit}`) !== conflict.sourceCommit)
       throw new Error('Accepted source ref changed during train resolution');
-    if (!allowTargetMove && git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
+    if (!allowTargetMove && this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
       throw new Error('Integration ref changed during train resolution');
     const task = this.store.task(request.taskId);
     if (request.managerLanding && request.managerLanding.managerId !== task.brief.manager)
@@ -262,23 +268,23 @@ export class TrainResolver {
     logPath: string,
   ): Promise<TrainConflict | undefined> {
     this.store.assertCurrent(request);
-    if (git(tree, 'rev-parse', `${request.branch}^{commit}`) !== source)
+    if (this.git(tree, 'rev-parse', `${request.branch}^{commit}`) !== source)
       throw new Error('Accepted source ref changed before train composition');
     const accepted = request.managerLanding?.acceptedCommit ?? request.workerCommit;
     if (accepted && accepted !== source)
       throw new Error('Composition source differs from the accepted landing request');
-    const commonBase = git(tree, 'merge-base', target, source);
-    const targetHead = git(tree, 'rev-parse', targetRef);
-    git(tree, 'reset', '--hard', target);
-    const merged = ownerConflictGit(tree, 'merge', '--no-ff', '--no-commit', source);
+    const commonBase = this.git(tree, 'merge-base', target, source);
+    const targetHead = this.git(tree, 'rev-parse', targetRef);
+    this.git(tree, 'reset', '--hard', target);
+    const merged = this.ownerGit(tree, 'merge', '--no-ff', '--no-commit', source);
     const output = `${merged.stdout}${merged.stderr}`;
     appendFileSync(logPath, output);
-    let paths = unresolved(tree);
+    let paths = unresolved(tree, this.store.policy.merge);
     const rerereFiles = rerereAppliedFiles(output);
     if (merged.status !== 0 && !paths.length && !rerereFiles.length)
       throw new TrainResolverInfrastructureError(merged.stderr.trim() || 'Cannot compose accepted source');
     if (!paths.length && !rerereFiles.length) {
-      if (ownerConflictGit(tree, 'rev-parse', '--verify', 'MERGE_HEAD').status === 0) git(tree, 'commit', '--no-edit');
+      if (this.ownerGit(tree, 'rev-parse', '--verify', 'MERGE_HEAD').status === 0) this.git(tree, 'commit', '--no-edit');
       return;
     }
     const allPaths = ownerConflictFiles([...paths, ...rerereFiles]);
@@ -346,42 +352,42 @@ export class TrainResolver {
         const receipt = JSON.parse(completed.body) as TrainConflict;
         if (
           receipt.resolvedCommit &&
-          git(tree, 'rev-parse', `${receipt.resolvedCommit}^1`) === target &&
-          git(tree, 'rev-parse', `${receipt.resolvedCommit}^2`) === source
+          this.git(tree, 'rev-parse', `${receipt.resolvedCommit}^1`) === target &&
+          this.git(tree, 'rev-parse', `${receipt.resolvedCommit}^2`) === source
         ) {
-          git(tree, 'merge', '--abort');
-          git(tree, 'reset', '--hard', receipt.resolvedCommit);
+          this.git(tree, 'merge', '--abort');
+          this.git(tree, 'reset', '--hard', receipt.resolvedCommit);
           return receipt;
         }
       }
       // Git already consulted its actual common-dir cache while merging. Try it explicitly before any union/model.
-      git(tree, 'rerere');
-      paths = unresolved(tree);
+      this.git(tree, 'rerere');
+      paths = unresolved(tree, this.store.policy.merge);
       for (const path of paths) {
-        const stages = [1, 2, 3].map((stage) => ownerConflictGit(tree, 'show', `:${stage}:${path}`));
+        const stages = [1, 2, 3].map((stage) => this.ownerGit(tree, 'show', `:${stage}:${path}`));
         if (stages.some((stage) => stage.status !== 0)) continue;
-        const modes = git(tree, 'ls-files', '--stage', '--', path)
+        const modes = this.git(tree, 'ls-files', '--stage', '--', path)
           .split('\n')
           .map((line) => line.split(' ')[0]);
         if (modes.some((mode) => mode !== '100644' && mode !== '100755') || new Set(modes).size !== 1) continue;
         const union = additiveUnion(stages[0]!.stdout, stages[1]!.stdout, stages[2]!.stdout, path);
         if (union === undefined) continue;
         writeFileSync(join(tree, path), union);
-        git(tree, 'add', '--', path);
+        this.git(tree, 'add', '--', path);
         conflict.method = 'additive';
       }
-      paths = unresolved(tree);
+      paths = unresolved(tree, this.store.policy.merge);
       if (paths.length) {
         conflict.method = 'resolver';
         const ok = await this.pass(request, tree, conflict, 'resolve', paths, logPath, tuple);
         if (!ok) return conflict;
       }
       this.current(request, conflict, true);
-      if (unresolved(tree).length) throw new Error('Unresolved Git paths remain after train resolution');
-      git(tree, 'rerere');
-      git(tree, 'commit', '--no-edit');
-      conflict.resolvedCommit = git(tree, 'rev-parse', 'HEAD');
-      git(tree, 'update-ref', `refs/goal/train-resolution/${key}`, conflict.resolvedCommit);
+      if (unresolved(tree, this.store.policy.merge).length) throw new Error('Unresolved Git paths remain after train resolution');
+      this.git(tree, 'rerere');
+      this.git(tree, 'commit', '--no-edit');
+      conflict.resolvedCommit = this.git(tree, 'rev-parse', 'HEAD');
+      this.git(tree, 'update-ref', `refs/goal/train-resolution/${key}`, conflict.resolvedCommit);
       this.event(request, 'train-resolution', conflict);
     } catch (error) {
       if (error instanceof TrainResolverInfrastructureError) throw error;
@@ -403,7 +409,7 @@ export class TrainResolver {
     }
     return this.pass(request, tree, conflict, 'repair', conflict.conflictFiles, logPath, {
       compilerOutput,
-      candidate: git(tree, 'rev-parse', 'HEAD'),
+      candidate: this.git(tree, 'rev-parse', 'HEAD'),
     });
   }
 
@@ -480,7 +486,7 @@ export class TrainResolver {
       // original contracts when a later member conflicts on one of those additional files.
       if (
         !paths.some((path) => matchesPath(path, candidate.brief.paths, this.store.policy.brief)) &&
-        !git(tree, 'diff', '--name-only', '-z', candidate.base, source, '--', ...paths)
+        !this.git(tree, 'diff', '--name-only', '-z', candidate.base, source, '--', ...paths)
       )
         return [];
       return [
@@ -516,11 +522,11 @@ export class TrainResolver {
       sourceContract: task.brief.markdown,
       sourceContracts,
       targetContracts: contracts,
-      sourceDiff: git(tree, 'diff', conflict.commonBase, conflict.sourceCommit, '--', ...paths),
-      targetDiff: git(tree, 'diff', conflict.commonBase, conflict.targetCommit, '--', ...paths),
+      sourceDiff: this.git(tree, 'diff', conflict.commonBase, conflict.sourceCommit, '--', ...paths),
+      targetDiff: this.git(tree, 'diff', conflict.commonBase, conflict.targetCommit, '--', ...paths),
       files: paths.map((path) => ({
         path,
-        index: git(tree, 'ls-files', '--stage', '--', path),
+        index: this.git(tree, 'ls-files', '--stage', '--', path),
         text: readFileSync(join(tree, path), 'utf8'),
       })),
     };
@@ -531,10 +537,10 @@ export class TrainResolver {
     }
     const contract = task.brief.markdown;
     const modes = new Map(paths.map((path) => [path, lstatSync(join(tree, path)).mode]));
-    const before = snapshot(tree, paths),
-      beforeRefs = refs(tree, conflict.targetRef),
-      head = git(tree, 'rev-parse', 'HEAD');
-    const index = git(tree, 'ls-files', '--stage', '-z');
+    const before = snapshot(tree, paths, this.store.policy.merge),
+      beforeRefs = refs(tree, conflict.targetRef, this.store.policy.merge),
+      head = this.git(tree, 'rev-parse', 'HEAD');
+    const index = this.git(tree, 'ls-files', '--stage', '-z');
     if (prior) {
       const completed = events.findLast(
         (event) =>
@@ -548,15 +554,15 @@ export class TrainResolver {
         receipt.commit &&
         receipt.head === head &&
         receipt.inputHash === hash(prompt) &&
-        (receipt.commit === head || git(tree, 'rev-parse', `${receipt.commit}^1`) === head) &&
-        git(tree, 'diff', '--name-only', head, receipt.commit)
+        (receipt.commit === head || this.git(tree, 'rev-parse', `${receipt.commit}^1`) === head) &&
+        this.git(tree, 'diff', '--name-only', head, receipt.commit)
           .split('\n')
           .filter(Boolean)
           .every((path) => paths.includes(path))
       ) {
         this.current(request, conflict);
-        git(tree, 'reset', '--hard', receipt.commit);
-        if (snapshot(tree, paths) !== before) throw new Error('Replayed repair changed outside conflicted files');
+        this.git(tree, 'reset', '--hard', receipt.commit);
+        if (snapshot(tree, paths, this.store.policy.merge) !== before) throw new Error('Replayed repair changed outside conflicted files');
         conflict.resolvedCommit = receipt.commit;
         return true;
       }
@@ -674,12 +680,12 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         throw new TrainResolverInfrastructureError('Train resolver provider allowance refused the bounded session');
       if (code !== 0 || failure) throw new Error(failure ?? `Train resolver exited with ${code}`);
       if (
-        git(tree, 'rev-parse', 'HEAD') !== head ||
-        refs(tree, conflict.targetRef) !== beforeRefs ||
-        git(tree, 'ls-files', '--stage', '-z') !== index
+        this.git(tree, 'rev-parse', 'HEAD') !== head ||
+        refs(tree, conflict.targetRef, this.store.policy.merge) !== beforeRefs ||
+        this.git(tree, 'ls-files', '--stage', '-z') !== index
       )
         throw new Error('Train resolver changed Git source, refs or index');
-      if (snapshot(tree, paths) !== before)
+      if (snapshot(tree, paths, this.store.policy.merge) !== before)
         throw new Error('Train resolver edited outside conflicted files or frozen inputs');
       for (const path of paths) {
         const info = lstatSync(join(tree, path));
@@ -691,27 +697,27 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         )
           throw new Error(`Train resolver left invalid resolution in ${path}`);
       }
-      if (git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
+      if (this.git(tree, 'rev-parse', conflict.targetRef) !== conflict.targetHead)
         this.event(request, 'train-target-moved', {
           key: conflict.key,
           targetRef: conflict.targetRef,
           expected: conflict.targetHead,
-          actual: git(tree, 'rev-parse', conflict.targetRef),
+          actual: this.git(tree, 'rev-parse', conflict.targetRef),
           publication: 'recompose-required',
         });
-      git(tree, 'add', '--', ...paths);
-      if (unresolved(tree).length) throw new Error('Unresolved Git paths remain');
-      if (phase === 'repair' && git(tree, 'diff', '--cached', '--name-only')) {
-        git(tree, 'commit', '-m', 'Repair train resolution typing');
-        conflict.resolvedCommit = git(tree, 'rev-parse', 'HEAD');
+      this.git(tree, 'add', '--', ...paths);
+      if (unresolved(tree, this.store.policy.merge).length) throw new Error('Unresolved Git paths remain');
+      if (phase === 'repair' && this.git(tree, 'diff', '--cached', '--name-only')) {
+        this.git(tree, 'commit', '-m', 'Repair train resolution typing');
+        conflict.resolvedCommit = this.git(tree, 'rev-parse', 'HEAD');
       }
       if (phase === 'repair')
-        git(tree, 'update-ref', `refs/goal/train-repair/${conflict.key}`, git(tree, 'rev-parse', 'HEAD'));
+        this.git(tree, 'update-ref', `refs/goal/train-repair/${conflict.key}`, this.git(tree, 'rev-parse', 'HEAD'));
       const measurement = measureLog(output, { adapter: agentAdapter(profile.cli), policy: this.store.policy });
       this.event(request, 'train-resolver-completed', {
         ...run,
         ok: true,
-        commit: git(tree, 'rev-parse', 'HEAD'),
+        commit: this.git(tree, 'rev-parse', 'HEAD'),
         tokens: measurement.tokens,
         session: measurement.session,
         endedAt: new Date().toISOString(),

@@ -334,6 +334,7 @@ function writeChildCode(gatePath?: string, exitCode = 0, runtimeProofPath?: stri
       [
         `const fs = await import('node:fs');`,
         `const gate = ${JSON.stringify(gatePath)};`,
+        // A fixture release handshake, not a production polling interval.
         `while (!fs.existsSync(gate)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);`,
         `process.exit(${exitCode});`,
       ].join('\n')
@@ -351,7 +352,7 @@ function commandResultCheck(
   detail: string,
   evidence: Record<string, unknown> = {}, policy = defaultPolicy.nativeCommands
 ): void {
-  pushCheck(checks, field, command, ok, detail, { ...displayResult(result), ...evidence });
+  pushCheck(checks, field, command, ok, detail, { ...displayResult(result, policy), ...evidence });
 }
 
 function addRecordChecks(
