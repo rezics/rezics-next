@@ -14,6 +14,7 @@ export type ImportProgressOutcome =
 
 export type ImportProgressCounts = Readonly<{
   inputBytes: number;
+  decodedBytes: number;
   materializedRecords: number;
   stagedRecords: number;
   acknowledgedEffects: number;
@@ -62,6 +63,7 @@ export class ImportProgressReporter {
   readonly invocation = randomUUID();
   private readonly counts: Record<ProgressCounter, number> = {
     inputBytes: 0,
+    decodedBytes: 0,
     materializedRecords: 0,
     stagedRecords: 0,
     acknowledgedEffects: 0,
@@ -259,7 +261,7 @@ export class ImportProgressReporter {
     if (this.options.mode === 'jsonl') return `${JSON.stringify(event)}\n`;
     const source = safeTerminalText(event.source);
     const counts = event.counts;
-    const line = `Import ${source} ${event.phase}: ${counts.inputBytes} bytes, ${counts.materializedRecords} materialized, ${counts.stagedRecords} staged, ${counts.acknowledgedEffects} acknowledged effects; new ${counts.newRecords}, changed ${counts.changedRecords}, unchanged ${counts.unchangedRecords}, vanished ${counts.vanishedRecords}, skipped ${counts.skippedRecords}, media deferred ${counts.deferredMedia}, rejected ${counts.rejectedMedia}`;
+    const line = `Import ${source} ${event.phase}: ${counts.inputBytes} compressed bytes, ${counts.decodedBytes} decoded bytes, ${counts.materializedRecords} materialized, ${counts.stagedRecords} staged, ${counts.acknowledgedEffects} acknowledged effects; new ${counts.newRecords}, changed ${counts.changedRecords}, unchanged ${counts.unchangedRecords}, vanished ${counts.vanishedRecords}, skipped ${counts.skippedRecords}, media deferred ${counts.deferredMedia}, rejected ${counts.rejectedMedia}`;
     return `${this.options.tty ? '\r' : ''}${line}${this.options.tty && event.terminal ? '\n' : this.options.tty ? '' : '\n'}`;
   }
 }

@@ -1,9 +1,25 @@
 import { constants } from 'node:fs';
-import { open, type FileHandle } from 'node:fs/promises';
+import { lstat, open, type FileHandle } from 'node:fs/promises';
 import { DEFAULT_DUMP_CHUNK_BYTES, DEFAULT_DUMP_RECORD_BYTES, MAX_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 
+export type DumpInputFailureIdentity =
+  | 'invalid-input'
+  | 'gzip-integrity'
+  | 'gzip-truncated'
+  | 'gzip-trailing-garbage'
+  | 'decode-budget'
+  | 'compression-unsupported'
+  | 'filesystem-changed';
+
 /** Bounded dump/path failure shared by import and offline preview. */
-export class DumpInputError extends Error {}
+export class DumpInputError extends Error {
+  readonly identity: DumpInputFailureIdentity;
+  constructor(message = 'Input is unavailable or invalid.', identity: DumpInputFailureIdentity = 'invalid-input') {
+    super(message);
+    this.name = 'DumpInputError';
+    this.identity = identity;
+  }
+}
 
 export type DumpInputObserver = {
   onInputPass?(kind: 'dump' | 'vndb-entries'): void;
@@ -11,8 +27,11 @@ export type DumpInputObserver = {
 };
 
 export type DumpByteProgress = {
-  add(counter: 'inputBytes', amount?: number): void;
+  add(counter: 'inputBytes' | 'decodedBytes', amount?: number): void;
 };
+
+type OpenedDump = { path: string; dev: number; ino: number; size: number; mtimeMs: number };
+const openedDumps = new WeakMap<FileHandle, OpenedDump>();
 
 export type RawVndbEntry = {
   path: string;
@@ -73,17 +92,51 @@ export async function closeInput<T>(iterator: AsyncIterator<T>, signal: AbortSig
   }
 }
 
+async function assertDumpUnchanged(handle: FileHandle): Promise<void> {
+  const opened = openedDumps.get(handle);
+  if (!opened) return;
+  let current: Awaited<ReturnType<FileHandle['stat']>>;
+  try {
+    current = await handle.stat();
+  } catch {
+    throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
+  }
+  if (
+    current.dev !== opened.dev ||
+    current.ino !== opened.ino ||
+    current.size !== opened.size ||
+    current.mtimeMs !== opened.mtimeMs
+  )
+    throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
+  try {
+    const pathStat = await lstat(opened.path);
+    if (pathStat.dev !== opened.dev || pathStat.ino !== opened.ino)
+      throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
+  } catch (error) {
+    if (error instanceof DumpInputError) throw error;
+    throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
+  }
+}
+
 export async function openDump(path: string, handleCount: { value: number }): Promise<FileHandle | undefined> {
   if (path === '-') return undefined;
   let handle: FileHandle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK);
   } catch {
     throw new DumpInputError();
   }
   handleCount.value++;
   try {
-    if (!(await handle.stat()).isFile()) throw new DumpInputError();
+    const identity = await handle.stat();
+    if (!identity.isFile()) throw new DumpInputError();
+    openedDumps.set(handle, {
+      path,
+      dev: identity.dev,
+      ino: identity.ino,
+      size: identity.size,
+      mtimeMs: identity.mtimeMs,
+    });
     return handle;
   } catch (error) {
     try {
@@ -108,7 +161,10 @@ export async function* fileChunks(handle: FileHandle, signal: AbortSignal): Asyn
       throw new DumpInputError();
     }
     throwIfAborted(signal);
-    if (!result.bytesRead) return;
+    if (!result.bytesRead) {
+      await assertDumpUnchanged(handle);
+      return;
+    }
     position += result.bytesRead;
     yield buffer.subarray(0, result.bytesRead);
   }

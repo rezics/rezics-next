@@ -34,6 +34,12 @@ import { runPreviewCli } from './preview-cli.ts';
 import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
 import {
+  admitDumpCompression,
+  decodeDumpBytes,
+  parseDumpCompression,
+  type DumpCompression,
+} from './compressed-dump.ts';
+import {
   DumpInputError,
   fileChunks,
   observedEntries,
@@ -105,6 +111,8 @@ type Config = {
   sourceAlias?: string;
   disappearanceThreshold?: number;
   progressMode?: ImportProgressMode;
+  compression: DumpCompression;
+  decodeBudget?: number;
 };
 
 class InputFailure extends DumpInputError {}
@@ -114,6 +122,7 @@ function usage(): string {
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
+    '       [--compression none|gzip] [--decode-budget <bytes>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
@@ -121,7 +130,8 @@ function usage(): string {
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --help',
+    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --help',
+    'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a gzip decoded-byte ceiling (default 256 GiB).',
   ].join('\n');
 }
 
@@ -148,6 +158,8 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--source-alias',
     '--disappearance-threshold',
     '--progress',
+    '--compression',
+    '--decode-budget',
   ]);
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
@@ -193,7 +205,18 @@ function parse(argv: readonly string[]): Config | 'help' {
     account,
     client,
     auth,
+    compression: 'none',
   };
+  const compression = values.get('--compression');
+  if (compression !== undefined) result.compression = parseDumpCompression(compression);
+  const decodeBudget = values.get('--decode-budget');
+  if (decodeBudget !== undefined) {
+    if (result.compression !== 'gzip') throw new InputFailure();
+    if (!/^[1-9][0-9]{0,15}$/.test(decodeBudget)) throw new InputFailure();
+    const parsedBudget = Number(decodeBudget);
+    if (!Number.isSafeInteger(parsedBudget) || parsedBudget <= 0) throw new InputFailure();
+    result.decodeBudget = parsedBudget;
+  }
   const progressMode = values.get('--progress');
   if (progressMode !== undefined) {
     if (progressMode !== 'human' && progressMode !== 'jsonl') throw new InputFailure();
@@ -336,15 +359,30 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     const auth = parseOrigin(config.auth);
     if (auth.protocol !== 'https:') throw new InputFailure();
     config.auth = auth.origin;
-  } catch {
-    return { code: 2, stdout: '', stderr: diagnostic('Invalid importer arguments.'), openHandles: 0 };
+  } catch (error) {
+    return {
+      code: 2,
+      stdout: '',
+      stderr: diagnostic(
+        error instanceof DumpInputError && error.identity !== 'invalid-input'
+          ? error.message
+          : 'Invalid importer arguments.',
+      ),
+      openHandles: 0,
+    };
   }
 
   let registration: SourceRegistration;
   try {
     registration = createSourceRegistration(config.source, { source: config.sourceAlias ?? config.source });
-  } catch {
-    return { code: 2, stdout: '', stderr: diagnostic('Invalid importer arguments.'), openHandles: 0 };
+    admitDumpCompression(config.source, config.compression);
+  } catch (error) {
+    return {
+      code: 2,
+      stdout: '',
+      stderr: diagnostic(error instanceof DumpInputError ? error.message : 'Invalid importer arguments.'),
+      openHandles: 0,
+    };
   }
 
   const externalSignal = options.signal ?? new AbortController().signal;
@@ -404,7 +442,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       stderr: diagnostic(
         error instanceof CredentialInputError
           ? 'Input or account key is unavailable or invalid.'
-          : 'Input is unavailable or invalid.',
+          : error instanceof DumpInputError
+            ? error.message
+            : 'Input is unavailable or invalid.',
       ),
       openHandles: 0,
     };
@@ -648,13 +688,22 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           });
       output = resultFor(run, lastHttpStatus, signal);
     } else {
-      const input = ownedChunks(
-        dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
-        signal,
-        'dump',
-        options.observer,
-        dumpHandle !== undefined,
-        progress,
+      const input = decodeDumpBytes(
+        ownedChunks(
+          dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
+          signal,
+          'dump',
+          options.observer,
+          dumpHandle !== undefined,
+          progress,
+        ),
+        {
+          compression: config.compression,
+          signal,
+          ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
+          ...(progress ? { progress } : {}),
+          observer: { onDecodedChunk: (_bytes, backing) => options.observer?.onInputBuffer?.(backing) },
+        },
       );
       const nativeInput = config.source === 'openlibrary' ? openLibraryMetadata(input, signal) : input;
       const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));
@@ -681,10 +730,17 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     output = {
-      code: interrupted ? 130 : error instanceof InputFailure || error instanceof VndbInputError ? 2 : 1,
+      code:
+        interrupted ? 130
+        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError ? 2
+        : 1,
       stdout: '',
       stderr: diagnostic(
-        interrupted ? 'Import interrupted; durable state is retained for resume.' : 'Import failed safely.',
+        interrupted
+          ? 'Import interrupted; durable state is retained for resume.'
+          : error instanceof DumpInputError
+            ? error.message
+            : 'Import failed safely.',
       ),
       openHandles: 0,
     };
@@ -760,7 +816,7 @@ function resultFor(
     return {
       code: 2,
       stdout: '',
-      stderr: diagnostic('Input is incomplete or invalid.', counts, run.skipped),
+      stderr: diagnostic(run.diagnostic || 'Input is incomplete or invalid.', counts, run.skipped),
       openHandles: 0,
     };
   if (run.status === 'mass-disappearance')

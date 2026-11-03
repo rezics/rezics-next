@@ -39,6 +39,7 @@ import {
   type ObservationReason,
   type RetainedObservationHead,
 } from './source-observation.ts';
+import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
@@ -1539,7 +1540,7 @@ export class Importer {
           store.seal(run, { complete: false, reason: 'malformed' });
           return finish(
             signal.aborted || error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
-            'Input is incomplete or invalid',
+            error instanceof DumpInputError ? error.message : 'Input is incomplete or invalid',
           );
         }
         const seal = store.seal(run, { complete: true, skipped });

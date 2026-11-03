@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import type { SourceId, SourceRecord } from '@rezics/conversion';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import { admitDumpCompression, decodeDumpBytes, type DumpCompression } from './compressed-dump.ts';
 import { readDump } from './dumps.ts';
 import { observeDumpRetention } from './dumps-bytes.ts';
 import {
@@ -49,6 +50,8 @@ export type DumpPreviewOptions = Readonly<{
   signal?: AbortSignal;
   observer?: DumpInputObserver;
   maxStoreBytes?: number;
+  compression?: DumpCompression;
+  decodeBudget?: number;
 }>;
 
 export type CapturedBaseline = Readonly<{
@@ -407,6 +410,8 @@ export class DumpPreview {
   static async build(options: DumpPreviewOptions): Promise<DumpPreview> {
     const signal = options.signal ?? new AbortController().signal;
     if (signal.aborted) throw new DumpPreviewFailure('Preview was cancelled.', 130);
+    const compression = options.compression ?? 'none';
+    admitDumpCompression(options.source, compression);
     const retain = Boolean(options.outputDir);
     const ownedDir = options.outputDir
       ? await createOutputDir(options.outputDir)
@@ -452,12 +457,19 @@ export class DumpPreview {
         baselinePresent,
       });
       dumpHandle = await openDump(options.dump, handles);
-      const dumpBytes = ownedChunks(
-        dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (async function* () {})()),
-        signal,
-        'dump',
-        options.observer,
-        dumpHandle !== undefined,
+      const dumpBytes = decodeDumpBytes(
+        ownedChunks(
+          dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (async function* () {})()),
+          signal,
+          'dump',
+          options.observer,
+          dumpHandle !== undefined,
+        ),
+        {
+          compression,
+          signal,
+          ...(options.decodeBudget === undefined ? {} : { decodeBudget: options.decodeBudget }),
+        },
       );
       const restoreRetention = observeDumpRetention(() => {});
       try {
@@ -533,14 +545,18 @@ export class DumpPreview {
             complete: false,
             errorIdentity: interrupted
               ? 'cancelled'
-              : error instanceof VndbInputError || error instanceof DumpInputError
-                ? 'invalid-input'
-                : 'invalid-input',
+              : error instanceof DumpInputError
+                ? error.identity
+                : error instanceof VndbInputError
+                  ? 'invalid-input'
+                  : 'invalid-input',
             errorMessage: interrupted
               ? 'Preview was cancelled.'
               : error instanceof DumpPreviewFailure || error instanceof PreviewStoreFailure
                 ? error.message
-                : 'Input is incomplete or invalid.',
+                : error instanceof DumpInputError
+                  ? error.message
+                  : 'Input is incomplete or invalid.',
           });
       } catch {
         // The incomplete plan identity is best-effort once acquisition has failed.

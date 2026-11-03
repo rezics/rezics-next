@@ -1,4 +1,9 @@
 import type { SourceId } from '@rezics/conversion';
+import {
+  admitDumpCompression,
+  parseDumpCompression,
+  type DumpCompression,
+} from './compressed-dump.ts';
 import { DumpInputError, type RawVndbEntry } from './dump-input.ts';
 import { DumpPreview, DumpPreviewFailure, type DumpPreviewOptions } from './dump-preview.ts';
 import {
@@ -19,11 +24,13 @@ const RECORD_KEY =
 const USAGE = [
   'Usage: rezics-import preview --source <bangumi|vndb|openlibrary|wikidata> --dump <path|->',
   '       [--source-alias <configured-source-id>] [--baseline <sqlite-path>] [--output-dir <path>]',
+  '       [--compression none|gzip] [--decode-budget <bytes>]',
   '       [--page new|changed|unchanged|vanished] [--limit 1..100] [--cursor <opaque-cursor>]',
   '       [--record <native-record-key>] [--json]',
   '       rezics-import preview --plan-dir <path> [--page ...] [--record ...] [--json]',
   '       rezics-import preview --help',
   'Pages default to 20 rows. Preview is local and offline; it never imports, writes import state, or contacts the API.',
+  'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. --plan-dir does not reopen or decompress input.',
 ].join('\n');
 
 export type PreviewCliResult = Readonly<{ code: number; stdout: string; stderr: string; openHandles: number }>;
@@ -46,6 +53,8 @@ export type ParsedPreviewArgs = Readonly<{
   cursor?: string;
   record?: string;
   json: boolean;
+  compression: DumpCompression;
+  decodeBudget?: number;
 }>;
 
 class UsageFailure extends DumpPreviewFailure {
@@ -81,6 +90,8 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
     '--limit',
     '--cursor',
     '--record',
+    '--compression',
+    '--decode-budget',
   ]);
   let json = false;
   for (let index = 0; index < argv.length; index++) {
@@ -102,13 +113,35 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   const source = values.get('--source');
   const dump = values.get('--dump');
   if (planDir) {
-    if (source || dump || values.has('--source-alias') || values.has('--baseline') || values.has('--output-dir'))
+    if (
+      source ||
+      dump ||
+      values.has('--source-alias') ||
+      values.has('--baseline') ||
+      values.has('--output-dir') ||
+      values.has('--compression') ||
+      values.has('--decode-budget')
+    )
       throw new UsageFailure(
         '--plan-dir reopens a retained preview and cannot be combined with dump acquisition flags.',
       );
   } else {
     if (!source || !VALID_SOURCE.test(source) || !dump) throw new UsageFailure('Preview requires --source and --dump.');
     if (dump !== '-' && !dump.trim()) throw new UsageFailure('Preview dump path is invalid.');
+  }
+  let compression: DumpCompression = 'none';
+  const compressionValue = values.get('--compression');
+  if (compressionValue !== undefined) compression = parseDumpCompression(compressionValue);
+  if (source) admitDumpCompression(source, compression);
+  let decodeBudget: number | undefined;
+  const decodeBudgetValue = values.get('--decode-budget');
+  if (decodeBudgetValue !== undefined) {
+    if (compression !== 'gzip') throw new UsageFailure('--decode-budget applies only with --compression gzip.');
+    if (!/^[1-9][0-9]{0,15}$/.test(decodeBudgetValue))
+      throw new UsageFailure('--decode-budget must be a positive safe integer byte count.');
+    decodeBudget = Number(decodeBudgetValue);
+    if (!Number.isSafeInteger(decodeBudget) || decodeBudget <= 0)
+      throw new UsageFailure('--decode-budget must be a positive safe integer byte count.');
   }
   const alias = values.get('--source-alias');
   if (alias !== undefined && (Buffer.byteLength(alias, 'utf8') > 32 || !SOURCE_ALIAS.test(alias)))
@@ -149,6 +182,8 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
     ...(limit === undefined ? {} : { limit }),
     ...(cursor ? { cursor } : {}),
     ...(record ? { record } : {}),
+    compression,
+    ...(decodeBudget === undefined ? {} : { decodeBudget }),
   };
 }
 
@@ -282,7 +317,7 @@ function documentFor(preview: DumpPreview, parsed: ParsedPreviewArgs): Record<st
 function errorMessage(error: unknown): { code: number; message: string } {
   if (error instanceof DumpPreviewFailure || error instanceof PreviewStoreFailure)
     return { code: error.code, message: error.message };
-  if (error instanceof DumpInputError) return { code: 2, message: 'Input is unavailable or invalid.' };
+  if (error instanceof DumpInputError) return { code: 2, message: error.message };
   if (error instanceof DOMException && error.name === 'AbortError')
     return { code: 130, message: 'Preview was cancelled.' };
   return { code: 1, message: 'Preview failed safely; importer state was not changed.' };
@@ -343,6 +378,8 @@ export async function runPreviewCli(
           ...(options.stdin ? { stdin: options.stdin } : {}),
           ...(options.entries ? { entries: options.entries } : {}),
           ...(options.signal ? { signal: options.signal } : {}),
+          compression: parsed.compression,
+          ...(parsed.decodeBudget === undefined ? {} : { decodeBudget: parsed.decodeBudget }),
         } satisfies DumpPreviewOptions);
     const code = preview.plan.complete ? 0 : 2;
     if (parsed.json)
