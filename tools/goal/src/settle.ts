@@ -330,7 +330,7 @@ export async function settle(
           Array.isArray(exit.checks) &&
           exit.checks.length === 0,
         );
-        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch);
+        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
         const verified =
           !finalMeasurement.failureKind &&
           !finalMeasurement.blocker &&

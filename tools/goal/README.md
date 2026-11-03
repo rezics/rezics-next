@@ -442,6 +442,11 @@ Explicit runners and lease deadlines retain precedence within the configured con
 windows remain validated independently of protocol identities. The default inbox page size must not exceed its maximum;
 operators lowering the maximum below the default must also lower the default page size. A single
 existing-failure probe samples the earliest prefix and leaves any unsampled range unproven.
+Publication inventory age and clock skew use the same policy for current and legacy receiving. New workflow
+deadlines and grace are configurable; the historical cancellation command identity, hourly cadence, workflow blob
+pins and single-invocation authority remain fixed. Publication dependency preparation forwards native command
+limits to pinned Bun runtime checks. Smoke CLI diagnostics and lifecycle helper cleanup use the caller policy;
+explicit helper output bounds retain precedence. All path-matching consumers forward the caller brief policy.
 Launch smoke forwards its startup policy snapshot to its inner process. Its UUID shapes, two provider invocations,
 fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
 or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
@@ -473,6 +478,25 @@ manager-message limits use the caller policy. Brief estimate defaults remain gui
 | `flow.oldestQueueMs`                                  | `3600000`                   | Alarm when the oldest queue entry exceeds this age (ms).                                        |
 | `flow.landingP90Ms`                                   | `1800000`                   | Alarm when the landing p90 exceeds this duration (ms).                                          |
 | `flow.attemptsPerIntegrated`                          | `1.5`                       | Alarm above this attempts-per-integrated-task ratio.                                            |
+| `policy.publication.workflowDeadlineSeconds`          | `1800`                      | Outer deadline for a new publication workflow (seconds).                                        |
+| `policy.publication.workflowGraceSeconds`             | `30`                        | TERM-to-KILL grace for a new publication workflow (seconds).                                    |
+| `policy.publication.commandTimeoutMs`                 | `30000`                     | Publication Git and executable-version helper deadline (ms).                                    |
+| `policy.publication.commandBufferBytes`               | `2097152`                   | Publication helper command output buffer (bytes).                                               |
+| `policy.publication.inventoryMaxAgeMs`                | `300000`                    | Maximum current or legacy native inventory age (ms).                                            |
+| `policy.publication.observationClockSkewMs`           | `30000`                     | Permitted future publication inventory or legacy inbox observation skew (ms).                   |
+| `policy.publication.processPollMs`                    | `100`                       | Owned publication process-group observation interval (ms).                                      |
+| `policy.publicationLegacy.evidenceBytes`              | `1048576`                   | Maximum lossless UTF-8 legacy evidence file size (bytes).                                       |
+| `policy.publicationLegacy.records`                    | `256`                       | Legacy records per collection and total received records or source references.                  |
+| `policy.publicationLegacy.fieldCharacters`            | `512`                       | Legacy receiving identifiers and document/evidence path characters.                             |
+| `policy.publicationLegacy.documentReferences`         | `16`                        | Authenticated document references per legacy owner inbox decision.                              |
+| `policy.nativeCommands.commandTimeoutMs`              | `30000`                     | Native compatibility command deadline, including pinned Bun runtime checks (ms).                |
+| `policy.nativeCommands.commandBufferBytes`            | `32768`                     | Native compatibility command output buffer (bytes).                                             |
+| `policy.proof.commandTimeoutMs`                       | `30000`                     | Proof registration, preflight and historical-source Git helper deadline (ms).                   |
+| `policy.proof.gitBufferBytes`                         | `33554432`                  | Proof registration and historical-source metadata Git output buffer (bytes).                    |
+| `policy.launchSmoke.processTerminationGraceMs`        | `1000`                      | Bounded lifecycle helper TERM-to-KILL grace (ms).                                               |
+| `policy.launchSmoke.processCleanupGraceMs`            | `500`                       | Bounded lifecycle helper descendant cleanup grace (ms).                                         |
+| `policy.launchSmoke.processCleanupPollMs`             | `25`                        | Bounded lifecycle helper descendant cleanup polling interval (ms).                              |
+| `policy.launchSmoke.systemdCommandTimeoutMs`          | `25000`                     | Recorded systemd-run helper command deadline (ms).                                              |
 | `policy.launchSmoke.pollMs`                           | `100`                       | Worker-check result polling interval (ms).                                                      |
 | `policy.launchSmoke.budgetMs`                         | `270000`                    | Internal lifecycle smoke execution budget (ms).                                                 |
 | `policy.launchSmoke.outputBytes`                      | `2097152`                   | Captured and forwarded smoke command output bound (bytes).                                      |

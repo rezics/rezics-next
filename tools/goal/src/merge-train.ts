@@ -90,8 +90,9 @@ const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
 export function integrationChecksForFiles(
   changed: readonly string[],
   checks: readonly IntegrationCheck[],
+  policy = defaultPolicy.brief,
 ): IntegrationCheck[] {
-  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
+  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths, policy)));
 }
 
 export function rootTypecheckCommand(changed: readonly string[]): string[] {
@@ -127,10 +128,11 @@ export function landingAffectedChecks(
   changed: readonly string[],
   _workspace: boolean,
   explicit: readonly AffectedTestCheck[] | undefined,
+  policy = defaultPolicy.brief,
 ): AffectedTestCheck[] {
   const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
   const checks = [...(explicit ?? (testDefaults ? [] : defaults.affectedTests))];
-  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
+  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths, policy)));
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
@@ -534,8 +536,8 @@ export function newErrorLines(output: string, baseline: string): string[] {
   return added;
 }
 
-function derivedForPath(path: string, files: readonly DerivedFile[]): DerivedFile[] {
-  return files.filter((file) => matchesPath(path, [file.path]));
+function derivedForPath(path: string, files: readonly DerivedFile[], policy = defaultPolicy.brief): DerivedFile[] {
+  return files.filter((file) => matchesPath(path, [file.path], policy));
 }
 
 function markdownUnionFiles(logPath: string): string[] {
@@ -584,13 +586,14 @@ function regenerateLandingDerivedFiles(
   base: string,
   files: readonly DerivedFile[],
   logPath: string,
+  policy = defaultPolicy.brief,
 ): void {
   const changedSources = changedPathsBetween(cwd, base, git(cwd, 'rev-parse', 'HEAD'));
   const triggered = files.filter(
     (file) =>
       file.stage === 'promotion' &&
       file.inputs?.length &&
-      changedSources.some((path) => matchesPath(path, file.inputs!)),
+      changedSources.some((path) => matchesPath(path, file.inputs!, policy)),
   );
   if (!triggered.length) return;
 
@@ -606,7 +609,7 @@ function regenerateLandingDerivedFiles(
   }
 
   const changed = changedWorkingFiles(cwd);
-  const outside = changed.filter((path) => !files.some((file) => matchesPath(path, [file.path])));
+  const outside = changed.filter((path) => !files.some((file) => matchesPath(path, [file.path], policy)));
   if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
   if (!changed.length) {
     appendFileSync(logPath, 'Derived outputs already match the dev landing; no regeneration commit added\n');
@@ -710,8 +713,8 @@ export function controlPlaneChecks(policy = defaultPolicy.controlPlane): readonl
 /** Defaults for synthetic callers; the production train creates commands from its startup policy. */
 export const CONTROL_PLANE_CHECKS = controlPlaneChecks();
 const LAUNCH_SMOKE_PATHS = defaults.launchSmokePaths as string[];
-export function launchSmokeRequired(changed: readonly string[]): boolean {
-  return changed.some((path) => matchesPath(path, LAUNCH_SMOKE_PATHS));
+export function launchSmokeRequired(changed: readonly string[], policy = defaultPolicy.brief): boolean {
+  return changed.some((path) => matchesPath(path, LAUNCH_SMOKE_PATHS, policy));
 }
 
 type ControlPlaneReleaseSnapshot = {
@@ -993,6 +996,7 @@ export function resolveMechanicalConflicts(
   markdown: 'insertions' | 'union' = 'insertions',
   // Index stage holding the task; callers replaying it during a rebase must select stage 3.
   taskStage: 2 | 3 = 2,
+  policy = defaultPolicy.brief,
 ): string[] | false {
   const resolved = new Map<string, string>();
   const unionResolved: string[] = [];
@@ -1051,7 +1055,7 @@ export function resolveMechanicalConflicts(
       } finally {
         rmSync(scratch, { recursive: true, force: true });
       }
-    } else if (matchesPath(file, defaultJsonMessageConflicts)) {
+    } else if (matchesPath(file, defaultJsonMessageConflicts, policy)) {
       const stages = ([1, 2, 3] as const).map((stage) => {
         const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
         if (stage === 1 && result.status !== 0) return '{}';
@@ -1130,8 +1134,12 @@ function mergeFlatJsonMessage(baseText: string, oursText: string, theirsText: st
   return { ok: true, value };
 }
 
-function jsonMessageConflictError(cwd: string, paths: readonly string[]): Error | undefined {
-  for (const file of paths.filter((path) => matchesPath(path, defaultJsonMessageConflicts))) {
+function jsonMessageConflictError(
+  cwd: string,
+  paths: readonly string[],
+  policy = defaultPolicy.brief,
+): Error | undefined {
+  for (const file of paths.filter((path) => matchesPath(path, defaultJsonMessageConflicts, policy))) {
     const stages = ([1, 2, 3] as const).map((stage) => {
       const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
       return result.status === 0 ? result.stdout : '{}';
@@ -1148,6 +1156,7 @@ function rebaseWithDerivedFiles(
   originalBase: string,
   logPath: string,
   files: readonly DerivedFile[],
+  policy = defaultPolicy.brief,
 ): unknown | boolean {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
@@ -1159,12 +1168,12 @@ function rebaseWithDerivedFiles(
       if (!conflicts.length) throw rebaseError;
       // bun.lock is an integration-stage derived file: keep the integration lockfile, regenerate from the
       // merged manifests, and commit that result as part of the rebased landing.
-      const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files).length > 0);
-      const textConflicts = conflicts.filter((path) => !derivedForPath(path, files).length);
+      const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files, policy).length > 0);
+      const textConflicts = conflicts.filter((path) => !derivedForPath(path, files, policy).length);
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
-        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union', 3);
-        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts) ?? rebaseError;
+        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union', 3, policy);
+        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts, policy) ?? rebaseError;
         const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
         appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
         stagePaths(cwd, new Set(textConflicts));
@@ -1173,7 +1182,7 @@ function rebaseWithDerivedFiles(
       for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
       const integrationCommands = new Map<string, string[]>();
       for (const path of derivedConflicts)
-        for (const file of derivedForPath(path, files)) {
+        for (const file of derivedForPath(path, files, policy)) {
           integrationCommands.set(JSON.stringify(file.command), file.command);
         }
       if (integrationCommands.size) ensureDerivedDependencies(cwd, logPath, integrationCommands.values());
@@ -1186,7 +1195,7 @@ function rebaseWithDerivedFiles(
       }
       const regeneratedLockfile = derivedConflicts.includes('bun.lock');
       const stageFiles = new Set(derivedConflicts);
-      for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
+      for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files, policy).length) stageFiles.add(path);
       stagePaths(cwd, stageFiles);
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
@@ -1217,6 +1226,7 @@ export function rebaseOnto(
   logPath: string,
   files: readonly DerivedFile[] = defaultDerivedFiles,
   allowedPaths?: readonly string[],
+  policy = defaultPolicy.brief,
 ): boolean {
   const upstream = rebaseUpstream(cwd, base, originalBase);
   const head = git(cwd, 'rev-parse', 'HEAD');
@@ -1224,7 +1234,7 @@ export function rebaseOnto(
   // the target's history changed, which a wrong upstream would replay or revert.
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
+  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy);
   if (typeof initialConflict === 'boolean') return initialConflict;
 
   git(cwd, 'rebase', '--abort');
@@ -1239,7 +1249,7 @@ export function rebaseOnto(
   if (allowedPaths) {
     const changed = git(cwd, 'diff', '--name-only', upstream, 'HEAD').split('\n').filter(Boolean);
     const outside = outsideScope(
-      changed.filter((path) => !derivedForPath(path, files).length && !own.has(path)),
+      changed.filter((path) => !derivedForPath(path, files, policy).length && !own.has(path)),
       allowedPaths,
     );
     if (outside.length) {
@@ -1248,7 +1258,7 @@ export function rebaseOnto(
     }
   }
 
-  const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files);
+  const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy);
   if (squashedConflict !== undefined && typeof squashedConflict !== 'boolean') throw squashedConflict;
   return squashedConflict === true;
 }
@@ -1806,7 +1816,15 @@ export class MergeTrain {
           }
 
           try {
-            rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
+            rebaseOnto(
+              trainTree,
+              previous,
+              originalBase,
+              logPath,
+              derivedFiles,
+              request.declaredPaths,
+              (this.options.policy ?? defaultPolicy).brief,
+            );
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
             if (conflicts.length) {
@@ -1863,7 +1881,9 @@ export class MergeTrain {
           result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
           try {
             this.checkScope(
-              result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+              result.changedFiles.filter(
+                (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
+              ),
               request,
               logPath,
             );
@@ -1907,7 +1927,9 @@ export class MergeTrain {
             result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles);
             try {
               this.checkScope(
-                result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length),
+                result.changedFiles.filter(
+                  (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
+                ),
                 request,
                 logPath,
               );
@@ -2122,7 +2144,12 @@ export class MergeTrain {
             member.entry.request,
             outsideScope(
               (member.result.changedFiles ?? []).filter(
-                (path) => !derivedForPath(path, o.derivedFiles ?? defaultDerivedFiles).length,
+                (path) =>
+                  !derivedForPath(
+                    path,
+                    o.derivedFiles ?? defaultDerivedFiles,
+                    (this.options.policy ?? defaultPolicy).brief,
+                  ).length,
               ),
               member.entry.request.declaredPaths,
             ),
@@ -2795,14 +2822,29 @@ export class MergeTrain {
           git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
         } else {
           try {
-            rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles, request.declaredPaths);
+            rebaseOnto(
+              trainTree,
+              base,
+              originalBase,
+              logPath,
+              derivedFiles,
+              request.declaredPaths,
+              (this.options.policy ?? defaultPolicy).brief,
+            );
           } catch (error) {
             if (!(error instanceof WorkerConflictError)) throw error;
             refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
             return finish();
           }
         }
-        if (!stabilize && integratesIntoDev) regenerateLandingDerivedFiles(trainTree, base, derivedFiles, logPath);
+        if (!stabilize && integratesIntoDev)
+          regenerateLandingDerivedFiles(
+            trainTree,
+            base,
+            derivedFiles,
+            logPath,
+            (this.options.policy ?? defaultPolicy).brief,
+          );
         const frozen = workspace
           ? sharedStore!
               .tasks()
@@ -2826,7 +2868,9 @@ export class MergeTrain {
         result.diffLines = diffLineCount(trainTree, base);
         result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
-        const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
+        const scopeCheckedFiles = result.changedFiles.filter(
+          (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
+        );
         if (workspace) {
           const ownership = readRiskOwnership(
             o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
@@ -2838,7 +2882,9 @@ export class MergeTrain {
               .flatMap(([, paths]) => paths);
             try {
               this.checkScope(
-                taskChangedPaths(task, tip).filter((path) => !derivedForPath(path, derivedFiles).length),
+                taskChangedPaths(task, tip).filter(
+                  (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
+                ),
                 {
                   ...request,
                   declaredPaths: task.brief.paths,
@@ -2891,7 +2937,7 @@ export class MergeTrain {
             result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
             result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
             const formattedScopeCheckedFiles = result.changedFiles.filter(
-              (path) => !derivedForPath(path, derivedFiles).length,
+              (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
             );
             if (!workspace) this.checkScope(formattedScopeCheckedFiles, request, logPath);
           }
@@ -2942,7 +2988,11 @@ export class MergeTrain {
         }
         const configuredIntegrationChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const matchingIntegrationChecks = integrationChecksForFiles(result.changedFiles, configuredIntegrationChecks);
+        const matchingIntegrationChecks = integrationChecksForFiles(
+          result.changedFiles,
+          configuredIntegrationChecks,
+          (this.options.policy ?? defaultPolicy).brief,
+        );
         // `clean -fdx` above removed node_modules; remote checks resolve the pinned Bun from it, so every stabilize
         // landing's first check failed before running (2026-10-29). Control-plane landings install their own.
         if (
@@ -2957,7 +3007,12 @@ export class MergeTrain {
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
           ? []
-          : landingAffectedChecks(result.changedFiles, Boolean(workspace), o.affectedTests);
+          : landingAffectedChecks(
+              result.changedFiles,
+              Boolean(workspace),
+              o.affectedTests,
+              (this.options.policy ?? defaultPolicy).brief,
+            );
         const siblings = siblingTestCommand(
           siblingTestFiles(result.changedFiles, trainTree),
           testDefaults ? undefined : defaults.siblingTests.command,
@@ -3128,7 +3183,11 @@ export class MergeTrain {
         }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const integrationChecks = integrationChecksForFiles(result.changedFiles, configuredChecks);
+        const integrationChecks = integrationChecksForFiles(
+          result.changedFiles,
+          configuredChecks,
+          (this.options.policy ?? defaultPolicy).brief,
+        );
         if (!skipDevChecks && !controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
@@ -3407,7 +3466,9 @@ export class MergeTrain {
                 (workspace
                   ? taskChangedPaths(sharedStore!.task(request.taskId), tip)
                   : (result.changedFiles ?? [])
-                ).filter((path) => !derivedForPath(path, derivedFiles).length),
+                ).filter(
+                  (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
+                ),
                 request.declaredPaths,
               ),
               ...markdownUnionFiles(logPath),
@@ -3865,7 +3926,17 @@ export class MergeTrain {
       resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
       ...FORMAT_FLAGS,
     ];
-    if (!resolveMechanicalConflicts(tree, files, formatCommand, 'insertions', 3)) return false;
+    if (
+      !resolveMechanicalConflicts(
+        tree,
+        files,
+        formatCommand,
+        'insertions',
+        3,
+        (this.options.policy ?? defaultPolicy).brief,
+      )
+    )
+      return false;
     git(tree, 'add', '--', ...files);
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
@@ -3874,12 +3945,17 @@ export class MergeTrain {
   /** Resolve a generated-only merge by keeping the target side and regenerating every declared output. */
   private resolveGeneratedConflicts(tree: string, conflicts: readonly string[], logPath: string): boolean {
     const files = this.options.derivedFiles ?? defaultDerivedFiles;
-    if (!conflicts.length || conflicts.some((path) => !derivedForPath(path, files).length)) return false;
+    if (
+      !conflicts.length ||
+      conflicts.some((path) => !derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief).length)
+    )
+      return false;
 
     const commands = new Map<string, string[]>();
     for (const path of conflicts) {
       git(tree, 'checkout', '--ours', '--', path);
-      for (const file of derivedForPath(path, files)) commands.set(JSON.stringify(file.command), file.command);
+      for (const file of derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief))
+        commands.set(JSON.stringify(file.command), file.command);
     }
     try {
       ensureDerivedDependencies(tree, logPath, commands.values());
@@ -3892,7 +3968,9 @@ export class MergeTrain {
       appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
       if (result.status !== 0) return false;
     }
-    const changedGenerated = changedWorkingFiles(tree).filter((path) => derivedForPath(path, files).length > 0);
+    const changedGenerated = changedWorkingFiles(tree).filter(
+      (path) => derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief).length > 0,
+    );
     stagePaths(tree, new Set([...conflicts, ...changedGenerated]));
     git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
@@ -3965,7 +4043,7 @@ export class MergeTrain {
         let goals = new Set<string>();
         for (const task of tasks) {
           for (const pattern of task.brief!.paths!) {
-            if (!matchesPath(file, [pattern])) continue;
+            if (!matchesPath(file, [pattern], (this.options.policy ?? defaultPolicy).brief)) continue;
             const specificity = literal(pattern);
             if (specificity > best) {
               best = specificity;
@@ -4483,7 +4561,11 @@ export class MergeTrain {
             !changed.reason?.trim() ||
             !/^tools\/goal\/[a-zA-Z0-9_./-]+$/.test(changed.path) ||
             changed.path.split('/').includes('..') ||
-            !matchesPath(changed.path, store.task(member.taskId).brief.paths)
+            !matchesPath(
+              changed.path,
+              store.task(member.taskId).brief.paths,
+              (this.options.policy ?? defaultPolicy).brief,
+            )
           )
             throw new Error(
               'Changed producer input must name an actual omitted or added owner source and relevance reason',

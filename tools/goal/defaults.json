@@ -474,7 +474,9 @@
     "proof": {
       "concurrency": 3,
       "producerErrorCharacters": 8192,
-      "sourceBufferBytes": 8388608
+      "sourceBufferBytes": 8388608,
+      "commandTimeoutMs": 30000,
+      "gitBufferBytes": 33554432
     },
     "launchContext": {
       "dependencies": 48,
@@ -526,7 +528,11 @@
       "snapshotEvents": 16,
       "launchErrors": 8,
       "resultCharacters": 400,
-      "drainWaitMs": 5000
+      "drainWaitMs": 5000,
+      "processTerminationGraceMs": 1000,
+      "processCleanupGraceMs": 500,
+      "processCleanupPollMs": 25,
+      "systemdCommandTimeoutMs": 25000
     },
     "brief": {
       "bytes": 65536,
@@ -536,6 +542,25 @@
     "workerPrompt": {
       "characters": 20000,
       "gitBufferBytes": 16777216
+    },
+    "publication": {
+      "workflowDeadlineSeconds": 1800,
+      "workflowGraceSeconds": 30,
+      "commandTimeoutMs": 30000,
+      "commandBufferBytes": 2097152,
+      "inventoryMaxAgeMs": 300000,
+      "observationClockSkewMs": 30000,
+      "processPollMs": 100
+    },
+    "publicationLegacy": {
+      "evidenceBytes": 1048576,
+      "records": 256,
+      "fieldCharacters": 512,
+      "documentReferences": 16
+    },
+    "nativeCommands": {
+      "commandTimeoutMs": 30000,
+      "commandBufferBytes": 32768
     }
   }
 }

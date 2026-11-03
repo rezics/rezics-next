@@ -538,6 +538,7 @@ async function exerciseWorkerCheck(
       env: { ...process.env, REZICS_CHECK_MEMORY: 'off' },
       timeoutMs: Math.min(policy.commandTimeoutMs, Math.max(1, deadline - Date.now())),
       outputLimit: policy.outputBytes,
+      policy,
     },
   );
   const id = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
@@ -574,6 +575,7 @@ async function exerciseWorkerCheck(
       env: { ...process.env, REZICS_CHECK_MEMORY: 'off' },
       timeoutMs: Math.min(policy.commandTimeoutMs, Math.max(1, deadline - Date.now())),
       outputLimit: policy.outputBytes,
+      policy,
     });
     if (wait.timedOut) throw new Error('capacity timeout: dev worker-check wait is infrastructure/unverified');
     if (wait.error || wait.status !== 0)
@@ -1365,7 +1367,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   mkdirSync(stateDirectory, { recursive: true });
   mkdirSync(worktreeRoot, { recursive: true });
   const originalPath = process.env.PATH;
-  const systemdRecorder = recordSystemdRun(join(stateDirectory, 'systemd-bin'));
+  const systemdRecorder = recordSystemdRun(join(stateDirectory, 'systemd-bin'), policy);
   const codexLogDirectory = join(stateDirectory, 'codex-argv');
   mkdirSync(codexLogDirectory, { recursive: true });
   const codexLogs = new Map<string, string>();
@@ -1854,14 +1856,21 @@ export function parseSmokeArguments(args: string[]): SmokeOptions {
   return options;
 }
 
-export async function main(runSmoke?: () => Promise<void>): Promise<number> {
+export async function main(runSmoke?: () => Promise<void>, policyOverride?: ControlPolicy): Promise<number> {
+  let startupPolicy = policyOverride ?? defaultPolicy;
   try {
+    if (!runSmoke)
+      startupPolicy =
+        policyOverride ??
+        (process.env.REZICS_LAUNCH_SMOKE_POLICY
+          ? readControlPolicy(JSON.parse(process.env.REZICS_LAUNCH_SMOKE_POLICY))
+          : (loadSettings().policy ?? defaultPolicy));
     if (process.argv.includes('--inner')) await runInnerSmoke(reportLine);
     else if (runSmoke) await runSmoke();
-    else await runLaunchSmoke(undefined, parseSmokeArguments(process.argv.slice(2)));
+    else await runLaunchSmoke(undefined, { ...parseSmokeArguments(process.argv.slice(2)), policy: startupPolicy });
     return 0;
   } catch (error) {
-    const detail = message(error);
+    const detail = message(error, startupPolicy.launchSmoke);
     if (/^(?:candidate|setup|start|wake|success|lifecycle regressions): failed:/.test(detail)) return 1;
     if (process.argv.includes('--inner')) reportLine(`setup: failed: ${detail}`);
     else process.stderr.write(`launch-smoke: ${detail}\n`);

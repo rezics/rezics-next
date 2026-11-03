@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { JSON5 } from 'bun';
@@ -21,8 +22,6 @@ import { fileURLToPath } from 'node:url';
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
 const REPOSITORY_ROOT = resolve(import.meta.dir, '../../..');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const OUTPUT_LIMIT = 32 * 1024;
-const PROCESS_TIMEOUT_MS = 30_000;
 
 type ContractOption = {
   flag: string;
@@ -127,13 +126,18 @@ function commandExists(file: string): boolean {
   }
 }
 
-function run(command: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): RunResult {
+function run(
+  command: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  policy = defaultPolicy.nativeCommands,
+): RunResult {
   const result = spawnSync(command[0]!, command.slice(1), {
     cwd,
     env,
     encoding: 'utf8',
-    timeout: PROCESS_TIMEOUT_MS,
-    maxBuffer: OUTPUT_LIMIT,
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.commandBufferBytes,
   });
   return {
     command,
@@ -178,13 +182,14 @@ function runtimeCheck(
   executable: string,
   contract: CheckCompatibilityContract,
   artifact?: BunArtifact,
+  policy = defaultPolicy.nativeCommands,
 ): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
   const versionArgs = contract.workerCheck.bun.versionArgv;
   const revisionArgs = contract.workerCheck.bun.revisionArgv;
   const versionCommand = [executable, ...versionArgs];
   const revisionCommand = [executable, ...revisionArgs];
-  const version = run(versionCommand, scriptsRoot);
+  const version = run(versionCommand, scriptsRoot, process.env, policy);
   const actualVersion = version.stdout.trim();
   const pinShapeOk =
     expectedPin.startsWith(contract.workerCheck.bun.versionPrefix) &&
@@ -210,7 +215,7 @@ function runtimeCheck(
     { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version) },
   );
 
-  const revision = run(revisionCommand, scriptsRoot);
+  const revision = run(revisionCommand, scriptsRoot, process.env, policy);
   const actualRevision = revision.stdout.trim();
   const revisionOk =
     revision.status === 0 &&
@@ -236,9 +241,10 @@ export function checkPinnedBunRuntime(
   expectedPin: string,
   executable: string,
   contract = CHECK_COMPATIBILITY_CONTRACT,
+  policy = defaultPolicy.nativeCommands,
 ): CompatibilityCheck[] {
   if (!isAbsolute(executable)) executable = resolve(scriptsRoot, executable);
-  return runtimeCheck(resolve(scriptsRoot), expectedPin, executable, contract);
+  return runtimeCheck(resolve(scriptsRoot), expectedPin, executable, contract, undefined, policy);
 }
 
 function validateWorkerRecord(
@@ -665,7 +671,12 @@ function parsePackageManager(
   }
 }
 
-function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract: CheckCompatibilityContract): boolean {
+function checkBunPin(
+  checks: CompatibilityCheck[],
+  scriptsRoot: string,
+  contract: CheckCompatibilityContract,
+  policy = defaultPolicy.nativeCommands,
+): boolean {
   const firstCheck = checks.length;
   const pin = parsePackageManager(scriptsRoot, checks, contract);
   const artifact = pin === undefined ? undefined : contract.workerCheck.bun.artifacts[pin];
@@ -828,7 +839,7 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
       `Could not establish installed package/lockfile custody: ${String(error)}.`,
     );
   }
-  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact)) checks.push(check);
+  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact, policy)) checks.push(check);
   pushCheck(
     checks,
     'workerCheck.bun.lookup',
@@ -841,9 +852,12 @@ function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract
 }
 
 /** Verify the complete package pin, installed artifact custody and exact executable runtime identity, without remote work. */
-export function checkPinnedBunInstallation(scriptsRoot: string): CompatibilityCheck[] {
+export function checkPinnedBunInstallation(
+  scriptsRoot: string,
+  policy = defaultPolicy.nativeCommands,
+): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
-  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT);
+  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT, policy);
   return checks;
 }
 

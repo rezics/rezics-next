@@ -94,8 +94,8 @@ function siblingTestFilesAtCommit(changedPaths: readonly string[], tracked: Read
 function commits(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'rev-list', '--reverse', `${base}..${target}`).split('\n').filter(Boolean);
 }
-function matches(file: string, paths: readonly string[]): boolean {
-  return paths.some((path) => matchesPath(file, [path]));
+function matches(file: string, paths: readonly string[], policy = defaultPolicy.brief): boolean {
+  return paths.some((path) => matchesPath(file, [path], policy));
 }
 function taskCommits(task: Task, cwd: string): string[] {
   if (task.integratedCommits?.length) return task.integratedCommits;
@@ -166,7 +166,7 @@ function createChecks(
     { command: ['env', `TYPECHECK_CHANGED=${files.join('\n')}`, ...typecheck], closure: ['**'] },
   ];
   for (const affected of settings.verifierChecks ?? settings.affectedTests ?? []) {
-    const selected = files.some((file) => matches(file, affected.paths));
+    const selected = files.some((file) => matches(file, affected.paths, settings.policy?.brief));
     if (selected) checks.push({ command: [...affected.command], closure: [...affected.paths] });
   }
   const tracked = trackedFilesAt(checkout, candidate);
@@ -965,7 +965,9 @@ function suspectsFor(
       if (!taskCommitList.some((commit) => position.has(commit))) return undefined;
       if (
         !check.closure.includes('**') &&
-        !filesInCommits(settings.mainCheckout, taskCommitList).some((file) => matches(file, check.closure))
+        !filesInCommits(settings.mainCheckout, taskCommitList).some((file) =>
+          matches(file, check.closure, settings.policy?.brief),
+        )
       )
         return undefined;
       const commit = (task.integratedCommit ?? task.mergedCommit)!;

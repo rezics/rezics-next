@@ -328,7 +328,11 @@ export class TrainResolver {
             detail: JSON.stringify(conflict),
           });
       });
-    if (allPaths.some((path) => frozen.includes(path) || matchesPath(path, request.protectedPaths ?? []))) {
+    if (
+      allPaths.some(
+        (path) => frozen.includes(path) || matchesPath(path, request.protectedPaths ?? [], this.store.policy.brief),
+      )
+    ) {
       conflict.detail = 'Conflict touches a frozen or protected input';
       return conflict;
     }
@@ -478,7 +482,7 @@ export class TrainResolver {
       // Exact native scope approvals never rewrite briefs. Actual accepted contributions still need their owners'
       // original contracts when a later member conflicts on one of those additional files.
       if (
-        !paths.some((path) => matchesPath(path, candidate.brief.paths)) &&
+        !paths.some((path) => matchesPath(path, candidate.brief.paths, this.store.policy.brief)) &&
         !git(tree, 'diff', '--name-only', '-z', candidate.base, source, '--', ...paths)
       )
         return [];
@@ -500,7 +504,7 @@ export class TrainResolver {
             (owner) =>
               owner.id !== task.id &&
               owner.workspace?.module === task.workspace!.module &&
-              paths.some((path) => matchesPath(path, owner.brief.paths)),
+              paths.some((path) => matchesPath(path, owner.brief.paths, this.store.policy.brief)),
           )
           .slice(-4)
           .map((owner) => ({

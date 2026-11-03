@@ -516,7 +516,7 @@ export class WorkerTasks {
       }
       const brief = submittedBrief;
       const base = brief.proof?.sourceCommit ?? this.taskBaseHead(brief);
-      const files = parseFrozenFiles(brief.markdown, brief.paths);
+      const files = parseFrozenFiles(brief.markdown, brief.paths, this.settings.policy?.brief);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       const frozen = prepareInitialDispatch({
@@ -546,7 +546,7 @@ export class WorkerTasks {
     }
   }
   private prepareSharedFrozen(task: Task): void {
-    const files = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+    const files = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
     const prior = frozenFiles(task);
     if (
       files.length === prior.length &&
@@ -753,8 +753,12 @@ export class WorkerTasks {
           throw new Error('amendment outside a shared module requires a new isolated task');
         if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
           throw new Error('prelaunch amendment preserves ordinary priority only');
-        const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths);
-        const nextFrozen = parseFrozenFiles(submitted.brief.markdown, submitted.brief.paths);
+        const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
+        const nextFrozen = parseFrozenFiles(
+          submitted.brief.markdown,
+          submitted.brief.paths,
+          this.settings.policy?.brief,
+        );
         if (
           previousFrozen.length !== nextFrozen.length ||
           previousFrozen.some((file) => !nextFrozen.some((next) => next.path === file.path && next.hash === file.hash))
@@ -876,7 +880,7 @@ export class WorkerTasks {
         this.settings.integration.operationsManager,
         this.settings.integrationBranch,
       );
-      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
       if (missing.length)
         throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
       if (submitted) {
@@ -1026,7 +1030,7 @@ export class WorkerTasks {
         this.settings.integration.operationsManager,
         this.settings.integrationBranch,
       );
-      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
       if (missing.length)
         throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     }
@@ -1281,6 +1285,7 @@ export class WorkerTasks {
           `${logPath}.rebase`,
           this.settings.derivedFiles,
           task.brief.paths,
+          this.settings.policy?.brief,
         );
       } catch (error) {
         const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
@@ -1411,7 +1416,7 @@ export class WorkerTasks {
       throw new ProofUnavailableError(
         'Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing',
       );
-    const missing = preflightProof(this.settings.mainCheckout, task.brief);
+    const missing = preflightProof(this.settings.mainCheckout, task.brief, this.settings.policy?.proof);
     if (missing.length)
       throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
   }
@@ -1745,7 +1750,7 @@ export class WorkerTasks {
           setupStep = 'preflighting original proof';
           requireOriginalProofProfile(profile);
           if (task.brief.criticalPath) throw new Error('proof requires ordinary Codex routing');
-          const missing = preflightProof(task.worktree, task.brief);
+          const missing = preflightProof(task.worktree, task.brief, this.settings.policy?.proof);
           if (missing.length)
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
           task = this.prepareProofWorktree(task, next);
@@ -1849,7 +1854,7 @@ export class WorkerTasks {
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
         setupStep = 'committing frozen acceptance files';
-        const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+        const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
         const priorFiles = frozenFiles(task);
         const frozen = commitFrozenFiles(
           task.worktree,
@@ -1881,6 +1886,7 @@ export class WorkerTasks {
                 rebaseLog,
                 this.settings.derivedFiles,
                 task.brief.paths,
+                this.settings.policy?.brief,
               );
             } catch (error) {
               files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);

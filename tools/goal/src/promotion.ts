@@ -102,7 +102,7 @@ export async function regenerateDerivedHead(
     const tracked = git(tree, 'ls-files', '-z').split('\0').filter(Boolean);
     const commands = new Map<string, string[]>();
     for (const file of files)
-      if (tracked.some((path) => matchesPath(path, [file.path])))
+      if (tracked.some((path) => matchesPath(path, [file.path], settings.policy?.brief)))
         commands.set(JSON.stringify(file.command), file.command);
     // A fresh worktree has no node_modules, and generators such as the kernel's run its installed tools.
     const install =
@@ -116,7 +116,9 @@ export async function regenerateDerivedHead(
     }
 
     const changes = workingFiles(tree);
-    const outside = changes.filter((path) => !files.some((file) => matchesPath(path, [file.path])));
+    const outside = changes.filter(
+      (path) => !files.some((file) => matchesPath(path, [file.path], settings.policy?.brief)),
+    );
     if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
     let candidate = expected;
     if (changes.length) {
@@ -913,7 +915,8 @@ function mergeMainIntoDev(
       });
       if (merged.status !== 0) {
         const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
-        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived))) return undefined;
+        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived, settings.policy?.brief)))
+          return undefined;
         try {
           git(tree, 'checkout', '--ours', '--', ...conflicts);
           git(tree, 'add', '--', ...conflicts);

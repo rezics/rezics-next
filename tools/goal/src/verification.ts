@@ -144,6 +144,7 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
           spawnSync('git', ['merge-base', '--is-ancestor', PROOF_PRODUCER_COMMIT, binding.sourceCommit], {
             cwd: binding.cwd,
             stdio: 'ignore',
+            timeout: store.policy.proof.commandTimeoutMs,
           }).status !== 0
         )
           return {
@@ -233,7 +234,17 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Brief, Task } from './types.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
 import type { WorkerStore } from './store.ts';
-import { git } from './tasks.ts';
+function proofGit(cwd: string, args: string[], policy = defaultPolicy.proof): string {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
+  });
+  if (result.status !== 0 || result.error)
+    throw new Error(result.error?.message || result.stderr?.trim() || `git ${args[0]} failed`);
+  return result.stdout.trim();
+}
 
 export type ProofAuthorization = {
   fingerprint: string;
@@ -351,15 +362,16 @@ export function authorizeProof(
   operations: string | undefined,
   integrationBranch: string,
 ): ProofAuthorization {
+  const policy = store.policy.proof;
   if (brief.kind !== 'verification' || !brief.proof || brief.criticalPath)
     throw new Error('invalid verification registration');
   authenticateProofManager(store, brief.manager, actor, operations);
   const proof = parseProofMetadata(brief.proof);
   if (!originalCommandHasInputs(brief.acceptance.command))
     throw new Error('proof cannot register a broad root or gate campaign');
-  if (git(root, ['rev-parse', `refs/heads/${integrationBranch}`]) !== proof.sourceCommit)
+  if (proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy) !== proof.sourceCommit)
     throw new Error('proof source must be the captured integration head');
-  if (git(root, ['rev-parse', `${proof.sourceCommit}^{commit}`]) !== proof.sourceCommit)
+  if (proofGit(root, ['rev-parse', `${proof.sourceCommit}^{commit}`], policy) !== proof.sourceCommit)
     throw new Error('proof source is not a captured commit');
   const originals = proof.sourceTasks.map((id) => {
     const task = store.task(id);
@@ -372,7 +384,7 @@ export function authorizeProof(
       !commit
     )
       throw new Error(`proof source ${id} must be a same-Goal integrated original`);
-    if (git(root, ['merge-base', commit, proof.sourceCommit]) !== commit)
+    if (proofGit(root, ['merge-base', commit, proof.sourceCommit], policy) !== commit)
       throw new Error(`proof source commit does not contain ${id}`);
     return { taskId: id, commit, argv: [...task.brief.acceptance.command] };
   });
@@ -388,12 +400,12 @@ export function authorizeProof(
     fingerprint: proofFingerprint(brief),
     manager: actor.id,
     sessionId: actor.sessionId,
-    sourceTree: git(root, ['rev-parse', `${proof.sourceCommit}^{tree}`]),
+    sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
     originals,
   };
 }
 /** Read captured Git objects only. Explicit command files, including shell-contained originals, must exist. */
-export function preflightProof(root: string, brief: Brief): string[] {
+export function preflightProof(root: string, brief: Brief, policy = defaultPolicy.proof): string[] {
   if (!brief.proof) return ['proof metadata unavailable'];
   const tokens = brief.acceptance.command.flatMap(
     (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
@@ -407,8 +419,11 @@ export function preflightProof(root: string, brief: Brief): string[] {
   return [...new Set(tokens)].filter((file) => {
     if (file.startsWith('-') || file.includes('..') || file.startsWith('/')) return true;
     return (
-      spawnSync('git', ['cat-file', '-e', `${brief.proof!.sourceCommit}:${cwd}${file}`], { cwd: root, stdio: 'ignore' })
-        .status !== 0
+      spawnSync('git', ['cat-file', '-e', `${brief.proof!.sourceCommit}:${cwd}${file}`], {
+        cwd: root,
+        stdio: 'ignore',
+        timeout: policy.commandTimeoutMs,
+      }).status !== 0
     );
   });
 }
@@ -881,9 +896,13 @@ export function validateHistoricalProofReaderSource(
   policy = defaultPolicy.proof,
 ): string {
   const { root, integrationRoot, integrationBranch } = source;
-  if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
+  if (
+    !isAbsolute(root) ||
+    realpathSync(root) !== root ||
+    proofGit(root, ['rev-parse', '--show-toplevel'], policy) !== root
+  )
     throw new Error('Historical reader root must be a canonical Git checkout root');
-  const commit = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  const commit = proofGit(root, ['rev-parse', '--verify', 'HEAD^{commit}'], policy);
   for (const [ancestor, descendant] of [
     [PROOF_PRODUCER_COMMIT, commit],
     [commit, `refs/heads/${integrationBranch}`],
@@ -892,13 +911,14 @@ export function validateHistoricalProofReaderSource(
       spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
         cwd: integrationRoot,
         stdio: 'ignore',
+        timeout: policy.commandTimeoutMs,
       }).status !== 0
     )
       throw new Error(
         'Historical reader source must contain the delivered producer and be a captured integration ancestor',
       );
   }
-  if (git(root, ['status', '--porcelain', '--untracked-files=no']))
+  if (proofGit(root, ['status', '--porcelain', '--untracked-files=no'], policy))
     throw new Error('Historical reader source must be Git-clean');
   if (importedHistoricalSources.has(root) && importedHistoricalSources.get(root) !== commit)
     throw new Error('Imported historical reader source changed; configure an immutable captured checkout');
@@ -917,12 +937,13 @@ export function validateHistoricalProofReaderSource(
       !lstatSync(absolute).isFile()
     )
       throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
-    const entry = git(integrationRoot, ['ls-tree', commit, '--', path]);
+    const entry = proofGit(integrationRoot, ['ls-tree', commit, '--', path], policy);
     if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
       throw new Error(`Historical reader module is not a captured regular file: ${path}`);
     const expected = spawnSync('git', ['show', `${commit}:${path}`], {
       cwd: integrationRoot,
       maxBuffer: policy.sourceBufferBytes,
+      timeout: policy.commandTimeoutMs,
     });
     const contents = readFileSync(absolute);
     if (expected.status !== 0 || !contents.equals(expected.stdout))
@@ -1077,14 +1098,15 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
 }
 
 /** Passing evidence belongs only to this exact source and integration ref, never a later source. */
-export function proofSourceUnchanged(task: Task, integrationBranch: string): boolean {
+export function proofSourceUnchanged(task: Task, integrationBranch: string, policy = defaultPolicy.proof): boolean {
   if (!registeredProof(task.brief, task.proofAuthorization)) return false;
   try {
     return (
-      git(task.worktree, ['rev-parse', 'HEAD']) === task.brief.proof!.sourceCommit &&
-      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofAuthorization!.sourceTree &&
-      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.brief.proof!.sourceCommit &&
-      git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) === ''
+      proofGit(task.worktree, ['rev-parse', 'HEAD'], policy) === task.brief.proof!.sourceCommit &&
+      proofGit(task.worktree, ['rev-parse', 'HEAD^{tree}'], policy) === task.proofAuthorization!.sourceTree &&
+      proofGit(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`], policy) ===
+        task.brief.proof!.sourceCommit &&
+      proofGit(task.worktree, ['status', '--porcelain', '--untracked-files=all'], policy) === ''
     );
   } catch {
     return false;

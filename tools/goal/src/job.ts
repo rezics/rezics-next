@@ -1895,11 +1895,13 @@ export class WorkerJob implements GateOutcomeSink {
       record.diffLines = outcome.diffLines;
       record.changedFiles = [...outcome.changedFiles];
       // Declared paths say where the work is expected, not a fence: the record keeps every file changed outside them.
-      const outsidePaths = outcome.changedFiles.filter((path) => !matchesPath(path, task.brief.paths));
+      const outsidePaths = outcome.changedFiles.filter(
+        (path) => !matchesPath(path, task.brief.paths, this.policy.brief),
+      );
       if (outsidePaths.length) record.outsidePaths = outsidePaths;
       else delete record.outsidePaths;
       // Product work on dev may outgrow its estimate; the record keeps the overrun instead of a scope stop.
-      const overrun = devProductBrief(task.brief) ? estimateOverrun(outcome, task) : undefined;
+      const overrun = devProductBrief(task.brief) ? estimateOverrun(outcome, task, this.policy.brief) : undefined;
       if (overrun) record.estimateOverrun = overrun;
       else delete record.estimateOverrun;
       record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
@@ -2107,7 +2109,7 @@ export class WorkerJob implements GateOutcomeSink {
       const controlPlaneGate =
         controlPlaneReleaseBrief(task.brief) &&
         outcome.stage === 'gate' &&
-        outcome.changedFiles.every((path) => matchesPath(path, task.brief.paths));
+        outcome.changedFiles.every((path) => matchesPath(path, task.brief.paths, this.policy.brief));
       const classificationOutcome = controlPlaneGate
         ? { ...outcome, diffLines: 0, nonGeneratedDiffLines: 0, nonGeneratedChangedFiles: [] }
         : outcome;
@@ -2118,6 +2120,7 @@ export class WorkerJob implements GateOutcomeSink {
         record,
         limits,
         this.hasCommit(outcome),
+        this.policy.brief,
       );
       record.escalation = failureClass;
       record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);

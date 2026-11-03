@@ -745,7 +745,7 @@ export async function launch(
   if (
     task.brief.kind === 'verification' &&
     (!registeredProof(task.brief, task.proofAuthorization) ||
-      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? ''))
+      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? '', policy.proof))
   )
     throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
   recordFlow(store.db, {
