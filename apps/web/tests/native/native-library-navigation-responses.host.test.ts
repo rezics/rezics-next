@@ -20,7 +20,10 @@ afterAll(async () => {
   await stack?.stop();
 }, 180_000);
 
-function responseFor(fixture: NativeLibraryNavigationResponseFixture, scenarioId: string): NativeLibraryNavigationRawResponse {
+function responseFor(
+  fixture: NativeLibraryNavigationResponseFixture,
+  scenarioId: string,
+): NativeLibraryNavigationRawResponse {
   const scenario = fixture.scenarios.find((item) => item.scenarioId === scenarioId);
   expect(scenario, `the closed scenario ${scenarioId} is exported`).toBeDefined();
   expect(scenario!.responseIds).toHaveLength(1);
@@ -79,7 +82,8 @@ test('native Library and My Collections exports retain raw owner-local responses
   expect(otherEntry.bodyText).not.toContain('Native library member');
 
   const pinWrite = fixture.commands.find(
-    (command) => command.method === 'PUT' && command.path === `/v1/libraryPins/${fixture.fixtureFacts.publicCollectionId}`,
+    (command) =>
+      command.method === 'PUT' && command.path === `/v1/libraryPins/${fixture.fixtureFacts.publicCollectionId}`,
   );
   expect(pinWrite, 'the existing fixture pins through its native command').toBeDefined();
   expect(pinWrite!.headers['idempotency-key']).toBeTruthy();
@@ -88,7 +92,12 @@ test('native Library and My Collections exports retain raw owner-local responses
   const priorPinList = fixture.responses
     .filter(({ method, path, persona, commandId }) => {
       const command = fixture.commands.find((item) => item.id === commandId);
-      return method === 'GET' && path === '/v1/libraryPins?limit=100' && persona === 'bob' && command!.sequence < pinWrite!.sequence;
+      return (
+        method === 'GET' &&
+        path === '/v1/libraryPins?limit=100' &&
+        persona === 'bob' &&
+        command!.sequence < pinWrite!.sequence
+      );
     })
     .at(-1);
   expect(priorPinList).toBeDefined();
@@ -106,7 +115,8 @@ test('native Library and My Collections exports retain raw owner-local responses
   expect(textOf(currentAlicePins.body)).not.toContain(fixture.fixtureFacts.publicCollectionId);
 
   const bobCollections = responseFor(fixture, 'collections.bob.owner');
-  const bobDescriptors = (bobCollections.body as { collections?: { id?: string; builtinKind?: string }[] }).collections ?? [];
+  const bobDescriptors =
+    (bobCollections.body as { collections?: { id?: string; builtinKind?: string }[] }).collections ?? [];
   const everythingId = bobDescriptors.find(({ builtinKind }) => builtinKind === 'everything')?.id;
   const memberScenario = fixture.scenarios.find(({ scenarioId }) => scenarioId === 'members.everything.bob')!;
   if (everythingId && memberScenario.state !== 'dependency_unavailable') {
@@ -132,6 +142,10 @@ test('native Library and My Collections exports retain raw owner-local responses
   const bobMyCollections = fixture.scenarios.find(({ scenarioId }) => scenarioId === 'page.my-collections.bob')!;
   const aliceLinks = fixture.destinations.filter(({ id }) => aliceMyCollections.destinationIds.includes(id));
   const bobLinks = fixture.destinations.filter(({ id }) => bobMyCollections.destinationIds.includes(id));
-  expect(aliceLinks.some(({ href }) => href === `/en/collections/${fixture.fixtureFacts.privateCollectionId}`)).toBe(true);
-  expect(bobLinks.some(({ href }) => href === `/en/collections/${fixture.fixtureFacts.privateCollectionId}`)).toBe(false);
+  expect(aliceLinks.some(({ href }) => href === `/en/collections/${fixture.fixtureFacts.privateCollectionId}`)).toBe(
+    true,
+  );
+  expect(bobLinks.some(({ href }) => href === `/en/collections/${fixture.fixtureFacts.privateCollectionId}`)).toBe(
+    false,
+  );
 });

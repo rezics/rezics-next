@@ -94,8 +94,7 @@ export const nativeLibraryNavigationResponseScenarioManifest = [
   },
 ] as const;
 
-export type NativeLibraryNavigationScenarioId =
-  (typeof nativeLibraryNavigationResponseScenarioManifest)[number]['id'];
+export type NativeLibraryNavigationScenarioId = (typeof nativeLibraryNavigationResponseScenarioManifest)[number]['id'];
 export type NativeLibraryNavigationPersona = 'alice' | 'bob';
 export type NativeLibraryNavigationScenarioState =
   | 'available'
@@ -251,7 +250,10 @@ function gitOutput(args: string[]): string {
   return result.stdout.toString().trim();
 }
 
-function sourceBinding(stack: NativeWebStack, auth: NativeAuthStack): NativeLibraryNavigationResponseFixture['binding'] {
+function sourceBinding(
+  stack: NativeWebStack,
+  auth: NativeAuthStack,
+): NativeLibraryNavigationResponseFixture['binding'] {
   let sourceCommit: string | null = null;
   let sourceTreeClean: boolean | null = null;
   let sourceIdentity: 'known' | 'unknown' = 'unknown';
@@ -305,9 +307,7 @@ function recordingStack(
           persona,
           headers: {
             ...(headers.get('content-type') === null ? {} : { 'content-type': headers.get('content-type')! }),
-            ...(headers.get('idempotency-key') === null
-              ? {}
-              : { 'idempotency-key': headers.get('idempotency-key')! }),
+            ...(headers.get('idempotency-key') === null ? {} : { 'idempotency-key': headers.get('idempotency-key')! }),
           },
           ...(typeof init.body === 'string' ? { bodyText: init.body } : {}),
         };
@@ -463,14 +463,7 @@ export async function createNativeLibraryNavigationResponsesFixture(
     { id: 'page.my-collections.bob', persona: 'bob', journey: bobJourney, path: '/en/library/collections' },
   ] as const;
   for (const item of pageScenarios) {
-    const destinationIds = await pageDestinations(
-      item.journey,
-      stack,
-      item.persona,
-      item.path,
-      item.id,
-      destinations,
-    );
+    const destinationIds = await pageDestinations(item.journey, stack, item.persona, item.path, item.id, destinations);
     scenarios.push(scenario(item.id, 'available', [], destinationIds));
   }
 
@@ -499,7 +492,11 @@ export async function createNativeLibraryNavigationResponsesFixture(
   );
 
   const identities = [
-    { persona: 'alice', ownerAccountId: fixture.owner.accountId, body: responseFor(responses, 'GET', aliceCollectionsPath, 'alice').body },
+    {
+      persona: 'alice',
+      ownerAccountId: fixture.owner.accountId,
+      body: responseFor(responses, 'GET', aliceCollectionsPath, 'alice').body,
+    },
     { persona: 'bob', ownerAccountId: fixture.reader.accountId, body: bobCollectionsBody },
   ].flatMap(({ persona, ownerAccountId, body }) =>
     listRows(body, 'collections').flatMap((row) =>
