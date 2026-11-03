@@ -56,27 +56,46 @@ function mergeCaptures(captures: readonly Capture[]): Capture {
         );
       })
     : undefined;
+  const requestBytes = concatenate(captures.map((capture) => capture.requestBytes));
+  const responseBytes = concatenate(captures.map((capture) => capture.responseBytes));
+  const planStatementIndexes = planStatements;
+  const statementErrors = concatenate(captures.map((capture) => capture.statementErrors));
+  const statementErrorMessages = concatenate(captures.map((capture) => capture.statementErrorMessages));
+  const statementBackends = concatenate(captures.map((capture) => capture.statementBackends));
+  const planBackends = concatenate(captures.map((capture) => capture.planBackends));
+  const planDatabases = concatenate(captures.map((capture) => capture.planDatabases));
+  const backgroundStatements = concatenate(captures.map((capture) => capture.backgroundStatements));
+  const backgroundRequestBytes = concatenate(captures.map((capture) => capture.backgroundRequestBytes));
+  const backgroundResponseBytes = concatenate(captures.map((capture) => capture.backgroundResponseBytes));
+  const backgroundStatementErrors = concatenate(captures.map((capture) => capture.backgroundStatementErrors));
+  const backgroundStatementErrorMessages = concatenate(
+    captures.map((capture) => capture.backgroundStatementErrorMessages),
+  );
+  const backgroundStatementBackends = concatenate(captures.map((capture) => capture.backgroundStatementBackends));
+  const backgroundPlanBackends = concatenate(captures.map((capture) => capture.backgroundPlanBackends));
+  const backgroundPlanDatabases = concatenate(captures.map((capture) => capture.backgroundPlanDatabases));
   return {
     statements: concatenate(captures.map((capture) => capture.statements)) ?? [],
-    requestBytes: concatenate(captures.map((capture) => capture.requestBytes)),
-    responseBytes: concatenate(captures.map((capture) => capture.responseBytes)),
+    ...(captures[0]?.elapsedMs === undefined ? {} : { elapsedMs: captures[0].elapsedMs }),
+    ...(requestBytes === undefined ? {} : { requestBytes }),
+    ...(responseBytes === undefined ? {} : { responseBytes }),
     plans,
-    planStatements,
-    statementErrors: concatenate(captures.map((capture) => capture.statementErrors)),
-    statementErrorMessages: concatenate(captures.map((capture) => capture.statementErrorMessages)),
-    statementBackends: concatenate(captures.map((capture) => capture.statementBackends)),
-    planBackends: concatenate(captures.map((capture) => capture.planBackends)),
-    planDatabases: concatenate(captures.map((capture) => capture.planDatabases)),
-    backgroundStatements: concatenate(captures.map((capture) => capture.backgroundStatements)),
-    backgroundRequestBytes: concatenate(captures.map((capture) => capture.backgroundRequestBytes)),
-    backgroundResponseBytes: concatenate(captures.map((capture) => capture.backgroundResponseBytes)),
-    backgroundPlans,
-    backgroundPlanStatements,
-    backgroundStatementErrors: concatenate(captures.map((capture) => capture.backgroundStatementErrors)),
-    backgroundStatementErrorMessages: concatenate(captures.map((capture) => capture.backgroundStatementErrorMessages)),
-    backgroundStatementBackends: concatenate(captures.map((capture) => capture.backgroundStatementBackends)),
-    backgroundPlanBackends: concatenate(captures.map((capture) => capture.backgroundPlanBackends)),
-    backgroundPlanDatabases: concatenate(captures.map((capture) => capture.backgroundPlanDatabases)),
+    ...(planStatementIndexes === undefined ? {} : { planStatements: planStatementIndexes }),
+    ...(statementErrors === undefined ? {} : { statementErrors }),
+    ...(statementErrorMessages === undefined ? {} : { statementErrorMessages }),
+    ...(statementBackends === undefined ? {} : { statementBackends }),
+    ...(planBackends === undefined ? {} : { planBackends }),
+    ...(planDatabases === undefined ? {} : { planDatabases }),
+    ...(backgroundStatements === undefined ? {} : { backgroundStatements }),
+    ...(backgroundRequestBytes === undefined ? {} : { backgroundRequestBytes }),
+    ...(backgroundResponseBytes === undefined ? {} : { backgroundResponseBytes }),
+    ...(backgroundPlans === undefined ? {} : { backgroundPlans }),
+    ...(backgroundPlanStatements === undefined ? {} : { backgroundPlanStatements }),
+    ...(backgroundStatementErrors === undefined ? {} : { backgroundStatementErrors }),
+    ...(backgroundStatementErrorMessages === undefined ? {} : { backgroundStatementErrorMessages }),
+    ...(backgroundStatementBackends === undefined ? {} : { backgroundStatementBackends }),
+    ...(backgroundPlanBackends === undefined ? {} : { backgroundPlanBackends }),
+    ...(backgroundPlanDatabases === undefined ? {} : { backgroundPlanDatabases }),
   };
 }
 
