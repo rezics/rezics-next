@@ -119,7 +119,9 @@ Session BFF caller identity is asserted by `tests/session-bff-identity.test.ts`.
 The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
 database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
-needs the normal loopback-only browser namespace.
+needs the normal loopback-only browser namespace. An explicit `bun test tests/*.host.test.ts` through this runner uses
+the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
+not hide a named file.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.

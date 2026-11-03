@@ -10,6 +10,18 @@ const signals = [
   ['SIGTERM', 15],
   ['SIGHUP', 1],
 ] as const;
+const hostTestFile = /\.host\.test\.[cm]?[jt]sx?$/u;
+
+/** bunfig excludes `*.host.test.ts`; named host files use the same CLI override as `test:host`. */
+export function admitExplicitHostTestCommand(command: string[]): string[] {
+  if (command[0] !== 'bun' || command[1] !== 'test') return command;
+  if (
+    command.some((argument) => argument === '--path-ignore-patterns' || argument.startsWith('--path-ignore-patterns='))
+  )
+    return command;
+  if (!command.slice(2).some((argument) => hostTestFile.test(argument))) return command;
+  return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
+}
 
 export type FocusedRunnerOptions = {
   appDirectory?: string;
@@ -107,6 +119,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     { ...process.env, ...options.env },
   );
   if (routed !== null) return routed;
+  const admitted = admitExplicitHostTestCommand(command);
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -115,8 +128,8 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     WEB_TEST_STATE_DIR: stateDirectory,
   };
   const invocation = options.privateNetwork
-    ? ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...command]
-    : command;
+    ? ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...admitted]
+    : admitted;
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;

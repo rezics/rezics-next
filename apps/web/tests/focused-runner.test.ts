@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runFocusedCommand } from '../scripts/focused.ts';
+import { admitExplicitHostTestCommand, runFocusedCommand } from '../scripts/focused.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-web-focused-test-'));
 
@@ -44,6 +44,28 @@ function outputGate(token: string) {
     },
   };
 }
+
+test('named host files use the host-runner path-ignore override', () => {
+  expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/pages-workers.host.test.ts'])).toEqual([
+    'bun',
+    'test',
+    '--path-ignore-patterns=node_modules/**',
+    'tests/pages-workers.host.test.ts',
+  ]);
+  expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/page-stories.test.ts'])).toEqual([
+    'bun',
+    'test',
+    'tests/page-stories.test.ts',
+  ]);
+  expect(
+    admitExplicitHostTestCommand([
+      'bun',
+      'test',
+      '--path-ignore-patterns=custom/**',
+      'tests/pages-workers.host.test.ts',
+    ]),
+  ).toEqual(['bun', 'test', '--path-ignore-patterns=custom/**', 'tests/pages-workers.host.test.ts']);
+});
 
 test('forwards the focused command, uses owned test state, and never requests a stack lease', async () => {
   const leaseDirectory = join(temporary, 'must-not-be-created');
