@@ -235,7 +235,7 @@ function validate(input: RealmSubjectDisclosureInput): RealmSubjectDisclosureInp
     input.candidates.length > REALM_SUBJECT_DISCLOSURE_BATCH
   )
     throw new RangeError('Realm Subject disclosure accepts 1 to 8 candidates');
-  const candidates = input.candidates.map(({ threadId, openingPostId, subjectId }) => {
+  const candidates = Array.from(input.candidates, ({ threadId, openingPostId, subjectId }) => {
     if (route(threadId) !== route(openingPostId)) throw new TypeError('Opening must share the original thread route');
     route(subjectId);
     return Object.freeze({ threadId, openingPostId, subjectId });

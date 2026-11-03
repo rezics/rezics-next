@@ -179,6 +179,13 @@ test('final source changes suppress old evidence and unavailable work never beco
         { actor: { kind: 'anonymous' }, deadline, work },
       ),
     ).rejects.toBeInstanceOf(RangeError);
+    await expect(
+      prepareRealmSubjectDisclosure(
+        { pool: world.system.database.pool, access: world.system.access },
+        { realmId: target.realmId, candidates: Array(1) },
+        { actor: { kind: 'anonymous' }, deadline, work },
+      ),
+    ).rejects.toBeInstanceOf(TypeError);
   } finally {
     await world.system.close();
   }
