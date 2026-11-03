@@ -87,10 +87,14 @@ export async function spaceDiscoveryDependencyReadiness(pool: Pool): Promise<Spa
     return row;
   });
   const generation = createHash('sha256')
-    .update(`${observation.install_cut ?? 'missing'}:${observation.tuple_generation ?? 'missing'}:${observation.producer_generation ?? 'missing'}`)
+    .update(
+      `${observation.install_cut ?? 'missing'}:${observation.tuple_generation ?? 'missing'}:${observation.producer_generation ?? 'missing'}`,
+    )
     .digest('hex');
   const cut = createHash('sha256')
-    .update(`${observation.install_cut ?? 'missing'}:${observation.tuple_cut ?? 'missing'}:${observation.producer_cut ?? 'missing'}`)
+    .update(
+      `${observation.install_cut ?? 'missing'}:${observation.tuple_cut ?? 'missing'}:${observation.producer_cut ?? 'missing'}`,
+    )
     .digest('hex');
   const capabilities = <T extends SourceFenceCapability>(sourceFence: T): DependencyCapabilities<T> => ({
     context: 'connected' as const,

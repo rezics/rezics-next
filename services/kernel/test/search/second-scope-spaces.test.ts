@@ -111,7 +111,11 @@ describe('second-scope Space discovery adapter', () => {
     const adapter = adapterFor(source, async () => new Map());
 
     expect(await adapter.source.tupleWitnesses?.(partition, [firstId])).toEqual(new Map([[firstId, witness]]));
-    await adapter.source.registerTupleProducer?.({ generation: 'source-generation', cut: 'source-cut', complete: true });
+    await adapter.source.registerTupleProducer?.({
+      generation: 'source-generation',
+      cut: 'source-cut',
+      complete: true,
+    });
     expect(registered).toBe('source-generation');
     expect(await adapter.source.publishTupleWitness?.(input)).toBe(witness);
     expect(published).toBe(input);

@@ -76,14 +76,16 @@ export async function openSpaceDiscoveryFrontier(
 }
 
 async function prepareFrontier(pool: Pool, key: SpaceDiscoveryFrontier): Promise<Progress> {
-  const retained = await withConnection(pool, async (client) =>
-    (
-      await client.query<{ invalidation: SpaceDiscoveryInvalidation }>(
-        `SELECT invalidation FROM community.space_discovery_frontier
+  const retained = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ invalidation: SpaceDiscoveryInvalidation }>(
+          `SELECT invalidation FROM community.space_discovery_frontier
          WHERE partition_no=$1 AND obligation=$2`,
-        [key.partition, key.obligation],
-      )
-    ).rows[0],
+          [key.partition, key.obligation],
+        )
+      ).rows[0],
   );
   if (!retained) throw new Error('Space discovery obligation unavailable');
   const sourceTupleReady =
@@ -105,27 +107,28 @@ async function prepareFrontier(pool: Pool, key: SpaceDiscoveryFrontier): Promise
        WHERE NOT complete ORDER BY partition_no LIMIT 1`,
     );
     if (pending.rows.length) return noEffect(row);
-    const cut = row.invalidation.target.kind === 'source-fence'
-      ? (
-          await tx.query<{ cut: string }>(
-            `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_tuple_inverse
+    const cut =
+      row.invalidation.target.kind === 'source-fence'
+        ? (
+            await tx.query<{ cut: string }>(
+              `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_tuple_inverse
              WHERE tuple_route=$1 AND source=$2 AND external_id=$3 AND field_group=$4 AND active
              ORDER BY ordinal DESC LIMIT 1),0)::text AS cut`,
-            [
-              row.invalidation.target.route,
-              row.invalidation.target.source,
-              row.invalidation.target.externalId,
-              row.invalidation.target.fieldGroup,
-            ],
-          )
-        ).rows[0]!.cut
-      : (
-          await tx.query<{ cut: string }>(
-            `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_dependency
+              [
+                row.invalidation.target.route,
+                row.invalidation.target.source,
+                row.invalidation.target.externalId,
+                row.invalidation.target.fieldGroup,
+              ],
+            )
+          ).rows[0]!.cut
+        : (
+            await tx.query<{ cut: string }>(
+              `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_dependency
              WHERE dependency=$1::jsonb ORDER BY ordinal DESC LIMIT 1),0)::text AS cut`,
-            [JSON.stringify(row.invalidation.target)],
-          )
-        ).rows[0]!.cut;
+              [JSON.stringify(row.invalidation.target)],
+            )
+          ).rows[0]!.cut;
     await tx.query(
       `UPDATE community.space_discovery_frontier SET state='draining',cut=$3
        WHERE partition_no=$1 AND obligation=$2`,

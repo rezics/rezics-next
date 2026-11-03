@@ -216,11 +216,7 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
     async () => {
       const locator = await nextSpaceDiscoveryTupleWitnessWork(context.pool);
       if (!locator) return false;
-      await repairSpaceDiscoveryTupleWitness(
-        context.pool,
-        partitionOf(locator.route),
-        locator.spaceId,
-      );
+      await repairSpaceDiscoveryTupleWitness(context.pool, partitionOf(locator.route), locator.spaceId);
       return true;
     },
     { name: 'community.space-dependencies.tuple-witness', ...COMMAND_STEP_RETRIES },

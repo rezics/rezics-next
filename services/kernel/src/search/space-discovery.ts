@@ -65,7 +65,10 @@ export type SpaceDiscoveryAdapter = Readonly<{
   kind: typeof SPACE_DISCOVERY_KIND;
   source: Readonly<{
     dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
-    tupleWitnesses?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, SpaceDiscoveryTupleWitness>>;
+    tupleWitnesses?(
+      partition: number,
+      ids: readonly string[],
+    ): Promise<ReadonlyMap<string, SpaceDiscoveryTupleWitness>>;
     registerTupleProducer?(input: Readonly<{ generation: string; cut: string; complete: true }>): Promise<void>;
     publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
@@ -293,7 +296,10 @@ export function createSpaceDiscoveryAdapter(
               ids.map((id) => ({ route: routeOf(id) ?? -1, id })),
               partition,
             );
-            return native.tupleWitnesses!(partition, keys.map(({ id }) => id));
+            return native.tupleWitnesses!(
+              partition,
+              keys.map(({ id }) => id),
+            );
           },
         }
       : {}),

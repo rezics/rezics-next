@@ -112,8 +112,7 @@ function checkedInput(input: SpaceDiscoveryTupleWitnessInput): SpaceDiscoveryTup
   )
     throw new TypeError('Invalid Space source tuple witness');
   const tuples = input.tuples.map(checkedTuple);
-  if (new Set(tuples.map(identity)).size !== tuples.length)
-    throw new TypeError('Duplicate Space source tuple witness');
+  if (new Set(tuples.map(identity)).size !== tuples.length) throw new TypeError('Duplicate Space source tuple witness');
   if (
     !Number.isInteger(input.origin.partition) ||
     input.origin.partition < 0 ||
@@ -184,7 +183,11 @@ export async function registerSpaceDiscoveryTupleProducer(
   );
 }
 
-async function currentHead(client: Pick<PoolClient, 'query'>, route: number, spaceId: string): Promise<OwnerHead | null> {
+async function currentHead(
+  client: Pick<PoolClient, 'query'>,
+  route: number,
+  spaceId: string,
+): Promise<OwnerHead | null> {
   const row = (
     await client.query<OwnerHead>(
       `SELECT s.head_revision_id::text AS space_revision,r.realm_id::text AS realm_id,
@@ -505,14 +508,30 @@ async function acknowledgeTupleWork(pool: Pool, work: Work): Promise<void> {
            VALUES($1,$2,$3,$4,$5,$6,$7::bigint)
            ON CONFLICT(route,space_id,tuple_route,source,external_id,field_group)
            DO UPDATE SET witness_generation=EXCLUDED.witness_generation`,
-          [work.route, work.space_id, work.tuple_route, work.source, work.external_id, work.field_group, work.witness_generation],
+          [
+            work.route,
+            work.space_id,
+            work.tuple_route,
+            work.source,
+            work.external_id,
+            work.field_group,
+            work.witness_generation,
+          ],
         );
       } else {
         await tx.query(
           `DELETE FROM community.space_discovery_tuple_reference
            WHERE route=$1 AND space_id=$2 AND tuple_route=$3 AND source=$4 AND external_id=$5
              AND field_group=$6 AND witness_generation<$7::bigint`,
-          [work.route, work.space_id, work.tuple_route, work.source, work.external_id, work.field_group, work.witness_generation],
+          [
+            work.route,
+            work.space_id,
+            work.tuple_route,
+            work.source,
+            work.external_id,
+            work.field_group,
+            work.witness_generation,
+          ],
         );
       }
     }
@@ -585,17 +604,19 @@ export async function repairSpaceDiscoveryTupleWitness(
     throw new RangeError('Space tuple work page limit must be 1..50');
   const route = routeOf(spaceId);
   if (route === null || partitionOf(route) !== partition) throw new TypeError('Invalid Space tuple work locator');
-  const page = await withConnection(pool, async (client) =>
-    (
-      await client.query<Work>(
-        `SELECT w.route,w.space_id,w.witness_generation::text,w.tuple_route,w.source,w.external_id,
+  const page = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<Work>(
+          `SELECT w.route,w.space_id,w.witness_generation::text,w.tuple_route,w.source,w.external_id,
                 w.field_group,w.action,w.producer_epoch::text,w.source_position::text
          FROM community.space_discovery_tuple_work w
          WHERE w.route=$1 AND w.space_id=$2
          ORDER BY w.witness_generation,w.tuple_route,w.source,w.external_id,w.field_group,w.action LIMIT $3`,
-        [route, spaceId, limit],
-      )
-    ).rows,
+          [route, spaceId, limit],
+        )
+      ).rows,
   );
   for (const work of page) {
     await applyTupleWork(pool, work);
@@ -605,7 +626,7 @@ export async function repairSpaceDiscoveryTupleWitness(
 }
 
 async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: number; id: string }>[]) {
-  const groups = new Map<number, typeof keys[number][]>();
+  const groups = new Map<number, (typeof keys)[number][]>();
   for (const key of keys) {
     const partition = partitionOf(key.route);
     const group = groups.get(partition) ?? [];
@@ -665,7 +686,12 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
         const tuples = new Map<string, SourceFenceTuple[]>();
         for (const ref of refs) {
           const list = tuples.get(ref.space_id) ?? [];
-          list.push({ route: ref.route, source: ref.source, external_id: ref.external_id, field_group: ref.field_group });
+          list.push({
+            route: ref.route,
+            source: ref.source,
+            external_id: ref.external_id,
+            field_group: ref.field_group,
+          });
           tuples.set(ref.space_id, list);
         }
         for (const row of rows) {
@@ -723,7 +749,10 @@ async function readTupleFences(pool: Pool, tuples: readonly SourceFenceTuple[]) 
         const anchor = await readPartition(connection, partition);
         if (!anchor || anchor.writeState !== 'active') throw new Error('Source tuple home is unavailable');
         for (let offset = 0; offset < group.length; offset += 100) {
-          const found = await readFences(await partitionReadClient(connection, partition), group.slice(offset, offset + 100));
+          const found = await readFences(
+            await partitionReadClient(connection, partition),
+            group.slice(offset, offset + 100),
+          );
           for (const fence of found) if (fence.takenDown) fenced.add(identity(fence));
         }
         await connection.query('COMMIT');
@@ -746,25 +775,25 @@ export async function readSpaceDiscoveryTupleWitnesses(
   ids: readonly string[],
 ): Promise<ReadonlyMap<string, SpaceDiscoveryTupleWitness>> {
   if (!Array.isArray(ids) || ids.length > 100) throw new RangeError('At most 100 Space tuple witnesses');
-  const keys = [...new Map(ids.map((id) => {
-    const route = routeOf(id);
-    if (route === null) throw new TypeError('Invalid Space tuple witness key');
-    return [id, { route, id }] as const;
-  })).values()];
-  const unavailable = (
-    spaceId: string,
-    state: 'preparing' | 'unavailable',
-    current?: SpaceDiscoveryTupleWitness,
-  ) => ({
-    state,
-    spaceId: current?.spaceId ?? spaceId,
-    generation: null,
-    cut: null,
-    tuples: [],
-  }) satisfies SpaceDiscoveryTupleWitness;
+  const keys = [
+    ...new Map(
+      ids.map((id) => {
+        const route = routeOf(id);
+        if (route === null) throw new TypeError('Invalid Space tuple witness key');
+        return [id, { route, id }] as const;
+      }),
+    ).values(),
+  ];
+  const unavailable = (spaceId: string, state: 'preparing' | 'unavailable', current?: SpaceDiscoveryTupleWitness) =>
+    ({
+      state,
+      spaceId: current?.spaceId ?? spaceId,
+      generation: null,
+      cut: null,
+      tuples: [],
+    }) satisfies SpaceDiscoveryTupleWitness;
   const before = await spaceDiscoveryDependencyReadiness(pool);
-  if (before.state !== 'ready')
-    return new Map(keys.map(({ id }) => [id, unavailable(id, before.state)]));
+  if (before.state !== 'ready') return new Map(keys.map(({ id }) => [id, unavailable(id, before.state)]));
   const first = await readOwnerWitnesses(pool, keys);
   const candidateTuples = [...first.values()].flatMap((witness) =>
     witness.state === 'ready' ? [...witness.tuples] : [],

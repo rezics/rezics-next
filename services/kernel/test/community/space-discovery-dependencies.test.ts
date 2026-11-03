@@ -182,7 +182,9 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
   while (await repairSpaceDiscoveryTupleWitness(system.database.pool, home, space.spaceId, 1)) {
     /* Resume exact tuple-home work in bounded pages. */
   }
-  expect((await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId)).toMatchObject({
+  expect(
+    (await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId),
+  ).toMatchObject({
     state: 'ready',
     tuples: [tuple],
   });
@@ -217,11 +219,18 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
   await takedownSourceFence(
     { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
     governance.actor,
-    { source: tuple.source, external_id: tuple.external_id, field_group: tuple.field_group, reason: 'Private evidence' },
+    {
+      source: tuple.source,
+      external_id: tuple.external_id,
+      field_group: tuple.field_group,
+      reason: 'Private evidence',
+    },
     { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },
   );
   const tupleHome = partitionOf(tuple.route);
-  const fence = (await events(tupleHome)).find((event) => event.type === 'com.rezics.content.source_fence.taken_down.v1')!;
+  const fence = (await events(tupleHome)).find(
+    (event) => event.type === 'com.rezics.content.source_fence.taken_down.v1',
+  )!;
   await createSpaceDiscoveryEffect(system.database.pool).run(fence);
   const invalidation = (await events(tupleHome)).find(
     (event) =>
@@ -233,7 +242,9 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
   expect(
     (await events(home)).some((event) => event.type === SPACE_DISCOVERY_INVALIDATED && event.subject === space.spaceId),
   ).toBe(true);
-  expect((await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId)).toMatchObject({
+  expect(
+    (await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId),
+  ).toMatchObject({
     state: 'unavailable',
     tuples: [],
   });

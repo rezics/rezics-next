@@ -21,10 +21,7 @@ import {
   type SpaceDiscoveryTupleWitness,
   type SpaceDiscoveryTupleWitnessInput,
 } from './space-discovery-source-fences.ts';
-export type {
-  SpaceDiscoveryTupleWitness,
-  SpaceDiscoveryTupleWitnessInput,
-} from './space-discovery-source-fences.ts';
+export type { SpaceDiscoveryTupleWitness, SpaceDiscoveryTupleWitnessInput } from './space-discovery-source-fences.ts';
 
 const spaceTypes = [
   'created',
@@ -282,7 +279,10 @@ export function spaceDiscoverySource(
     tupleWitnesses(partition, ids) {
       partitionKey(partition);
       const requested = keys(ids, partition);
-      return readSpaceDiscoveryTupleWitnesses(deps.pool, requested.map(({ id }) => id));
+      return readSpaceDiscoveryTupleWitnesses(
+        deps.pool,
+        requested.map(({ id }) => id),
+      );
     },
     registerTupleProducer(input) {
       return registerSpaceDiscoveryTupleProducer(deps.pool, input);
