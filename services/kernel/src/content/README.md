@@ -2072,3 +2072,98 @@ ready population. The factory and disclosure owners remain the sole owners of th
   generation changes only once for a repeated event key.
 - **Growth check:** `test/content/realm-subject-lifecycle.test.ts` observes a board-set reduction invalidate the same
   Realm cut containing discussion and review witnesses.
+
+## Native board watches and private management
+
+Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
+`kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
+`board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
+
+| Consumer | Native method and mounted operation | Result |
+| --- | --- | --- |
+| Web board control | `readBoardWatchState`; `GET /v1/boards/{id}/watch` | `{watching,revision}`, with current board disclosure |
+| Web board control | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key` | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
+| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread|board&limit=&cursor=` | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range |
+| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access |
+| Performance Inbox | Existing `notifications.list` with `board_activity` | Existing post/thread target identifiers and current native post disclosure |
+
+Web board controls and Performance Settings watch management remain unavailable consumer adapters; these methods
+are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery keep their existing shapes and storage.
+A thread management row has revision 1 for its unique edge. Board state retains a CAS tombstone; rewatch rotates its
+identity and creation cutoff. Neither kind uses common Following. Listing/removal sends no notice.
+
+Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title}`. Denied and absent resources
+both return `{id,kind,revision,createdAt,state:'unavailable'}`. They contain no title, author, place, owner, destination
+or denial reason; the opaque personal `id` permits self-removal after a ban. Concurrent removal skips the row and
+advances its raw key. Sparse or empty pages can continue; there is no request refill. Encrypted cursors bind viewer,
+selection, page size, client, operator, authentication epoch and actor-home partition generation, retaining database
+microsecond keys. Native self-account authority precedes cursor parsing and new receipt lookups.
+
+`registerContent` mounts `content_board_watch_notice` through `contentNoticeEffects` with the default worker's native
+Access. It checks the exact original publication partition/epoch/position/event identity in the outbox and current
+first post, thread and publication revision. Delayed first publication counts. Historical imports, ordinary revisions
+and restores do not emit this original publication. A source refusal commits completed work so restoration cannot
+reopen it. Candidate timestamps retain database precision. Range checkouts end before recipient Access. Current
+source/board/thread/Realm/place eligibility precedes the delivered preference/finalization path, which additionally
+locks the live personal edge and suppresses an already sent reply/mention/thread notice from that source. Refusals
+remain final across preference changes. Actor-home and inverse fanout indexes belong to the same original row and
+change atomically, so no asynchronous inverse can recreate an unwatched edge. Erasure includes board tombstones;
+retention includes board source progress.
+
+### Cost: board state and self-removal
+
+- Touches: shared current account authority, current board disclosure for read/set-true, an actor-home PK state read,
+  at most one row mutation, and the native `runCommand` envelope for writes. False set and removal omit board reads.
+- Bound: read is `Q_self + Q_board + Q_point`; set is `Q_self + Q_board + C + 2*Q_point`; removal is
+  `Q_self + C + 2*Q_point`. Each domain point is one statement and at most one original row. `C` includes the actual
+  shared authorization, time, transaction controls, partition, receipt, outbox and write basis. Retry reauthorizes,
+  reads its receipt and skips the body. No-op/retry has nonzero cost. Each mutation maintains a fixed set of indexes.
+- Growth check: `board-watch-growth.test.ts` runs the real mounted read and same-key set retry at 256/1024/4096
+  subscriptions alongside both management selections and durable delivery.
+
+### Cost: selected management page
+
+- Touches: shared `account:read`, one generation point, one actor-home range of B≤100 raw candidates, existing
+  `readThread`/`readBoard` disclosure per examined candidate, and one exact own-edge presence recheck per candidate.
+- Bound: `Q_self + Q_partition + Q_range(B) + B*(Q_native_disclosure + Q_point)`. The range is one data statement
+  and at most 100 physical subscription rows; presence is one statement/one row. P≤20 outputs are retained. Native
+  source, board, Realm/place and presentation dependencies and their transaction controls remain additive, including
+  unavailable results. Memory is O(B+P+D), with the existing native ancestry ceiling D≤33; no all-partition query.
+- Growth check: the native growth journey grows both actor-home ranges, verifies physical rows/statements/blocks,
+  rejects large sequential scans, and reads both explicit selections with available and unavailable rows. Connected
+  outcome tests cover cursor refusal, current denial and exact self-removal.
+
+### Cost: board-opening page
+
+- Touches: `readOpening` runs one partition point and one exact envelope/thread/post/revision query. Its native
+  envelope has at most `MAX_COMMAND_EVENTS=1000` events. `loadPage` runs BEGIN, partition fence, work INSERT, work lock,
+  B≤100 recipient range and COMMIT. Advancing runs BEGIN, partition fence, progress UPDATE and COMMIT.
+- Bound: fixed work is eight data statements and four transaction controls, one bounded original-envelope range,
+  three original source points, three load progress/fence points, two advance/fence points and B recipient rows.
+  Per recipient add the exact source query/partition point, `postReadableByAccount`, and the delivered finalizer.
+  Finalization uses BEGIN/COMMIT and at most eight data statements: partition fence, previous decision, terminal
+  account, account/preferences join, active edge, three-kind notice overlap, decision INSERT and notice INSERT.
+  Those statements touch at most eleven original rows; duplicates, unavailable and suppressed recipients retain all
+  dispatched work. Native post disclosure expands to four released snapshots (each BEGIN/COMMIT plus partition),
+  two chains (thread, at most D=33 posts, selected revision), two board points, and at most D+4 native
+  `accountStandingCheck` invocations (board twice, thread, posts, optional Realm). Each post point joins its current
+  revision and optional moderation decision; thread/board/revision points are unique-key reads. Shared Access's
+  dependencies and query/control statements remain charged through those original callees.
+  Thus each step is `Q_fixed + B*(Q_subscription + Q_current_authority + Q_delivery) + D*Q_dependency`, with the
+  fixed/load/advance, raw candidate/active point, exact source/native disclosure and remaining finalization expansions
+  above. No suppressed path is charged zero or assigned a fitted allowance. Memory is O(B+D), with one fixed
+  30-second deadline per page. Persisted exact raw keys keep progress monotone across unavailable/removed rows.
+- Growth check: the same journey executes two native pages per fresh original publication at 256/1024/4096 with
+  unchanged B/P/D, positive, preference-suppressed, self-suppressed and missing recipients. It captures physical
+  rows/blocks/statements/bytes and transaction controls, rejects large watch-table sequential scans and checks sparse
+  durable progress. Connected tests replay the default registered effect and preserve refusal after preference reset.
+
+### Cost: board erasure and retention
+
+- Touches: the durable account erasure's final stage selects/deletes at most 50 board rows including tombstones.
+  Compatibility cleanup and source retention share the existing 1000-row total budget with other notice work.
+- Bound: one data statement plus the existing BEGIN, partition fence and COMMIT; at most 50 selected and 50 deleted
+  original rows with fixed index maintenance. Retention has the same shape at its remaining finite budget. Deleting
+  the original row atomically removes the inverse index. Each finite page releases its checkout before continuing.
+- Growth check: connected native outcomes exhaust cleanup and replay prior publication after removal; integration
+  verification also owns full erasure growth within this journey.
