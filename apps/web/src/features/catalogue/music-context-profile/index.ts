@@ -56,7 +56,10 @@ function tokenOf(result: { headers?: HeadersInit | undefined }) {
 }
 
 export function musicContextKind(release: Definitions, type: string): MusicContextKind {
-  for (const [kind, ids] of Object.entries(musicContextRequested) as [Exclude<MusicContextKind, 'unsupported'>, readonly string[]][]) {
+  for (const [kind, ids] of Object.entries(musicContextRequested) as [
+    Exclude<MusicContextKind, 'unsupported'>,
+    readonly string[],
+  ][]) {
     if (ids.some((id) => !!release.types[id] && typeExtends(release, type, id))) return kind;
   }
   return 'unsupported';
@@ -69,7 +72,11 @@ function timeText(content: unknown): { text: string; precision?: string; unknown
   const precision = typeof value.precision === 'number' ? String(value.precision) : undefined;
   const iso = value.time.replace(/^\+/, '');
   const text = precision === '9' ? iso.slice(0, 4) : precision === '10' ? iso.slice(0, 7) : iso.slice(0, 10);
-  return { text, ...(precision ? { precision } : {}), ...(precision !== '11' ? { unknown: precision === undefined } : {}) };
+  return {
+    text,
+    ...(precision ? { precision } : {}),
+    ...(precision !== '11' ? { unknown: precision === undefined } : {}),
+  };
 }
 
 export async function readMusicContext(
@@ -117,7 +124,10 @@ export async function readMusicContext(
         facts.push({
           property,
           label,
-          text: typeof statement.value.content === 'string' ? statement.value.content : JSON.stringify(statement.value.content),
+          text:
+            typeof statement.value.content === 'string'
+              ? statement.value.content
+              : JSON.stringify(statement.value.content),
         });
       }
     }
@@ -148,7 +158,9 @@ export async function readMusicContext(
           property: stream.id,
           direction: 'out' as const,
           ...(date ? { date: timeText(date.value.type === 'value' ? date.value.content : undefined).text } : {}),
-          ...(role && role.value.type === 'value' && typeof role.value.content === 'string' ? { role: role.value.content } : {}),
+          ...(role && role.value.type === 'value' && typeof role.value.content === 'string'
+            ? { role: role.value.content }
+            : {}),
           unreadable: !row.summary,
         };
       });

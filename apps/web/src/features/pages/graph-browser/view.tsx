@@ -136,13 +136,18 @@ function GraphDiagram({
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
     const index = order.indexOf(id);
-    const next = event.key === 'ArrowDown' ? order[index + 1] ?? order[0] : order[index - 1] ?? order.at(-1);
+    const next = event.key === 'ArrowDown' ? (order[index + 1] ?? order[0]) : (order[index - 1] ?? order.at(-1));
     if (next) onSelect({ kind: 'node', id: next });
   }
   const width = 360;
   const height = Math.max(160, nodes.length * 48);
   return (
-    <svg role="group" aria-label={m.graph_explore_diagram({}, o)} viewBox={`0 0 ${width} ${height}`} className="max-w-full">
+    <svg
+      role="group"
+      aria-label={m.graph_explore_diagram({}, o)}
+      viewBox={`0 0 ${width} ${height}`}
+      className="max-w-full"
+    >
       {edges.map((edge, index) => {
         const from = order.indexOf(edge.from);
         const to = order.indexOf(edge.to);
@@ -231,7 +236,12 @@ export function GraphBrowserPage({
     refetchOnReconnect: false,
   });
   const read = page ?? (query.data?.ok ? query.data : undefined);
-  const error = !read && query.data && !query.data.ok ? query.data : !read && query.isError ? { ok: false as const, reason: 'unavailable' as const } : undefined;
+  const error =
+    !read && query.data && !query.data.ok
+      ? query.data
+      : !read && query.isError
+        ? { ok: false as const, reason: 'unavailable' as const }
+        : undefined;
   useEffect(() => {
     if (read?.session) setSession(read.session);
   }, [read?.session]);
@@ -283,7 +293,10 @@ export function GraphBrowserPage({
         ? m.graph_explore_stale({}, o)
         : m.graph_explore_unavailable({}, o);
   return (
-    <article className="mx-auto w-full min-w-0 max-w-5xl space-y-6 [overflow-wrap:anywhere]" aria-busy={query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-5xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={query.isPending}
+    >
       <ViewHeading label={m.graph_explore_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.graph_explore_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.graph_explore_loading({}, o)}</p>}
@@ -339,9 +352,7 @@ export function GraphBrowserPage({
           {!read.relations.length && <p>{m.graph_explore_no_relation({}, o)}</p>}
           {read.graph.nodes.length === 0 && <p>{m.graph_explore_empty({}, o)}</p>}
           {read.graph.truncated.length > 0 && (
-            <p role="status">
-              {m.graph_explore_incomplete({ limit: String(GRAPH_LIMIT) }, o)}
-            </p>
+            <p role="status">{m.graph_explore_incomplete({ limit: String(GRAPH_LIMIT) }, o)}</p>
           )}
           <div className="grid gap-6 lg:grid-cols-2">
             <GraphList
@@ -380,28 +391,49 @@ export function GraphBrowserPage({
           {read.detail && (
             <section className="space-y-3" aria-live="polite">
               <h2 className="font-sans text-xl font-semibold">{m.graph_explore_inspect({}, o)}</h2>
-              <p>
-                {pickText(read.detail.subject.subject.labels, locale).text || m.subject_value_unlabelled({}, o)}
-              </p>
+              <p>{pickText(read.detail.subject.subject.labels, locale).text || m.subject_value_unlabelled({}, o)}</p>
               {read.detail.statement && (
                 <p>
                   {read.detail.labels[read.detail.statement.property.id]?.text ?? read.detail.statement.property.id}
                 </p>
               )}
               <div className="flex min-w-0 flex-wrap gap-2">
-                <a className={linkClass} href={subjectHref({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text }, locale).href}>
+                <a
+                  className={linkClass}
+                  href={
+                    subjectHref(
+                      {
+                        id: read.detail.subject.subject.id,
+                        label: pickText(read.detail.subject.subject.labels, locale).text,
+                      },
+                      locale,
+                    ).href
+                  }
+                >
                   {m.graph_explore_open_subject({}, o)}
                 </a>
-                <a className={linkClass} href={`${catalogueEntries.quotations({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}>
+                <a
+                  className={linkClass}
+                  href={`${catalogueEntries.quotations({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                >
                   {m.graph_explore_quotations({}, o)}
                 </a>
-                <a className={linkClass} href={`${catalogueEntries.concepts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}>
+                <a
+                  className={linkClass}
+                  href={`${catalogueEntries.concepts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                >
                   {m.graph_explore_concepts({}, o)}
                 </a>
-                <a className={linkClass} href={`${catalogueEntries.musicContext({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}>
+                <a
+                  className={linkClass}
+                  href={`${catalogueEntries.musicContext({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                >
                   {m.graph_explore_music({}, o)}
                 </a>
-                <a className={linkClass} href={`${catalogueEntries.facts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}>
+                <a
+                  className={linkClass}
+                  href={`${catalogueEntries.facts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                >
                   {m.graph_explore_correct({}, o)}
                 </a>
               </div>

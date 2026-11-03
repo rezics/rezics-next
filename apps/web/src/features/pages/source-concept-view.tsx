@@ -51,7 +51,10 @@ export function SourceConceptView({
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const origin = returnTo || subjectHref({ id, label: title.text }, locale).href;
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={query.isPending}
+    >
       <ViewHeading label={m.concept_explore_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.concept_explore_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.concept_explore_loading({}, o)}</p>}
@@ -68,8 +71,7 @@ export function SourceConceptView({
           {read.definition && <p>{read.definition.text}</p>}
           {read.aliases.length > 0 && (
             <p>
-              {m.concept_explore_aliases({}, o)}:{' '}
-              {read.aliases.map((alias) => alias.text).join(' · ')}
+              {m.concept_explore_aliases({}, o)}: {read.aliases.map((alias) => alias.text).join(' · ')}
             </p>
           )}
           <section>
@@ -106,12 +108,19 @@ export function SourceConceptView({
               type="button"
               variant="outline"
               className={actionClass}
-              onClick={() => void transport.read({ cursor: read.next ?? undefined, session: read.session }).then((value) => value.ok && setPage(value))}
+              onClick={() =>
+                void transport
+                  .read({ cursor: read.next ?? undefined, session: read.session })
+                  .then((value) => value.ok && setPage(value))
+              }
             >
               {m.concept_explore_more({}, o)}
             </Button>
           )}
-          <a className={linkClass} href={`${catalogueEntries.facts({ id, label: title.text, locale }).href}?${new URLSearchParams({ returnTo: origin })}`}>
+          <a
+            className={linkClass}
+            href={`${catalogueEntries.facts({ id, label: title.text, locale }).href}?${new URLSearchParams({ returnTo: origin })}`}
+          >
             {m.concept_explore_correct({}, o)}
           </a>
           <a className={linkClass} href={origin}>

@@ -18,21 +18,52 @@ function item(mode: 'ok' | 'unreadable' | 'retired'): SubjectRead {
       id: concept,
       type: 'skos:Concept',
       revision: 1,
-      release: mode === 'retired' ? 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' : 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      release:
+        mode === 'retired'
+          ? 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+          : 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       context: '00000000-0000-4000-8000-000000000001',
       labels: { en: 'Protagonist', ja: '主人公' },
       descriptions: { en: 'Lead role' },
       aliases: { en: ['Hero', 'Protagonist'], ja: ['主人公'] },
       statements: {
         'skos:inScheme': [
-          { id: '00000000-0000-4000-8000-00000000e021', rank: 'normal', property: { id: 'skos:inScheme', data_type: 'wikibase-item' }, value: { type: 'value', content: schemeA }, qualifiers: [], references: [] },
-          { id: '00000000-0000-4000-8000-00000000e022', rank: 'normal', property: { id: 'skos:inScheme', data_type: 'wikibase-item' }, value: { type: 'value', content: schemeB }, qualifiers: [], references: [] },
+          {
+            id: '00000000-0000-4000-8000-00000000e021',
+            rank: 'normal',
+            property: { id: 'skos:inScheme', data_type: 'wikibase-item' },
+            value: { type: 'value', content: schemeA },
+            qualifiers: [],
+            references: [],
+          },
+          {
+            id: '00000000-0000-4000-8000-00000000e022',
+            rank: 'normal',
+            property: { id: 'skos:inScheme', data_type: 'wikibase-item' },
+            value: { type: 'value', content: schemeB },
+            qualifiers: [],
+            references: [],
+          },
         ],
         'skos:broader': [
-          { id: '00000000-0000-4000-8000-00000000e023', rank: 'normal', property: { id: 'skos:broader', data_type: 'wikibase-item' }, value: { type: 'value', content: broader }, qualifiers: [], references: [] },
+          {
+            id: '00000000-0000-4000-8000-00000000e023',
+            rank: 'normal',
+            property: { id: 'skos:broader', data_type: 'wikibase-item' },
+            value: { type: 'value', content: broader },
+            qualifiers: [],
+            references: [],
+          },
         ],
         'schema:sameAs': [
-          { id: '00000000-0000-4000-8000-00000000e024', rank: 'normal', property: { id: 'schema:sameAs', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/i1' }, qualifiers: [], references: [] },
+          {
+            id: '00000000-0000-4000-8000-00000000e024',
+            rank: 'normal',
+            property: { id: 'schema:sameAs', data_type: 'url' },
+            value: { type: 'value', content: 'https://vndb.org/i1' },
+            qualifiers: [],
+            references: [],
+          },
         ],
       },
       resolution: {},
@@ -57,7 +88,18 @@ function client(mode: 'ok' | 'unreadable' | 'retired') {
         get: async ({ query }: { query: { cursor?: string } }) => ({
           status: 200,
           data: {
-            links: [{ subject: '00000000-0000-4000-8000-00000000c005', statement: '00000000-0000-4000-8000-00000000e025', summary: { id: '00000000-0000-4000-8000-00000000c005', type: 'skos:Concept', label: { value: 'Heroine', language: 'en' } }, related: {} }],
+            links: [
+              {
+                subject: '00000000-0000-4000-8000-00000000c005',
+                statement: '00000000-0000-4000-8000-00000000e025',
+                summary: {
+                  id: '00000000-0000-4000-8000-00000000c005',
+                  type: 'skos:Concept',
+                  label: { value: 'Heroine', language: 'en' },
+                },
+                related: {},
+              },
+            ],
             next: query.cursor ? null : 'concept-next',
             freshness: { caught_up: true },
           },
@@ -69,18 +111,29 @@ function client(mode: 'ok' | 'unreadable' | 'retired') {
 
 test('source concept explorer covers two schemes, duplicate labels, unknown roles, continuation and retired meaning', async () => {
   expect(conceptTypeAdmitted(bundledRelease, 'skos:Concept')).toBe(true);
-  const read = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', { role: 'vndb:unknown' });
+  const read = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', {
+    role: 'vndb:unknown',
+  });
   if (!read.ok) throw new Error('expected concept');
   expect(read.schemes.map((scheme) => scheme.label).sort()).toEqual(['Bangumi tags', 'VNDB traits']);
   expect(read.aliases.filter((alias) => alias.text === 'Protagonist').length).toBe(1);
   expect(read.codes.some((code) => code.unknown && code.value === 'vndb:unknown')).toBe(true);
   expect(read.hierarchy.some((row) => row.direction === 'broader' && row.id === broader)).toBe(true);
   expect(read.next).toBe('concept-next');
-  const continued = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', { cursor: 'concept-next' });
-  expect(continued.ok && continued.next).toBeNull();
-  const retired = await readSourceConcept(client('retired'), 'Bearer reader', { ...bundledRelease, digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }, concept, 'en', {
-    pin: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  const continued = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', {
+    cursor: 'concept-next',
   });
+  expect(continued.ok && continued.next).toBeNull();
+  const retired = await readSourceConcept(
+    client('retired'),
+    'Bearer reader',
+    { ...bundledRelease, digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+    concept,
+    'en',
+    {
+      pin: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    },
+  );
   expect(retired.ok && retired.retired).toBe(true);
   expect(await readSourceConcept(client('unreadable'), 'Bearer reader', bundledRelease, concept, 'en', {})).toEqual({
     ok: false,

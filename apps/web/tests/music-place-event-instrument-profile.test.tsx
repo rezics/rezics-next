@@ -130,7 +130,12 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   property: { id: 'schema:location', data_type: 'wikibase-item' },
                   value: { type: 'value', content: eventA },
                   rank: 'normal',
-                  qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 10 } } }],
+                  qualifiers: [
+                    {
+                      property: { id: 'schema:startDate', data_type: 'time' },
+                      value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 10 } },
+                    },
+                  ],
                   references: [],
                 },
                 summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
@@ -142,7 +147,12 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   property: { id: 'schema:location', data_type: 'wikibase-item' },
                   value: { type: 'value', content: eventB },
                   rank: 'normal',
-                  qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'value', content: { time: '+2002-00-00T00:00:00Z', precision: 9 } } }],
+                  qualifiers: [
+                    {
+                      property: { id: 'schema:startDate', data_type: 'time' },
+                      value: { type: 'value', content: { time: '+2002-00-00T00:00:00Z', precision: 9 } },
+                    },
+                  ],
                   references: [],
                 },
                 summary: { id: eventB, type: 'schema:Event', label: { value: 'Autumn concert', language: 'en' } },
@@ -157,7 +167,10 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'novalue' } }],
                   references: [],
                 },
-                summary: mode === 'unreadable' ? null : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
+                summary:
+                  mode === 'unreadable'
+                    ? null
+                    : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
                 related: {},
               },
             ],

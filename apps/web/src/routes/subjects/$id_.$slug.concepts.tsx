@@ -23,5 +23,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
 function ConceptsRoute() {
   const { id } = Route.useParams();
   const { role, returnTo } = Route.useSearch();
-  return <SourceConceptSession key={`${id}:${getLocale()}`} id={id} locale={getLocale()} role={role} returnTo={returnTo} />;
+  return (
+    <SourceConceptSession key={`${id}:${getLocale()}`} id={id} locale={getLocale()} role={role} returnTo={returnTo} />
+  );
 }

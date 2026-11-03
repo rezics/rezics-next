@@ -8,7 +8,12 @@ export const readSubjectQuotations = createServerFn({ method: 'POST', strict: fa
   .validator((value: unknown) => {
     if (!value || typeof value !== 'object') throw new Error('Invalid quotation address');
     const input = value as Record<string, unknown>;
-    if (typeof input.id !== 'string' || !isExploreId(input.id) || typeof input.locale !== 'string' || input.locale.length > 35)
+    if (
+      typeof input.id !== 'string' ||
+      !isExploreId(input.id) ||
+      typeof input.locale !== 'string' ||
+      input.locale.length > 35
+    )
       throw new Error('Invalid quotation address');
     if (input.quote !== undefined && (typeof input.quote !== 'string' || !isExploreId(input.quote)))
       throw new Error('Invalid quotation address');

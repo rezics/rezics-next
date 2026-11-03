@@ -97,7 +97,8 @@ function statementText(statement: SubjectRead['subject']['statements'][string][n
   if (statement.value.type !== 'value') return null;
   const content = statement.value.content;
   if (typeof content === 'string') return content;
-  if (content && typeof content === 'object' && 'text' in content && typeof content.text === 'string') return content.text;
+  if (content && typeof content === 'object' && 'text' in content && typeof content.text === 'string')
+    return content.text;
   return null;
 }
 
@@ -120,10 +121,9 @@ export async function readQuotationPage(
     const type = current.data.subject.type;
     const workProperty = quotationProperty(release, type, quotationRequested.work);
     const speakerProperty = quotationProperty(release, type, quotationRequested.speaker);
-    const listProperty =
-      typeExtends(release, type, quotationRequested.type)
-        ? undefined
-        : workProperty ?? speakerProperty ?? quotationProperty(release, type, ['schema:hasPart']);
+    const listProperty = typeExtends(release, type, quotationRequested.type)
+      ? undefined
+      : (workProperty ?? speakerProperty ?? quotationProperty(release, type, ['schema:hasPart']));
     let session = tokenOf(current) ?? input.session;
     const rows: QuotationRow[] = [];
     let next: string | null = null;
@@ -131,7 +131,12 @@ export async function readQuotationPage(
       rows.push(await quotationRow(client, authorization, release, current.data, locale, session));
     } else if (listProperty) {
       const page = await client.subjects({ id }).relations.get({
-        query: { property: listProperty, language: locale, limit: QUOTATION_PAGE_CAP, ...(input.cursor ? { cursor: input.cursor } : {}) },
+        query: {
+          property: listProperty,
+          language: locale,
+          limit: QUOTATION_PAGE_CAP,
+          ...(input.cursor ? { cursor: input.cursor } : {}),
+        },
         headers: headersOf(authorization, session),
       });
       if (page.status !== 200 || !page.data || !('relations' in page.data)) return candidateFailure(page.status);
@@ -159,7 +164,7 @@ export async function readQuotationPage(
         else rows.unshift(detailed);
       }
     }
-    const selected = chosen ? rows.find((row) => row.id === chosen) ?? null : rows[0] ?? null;
+    const selected = chosen ? (rows.find((row) => row.id === chosen) ?? null) : (rows[0] ?? null);
     return {
       ok: true,
       public: current.data,
@@ -190,11 +195,12 @@ async function quotationRow(
   const textStatement = textProperty ? subject.subject.statements[textProperty]?.[0] : undefined;
   let body: AuthoredBody | null = null;
   let text = textStatement ? statementText(textStatement) : null;
-  let language: string | null = textStatement?.value.type === 'value' && isRecord(textStatement.value.content)
-    ? typeof textStatement.value.content.language === 'string'
-      ? textStatement.value.content.language
-      : null
-    : null;
+  let language: string | null =
+    textStatement?.value.type === 'value' && isRecord(textStatement.value.content)
+      ? typeof textStatement.value.content.language === 'string'
+        ? textStatement.value.content.language
+        : null
+      : null;
   if (textStatement && release.properties[textStatement.property.id]?.datatype === 'document') {
     body = await readAuthoredBody(client, subject.subject.id, textStatement, authorization, session);
     if (body.ok) {
@@ -206,7 +212,12 @@ async function quotationRow(
     if (!property) return { kind, status: 'unknown' };
     const statement = subject.subject.statements[property]?.[0];
     if (!statement) return { kind, status: kind === 'speaker' ? 'missing' : 'unknown' };
-    return contextOf(kind, statement.value.type === 'value' ? statement.value.content : undefined, subject.related, locale);
+    return contextOf(
+      kind,
+      statement.value.type === 'value' ? statement.value.content : undefined,
+      subject.related,
+      locale,
+    );
   };
   return {
     id: subject.subject.id,
@@ -218,7 +229,12 @@ async function quotationRow(
       item(workProperty, 'work'),
       item(voiceProperty, 'voice'),
       subject.subject.sourceRecords[0]
-        ? { kind: 'source', status: 'current', label: subject.subject.sourceRecords[0].name, href: subject.subject.sourceRecords[0].url }
+        ? {
+            kind: 'source',
+            status: 'current',
+            label: subject.subject.sourceRecords[0].name,
+            href: subject.subject.sourceRecords[0].url,
+          }
         : { kind: 'source', status: 'unknown' },
     ],
   };

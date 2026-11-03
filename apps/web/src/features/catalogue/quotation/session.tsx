@@ -29,7 +29,14 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
       transport={{
         read: (next) =>
           readSubjectQuotations({
-            data: { id, locale, expectedReader, quote: next.quote ?? quote, cursor: next.cursor, session: next.session },
+            data: {
+              id,
+              locale,
+              expectedReader,
+              quote: next.quote ?? quote,
+              cursor: next.cursor,
+              session: next.session,
+            },
             headers: csrfHeaders(),
           }),
       }}

@@ -8,7 +8,12 @@ export const readSubjectConcept = createServerFn({ method: 'POST', strict: false
   .validator((value: unknown) => {
     if (!value || typeof value !== 'object') throw new Error('Invalid concept address');
     const input = value as Record<string, unknown>;
-    if (typeof input.id !== 'string' || !isExploreId(input.id) || typeof input.locale !== 'string' || input.locale.length > 35)
+    if (
+      typeof input.id !== 'string' ||
+      !isExploreId(input.id) ||
+      typeof input.locale !== 'string' ||
+      input.locale.length > 35
+    )
       throw new Error('Invalid concept address');
     return {
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),

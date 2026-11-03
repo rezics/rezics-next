@@ -14,10 +14,18 @@ import {
 function address(value: unknown) {
   if (!value || typeof value !== 'object') throw new Error('Invalid graph address');
   const input = value as Record<string, unknown>;
-  if (typeof input.id !== 'string' || !isExploreId(input.id) || typeof input.locale !== 'string' || input.locale.length > 35)
+  if (
+    typeof input.id !== 'string' ||
+    !isExploreId(input.id) ||
+    typeof input.locale !== 'string' ||
+    input.locale.length > 35
+  )
     throw new Error('Invalid graph address');
   const query = graphQueryOf({
-    property: typeof input.property === 'string' || Array.isArray(input.property) ? (input.property as string | string[]) : undefined,
+    property:
+      typeof input.property === 'string' || Array.isArray(input.property)
+        ? (input.property as string | string[])
+        : undefined,
     direction: typeof input.direction === 'string' ? input.direction : undefined,
     depth: typeof input.depth === 'number' || typeof input.depth === 'string' ? input.depth : undefined,
   });
@@ -39,9 +47,7 @@ function address(value: unknown) {
         }
       : undefined;
   const expansion =
-    input.expansion && typeof input.expansion === 'object'
-      ? (input.expansion as GraphTruncation)
-      : undefined;
+    input.expansion && typeof input.expansion === 'object' ? (input.expansion as GraphTruncation) : undefined;
   if (
     expansion &&
     (!isExploreId(expansion.node) ||
@@ -96,21 +102,14 @@ export const readSubjectGraphBrowser = createServerFn({ method: 'POST', strict: 
       : data.node
         ? { kind: 'node', id: data.node }
         : undefined;
-    return readSubjectGraphPage(
-      prepared.client,
-      prepared.authorization,
-      release,
-      data.id,
-      data.locale,
-      {
-        property: data.property,
-        direction: data.direction,
-        depth: data.depth,
-        selection,
-        expansion: data.expansion,
-        session: data.session,
-      },
-    );
+    return readSubjectGraphPage(prepared.client, prepared.authorization, release, data.id, data.locale, {
+      property: data.property,
+      direction: data.direction,
+      depth: data.depth,
+      selection,
+      expansion: data.expansion,
+      session: data.session,
+    });
   });
 
 export const graphPageLimit = GRAPH_LIMIT;

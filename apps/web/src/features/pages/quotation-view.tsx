@@ -14,7 +14,11 @@ const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type QuotationTransport = {
-  read: (input: { quote?: string | undefined; cursor?: string | undefined; session?: string | undefined }) => Promise<QuotationRead>;
+  read: (input: {
+    quote?: string | undefined;
+    cursor?: string | undefined;
+    session?: string | undefined;
+  }) => Promise<QuotationRead>;
 };
 
 function option(locale: string) {
@@ -64,13 +68,20 @@ export function QuotationView({
   const origin = returnTo || subjectHref({ id, label: title.text }, locale).href;
   const selected = read?.selected ?? read?.rows[0];
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={query.isPending}
+    >
       <ViewHeading label={m.quotation_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.quotation_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.quotation_loading({}, o)}</p>}
       {error && (
         <p ref={failureRef} role="alert" tabIndex={-1}>
-          {error.reason === 'denied' ? m.quotation_denied({}, o) : error.reason === 'stale' ? m.quotation_stale({}, o) : m.quotation_unavailable({}, o)}
+          {error.reason === 'denied'
+            ? m.quotation_denied({}, o)
+            : error.reason === 'stale'
+              ? m.quotation_stale({}, o)
+              : m.quotation_unavailable({}, o)}
         </p>
       )}
       {read && !read.admitted && <p>{m.quotation_unsupported({}, o)}</p>}
@@ -84,7 +95,11 @@ export function QuotationView({
                   type="button"
                   variant={selected?.id === row.id ? 'default' : 'outline'}
                   className={actionClass}
-                  onClick={() => void transport.read({ quote: row.id, session: read.session }).then((value) => value.ok && setPage(value))}
+                  onClick={() =>
+                    void transport
+                      .read({ quote: row.id, session: read.session })
+                      .then((value) => value.ok && setPage(value))
+                  }
                 >
                   {row.text || m.quotation_text({}, o)}
                 </Button>
@@ -96,7 +111,11 @@ export function QuotationView({
               type="button"
               variant="outline"
               className={actionClass}
-              onClick={() => void transport.read({ cursor: read.next ?? undefined, session: read.session }).then((value) => value.ok && setPage(value))}
+              onClick={() =>
+                void transport
+                  .read({ cursor: read.next ?? undefined, session: read.session })
+                  .then((value) => value.ok && setPage(value))
+              }
             >
               {m.quotation_more({}, o)}
             </Button>
@@ -110,7 +129,10 @@ export function QuotationView({
                 {selected.contexts.map((context) => (
                   <li key={context.kind}>
                     {context.status === 'current' && context.id ? (
-                      <a className={linkClass} href={subjectHref({ id: context.id, label: context.label ?? '' }, locale).href}>
+                      <a
+                        className={linkClass}
+                        href={subjectHref({ id: context.id, label: context.label ?? '' }, locale).href}
+                      >
                         {contextText(context, locale)}
                       </a>
                     ) : (

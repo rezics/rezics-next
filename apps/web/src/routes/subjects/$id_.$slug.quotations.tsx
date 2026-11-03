@@ -23,5 +23,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
 function QuotationsRoute() {
   const { id } = Route.useParams();
   const { quote, returnTo } = Route.useSearch();
-  return <QuotationSession key={`${id}:${getLocale()}`} id={id} locale={getLocale()} quote={quote} returnTo={returnTo} />;
+  return (
+    <QuotationSession key={`${id}:${getLocale()}`} id={id} locale={getLocale()} quote={quote} returnTo={returnTo} />
+  );
 }

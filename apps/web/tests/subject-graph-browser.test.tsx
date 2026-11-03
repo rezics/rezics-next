@@ -69,20 +69,31 @@ function release(): Release {
         qualifiers: [],
         multivalued: true,
         value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-        relation: { group: 'derivation', order: 'name', inverse: 'rezics:influenced', inverseLabels: { en: 'influenced' } },
+        relation: {
+          group: 'derivation',
+          order: 'name',
+          inverse: 'rezics:influenced',
+          inverseLabels: { en: 'influenced' },
+        },
       },
     },
   } as Release;
 }
 
 function node(id: string, label: string) {
-  return { id, type: 'schema:Book', label, summary: { id, type: 'schema:Book', label: { value: label, language: 'en' } } };
+  return {
+    id,
+    type: 'schema:Book',
+    label,
+    summary: { id, type: 'schema:Book', label: { value: label, language: 'en' } },
+  };
 }
 
 function graphClient(mode: 'cycle' | 'truncated' | 'hidden' | 'unavailable' | 'empty', population = 32) {
   const calls: string[] = [];
-  const books = Array.from({ length: population }, (_, index) =>
-    `00000000-0000-4000-8000-${(0xb000 + index).toString(16).padStart(12, '0')}`,
+  const books = Array.from(
+    { length: population },
+    (_, index) => `00000000-0000-4000-8000-${(0xb000 + index).toString(16).padStart(12, '0')}`,
   );
   const page: GraphPage = {
     nodes: [node(anchor, 'Anchor'), node(neighbour, 'Neighbour'), node(cycle, 'Cycle')],
@@ -93,9 +104,7 @@ function graphClient(mode: 'cycle' | 'truncated' | 'hidden' | 'unavailable' | 'e
       { from: neighbour, property: 'wdt:P737', to: anchor, statement: '00000000-0000-4000-8000-00000000e004' },
     ],
     truncated:
-      mode === 'truncated'
-        ? [{ node: neighbour, property: 'wdt:P737', direction: 'out', cursor: 'native-next' }]
-        : [],
+      mode === 'truncated' ? [{ node: neighbour, property: 'wdt:P737', direction: 'out', cursor: 'native-next' }] : [],
   };
   if (mode === 'empty') {
     page.nodes = [node(anchor, 'Anchor')];
@@ -135,7 +144,14 @@ function graphClient(mode: 'cycle' | 'truncated' | 'hidden' | 'unavailable' | 'e
             data: {
               relations: [
                 {
-                  statement: { id: '00000000-0000-4000-8000-00000000e005', property: { id: 'wdt:P737', data_type: 'wikibase-item' }, value: { type: 'value', content: cycle }, rank: 'normal', qualifiers: [], references: [] },
+                  statement: {
+                    id: '00000000-0000-4000-8000-00000000e005',
+                    property: { id: 'wdt:P737', data_type: 'wikibase-item' },
+                    value: { type: 'value', content: cycle },
+                    rank: 'normal',
+                    qualifiers: [],
+                    references: [],
+                  },
                   summary: { id: cycle, type: 'schema:Book', label: { value: 'Cycle', language: 'en' } },
                   related: {},
                 },
@@ -170,9 +186,16 @@ test('graph explorer keeps cycles and both directions, continues a truncated bra
   });
   if (!first.ok) throw new Error('expected continuation');
   expect(first.graph.nodes.some((node) => node.id === cycle)).toBe(true);
-  const hiddenRead = await readSubjectGraphPage(graphClient('hidden').client, 'Bearer reader', release(), hidden, 'en', {
-    property: 'wdt:P737',
-  });
+  const hiddenRead = await readSubjectGraphPage(
+    graphClient('hidden').client,
+    'Bearer reader',
+    release(),
+    hidden,
+    'en',
+    {
+      property: 'wdt:P737',
+    },
+  );
   expect(hiddenRead).toEqual({ ok: false, reason: 'unavailable' });
   const merged = mergeGraphPage(first.graph, { nodes: [], edges: [], truncated: [] }, neighbour);
   expect(merged.truncated.some((entry) => entry.node === neighbour)).toBe(false);
@@ -209,7 +232,17 @@ test('graph page offers a table and diagram and recovers keyboard selection with
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en/subjects/book/anchor/graph' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'Element', 'Node', 'Document', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'Element',
+    'Node',
+    'Document',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -251,7 +284,9 @@ test('graph page offers a table and diagram and recovers keyboard selection with
     expect(host.querySelector('svg')).toBeTruthy();
     const buttons = [...host.querySelectorAll('button')];
     const neighbourButton = buttons.find((button) => button.textContent === 'Neighbour');
-    await act(async () => neighbourButton?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    await act(async () =>
+      neighbourButton?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
+    );
     expect(host.textContent).toContain('Neighbour');
     await show(
       h(GraphBrowserPage, {

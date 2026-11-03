@@ -14,7 +14,13 @@ const quote = '00000000-0000-4000-8000-00000000b002';
 const speaker = '00000000-0000-4000-8000-00000000b003';
 const voice = '00000000-0000-4000-8000-00000000b004';
 
-function item(id: string, type: string, labels: Record<string, string>, statements: SubjectRead['subject']['statements'], related: SubjectRead['related'] = {}): SubjectRead {
+function item(
+  id: string,
+  type: string,
+  labels: Record<string, string>,
+  statements: SubjectRead['subject']['statements'],
+  related: SubjectRead['related'] = {},
+): SubjectRead {
   return {
     subject: {
       id,
@@ -59,9 +65,22 @@ function admit(release: Release) {
     value: { type: 'string' as const, pattern: '^[0-9a-f-]+$' },
     relation: { group: 'credit' as const, order: 'name' as const, inverse: 'none' as const },
   };
-  release.properties['schema:spokenByCharacter'] = { ...itemValue, iri: 'http://schema.org/spokenByCharacter', labels: { en: 'speaker' } };
-  release.properties['schema:isPartOf'] = { ...itemValue, iri: 'http://schema.org/isPartOf', labels: { en: 'work' }, targets: ['schema:Book'] };
-  release.properties['schema:recordedBy'] = { ...itemValue, iri: 'http://schema.org/recordedBy', labels: { en: 'voice' } };
+  release.properties['schema:spokenByCharacter'] = {
+    ...itemValue,
+    iri: 'http://schema.org/spokenByCharacter',
+    labels: { en: 'speaker' },
+  };
+  release.properties['schema:isPartOf'] = {
+    ...itemValue,
+    iri: 'http://schema.org/isPartOf',
+    labels: { en: 'work' },
+    targets: ['schema:Book'],
+  };
+  release.properties['schema:recordedBy'] = {
+    ...itemValue,
+    iri: 'http://schema.org/recordedBy',
+    labels: { en: 'voice' },
+  };
   release.properties['schema:text'] = {
     iri: 'http://schema.org/text',
     labels: { en: 'text' },
@@ -73,7 +92,12 @@ function admit(release: Release) {
     value: { type: 'object' },
   };
   release.types['schema:Book']!.properties.push('schema:hasPart');
-  release.properties['schema:hasPart'] = { ...itemValue, iri: 'http://schema.org/hasPart', labels: { en: 'has part' }, targets: ['schema:Quotation'] };
+  release.properties['schema:hasPart'] = {
+    ...itemValue,
+    iri: 'http://schema.org/hasPart',
+    labels: { en: 'has part' },
+    targets: ['schema:Quotation'],
+  };
   return release;
 }
 
@@ -93,16 +117,19 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
           references: [],
         },
       ],
-      'schema:spokenByCharacter': mode === 'missing' ? [] : [
-        {
-          id: '00000000-0000-4000-8000-00000000e012',
-          rank: 'normal',
-          property: { id: 'schema:spokenByCharacter', data_type: 'wikibase-item' },
-          value: { type: 'value', content: speaker },
-          qualifiers: [],
-          references: [],
-        },
-      ],
+      'schema:spokenByCharacter':
+        mode === 'missing'
+          ? []
+          : [
+              {
+                id: '00000000-0000-4000-8000-00000000e012',
+                rank: 'normal',
+                property: { id: 'schema:spokenByCharacter', data_type: 'wikibase-item' },
+                value: { type: 'value', content: speaker },
+                qualifiers: [],
+                references: [],
+              },
+            ],
       'schema:isPartOf': [
         {
           id: '00000000-0000-4000-8000-00000000e013',
@@ -116,7 +143,9 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
     },
     {
       [work]: { type: 'schema:Book', labels: { en: 'Work' } },
-      ...(mode === 'restricted' ? { [speaker]: { type: 'wd:Q95074', labels: {} } } : { [speaker]: { type: 'wd:Q95074', labels: { en: 'Hero' } } }),
+      ...(mode === 'restricted'
+        ? { [speaker]: { type: 'wd:Q95074', labels: {} } }
+        : { [speaker]: { type: 'wd:Q95074', labels: { en: 'Hero' } } }),
       [voice]: { type: 'schema:Person', labels: { en: 'Voice' } },
     },
   );
@@ -134,7 +163,20 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
           return {
             status: 200,
             data: {
-              relations: [{ statement: { id: quote, property: { id: 'schema:hasPart', data_type: 'wikibase-item' }, value: { type: 'value', content: quote }, rank: 'normal', qualifiers: [], references: [] }, summary: { id: quote, type: 'schema:Quotation', label: { value: 'I will return', language: 'en' } }, related: {} }],
+              relations: [
+                {
+                  statement: {
+                    id: quote,
+                    property: { id: 'schema:hasPart', data_type: 'wikibase-item' },
+                    value: { type: 'value', content: quote },
+                    rank: 'normal',
+                    qualifiers: [],
+                    references: [],
+                  },
+                  summary: { id: quote, type: 'schema:Quotation', label: { value: 'I will return', language: 'en' } },
+                  related: {},
+                },
+              ],
               next: query.cursor ? null : 'more-quotes',
               freshness: { caught_up: true },
             },
@@ -148,7 +190,21 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
 test('quotation reading keeps multilingual text, two contexts, missing and restricted speakers, and stale lists', async () => {
   const closed = { types: { 'schema:Book': { properties: [] } }, properties: {} } as unknown as Release;
   expect(quotationTypeAdmitted(closed)).toBe(false);
-  const definitions = admit({ types: { 'schema:Book': { properties: [], bases: ['schema:CreativeWork'], labels: { en: 'book' }, iri: '', mappings: [], facets: [], coverRatio: '5:7', listPresentation: { imageAspect: 'portrait', keyFacts: [] } } }, properties: {} } as Release);
+  const definitions = admit({
+    types: {
+      'schema:Book': {
+        properties: [],
+        bases: ['schema:CreativeWork'],
+        labels: { en: 'book' },
+        iri: '',
+        mappings: [],
+        facets: [],
+        coverRatio: '5:7',
+        listPresentation: { imageAspect: 'portrait', keyFacts: [] },
+      },
+    },
+    properties: {},
+  } as Release);
   const current = await readQuotationPage(client('ok'), 'Bearer reader', definitions, quote, 'en', {});
   if (!current.ok) throw new Error('expected quotation');
   expect(current.selected?.text).toBe('I will return');
@@ -160,11 +216,21 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
     ['source', 'unknown'],
   ]);
   const missing = await readQuotationPage(client('missing'), 'Bearer reader', definitions, quote, 'en', {});
-  expect(missing.ok && missing.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe('missing');
+  expect(missing.ok && missing.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe(
+    'missing',
+  );
   const restricted = await readQuotationPage(client('restricted'), 'Bearer reader', definitions, quote, 'en', {});
-  expect(restricted.ok && restricted.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe('restricted');
-  expect(await readQuotationPage(client('stale'), 'Bearer reader', definitions, work, 'en', { quote })).toEqual({ ok: false, reason: 'stale' });
-  expect(await readQuotationPage(client('unavailable'), 'Bearer reader', definitions, quote, 'en', {})).toEqual({ ok: false, reason: 'unavailable' });
+  expect(restricted.ok && restricted.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe(
+    'restricted',
+  );
+  expect(await readQuotationPage(client('stale'), 'Bearer reader', definitions, work, 'en', { quote })).toEqual({
+    ok: false,
+    reason: 'stale',
+  });
+  expect(await readQuotationPage(client('unavailable'), 'Bearer reader', definitions, quote, 'en', {})).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
   expect(catalogueEntries.quotations({ id: work, label: 'Work', locale: 'en' }).href).toContain('/quotations');
 });
 
@@ -172,7 +238,17 @@ test('quotation page returns from candidate review and names unavailable configu
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en/subjects/work/work/quotations' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'Element', 'Node', 'Document', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'Element',
+    'Node',
+    'Document',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -192,7 +268,13 @@ test('quotation page returns from candidate review and names unavailable configu
   const clientQuery = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   async function show(node: ReactNode) {
     await act(async () =>
-      root.render(h(QueryClientProvider, { client: clientQuery }, h(CandidateReaderBoundary, { observed: { state: 'signed-out', csrfToken: null }, address: 'quote' }, node))),
+      root.render(
+        h(
+          QueryClientProvider,
+          { client: clientQuery },
+          h(CandidateReaderBoundary, { observed: { state: 'signed-out', csrfToken: null }, address: 'quote' }, node),
+        ),
+      ),
     );
   }
   try {
@@ -201,12 +283,30 @@ test('quotation page returns from candidate review and names unavailable configu
         id: quote,
         locale: 'en',
         returnTo: '/en/subjects/work/work/graph',
-        transport: { read: async () => ({ ok: true, public: item(quote, 'schema:Book', { en: 'Work' }, {}), admitted: false, rows: [], selected: null, next: null }) },
-        initial: { ok: true, public: item(quote, 'schema:Book', { en: 'Work' }, {}), admitted: false, rows: [], selected: null, next: null },
+        transport: {
+          read: async () => ({
+            ok: true,
+            public: item(quote, 'schema:Book', { en: 'Work' }, {}),
+            admitted: false,
+            rows: [],
+            selected: null,
+            next: null,
+          }),
+        },
+        initial: {
+          ok: true,
+          public: item(quote, 'schema:Book', { en: 'Work' }, {}),
+          admitted: false,
+          rows: [],
+          selected: null,
+          next: null,
+        },
       }),
     );
     expect(host.textContent).toContain(m.quotation_unsupported());
-    expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === '/en/subjects/work/work/graph')).toBe(true);
+    expect(
+      [...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === '/en/subjects/work/work/graph'),
+    ).toBe(true);
   } finally {
     await act(async () => root.unmount());
     clientQuery.clear();

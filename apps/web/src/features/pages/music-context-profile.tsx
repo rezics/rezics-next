@@ -14,7 +14,11 @@ const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type MusicContextTransport = {
-  read: (input: { stream?: string | undefined; cursor?: string | undefined; session?: string | undefined }) => Promise<MusicContextRead>;
+  read: (input: {
+    stream?: string | undefined;
+    cursor?: string | undefined;
+    session?: string | undefined;
+  }) => Promise<MusicContextRead>;
 };
 
 function kindLabel(kind: MusicContextKind, locale: string) {
@@ -57,7 +61,10 @@ export function MusicContextProfile({
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const origin = returnTo || subjectHref({ id, label: title.text }, locale).href;
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={query.isPending}
+    >
       <ViewHeading label={m.music_context_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.music_context_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.music_context_loading({}, o)}</p>}
@@ -104,12 +111,19 @@ export function MusicContextProfile({
               type="button"
               variant="outline"
               className={actionClass}
-              onClick={() => void transport.read({ stream: read.stream, cursor: read.next ?? undefined, session: read.session }).then((value) => value.ok && setPage(value))}
+              onClick={() =>
+                void transport
+                  .read({ stream: read.stream, cursor: read.next ?? undefined, session: read.session })
+                  .then((value) => value.ok && setPage(value))
+              }
             >
               {m.music_context_more({}, o)}
             </Button>
           )}
-          <a className={linkClass} href={`${catalogueEntries.facts({ id, label: title.text, locale }).href}?${new URLSearchParams({ returnTo: origin })}`}>
+          <a
+            className={linkClass}
+            href={`${catalogueEntries.facts({ id, label: title.text, locale }).href}?${new URLSearchParams({ returnTo: origin })}`}
+          >
             {m.music_context_correct({}, o)}
           </a>
           <a className={linkClass} href={origin}>

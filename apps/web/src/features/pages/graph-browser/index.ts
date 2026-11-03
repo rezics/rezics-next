@@ -77,8 +77,14 @@ export type GraphRead =
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativeGraph = Extract<NonNullable<Awaited<ReturnType<Endpoint['graph']['get']>>['data']>, { nodes: unknown[] }>;
-type NativeCounts = Extract<NonNullable<Awaited<ReturnType<Endpoint['counts']['get']>>['data']>, { properties?: unknown }>;
-type NativeRelations = Extract<NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>, { relations: unknown[] }>;
+type NativeCounts = Extract<
+  NonNullable<Awaited<ReturnType<Endpoint['counts']['get']>>['data']>,
+  { properties?: unknown }
+>;
+type NativeRelations = Extract<
+  NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>,
+  { relations: unknown[] }
+>;
 type NativeLinks = Extract<NonNullable<Awaited<ReturnType<Endpoint['links']['get']>>['data']>, { links: unknown[] }>;
 type Definitions = Pick<Release, 'types' | 'properties'>;
 
@@ -192,9 +198,7 @@ function relationOptions(release: Definitions, type: string, locale: string, cou
   const counted = counts.properties ?? {};
   return relationFields(release as Release, type, locale).flatMap((field) => {
     const property = release.properties[field.id];
-    const inverse = property?.relation?.inverseLabels
-      ? pickText(property.relation.inverseLabels, locale)
-      : null;
+    const inverse = property?.relation?.inverseLabels ? pickText(property.relation.inverseLabels, locale) : null;
     const tally = counted[field.id];
     return [
       {
@@ -281,12 +285,14 @@ function expansionPage(
             ]
           : [],
       ),
-      edges: page.relations.map((row) => ({
-        from: node,
-        property,
-        to: row.summary?.id ?? '',
-        statement: row.statement.id,
-      })).filter((edge) => edge.to),
+      edges: page.relations
+        .map((row) => ({
+          from: node,
+          property,
+          to: row.summary?.id ?? '',
+          statement: row.statement.id,
+        }))
+        .filter((edge) => edge.to),
       truncated: page.next
         ? [
             {
@@ -355,7 +361,12 @@ export async function readSubjectGraphPage(
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
     const counts = await client.subjects({ id }).counts.get({ headers });
-    recordCall(cost, `GET /v1/subjects/${id}/counts`, Object.keys(counts.data && 'properties' in counts.data ? (counts.data.properties ?? {}) : {}).length, counts.data ?? null);
+    recordCall(
+      cost,
+      `GET /v1/subjects/${id}/counts`,
+      Object.keys(counts.data && 'properties' in counts.data ? (counts.data.properties ?? {}) : {}).length,
+      counts.data ?? null,
+    );
     if (counts.status !== 200 || !counts.data) return candidateFailure(counts.status);
     const counted: NativeCounts = 'content' in counts.data ? counts.data : { content: null };
     const relations = relationOptions(release, current.data.subject.type, locale, counted);
@@ -382,9 +393,7 @@ export async function readSubjectGraphPage(
       recordCall(
         cost,
         `GET /v1/subjects/${id}/graph`,
-        result.data && 'nodes' in result.data
-          ? result.data.nodes.length + result.data.edges.length
-          : 0,
+        result.data && 'nodes' in result.data ? result.data.nodes.length + result.data.edges.length : 0,
         result.data ?? null,
       );
       if (result.status === 308) return candidateFailure(404);
@@ -465,5 +474,9 @@ export function replaceExploreSelection(read: Extract<GraphRead, { ok: true }>, 
       (selection.kind === 'edge' && read.detail?.statement?.id === selection.statement))
       ? read.detail
       : null;
-  return { ...read, detail, cost: { ...read.cost, bytesRetained: jsonBytes({ graph: read.graph, detail, query: read.query }) } };
+  return {
+    ...read,
+    detail,
+    cost: { ...read.cost, bytesRetained: jsonBytes({ graph: read.graph, detail, query: read.query }) },
+  };
 }
