@@ -39,6 +39,11 @@ import { SlowModeEligibility } from './slow-mode';
 import { writingScope } from './local-writing-draft';
 import { LocalWritingDraftControls, useLocalWritingDraft } from './local-writing-draft-controls';
 import { PortableWritingControls, PortableWritingToolbar, usePortableWriting } from './portable-writing-controls';
+import {
+  WritingInspectionControls,
+  WritingInspectionToolbar,
+  useWritingInspection,
+} from './writing-inspection-controls';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -585,6 +590,7 @@ function PostComposerContent<T, Context = undefined>({
   const writingRevision = useRef(0);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
+  const titleHost = useRef<HTMLInputElement>(null);
   const [editorReady, setEditorReady] = useState(false);
   const focusCaller = JSON.stringify([initialKey, containerId ?? null, boardId ?? null, submissionContext]);
   const focusLatest = useRef({ focusRequest, focusCaller, replyTargetId, editorReady });
@@ -667,6 +673,30 @@ function PostComposerContent<T, Context = undefined>({
     lifetime,
   );
 
+  const inspection = useWritingInspection({
+    signal: lifetime.controller.signal,
+    binding: JSON.stringify([initialKey, containerId, boardId, replyTargetId, submissionContext, canSubmit]),
+    current: () => lifetime.current() && canSubmit,
+    revision: () => writingRevision.current,
+    snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current }),
+    title: () => (titleRequired ? title : null),
+    facts: () => ({
+      pendingUploads: pendingRef.current,
+      attachmentIssues: failure?.reason === 'media-unavailable' ? (failure.media ?? []) : [],
+      refusal:
+        failure && failure.reason !== 'unavailable' && failure.reason !== 'media-unavailable'
+          ? refusalText(failure)
+          : uploadNotice,
+      unknown: replyIntent.current.unresolved,
+      sending: submittingRef.current,
+    }),
+    editor: () =>
+      editorHost.current?.querySelector<HTMLElement>(
+        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
+      ) ?? null,
+    titleEditor: () => titleHost.current,
+  });
+
   const writing = usePortableWriting(
     {
       current: () => lifetime.current(),
@@ -703,6 +733,7 @@ function PostComposerContent<T, Context = undefined>({
   function invalidateWriting() {
     writingRevision.current++;
     writing?.changed();
+    inspection?.changed();
   }
   function snapshotPending() {
     if (!lifetime.current()) return;
@@ -975,11 +1006,12 @@ function PostComposerContent<T, Context = undefined>({
     if (!lifetime.current()) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
+    // The installed snapshot port reports rich input synchronously, then publishes
+    // its admitted snapshot. Never flatten or rewalk that document on every input.
+    if (target.classList.contains('ProseMirror')) return;
     const next = fromPlainText(target.innerText, 'blocks');
     const hasMedia = target.querySelector('img, [data-media-id], [data-type="image"]') !== null;
     setBodyCanSend(hasDocumentContent(next) || hasMedia);
-    // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
-    if (target.classList.contains('ProseMirror')) return;
     invalidateWriting();
     bodyRef.current = next;
     if (plainEditorVisible) setBody(next);
@@ -1099,6 +1131,7 @@ function PostComposerContent<T, Context = undefined>({
               {m.thread_title_label()}
             </Label>
             <Input
+              ref={titleHost}
               id="thread-title"
               className="h-11 min-w-0 max-w-full border-border bg-background px-3"
               value={title}
@@ -1144,6 +1177,7 @@ function PostComposerContent<T, Context = undefined>({
             actions={
               <>
                 {writing ? <PortableWritingToolbar transfer={writing} /> : null}
+                {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
                 <Button
                   type="submit"
                   form={formId}
@@ -1158,6 +1192,12 @@ function PostComposerContent<T, Context = undefined>({
           />
         </div>
       </div>
+      {inspection ? (
+        <WritingInspectionControls
+          inspection={inspection}
+          context={<p>{m.thread_inspection_target({ target: replyTargetId ?? containerId ?? boardId ?? '' })}</p>}
+        />
+      ) : null}
       {writing ? (
         <PortableWritingControls
           transfer={writing}
@@ -1307,20 +1347,10 @@ function InlinePostEditorContent({
   const [body, setBody] = useState(initialBody);
   const initialBodyRef = useRef(initialBody);
   const bodyRef = useRef(body);
-  const draftRevision = useRef(0);
+  const writingRevision = useRef(0);
   const [inspectionRevision, setInspectionRevision] = useState(0);
-  const [inspectionReady, setInspectionReady] = useState(true);
-
-  function invalidateInspection() {
-    draftRevision.current++;
-    setInspectionRevision(draftRevision.current);
-  }
-
-  function inspectionPending() {
-    if (!lifetime.current()) return;
-    setInspectionReady(false);
-    invalidateInspection();
-  }
+  const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
+  const snapshotPhaseRef = useRef(snapshotPhase);
   const [revisionId, setRevisionId] = useState(initialRevisionId);
   const [failure, setFailure] = useState<EditFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
@@ -1342,7 +1372,8 @@ function InlinePostEditorContent({
     null,
     commandContext,
   );
-  const ready = hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
+  const ready =
+    snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
   const departureSignature = JSON.stringify([
     bodyRef.current,
     revisionId,
@@ -1359,6 +1390,7 @@ function InlinePostEditorContent({
     lifetime.current() && (submitting || editIntent.current.unresolved),
     departureSignature,
     onCancel,
+    () => lifetime.retire(),
   );
   const mediaUpload = useComposerUpload(containerId, ownedMediaIds, refusalRef, lifetime);
   const upload = mediaUpload.upload;
@@ -1371,9 +1403,53 @@ function InlinePostEditorContent({
     lifetime,
   );
 
+  const inspection = useWritingInspection({
+    signal: lifetime.controller.signal,
+    binding: JSON.stringify([containerId, idempotencyKey, initialRevisionId, revisionId]),
+    current: () => lifetime.current(),
+    revision: () => writingRevision.current,
+    snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current }),
+    title: () => null,
+    facts: () => ({
+      pendingUploads: pendingRef.current,
+      attachmentIssues: failure?.reason === 'media-unavailable' ? (failure.media ?? []) : [],
+      refusal:
+        failure && failure.reason !== 'unavailable' && failure.reason !== 'media-unavailable'
+          ? postEditFailureText(failure)
+          : uploadNotice,
+      unknown: editIntent.current.unresolved,
+      sending: submittingRef.current,
+    }),
+    editor: () =>
+      editorRoot.current?.querySelector<HTMLElement>(
+        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
+      ) ?? null,
+  });
+
+  function invalidateInspection() {
+    writingRevision.current++;
+    setInspectionRevision(writingRevision.current);
+    inspection?.changed();
+  }
+
+  function snapshotPending() {
+    if (!lifetime.current()) return;
+    snapshotPhaseRef.current = 'pending';
+    setSnapshotPhase('pending');
+    invalidateInspection();
+  }
+
+  function snapshotFailed() {
+    if (!lifetime.current()) return;
+    snapshotPhaseRef.current = 'failed';
+    setSnapshotPhase('failed');
+    invalidateInspection();
+  }
+
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
-    setInspectionReady(true);
+    snapshotPhaseRef.current = 'ready';
+    setSnapshotPhase('ready');
     invalidateInspection();
     bodyRef.current = next;
     setBody(next);
@@ -1479,8 +1555,8 @@ function InlinePostEditorContent({
   function removeIssueImage(id: string) {
     if (!lifetime.current()) return;
     const next = withoutImage(bodyRef.current, id);
-    pruneCopiedImages(next);
     invalidateInspection();
+    pruneCopiedImages(next);
     bodyRef.current = next;
     setBody(next);
     setFailure((current) =>
@@ -1502,7 +1578,14 @@ function InlinePostEditorContent({
 
   async function submit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (!lifetime.current() || pendingRef.current > 0 || !ready || submittingRef.current) return;
+    if (
+      !lifetime.current() ||
+      snapshotPhaseRef.current !== 'ready' ||
+      pendingRef.current > 0 ||
+      !ready ||
+      submittingRef.current
+    )
+      return;
     const sources = imageSources(bodyRef.current);
     if (sources.length > replyImageLimit) {
       setUploadNotice(m.editor_image_limit());
@@ -1569,8 +1652,9 @@ function InlinePostEditorContent({
     editorPendingRef.current = 0;
     updatePending();
     initialBodyRef.current = current.body;
+    snapshotPhaseRef.current = 'ready';
+    setSnapshotPhase('ready');
     invalidateInspection();
-    setInspectionReady(true);
     bodyRef.current = current.body;
     setBody(current.body);
     ownedMediaIds.current = new Set(current.mediaIds);
@@ -1611,7 +1695,7 @@ function InlinePostEditorContent({
           event.key === 'Escape' &&
           !submitting &&
           !event.defaultPrevented &&
-          !(event.target instanceof HTMLElement && event.target.closest('[role="alertdialog"]'))
+          !(event.target instanceof HTMLElement && event.target.closest('[role="alertdialog"], [role="dialog"]'))
         ) {
           event.preventDefault();
           departure.requestDiscard(onCancel);
@@ -1641,8 +1725,8 @@ function InlinePostEditorContent({
             key={revisionId}
             value={body}
             onChange={updateBody}
-            onSnapshotPending={inspectionPending}
-            onSnapshotError={inspectionPending}
+            onSnapshotPending={snapshotPending}
+            onSnapshotError={snapshotFailed}
             label={m.thread_reply_body_label()}
             labels={labels}
             lookupMention={lookupPostMention}
@@ -1671,13 +1755,13 @@ function InlinePostEditorContent({
             revision: inspectionRevision,
             authority: inspectionAdmission?.authority ?? lifetime,
             signal: lifetime.controller.signal,
-            inspectable: inspectionReady && (inspectionAdmission?.current() ?? true),
+            inspectable: snapshotPhase === 'ready' && (inspectionAdmission?.current() ?? true),
             read: () =>
               lifetime.current() &&
               (inspectionAdmission?.current() ?? true) &&
               !submittingRef.current &&
               !editIntent.current.unresolved
-                ? { body: bodyRef.current, revision: draftRevision.current }
+                ? { body: bodyRef.current, revision: writingRevision.current }
                 : null,
           }}
           onReplace={replaceWithCurrent}
@@ -1694,6 +1778,7 @@ function InlinePostEditorContent({
           </p>
         ) : null}
         <div className="flex min-w-0 flex-wrap gap-2 [overflow-wrap:anywhere]">
+          {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
           <Button
             type="submit"
             className={authoringActionClassName}
@@ -1713,6 +1798,12 @@ function InlinePostEditorContent({
           </Button>
         </div>
       </form>
+      {inspection ? (
+        <WritingInspectionControls
+          inspection={inspection}
+          context={<p>{m.thread_inspection_edit_target({ target: containerId, revision: revisionId })}</p>}
+        />
+      ) : null}
     </div>
   );
 }

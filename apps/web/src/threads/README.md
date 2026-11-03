@@ -29,6 +29,8 @@ the row menu on Close. The URL is the row's already-admitted localized canonical
 position or additional read; unavailable rows use the untitled destination. Only a successful clipboard write reports
 success. Board, row availability, destination replacement and unmount retire prior copy results and manual recovery.
 
+## Authoring departure and caller lifetime
+
 The default new-thread, reply and inline-edit composers compare their current local work with the mounted editor's
 baseline. Changed titles, structured bodies, review or discussion selections, uploads, active submissions and
 unresolved outcomes register with the page's authoring-departure owner. The owner shows one accessible Stay/Leave
@@ -114,6 +116,63 @@ Decision: opening Review explicitly opens both full readings; selecting an index
 and **Read full document** restores the complete reader without changing either writing.
 
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
+
+## Browser-only writing recovery
+
+“Save in this browser” explicitly enables a device-local copy of confirmed-unsent text/document and title for the
+mounted draft. It is not server autosave or device sync. Other users of the same browser profile may inspect its
+storage; the privacy explanation appears before enabling saving. Stopping saving retains the last copy; Discard
+removes that exact browser copy while leaving the live editor intact. Changes need 750 ms idle time to reach storage,
+so departure protection remains necessary, including immediately after editing a saved draft.
+
+A later signed-in, admitted visit loads only the same account and context, presents a dated plain-text preview and
+requires Restore or Discard. It never injects text on load. Restore confirms replacement when the editor already
+contains writing, validates the installed document schema again and allocates a fresh current-visit command key.
+The current admission, thread, reply parent and selected Subject ids must match. It does not restore fetched labels,
+review citations or selections into another route; the current page owns those values and native submission checks
+remain authoritative. No loader, network autosave or new native producer is added.
+
+Decision: Without an installed reload media-admission method, browser copies retain attachment descriptions as text
+and require attaching files again; they store no media references, upload permissions or opaque component payloads.
+
+The versioned private namespace `rezics:private-writing:v1` uses one bounded metadata index and 16 fixed payload
+slots. Each serialized payload envelope is at most 128 KiB in UTF-8, including its title, document, text projection
+and format metadata, for a 2 MiB committed payload ceiling. Metadata has a separate 64 KiB bound. New copies use an
+empty slot; when full, the oldest copy (including copies older than 30 days) is proposed for replacement with its
+date and explicit confirmation before any replacement. No old copy is silently expired. Another account's body or
+title is never read to choose an eviction. A same-context existing copy must also be explicitly replaced or restored.
+An exact current-visit saved revision can be updated without repeatedly confirming its replacement.
+
+The store reads O(K) indexed metadata, K <= 16, and encodes/decodes only the selected payload in O(B), B <= 128 KiB.
+It never enumerates unrelated localStorage. A mounted scope owns at most one 750 ms timer and one synchronous load;
+retirement cancels its timer without retries. Account/readiness/CSRF replacement, including away/back notifications
+before React renders, aborts the existing composer lifetime, clears the preview and export immediately and prevents
+late restore/save work. Route departure retires the caller before resuming navigation. Changing context retires the
+old browser-draft scope without moving its text to the replacement context. Other-tab storage changes also retire
+that browser-draft scope to avoid overwriting a replacement revision.
+
+Before a native submission starts, any exact saved copy (and any unchosen same-context preview) is synchronously
+marked unknown in the index. If that marker fails, the browser keeps writing and does not start transport. Saving
+and restoring stay suspended while submission is in flight or unknown; the explanation explicitly says a browser
+copy cannot determine whether a request was applied. Reloaded unknown copies can be discarded but cannot become
+fresh commands. The existing same-visit immutable retry remains usable. A known refusal re-enables the original
+confirmed-unsent copy; confirmed success deletes only the submitted draft's exact saved revision, preserving any
+replacement copy. Cleanup failures leave an unknown copy and an actionable storage error, never a restorable replay.
+Previously unknown reload previews cannot become confirmed-unsent merely because an unrelated request was refused.
+
+Storage denial, quota errors, damaged index/payload pairs and unsupported versions keep live writing intact. Retry
+is explicit. Export reveals a selectable plain-text field; Copy reports success only after clipboard completion and
+falls back to manual selection on denial. Text export excludes formatting and attachments. A separately confirmed
+reset removes only this namespace's 16 known slots and index, with a warning that other accounts' local copies are
+also removed; it never changes the live editor or published content. Index/payload revision mismatches fail closed.
+The bounded v1 reader rejects unknown versions rather than guessing a migration from legacy data that may contain
+publication commands. It does not scan or import legacy draft keys.
+
+Legacy reply/composer and draft-recovery stories informed the local-copy and export choices; no legacy command,
+receipt, media reservation or automatic restoration is ported. Prepared recovery stories use supplied outcomes and
+show that status explicitly. The focused recovery tests pin storage boundaries, privacy/uncertainty, retirement and
+the mounted reload/restore journey. Existing authoring-departure, composer lifetime and composer stories retain
+ownership of navigation, upload and rich-editor interactions.
 
 ## Author erasure caller lifetime
 
@@ -212,63 +271,6 @@ reply-selection callback and single composer. The model never sorts the canonica
 The existing native exact-post locator is used for missing parents; no new hierarchy producer or hydration seam is
 introduced. The priority post action and document renderer interfaces are unchanged.
 
-## Browser-only writing recovery
-
-“Save in this browser” explicitly enables a device-local copy of confirmed-unsent text/document and title for the
-mounted draft. It is not server autosave or device sync. Other users of the same browser profile may inspect its
-storage; the privacy explanation appears before enabling saving. Stopping saving retains the last copy; Discard
-removes that exact browser copy while leaving the live editor intact. Changes need 750 ms idle time to reach storage,
-so departure protection remains necessary, including immediately after editing a saved draft.
-
-A later signed-in, admitted visit loads only the same account and context, presents a dated plain-text preview and
-requires Restore or Discard. It never injects text on load. Restore confirms replacement when the editor already
-contains writing, validates the installed document schema again and allocates a fresh current-visit command key.
-The current admission, thread, reply parent and selected Subject ids must match. It does not restore fetched labels,
-review citations or selections into another route; the current page owns those values and native submission checks
-remain authoritative. No loader, network autosave or new native producer is added.
-
-Decision: Without an installed reload media-admission method, browser copies retain attachment descriptions as text
-and require attaching files again; they store no media references, upload permissions or opaque component payloads.
-
-The versioned private namespace `rezics:private-writing:v1` uses one bounded metadata index and 16 fixed payload
-slots. Each serialized payload envelope is at most 128 KiB in UTF-8, including its title, document, text projection
-and format metadata, for a 2 MiB committed payload ceiling. Metadata has a separate 64 KiB bound. New copies use an
-empty slot; when full, the oldest copy (including copies older than 30 days) is proposed for replacement with its
-date and explicit confirmation before any replacement. No old copy is silently expired. Another account's body or
-title is never read to choose an eviction. A same-context existing copy must also be explicitly replaced or restored.
-An exact current-visit saved revision can be updated without repeatedly confirming its replacement.
-
-The store reads O(K) indexed metadata, K <= 16, and encodes/decodes only the selected payload in O(B), B <= 128 KiB.
-It never enumerates unrelated localStorage. A mounted scope owns at most one 750 ms timer and one synchronous load;
-retirement cancels its timer without retries. Account/readiness/CSRF replacement, including away/back notifications
-before React renders, aborts the existing composer lifetime, clears the preview and export immediately and prevents
-late restore/save work. Route departure retires the caller before resuming navigation. Changing context retires the
-old browser-draft scope without moving its text to the replacement context. Other-tab storage changes also retire
-that browser-draft scope to avoid overwriting a replacement revision.
-
-Before a native submission starts, any exact saved copy (and any unchosen same-context preview) is synchronously
-marked unknown in the index. If that marker fails, the browser keeps writing and does not start transport. Saving
-and restoring stay suspended while submission is in flight or unknown; the explanation explicitly says a browser
-copy cannot determine whether a request was applied. Reloaded unknown copies can be discarded but cannot become
-fresh commands. The existing same-visit immutable retry remains usable. A known refusal re-enables the original
-confirmed-unsent copy; confirmed success deletes only the submitted draft's exact saved revision, preserving any
-replacement copy. Cleanup failures leave an unknown copy and an actionable storage error, never a restorable replay.
-Previously unknown reload previews cannot become confirmed-unsent merely because an unrelated request was refused.
-
-Storage denial, quota errors, damaged index/payload pairs and unsupported versions keep live writing intact. Retry
-is explicit. Export reveals a selectable plain-text field; Copy reports success only after clipboard completion and
-falls back to manual selection on denial. Text export excludes formatting and attachments. A separately confirmed
-reset removes only this namespace's 16 known slots and index, with a warning that other accounts' local copies are
-also removed; it never changes the live editor or published content. Index/payload revision mismatches fail closed.
-The bounded v1 reader rejects unknown versions rather than guessing a migration from legacy data that may contain
-publication commands. It does not scan or import legacy draft keys.
-
-Legacy reply/composer and draft-recovery stories informed the local-copy and export choices; no legacy command,
-receipt, media reservation or automatic restoration is ported. Prepared recovery stories use supplied outcomes and
-show that status explicitly. The focused recovery tests pin storage boundaries, privacy/uncertainty, retirement and
-the mounted reload/restore journey. Existing authoring-departure, composer lifetime and composer stories retain
-ownership of navigation, upload and rich-editor interactions.
-
 ## Local writing files
 
 Admitted signed-in new-thread and reply composers expose **Writing files** in the existing editor action row.
@@ -332,6 +334,62 @@ Prepared portable-writing stories use the real composer and visibly supplied sub
 are separately labelled prepared editor fixtures. Existing composer and browser-draft stories continue to own rich
 formatting, upload, departure and reload interactions. Portable-writing interaction stories cover phone 390 and
 desktop 1280, light/dark, long writing, file inspection, cancellation, export fallback, replacement and keyboard return.
+
+## Inspecting current unsent writing
+
+New-thread, reply and inline-edit composers offer **Inspect writing** without changing Send or Save. Inspection
+captures one immutable current body and the applicable title; its single read-only `DocumentBody` is separate from
+the mounted editor. Board/thread/reply context and an edit's source revision remain distinct from draft text. It adds
+no author identity, publication date, licence choice, review routing, storage, import/export or publication command.
+Close preserves the unchanged editor's selection. Structure links move within this one preview; Repair closes it and
+resolves the exact current `data-block-id` in the existing editor. If that ID cannot be found, focus returns to the
+editor with an explanation, without selecting a neighboring block. Keyboard dismissal and dialog focus are owned by
+the installed dialog; controls retain 44 px targets, wrapping labels and reduced-motion behavior.
+
+Decision: Measure body text in Unicode code points, title capacity in the current Web caller's UTF-16 code units,
+and document sizes in UTF-8 bytes; leave the unavailable per-request and body-text budgets explicitly unknown.
+
+`documentText` owns text projection: hard breaks and paragraph separators count, combining marks count separately,
+emoji and CJK retain their code points, mentions contribute `@` without account lookup, and link targets remain in
+JSON rather than being counted as resolved labels. Ruby annotations are not base text; image alt text, media captions
+and component fallbacks follow the codec. `serializeDocument` owns canonical normalized bytes. Inspection also counts
+the exact supplied body JSON's UTF-8 bytes. Neither byte count includes the request envelope or claims upload admission.
+Supported IDs, marks, link targets, media references and Unicode spelling are never rewritten to fit a counter.
+
+The delivered editor checks body snapshot JSON against 2,097,152 UTF-8 bytes. The portable-writing adapter's existing
+64-container local safety guard is applied iteratively before recursive document admission; over-depth or oversize
+snapshots are rejected whole, not truncated. Canonical output must also fit that smaller delivered document ceiling.
+The document codecs expose no smaller size bound. The current Web new-thread validator accepts at most 512 title
+UTF-16 code units (the native thread schema's 1024 maximum is not this caller's budget). The shared
+`threadTitleCodeUnitLimit` names that unchanged rule. The existing image composer admits at most 32 image slots;
+remaining slots describe editor structure, never attachment permission. No maximum is invented for other media,
+visible body text or total request bytes. The native content reader has a 2 MiB request envelope cap, but Web exposes
+no typed per-post request budget; context, IDs and title consume that envelope too, so it is not displayed as capacity.
+
+Inspection consumes portable writing's installed `onSnapshotPending`, `onSnapshotError` and admitted `onChange` port.
+An unnormalized current editor state is honestly pending or unsupported; inspection never falls back to an older body
+as though current, nor replaces the editor's recovery authority. Inline edits now consume that same optional port.
+A valid profile/schema is distinguished from an empty body, unfinished uploads, unavailable attachments, supplied
+server refusals, in-flight commands and unknown outcomes. Inspection does not read media state, resolve accounts,
+fetch metadata, acquire upload capability, retry, reseal or unlock a command. Without admitted current image summaries,
+the existing reader's unavailable-image placeholder is used; no media URL is invented.
+
+Only one captured snapshot plus summaries is retained by an inspection visit. Explicit inspection performs one
+O(B + N) admission/projection pipeline under the installed bound, reusing results for the same source identity and
+revision. Traversal collects at most 100 outline entries and 20 diagnostic rows with exact omitted counts. The full
+reader remains a single document even when navigation is shortened. Tests cover 1 KiB, 64 KiB and 1 MiB inputs,
+many small blocks, one large block, long links, the 32-image boundary and deeply nested rejection. Work is linear in
+serialized bytes and nodes; there are no per-node reads or requests. Typing only invalidates the optional inspection
+in O(1); measurement waits 750 ms after the last change and cancels superseded work. Pending or unmeasured values
+are labeled. The rich input fallback no longer flattens the live ProseMirror document on each keystroke.
+
+Changed writing or supplied readiness facts clear the prior preview immediately and require explicit refresh while
+inspection is open. Target, admission, route, edit source and authoring lifetime replacement retire the old visit.
+Session/account/readiness/CSRF away-and-back changes use the composer's existing synchronous abort authority: private
+preview DOM, selection callbacks and pending measurement are discarded and cannot revive. Browser-only confirmed-
+unsent recovery and same-visit immutable-command recovery retain their separate owners; inspection creates no copy
+in browser storage and cannot turn a saved unknown outcome into a new replay. Prepared stories supply outcomes and
+exercise the connected composer; they do not establish native acceptance or final browser capture evidence.
 
 ## Finding and inspecting returned revisions
 

@@ -1,4 +1,5 @@
 import { checkDocument, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
+import { threadTitleCodeUnitLimit } from './authoring-limits';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -117,7 +118,7 @@ function validateThreadDraft(input: unknown): StartThreadInput {
     !('title' in input) ||
     typeof input.title !== 'string' ||
     !input.title.trim() ||
-    input.title.length > 512
+    input.title.length > threadTitleCodeUnitLimit
   )
     throw new Error('Invalid thread draft');
   const base = { ...draft, boardId: input.boardId, title: input.title };
