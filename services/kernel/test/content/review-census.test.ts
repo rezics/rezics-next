@@ -2,8 +2,12 @@ import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
+import { maintainReviewCensusBatch, REVIEW_CENSUS_BATCH_PAGES } from '../../src/content/review-census-work.ts';
+import { softDeletePost } from '../../src/content/erase-post.ts';
+import { restorePost } from '../../src/content/restore-post.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
+import { observeSql } from './support/sql-observer.ts';
 
 const fixture = await standingFixture();
 afterAll(() => fixture.close());
@@ -14,7 +18,20 @@ const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture
   deadline: Date.now() + 30_000,
 }));
 
-test('a retained native census resumes at its committed cut without promoting candidate exhaustion to a public total', async () => {
+test('a census maintenance turn yields after bounded progress and stops when authority is preparing', async () => {
+  let pages = 0;
+  const changed = { state: 'changed' as const, generation: Bun.randomUUIDv7(), examined: 0 };
+  expect(await maintainReviewCensusBatch(1, async () => { pages++; return changed; })).toBe(changed);
+  expect(pages).toBe(REVIEW_CENSUS_BATCH_PAGES);
+  pages = 0;
+  expect(await maintainReviewCensusBatch(1, async () => {
+    pages++;
+    return { ...changed, state: 'preparing' };
+  })).toMatchObject({ state: 'preparing' });
+  expect(pages).toBe(1);
+});
+
+test('a retained native census resumes, replaces restored lifecycles and keeps incomplete authority preparing', async () => {
   const author = (await fixture.context()).actor;
   const board = (
     await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
@@ -53,6 +70,27 @@ test('a retained native census resumes at its committed cut without promoting ca
   }
   const partition = partitionOf(routeOf(written.value.threadId)!);
   expect(await source.censusCoverage(partition)).toMatchObject({ state: 'preparing', installed: false });
+  const commitObserver = observeSql(fixture.pool);
+  try {
+    await source.pageWithCut(partition, null, 1);
+    const statement = commitObserver.records.find(({ statement }) =>
+      statement.includes('AS "lifecycleState"') && statement.includes('ORDER BY t.route,t.thread_id'),
+    )!.statement;
+    const barrier = commitObserver.hold({ statement }, 'after');
+    const pending = source.maintainCensus(partition);
+    try {
+      await barrier.entered;
+      await fixture.reader.query(
+        'UPDATE content.thread SET security_revision=security_revision+1 WHERE route >= $1 AND route < $2',
+        [partition * 16, (partition + 1) * 16],
+      );
+    } finally {
+      barrier.release();
+    }
+    expect(await pending).toMatchObject({ state: 'changed', examined: 0 });
+  } finally {
+    await commitObserver.close();
+  }
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'progress', examined: 25 });
   expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'census-installation' });
   const resumed = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
@@ -102,8 +140,7 @@ test('a retained native census resumes at its committed cut without promoting ca
       )
     ).rows[0]?.count,
   ).toBe(1);
-  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'progress' });
-  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'exhausted' });
+  expect(await maintainReviewCensusBatch(partition, resumed.maintainCensus)).toMatchObject({ state: 'exhausted' });
   expect(
     (
       await fixture.reader.query(
@@ -112,6 +149,43 @@ test('a retained native census resumes at its committed cut without promoting ca
       )
     ).rows[0]?.count,
   ).toBe(26);
+  const before = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
+  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 });
+  await fixture.grant(author.accountId, 'post:erase', { route: routeOf(written.value.itemId)!, id: written.value.itemId });
+  await softDeletePost(deps, author, { postId: written.value.itemId, reason: 'Withdraw review' }, request());
+  await restorePost(deps, author, written.value.itemId, request());
+  const restored = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
+  expect(restored.revisionId).toBe(before.revisionId);
+  expect(restored.sourceVersion).not.toBe(before.sourceVersion);
+  expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+  expect(await maintainReviewCensusBatch(partition, resumed.maintainCensus)).toMatchObject({ state: 'exhausted' });
+  expect((await source.censusCoverage(partition)).generation).not.toBe(installed.generation);
+  expect(await source.count(partition)).toMatchObject({ unavailable: true });
+
+  // A native projection repair need not publish a new domain position. Its source
+  // row must still match after owner hydration before a census episode is retained.
+  const observer = observeSql(fixture.pool);
+  try {
+    await source.pageWithCut(partition, null, 1);
+    const statement = observer.records.find(({ statement }) =>
+      statement.includes('AS "lifecycleState"') && statement.includes('LIMIT $5'),
+    )!.statement;
+    const barrier = observer.hold({ statement }, 'after');
+    const pending = source.pageWithCut(partition, null, 1);
+    try {
+      await barrier.entered;
+      await fixture.reader.query(
+        'UPDATE content.thread SET security_revision=security_revision+1 WHERE route >= $1 AND route < $2',
+        [partition * 16, (partition + 1) * 16],
+      );
+    } finally {
+      barrier.release();
+    }
+    expect(await pending).toMatchObject({ state: 'changed', missing: 'source-lifecycle', reviews: [], next: null });
+  } finally {
+    await observer.close();
+  }
   expect(await source.pageWithCut(partition, null, 1)).not.toHaveProperty('census');
 }, 60_000);
 

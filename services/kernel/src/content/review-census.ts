@@ -53,6 +53,7 @@ type Reader = Readonly<{
     client: Pick<PoolClient, 'query'>,
     partition: number,
     cut: ReviewCensusCut | null,
+    episodes?: readonly ReviewCensusEpisode[],
   ): Promise<ReviewCensusObservation>;
 }>;
 type Installation = {
@@ -181,7 +182,7 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
         // Another resumed worker won. Do not replay an old delta or move its frontier.
         if (locked.generation !== state.generation || locked.revision !== state.revision)
           return { state: 'changed', generation: locked.generation, examined: 0 };
-        const current = await reader.observe(client, partition, page.cut);
+        const current = await reader.observe(client, partition, page.cut, page.episodes);
         if (current.state !== 'ready') return { state: current.state, generation: state.generation, examined: 0 };
         if (!sameReviewCensusCut(page.cut, current.cut))
           return { state: 'changed', generation: state.generation, examined: 0 };

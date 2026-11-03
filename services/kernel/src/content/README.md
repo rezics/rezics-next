@@ -1114,8 +1114,9 @@ boards live in other partitions.
 thread ID as the document identity. `sourceVersion` is an enumerable opaque value on candidate, read and hydration
 records; it is equality evidence for refresh ordering, never disclosure authority or content identity.
 
-The `rv1_` value is SHA-256 over the review ID, opening revision ID, thread security revision, opening-post security
-revision, latest unique per-review receiving journal position, and each observed dependency home with its own epoch
+The `rv1_` value is SHA-256 over the current source identity, author, board, target, placement and title, opening
+revision ID, thread and opening-post security revisions, native thread/board/opening lifecycle fields, latest unique
+per-review receiving journal position, and each observed dependency home with its own epoch
 and position. The latest journal position is allocated by the review-partition receiver from an authenticated original;
 replaying the same original does not allocate another position. Positions from different homes remain keyed by home and
 are never compared as a shared clock. Native home observations also make an unincorporated scope or Access change
@@ -1155,16 +1156,33 @@ Installation writes follow the existing native candidate projection transaction:
 do not allocate a domain publication position. They release the checkout before native owner hydration. The final
 CAS reobserves core home metadata and native lifecycle progress; it cannot certify missing authority coverage.
 `installed: true` means the candidate keyset was exhausted at its captured cut. It never means a complete anonymous
-count, including for an empty partition. Native maintenance registration, ongoing invalidation repair, complete
+count, including for an empty partition. Ongoing invalidation repair, complete
 Access/citation/Semantic/source proof, ready total/current equality and three-scale physical acceptance remain to be
 delivered together before this installation may back a public total.
+
+Decision: maintain the retained census hourly in bounded resumable partition turns; keep coverage preparing until native authority closure is complete.
+
+The default Content supervisor registers `content.review-census.sweep` and its persistent hourly schedule.
+Each sweep runs at most eight partition children concurrently. Each child processes at most eight durable pages,
+including cut resets, then yields to the next scheduled turn. It stops on exhaustion, preparing or unavailable;
+exceptions use the bounded durable-step retry policy. Every page constructs the anonymous native source with the
+configured reference signing keys and a fresh deadline. Restarted workers resume the stored signed continuation,
+generation and CAS revision rather than a workflow-local key. No census-maintenance step changes public readiness.
+
+Every source read, hydration and page also reobserves the examined native thread, board and opening rows in its
+final owner snapshot. A source-lifecycle mismatch returns changed (legacy pages return cut-changed), even when a
+projection repair did not advance a domain position. Removed rows cannot compare equal; unchanged opening revision
+IDs cannot stand in for lifecycle equality. The version includes live/availability/visibility and deletion state.
+This adds one exact-key source query for at most 100 examined candidates, without reading bodies or refilling pages.
+The census commit rechecks those source versions and their current dependency directory inside its CAS transaction,
+so a repair between the producer's final snapshot and installation cannot commit stale contribution eligibility.
 
 ##### Cost: retained census page
 
 - **Touches:** one coherent producer page and its real Content/Access/Semantic owner calls; one installation point
   before that page; one locked installation point, bounded previous-contribution points, retained episode inserts,
   contribution replacements and installation CAS after it. The existing coherent cut is reobserved before writes.
-- **Bound:** the page retains at most 100 episodes and 256 home observations. Installation adds at most 14 SQL
+- **Bound:** the page retains at most 100 episodes and 256 home observations. Installation adds at most 16 SQL
   statements and four transaction controls to the existing coherent-page operation. Previous contributions use
   exact `(route, thread_id)` keys; episode conflicts and foreign keys use exact `(route, thread_id, source_version)`
   keys. This bounds the store's work only. Nested authority examined rows/bytes and complete invalidation coverage

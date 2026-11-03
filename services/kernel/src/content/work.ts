@@ -1,4 +1,5 @@
 import { registerReviewDiscoveryWork } from './review-discovery-work.ts';
+import { registerReviewCensusWork, REVIEW_CENSUS_SCHEDULE, REVIEW_CENSUS_WORKFLOW } from './review-census-work.ts';
 import { createDiscoveryMutationEffect, recoverDiscoveryMutations } from './discovery-mutation.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
@@ -155,6 +156,7 @@ async function registerWork(
 ): Promise<void> {
   const { storage } = options;
   registerReviewDiscoveryWork(context);
+  registerReviewCensusWork(context, options.access, partitions);
   const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
@@ -489,6 +491,14 @@ async function registerWork(
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
+    {
+      scheduleName: REVIEW_CENSUS_SCHEDULE,
+      workflowName: REVIEW_CENSUS_WORKFLOW,
+      schedule: '0 * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
     {
       scheduleName: 'content.ownDrafts.every-minute',
       workflowName: OWN_DRAFT_REPAIR_WORKFLOW,

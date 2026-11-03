@@ -136,6 +136,7 @@ type Candidate = Readonly<{
   firstPostId: string | null;
   revisionId: string | null;
   lifecycleVersion: string;
+  lifecycleState: string;
 }>;
 
 type CandidateRow = {
@@ -151,6 +152,7 @@ type CandidateRow = {
   firstPostId: string | null;
   revisionId: string | null;
   lifecycleVersion: string;
+  lifecycleState: string;
 };
 
 type HydratedReview = Omit<ReviewDiscoverySummary, 'sourceVersion'> & Readonly<{ revisionId: string }>;
@@ -162,7 +164,9 @@ const candidateColumns = `
   b.realm_id::text AS "realmId", t.title, t.security_revision::text AS "securityRevision",
   t.first_post_id::text AS "firstPostId", p.head_revision_id::text AS "revisionId",
   p.security_revision::text AS "postSecurityRevision",
-  COALESCE(lifecycle.position, 0)::text AS "lifecycleVersion"`;
+  COALESCE(lifecycle.position, 0)::text AS "lifecycleVersion",
+  jsonb_build_array(t.review_live,t.availability,t.visibility,b.purpose,b.visibility,
+    p.availability,p.visibility,p.deleted_at)::text AS "lifecycleState"`;
 
 const lifecycleJoin = `
   LEFT JOIN LATERAL (
@@ -278,6 +282,43 @@ async function pageCandidates(
   return rows.rows.map(candidate);
 }
 
+const populationJoins = `
+     FROM content.thread t
+     LEFT JOIN content.board b
+       ON b.route = get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
+      AND b.board_id = t.board_id
+     LEFT JOIN content.post p
+       ON p.route = t.route AND p.thread_id = t.thread_id AND p.post_id = t.first_post_id
+     ${lifecycleJoin}
+     WHERE t.kind = 'review'`;
+
+/** Reobserve the source rows as well as their clocks. Projection installation and
+ * repair can change native lifecycle fields without allocating a publication. */
+async function populationByIds(
+  client: Pick<PoolClient, 'query'>,
+  partition: number,
+  ids: readonly string[],
+): Promise<Candidate[]> {
+  if (ids.length === 0) return [];
+  const current = await client.query<CandidateRow>(
+    `SELECT ${candidateColumns} ${populationJoins}
+     AND t.route >= $1 AND t.route < $2 AND t.thread_id=ANY($3::uuid[])
+     ORDER BY t.route,t.thread_id`,
+    [partition * 16, (partition + 1) * 16, ids],
+  );
+  return current.rows.map(candidate);
+}
+
+async function currentCandidatesMatch(
+  client: Pick<PoolClient, 'query'>,
+  partition: number,
+  observed: readonly Candidate[],
+): Promise<boolean> {
+  const current = await populationByIds(client, partition, observed.map((item) => item.id));
+  const byId = new Map(current.map((row) => [row.id, row]));
+  return observed.every((item) => JSON.stringify(item) === JSON.stringify(byId.get(item.id)));
+}
+
 async function populationCandidates(
   client: PoolClient,
   partition: number,
@@ -286,15 +327,7 @@ async function populationCandidates(
 ): Promise<Candidate[]> {
   const routeFloor = partition * 16;
   const rows = await client.query<CandidateRow>(
-    `SELECT ${candidateColumns}
-     FROM content.thread t
-     LEFT JOIN content.board b
-       ON b.route = get_byte(uuid_send(t.board_id), 10) * 256 + get_byte(uuid_send(t.board_id), 11)
-      AND b.board_id = t.board_id
-     LEFT JOIN content.post p
-       ON p.route = t.route AND p.thread_id = t.thread_id AND p.post_id = t.first_post_id
-     ${lifecycleJoin}
-     WHERE t.kind = 'review'
+    `SELECT ${candidateColumns} ${populationJoins}
        AND t.route >= $1 AND t.route < $2
        AND (t.route, t.thread_id) > ($3::integer, $4::uuid)
      ORDER BY t.route, t.thread_id LIMIT $5`,
@@ -411,11 +444,7 @@ function sameCut(left: PopulationCut, right: PopulationCut): boolean {
 function sourceVersion(value: Candidate, dependencyHomes: readonly number[], cut: PopulationCut): string {
   const selected = new Set([partitionOf(value.route), ...dependencyHomes]);
   const state = {
-    id: value.id,
-    revisionId: value.revisionId,
-    securityRevision: value.securityRevision,
-    postSecurityRevision: value.postSecurityRevision,
-    lifecycleVersion: value.lifecycleVersion,
+    ...value,
     homes: cut.homes
       .filter((home) => selected.has(home.partition))
       .map((home) => [home.partition, home.epoch, home.position.toString()]),
@@ -633,6 +662,19 @@ function failedSourceError(state: Exclude<CutState, { status: 'ready' }>): never
   throw new ReviewDiscoverySourceError(state.status, state.missing ?? 'native-population');
 }
 
+async function reobserveOutput(
+  client: Pick<PoolClient, 'query'>,
+  partition: number,
+  cut: PopulationCut,
+  candidates: readonly Candidate[],
+): Promise<Readonly<{ state: CutState; current: boolean }>> {
+  const state = await captureCut(client, partition, cut.homes.map((home) => home.partition));
+  return {
+    state,
+    current: state.status === 'ready' && await currentCandidatesMatch(client, partition, candidates),
+  };
+}
+
 /** Public-only producer. Search owns the document union, writer, and query integration. */
 export function createReviewDiscoverySource(
   dependencies: ContentReadDependencies,
@@ -658,20 +700,23 @@ export function createReviewDiscoverySource(
     );
     if (native.status === 'unavailable') throw new ReviewDiscoverySourceError('unavailable', native.missing);
     if (native.state.status !== 'ready') failedSourceError(native.state);
+    const observedCut = native.state.cut;
     const hydrated = new Map<string, VersionedReview>();
     for (const item of native.candidates) {
       const value = await hydrateCandidate(dependencies, context, item);
       if (value)
         hydrated.set(value.id, indexHydrated(value, item, native.depSet.byReview.get(item.id) ?? [], native.state.cut));
     }
-    const finalState = await withReadTransaction(
+    const final = await withReadTransaction(
       dependencies.pool,
-      (client) => captureCut(client, partition, native.depSet.homes),
+      (client) => reobserveOutput(client, partition, observedCut, native.candidates),
       context.deadline,
     );
+    const finalState = final.state;
     if (finalState.status !== 'ready') failedSourceError(finalState);
     if (!sameCut(native.state.cut, finalState.cut))
       throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency');
+    if (!final.current) throw new ReviewDiscoverySourceError('changed', 'source-lifecycle');
     return { position: native.position, hydrated };
   }
 
@@ -773,16 +818,12 @@ export function createReviewDiscoverySource(
         });
       if (reviews.length === limit) break;
     }
-    const finalState = await withReadTransaction(
+    const final = await withReadTransaction(
       dependencies.pool,
-      (client) =>
-        captureCut(
-          client,
-          partition,
-          native.cut.homes.map((home) => home.partition),
-        ),
+      (client) => reobserveOutput(client, partition, native.cut, native.selected.slice(0, examined)),
       context.deadline,
     );
+    const finalState = final.state;
     if (finalState.status !== 'ready')
       return failedPopulationPage(
         partition,
@@ -792,6 +833,8 @@ export function createReviewDiscoverySource(
       );
     if (!sameCut(native.cut, finalState.cut))
       return failedPopulationPage(partition, 'changed', 'eligibility-dependency', finalState.position);
+    if (!final.current)
+      return failedPopulationPage(partition, 'changed', 'source-lifecycle', finalState.position);
     const last = native.selected[examined - 1];
     let next: ReviewDiscoveryContinuation | null = null;
     if (last && examined < native.candidates.length) {
@@ -839,10 +882,25 @@ export function createReviewDiscoverySource(
         next: page.next,
       };
     },
-    async observe(client, partition, cut) {
+    async observe(client, partition, cut, episodes) {
       const current = await captureCut(client, partition, cut?.homes.map((home) => home.partition) ?? []);
       if (current.status !== 'ready')
         return { state: current.status, position: current.position, missing: current.missing };
+      if (episodes?.length) {
+        const ids = episodes.map((episode) => episode.id);
+        const candidates = await populationByIds(client, partition, ids);
+        const depSet = await readDependencies(client, partition, ids);
+        if (!depSet)
+          return { state: 'unavailable', position: current.position, missing: 'review-dependency-directory' };
+        const homes = new Set(current.cut.homes.map((home) => home.partition));
+        const versions = new Map(candidates.map((item) => [
+          item.id,
+          sourceVersion(item, depSet.byReview.get(item.id) ?? [], current.cut),
+        ]));
+        if (depSet.homes.some((home) => !homes.has(home)) ||
+            episodes.some((episode) => versions.get(episode.id) !== episode.sourceVersion))
+          return { state: 'changed', position: current.position, missing: 'source-lifecycle' };
+      }
       return {
         state: 'ready',
         position: current.position,
@@ -945,18 +1003,14 @@ export function createReviewDiscoverySource(
           reviews.push(indexRecord(indexHydrated(value, item, native.depSet.byReview.get(item.id) ?? [], native.cut)));
         if (reviews.length === limit) break;
       }
-      const finalState = await withReadTransaction(
+      const final = await withReadTransaction(
         dependencies.pool,
-        (client) =>
-          captureCut(
-            client,
-            partition,
-            native.cut.homes.map((home) => home.partition),
-          ),
+        (client) => reobserveOutput(client, partition, native.cut, native.selected.slice(0, examined)),
         context.deadline,
       );
+      const finalState = final.state;
       if (finalState.status !== 'ready') failedSourceError(finalState);
-      if (!sameCut(native.cut, finalState.cut))
+      if (!sameCut(native.cut, finalState.cut) || !final.current)
         return { partition, position: finalState.position, incomplete: 'cut-changed' };
       const last = native.selected[examined - 1];
       return {
