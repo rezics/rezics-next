@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef } from 'react';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { m } from '../../paraglide/messages.js';
@@ -7,6 +7,7 @@ import { threadLocation } from '../../threads/thread-href';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
 import { SubjectCommunityPreview } from './subject-community-preview';
+import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
 
@@ -42,6 +43,31 @@ export function SubjectCommunityRegion({
 }) {
   const options = { locale: locale as never };
   const community = useContext(SubjectCommunityContext);
+  const reading = useSubjectCommunityReading({
+    source: community?.sourceKey ?? region,
+    reader: community?.reader ?? null,
+    descriptor: JSON.stringify([
+      id,
+      node,
+      subject.id,
+      kind,
+      locale,
+      href,
+      paged,
+      community?.contextId,
+      region.state,
+      region.state === 'ready' ? region.context : null,
+      region.state === 'ready' ? region.reactionsAsOf : null,
+    ]),
+  });
+  if (!reading.available) region = { state: 'unavailable' };
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focused = useRef<EventTarget | null>(null);
+  useLayoutEffect(() => {
+    // A replacing page removes its focused card. Keep keyboard recovery at this region's stable heading.
+    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
+      heading.current?.focus();
+  }, [reading.key, reading.available]);
   const review = kind === 'review';
   const title = review ? m.subject_reviews({}, options) : m.subject_discussion({}, options);
   const threads = region.state === 'ready' ? region.threads : [];
@@ -73,9 +99,18 @@ export function SubjectCommunityRegion({
       data-state={state}
       aria-labelledby={`${id}-title`}
       className="min-w-0 space-y-4"
+      onFocusCapture={(event) => {
+        focused.current = event.target;
+      }}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <StreamHeading node={paged ? id : undefined} id={`${id}-title`} className={headingClass}>
+        <StreamHeading
+          ref={heading}
+          tabIndex={-1}
+          node={paged ? id : undefined}
+          id={`${id}-title`}
+          className={headingClass}
+        >
           {title}
         </StreamHeading>
         {!paged && region.state === 'ready' && (
@@ -128,7 +163,7 @@ export function SubjectCommunityRegion({
         </div>
       )}
       {threads.length > 0 && (
-        <ul className="min-w-0">
+        <ul key={reading.key} className="min-w-0">
           {threads.map((thread) => {
             const threadHref = threadLocation(locale, thread);
             const reader = community?.reader ?? null;

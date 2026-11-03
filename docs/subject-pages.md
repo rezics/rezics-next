@@ -1065,6 +1065,9 @@ Community pages decode only against their planned native request and its row lim
 Decision: every completed community read starts a fresh local visit even at the same URL; retired cleanup cannot
 retire its replacement. Local visit identity grants no native authority. Continuation and retry retain the opaque
 cursor within Content's nonempty 4096-character bound; continuation and recovery links have 44px minimum targets.
+Decision: a retired native observation stays unavailable through an away/back browser epoch; only a fresh native
+observation may admit cards again. Mounted regions observe the existing session/CSRF and exposure caches, retire
+their cards and context on replacement, and return a removed card's keyboard focus to the surviving heading.
 
 Every preview shows at most twelve items (fewer for reviews, threads and lists) and links to its full view when
 there are more. A subject with only a

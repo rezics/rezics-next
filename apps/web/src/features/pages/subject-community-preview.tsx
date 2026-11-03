@@ -23,7 +23,7 @@ function ReadOnlyReactionCounts({
   locale: string;
   reactionsAsOf: CommunityReactionFreshness;
 }) {
-  if (thread.reactions === undefined || reactionsAsOf === null)
+  if (thread.reactions === undefined || reactionsAsOf == null)
     return (
       <p role="status" className="text-sm text-muted-foreground">
         {m.subject_reactions_unavailable()}

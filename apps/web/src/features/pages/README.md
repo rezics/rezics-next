@@ -28,8 +28,12 @@ Decision: give every completed community read a fresh local visit identity, incl
 identity retires local effects and never substitutes for native context, freshness or action authority.
 
 Visit cleanup retires only its captured visit. Returning to an earlier URL cannot revive it or let its cleanup retire
-a newer visit. The lifetime also distinguishes locale, credential epoch and exposure when supplied by its caller;
-the disconnected reaction exercise binds locale, while credential/session fencing stays in the command owner.
+a newer visit. Mounted regions observe the existing browser session and exposure caches without fetching. Account,
+CSRF, successful session observation, exposure, provider, locale, descriptor or same-source watermark replacement
+removes the mounted cards, context, citations and selected child state until a new native observation arrives. Each
+new observation remounts its card subtree; the heading survives and receives focus when a focused card disappears.
+Decision: a retired native observation stays unavailable through an away/back browser epoch; only a fresh native
+observation may admit cards again.
 
 `voteCitation` remains historical first-post context, never the author's current rating. A null citation is
 unscored; a present citation without its native scale and original target is unavailable. Omitted reaction counts
@@ -50,6 +54,7 @@ titles open the admitted thread; Board links remain read destinations. See the [
       context and reaction freshness are checked from that same response. Opening a conversation is deliberate.
       Explicit retry repeats its cursor. Current Subject cards issue no per-card hydration, mutation or readback.
       Session preparation belongs to the existing public/private page boundary; projection adds no session request.
+      Visit retirement subscribes to those existing caches, without reads, commands or readbacks.
       A deliberate conversation open delegates commands and their readback to that conversation's existing owners.
 - [ ] **Bound:** The card projection carries at most 20 rows and excerpts up to 280 UTF-16 code units; the current
       context adds one Subject label/source and one Global or Realm place. Native Realm title admission is bounded by
