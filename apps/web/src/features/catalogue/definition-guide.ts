@@ -2,6 +2,12 @@ import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { createTypes } from './create-subject';
+import {
+  comparisonField,
+  guideCompareValue,
+  type GuideComparison,
+  type GuideComparisonSide,
+} from './definition-guide-comparison';
 
 export type GuideRelease = Pick<Release, 'types' | 'properties'> & { digest: string };
 export type GuideLocale = 'de' | 'en' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant';
@@ -10,6 +16,7 @@ export type GuideAddress = {
   property?: string | undefined;
   release?: string | undefined;
   returnTo?: string | undefined;
+  compare?: typeof guideCompareValue | undefined;
 };
 export type GuideFailure = 'denied' | 'concealed' | 'invalid' | 'unavailable' | 'no-match' | 'stale';
 export type GuideTypeSummary = {
@@ -32,7 +39,8 @@ export type GuideRead =
   | { ok: false; reason: GuideFailure }
   | { ok: true; release: GuideRelease; pin: 'pinned' }
   | { ok: true; page: GuideDirectoryPage; pin: 'active' }
-  | { ok: true; descriptor: GuideTypeDescriptor; pin: 'active' };
+  | { ok: true; descriptor: GuideTypeDescriptor; pin: 'active' }
+  | { ok: true; comparison: GuideComparison; pin: 'compare' };
 export type GuideTransport = {
   read: (locale?: GuideLocale) => Promise<GuideRead>;
   directory: (locale: GuideLocale, query: string, cursor?: string) => Promise<GuidePageRead>;
@@ -46,6 +54,9 @@ export class DefinitionReadError extends Error {
 }
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
+export function isGuideDigest(value: unknown): value is string {
+  return typeof value === 'string' && digestPattern.test(value);
+}
 export const guidePageSize = 20;
 export const guideIdentifierLimit = 4_194_304;
 export const guideLocales: readonly GuideLocale[] = ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
@@ -148,20 +159,26 @@ function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
   return strings(typedDefinition.properties) && typedDefinition.properties.every((id) => Object.hasOwn(properties, id));
 }
 
+/** Active pointer only; never an exact historical file and never a substitute for a missing pin. */
+export async function fetchGuideActiveDigest(
+  client: KernelClient,
+  headers: Record<string, string> = {},
+): Promise<string> {
+  const active = await client.definitions.active.get({ headers });
+  requireSuccess(active.status);
+  const selected = active.data?.digest;
+  if (!isGuideDigest(selected)) throw new DefinitionReadError('invalid');
+  return selected;
+}
+
 /** Generated native GETs, with current caller headers. Never cache a caller's authority or guess a release file. */
 export async function fetchGuideRelease(
   client: KernelClient,
   digest?: string,
   headers: Record<string, string> = {},
 ): Promise<GuideRelease> {
-  if (digest !== undefined && !digestPattern.test(digest)) throw new DefinitionReadError('invalid');
-  let selected = digest;
-  if (selected === undefined) {
-    const active = await client.definitions.active.get({ headers });
-    requireSuccess(active.status);
-    selected = active.data?.digest;
-  }
-  if (!selected || !digestPattern.test(selected)) throw new DefinitionReadError('invalid');
+  if (digest !== undefined && !isGuideDigest(digest)) throw new DefinitionReadError('invalid');
+  const selected = digest ?? (await fetchGuideActiveDigest(client, headers));
   const response = await client.definitions.releases({ digest: selected }).get({ headers });
   requireSuccess(response.status);
   if (response.data?.digest !== selected || !releasedMetadata(response.data.release))
@@ -273,15 +290,66 @@ export async function readGuideType(
   }
 }
 
+async function readExactSide(
+  readRelease: (digest?: string) => Promise<GuideRelease>,
+  digest: string,
+): Promise<GuideComparisonSide> {
+  try {
+    const release = await readRelease(digest);
+    if (release.digest !== digest) return { status: 'invalid', digest };
+    return { status: 'available', digest, release, admitted: false };
+  } catch (error) {
+    return { status: failure(error), digest };
+  }
+}
+
+async function activeDigestFromRelease(readRelease: (digest?: string) => Promise<GuideRelease>) {
+  return (await readRelease()).digest;
+}
+
+async function readComparedGuide(
+  address: GuideAddress,
+  readRelease: (digest?: string) => Promise<GuideRelease>,
+  readActiveDigest: () => Promise<string>,
+): Promise<GuideRead> {
+  const typeId = address.type;
+  const property = address.property;
+  const pinnedDigest = address.release;
+  if (!typeId || !property || !isGuideDigest(pinnedDigest)) return { ok: false, reason: 'invalid' };
+  const withField = (side: GuideComparisonSide): GuideComparisonSide =>
+    side.status === 'available' ? { ...side, ...comparisonField(side.release, typeId, property) } : side;
+  const pinnedTask = readExactSide(readRelease, pinnedDigest);
+  const currentTask = (async (): Promise<GuideComparisonSide> => {
+    let digest: string;
+    try {
+      digest = await readActiveDigest();
+    } catch (error) {
+      return { status: failure(error) };
+    }
+    if (!isGuideDigest(digest)) return { status: 'invalid', digest };
+    return readExactSide(readRelease, digest);
+  })();
+  const [pinned, current] = await Promise.all([pinnedTask, currentTask]);
+  return {
+    ok: true,
+    pin: 'compare',
+    comparison: { type: typeId, property, pinned: withField(pinned), current: withField(current) },
+  };
+}
+
 export async function readGuide(
   address: GuideAddress,
   readRelease: (digest?: string) => Promise<GuideRelease>,
   readDirectory: () => Promise<GuidePageRead>,
   readType: (typeId: string) => Promise<GuideTypeRead>,
+  readActiveDigest?: () => Promise<string>,
 ): Promise<GuideRead> {
   try {
     if (address.release !== undefined && !digestPattern.test(address.release)) return { ok: false, reason: 'invalid' };
     if (address.property && !address.type) return { ok: false, reason: 'invalid' };
+    if (address.compare === guideCompareValue) {
+      return readComparedGuide(address, readRelease, readActiveDigest ?? (() => activeDigestFromRelease(readRelease)));
+    }
     if (address.release !== undefined) {
       const release = await readRelease(address.release);
       if (address.type && !Object.hasOwn(release.types, address.type)) return { ok: false, reason: 'invalid' };
@@ -332,9 +400,17 @@ export function guideReturnTo(value: unknown, locale: string): string | undefine
     return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/** Compare is offered only for a pinned field opened from a validated editor return. */
+export function guideEditorField(address: GuideAddress, locale: string) {
+  return Boolean(
+    address.type && address.property && isGuideDigest(address.release) && guideReturnTo(address.returnTo, locale),
+  );
+}
+
 export function definitionGuideHref(locale: string, address: GuideAddress = {}): string {
   const query = new URLSearchParams();
   for (const key of ['type', 'property', 'release'] as const) if (address[key]) query.set(key, address[key]);
+  if (address.compare === guideCompareValue && guideEditorField(address, locale)) query.set('compare', guideCompareValue);
   const returnTo = guideReturnTo(address.returnTo, locale);
   if (returnTo) query.set('returnTo', returnTo);
   return `/${locale}/catalogue/definitions${query.size ? `?${query}` : ''}`;

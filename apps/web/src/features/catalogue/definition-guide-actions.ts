@@ -6,6 +6,7 @@ import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { readReleaseForCaller } from '../../subject/definitions';
 import {
+  fetchGuideActiveDigest,
   guideLocales,
   guideIdentifierLimit,
   readGuide,
@@ -18,14 +19,20 @@ import {
   type GuideRead,
   type GuideTypeRead,
 } from './definition-guide';
+import { guideCompareValue } from './definition-guide-comparison';
 
 export function guideAddress(value: unknown): GuideAddress {
   const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const result: GuideAddress = {};
-  for (const key of ['type', 'property', 'release', 'returnTo'] as const) {
+  for (const key of ['type', 'property', 'release', 'returnTo', 'compare'] as const) {
     if (input[key] !== undefined) {
-      const limit = key === 'returnTo' ? 2048 : key === 'type' || key === 'property' ? guideIdentifierLimit : 256;
+      const limit =
+        key === 'returnTo' ? 2048 : key === 'compare' ? 32 : key === 'type' || key === 'property' ? guideIdentifierLimit : 256;
       if (typeof input[key] !== 'string' || input[key].length > limit) throw new Error('Invalid guide address');
+      if (key === 'compare') {
+        if (input[key] === guideCompareValue) result.compare = guideCompareValue;
+        continue;
+      }
       result[key] = input[key];
     }
   }
@@ -93,6 +100,7 @@ export const readDefinitionGuide = createServerFn({ method: 'GET' })
         (digest) => readReleaseForCaller({ client, ...(digest ? { digest } : {}), headers }),
         () => readGuideDirectory(client, data.locale, '', undefined, headers),
         (typeId) => readGuideType(client, typeId, data.locale, headers),
+        () => fetchGuideActiveDigest(client, headers),
       ),
     ),
   );

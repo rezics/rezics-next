@@ -21,11 +21,22 @@ import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
 import { DefinitionMeaning as Meaning } from './definition-meaning';
 import {
+  comparisonAspects,
+  comparisonDigestsMatch,
+  comparisonFieldRemoved,
+  guideCompareValue,
+  type GuideComparison,
+  type GuideComparisonSide,
+  type GuideFieldAspect,
+} from './definition-guide-comparison';
+import {
   definitionGuideHref,
   definitionText,
+  guideEditorField,
   guideIdentifierLimit,
   guideReturnTo,
   guideTypes,
+  type GuideFailure,
   type GuideLocale,
   type GuideAddress,
   type GuideRead,
@@ -149,10 +160,25 @@ function Kind({ datatype, locale }: { datatype: string; locale: string }) {
   return labels[datatype]?.() ?? m.guide_missing({}, o);
 }
 
-function Constraint({ label, children }: { label: string; children: ReactNode }) {
+function Constraint({
+  label,
+  changed,
+  locale,
+  children,
+}: {
+  label: string;
+  changed?: boolean;
+  locale?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="min-w-0 space-y-1">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dt className={cn('text-sm text-muted-foreground', changed && 'font-medium text-foreground')}>
+        {label}
+        {changed && locale && (
+          <span className="ms-2 font-normal text-muted-foreground">{m.guide_changed({}, { locale: locale as never })}</span>
+        )}
+      </dt>
       <dd className="min-w-0 max-w-full [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );
@@ -167,13 +193,17 @@ function Constraints({
   release,
   locale,
   qualifiers = true,
+  changed,
 }: {
   definition: PropertyDefinition;
   release: GuideRelease;
   locale: string;
   qualifiers?: boolean;
+  changed?: ReadonlySet<GuideFieldAspect>;
 }) {
   const o = { locale: locale as never };
+  const mark = (aspect: GuideFieldAspect) => ({ changed: changed?.has(aspect), locale });
+  const omitted = m.guide_omitted({}, o);
   const value = object(definition.value);
   const parts = object(value.properties);
   const amount = object(parts.amount);
@@ -184,14 +214,14 @@ function Constraints({
   return (
     <div className="space-y-5">
       <dl className="grid gap-4 sm:grid-cols-2">
-        <Constraint label={m.guide_datatype({}, o)}>
+        <Constraint label={m.guide_datatype({}, o)} {...mark('datatype')}>
           <Kind datatype={definition.datatype} locale={locale} />
         </Constraint>
-        <Constraint label={m.guide_cardinality({}, o)}>
+        <Constraint label={m.guide_cardinality({}, o)} {...mark('multiplicity')}>
           {definition.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
         </Constraint>
-        {definition.targets && (
-          <Constraint label={m.guide_targets({}, o)}>
+        {definition.targets ? (
+          <Constraint label={m.guide_targets({}, o)} {...mark('targets')}>
             <ul className="space-y-1">
               {definition.targets.map((target) => (
                 <li key={target}>
@@ -206,9 +236,15 @@ function Constraints({
               ))}
             </ul>
           </Constraint>
+        ) : (
+          changed?.has('targets') && (
+            <Constraint label={m.guide_targets({}, o)} {...mark('targets')}>
+              {omitted}
+            </Constraint>
+          )
         )}
-        {definition.units && (
-          <Constraint label={m.guide_units({}, o)}>
+        {definition.units ? (
+          <Constraint label={m.guide_units({}, o)} {...mark('units')}>
             <ul>
               {definition.units.map((unit) => (
                 <li key={unit}>
@@ -227,6 +263,12 @@ function Constraints({
               ))}
             </ul>
           </Constraint>
+        ) : (
+          changed?.has('units') && (
+            <Constraint label={m.guide_units({}, o)} {...mark('units')}>
+              {omitted}
+            </Constraint>
+          )
         )}
         {definition.minimum !== undefined && (
           <Constraint label={m.guide_minimum({}, o)}>{definition.minimum}</Constraint>
@@ -268,8 +310,14 @@ function Constraints({
       </dl>
       {qualifiers && (
         <section className="flex min-w-0 flex-col gap-3">
-          <ContentItemHeading level={3} className="font-medium">
+          <ContentItemHeading
+            level={3}
+            className={cn('font-medium', changed?.has('qualifiers') && 'text-foreground')}
+          >
             {m.guide_qualifiers({}, o)}
+            {changed?.has('qualifiers') && (
+              <span className="ms-2 text-sm font-normal text-muted-foreground">{m.guide_changed({}, o)}</span>
+            )}
           </ContentItemHeading>
           {definition.qualifiers.length === 0 ? (
             <p className="text-muted-foreground">{m.guide_no_qualifiers({}, o)}</p>
@@ -299,6 +347,167 @@ function Constraints({
   );
 }
 
+function guideFailureText(reason: GuideFailure, locale: string) {
+  const o = { locale: locale as never };
+  return reason === 'invalid'
+    ? m.guide_invalid({}, o)
+    : reason === 'no-match'
+      ? m.guide_no_exact_match({}, o)
+      : reason === 'stale'
+        ? m.guide_stale_results({}, o)
+        : reason === 'denied'
+          ? m.guide_denied({}, o)
+          : reason === 'concealed'
+            ? m.guide_concealed({}, o)
+            : m.guide_unavailable({}, o);
+}
+
+function ComparisonField({
+  title,
+  side,
+  property,
+  locale,
+  changed,
+  removed,
+  unavailable,
+}: {
+  title: string;
+  side: GuideComparisonSide;
+  property: string;
+  locale: string;
+  changed?: ReadonlySet<GuideFieldAspect>;
+  removed?: boolean;
+  unavailable: string;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <ContentItemFrame as="section" className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
+      <header className="space-y-2">
+        <ContentItemHeading level={2} className="text-lg font-semibold">
+          {title}
+        </ContentItemHeading>
+        {side.digest && (
+          <p className="break-all text-sm text-muted-foreground">
+            {m.guide_digest({}, o)}: <code>{side.digest}</code>
+          </p>
+        )}
+      </header>
+      {side.status !== 'available' && (
+        <p role="alert" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+          {unavailable} {guideFailureText(side.status, locale)}
+        </p>
+      )}
+      {side.status === 'available' && removed && (
+        <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+          {m.guide_removed_field({}, o)}
+        </p>
+      )}
+      {side.status === 'available' && side.admitted && side.field && (
+        <>
+          <header className="space-y-2">
+            <ContentItemHeading level={3} className="text-lg font-semibold">
+              <Meaning values={side.field.labels} locale={locale} />
+            </ContentItemHeading>
+            <p>
+              <Meaning values={side.field.descriptions} locale={locale} />
+            </p>
+          </header>
+          <Constraints definition={side.field} release={side.release} locale={locale} changed={changed} />
+          <p className={cn('text-sm', changed?.has('disclosure') && 'font-medium')}>
+            {side.field.disclosure === 'sourceOrConsent' ? m.guide_consent({}, o) : m.guide_references({}, o)}
+            {changed?.has('disclosure') && (
+              <span className="ms-2 font-normal text-muted-foreground">{m.guide_changed({}, o)}</span>
+            )}
+          </p>
+          <details className="text-sm text-muted-foreground">
+            <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
+            <code className="break-all">{property}</code>
+          </details>
+        </>
+      )}
+    </ContentItemFrame>
+  );
+}
+
+function ComparisonGuide({
+  address,
+  locale,
+  comparison,
+  retry,
+  retryPending,
+}: {
+  address: GuideAddress;
+  locale: string;
+  comparison: GuideComparison;
+  retry: (intent?: GuideFocusIntent) => boolean | void;
+  retryPending: boolean;
+}) {
+  const o = { locale: locale as never };
+  const match = comparisonDigestsMatch(comparison);
+  const removed = comparisonFieldRemoved(comparison);
+  const changed = match ? new Set<GuideFieldAspect>() : comparisonAspects(comparison);
+  const close = { ...address, compare: undefined };
+  const retryable =
+    (comparison.pinned.status === 'unavailable' ||
+      comparison.pinned.status === 'denied' ||
+      comparison.current.status === 'unavailable' ||
+      comparison.current.status === 'denied') &&
+    !retryPending;
+  return (
+    <section className="space-y-5">
+      <a className={cn(linkClassName, 'text-sm')} href={definitionGuideHref(locale, close)}>
+        {m.guide_close_compare({}, o)}
+      </a>
+      {match && (
+        <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+          {m.guide_no_change({}, o)}
+        </p>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ComparisonField
+          title={m.guide_pinned_definition({}, o)}
+          side={comparison.pinned}
+          property={comparison.property}
+          locale={locale}
+          changed={changed}
+          unavailable={m.guide_pinned_unavailable({}, o)}
+        />
+        <ComparisonField
+          title={m.guide_current_definition({}, o)}
+          side={comparison.current}
+          property={comparison.property}
+          locale={locale}
+          changed={changed}
+          removed={removed}
+          unavailable={m.guide_current_unavailable({}, o)}
+        />
+      </div>
+      {retryable && (
+        <Button
+          variant="outline"
+          className={actionClassName}
+          disabled={retryPending}
+          aria-busy={retryPending || undefined}
+          onClick={() => retry()}
+        >
+          {m.guide_retry({}, o)}
+        </Button>
+      )}
+      <p className="text-sm text-muted-foreground">{m.guide_native({}, o)}</p>
+    </section>
+  );
+}
+
+function CompareCurrentLink({ address, locale }: { address: GuideAddress; locale: string }) {
+  if (address.compare === guideCompareValue || !guideEditorField(address, locale)) return null;
+  const o = { locale: locale as never };
+  return (
+    <a className={linkClassName} href={definitionGuideHref(locale, { ...address, compare: guideCompareValue })}>
+      {m.guide_compare({}, o)}
+    </a>
+  );
+}
+
 /** A read-only companion to the native editors, sharing the ordinary shell and controls. */
 export function DefinitionGuide({
   address,
@@ -324,7 +533,14 @@ export function DefinitionGuide({
   });
   // Retire callbacks as well as focus intent when this query address leaves.
   // A later visit to an equal address must not revive an earlier attempt.
-  const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const key = JSON.stringify([
+    address.type,
+    address.property,
+    address.release,
+    address.compare,
+    address.returnTo,
+    locale,
+  ]);
   const lifetime = useRef({ key, active: true, pending: false });
   if (lifetime.current.key !== key) {
     lifetime.current.active = false;
@@ -386,7 +602,7 @@ function ActiveGuide({
   const o = { locale: locale as never };
   const prefixId = useId();
   const exactId = useId();
-  const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const key = JSON.stringify([address.type, address.property, address.release, address.compare, address.returnTo, locale]);
   const section = useRef<HTMLElement>(null);
   const focusIntent = useGuideFocusIntent();
   const handledFocus = useRef<object | undefined>(undefined);
@@ -849,7 +1065,14 @@ export function DefinitionGuideContent({
   const article = useRef<HTMLElement>(null);
   const focusIntent = useGuideFocusIntent();
   const handledRetry = useRef<object | undefined>(undefined);
-  const actionScope = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const actionScope = JSON.stringify([
+    address.type,
+    address.property,
+    address.release,
+    address.compare,
+    address.returnTo,
+    locale,
+  ]);
   if (focusIntent.current && focusIntent.current.scope !== actionScope) focusIntent.current = undefined;
   useEffect(() => {
     const completion = retryCompletion;
@@ -861,7 +1084,7 @@ export function DefinitionGuideContent({
   }, [retryCompletion, retryPending]);
   // A local choice belongs to this exact definition address. Object identity is
   // unsuitable here: route search objects can be recreated without navigation.
-  const addressKey = JSON.stringify([address.type, address.property, address.release]);
+  const addressKey = JSON.stringify([address.type, address.property, address.release, address.compare]);
   const [selection, setSelection] = useState({
     addressKey,
     type: address.type ?? '',
@@ -873,6 +1096,7 @@ export function DefinitionGuideContent({
     setSelection({ addressKey, type: selected });
   }
   const back = guideReturnTo(address.returnTo, locale) ?? `/${locale}/catalogue/new`;
+  const comparison = read?.ok && read.pin === 'compare' ? read.comparison : undefined;
   const release = read?.ok && read.pin === 'pinned' && !retryPending ? read.release : undefined;
   const types = release ? guideTypes(release, locale) : [];
   const type = selected && release?.types[selected];
@@ -881,7 +1105,10 @@ export function DefinitionGuideContent({
   return (
     <article
       ref={article}
-      className="mx-auto w-full min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      className={cn(
+        'mx-auto w-full min-w-0 space-y-6 text-foreground [overflow-wrap:anywhere]',
+        comparison ? 'max-w-5xl' : 'max-w-3xl',
+      )}
     >
       <header className="space-y-3">
         <PageHeading tabIndex={-1} className={recoveryClassName}>
@@ -893,6 +1120,20 @@ export function DefinitionGuideContent({
         </a>
       </header>
       {(!read || retryPending) && <p role="status">{m.guide_loading({}, o)}</p>}
+      {address.compare === guideCompareValue && address.release && !comparison && (
+        <p className="break-all text-sm text-muted-foreground">
+          {m.guide_digest({}, o)}: <code>{address.release}</code>
+        </p>
+      )}
+      {comparison && (
+        <ComparisonGuide
+          address={address}
+          locale={locale}
+          comparison={comparison}
+          retry={retry}
+          retryPending={retryPending}
+        />
+      )}
       {read && !read.ok && (
         <section className="space-y-4">
           {!retryPending && (
@@ -928,7 +1169,7 @@ export function DefinitionGuideContent({
           )}
         </section>
       )}
-      {transport && address.release === undefined && (
+      {transport && address.release === undefined && address.compare !== guideCompareValue && (
         <ActiveGuide
           address={address}
           locale={locale}
@@ -1020,6 +1261,7 @@ export function DefinitionGuideContent({
                       <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                       <code className="break-all">{property}</code>
                     </details>
+                    <CompareCurrentLink address={{ ...address, type: selected, property }} locale={locale} />
                     <a
                       className={linkClassName}
                       href={definitionGuideHref(locale, { ...address, type: selected, property: undefined })}

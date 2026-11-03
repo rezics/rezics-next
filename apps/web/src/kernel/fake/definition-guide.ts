@@ -40,6 +40,7 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
       if (scenario === 'loading') return new Promise<Response>(() => {});
       if (scenario === 'denied') return Response.json({ code: 'invalid_credentials' }, { status: 401 });
       if (scenario === 'unavailable' && attempts++ === 0) return Response.json({ code: 'overloaded' }, { status: 503 });
+      if (path === '/v1/definitions/active') return Response.json({ digest: definitions.digest });
       if (path === `/v1/definitions/releases/${historicalGuideDigest}`)
         return Response.json({ digest: historicalGuideDigest, release: historical as Release });
       if (path === `/v1/definitions/releases/${definitions.digest}`) {

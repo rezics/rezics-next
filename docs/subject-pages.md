@@ -241,7 +241,9 @@ datatypes, qualifiers, units, multiplicity, targets and native reference or `sou
 explained. Missing meaning, empty metadata, loading, invalid addresses, concealed definitions and unavailable
 reads remain distinct. Help opens in a separate tab to retain the original draft and uncertain request; Return
 to contribution permits only the existing localized creation or canonical subject editor address, including
-its selected field and statement. Current authority, validation and writes remain with those editors and their
+its selected field and statement. A pinned field opened from that editor can compare the original exact
+release with the current admitted definition of the same Type and property; unavailable pinned data never
+becomes the active bundle, and the comparison does not rewrite or submit the contribution. Current authority, validation and writes remain with those editors and their
 private session BFF; the guide has no mutation or publication controls.
 
 The current type, property and release address owns the guide selection, including when a mounted guide is

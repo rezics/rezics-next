@@ -668,3 +668,10 @@ historical release.
 Decision: missing qualifier definitions on an exact Type descriptor are completed from that descriptor's
 release digest through the existing immutable release reader; admitted fields stay the descriptor's list, and
 a missing pin stays unread rather than becoming the active bundle.
+Decision: a pinned field opened from a validated editor return offers Compare current definition. That view
+resolves the original exact digest and the active pointer's exact digest independently, shows native
+differences side by side, and never substitutes the current release for an unavailable pin. Label differences
+are not definition changes. Comparison does not require the return URL, but the Compare control does.
+Decision: comparison reads stay bounded to the active pointer and the two exact releases; Type directory
+search is not used. Opening, switching and closing comparison keeps the original editor return, including
+its field and statement.
