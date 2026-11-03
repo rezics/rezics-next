@@ -1762,32 +1762,65 @@ writer, asset picker or upload/lifecycle engine here.
   `readExactPublishedRules` for at most one pin; each owner reader includes its own source/final
   checks and Access preparation. All Community, Access, Auth and Content participating pools and
   registered runner phases belong to this operation, including cold evidence release and denial.
-- **Bound:** a fully selected success has two Community source-round transactions, eight image
-  snapshots (four per selected-image owner read) and four rules snapshots (two source rounds per
-  exact-rules read), for fourteen read-only transactions. The outer operation makes three current
-  `readRealm` calls and nineteen top-level Access preparations: one initial Realm check, six source
-  round checks, ten image-owner checks and two rules decision preparations. The exact-rules readers
-  make at most eight thread/post decisions. Empty image selection skips its eight snapshots; an
-  unset rules pin skips its four snapshots. No outer reader retries or scans a Realm population.
-  Each image owner reads at most two exact media keys in its initial, final and per-key Access
-  checks: twelve media rows and at most 144 retained variant rows across both owner reads. Each
-  rules source round reads at most 33 exact Post ancestry rows, one Thread, Board, Realm, revision
-  and body, and at most three represented homes. The four rules source rounds therefore examine
-  at most 132 Post rows and four rows of each other kind. `realm-read.sql` and `space-read.sql`
-  materialize the exact routed identity before joining its exact head; lifecycle binding, selected
-  media, media variants and rules revisions use their full routed keys. The only ancestry walk is
-  the rules owner's selected 33-Post cap.
+- **Outer source accounting:** adopt the nested-cost correction: seven fresh single-resource
+  Access preparations include the initial locator and three checks in each source round. Each
+  source round has seven local statements (BEGIN, time, partition, settings, Space, binding,
+  COMMIT), so the pair contributes fourteen statements including four transaction controls.
+  With `P_i = 2 + d_i + k_i + V_i` the actual preparation cost and `Q_i` its formula evaluation,
+  the complete available outer source expression is
+  `28 + b_locator + b_initial + b_final + sum(i=0..6, P_i + Q_i)`.
+  The 28 includes fourteen local statements, ten source-round eligibility statements and four
+  locator statements. Protected-ban terms are each zero or one. This expression excludes the
+  selected owner calls and mounted authentication; it is not a measured ceiling. Preparation
+  callbacks, inverse membership and assignments retain their own physical row costs.
+- **Selected media:** charge both complete invocations. For each, `m<=2` selected distinct IDs
+  and `a<=m` usable initial objects give four snapshots and `18+m+a` local statements. Including
+  locator time and domain eligibility, the available expression is
+  `27+m+2a+b_locator+b_final+sum(3+a actual preparation/evaluation costs)`.
+  Across both calls, initial/final/eligibility acquisitions total at most twelve exact media
+  queries, each including up to twelve variant slots. Empty selection dispatches none. All
+  source/eligibility/final proofs, raw private transport fields and parsed/signature/result
+  copies remain charged. There is no object-body fetch.
 
-  Realm and Space titles/summaries admit 1,024/4,096 code points each, so their four response
-  strings use at most 40,960 UTF-8 bytes (61,440 bytes when every control character is JSON-escaped).
-  Each selected rules body is at most 65,536 canonical UTF-8 bytes; four source bodies cap those
-  reads at 262,144 bytes. Two stable-result copies and the final response contribute at most three
-  body serializations, conservatively 1,179,648 escaped bytes. A selected image credit admits at
-  most 3,652 code points from its rights-holder, source name/URL, licence and attribution fields;
-  that is 14,608 UTF-8 bytes or 21,912 JSON bytes per image. The response carries at most 24 image
-  variants. The outer composer makes two source signatures, at most six selected-value signatures
-  and one response serialization. These derived producer ceilings do not include the nested
-  Access/Auth SQL and runner work, which remains part of connected all-pool growth evidence.
+  Decision: ordinary shared Realm-media acquisition nulls historical thumbhashes over 32 bytes
+  and colors outside the seven-byte hexadecimal format before materializing descriptors; the
+  image remains available with a null placeholder. Valid native metadata, including historical
+  uppercase hexadecimal colors, remains usable. This repairs the common producer used by
+  settings and My Realms; the work-only projection and cover-only constraint prove no ordinary
+  acquisition bound. No writer, schema snapshot or descriptor grant changes.
+
+  The native image transformer writes the placeholder and at most twelve width-ladder variants
+  through `finish-image.sql`. Ordinary acquisition now returns at most 44 ASCII base64 bytes
+  and seven color bytes per object. The remaining variable descriptor fields are schema-bounded:
+  variant format is four bytes, MIME type ten, digest 64, width four decimal digits, positive
+  int32 height ten, positive int64 byteCount nineteen, and the derived key is at most 48 ASCII
+  bytes (`m/` + UUID + `/` + format + `-` + width). For seven fields, PostgreSQL JSONB's keys,
+  quotes, colons, spaces, commas and braces add 86 bytes; quoted string values add 134 and the
+  three numeric values add 33. Each raw variant is at most 253 bytes and the twelve-element
+  array at most `2 + 12*253 + 11*2 = 3060` bytes. UUIDs, booleans, enumerated purpose/state,
+  timestamp, nonnegative int64 security revision, digest and constrained float4 focal coordinates
+  are finite native scalars. Credit is always null here; no rights/provenance document is read.
+  These are acquisition field ceilings, not a whole-operation memory or serialization ceiling.
+- **Selected rules:** each of the two complete owner calls prepares one batched decisions object
+  (`E=1+d+i+o+r<=5` SQL per invocation, with producer costs still charged), then takes two
+  source/body snapshots. A complete snapshot has `H+8+e+B` local statements, `H<=33` ancestor
+  batches, optional extra partition `e<=1`, optional protected-ban batch `B<=1`, and four formulas.
+  Four snapshots therefore execute sixteen formulas, while only the two final payloads are
+  parsed, canonicalized and hashed. The SQL raw-body guard gives four acquisitions of at most
+  65536 bytes, or 262144 cumulative raw bytes; this is not peak retained memory. Initial/final
+  rows, ancestry/container/revision signatures, parsed documents, canonical strings, documentText,
+  split/join intermediates and final JSON encoding must be charged separately. Postparse
+  canonical limits and title/summary code-unit slices do not bound earlier acquisition or UTF-8.
+- **Remaining composition:** retain full Realm/Space/binding/home comparisons, including
+  discarded fields, repeated vote-map copies and temporary JSON strings. Source title/summary
+  limits are code-point bounds; UTF-8 expansion is at most four bytes per code point and JSON
+  escaping at most six. Space address must use the normalized-handle writer invariant, not an
+  invented schema constraint. GET has authentication in its actual Auth/identity and Access
+  pools, no declared rate counter and no worker. `releaseOperationalTime` has zero SQL. Failure,
+  rollback, withheld and cold-release work is charged where dispatched; a caller retry pays a
+  complete new attempt. Complete statement/transaction, examined-row, retained-copy and
+  serialization ceilings require the native callee and physical-prefix composition below;
+  no total ceiling is inferred from output size or observed runs.
 
 - **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
   not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
