@@ -9,7 +9,7 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { inspectNativeLabelCollections } from './native-labels-inspection.ts';
 import { costOf } from '../../support/growth.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
-import { json, write, setEntry, publish, unavailable, deleteAccount } from './native-conformance.ts';
+import { json, write, setEntry, publish, requestKey, unavailable, deleteAccount } from './native-conformance.ts';
 import { purgeLabelRetentionPage } from '../../../src/library/label-retention.ts';
 import { provisionOwnerUnreadableSubject } from './native-private-subject.ts';
 import { seedNativeLabelHistory } from './native-label-history-seed.ts';
