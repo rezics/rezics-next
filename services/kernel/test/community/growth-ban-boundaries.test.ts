@@ -323,8 +323,8 @@ beforeAll(async () => {
       pool: db.pool,
       access: production.access,
       readOperation: readMembershipInitiator,
-      async readConsent() {
-        return accessActions;
+      async readConsent({ actorAccountId, clientId }) {
+        return { actorAccountId, clientId, scopes: accessActions };
       },
     }),
   });
