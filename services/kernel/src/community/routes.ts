@@ -2169,7 +2169,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-resource-types': ['community.realm'],
-          security: readSecurity,
+          security: writeSecurity,
         },
       },
       async ({ params: { realmId, subjectId }, actor, admission, job, session, set }) => {
