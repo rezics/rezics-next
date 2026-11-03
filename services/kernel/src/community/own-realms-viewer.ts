@@ -86,7 +86,14 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
             subject: null,
             at,
           });
-          if (!realm || !source || realm.spaceId !== host.id) throw retry();
+          if (
+            !realm ||
+            !source ||
+            realm.spaceId !== host.id ||
+            realm.headRevisionId !== initial.headRevisionId ||
+            source.head_revision_id !== initial.headRevisionId
+          )
+            throw retry();
           const row =
             actor.kind === 'account'
               ? await membershipRead.run(client, {
@@ -197,6 +204,13 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
     return {
       current,
       async finish() {
+        requireIdentity();
+        // Re-enter through the ordinary native reader after dependent hydration.
+        // Its original head is a witness, never a refreshed selection.
+        const readable = await readRealm(deps, actor, realmId, context);
+        if (!readable) return null;
+        if (readable.headRevisionId !== initial.headRevisionId || readable.spaceId !== initial.spaceId)
+          throw retry();
         const final = await round();
         if (!final) return null;
         const a = expectedSource,
@@ -222,4 +236,6 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
   };
 }
 
-export type RealmViewerObservation = NonNullable<Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>>;
+export type RealmViewerObservation = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>
+>;

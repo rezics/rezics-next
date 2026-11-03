@@ -225,7 +225,11 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
         current: {
           destination: { kind: 'realm', realmId: growth.realmId },
           viewer: { membership: { state: 'member' } },
-          actions: { state: 'unavailable' },
+          actions: {
+            state: 'current',
+            enter: { state: 'available', method: 'GET', expectedStatus: 200 },
+            leave: { state: 'available', method: 'DELETE', expectedStatus: 202 },
+          },
         },
       },
     ],

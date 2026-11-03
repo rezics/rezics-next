@@ -2,7 +2,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { Compile } from 'typebox/compile';
 import { ownRealmsResponseSchema } from '../../src/community/schemas.ts';
-import { closeCommunityDrivers, createCommunityDriver, queryCommunityDatabase } from './community-driver.ts';
+import {
+  closeCommunityDrivers,
+  communityFixtureRuntime,
+  createCommunityDriver,
+  queryCommunityDatabase,
+} from './community-driver.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { createRealmViewerObservation } from '../../src/community/own-realms-viewer.ts';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';
 import { routeOf } from '../../src/route/route.ts';
 
@@ -131,6 +138,44 @@ test('current native identity and presentation follow membership completion and 
   expect(rejoined.current.viewer.membership.reservationId).not.toBe(first.current.viewer.membership.reservationId);
   expect(rejoined.current.viewer.membership.transactionId).not.toBe(first.current.viewer.membership.transactionId);
   expect(rejoined.current.actions.leave.state).toBe('available');
+
+  // A revision between the locating read and first advice round cannot become
+  // the original witness, even for an independent assembler without a selection.
+  const { system } = communityFixtureRuntime();
+  const deadline = Date.now() + 30_000;
+  const actor = await system.access.authenticate(fixture.member.bearer, {
+    pool: system.database.pool,
+    deadline,
+  });
+  let changed = false;
+  const access = deriveAccess(system.access, {
+    async prepare(viewer, action, resource, context) {
+      if (action === 'realm:manage' && !changed) {
+        changed = true;
+        expect(
+          (
+            await driver.request({
+              actor: fixture.owner,
+              method: 'PATCH',
+              path: `/v1/realms/${realm.realmId}`,
+              key: key(),
+              ifMatch: updated.headers.get('etag')!,
+              body: { summary: 'Changed during observation' },
+            })
+          ).status,
+        ).toBe(200);
+      }
+      return system.access.prepare!(viewer, action, resource, context);
+    },
+  });
+  await expect(
+    createRealmViewerObservation({ pool: system.database.pool, access })({
+      actor,
+      realmId: realm.realmId,
+      deadline,
+    }),
+  ).rejects.toMatchObject({ code: 'transaction_retry_exhausted' });
+  expect(changed).toBe(true);
 
   // Management is admitted by the actual native action, never by member status.
   expect(
