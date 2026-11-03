@@ -7,6 +7,8 @@ import type { SuggestionResult } from '../search/suggestions';
 import type { FilterDocument } from '@rezics/filter';
 import { collectionFilterAddress } from './collection-filter-params';
 import { CollectionFilterAddressState } from './collection-filter-address-state';
+import { Exposure } from '../kernel/exposure';
+import { SaveQueryLink } from './saved-query-editor/link';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -149,46 +151,64 @@ export function CollectionFilters({
   return (
     <section className="min-w-0">
       <CollectionFilterAddressState id={id} type={type} params={params} search={search} />
-      {properties.length ? (
-        <>
-          <Button
-            ref={trigger}
-            type="button"
-            aria-label={m.collection_filters()}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            aria-controls={open ? surfaceId : undefined}
-            variant="outline"
-            size="icon"
-            className="min-h-11 min-w-11"
-            onClick={() => changeOpen(true)}
-          >
-            <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-          </Button>
-          {mobile ? (
-            <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
-              <div id={surfaceId}>{form}</div>
-            </BottomSheet>
-          ) : (
-            <Dialog open={open} onOpenChange={changeOpen}>
-              <DialogContent
-                id={surfaceId}
-                finalFocus={trigger}
-                showCloseButton={false}
-                className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
-              >
-                <DialogHeader className="flex-row items-center justify-between gap-4">
-                  <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
-                  <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
-                    {m.library_collection_cancel()}
-                  </DialogClose>
-                </DialogHeader>
-                {form}
-              </DialogContent>
-            </Dialog>
-          )}
-        </>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {properties.length ? (
+          <>
+            <Button
+              ref={trigger}
+              type="button"
+              aria-label={m.collection_filters()}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              aria-controls={open ? surfaceId : undefined}
+              variant="outline"
+              size="icon"
+              className="min-h-11 min-w-11"
+              onClick={() => changeOpen(true)}
+            >
+              <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+            </Button>
+            {mobile ? (
+              <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
+                <div id={surfaceId}>{form}</div>
+              </BottomSheet>
+            ) : (
+              <Dialog open={open} onOpenChange={changeOpen}>
+                <DialogContent
+                  id={surfaceId}
+                  finalFocus={trigger}
+                  showCloseButton={false}
+                  className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
+                >
+                  <DialogHeader className="flex-row items-center justify-between gap-4">
+                    <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
+                    <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
+                      {m.library_collection_cancel()}
+                    </DialogClose>
+                  </DialogHeader>
+                  {form}
+                </DialogContent>
+              </Dialog>
+            )}
+          </>
+        ) : null}
+        {params.document ? (
+          <Exposure operation="collection.create">
+            <SaveQueryLink
+              document={params.document}
+              from={collectionFilterAddress(
+                locale,
+                id,
+                params.selected,
+                params.ranges,
+                params.selectedLabels,
+                type,
+                new URLSearchParams(search),
+              )}
+            />
+          </Exposure>
+        ) : null}
+      </div>
     </section>
   );
 }

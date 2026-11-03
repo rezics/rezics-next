@@ -4,8 +4,9 @@ This page owns the joint Collection presentation and editor contract. It selects
 it does **not** claim runtime, generated API or UI delivery. [Library and Collections](library-and-collections.md),
 [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
 [Filtered lists](filtered-lists.md), [Scope](scope.md) and [Deletion](deletion.md) retain membership, admission,
-privacy, cost and lifecycle authority. Existing scope defers user-saved dynamic execution; the editor requirement
-below introduces selected work, not evidence that the deferred runtime or publication machinery exists.
+privacy, cost and lifecycle authority. Second-scope saved-query authoring is in Web's interface scope. Native
+execution, publication and generated API delivery remain Commerce obligations; this page does not claim they are
+present.
 
 ## Model and definitions
 
@@ -147,8 +148,8 @@ current grants and response envelopes remain; selected additions do not make the
 | `POST /v1/collections/{collectionId}/members/{memberId}:move {after}`                                                               | `200 {member}`; intra-Collection reorder      | Not cross-Collection transfer; current parent CAS/lifecycle integration remains required |
 | `POST /v1/collections/{collectionId}/members:batchRemove {revision,memberIds}`                                                      | Absent                                        | `200 {collection,removed:[{memberId,deletionId,revision}]}`                              |
 | `POST /v1/collections/{collectionId}/members:move {revision,memberIds,destinationCollectionId,destinationRevision,after}`           | Absent                                        | `200 {source,destination,members}`                                                       |
-| `POST /v1/collections {membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}` | Absent                                        | Saved-dynamic create, `201 {collection}`                                                 |
-| `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}`                                                                   | Absent                                        | `200 {collection}`                                                                       |
+| `POST /v1/collections {membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}` | Web private create caller; native may `503`   | Saved-dynamic create, `201 {collection}`                                                 |
+| `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}`                                                                   | Web CAS caller; native may `503`/`409`        | `200 {collection}`                                                                       |
 
 All curated editing preserves occurrence IDs, notes, added times and duplicates, existing ordinal bounds,
 parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
@@ -199,10 +200,13 @@ Rule create/update require native current family scopes/gates, admitted indexed 
 bounded retained preparation and current disclosure. Public membership requires explicit complete Publication and
 current subject disclosure; never evaluate curator-private facts for public readers. Pending/unbuilt dynamic
 sources cannot report exact counts as zero. Existing dynamic DTO count omissions remain in force.
-The current scope and dynamic owner docs defer user-saved runtime. This selected editor requirement introduces
-work before that execution is delivered; it does not amend scope gates, invent publication execution or relax
-Collection-source contracts. Broader scope activation remains a coordinating product decision.
+Second-scope authoring is admitted. Native saved-source execution, complete publication and member pages remain
+Commerce; Web shows unavailable at that boundary and never invents a successful native response, occurrence IDs
+or count/time fields. A Library state ID without profile and state set stays unsaved with correction.
 Decision: Web actual `/collections/$id/rule` stories compose the delivered GET rule schema and recorded release choices; they do not invent a successful saved-rule write or member-execution preview.
+The create/reopen journey is `/library/rules/new` and `/collections/$id/rule`. An owned Collection or Library
+filter selection is admitted with the shared grammar and `id` sort; representable predicates seed a private
+create draft for explicit Save. Built-in identities have no rule editor.
 
 ## Current source inventory
 

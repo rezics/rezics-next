@@ -28,3 +28,7 @@ and original screenshots remain unmeasured until admitted. Native query semantic
 
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
 properties and applied params, without introducing another filter store or claiming unsupported backend scopes.
+
+An admitted Collection filter document, or a Library type/label selection, can open `/library/rules/new` as a private
+saved dynamic Collection. A Library state ID without profile and state set stays unsaved with correction. Built-in
+Collections keep their immutable rules. Native member execution remains Commerce.

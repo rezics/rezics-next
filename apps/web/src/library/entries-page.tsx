@@ -20,6 +20,7 @@ import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { ShelfTypes } from './shelf-types';
+import { SaveQueryLink } from './saved-query-editor/link';
 
 type Display = ShelfDisplay;
 
@@ -177,6 +178,20 @@ export function PersonalLibraryPage({
             <a href={clearTypeHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               {m.library_type_clear()}
             </a>
+          ) : null}
+          {page.type || page.state ? (
+            <Exposure operation="collection.create">
+              <SaveQueryLink
+                {...(page.type ? { type: page.type } : {})}
+                {...(page.state ? { state: page.state } : {})}
+                from={shelfHref(locale, {
+                  ...typeSearch,
+                  ...(page.state ? { state: page.state } : {}),
+                  ...sort,
+                  ...display,
+                })}
+              />
+            </Exposure>
           ) : null}
         </div>
         {page.cursorReset ? <p role="status">{m.library_sort_restarted()}</p> : null}

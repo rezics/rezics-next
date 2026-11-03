@@ -12,6 +12,8 @@ import { LibraryNavigation } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
+import { RuleEditLink } from './collection-rule-editor';
+import { useSession } from '../session/query';
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
@@ -115,6 +117,7 @@ function DynamicCollectionPageLifetime({
     }
   }
   const locale = getLocale();
+  const session = useSession();
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
@@ -139,7 +142,19 @@ function DynamicCollectionPageLifetime({
         </header>
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
-        <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>
+        {current.builtinKind ? (
+          <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>
+        ) : (
+          <RuleEditLink
+            collection={{
+              id: current.id,
+              curatorAccountId: current.curatorAccountId ?? null,
+              membershipKind: 'dynamic',
+            }}
+            viewerId={session.subject ?? null}
+            allowed={session.state === 'signed-in'}
+          />
+        )}
         {current.filterProperties && current.filterParams ? (
           <CollectionFilters
             id={current.id}

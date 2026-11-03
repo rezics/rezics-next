@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { FilterDocument } from '@rezics/filter';
 import { CollectionRuleEditor } from './collection-rule-editor';
 import type { RulePage } from './collection-rule-read';
 import { readCollectionRule, readCollectionRuleChoices, saveCollectionRule } from './collection-rule-actions';
@@ -20,10 +21,12 @@ export function CollectionRuleCurrent({
   page,
   collectionId,
   navigate,
+  seed,
 }: {
   page: RulePage;
   collectionId: string | null;
   navigate?: (id: string) => void;
+  seed?: FilterDocument;
 }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId]), true);
   // A retired loader object cannot seed a returning viewer/address lifetime.
@@ -57,6 +60,7 @@ export function CollectionRuleCurrent({
       canLabelCurrent={owner.canLabelCurrent}
       currentCsrf={owner.credential}
       requireProvenance
+      {...(seed ? { seed } : {})}
       save={(data, csrf) =>
         owner.isCurrent() && owner.credential()
           ? saveCollectionRule({ data, headers: { 'X-CSRF-Token': csrf } })

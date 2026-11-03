@@ -31,8 +31,10 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 Includes `apps/web` and `apps/auth`, shared UI/document components, BFF/media transport, product routes, library
 pages and SEO. Follow [public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
-The adopted mixed Home journey below is in scope; personalized recommendations remain deferred. The second scope
-includes the interfaces below, including personal saved queries. Backend contracts stay with their product owners; preparation and privacy changes must remain visible
+The adopted mixed Home journey below is in scope; personalized recommendations remain deferred. This Goal adopts
+the complete second-scope features opened in [public scope](../scope.md): saved dynamic queries, advanced facets,
+scopes, Realm rating order, board pins, slow mode, watch, Collection/review/Space discovery and the moderator
+workbench. Backend contracts stay with their product owners; preparation and privacy changes must remain visible
 in the interface.
 
 ### Second-scope interfaces
@@ -45,9 +47,13 @@ Existing editors, refinement, rows, report queues and their original acceptance 
 Decision: extend the existing routes through small owner-backed consumer seams; keep all ten interface slices
 independent rather than making shared files or unfinished producer delivery into scheduling dependencies.
 
-- **Save a query.** From an owned Collection or Library filter selection, create a private saved dynamic Collection
-  through the existing rule editor. Carry only representable admitted predicates, with explicit review before Save.
-  An unrepresentable selection stays unsaved with a useful correction. Creation does not publish membership.
+- **Save a query.** Delivered on `/library/rules/new` and `/collections/$id/rule` through `saved-query-editor` and
+  the existing rule editor. An owned Collection or Library filter selection is admitted with the shared grammar and
+  `id` sort; representable predicates seed a private create draft for explicit Save. Unrepresentable Library state
+  (no profile/state set) and invalid filter JSON stay unsaved with correction. Built-in identities have no rule
+  editor. Create uses `POST /v1/collections` `{membershipKind:'dynamic', visibility:'private', rule:{filter,sort:'id'}}`;
+  edit uses `PUT .../rule` with CAS revision. Native execution and publication remain Commerce; Web shows
+  unavailable, conflict and uncertain recovery without inventing members, counts or occurrence IDs.
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
   count-free value continuation for that exact Collection. Keep at most eight active properties; changing the
   property window does not discard selected operands. This is shared by curated and built-in dynamic readers.

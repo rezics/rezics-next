@@ -279,6 +279,7 @@ type EditorProps = {
   canLabelCurrent?: (() => boolean) | undefined;
   requireProvenance?: boolean | undefined;
   navigate?: ((id: string) => void) | undefined;
+  seed?: FilterDocument | undefined;
 };
 
 const pageIdentity = (page: RulePage) =>
@@ -461,6 +462,7 @@ function RuleForm({
   isOwnerCurrent,
   canLabelCurrent,
   requireProvenance,
+  seed,
   accepts,
   remember,
 }: Omit<EditorProps, 'page' | 'admitted'> & {
@@ -485,7 +487,7 @@ function RuleForm({
   const [description, setDescription] = useState('');
   const [textSubmitted, setTextSubmitted] = useState(false);
   const [filter, setFilter] = useState<FilterDocument | undefined>(
-    page.state === 'ready' ? page.rule.filter : { and: [presence] },
+    page.state === 'ready' ? page.rule.filter : (seed ?? { and: [presence] }),
   );
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
