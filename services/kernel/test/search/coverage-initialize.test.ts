@@ -4,7 +4,7 @@ import { initializeSubjectIncarnation } from '../../src/search/coverage.ts';
 import { documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { OpenSearchError } from '../../src/search/opensearch.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { subjectConsumer } from '../../src/search/consumer-name.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { createCoverageFixture } from './coverage-fixture.ts';
 

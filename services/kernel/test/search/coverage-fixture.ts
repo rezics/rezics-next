@@ -28,12 +28,13 @@ import {
   SUGGEST_TEMPLATE,
   FACET_TEMPLATE,
 } from '../../src/search/query.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { subjectConsumer } from '../../src/search/consumer-name.ts';
 import { createSearchScopeSource } from '../../src/search/scope-source.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { populateControlledSubjects } from './support/controlled-population.ts';
 
 export type CoverageFixtureResources = {

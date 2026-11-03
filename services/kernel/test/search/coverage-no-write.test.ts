@@ -3,7 +3,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createCoverageStore, type HomeGuard } from '../../src/search/coverage-store.ts';
 import type { ApplyAttempt, HomeCoverage, IndexIncarnation } from '../../src/search/coverage.ts';
 import { subjectIndexName } from '../../src/search/indices.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { subjectConsumer } from '../../src/search/consumer-name.ts';
 
 // Staged implementation acceptance: real migrated DB/pool, no mock SQL or store.
 // Synthetic durable observations exercise storage only, never native readiness evidence.

@@ -8,7 +8,7 @@ import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
 import * as codec from './coverage-store-codec.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
-import { subjectConsumer } from './runner.ts';
+import { subjectConsumer } from './consumer-name.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 
 /** Physical identity is observed from the engine; names and numeric generations are insufficient. */

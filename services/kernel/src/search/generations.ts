@@ -25,9 +25,9 @@ import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool } from 'pg';
 import { discardConnection } from '../database/pool.ts';
+import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 import {
   createSubjectIndex,
-  MAX_SUBJECT_GENERATIONS,
   observedWrite,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
@@ -44,12 +44,10 @@ import unlockRebuild from './rebuild-unlock.sql';
 
 export { observedWrite };
 import type { SubjectSource } from './source.ts';
-import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
-
-import { discoveryConsumer } from './consumer-name.ts';
+import { discoveryConsumer, subjectConsumer } from './consumer-name.ts';
 export { discoveryConsumer } from './consumer-name.ts';
 
-export { MAX_SUBJECT_GENERATIONS } from './indices.ts';
+export { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
 export type PartitionCount = { partition: number; indexed: number; source: number };
 
@@ -901,6 +899,7 @@ export async function rebuildDiscovery(options: {
   await allocateDiscovery(options.pool, options.prefix, registry, requiredKinds);
   const generation = (await discoveryGenerations(options.pool, options.prefix)).at(-1)?.generation;
   if (generation === undefined) throw new Error('Discovery allocation is absent');
+  const { startDiscoveryIndexing } = await import('./runner.ts');
   const runner = startDiscoveryIndexing({ ...options, requiredKinds }),
     deadline = Date.now() + 3_600_000;
   try {

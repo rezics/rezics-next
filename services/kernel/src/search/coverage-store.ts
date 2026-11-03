@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { subjectIndexName } from './indices.ts';
-import { subjectConsumer } from './runner.ts';
+import { subjectConsumer } from './consumer-name.ts';
 import allocateControl from './coverage-store-control.sql';
 import registerLineage from './coverage-store-lineage.sql';
 import readHome from './coverage-store-home.sql';

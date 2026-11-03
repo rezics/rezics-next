@@ -862,7 +862,7 @@ CREATE TABLE search.index_home_coverage (
     covered_through jsonb,
     attempt jsonb,
     CONSTRAINT index_home_coverage_attempt_check CHECK (((jsonb_typeof(attempt) = 'object'::text) AND (octet_length((attempt)::text) <= 4096))),
-    CONSTRAINT index_home_coverage_check CHECK (((current IS NULL) = (fence IS NULL))),
+    CONSTRAINT index_home_coverage_check CHECK (((fence IS NULL) OR (current IS NOT NULL))),
     CONSTRAINT index_home_coverage_check1 CHECK (((verified IS NULL) = (covered_through IS NULL))),
     CONSTRAINT index_home_coverage_consumer_check CHECK (((octet_length(consumer) >= 1) AND (octet_length(consumer) <= 63))),
     CONSTRAINT index_home_coverage_covered_through_check CHECK (((jsonb_typeof(covered_through) = 'object'::text) AND (octet_length((covered_through)::text) <= 256))),

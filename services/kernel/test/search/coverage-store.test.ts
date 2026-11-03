@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { subjectIndexName } from '../../src/search/indices.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { subjectConsumer } from '../../src/search/consumer-name.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createCoverageStore, type HomeGuard } from '../../src/search/coverage-store.ts';
 import type { ApplyAttempt, IndexIncarnation } from '../../src/search/coverage.ts';

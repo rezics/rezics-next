@@ -21,7 +21,9 @@ probe) as a module-init literal, because circular import evaluation can observe 
 
 `subjectConsumer` and `discoveryConsumer` construct native checkpoint names from the exact admitted prefix, a
 positive safe generation and an explicit family (`subjects` or `discovery`). Ordinary names that already fit the
-63-character native consumer domain stay byte-for-byte. Longer admitted identities use a deterministic hashed
+63-character native consumer domain stay byte-for-byte. Coverage store, initialization and certification bind
+`subjectConsumer` from `consumer-name.ts`. A missing home fence is late publication;
+a fence still requires current. Longer admitted identities use a deterministic hashed
 fallback in that domain. A prefix containing `subjects` cannot rewrite the discovery family. Ambiguous legacy
 discovery identities created by replacing `subjects` inside the prefix are not inherited or copied; recover them
 through the existing unavailable/rebuild path.
