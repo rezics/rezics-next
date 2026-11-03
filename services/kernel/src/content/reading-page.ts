@@ -418,7 +418,7 @@ function guestCatalogueReady(
       applicableBindings(bindings, reference.type, reference.id).every((binding) => {
         const classification = guestSecurity.get(binding.operationId);
         return classification === 'anonymous' || classification === 'authenticated';
-      }),
+      })),
   );
 }
 
