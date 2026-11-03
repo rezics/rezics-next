@@ -39,7 +39,11 @@ test('released appearance and gender admit exact spoiler levels without extendin
 });
 
 test('journey thresholds admit only explicit levels through the selected value', () => {
-  for (const [threshold, levels] of [[0, ['0']], [1, ['0', '1']], [2, ['0', '1', '2']]] as const) {
+  for (const [threshold, levels] of [
+    [0, ['0']],
+    [1, ['0', '1']],
+    [2, ['0', '1', '2']],
+  ] as const) {
     for (const property of ['schema:keywords', 'schema:gender', 'schema:character']) {
       const filter = parseFilter({ statement: { property, in: [id] } });
       expect(admitFilter(filter, release, { spoilerThreshold: threshold })).toEqual({
@@ -64,7 +68,9 @@ test('journey thresholds admit only explicit levels through the selected value',
   expect(admitFilter(voice, release, { spoilerThreshold: 0 })).toEqual(voice);
   expect(() =>
     admitFilter(
-      parseFilter({ statement: { property: 'schema:character', in: [id], qualifiers: [{ property: spoiler, in: ['2'] }] } }),
+      parseFilter({
+        statement: { property: 'schema:character', in: [id], qualifiers: [{ property: spoiler, in: ['2'] }] },
+      }),
       release,
       { spoilerThreshold: 0 },
     ),

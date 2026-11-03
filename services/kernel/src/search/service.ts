@@ -582,14 +582,10 @@ export function createSearchService({
             ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
           });
         } else {
-          admitted = admitFilter(
-            filter as FilterDocument,
-            active,
-            {
-              ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
-              ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
-            },
-          );
+          admitted = admitFilter(filter as FilterDocument, active, {
+            ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
+            ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+          });
         }
       } catch (error) {
         if (error instanceof FilterError)

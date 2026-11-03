@@ -1047,12 +1047,7 @@ function admitConstructed(
     const thresholdSupport =
       options.spoilerThreshold === undefined ? 'unaffected' : spoilerThresholdSupport(release, statement.property);
     if (thresholdSupport === 'missing')
-      reject(
-        appendPointer(pointer, 'statement'),
-        source,
-        'unsupported',
-        'unsupported_query',
-      );
+      reject(appendPointer(pointer, 'statement'), source, 'unsupported', 'unsupported_query');
     if (options.spoilerThreshold !== undefined && thresholdSupport === 'supported') {
       const allowed = SPOILER_LEVELS.slice(0, options.spoilerThreshold + 1);
       const qualifiers = [...(statement.qualifiers ?? [])];
