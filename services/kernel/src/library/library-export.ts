@@ -101,13 +101,13 @@ function seekOf(
 }
 function manifest(capture: Capture) {
   return {
-    format: 'https://rezics.com/formats/library-export',
-    version: 1,
+    format: 'https://rezics.com/formats/library-export' as const,
+    version: 1 as const,
     exportId: capture.export_id,
     capturedAt: capture.created_at,
     expiresAt: capture.expires_at,
-    privacy: 'private',
-    completeness: 'supported-native-facts',
+    privacy: 'private' as const,
+    completeness: 'supported-native-facts' as const,
     sections: [...exportSections],
     omissions: {
       trash: 'excluded; current live facts and retained session history only',
@@ -117,7 +117,7 @@ function manifest(capture: Capture) {
       publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
       reimport: 'unavailable; this format does not promise an installed re-import endpoint',
     },
-  } as const;
+  };
 }
 function status(deps: LibraryExportDependencies, accountId: string, capture: Capture) {
   return {
