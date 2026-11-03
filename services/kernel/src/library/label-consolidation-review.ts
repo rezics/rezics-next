@@ -119,12 +119,12 @@ export function createLabelConsolidationReview(deps: { pool: Pool; access: Acces
         !actor.scopes.includes('library_entry:read') || !actor.scopes.includes('library_entry:update')) throw new GrantDeniedError();
     const sourceId = id(sourceLabelId), input = parse(value);
     if (sourceId === input.targetLabelId) throw invalid();
-    sameAccountRoute(actor.accountId, sourceId);
-    sameAccountRoute(actor.accountId, input.targetLabelId);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const gate = () => admitGroup({ ...deps, access: () => deps.access, actor, clock, deadline,
       group: 'personal_library', clientAction: 'library_entry:read' });
     async function labels(client: Client, route: number) {
+      sameAccountRoute(actor.accountId, sourceId);
+      sameAccountRoute(actor.accountId, input.targetLabelId);
       const source = await readPersonalLabel(client, route, actor.accountId, sourceId);
       const target = await readPersonalLabel(client, route, actor.accountId, input.targetLabelId);
       if (!source || !target) throw new LibraryNotFoundError();
@@ -141,7 +141,7 @@ export function createLabelConsolidationReview(deps: { pool: Pool; access: Acces
       const partition = await readPartition(client, partitionOf(route));
       if (!partition) throw new Error('Missing owner partition');
       let offset = 0;
-      if (input.cursor) {
+      if (input.cursor !== undefined) {
         const cursor = await decodeListCursor(deps.tokens, binding, input.cursor, clock());
         if (!cursor.ok || cursor.after.length !== 2 || typeof cursor.after[0] !== 'number' || !Number.isInteger(cursor.after[0]) ||
             cursor.after[0] < 1 || cursor.after[0] >= input.items.length || typeof cursor.after[1] !== 'string')

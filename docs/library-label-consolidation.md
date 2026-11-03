@@ -46,8 +46,8 @@ The existing native assignment readers reopen both labels; review changes neithe
 
 ## Remaining confirmation and movement
 
-Review and its generated client are installed. Confirmation, apply/retry/result APIs and Web integration remain
-continuation work. Web's existing Labels interface owns the eventual single flow. It must not interpret `movable`
+The native typed review function and HTTP route are installed. Client declaration regeneration, confirmation,
+apply/retry/result APIs and Web integration remain continuation work. Web's existing Labels interface owns the eventual single flow. It must not interpret `movable`
 or the `selection` hash as permission or immutable confirmation. There is no competing label editor or rule filter.
 
 Confirmation must bind each item's exact source/target label revisions, assignment incarnations/revisions, current

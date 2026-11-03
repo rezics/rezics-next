@@ -83,6 +83,9 @@ test('selection validation, inaccessible supplied IDs and foreign/deleted/recrea
   const item = await select(source.id, await f.createSubject('unprofiled'));
   const path = '/v1/libraryLabels/' + source.id + ':reviewConsolidation';
   const input = { targetLabelId: target.id, items: [item] };
+  const review = createLabelConsolidationReview({ pool: f.pool, tokens: f.tokens, access: f.access });
+  await expect(review({ ...f.owner.actor, scopes: ['library_entry:read'] }, source.id, input)).rejects.toThrow();
+  await expect(review({ ...f.owner.actor, scopes: ['library_entry:update'] }, source.id, input)).rejects.toThrow();
   for (const body of [
     { ...input, targetLabelId: source.id }, { ...input, items: [] }, { ...input, limit: 5 },
     { ...input, items: [item, item] }, { ...input, q: 'all' }, { ...input, items: Array(17).fill(item) },
