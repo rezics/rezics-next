@@ -10,6 +10,7 @@ import type { TracedCommand } from '../../../../../specs/library-labels-driver.t
 import { createLibraryDriver } from './outcome-driver.ts';
 import type { AccountActor } from '../../../src/request/access.ts';
 import type { ShelfTypeDigest } from '../../../src/library/shelf-type-keys.ts';
+import type { createStateReferenceRepair } from './native-state-reference-repair.ts';
 
 export type NativeConformanceOptions = Readonly<{
   shelfTypeDigest?: ShelfTypeDigest;
@@ -36,6 +37,7 @@ export interface NativeConformanceWorld extends LibraryDriver {
     databaseUrl: string;
     steward: Anchor;
     workClient: WorkClient;
+    stateReferenceRepair: ReturnType<typeof createStateReferenceRepair>;
     /** Existing Auth provisioning and kernel transport, with no asserted Actor. */
     principal(partition: number): Promise<Principal>;
     reauthenticate(accountId: string, scopes?: readonly string[]): Promise<Principal>;

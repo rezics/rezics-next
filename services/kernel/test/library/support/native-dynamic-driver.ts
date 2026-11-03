@@ -19,11 +19,17 @@ import {
 } from './native-conformance.ts';
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
 import { inspectNativeDynamicCollections } from './native-dynamic-inspection.ts';
+import type { StateReferenceRepairLatch } from './native-state-reference-repair.ts';
+
+export type NativeDynamicCollectionsDriver = Omit<DynamicCollectionsDriver, 'holdStateReferenceRepair'> & {
+  world: NativeConformanceWorld;
+  holdStateReferenceRepair(): Promise<StateReferenceRepairLatch>;
+};
 
 /** Compile source declarations and use only the accepted release to describe a fixture's meaning. */
 export async function createDynamicCollectionsDriver(
   installedWorld?: NativeConformanceWorld,
-): Promise<DynamicCollectionsDriver> {
+): Promise<NativeDynamicCollectionsDriver> {
   const world = installedWorld ?? (await createLibraryDriver());
   try {
     const input = profileSources('profile-v1');
@@ -44,7 +50,8 @@ export async function createDynamicCollectionsDriver(
     };
     const profiles = { game: fixture('game'), recipe: fixture('recipe'), record: fixture('record') };
     const labels = new Map<string, string>();
-    const driver: DynamicCollectionsDriver = {
+    const driver: NativeDynamicCollectionsDriver = {
+      world,
       accounts: world.accounts,
       profiles,
       unknown: world.unknown,
@@ -167,11 +174,10 @@ export async function createDynamicCollectionsDriver(
         await world.native.capture(operation);
         return unavailable('native opaque state-reference probe observations');
       },
-      async holdStateReferenceRepair() {
-        return unavailable('native state-reference repair source-capture latch');
-      },
+      holdStateReferenceRepair: world.native.stateReferenceRepair.hold,
       async repairStateReferences() {
-        return unavailable('native bounded state-reference repair dispatch');
+        const run = await world.native.stateReferenceRepair.start();
+        await run.result;
       },
       close: world.close,
     };

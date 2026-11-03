@@ -7,11 +7,22 @@ import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { workStepDeadline } from './command-support.ts';
 import { readOwnerIndexFrontier, stepOwnerIndex, type OwnerIndexFrontier } from './owner-index.ts';
-import { applyOwnerPinMeaning, loadOwnerPinMeaning, nextOwnerPin } from './owner-index-metadata.ts';
+import { applyOwnerPinMeaning, loadOwnerPinMeaning, nextOwnerPin, type OwnerPinMeaning } from './owner-index-metadata.ts';
 
 export const OWNER_INDEX_WORKFLOW = 'library.ownerIndex';
 export const OWNER_INDEX_SWEEP = 'library.ownerIndexSweep';
 export const OWNER_INDEX_SCHEDULE = 'library.ownerIndex.every-10-minutes';
+export type OwnerPinCapture = Readonly<{ workflowId: string; accountId: string; meaning: OwnerPinMeaning }>;
+const pinCaptures = new WeakMap<WorkContext['pool'], (capture: OwnerPinCapture) => Promise<void>>();
+/** Private executor observation: the owner checkout and immutable release checkout have both ended. */
+export function observeOwnerPinCapture(
+  pool: WorkContext['pool'],
+  capture: (value: OwnerPinCapture) => Promise<void>,
+) {
+  if (pinCaptures.has(pool)) throw new Error('Owner pin capture observer already installed');
+  pinCaptures.set(pool, capture);
+  return () => pinCaptures.delete(pool);
+}
 type Locator = { accounts: [string]; frontier: OwnerIndexFrontier | null; metadata: boolean };
 type Sweep = { root: string; sequence: number; partition: number; route: number | null; account: string | null };
 
@@ -69,6 +80,7 @@ async function page(context: WorkContext, input: Locator) {
     if (pin === undefined) return;
     // The one owner home is released before Global/Definitions checkout.
     const meaning = await loadOwnerPinMeaning(context.pool, accountId, pin);
+    await pinCaptures.get(context.pool)?.({ workflowId: DBOS.workflowID!, accountId, meaning });
     await transaction(context, accountId, (tx) => applyOwnerPinMeaning(tx, accountId, meaning));
     // Metadata is swept in bounded pages. No user read schedules or pretends metadata completion.
     return;

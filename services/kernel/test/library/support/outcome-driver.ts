@@ -37,6 +37,7 @@ import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { NativeLabelCommandTrace } from './native-label-command-trace.ts';
+import { createStateReferenceRepair, installStateReferenceRepairLatch } from './native-state-reference-repair.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -263,6 +264,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let stateReferenceRepair: ReturnType<typeof createStateReferenceRepair> | undefined;
   let restorePoolInstrumentation: (() => void) | undefined;
   let restoreDatabaseClock: (() => void) | undefined;
   let dropped = false;
@@ -270,6 +272,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
 
   const cleanup = async () => {
     commandTrace.close();
+    stateReferenceRepair?.close();
     if (child) {
       child.kill('SIGCONT');
       child.kill('SIGTERM');
@@ -570,6 +573,15 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     let childHeld = true;
     let workerFailure: string | undefined;
     let workerDiagnosticsTask: Promise<void> | undefined;
+    stateReferenceRepair = createStateReferenceRepair({
+      accountId: ownerAccount.id,
+      client: workClient,
+      resume: resumeExecutor,
+      send: (message) => {
+        if (!child) throw new Error('Production library executor is unavailable');
+        child.send(message);
+      },
+    });
 
     async function startExecutor(): Promise<void> {
       if (child) {
@@ -599,6 +611,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
         stderr: 'pipe',
         ipc(message) {
           if (message === 'ready') ready();
+          else stateReferenceRepair?.receive(message);
         },
       });
       const running = child;
@@ -623,6 +636,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
             : undefined;
       })();
       const exited = running.exited.then(async (code) => {
+        stateReferenceRepair?.close();
         await workerDiagnosticsTask;
         workerFailure ??= `executor exited ${code}: ${diagnostics || '(no output)'}`;
         return code;
@@ -913,6 +927,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
         databaseUrl,
         workClient,
         traceCommand: (operation) => commandTrace.trace(operation),
+        stateReferenceRepair,
         steward: governor,
         growth: db,
         async principal(partition) {
@@ -1425,7 +1440,17 @@ if (import.meta.main) {
     KERNEL_WORKER_POOL_SIZE: '10',
     KERNEL_EXECUTOR_ID: 'library-outcomes',
   });
-  await startWorker(readWorkerConfig(workerEnv), KERNEL_WORK_MODULES, workerEnv);
+  let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
+  process.on('message', (message) => repairLatch?.receive(message));
+  process.on('disconnect', () => repairLatch?.close());
+  const modules = KERNEL_WORK_MODULES.map((module) => module.name !== 'library' ? module : {
+    ...module,
+    async register(context: Parameters<typeof module.register>[0]) {
+      repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
+      await module.register(context);
+    },
+  });
+  await startWorker(readWorkerConfig(workerEnv), modules, workerEnv);
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
 }

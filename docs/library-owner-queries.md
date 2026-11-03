@@ -609,6 +609,7 @@ liveness changes advance the existing source head immediately and retain one ind
 Native predicate truth always checks the current same-owner live parent. Bounded default maintenance bootstraps
 native rows and resolves actual immutable released pin meanings, expanding all supported state siblings through
 the existing opaque reference authority. These records are not canonical keys, query results or disclosure evidence.
+Native state-reference race binding uses that installed pending-pin metadata page; ready-pin recapture has no installed producer and fails explicitly rather than resetting accepted metadata through fixture writes.
 
 The common Collection reader/routes now recognize logical owner Everything, discriminate dynamic DTOs and reject
 occurrence mutations. Empty Everything uses complete independent native absence checks, never an unbuilt directory
