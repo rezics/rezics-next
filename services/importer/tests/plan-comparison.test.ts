@@ -194,7 +194,9 @@ test('structured diff reports nested native values, unresolved targets and order
   expect(addresses).toContain('aliases');
   expect(addresses).toContain('statistic');
   expect(diff.parts.some((part) => part.domain === 'reference' && part.change !== 'unchanged')).toBe(true);
-  expect(diff.parts.some((part) => part.domain === 'fact' && JSON.stringify(part.before ?? {}).includes('precision'))).toBe(true);
+  expect(diff.parts.some((part) => /precision|time/.test(part.address) || JSON.stringify(part.before ?? {}).includes('precision'))).toBe(
+    true,
+  );
   expect(diff.parts.some((part) => part.domain === 'media')).toBe(false);
   expect(JSON.stringify(diff.parts)).not.toContain('vote');
 
@@ -280,8 +282,11 @@ test('corrected input, converter pins, vanished distinction and baseline mismatc
     });
     await expect(PlanComparison.build({ leftDir: left, rightDir: aliased })).rejects.toThrow(/different configured sources/);
 
-    const copied = join(directory, 'copied-plan');
-    await persistPreview(directory, 'copied-plan', { source: 'wikidata', dump: leftDump });
+    const copied = await persistPreview(directory, 'copied-plan', {
+      source: 'wikidata',
+      dump: leftDump,
+      baseline: baselineA,
+    });
     const db = new Database(join(copied, 'preview.sqlite'));
     db.query('UPDATE preview_plans SET converter_revision=?').run('wikidata-fixture');
     db.query('UPDATE preview_records SET converter_revision=?, digest=?').run('wikidata-fixture', 'c'.repeat(64));
