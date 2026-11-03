@@ -71,7 +71,7 @@ const boundaries: ThreadReadingPage = {
 
 /** Prepared page projection: no fixture implies native hierarchy or additional read authority. */
 function PreparedReading({ boundaryStates = false }: { boundaryStates?: boolean }) {
-  const session = useSession();
+  const { state: session } = useSession();
   const client = useQueryClient();
   const viewerId = client.getQueryData(sessionQuery.queryKey)?.subject ?? null;
   const supplied = boundaryStates ? boundaries : page;
