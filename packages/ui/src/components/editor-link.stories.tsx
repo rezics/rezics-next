@@ -309,8 +309,12 @@ function checkJourneyDocument(snapshot: DocumentSnapshot) {
   return snapshot;
 }
 
+function postControl(canvas: ReturnType<typeof within>) {
+  return canvas.queryByRole('textbox', { name: 'Post' }) ?? canvas.getByRole('combobox', { name: 'Post' });
+}
+
 async function caretAtEnd(canvas: ReturnType<typeof within>) {
-  const textbox = canvas.getByRole('textbox', { name: 'Post' });
+  const textbox = postControl(canvas);
   await userEvent.click(textbox);
   const range = document.createRange();
   range.selectNodeContents(textbox);
@@ -617,8 +621,8 @@ export const InlineLifetimeJourney: Story = {
     freshSame.resolve(account('same-current', '000000000102'));
     const freshSameOption = await canvas.findByRole('option', { name: /@same-current/ });
     const retainedPointer = reactCallback(freshSameOption, 'onSelect');
-    expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveAttribute('role', 'combobox');
-    expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveAttribute('aria-controls');
+    expect(postControl(canvas)).toHaveAttribute('role', 'combobox');
+    expect(postControl(canvas)).toHaveAttribute('aria-controls');
 
     // A retained option and keyboard callback from the old visit cannot affect the replacement document.
     const editorSurface = canvasElement.querySelector<HTMLElement>('[data-slot="rich-text-editor"]')!;
