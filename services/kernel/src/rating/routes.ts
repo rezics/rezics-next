@@ -172,9 +172,9 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       async ({ actor, query, admission, job, set }) => {
         requirePersonalScope(actor);
         set.headers['cache-control'] = 'no-store';
-        return admission.run('normal', job, () => command(() =>
-          createOwnVotesReader(config()).page(actor, query, job.deadline),
-        ));
+        return admission.run('normal', job, () =>
+          command(() => createOwnVotesReader(config()).page(actor, query, job.deadline)),
+        );
       },
     )
     .get(
