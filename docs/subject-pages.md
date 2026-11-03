@@ -851,18 +851,18 @@ Refreshing the public result keeps the open confirmation and ownership declarati
 
 A subject page is a set of views, each with its own URL under the subject's address:
 
-| View       | Path          | Shown when                                                                      |
-| ---------- | ------------- | ------------------------------------------------------------------------------- |
-| Overview   | `/`           | Always                                                                          |
-| Editions   | `/editions`   | The type has editions or releases, and at least one exists                      |
+| View       | Path          | Shown when                                                                                                                                                                                                                     |
+| ---------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview   | `/`           | Always                                                                                                                                                                                                                         |
+| Editions   | `/editions`   | The type has editions or releases, and at least one exists                                                                                                                                                                     |
 | Contents   | `/contents`   | The type has ordered parts (volumes, episodes, chapters, routes) and one exists. The work-parts editor can review explicit native-string positions for memberships on the loaded page; each change is an independent proposal. |
-| Characters | `/characters` | At least one appearance exists                                                  |
-| Credits    | `/credits`    | At least one credit exists (staff and cast)                                     |
-| Relations  | `/relations`  | At least one relation exists in either direction                                |
-| Reviews    | `/reviews`    | An open read exists (shown with an invitation when empty)                       |
-| Discussion | `/discussion` | An open read exists (shown with an invitation when empty)                       |
-| Lists      | `/lists`      | At least one public collection contains the subject                             |
-| Details    | `/details`    | Always: every fact with qualifiers, sources, identifiers and history            |
+| Characters | `/characters` | At least one appearance exists                                                                                                                                                                                                 |
+| Credits    | `/credits`    | At least one credit exists (staff and cast)                                                                                                                                                                                    |
+| Relations  | `/relations`  | At least one relation exists in either direction                                                                                                                                                                               |
+| Reviews    | `/reviews`    | An open read exists (shown with an invitation when empty)                                                                                                                                                                      |
+| Discussion | `/discussion` | An open read exists (shown with an invitation when empty)                                                                                                                                                                      |
+| Lists      | `/lists`      | At least one public collection contains the subject                                                                                                                                                                            |
+| Details    | `/details`    | Always: every fact with qualifiers, sources, identifiers and history                                                                                                                                                           |
 
 A person or organization shows Works (their credits, grouped by role) instead of Credits, and Characters (roles
 they voiced or played) when any exist. A character shows Appearances (works, with role and cast) and Relations.

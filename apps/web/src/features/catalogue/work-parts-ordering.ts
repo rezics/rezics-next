@@ -71,11 +71,7 @@ export function proposedSlot(draft: Pick<OrderingDraft, 'originalSlot' | 'propos
   return writerSlot(next);
 }
 
-export function stageOrderingRow(
-  row: PartRow,
-  stream: PartStream,
-  cursor?: string,
-): OrderingDraft | undefined {
+export function stageOrderingRow(row: PartRow, stream: PartStream, cursor?: string): OrderingDraft | undefined {
   if (!stream.positionEditable) return;
   const correction = partCorrection(row, stream);
   if (!correction) return;
@@ -130,7 +126,8 @@ export function orderingLocked(draft: OrderingDraft): boolean {
 
 export function includedOrderingChanges(drafts: OrderingDraft[]): OrderingDraft[] {
   return drafts.filter(
-    (draft) => draft.included && draft.admitted && orderingChanged(draft) && orderingPositionReady(draft) && !draft.result?.ok,
+    (draft) =>
+      draft.included && draft.admitted && orderingChanged(draft) && orderingPositionReady(draft) && !draft.result?.ok,
   );
 }
 
@@ -208,9 +205,7 @@ export function markOrderingPresence(drafts: OrderingDraft[], rows: PartRow[]): 
 
 export function concealOrderingCommands(drafts: OrderingDraft[]): OrderingDraft[] {
   return drafts.map((draft) =>
-    draft.command && !draft.result
-      ? { ...draft, result: { ...candidateFailure(503), retry: true } }
-      : draft,
+    draft.command && !draft.result ? { ...draft, result: { ...candidateFailure(503), retry: true } } : draft,
   );
 }
 

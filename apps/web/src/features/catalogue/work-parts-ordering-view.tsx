@@ -166,7 +166,11 @@ export function WorkPartsOrderingBoard({
   }, [discard]);
   if (!page.length && !drafts.some((draft) => draft.command || draft.result)) return null;
   return (
-    <section data-ordering-board className="min-w-0 space-y-4 rounded-lg border border-border p-4" aria-labelledby={titleId}>
+    <section
+      data-ordering-board
+      className="min-w-0 space-y-4 rounded-lg border border-border p-4"
+      aria-labelledby={titleId}
+    >
       <ContentItemHeading id={titleId} level={2} className="font-sans text-lg font-semibold">
         {m.work_parts_order_title({}, o)}
       </ContentItemHeading>
@@ -193,14 +197,15 @@ export function WorkPartsOrderingBoard({
                     {identityLabel(draft, locale)}
                   </ContentItemHeading>
                   <p className="text-sm text-muted-foreground">
-                    {draft.direction === 'forward' ? m.work_parts_order_forward({}, o) : m.work_parts_order_inverse({}, o)}
+                    {draft.direction === 'forward'
+                      ? m.work_parts_order_forward({}, o)
+                      : m.work_parts_order_inverse({}, o)}
                   </p>
                   <p className="text-sm">
                     {m.work_parts_holder({}, o)}: <code className="break-all text-xs">{draft.holder}</code>
                   </p>
                   <p className="text-sm">
-                    {m.work_parts_order_current({}, o)}:{' '}
-                    {draft.currentPosition || m.work_parts_order_missing({}, o)}
+                    {m.work_parts_order_current({}, o)}: {draft.currentPosition || m.work_parts_order_missing({}, o)}
                   </p>
                   <Field>
                     <FieldLabel htmlFor={positionId}>{m.work_parts_order_proposed({}, o)}</FieldLabel>
@@ -302,7 +307,11 @@ export function WorkPartsOrderingBoard({
         )}
       </div>
       {discard && (
-        <div role="group" aria-label={m.work_parts_order_discard({}, o)} className="space-y-2 rounded-lg border border-border p-3">
+        <div
+          role="group"
+          aria-label={m.work_parts_order_discard({}, o)}
+          className="space-y-2 rounded-lg border border-border p-3"
+        >
           <p>{m.work_parts_order_discard_confirm({}, o)}</p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -428,7 +437,12 @@ export function WorkPartsOrderingResults({
                   {draft.present === false && ` — ${m.work_parts_order_absent({}, o)}`}
                   {draft.present && ` — ${m.work_parts_order_present({}, o)}`}
                   {draft.result?.ok && (
-                    <Button type="button" className={`${wrap} ms-2`} variant="outline" onClick={() => onOpenCandidate(draft)}>
+                    <Button
+                      type="button"
+                      className={`${wrap} ms-2`}
+                      variant="outline"
+                      onClick={() => onOpenCandidate(draft)}
+                    >
                       {m.work_parts_order_review_candidate({}, o)}
                     </Button>
                   )}

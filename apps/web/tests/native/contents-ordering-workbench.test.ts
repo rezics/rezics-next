@@ -30,7 +30,9 @@ test('two existing holders keep native-string positions, citations and independe
     property: { id: 'rezics:firstPart', data_type: 'string' as const },
     value: { type: 'value' as const, content: 'A' },
   };
-  expect(replacePosition({ ...first.statement!, qualifiers: [...first.statement!.qualifiers, extra] }, '10').qualifiers).toEqual([
+  expect(
+    replacePosition({ ...first.statement!, qualifiers: [...first.statement!.qualifiers, extra] }, '10').qualifiers,
+  ).toEqual([
     { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: '10' } },
     extra,
   ]);
@@ -118,7 +120,9 @@ test('Work Parts stages a bounded page, reviews changed positions and submits in
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const click = async (name: string, scope: ParentNode = host) => {
-    const button = [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
+    const button = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+      (node) => node.textContent?.trim() === name,
+    )!;
     expect(button).toBeDefined();
     await act(async () => button.click());
     return button;
@@ -154,7 +158,11 @@ test('Work Parts stages a bounded page, reviews changed positions and submits in
     };
     await act(async () =>
       root.render(
-        h(QueryClientProvider, { client }, h(WorkPartsPage, { id: fixture.id, locale: 'en', initial, search: fixture.search, transport })),
+        h(
+          QueryClientProvider,
+          { client },
+          h(WorkPartsPage, { id: fixture.id, locale: 'en', initial, search: fixture.search, transport }),
+        ),
       ),
     );
     const rows = [...host.querySelectorAll('article ul > li')];
@@ -176,15 +184,20 @@ test('Work Parts stages a bounded page, reviews changed positions and submits in
     await until(() => host.querySelector('[data-ordering-review]')!.textContent!.includes('Volume Two'));
     await click(m.work_parts_order_review());
     await click(m.work_parts_order_submit());
-    await until(() => !!host.querySelector('[data-ordering-results]')?.textContent?.includes('Proposed, awaiting review'));
+    await until(
+      () => !!host.querySelector('[data-ordering-results]')?.textContent?.includes('Proposed, awaiting review'),
+    );
     expect(host.querySelector('[data-ordering-results]')!.textContent).toContain('Uncertain');
     const posts = fixture.calls.filter((call) => call.method === 'POST');
     expect(posts).toHaveLength(1);
     await click(m.work_parts_order_submit());
     await until(() => fixture.calls.filter((call) => call.method === 'POST').length === 2);
-    expect(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.path).sort()).toEqual(
-      [`/v1/subjects/${workPartId}/candidates`, `/v1/subjects/${workPartsSecondId}/candidates`].sort(),
-    );
+    expect(
+      fixture.calls
+        .filter((call) => call.method === 'POST')
+        .map((call) => call.path)
+        .sort(),
+    ).toEqual([`/v1/subjects/${workPartId}/candidates`, `/v1/subjects/${workPartsSecondId}/candidates`].sort());
     expect(posts[0]!.key).toBe(fixture.calls.filter((call) => call.method === 'POST')[0]!.key);
   } finally {
     await act(async () => root.unmount());

@@ -315,7 +315,9 @@ function WorkPartsPageLive({
         },
         (key, result) =>
           lifetime.active() &&
-          setOrdering((previous) => previous.map((draft) => (draft.key === key ? recordOrderingResult(draft, result) : draft))),
+          setOrdering((previous) =>
+            previous.map((draft) => (draft.key === key ? recordOrderingResult(draft, result) : draft)),
+          ),
       );
     } finally {
       if (!lifetime.active()) return;
@@ -543,7 +545,9 @@ function WorkPartsPageLive({
                     onJump={jumpOrdering}
                     onDiscard={() =>
                       setOrdering(
-                        stream ? discardUnsentOrdering(ordering, stream.key, cursor.current) : discardUnsentOrdering(ordering),
+                        stream
+                          ? discardUnsentOrdering(ordering, stream.key, cursor.current)
+                          : discardUnsentOrdering(ordering),
                       )
                     }
                     onOpenCandidate={(draft) => setReviewing(draft)}
