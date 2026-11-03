@@ -1078,7 +1078,12 @@ function RecipeEditorLive({
                 {createReview && draftRead && (
                   <RecipeCreateReview
                     terms={terms}
-                    rows={rows.map((row) => ({ ...row, statement: recipeEvidence(row.statement) }))}
+                    rows={rows.map((row) => ({
+                      id: row.id,
+                      statement: recipeEvidence(row.statement),
+                      definition: row.definition,
+                      original: row.original,
+                    }))}
                     read={{
                       release: draftRead.release,
                       source: null,

@@ -146,7 +146,8 @@ export function recipeEvidenceChanges(
   for (const group of next) {
     const index = remaining.findIndex((entry) => JSON.stringify(entry) === JSON.stringify(group));
     if (index >= 0) {
-      changes.push({ change: 'retained', current: remaining.splice(index, 1)[0], next: group });
+      const retained = remaining.splice(index, 1)[0]!;
+      changes.push({ change: 'retained', current: retained, next: group });
       continue;
     }
     const edited = remaining.shift();

@@ -17,7 +17,7 @@ type RecipeReviewRow = {
   id: string;
   statement: StatementInput;
   definition: RecipeProperty;
-  original?: boolean;
+  original?: boolean | undefined;
   source?: StatementInput | undefined;
 };
 
@@ -91,7 +91,7 @@ function RecipeAssertionPreview({
   definition: RecipeProperty;
   read: StatementFieldsRead;
   locale: string;
-  original?: boolean;
+  original?: boolean | undefined;
 }) {
   const o = { locale: locale as never };
   return (
