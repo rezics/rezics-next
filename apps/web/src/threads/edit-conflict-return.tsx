@@ -24,7 +24,7 @@ export function useConflictReturn({
   admitted: () => boolean;
 }) {
   const visit = useRef<ReturnVisit | null>(null);
-  const popup = useRef<HTMLElement | null>(null);
+  const popup = useRef<HTMLDivElement | null>(null);
   const latest = useRef({ returningFocus, admitted });
   latest.current = { returningFocus, admitted };
 

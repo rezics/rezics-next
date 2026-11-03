@@ -55,6 +55,14 @@ function ConflictExample({ scenario = 'available', blocks = 10 }: { scenario?: S
         threadId: id(2),
         revisionId: id(4),
         securityRevision: 'prepared-security',
+        route: 13,
+        authorId: id(1),
+        parentId: null,
+        subjectIds: [],
+        boardId: id(7),
+        visibility: 'published',
+        sha256: 'prepared-digest',
+        voteCitation: null,
         availability: scenario === 'erased' ? 'erased' : 'available',
         body:
           scenario === 'missing' || scenario === 'erased'
@@ -70,7 +78,7 @@ function ConflictExample({ scenario = 'available', blocks = 10 }: { scenario?: S
         licence: 'CC-BY-4.0',
         createdAt: '2026-11-01T01:02:03Z',
         revisedAt: '2026-11-02T02:03:04Z',
-      }) as CurrentPost,
+      }) as unknown as CurrentPost,
   );
   return (
     <QueryClientProvider client={client}>

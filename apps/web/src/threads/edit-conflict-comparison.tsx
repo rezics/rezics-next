@@ -67,9 +67,9 @@ function ConflictDocumentReading({
   title: string;
   description: string;
   projection: ConflictProjection;
-  licence?: string;
-  createdAt?: string;
-  revisedAt?: string | null;
+  licence?: string | undefined;
+  createdAt?: string | undefined;
+  revisedAt?: string | null | undefined;
   allowed: () => boolean;
 }) {
   const id = useId();
@@ -294,8 +294,8 @@ export function EditConflictComparison({
   draft: ConflictProjection;
   current: ConflictProjection | undefined;
   licence: string | undefined;
-  createdAt?: string;
-  revisedAt?: string | null;
+  createdAt?: string | undefined;
+  revisedAt?: string | null | undefined;
   erased?: boolean;
   allowed: () => boolean;
 }) {

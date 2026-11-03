@@ -120,13 +120,13 @@ export class ConflictInspection {
     current: CurrentPost;
     id: string;
     threadId: string;
-    securityRevision: string;
+    securityRevision: string | undefined;
     sha256: CurrentPost['sha256'];
     body: CurrentPost['body'];
-    revisionId: string;
+    revisionId: string | undefined;
     availability: CurrentPost['availability'];
-    licence: string;
-    mediaIds: CurrentPost['mediaIds'];
+    licence: string | undefined;
+    mediaIds: Extract<CurrentPost, { availability: 'available' }>['mediaIds'] | undefined;
     presentation: ConflictPresentation | undefined;
     draft: ConflictDraftReading | undefined;
     draftProjection: ConflictProjection | undefined;
@@ -139,13 +139,13 @@ export class ConflictInspection {
       current,
       id: current.id,
       threadId: current.threadId,
-      securityRevision: current.securityRevision,
+      securityRevision: 'securityRevision' in current ? current.securityRevision : undefined,
       sha256: current.sha256,
       body: current.body,
-      revisionId: current.revisionId,
+      revisionId: 'revisionId' in current ? current.revisionId : undefined,
       availability: current.availability,
-      licence: current.licence,
-      mediaIds: current.mediaIds,
+      licence: 'licence' in current ? current.licence : undefined,
+      mediaIds: 'mediaIds' in current ? current.mediaIds : undefined,
       presentation,
       draft: presentation ? { body: presentation.body, revision: presentation.revision } : undefined,
       draftProjection: presentation ? projectConflictDocument(presentation.body) : undefined,
@@ -175,13 +175,13 @@ export class ConflictInspection {
       !current ||
       current.id !== retained.id ||
       current.threadId !== retained.threadId ||
-      current.securityRevision !== retained.securityRevision ||
+      ('securityRevision' in current ? current.securityRevision : undefined) !== retained.securityRevision ||
       current.sha256 !== retained.sha256 ||
       current.body !== retained.body ||
-      current.revisionId !== retained.revisionId ||
+      ('revisionId' in current ? current.revisionId : undefined) !== retained.revisionId ||
       current.availability !== retained.availability ||
-      current.licence !== retained.licence ||
-      current.mediaIds !== retained.mediaIds
+      ('licence' in current ? current.licence : undefined) !== retained.licence ||
+      ('mediaIds' in current ? current.mediaIds : undefined) !== retained.mediaIds
     )
       return this.invalidate('current');
     if (retained.draft) {
