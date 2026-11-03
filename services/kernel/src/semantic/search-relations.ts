@@ -1081,8 +1081,8 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             ? {
                 after_route: Number(cursor[1]),
                 after_subject: cursor[2]!,
-                after_slot: cursor[3],
-                after_candidate: cursor[4],
+                after_slot: cursor[3]!,
+                after_candidate: cursor[4]!,
               }
             : {
                 after_route: -1,

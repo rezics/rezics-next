@@ -66,7 +66,7 @@ async function pageSnapshot(
   client: Parameters<ViewerActionResource['read']>[0],
   ids: readonly string[],
   at: string,
-): Promise<Map<string, Snapshot>> {
+): Promise<Map<string, IdentifiedSnapshot>> {
   const selected = ids.flatMap((id) => {
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
@@ -180,7 +180,7 @@ export async function followingSpaceTargets(
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
   });
-  const snapshots = new Map<string, Snapshot>();
+  const snapshots = new Map<string, IdentifiedSnapshot>();
   if (valid.length) {
     const at = dependencies.clock().toISOString();
     const rows = await withConnection(dependencies.pool, (connection) =>
@@ -193,7 +193,7 @@ export async function followingSpaceTargets(
     for (const row of rows.filter(hasSpaceIdentity)) snapshots.set(row.space_id, row);
   }
 
-  const expectedByRealm = new Map<string, Snapshot>();
+  const expectedByRealm = new Map<string, IdentifiedSnapshot>();
   const addressedGroups: Group[] = [];
   const unsupportedGroups: Group[] = [];
   const realmGroups: Group[] = [];
@@ -259,7 +259,7 @@ export async function followingSpaceTargets(
     const snapshot = snapshots.get(spaceId);
     const spaceResult = actionResults.get(key(SPACE_RESOURCE, spaceId));
     const readable = snapshot !== undefined && snapshot.title !== null && success(spaceResult);
-    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title } : null;
+    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title! } : null;
     let destination: FollowingSpaceDestination = { kind: 'unavailable' };
     let actions: FollowingSpaceActions = { status: 'unavailable' };
     if (snapshot !== undefined && readable && snapshot.address !== null) {
