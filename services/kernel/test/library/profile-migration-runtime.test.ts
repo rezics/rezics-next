@@ -52,7 +52,7 @@ async function snapshot(f: NativeProfileFixture, accountId: string) {
       WHERE u.route=s.route AND u.session_id=s.session_id) AS units,
       (SELECT jsonb_agg(c ORDER BY change_no) FROM library.progress_change c
       WHERE c.route=s.route AND c.session_id=s.session_id) AS changes
-     FROM library.progress_session s WHERE s.route=$1 AND s.account_id=$2`,
+     FROM library.progress_session s WHERE s.route=$1 AND s.account_id=$2 ORDER BY s.session_id`,
     [routeOf(accountId), accountId],
   );
   return { ...state, history: sessions.rows };
