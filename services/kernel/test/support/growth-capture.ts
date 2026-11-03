@@ -122,6 +122,7 @@ type WireStatement = {
   readonly attribution: Attribution | undefined;
   parsed: boolean;
   bound: boolean;
+  topLevelPlanSeen: boolean;
   queued: boolean;
   queueNode: WireStatementNode | undefined;
 };
@@ -520,8 +521,8 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     return execute(config, more);
   }) as typeof connection.execute;
 
-  // pg emits ReadyForQuery after a query's notices and before it dispatches the next queued query. Clear the prior
-  // owner first, so the next query's connection.query/execute hook can install its own wire occurrence.
+  // Clear the dispatch owner before pg submits the next queued query. A SELECT's pending portal keeps its
+  // separate cleanup owner when an explicit transaction outlives ReadyForQuery.
   connection.prependListener('readyForQuery', (message: { readonly status?: string }) => {
     const wireStatement = clientExecutingStatement.get(client) ?? clientWireStatement.get(client);
     const attribution = wireStatement?.attribution;
@@ -590,7 +591,8 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
       const record = clientWireStatement.get(client)?.record ?? clientExecutingStatement.get(client)?.record;
       if (tag && nativePlanCommands.has(tag) && record) record.requiresNativePlan = true;
       const wireStatement = clientWireStatement.get(client) ?? clientExecutingStatement.get(client);
-      if (tag === 'SELECT' && wireStatement?.bound) clientPendingPortalPlan.set(client, wireStatement);
+      if (tag === 'SELECT' && record && wireStatement?.bound && !wireStatement.topLevelPlanSeen)
+        clientPendingPortalPlan.set(client, wireStatement);
       return;
     }
     if (protocolMessage.name === 'rowDescription') {
@@ -714,6 +716,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       attribution,
       parsed: false,
       bound: false,
+      topLevelPlanSeen: false,
       queued: false,
       queueNode: undefined,
     };
@@ -844,11 +847,14 @@ function instrument(client: PoolClient, state: CaptureState): void {
     if (typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker)) return;
     // Portal cleanup precedes the next statement's execution. Preserve that occurrence across wire dispatch;
     // never find an owner by SQL text, which would conflate retries and identical queued statements.
-    const pendingPortal = clientPendingPortalPlan.get(client);
+    const pendingPortal = notice.where ? undefined : clientPendingPortalPlan.get(client);
     if (pendingPortal) clientPendingPortalPlan.delete(client);
     const wireStatement = pendingPortal ?? clientExecutingStatement.get(client);
     const attribution = wireStatement?.attribution;
     if (!attribution || attribution.capture.error) return;
+    // PostgreSQL supplies an error context for nested SPI/trigger plans. Data-modifying SELECT CTEs finish
+    // their top-level executor before CommandComplete, so they must not leave a pending cleanup owner.
+    if (!notice.where && wireStatement) wireStatement.topLevelPlanSeen = true;
 
     try {
       const capture = attribution.capture;

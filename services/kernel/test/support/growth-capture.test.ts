@@ -153,15 +153,20 @@ async function duplicateThenRetry(client: PoolClient): Promise<void> {
 test('parameterized SELECT plans retain their occurrence across transaction portal cleanup', async () => {
   const result = await capture(db!, () =>
     withConnection(db!.pool, async (client) => {
-      await client.query('BEGIN READ ONLY');
+      await client.query('BEGIN');
       await client.query("SET LOCAL statement_timeout = '200ms'");
       await client.query('SELECT $1::integer AS answer', [11]);
+      await client.query(
+        'WITH removed AS (DELETE FROM growth_capture_test.binding_rows WHERE id = $1 RETURNING id) SELECT count(*) FROM removed',
+        [-11],
+      );
+      await client.query('INSERT INTO growth_capture_test.binding_rows (id) SELECT $1 WHERE false', [12]);
       await client.query('SELECT $1::integer AS answer', [12]);
       await client.query('COMMIT');
     }),
   );
-  expect(nativePlanEntries(result.capture).map(({ owner }) => owner)).toEqual([2, 3]);
-  expect(nativePlanEntries(result.capture).map(({ plan }) => plan['Actual Rows'])).toEqual([1, 1]);
+  expect(nativePlanEntries(result.capture).map(({ owner }) => owner)).toEqual([2, 3, 4, 5]);
+  expect(nativePlanEntries(result.capture).map(({ plan }) => plan['Actual Rows'])).toEqual([1, 1, 0, 1]);
 });
 
 test('a failed statement counts as executed work and carries its SQLSTATE', async () => {
@@ -1051,9 +1056,9 @@ test('measured writes with dotted and quoted names settle the exact relations', 
   const dotted = { kind: 'relation' as const, schema, name: 'write.target' };
   const quoted = { kind: 'relation' as const, schema, name: 'quote"d' };
   const colliding = { kind: 'relation' as const, schema: 'gcap', name: 'ident.write.target' };
-  await database.admin.query(`DROP SCHEMA IF EXISTS ${quotedRelationIdentity(dotted)} CASCADE`);
+  await database.admin.query('DROP SCHEMA IF EXISTS "gcap.ident" CASCADE');
   await database.admin.query('DROP SCHEMA IF EXISTS gcap CASCADE');
-  await database.admin.query(`CREATE SCHEMA ${quotedRelationIdentity(dotted)}`);
+  await database.admin.query('CREATE SCHEMA "gcap.ident"');
   await database.admin.query(`CREATE TABLE ${quotedRelationIdentity(dotted)} (id integer PRIMARY KEY)`);
   await database.admin.query(`CREATE TABLE ${quotedRelationIdentity(quoted)} (id integer PRIMARY KEY)`);
   await database.admin.query('CREATE SCHEMA gcap');
@@ -1097,7 +1102,7 @@ test('measured writes with dotted and quoted names settle the exact relations', 
     expect(alters.some((text) => text.includes('"gcap.ident"."quote""d"'))).toBe(true);
     expect(alters.some((text) => text.includes('"gcap"."ident.write.target"'))).toBe(false);
   } finally {
-    await database.admin.query(`DROP SCHEMA IF EXISTS ${quotedRelationIdentity(dotted)} CASCADE`);
+    await database.admin.query('DROP SCHEMA IF EXISTS "gcap.ident" CASCADE');
     await database.admin.query('DROP SCHEMA IF EXISTS gcap CASCADE');
   }
 });
