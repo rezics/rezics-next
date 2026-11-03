@@ -19,7 +19,7 @@ type ApprovalMethod = ReturnType<ReturnType<KernelClient['realms']>['claimReques
 export type RealmClaimApprovalReceipt = NonNullable<Awaited<ReturnType<ApprovalMethod>>['data']>['claim'];
 type RealmClaimReviewReadValue =
   | { kind: 'ready'; page: RealmClaimReviewPage }
-  | { kind: 'denied' | 'signed-out' | 'closed' | 'unavailable' };
+  | { kind: 'denied' | 'signed-out' | 'closed' | 'unavailable' | 'invalid-cursor' | 'stale-cursor' };
 export type RealmClaimReviewRead = RealmClaimReviewReadValue & {
   /** Private route-loader binding; the response DTO and native reader do not include these fields. */
   callerRealmId?: string;
@@ -271,7 +271,11 @@ export function createRealmClaimReview(
       await readPage(state.cursor);
     },
     async restart() {
-      if (state.read.kind !== 'unavailable' || state.outcome === 'uncertain') return;
+      if (
+        !['unavailable', 'invalid-cursor', 'stale-cursor'].includes(state.read.kind) ||
+        state.outcome === 'uncertain'
+      )
+        return;
       await readPage(undefined);
     },
     async prepare(requestId: string) {

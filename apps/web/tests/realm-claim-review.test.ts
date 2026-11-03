@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -362,7 +362,14 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     });
     expect(await approveRealmClaimReview(client, csrf, {}, input)).toEqual({ kind: 'denied' });
     expect(calls).toBe(0);
-    expect(await readRealmClaimReview(request(), {}, { realmId })).toEqual({ kind: 'unavailable' });
+    expect(
+      await readRealmClaimReview(
+        createKernelClient('https://kernel.example.test', { fetch: async () => Response.json({ claimRequests: [], next: null }) }),
+        request(),
+        {},
+        { realmId },
+      ),
+    ).toMatchObject({ kind: 'ready' });
   });
 
   test('unavailable and denied never render empty, private details or an approval action', () => {
@@ -380,29 +387,27 @@ describe('Platform Realm claim review and genuine native approval journey', () =
   });
 });
 
-describe('declared native Realm claim review read transport', () => {
-  const env = { KERNEL_ORIGIN: 'https://kernel.example.test' };
+describe('installed generated Realm claim review reader', () => {
+  const origin = 'https://kernel.example.test';
 
-  test('Connect existing reviewer read to declared sole native claim-review endpoint', async () => {
+  test('preserves the bounded page, opaque cursor and current bearer credential', async () => {
     const cursor = 'original.signed+/cursor?realm=exact&signature=%2F';
     const pages = [
       { claimRequests: [row], next: cursor },
       { claimRequests: [], next: 'signed-sparse-continuation' },
     ];
     const calls: Request[] = [];
-    const fetches = spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
-      calls.push(new Request(url, init));
-      expect(init?.cache).toBe('no-store');
-      expect(init?.credentials).toBe('omit');
-      expect(init?.redirect).toBe('error');
-      return Response.json(pages[calls.length - 1]);
+    const client = createKernelClient(origin, {
+      fetch: async (url, init) => {
+        calls.push(new Request(url, init));
+        return Response.json(pages[calls.length - 1]);
+      },
     });
     let token = 'current-session';
     let sessions = 0;
-    const sessionEnv: RealmClaimReviewEnv = {
-      ...env,
+    const env: RealmClaimReviewEnv = {
       AUTH_ISSUER: 'https://auth.example.test',
-      API_RESOURCE: env.KERNEL_ORIGIN,
+      API_RESOURCE: origin,
       WEBSITE_SCOPES: 'openid',
       WEBSITE_CLIENT_ID: 'web',
       WEBSITE_CLIENT_KEY: 'unused-by-this-read',
@@ -420,83 +425,64 @@ describe('declared native Realm claim review read transport', () => {
       new Request('https://site.example.test/action', {
         headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
       });
-    try {
-      expect(await readRealmClaimReview(sessionRequest(), sessionEnv, { realmId })).toEqual({
-        kind: 'ready',
-        page: pages[0],
-      });
-      token = 'refreshed-session';
-      expect(await readRealmClaimReview(sessionRequest(), sessionEnv, { realmId, cursor })).toEqual({
-        kind: 'ready',
-        page: pages[1],
-      });
-      expect(sessions).toBe(2);
-      expect(calls).toHaveLength(2);
-      for (const [index, call] of calls.entries()) {
-        const url = new URL(call.url);
-        expect(url.origin).toBe(env.KERNEL_ORIGIN);
-        expect(url.pathname).toBe(`/v1/realms/${realmId}/claimRequests`);
-        expect([...url.searchParams]).toEqual([['limit', '20'], ...(index === 1 ? [['cursor', cursor]] : [])]);
-        expect(call.method).toBe('GET');
-        expect(call.headers.get('authorization')).toBe(`Bearer ${index ? 'refreshed-session' : 'current-session'}`);
-        expect(call.headers.has('cookie')).toBe(false);
-        expect(call.headers.has('idempotency-key')).toBe(false);
-        expect(await call.text()).toBe('');
-      }
-    } finally {
-      fetches.mockRestore();
+    expect(await readRealmClaimReview(client, sessionRequest(), env, { realmId })).toEqual({
+      kind: 'ready',
+      page: pages[0],
+    });
+    token = 'refreshed-session';
+    expect(await readRealmClaimReview(client, sessionRequest(), env, { realmId, cursor })).toEqual({
+      kind: 'ready',
+      page: pages[1],
+    });
+    expect(sessions).toBe(2);
+    expect(calls).toHaveLength(2);
+    for (const [index, call] of calls.entries()) {
+      const url = new URL(call.url);
+      expect(url.origin).toBe(origin);
+      expect(url.pathname).toBe(`/v1/realms/${realmId}/claimRequests`);
+      expect([...url.searchParams]).toEqual([['limit', '20'], ...(index === 1 ? [['cursor', cursor]] : [])]);
+      expect(call.method).toBe('GET');
+      expect(call.headers.get('authorization')).toBe(`Bearer ${index ? 'refreshed-session' : 'current-session'}`);
+      expect(call.headers.has('cookie')).toBe(false);
+      expect(call.headers.has('idempotency-key')).toBe(false);
+      expect(await call.text()).toBe('');
     }
   });
 
-  test('native denial, closure, stale cursors and absent or malformed sources never become an empty queue', async () => {
+  test('keeps native cursor failures distinct and never turns malformed or denied results into an empty queue', async () => {
     for (const [status, body, kind] of [
       [401, { code: 'unauthorized' }, 'signed-out'],
       [403, { code: 'forbidden' }, 'denied'],
       [404, { code: 'not_found' }, 'denied'],
       [403, { code: 'platform_closed' }, 'closed'],
       [503, { code: 'dependency_unavailable' }, 'unavailable'],
-      [400, { code: 'stale_cursor' }, 'unavailable'],
+      [400, { code: 'invalid_cursor' }, 'invalid-cursor'],
+      [409, { code: 'stale_cursor' }, 'stale-cursor'],
       [200, { claimRequests: [{ ...row, realmId: row.claimantAccountId }], next: null }, 'unavailable'],
       [200, { claimRequests: [row], next: null, mayApprove: true }, 'unavailable'],
     ] as const) {
-      let calls = 0;
-      const fetcher = (async () => {
-        calls++;
-        return Response.json(body, { status });
-      }) as typeof fetch;
-      expect(
-        await readRealmClaimReview(request(), env, { realmId, cursor: 'original-signed-cursor' }, fetcher),
-      ).toEqual({
-        kind,
-      });
-      expect(calls).toBe(1);
+      const client = createKernelClient(origin, { fetch: async () => Response.json(body, { status }) });
+      expect(await readRealmClaimReview(client, request(), {}, { realmId, cursor: 'original-cursor' })).toEqual({ kind });
     }
-    for (const response of [new Response('not JSON'), new Response('Forbidden', { status: 403 })]) {
-      const fetcher = (async () => response) as typeof fetch;
-      expect(await readRealmClaimReview(request(), env, { realmId }, fetcher)).toEqual({
-        kind: response.status === 403 ? 'denied' : 'unavailable',
-      });
-    }
+    const client = createKernelClient(origin, { fetch: async () => new Response('not JSON') });
+    expect(await readRealmClaimReview(client, request(), {}, { realmId })).toEqual({ kind: 'unavailable' });
   });
 
-  test('signed-out, missing-source and invalid local reads send no GET; a lost GET waits for explicit retry', async () => {
+  test('validates local operands before transport and treats a lost generated read as retryable', async () => {
     let calls = 0;
-    const fetcher = (async () => {
-      calls++;
-      throw new Error('Read response lost');
-    }) as typeof fetch;
-    expect(
-      await readRealmClaimReview(new Request('https://site.example.test/action'), env, { realmId }, fetcher),
-    ).toEqual({
+    const client = createKernelClient(origin, {
+      fetch: async () => {
+        calls++;
+        throw new Error('Read response lost');
+      },
+    });
+    expect(await readRealmClaimReview(client, new Request('https://site.example.test/action'), {}, { realmId })).toEqual({
       kind: 'signed-out',
     });
-    expect(await readRealmClaimReview(request(), {}, { realmId }, fetcher)).toEqual({ kind: 'unavailable' });
-    await expect(readRealmClaimReview(request(), env, { realmId: 'invalid' }, fetcher)).rejects.toThrow();
-    await expect(readRealmClaimReview(request(), env, { realmId, cursor: '' }, fetcher)).rejects.toThrow();
+    await expect(readRealmClaimReview(client, request(), {}, { realmId: 'invalid' })).rejects.toThrow();
+    await expect(readRealmClaimReview(client, request(), {}, { realmId, cursor: '' })).rejects.toThrow();
     expect(calls).toBe(0);
-    expect(await readRealmClaimReview(request(), env, { realmId }, fetcher)).toEqual({ kind: 'unavailable' });
+    expect(await readRealmClaimReview(client, request(), {}, { realmId })).toEqual({ kind: 'unavailable' });
     expect(calls).toBe(1);
-    expect(await readRealmClaimReview(request(), env, { realmId }, fetcher)).toEqual({ kind: 'unavailable' });
-    expect(calls).toBe(2);
   });
 });

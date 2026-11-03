@@ -274,6 +274,7 @@ function RealmClaimReviewContent({
   const page = state.read.kind === 'ready' ? state.read.page : null;
   const confirming = page && state.outcome === 'confirming' ? state.intent : null;
   const denied = state.read.kind === 'denied' || state.read.kind === 'signed-out' || state.read.kind === 'closed';
+  const canRestart = ['unavailable', 'invalid-cursor', 'stale-cursor'].includes(state.read.kind);
   const receipt = page && state.outcome === 'approved' ? state.receipt : null;
   const editable = active && !state.busy && state.outcome === 'idle';
   return (
@@ -287,20 +288,22 @@ function RealmClaimReviewContent({
           <PageHeading>{m.realm_review_heading()}</PageHeading>
           <p className="text-pretty leading-7 text-muted-foreground">{m.realm_review_intro()}</p>
         </div>
-        {state.read.kind === 'unavailable' && !state.busy && state.outcome !== 'uncertain' ? (
+        {canRestart && !state.busy && state.outcome !== 'uncertain' ? (
           <div className="flex flex-wrap gap-3">
-            <Button
-              ref={retryPageButton}
-              variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-              disabled={!active}
-              onClick={(event) => {
-                rememberQueueActivation(event.detail);
-                void control.retryPage();
-              }}
-            >
-              {m.realm_review_retry_page()}
-            </Button>
+            {state.read.kind === 'unavailable' ? (
+              <Button
+                ref={retryPageButton}
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                disabled={!active}
+                onClick={(event) => {
+                  rememberQueueActivation(event.detail);
+                  void control.retryPage();
+                }}
+              >
+                {m.realm_review_retry_page()}
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"

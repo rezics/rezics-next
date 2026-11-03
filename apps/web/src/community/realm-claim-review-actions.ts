@@ -14,7 +14,7 @@ export const readRealmClaimReviewPage = createServerFn({ method: 'GET' })
   .validator((input: { realmId: string; cursor?: string }) => validateRealmClaimReviewRead(input))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readRealmClaimReview(getRequest(), env as RealmClaimReviewEnv, data);
+    return readRealmClaimReview(kernelClient(), getRequest(), env as RealmClaimReviewEnv, data);
   });
 
 export const submitRealmClaimApproval = createServerFn({ method: 'POST' })

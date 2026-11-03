@@ -10,22 +10,20 @@ import {
   type RealmClaimStatusRead,
 } from './realm-claim-status';
 
-export type RealmClaimStatusEnv = Partial<SessionEnv> & { KERNEL_ORIGIN?: string };
+export type RealmClaimStatusEnv = Partial<SessionEnv>;
 
-/** Isolated consumer transport until the original generated requester GETs are available. */
+/** Read the requester's own mine/exact receipt through the installed generated methods. */
 export async function readRealmClaimStatus(
   client: KernelClient,
   request: Request,
   env: RealmClaimStatusEnv,
   input: RealmClaimStatusInput,
-  fetcher: typeof fetch = globalThis.fetch,
 ): Promise<RealmClaimStatusRead> {
   input = validateRealmClaimStatusRead(input);
   try {
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'signed-out' };
-    if (!env.KERNEL_ORIGIN) return { kind: 'unavailable' };
     const target = client.realms({ realmId: input.realmId });
     const auth = { headers: { authorization } };
     async function access(): Promise<RealmClaimStatusRead> {
@@ -45,22 +43,16 @@ export async function readRealmClaimStatus(
     const before = await access();
     if (before.kind !== 'ready') return before;
     if (input.requestId === undefined && before.source.ownershipState !== 'orphaned') return { kind: 'unavailable' };
-    const url = new URL(`/v1/realms/${input.realmId}/claimRequests/${input.requestId ?? 'mine'}`, env.KERNEL_ORIGIN);
-    const response = await fetcher(url, {
-      method: 'GET',
-      headers: { authorization, accept: 'application/json' },
-      cache: 'no-store',
-      credentials: 'omit',
-      redirect: 'error',
-    });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status === 404) return { kind: 'denied' };
-    if (response.status === 403) {
-      const problem: unknown = await response.json().catch(() => null);
-      return { kind: isPlatformClosedProblem(response.status, problem) ? 'closed' : 'denied' };
-    }
-    if (response.status !== 200) return { kind: 'unavailable' };
-    const claimRequest = realmClaimStatusResponse(await response.json(), input);
+    const result =
+      input.requestId === undefined
+        ? await target.claimRequests.mine.get(auth)
+        : await target.claimRequests({ requestId: input.requestId }).get(auth);
+    if (isPlatformClosedProblem(result.status, result.error?.value)) return { kind: 'closed' };
+    if (result.status === 401) return { kind: 'signed-out' };
+    if (result.status === 404) return { kind: 'denied' };
+    if (result.status === 403) return { kind: 'denied' };
+    if (result.status !== 200 || result.error || !result.data) return { kind: 'unavailable' };
+    const claimRequest = realmClaimStatusResponse(result.data, input);
     if (claimRequest === undefined) return { kind: 'unavailable' };
     const final = await access();
     if (final.kind !== 'ready') return final;

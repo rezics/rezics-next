@@ -46,7 +46,8 @@ const pending: RealmClaimStatus = {
 const approved: RealmClaimStatus = { ...pending, state: 'approved', approvedAt: '2026-10-31T12:34:56.000Z' };
 const ready: RealmClaimRead = { kind: 'ready', snapshot: source, admission: 'allowed' };
 const own: RealmClaimStatusRead = { kind: 'ready', claimRequest: pending, source };
-const env: RealmClaimStatusEnv = { KERNEL_ORIGIN: 'https://kernel.example.test' };
+const origin = 'https://kernel.example.test';
+const env: RealmClaimStatusEnv = {};
 const request = () =>
   new Request('https://site.example.test/action', { headers: { authorization: 'Bearer current-viewer' } });
 const display = (initial: RealmClaimStatusRead) =>
@@ -71,10 +72,16 @@ test('Return to a real own Realm claim request and current native outcome', asyn
   let fact = pending;
   let lost = true;
   const posts: Request[] = [];
-  const client = createKernelClient(env.KERNEL_ORIGIN!, {
+  const points: Request[] = [];
+  const client = createKernelClient(origin, {
     fetch: async (url, init) => {
       const call = new Request(url, init);
       expect(call.headers.get('authorization')).toBe('Bearer current-viewer');
+      const path = new URL(call.url).pathname;
+      if (path.endsWith(`/claimRequests/${requestId}`)) {
+        points.push(call);
+        return Response.json({ claimRequest: fact });
+      }
       if (call.method === 'POST') {
         posts.push(call);
         expect(new URL(call.url).pathname).toBe(`/v1/realms/${realmId}/claimRequests`);
@@ -101,20 +108,6 @@ test('Return to a real own Realm claim request and current native outcome', asyn
         : Response.json({ realm: { ...recording.realm, ...current } });
     },
   });
-  const points: Request[] = [];
-  const fetcher: typeof fetch = async (url, init) => {
-    const call = new Request(url, init);
-    points.push(call);
-    expect(new URL(call.url).pathname).toBe(`/v1/realms/${realmId}/claimRequests/${requestId}`);
-    expect(new URL(call.url).search).toBe('');
-    expect(call.method).toBe('GET');
-    expect(call.headers.get('authorization')).toBe('Bearer current-viewer');
-    expect(call.headers.has('cookie')).toBe(false);
-    expect(call.headers.has('idempotency-key')).toBe(false);
-    expect(await call.text()).toBe('');
-    expect(init).toMatchObject({ cache: 'no-store', credentials: 'omit', redirect: 'error' });
-    return Response.json({ claimRequest: fact });
-  };
   const claim = createRealmClaim(
     realmId,
     ready,
@@ -129,10 +122,10 @@ test('Return to a real own Realm claim request and current native outcome', asyn
   await claim.retry();
   expect(claim.getSnapshot().request?.requestId).toBe(requestId);
   const input = { realmId, requestId: claim.getSnapshot().request!.requestId };
-  expect(await readRealmClaimStatus(client, request(), env, input, fetcher)).toEqual(own);
+  expect(await readRealmClaimStatus(client, request(), env, input)).toEqual(own);
   fact = approved;
   current = { ...source, ownershipState: 'owned', governanceReadOnly: false, orphanedAt: null, claimEligibleAt: null };
-  const outcome = await readRealmClaimStatus(client, request(), env, input, fetcher);
+  const outcome = await readRealmClaimStatus(client, request(), env, input);
   expect(outcome).toEqual({ kind: 'ready', claimRequest: approved, source: current });
   const html = display(outcome);
   expect(html).toContain('Request approved');
@@ -227,7 +220,7 @@ test('current session credentials and before/final read and participation bind e
   const sessionEnv: RealmClaimStatusEnv = {
     ...env,
     AUTH_ISSUER: 'https://auth.example.test',
-    API_RESOURCE: env.KERNEL_ORIGIN,
+    API_RESOURCE: origin,
     WEBSITE_SCOPES: 'openid',
     WEBSITE_CLIENT_ID: 'web',
     WEBSITE_CLIENT_KEY: 'unused',
@@ -243,26 +236,22 @@ test('current session credentials and before/final read and participation bind e
   };
   const cookieRequest = () =>
     new Request('https://site.example.test/action', { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } });
-  const client = createKernelClient(env.KERNEL_ORIGIN!, {
+  const client = createKernelClient(origin, {
     fetch: async (url, init) => {
       const call = new Request(url, init);
       expect(call.headers.get('authorization')).toBe(`Bearer ${token}`);
       const path = new URL(call.url).pathname;
       calls.push(path);
-      return path.endsWith('/participation')
+      return path.endsWith('/claimRequests/mine')
+        ? Response.json({ claimRequest: pending })
+        : path.endsWith('/participation')
         ? new Response(null, { status: 204 })
         : Response.json({ realm: { ...recording.realm, ...source } });
     },
   });
-  const fetcher: typeof fetch = async (url, init) => {
-    const call = new Request(url, init);
-    expect(call.headers.get('authorization')).toBe(`Bearer ${token}`);
-    calls.push(new URL(call.url).pathname);
-    return Response.json({ claimRequest: pending });
-  };
   for (const next of ['session-one', 'session-two']) {
     token = next;
-    expect(await readRealmClaimStatus(client, cookieRequest(), sessionEnv, { realmId }, fetcher)).toEqual(own);
+    expect(await readRealmClaimStatus(client, cookieRequest(), sessionEnv, { realmId })).toEqual(own);
   }
   expect(sessionReads).toBe(2);
   const root = `/v1/realms/${realmId}`;
@@ -276,9 +265,12 @@ test('current session credentials and before/final read and participation bind e
 test('source failures, unrelated identity, closure and revoked final access never become an empty own result', async () => {
   let round = 0;
   let finalStatus = 204;
-  const client = createKernelClient(env.KERNEL_ORIGIN!, {
+  let claimResponse = Response.json({ claimRequest: pending });
+  const client = createKernelClient(origin, {
     fetch: async (url) => {
-      if (new URL(String(url)).pathname.endsWith('/participation')) {
+      const path = new URL(String(url)).pathname;
+      if (path.includes('/claimRequests/')) return claimResponse;
+      if (path.endsWith('/participation')) {
         round++;
         return new Response(null, { status: round % 2 === 0 ? finalStatus : 204 });
       }
@@ -292,26 +284,27 @@ test('source failures, unrelated identity, closure and revoked final access neve
     [403, 'platform_closed', 'closed'],
     [503, 'unavailable', 'unavailable'],
   ] as const) {
+    claimResponse = Response.json({ code }, { status });
     expect(
-      await readRealmClaimStatus(client, request(), env, { realmId }, async () => Response.json({ code }, { status })),
+      await readRealmClaimStatus(client, request(), env, { realmId }),
     ).toEqual({ kind });
     round = 0;
   }
   finalStatus = 403;
+  claimResponse = Response.json({ claimRequest: pending });
   expect(
-    await readRealmClaimStatus(client, request(), env, { realmId, requestId }, async () =>
-      Response.json({ claimRequest: pending }),
-    ),
+    await readRealmClaimStatus(client, request(), env, { realmId, requestId }),
   ).toEqual({ kind: 'denied' });
   finalStatus = 204;
   round = 0;
+  claimResponse = Response.json({ claimRequest: null });
   expect(
-    await readRealmClaimStatus(client, request(), env, { realmId }, async () => Response.json({ claimRequest: null })),
+    await readRealmClaimStatus(client, request(), env, { realmId }),
   ).toEqual({ kind: 'ready', claimRequest: null, source });
   expect(await readRealmClaimStatus(client, new Request('https://site.example.test/action'), env, { realmId })).toEqual(
     { kind: 'signed-out' },
   );
-  expect(await readRealmClaimStatus(client, request(), {}, { realmId })).toEqual({ kind: 'unavailable' });
+  expect(await readRealmClaimStatus(client, request(), {}, { realmId })).toEqual({ kind: 'ready', claimRequest: null, source });
   for (const kind of ['denied', 'closed', 'unavailable', 'signed-out'] as const) {
     const html = display({ kind });
     expect(html).not.toContain(requestId);

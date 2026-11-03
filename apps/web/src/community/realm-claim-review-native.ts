@@ -13,41 +13,43 @@ import {
   type RealmClaimReviewRead,
 } from './realm-claim-review';
 
-export type RealmClaimReviewEnv = Partial<SessionEnv> & { KERNEL_ORIGIN?: string };
+export type RealmClaimReviewEnv = Partial<SessionEnv>;
 
-/** Consumer-local transport for the declared GET, until the original generated reader is delivered. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cursorFailure(status: number, value: unknown): RealmClaimReviewRead | null {
+  if ((status !== 400 && status !== 409) || !isRecord(value)) return null;
+  if (value.code === 'invalid_cursor') return { kind: 'invalid-cursor' };
+  if (value.code === 'stale_cursor') return { kind: 'stale-cursor' };
+  return null;
+}
+
+/** Use the installed, typed bounded reader; its native page remains the permission and disclosure authority. */
 export async function readRealmClaimReview(
+  client: KernelClient,
   request: Request,
   env: RealmClaimReviewEnv,
   input: { realmId: string; cursor?: string },
-  fetcher: typeof fetch = globalThis.fetch,
 ): Promise<RealmClaimReviewRead> {
   input = validateRealmClaimReviewRead(input);
   try {
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'signed-out' };
-    if (!env.KERNEL_ORIGIN) return { kind: 'unavailable' };
-    const url = new URL(`/v1/realms/${input.realmId}/claimRequests`, env.KERNEL_ORIGIN);
-    url.searchParams.set('limit', '20');
-    if (input.cursor !== undefined) url.searchParams.set('cursor', input.cursor);
-    const response = await fetcher(url, {
-      method: 'GET',
-      headers: { authorization, accept: 'application/json' },
-      cache: 'no-store',
-      credentials: 'omit',
-      redirect: 'error',
+    const result = await client.realms({ realmId: input.realmId }).claimRequests.get({
+      query: { limit: 20, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
+      headers: { authorization },
     });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status === 404) return { kind: 'denied' };
-    if (response.status === 403) {
-      const problem: unknown = await response.json().catch(() => null);
-      return { kind: isPlatformClosedProblem(response.status, problem) ? 'closed' : 'denied' };
-    }
-    // A stale/invalid cursor (400), unavailable producer or unexpected response discloses no old page.
-    if (response.status !== 200) return { kind: 'unavailable' };
-    const body: unknown = await response.json();
-    const page = realmClaimReviewPage(body, input.realmId);
+    if (isPlatformClosedProblem(result.status, result.error?.value)) return { kind: 'closed' };
+    if (result.status === 401) return { kind: 'signed-out' };
+    if (result.status === 404) return { kind: 'denied' };
+    if (result.status === 403) return { kind: 'denied' };
+    const cursorError = cursorFailure(result.status, result.error?.value);
+    if (cursorError) return cursorError;
+    if (result.status !== 200 || result.error || !result.data) return { kind: 'unavailable' };
+    const page = realmClaimReviewPage(result.data, input.realmId);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch (error) {
     return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };

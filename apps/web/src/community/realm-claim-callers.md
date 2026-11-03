@@ -1,8 +1,9 @@
 # Realm claim caller lifetimes
 
 The review and requester status panels bind private reads to one Realm target and one current browser session-cache
-generation. Review also binds its approval intent to the original request row and CSRF token. The native readers and
-approval endpoint remain the only permission authorities.
+generation. Review also binds its approval intent to the original request row and CSRF token. Both panels use the
+installed generated claim readers; the native operations remain the only permission authorities. The generated exact
+request status path is requester-owned and is never used to inspect a reviewer's selected row.
 
 `realm-claim-caller-lifetime.ts` observes the existing `['session']` QueryClient entry. It records each data update,
 including same-account CSRF changes and away/back transitions that React batches into one render. A visit is ready
@@ -39,10 +40,17 @@ data. The page is consumed once. Requester status still
 performs one foreground point read per current mount or explicit check. Sparse reviewer pages retain their exact
 opaque continuation and advance by one explicit native page.
 
-The bounded costs remain one supplied page of at most 20 review rows, one read for deliberate prepare, one original
-approval command per explicit confirmation or uncertain retry, and one first-page refresh after a current approval.
-Requester status remains one point read per foreground check. There are no timers, polling, hidden refill, extra
-endpoint or local authorization rule.
+The bounded costs remain one generated queue read per page, same-cursor retry or deliberate restart, one re-read for
+deliberate prepare, one original approval command per explicit confirmation or uncertain retry, and one first-page
+refresh after a current approval. Each requester status check uses one generated mine/exact receipt read plus the
+existing before/after Realm and participation checks. There are no per-row identity reads, timers, polling, hidden
+refill or local authorization rule.
+
+The review reader calls `KernelClient.realms({ realmId }).claimRequests.get` with limit 20 and the exact opaque cursor.
+Requester status calls the generated `claimRequests.mine.get` or `claimRequests({ requestId }).get` method. Both
+readers prepare the current viewer credential and validate the installed response; there is no consumer-local GET
+fallback. Installed fields and the still-missing current-review operations are recorded in
+[`realm-claim-current-review.md`](./realm-claim-current-review.md).
 
 `tests/realm-claim-callers.test.tsx` composes both actual panels with a real QueryClient session cache and deferred
 adapter results. The review and status unit suites retain their native transport, closed-payload and behavior oracles.

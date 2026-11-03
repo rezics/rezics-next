@@ -209,6 +209,25 @@ readback, and preserve the immutable command receipt independently. Current abse
 an accepted removal workflow remains pending until Accounts reports completion. See the
 [ban lifetime and consumer boundary](../../apps/web/src/community/realm-ban-lifetime.md).
 
+### Realm claim current review boundary
+
+The existing Realm claim queue and requester receipt remain one caller each. Review consumes the generated bounded
+`claimRequests.get` page; own status consumes generated `mine.get` or exact requester `get`. The current review row
+contains a claimant account ID and native episode dates, but it does not provide a display-safe claimant identity,
+optional Realm context, reviewer-qualified exact inspection or installed action advice. Requester status keeps its
+separate `currentEpisode` meaning: a previously approved receipt stays historical after a new orphan episode.
+
+Decision: use the installed generated list and requester-owned readers while reviewer identity, context, exact
+inspection and action advice remain unavailable until Content publishes their typed operations and response examples.
+Web does not infer eligibility or authority from dates, Realm roles, titles or ordinary reads. See
+[`current Realm claim review`](../../apps/web/src/community/realm-claim-current-review.md) and the
+[claim caller lifetime](../../apps/web/src/community/realm-claim-callers.md).
+
+The retained reader bound is one native page of at most 20 rows with its opaque continuation, with no refill or
+per-row identity/authority lookup. Requester status still validates Realm and participation around one generated
+mine/exact receipt read. Approval and its explicit first-page readback remain separately charged. Native identity,
+eligibility, disclosure, succession and growth evidence remain with Content and Accounts.
+
 ### My Realms current-entry boundary
 
 The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
