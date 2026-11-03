@@ -31,8 +31,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/home-native-reactions.test.tsx
@@ -47,13 +47,13 @@ acceptance:
     - tests/18-revision-history-reading.test.tsx
   placement: default
   tests:
-    - "The installed generated Content summary supplies the exact reaction target, positive counts, viewer slot and page freshness to the existing FeedActionBar/ThreadReactions owner; thread target identity is never inferred from summary.id."
-    - "Select, switch, clear, refusal rollback, unknown retry/readback and fresh-page reconciliation use the existing command engine and retire old page, viewer, session, selection, target and source observations."
-    - "Missing projection remains unavailable; known empty counts remain zero; anonymous viewer omission differs from signed-in null. No hidden or mute capability is fabricated."
-    - "Projection is O(N) for the already bounded page at 1/10/20 rows and duplicate targets, with no mount reaction reads, no per-row feed requests, bounded controllers and the native 20-row/160-candidate/one-mixed-round boundary unchanged."
-    - "Prepared Board replyCount proves receiving and exact inspection only; actual native delivery is claimed only when its installed schema supplies the field. Exact reaction/reply operands, signed score, zero versus unavailable and reply destination remain mounted and accessible."
-    - "Connected phone390/desktop1280 light/dark stories cover five initial pins, continuation without duplicates, exact compact counts, missing counts, anonymous/current viewer states, refusal, unknown recovery, target mismatch and stale/revoked observations."
-    - "The historical-reader, post-history-recovery and 18-revision suites preserve returned-revision source, reader/session/cursor behavior and the README section placement. Rendered and native claims require their own evidence."
+    - 'The installed generated Content summary supplies the exact reaction target, positive counts, viewer slot and page freshness to the existing FeedActionBar/ThreadReactions owner; thread target identity is never inferred from summary.id.'
+    - 'Select, switch, clear, refusal rollback, unknown retry/readback and fresh-page reconciliation use the existing command engine and retire old page, viewer, session, selection, target and source observations.'
+    - 'Missing projection remains unavailable; known empty counts remain zero; anonymous viewer omission differs from signed-in null. No hidden or mute capability is fabricated.'
+    - 'Projection is O(N) for the already bounded page at 1/10/20 rows and duplicate targets, with no mount reaction reads, no per-row feed requests, bounded controllers and the native 20-row/160-candidate/one-mixed-round boundary unchanged.'
+    - 'Prepared Board replyCount proves receiving and exact inspection only; actual native delivery is claimed only when its installed schema supplies the field. Exact reaction/reply operands, signed score, zero versus unavailable and reply destination remain mounted and accessible.'
+    - 'Connected phone390/desktop1280 light/dark stories cover five initial pins, continuation without duplicates, exact compact counts, missing counts, anonymous/current viewer states, refusal, unknown recovery, target mismatch and stale/revoked observations.'
+    - 'The historical-reader, post-history-recovery and 18-revision suites preserve returned-revision source, reader/session/cursor behavior and the README section placement. Rendered and native claims require their own evidence.'
   failing: true
 estimate:
   lines: 2250
