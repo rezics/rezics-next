@@ -11,8 +11,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ModerationDecisionSchema, readModerationDecision } from './moderation-decisions.ts';
-import { reportBoardPlacement } from './board-report-candidates.ts';
-import type { ReportTarget } from './reports.ts';
+import currentTarget from './moderation-history-target.sql';
 import page from './page-moderation-history.sql';
 import selectedPage from './moderation-history-kind-page.sql';
 import type { ModerationDependencies } from './moderation.ts';
@@ -113,7 +112,10 @@ export async function listModerationHistory(
     { route, id: boardId },
     { pool: deps.pool, deadline: context.deadline },
   );
-  const initial = await snapshot(deps.pool, route, context.deadline, (client) => boardCheck(client));
+  const checkBoard = async (client: AccessClient) =>
+    (await boardCheck(client)) &&
+    (await currentTarget.run(client, { route, kind: 'board', id: boardId })).length === 1;
+  const initial = await snapshot(deps.pool, route, context.deadline, checkBoard);
   if (!initial.value) throw missing();
 
   const ring = cursorRing(deps.routeKey);
@@ -163,7 +165,6 @@ export async function listModerationHistory(
     const targetRoute = routeOf(candidate.target_id);
     if (targetRoute === null || routeOf(candidate.decision_id) !== targetRoute)
       throw new Error('Moderation history candidate route mismatch');
-    const target = { kind: candidate.target_kind, id: candidate.target_id } as ReportTarget;
     const targetCheck = await accessCheck(
       deps.access,
       context.actor,
@@ -173,7 +174,10 @@ export async function listModerationHistory(
     );
     const current = await snapshot(deps.pool, targetRoute, context.deadline, async (client) => {
       if (!(await targetCheck(client))) return false;
-      return (await reportBoardPlacement(client, target)) === boardId;
+      const [target] = await currentTarget.run(client, {
+        route: targetRoute, kind: candidate.target_kind, id: candidate.target_id,
+      });
+      return target?.available === true && target.board_id === boardId;
     });
     if (!current.value) continue;
 
@@ -191,7 +195,7 @@ export async function listModerationHistory(
     entries.push(exact.value);
   }
 
-  const final = await snapshot(deps.pool, route, context.deadline, (client) => boardCheck(client));
+  const final = await snapshot(deps.pool, route, context.deadline, checkBoard);
   if (!final.value) throw missing();
   const last = selected.at(-1);
   return {
