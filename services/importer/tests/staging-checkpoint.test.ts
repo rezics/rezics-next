@@ -111,6 +111,9 @@ test('help names checkpointed staging, and unsupported producers fail before net
   expect(help.stdout).toContain('--checkpoint-staging');
   expect(help.stdout).toContain('--resume-staging');
   expect(help.stdout).toContain('re-hash');
+  expect(help.stdout).toContain('Bangumi');
+  expect(help.stdout).toContain('ratings stay omitted');
+  expect(help.stdout).toContain('Local conversion is not publication');
   const directory = await mkdtemp(join(tmpdir(), 'staging-cli-'));
   const requests: string[] = [];
   try {
@@ -142,7 +145,9 @@ test('help names checkpointed staging, and unsupported producers fail before net
     await writeFile(join(directory, 'dump.json'), '[]\n');
     const refused = [
       ['--source', 'vndb', '--dump', join(directory, 'dump.json'), '--checkpoint-staging'],
+      ['--source', 'bangumi', '--dump', join(directory, 'dump.json'), '--compression', 'gzip', '--checkpoint-staging'],
       ['--source', 'wikidata', '--dump', join(directory, 'dump.json'), '--compression', 'gzip', '--checkpoint-staging'],
+      ['--source', 'bangumi', '--dump', '-', '--checkpoint-staging'],
       ['--source', 'wikidata', '--dump', '-', '--checkpoint-staging'],
       ['--source', 'openlibrary', '--dump-set', join(directory, 'manifest.json'), '--checkpoint-staging'],
     ];
@@ -151,21 +156,23 @@ test('help names checkpointed staging, and unsupported producers fail before net
       expect(result.code).toBe(2);
       expect(result.stderr).toContain('Checkpointed staging is limited');
     }
-    const missing = await runImportCli(
-      [
-        '--source',
-        'wikidata',
-        '--dump',
-        join(directory, 'dump.json'),
-        ...credentials,
-        '--resume-staging',
-        '--generation',
-        '1',
-      ],
-      { fetch: blocked },
-    );
-    expect(missing.code).toBe(2);
-    expect(missing.stderr).toContain('No importer state database');
+    for (const source of ['bangumi', 'wikidata'] as const) {
+      const missing = await runImportCli(
+        [
+          '--source',
+          source,
+          '--dump',
+          join(directory, 'dump.json'),
+          ...credentials,
+          '--resume-staging',
+          '--generation',
+          '1',
+        ],
+        { fetch: blocked },
+      );
+      expect(missing.code).toBe(2);
+      expect(missing.stderr).toContain('No importer state database');
+    }
     expect(requests).toEqual([]);
   } finally {
     await rm(directory, { recursive: true, force: true });

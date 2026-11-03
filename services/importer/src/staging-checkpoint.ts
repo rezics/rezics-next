@@ -4,7 +4,7 @@ import type { SourceId } from '@rezics/conversion';
 /** First explicit local staging cursor. Compressed, archive and multi-file producers are out of scope. */
 export const STAGING_CHECKPOINT_VERSION = 1;
 export const STAGING_DECODER_ID = 'dumps-uncompressed-v1';
-export const STAGING_CHECKPOINT_SOURCES = ['openlibrary', 'wikidata'] as const;
+export const STAGING_CHECKPOINT_SOURCES = ['bangumi', 'openlibrary', 'wikidata'] as const;
 const SHA256 = /^[a-f0-9]{64}$/;
 const ZERO_DIGEST = '0'.repeat(64);
 
@@ -61,7 +61,7 @@ export class StagingCheckpointError extends Error {
 }
 
 export const STAGING_UNSUPPORTED_INPUT =
-  'Checkpointed staging is limited to one uncompressed Open Library or Wikidata regular file. VNDB archives, metadata sidecars, multi-file manifests, gzip and stdin are unsupported in this checkpoint format.';
+  'Checkpointed staging is limited to one uncompressed Bangumi, Open Library or Wikidata regular file. VNDB archives, metadata sidecars, multi-file manifests, gzip and stdin are unsupported in this checkpoint format.';
 
 export const STAGING_INCOMPATIBLE =
   'This staging checkpoint is incompatible with the supplied file or configuration. Use a deliberate fresh import; there is no in-place upgrade, reseal or force flag.';
@@ -81,10 +81,10 @@ export const STAGING_ACTIVE_GENERATION =
   'This source already has an active generation. Resume a compatible checkpoint with --resume-staging, or use ordinary import for sealed work.';
 
 export const STAGING_COST =
-  'Resume re-hashes the complete file and re-decodes from the first record to verify the committed prefix before converting remaining records. Path, inode, size, mtime and prefix hashes are not sufficient.';
+  'Resume re-hashes the complete file and re-decodes from the first record to verify the committed prefix before converting remaining records. Path, inode, size, mtime and prefix hashes are not sufficient. Local conversion is not publication; native application starts after a valid seal.';
 
 export function isStagingCheckpointSource(value: string): value is StagingCheckpointSource {
-  return value === 'openlibrary' || value === 'wikidata';
+  return (STAGING_CHECKPOINT_SOURCES as readonly string[]).includes(value);
 }
 
 export function emptyPrefixDigest(): string {

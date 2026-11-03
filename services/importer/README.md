@@ -392,11 +392,17 @@ Decision: human and JSONL progress both use stderr so the existing final stdout 
 
 ## Resume a checkpointed local staging capture
 
-Ordinary import still discards an unsealed staging generation and starts again. Large Open Library and Wikidata
+Ordinary import still discards an unsealed staging generation and starts again. Large Bangumi, Open Library and Wikidata
 files can opt into an explicit staging checkpoint so an interruption before sealing does not repeat conversion of
 records that already committed.
 
 ```sh
+bun services/importer/src/cli.ts --source bangumi --dump /srv/imports/bangumi.jsonl --state .state/imports.sqlite \
+  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
+  --checkpoint-staging
+bun services/importer/src/cli.ts --source bangumi --dump /srv/imports/bangumi.jsonl --state .state/imports.sqlite \
+  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
+  --resume-staging --generation 1
 bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json --state .state/imports.sqlite \
   --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
   --checkpoint-staging
@@ -405,8 +411,10 @@ bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.
   --resume-staging --generation 1
 ```
 
-`--checkpoint-staging` and `--resume-staging` admit only one uncompressed regular-file Open Library or Wikidata dump.
+`--checkpoint-staging` and `--resume-staging` admit one uncompressed regular-file Bangumi, Open Library or Wikidata dump.
 VNDB archives, gzip, stdin and multi-file manifests are refused; those producers are not guessed from a byte offset.
+Help names full-file hashing, committed-prefix verification, remaining conversion and later native application as
+separate steps. Local conversion is not publication; Bangumi ratings stay omitted.
 Before a checkpointed generation starts, the CLI hashes every byte of the opened file. Path, inode, size, mtime and
 prefix hashes are not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume
 re-hashes the same file, then re-decodes from the first record to verify the committed prefix, and converts only the
