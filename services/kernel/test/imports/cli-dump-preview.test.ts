@@ -8,9 +8,7 @@ test('an operator previews a changed dump against a completed baseline then impo
     expect(initial.code, JSON.stringify(initial)).toBe(0);
     expect(f.inspect().source.count).toBe(5);
 
-    const successor = records.map((row, index) =>
-      index === 0 ? { ...row, name: 'Revised preview catalogue' } : row,
-    );
+    const successor = records.map((row, index) => (index === 0 ? { ...row, name: 'Revised preview catalogue' } : row));
     const previewDump = feed(successor.slice(0, 4));
     const previewed = await f.preview(previewDump);
     expect(previewed.network).toEqual([]);

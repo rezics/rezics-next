@@ -1,10 +1,6 @@
 import type { SourceId } from '@rezics/conversion';
 import { DumpInputError, type RawVndbEntry } from './dump-input.ts';
-import {
-  DumpPreview,
-  DumpPreviewFailure,
-  type DumpPreviewOptions,
-} from './dump-preview.ts';
+import { DumpPreview, DumpPreviewFailure, type DumpPreviewOptions } from './dump-preview.ts';
 import {
   DEFAULT_PREVIEW_PAGE,
   MAX_PREVIEW_PAGE,
@@ -66,8 +62,7 @@ function boundedArguments(argv: readonly string[]): void {
     if (typeof argument !== 'string' || argument.length > MAX_ARGUMENT_BYTES || argument.includes('\0'))
       throw new UsageFailure('Preview arguments exceed the supported size.');
     totalBytes += Buffer.byteLength(argument, 'utf8');
-    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES)
-      throw new UsageFailure('Preview arguments exceed the supported size.');
+    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES) throw new UsageFailure('Preview arguments exceed the supported size.');
   }
 }
 
@@ -108,7 +103,9 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   const dump = values.get('--dump');
   if (planDir) {
     if (source || dump || values.has('--source-alias') || values.has('--baseline') || values.has('--output-dir'))
-      throw new UsageFailure('--plan-dir reopens a retained preview and cannot be combined with dump acquisition flags.');
+      throw new UsageFailure(
+        '--plan-dir reopens a retained preview and cannot be combined with dump acquisition flags.',
+      );
   } else {
     if (!source || !VALID_SOURCE.test(source) || !dump) throw new UsageFailure('Preview requires --source and --dump.');
     if (dump !== '-' && !dump.trim()) throw new UsageFailure('Preview dump path is invalid.');
@@ -177,10 +174,7 @@ function terminalSafeMessage(value: string): string {
 }
 
 function importInvocation(plan: PreviewPlan): string[] {
-  const alias =
-    plan.source === plan.sourceKind
-      ? ''
-      : ` --source-alias ${terminalString(plan.source)}`;
+  const alias = plan.source === plan.sourceKind ? '' : ` --source-alias ${terminalString(plan.source)}`;
   return [
     'Ordinary import reopens the actual dump, acquires its lease, and rechecks authority and fences. Preview evidence does not license a later file or bypass those checks.',
     `  bun services/importer/src/cli.ts --source ${plan.sourceKind}${alias} --dump <complete-input-path> --state <sqlite-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
@@ -200,10 +194,8 @@ function renderPlan(plan: PreviewPlan, directory: string): string[] {
     `Disappearance rule would block application: ${plan.disappearanceWouldBlock ? 'yes' : 'no'}`,
     `Preview store: ${directory}`,
   ];
-  if (!plan.complete)
-    lines.push('Incomplete input cannot present a valid vanished set or a retraction plan.');
-  if (plan.viewKind === 'first-import')
-    lines.push('No completed local baseline was captured for this comparison.');
+  if (!plan.complete) lines.push('Incomplete input cannot present a valid vanished set or a retraction plan.');
+  if (plan.viewKind === 'first-import') lines.push('No completed local baseline was captured for this comparison.');
   lines.push(...importInvocation(plan));
   return lines;
 }
@@ -251,10 +243,7 @@ function renderPage(page: ReturnType<DumpPreview['page']>): string[] {
   return lines;
 }
 
-function documentFor(
-  preview: DumpPreview,
-  parsed: ParsedPreviewArgs,
-): Record<string, unknown> {
+function documentFor(preview: DumpPreview, parsed: ParsedPreviewArgs): Record<string, unknown> {
   const plan = preview.plan;
   const document: Record<string, unknown> = {
     version: 1,

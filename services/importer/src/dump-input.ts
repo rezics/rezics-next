@@ -1,10 +1,6 @@
 import { constants } from 'node:fs';
 import { open, type FileHandle } from 'node:fs/promises';
-import {
-  DEFAULT_DUMP_CHUNK_BYTES,
-  DEFAULT_DUMP_RECORD_BYTES,
-  MAX_DUMP_CHUNK_BYTES,
-} from './dumps-bytes.ts';
+import { DEFAULT_DUMP_CHUNK_BYTES, DEFAULT_DUMP_RECORD_BYTES, MAX_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 
 /** Bounded dump/path failure shared by import and offline preview. */
 export class DumpInputError extends Error {}

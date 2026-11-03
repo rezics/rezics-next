@@ -23,11 +23,27 @@ test('preview CLI decodes a dump without credentials, leases or network', async 
   const directory = await mkdtemp(join(tmpdir(), 'preview-cli-'));
   try {
     const dump = join(directory, 'bangumi.jsonl');
-    await writeFile(dump, await readFile(new URL('../../../specs/fixtures/imports/dumps/bangumi-subject.jsonlines', import.meta.url)));
+    await writeFile(
+      dump,
+      await readFile(new URL('../../../specs/fixtures/imports/dumps/bangumi-subject.jsonlines', import.meta.url)),
+    );
     const output = join(directory, 'plan');
     const requests: string[] = [];
     const result = await runImportCli(
-      ['preview', '--source', 'bangumi', '--dump', dump, '--output-dir', output, '--json', '--page', 'new', '--record', '1001'],
+      [
+        'preview',
+        '--source',
+        'bangumi',
+        '--dump',
+        dump,
+        '--output-dir',
+        output,
+        '--json',
+        '--page',
+        'new',
+        '--record',
+        '1001',
+      ],
       {
         fetch: (async (input: RequestInfo | URL) => {
           requests.push(String(input));

@@ -62,7 +62,10 @@ function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-function sameFile(left: Awaited<ReturnType<FileHandle['stat']>>, right: Awaited<ReturnType<FileHandle['stat']>>): boolean {
+function sameFile(
+  left: Awaited<ReturnType<FileHandle['stat']>>,
+  right: Awaited<ReturnType<FileHandle['stat']>>,
+): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
@@ -88,9 +91,10 @@ function displayValue(value: unknown): unknown {
     const result: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       if (key === 'sourceUrl' || key === 'url' || /password|secret|token|credential/i.test(key)) continue;
-      result[key] = PROSE_KEYS.has(key) && typeof item === 'string'
-        ? { kind: 'document', bytes: Buffer.byteLength(item, 'utf8'), digest: sha256(item) }
-        : displayValue(item);
+      result[key] =
+        PROSE_KEYS.has(key) && typeof item === 'string'
+          ? { kind: 'document', bytes: Buffer.byteLength(item, 'utf8'), digest: sha256(item) }
+          : displayValue(item);
     }
     return result;
   }
@@ -184,7 +188,9 @@ function diagnosticsJson(conversion: ImportConversion): string {
   );
 }
 
-async function openReadonlyState(statePath: string): Promise<{ path: string; descriptor: FileHandle; database: Database }> {
+async function openReadonlyState(
+  statePath: string,
+): Promise<{ path: string; descriptor: FileHandle; database: Database }> {
   const path = resolve(statePath);
   let descriptor: FileHandle | undefined;
   let database: Database | undefined;
@@ -192,10 +198,12 @@ async function openReadonlyState(statePath: string): Promise<{ path: string; des
     const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
     descriptor = await open(path, flags);
     const identity = await descriptor.stat();
-    if (!identity.isFile()) throw new DumpPreviewFailure(`Baseline path is not a regular file: ${JSON.stringify(path)}.`, 2);
+    if (!identity.isFile())
+      throw new DumpPreviewFailure(`Baseline path is not a regular file: ${JSON.stringify(path)}.`, 2);
     database = new Database(path, { readonly: true, create: false, strict: true });
     const afterOpen = await stat(path);
-    if (!sameFile(identity, afterOpen)) throw new DumpPreviewFailure('Baseline path changed while it was being opened.', 2);
+    if (!sameFile(identity, afterOpen))
+      throw new DumpPreviewFailure('Baseline path changed while it was being opened.', 2);
     const handle = { path, descriptor, database };
     descriptor = undefined;
     database = undefined;
@@ -208,8 +216,14 @@ async function openReadonlyState(statePath: string): Promise<{ path: string; des
     if (code === 'ENOENT') throw new DumpPreviewFailure(`Baseline file does not exist: ${JSON.stringify(path)}.`, 2);
     if (code === 'ELOOP')
       throw new DumpPreviewFailure(`Baseline path must not be a symbolic link: ${JSON.stringify(path)}.`, 2);
-    if (error instanceof Error && /not a database|unable to open database|database disk image is malformed/i.test(error.message))
-      throw new DumpPreviewFailure(`Baseline file is not a supported readable SQLite database: ${JSON.stringify(path)}.`, 2);
+    if (
+      error instanceof Error &&
+      /not a database|unable to open database|database disk image is malformed/i.test(error.message)
+    )
+      throw new DumpPreviewFailure(
+        `Baseline file is not a supported readable SQLite database: ${JSON.stringify(path)}.`,
+        2,
+      );
     if (error instanceof Error && /no such (?:table|column)/i.test(error.message))
       throw new DumpPreviewFailure('Unsupported importer state schema: a required journal field is unavailable.', 2);
     throw new DumpPreviewFailure(`Unable to open baseline file ${JSON.stringify(path)}${code ? ` (${code})` : ''}.`, 2);
@@ -223,12 +237,15 @@ function validateBaselineSchema(database: Database): void {
     run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
   };
   for (const [table, columns] of Object.entries(required)) {
-    const found = database.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?').get('table', table) as
-      | { found: number }
-      | null;
+    const found = database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
+      .get('table', table) as { found: number } | null;
     if (!found) throw new DumpPreviewFailure(`Unsupported importer state schema: table ${table} is missing.`);
     const actual = new Set(
-      database.query(`PRAGMA table_info(${table})`).all().map((row) => (row as { name: string }).name),
+      database
+        .query(`PRAGMA table_info(${table})`)
+        .all()
+        .map((row) => (row as { name: string }).name),
     );
     const missing = columns.find((column) => !actual.has(column));
     if (missing)
@@ -281,7 +298,9 @@ function captureBaseline(database: Database, source: string, store: DumpPreviewS
         const row = JSON.parse(item.rowJson) as RecordRow;
         if (row.source !== source || row.recordKey !== item.recordKey || row.state !== 'present')
           throw new DumpPreviewFailure('Malformed journal row: baseline membership is unsupported.');
-        const projection = item.projectionJson ? JSON.parse(item.projectionJson) : { sourceKind: null, normalizedRecord: null };
+        const projection = item.projectionJson
+          ? JSON.parse(item.projectionJson)
+          : { sourceKind: null, normalizedRecord: null };
         store.captureBaselineMember(
           row,
           boundedJson([projection.sourceKind ?? null, projection.normalizedRecord ?? null]),
@@ -320,7 +339,11 @@ async function vndbRecords(
   tables.begin(source, run);
   try {
     if (options.entries) {
-      await tables.stage(source, run, observedEntries(input as AsyncIterable<RawVndbEntry>, options.signal, options.observer));
+      await tables.stage(
+        source,
+        run,
+        observedEntries(input as AsyncIterable<RawVndbEntry>, options.signal, options.observer),
+      );
     } else {
       await tables.stage(
         source,
@@ -430,9 +453,7 @@ export class DumpPreview {
       });
       dumpHandle = await openDump(options.dump, handles);
       const dumpBytes = ownedChunks(
-        dumpHandle
-          ? fileChunks(dumpHandle, signal)
-          : (options.stdin ?? (async function* () {})()),
+        dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (async function* () {})()),
         signal,
         'dump',
         options.observer,
@@ -453,8 +474,7 @@ export class DumpPreview {
         }
         for await (const record of records) {
           throwIfAborted(signal, 'Preview interrupted');
-          if (record.source !== options.source)
-            throw new DumpPreviewFailure('Source stream registration mismatch.');
+          if (record.source !== options.source) throw new DumpPreviewFailure('Source stream registration mismatch.');
           const conversion = registration.convert(
             { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
             { source },
@@ -511,7 +531,11 @@ export class DumpPreview {
         if (store.loadPlan())
           store.seal(previewId, {
             complete: false,
-            errorIdentity: interrupted ? 'cancelled' : error instanceof VndbInputError || error instanceof DumpInputError ? 'invalid-input' : 'invalid-input',
+            errorIdentity: interrupted
+              ? 'cancelled'
+              : error instanceof VndbInputError || error instanceof DumpInputError
+                ? 'invalid-input'
+                : 'invalid-input',
             errorMessage: interrupted
               ? 'Preview was cancelled.'
               : error instanceof DumpPreviewFailure || error instanceof PreviewStoreFailure

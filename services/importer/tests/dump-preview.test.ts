@@ -25,7 +25,10 @@ function archive(): Uint8Array {
     put(263, '00');
     put(
       148,
-      `${header.reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, '0')}\0 `,
+      `${header
+        .reduce((sum, byte) => sum + byte, 0)
+        .toString(8)
+        .padStart(6, '0')}\0 `,
     );
     return Buffer.concat([header, bytes, new Uint8Array((512 - (bytes.length % 512)) % 512)]);
   };
@@ -90,7 +93,10 @@ test('four launch sources decode real dumps without credentials or native effect
   try {
     const vndb = await dumpFile(directory, 'vndb.tar', archive());
     const cases = [
-      ['bangumi', await dumpFile(directory, 'bangumi.jsonl', await readFile(fixture('dumps/bangumi-subject.jsonlines')))],
+      [
+        'bangumi',
+        await dumpFile(directory, 'bangumi.jsonl', await readFile(fixture('dumps/bangumi-subject.jsonlines'))),
+      ],
       ['openlibrary', await dumpFile(directory, 'ol.tsv', await readFile(fixture('dumps/openlibrary.tsv')))],
       ['wikidata', await dumpFile(directory, 'wd.json', await readFile(fixture('dumps/wikidata.json')))],
       ['vndb', vndb],
@@ -136,8 +142,7 @@ test('baseline comparison pages changed and vanished keys and withholds vanished
       const changed = preview.page('changed', { limit: 20 });
       expect(changed.rows.length).toBeGreaterThan(0);
       const first = preview.page('new', { limit: 20 });
-      const next =
-        first.end === 'more' ? preview.page('new', { limit: 20, cursor: first.nextCursor }) : first;
+      const next = first.end === 'more' ? preview.page('new', { limit: 20, cursor: first.nextCursor }) : first;
       expect(next.rows.length).toBeLessThanOrEqual(20);
       const detail = preview.record(keys[0]!);
       expect(detail.found).toBe(true);

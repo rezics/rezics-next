@@ -60,7 +60,8 @@ export type PreviewPage<T> = Readonly<{
   kind: PreviewKind;
   limit: number;
   rows: readonly T[];
-}> & (Readonly<{ end: 'more'; nextCursor: string }> | Readonly<{ end: 'end' }>);
+}> &
+  (Readonly<{ end: 'more'; nextCursor: string }> | Readonly<{ end: 'end' }>);
 
 const RECORD_KEY =
   /^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u;
@@ -92,12 +93,7 @@ function cursorEncode(value: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }
 
-function cursorDecode(
-  value: string,
-  previewId: string,
-  source: string,
-  kind: PreviewKind,
-): { record: string } {
+function cursorDecode(value: string, previewId: string, source: string, kind: PreviewKind): { record: string } {
   if (bytes(value) > 2048 || !/^[A-Za-z0-9_-]+$/u.test(value))
     throw new PreviewStoreFailure('Cursor is malformed or exceeds its bound.', 2);
   let decoded: string;
@@ -134,10 +130,7 @@ export class DumpPreviewStore {
   private storedBytes = 0;
   private readonly ceiling: number;
 
-  constructor(
-    path: string | Database,
-    options: { maxStoreBytes?: number } = {},
-  ) {
+  constructor(path: string | Database, options: { maxStoreBytes?: number } = {}) {
     this.ceiling = options.maxStoreBytes ?? MAX_PREVIEW_STORE_BYTES;
     if (!Number.isSafeInteger(this.ceiling) || this.ceiling < 1)
       throw new PreviewStoreFailure('Preview storage ceiling is invalid.', 2);
@@ -262,7 +255,10 @@ export class DumpPreviewStore {
       .run(row.source, row.recordKey, comparisonJson, subjectBinding);
   }
 
-  baselineMember(source: string, recordKey: string): {
+  baselineMember(
+    source: string,
+    recordKey: string,
+  ): {
     row: RecordRow;
     comparisonJson: string;
     subjectBinding: string | null;
@@ -352,15 +348,7 @@ export class DumpPreviewStore {
           preview_id,source,record_key,record_revision,digest,converter_revision,subject_binding
         ) VALUES (?,?,?,?,?,?,?)`,
       )
-      .run(
-        previewId,
-        source,
-        row.recordKey,
-        row.recordRevision,
-        row.digest,
-        row.converterRevision,
-        row.subjectBinding,
-      );
+      .run(previewId, source, row.recordKey, row.recordRevision, row.digest, row.converterRevision, row.subjectBinding);
     this.database
       .query('UPDATE preview_plans SET vanished_count=vanished_count+1, stored_bytes=? WHERE preview_id=?')
       .run(this.storedBytes, previewId);
@@ -382,9 +370,7 @@ export class DumpPreviewStore {
     this.assertOpen();
     if (input.complete) {
       this.database
-        .query(
-          `UPDATE preview_plans SET complete=1, disappearance_would_block=?, stored_bytes=? WHERE preview_id=?`,
-        )
+        .query(`UPDATE preview_plans SET complete=1, disappearance_would_block=?, stored_bytes=? WHERE preview_id=?`)
         .run(input.disappearanceWouldBlock ? 1 : 0, this.storedBytes, previewId);
     } else {
       this.database
@@ -400,9 +386,10 @@ export class DumpPreviewStore {
 
   plan(previewId: string): PreviewPlan {
     this.assertOpen();
-    const row = this.database.query('SELECT * FROM preview_plans WHERE preview_id=?').get(previewId) as
-      | Record<string, unknown>
-      | null;
+    const row = this.database.query('SELECT * FROM preview_plans WHERE preview_id=?').get(previewId) as Record<
+      string,
+      unknown
+    > | null;
     if (!row) throw new PreviewStoreFailure('Preview plan is missing.');
     return {
       previewId: String(row.preview_id),
@@ -510,8 +497,7 @@ export class DumpPreviewStore {
   ): PreviewPage<PreviewVanishedRow> {
     this.assertOpen();
     const plan = this.plan(previewId);
-    if (!plan.complete)
-      throw new PreviewStoreFailure('Incomplete input cannot present a vanished membership page.', 2);
+    if (!plan.complete) throw new PreviewStoreFailure('Incomplete input cannot present a vanished membership page.', 2);
     const limit = options.limit ?? DEFAULT_PREVIEW_PAGE;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PREVIEW_PAGE)
       throw new PreviewStoreFailure('Page size must be an integer from 1 through 100.', 2);
