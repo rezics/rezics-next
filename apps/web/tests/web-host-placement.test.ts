@@ -13,7 +13,7 @@ afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 type Route = { file: string; placement: 'auth-lane' | 'raw-host' };
 
 function hostFiles(directory = app): string[] {
-  return [...new Bun.Glob('tests/*.host.test.ts').scanSync({ cwd: directory })].sort();
+  return [...new Set(new Bun.Glob('tests/**/*.host.test.ts').scanSync({ cwd: directory }))].sort();
 }
 
 function packageTokens(script: string): string[] {
@@ -94,16 +94,22 @@ test('the host command used by the general Web check routes Auth through its own
 test('discovers a newly added host file and routes every selected file exactly once', async () => {
   const directory = join(temporary, 'discovery');
   const tests = join(directory, 'tests');
-  mkdirSync(tests, { recursive: true });
+  mkdirSync(join(tests, 'native', 'deeper'), { recursive: true });
+  mkdirSync(join(directory, 'other'), { recursive: true });
   const selected = [
     'tests/auth-binding.host.test.ts',
     'tests/check-fresh.host.test.ts',
-    'tests/new-unrelated.host.test.ts',
+    'tests/native/deeper/stack.host.test.ts',
+    'tests/native/native-purchases.host.test.ts',
   ];
   for (const file of selected) writeFileSync(join(directory, file), '');
+  writeFileSync(join(tests, 'ordinary.test.ts'), '');
+  writeFileSync(join(tests, 'native', 'helper.ts'), '');
+  writeFileSync(join(directory, 'other', 'outside.host.test.ts'), '');
 
   let authRuns = 0;
   const nativeRuns: string[][] = [];
+  const nativeEnvironments: Array<string | undefined> = [];
   await runWebHostTests(
     { WEB_TEST_MARKER: 'preserved' },
     {
@@ -112,14 +118,22 @@ test('discovers a newly added host file and routes every selected file exactly o
         authRuns += 1;
         expect(env.WEB_TEST_MARKER).toBe('preserved');
       },
-      runNative: async (files) => {
+      runNative: async (files, env) => {
+        nativeEnvironments.push(env.WEB_TEST_MARKER);
         nativeRuns.push(files);
       },
     },
   );
 
   expect(authRuns).toBe(1);
-  expect(nativeRuns).toEqual([['tests/check-fresh.host.test.ts', 'tests/new-unrelated.host.test.ts']]);
+  expect(nativeEnvironments).toEqual(['preserved']);
+  expect(nativeRuns).toEqual([
+    [
+      'tests/check-fresh.host.test.ts',
+      'tests/native/deeper/stack.host.test.ts',
+      'tests/native/native-purchases.host.test.ts',
+    ],
+  ]);
   expect([...selected].sort()).toEqual(['tests/auth-binding.host.test.ts', ...nativeRuns[0]!].sort());
 });
 
@@ -153,15 +167,16 @@ test('the explicit Auth-only entry stays focused and propagates a lane failure',
 test('Auth and native host failures remain nonzero and the Auth lane cleanup runs', async () => {
   const directory = join(temporary, 'failures');
   const tests = join(directory, 'tests');
-  mkdirSync(tests, { recursive: true });
+  mkdirSync(join(tests, 'native'), { recursive: true });
   writeFileSync(join(tests, 'auth-binding.host.test.ts'), '');
   writeFileSync(join(tests, 'native-failure.host.test.ts'), '');
+  writeFileSync(join(tests, 'native', 'nested-failure.host.test.ts'), '');
   let cleanup = false;
   let nativeRun = false;
 
   await expect(
     runWebHostTests(
-      {},
+      { WEB_TEST_MARKER: 'preserved' },
       {
         directory,
         runAuthBinding: async () => {
@@ -171,14 +186,15 @@ test('Auth and native host failures remain nonzero and the Auth lane cleanup run
             cleanup = true;
           }
         },
-        runNative: async (files) => {
+        runNative: async (files, env) => {
           nativeRun = true;
-          expect(files).toEqual(['tests/native-failure.host.test.ts']);
-          throw new Error('native host test failed');
+          expect(env.WEB_TEST_MARKER).toBe('preserved');
+          expect(files).toEqual(['tests/native-failure.host.test.ts', 'tests/native/nested-failure.host.test.ts']);
+          throw new Error('native host test failed: tests/native/nested-failure.host.test.ts');
         },
       },
     ),
-  ).rejects.toThrow(/auth lane failed[\s\S]*native host test failed/);
+  ).rejects.toThrow(/auth lane failed[\s\S]*native host test failed: tests\/native\/nested-failure\.host\.test\.ts/);
 
   expect(cleanup).toBe(true);
   expect(nativeRun).toBe(true);

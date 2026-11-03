@@ -448,7 +448,7 @@ export type WebHostTestRuntime = {
 };
 
 function discoverWebHostFiles(directory: string): string[] {
-  return [...new Bun.Glob('tests/*.host.test.ts').scanSync({ cwd: directory })].sort();
+  return [...new Set(new Bun.Glob('tests/**/*.host.test.ts').scanSync({ cwd: directory }))].sort();
 }
 
 /** Routes every discovered Web host file once, preserving Auth's own database placement boundary. */
