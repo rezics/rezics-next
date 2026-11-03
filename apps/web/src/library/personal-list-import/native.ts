@@ -9,6 +9,7 @@ import {
   type VndbCommand,
   type VndbDecision,
   type VndbFailure,
+  type VndbJson,
   type VndbPage,
   type VndbPort,
   type VndbPreview,
@@ -22,6 +23,12 @@ type VndbSurface = KernelClient['libraryImports']['vndb'];
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function jsonValue(value: unknown): value is VndbJson {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  return Array.isArray(value) ? value.every(jsonValue) : record(value) && Object.values(value).every(jsonValue);
 }
 
 /** Runtime availability follows the same generated composition the adapter invokes below. */
@@ -105,7 +112,7 @@ function row(value: unknown): value is VndbRow {
   if (typeof value.title !== 'string' || !Array.isArray(value.labels) || !value.labels.every((label) => typeof label === 'string')) return false;
   if (value.identifier !== null && (!record(value.identifier) || value.identifier.provider !== 'vndb' || value.identifier.kind !== 'vn' || typeof value.identifier.value !== 'string')) return false;
   if (value.suggestedRole !== null && typeof value.suggestedRole !== 'string') return false;
-  if (!record(value.fields) || !Object.values(value.fields).every(sourceValue) || typeof value.retainedReason !== 'string') return false;
+  if (!record(value.fields) || !Object.values(value.fields).every(sourceValue) || typeof value.retainedReason !== 'string' || !jsonValue(value.evidence)) return false;
   if (!record(value.match) || !Array.isArray(value.match.candidates)) return false;
   if (!['unsupported', 'ambiguous', 'matched', 'unavailable', 'unmatched'].includes(String(value.match.status))) return false;
   if (value.target !== null && (!record(value.target) || typeof value.target.targetId !== 'string' || !Array.isArray(value.target.states) || !value.target.states.every(state))) return false;

@@ -25,9 +25,9 @@ export function VndbRowReview({ row, busy, onReview }: { row: VndbRow; busy: boo
   const [stateId, setStateId] = useState('');
   const [replace, setReplace] = useState(false);
   const [loading, setLoading] = useState(false);
-  const baseline = target?.id === row.target?.targetId
+  const baseline = row.target && target?.id === row.target.targetId
     ? row.target.baseline
-    : target?.id === row.decision?.targetId ? row.decision.baseline : null;
+    : row.decision && target?.id === row.decision.targetId ? row.decision.baseline : null;
 
   useEffect(() => {
     let current = true;

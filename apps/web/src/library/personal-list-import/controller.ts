@@ -43,6 +43,10 @@ function sameCommand(left: VndbCommand, right: VndbCommand): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function isVndbUnknown(value: unknown): value is VndbUnknown {
+  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'unknown' && 'command' in value;
+}
+
 function chooseRows(rows: VndbRow[], outcomes: Map<string, { ordinal: number; reviewId: string; status: string }>) {
   return rows
     .filter((row) => row.decision && !outcomes.has(receiptKey(row.ordinal, row.decision.reviewId)) &&
@@ -147,7 +151,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     }
     pending -= 1;
     if (!live()) return undefined;
-    if (response.kind === 'unknown') {
+    if (isVndbUnknown(response)) {
       unknown = response.command;
       notice = response;
       return response;

@@ -13,6 +13,8 @@ export type VndbSourceValue = {
   scale?: { min: number; max: number; step: number };
 };
 
+export type VndbJson = null | boolean | number | string | VndbJson[] | { [key: string]: VndbJson };
+
 export type VndbState = {
   id: string;
   labels: Record<string, string>;
@@ -30,7 +32,7 @@ export type VndbRow = {
   suggestedRole: string | null;
   fields: Record<string, VndbSourceValue>;
   retainedReason: string;
-  evidence: unknown;
+  evidence: VndbJson;
   match: { status: 'unsupported'; candidates: string[] } | {
     status: 'ambiguous' | 'matched' | 'unavailable' | 'unmatched';
     candidates: string[];

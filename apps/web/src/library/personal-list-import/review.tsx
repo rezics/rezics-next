@@ -26,7 +26,7 @@ export function VndbReviewPage({
   return (
     <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
       <p role="status">{m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}</p>
-      {snap.page?.state === 'cancelled' ? <p role="status">{m.library_bangumi_cancelled()}</p> : null}
+      {snap.page?.state === 'cancelled' ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
       <div className="flex flex-wrap gap-3">
         <VndbAction type="button" variant="outline" disabled={busy || snap.sourceVisible} onClick={onSource}>
           {m.library_vndb_source_button()}
