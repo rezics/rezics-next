@@ -277,10 +277,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       }
       await authorizeRealm();
       const latestQuestion = await readQuestion();
-      if (
-        ratingQuestionIdentity(latestQuestion) !== identity ||
-        latestQuestion.lifecycleRevision !== lifecycleRevision
-      )
+      if (ratingQuestionIdentity(latestQuestion) !== identity || latestQuestion.lifecycleRevision !== lifecycleRevision)
         throw new ProblemError('invalid_cursor');
       const latest = await readPrior();
       await observe(deps.pool, input.partition, deadline, async (client, epoch) => {

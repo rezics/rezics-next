@@ -60,7 +60,11 @@ export class QuestionLifecycleNotFoundError extends Error {
 function validate(input: QuestionLifecycleInput): void {
   if (!input || typeof input !== 'object' || routeOf(input.questionId) === null)
     throw new QuestionDefinitionInvalidError('questionId');
-  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1 || input.expectedRevision >= 2_147_483_647)
+  if (
+    !Number.isInteger(input.expectedRevision) ||
+    input.expectedRevision < 1 ||
+    input.expectedRevision >= 2_147_483_647
+  )
     throw new QuestionDefinitionInvalidError('expectedRevision');
 }
 
@@ -146,10 +150,10 @@ async function transition(
             throw new QuestionLifecycleNotFoundError();
           // Exact retries of the latest transition can reach their receipt. Once a later
           // lifecycle revision exists, an old replay is stale and cannot report success.
-          const exactReplay = current.lifecycleRevision === body.expectedRevision + 1 &&
-            current.lifecycleState === state;
-          const freshCommand = current.lifecycleRevision === body.expectedRevision &&
-            current.lifecycleState === expectedCurrentState;
+          const exactReplay =
+            current.lifecycleRevision === body.expectedRevision + 1 && current.lifecycleState === state;
+          const freshCommand =
+            current.lifecycleRevision === body.expectedRevision && current.lifecycleState === expectedCurrentState;
           if (!freshCommand && !exactReplay) throw new QuestionLifecycleConflictError();
         },
       },

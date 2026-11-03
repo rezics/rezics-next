@@ -191,9 +191,7 @@ export async function readSelectedQuestionDirectory(
     const latest = await withReadTransaction(deps.pool, async (client) => {
       const bounded = deadlineClient(client, deadline);
       await partitionReadClient(bounded, partitionOf(routeOf(input.realmId!)!));
-      return (
-        (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0'
-      );
+      return (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0';
     });
     if (latest !== page.lifecycleGeneration) throw new ProblemError('invalid_cursor');
     await authorize();

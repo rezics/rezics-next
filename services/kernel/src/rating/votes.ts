@@ -233,8 +233,7 @@ export function createVoteCommands(config: Dependencies) {
               false,
             );
             if (!current) throw new RatingQuestionNotFoundError();
-            if (input.units !== null && current.lifecycleState === 'retired')
-              throw new RatingQuestionRetiredError();
+            if (input.units !== null && current.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
           },
         },
         async (tx, command) => {
