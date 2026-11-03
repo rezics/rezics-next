@@ -4,17 +4,19 @@ import type { Pool } from 'pg';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { CommandUnavailableError } from '../access/unavailable.ts';
 import { resourceAuthorization } from '../access/index.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandTime, principalCommandIdentity, runCommand } from '../command/command.ts';
 import realmRead from '../community/realm-read.sql';
-import { partitionReadClient } from '../database/read-snapshot.ts';
+import { partitionReadClient, partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { Partition } from '../partition/partition.ts';
 import { QuestionDefinitionInvalidError } from './question-authoring.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
 import append from './question-label-append.sql';
@@ -33,6 +35,7 @@ export type QuestionLabel = {
   at: string | null;
   author: PublicIdentity | null;
 };
+export type QuestionLabelHistory = { labels: QuestionLabel[]; next: string | null };
 
 export function validateQuestionLabel(input: QuestionLabelInput): void {
   if (!input || routeOf(input.questionId) === null) throw new QuestionDefinitionInvalidError('questionId');
@@ -139,21 +142,96 @@ async function readableRealmQuestion(deps: Dependencies, actor: Actor, questionI
 
 type LabelRow = Awaited<ReturnType<typeof pageRead.run>>[number];
 
-/** Hydrate only consumed provenance through the current account allowlist, never
- * copied profiles. Every author checkout is independently anchored and released. */
-async function presentLabels(deps: Dependencies, rows: LabelRow[], deadline: number): Promise<QuestionLabel[]> {
-  const authors = new Map<string, PublicIdentity>();
+type AuthorObservation = {
+  identities: Map<string, PublicIdentity>;
+  epochs: Map<number, number>;
+};
+
+type LabelPageObservation = {
+  partition: Partition;
+  question: NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
+  rows: LabelRow[];
+  after: number;
+  ceiling: number;
+};
+
+function sameQuestionDefinition(
+  left: NonNullable<Awaited<ReturnType<typeof questionRead.run>>>,
+  right: NonNullable<Awaited<ReturnType<typeof questionRead.run>>>,
+): boolean {
+  return (
+    left.id === right.id &&
+    left.realmId === right.realmId &&
+    left.ownerId === right.ownerId &&
+    left.revision === right.revision &&
+    left.label === right.label &&
+    left.meaning === right.meaning &&
+    left.grain === right.grain &&
+    left.minimumUnits === right.minimumUnits &&
+    left.maximumUnits === right.maximumUnits &&
+    left.stepUnits === right.stepUnits
+  );
+}
+
+function sameLabelRows(left: LabelRow[], right: LabelRow[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((row, index) => {
+      const other = right[index]!;
+      return (
+        row.questionId === other.questionId &&
+        row.labelRevision === other.labelRevision &&
+        row.label === other.label &&
+        row.authorId === other.authorId &&
+        row.at === other.at
+      );
+    })
+  );
+}
+
+async function observeAuthors(deps: Dependencies, rows: LabelRow[], deadline: number): Promise<AuthorObservation> {
+  const identities = new Map<string, PublicIdentity>();
+  const epochs = new Map<number, number>();
   const ids = [...new Set(rows.flatMap((row) => (row.authorId === null ? [] : [row.authorId])))];
   for (const id of ids) {
     const route = routeOf(id);
     if (route === null) continue;
-    const identities = await withReadTransaction(deps.pool, async (client) => {
+    const home = partitionOf(route);
+    const observation = await withReadTransaction(deps.pool, async (client) => {
       const bounded = deadlineClient(client, deadline);
-      await partitionReadClient(bounded, partitionOf(route));
-      return readPublicIdentities(bounded, [route], [id]);
+      const bound = await partitionReadClientObservation(bounded, home);
+      return {
+        epoch: bound.partition.epoch,
+        identities: await readPublicIdentities(bound.client, [route], [id]),
+      };
     });
-    for (const identity of identities) authors.set(identity.id, identity);
+    const previousEpoch = epochs.get(home);
+    if (previousEpoch !== undefined && previousEpoch !== observation.epoch)
+      throw new CommandUnavailableError('fenced', home);
+    epochs.set(home, observation.epoch);
+    for (const identity of observation.identities) identities.set(identity.id, identity);
   }
+  return { identities, epochs };
+}
+
+function samePublicIdentity(left: PublicIdentity | undefined, right: PublicIdentity | undefined): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function currentAuthors(first: AuthorObservation, latest: AuthorObservation): Map<string, PublicIdentity> {
+  for (const [home, epoch] of first.epochs)
+    if (latest.epochs.get(home) !== epoch) throw new CommandUnavailableError('fenced', home);
+  const identities = new Map<string, PublicIdentity>();
+  for (const id of new Set([...first.identities.keys(), ...latest.identities.keys()])) {
+    const before = first.identities.get(id);
+    const now = latest.identities.get(id);
+    const current = samePublicIdentity(before, now) ? before : now;
+    if (current) identities.set(id, current);
+  }
+  return identities;
+}
+
+function labelValues(rows: LabelRow[], authors: Map<string, PublicIdentity>): QuestionLabel[] {
   return rows.map((row) => ({
     questionId: row.questionId,
     labelRevision: row.labelRevision,
@@ -161,6 +239,65 @@ async function presentLabels(deps: Dependencies, rows: LabelRow[], deadline: num
     at: row.at === null ? null : new Date(row.at).toISOString(),
     author: row.authorId === null ? null : (authors.get(row.authorId) ?? null),
   }));
+}
+
+async function observeLabelPage(
+  deps: Dependencies,
+  input: { questionId: string; limit: number },
+  deadline: number,
+  binding: CursorBinding,
+  cursor?: string,
+  selection?: { after: number; ceiling: number },
+): Promise<LabelPageObservation> {
+  const route = routeOf(input.questionId);
+  if (route === null) throw new ProblemError('not_found');
+  const home = partitionOf(route);
+  return withReadTransaction(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, deadline);
+    const bound = await partitionReadClientObservation(bounded, home);
+    const question = await questionRead.run(bound.client, { question_id: input.questionId });
+    if (!question || question.realmId === null) throw new ProblemError('not_found');
+
+    let after = selection?.after ?? 0;
+    let ceiling = selection?.ceiling ?? (question.labelRevision ?? 1);
+    if (cursor !== undefined) {
+      const decoded = decodeCursor(deps.tokens, binding, cursor, (deps.clock?.() ?? new Date()).getTime());
+      if (
+        !decoded.ok ||
+        decoded.after.length !== 2 ||
+        !decoded.after.every(
+          (value) => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 2_147_483_647,
+        ) ||
+        Number(decoded.after[0]) >= Number(decoded.after[1])
+      )
+        throw new ProblemError('invalid_cursor');
+      if (decoded.epoch !== bound.partition.epoch) throw new ProblemError('stale_cursor');
+      after = Number(decoded.after[0]);
+      ceiling = Number(decoded.after[1]);
+    }
+    const rows = await pageRead.run(bound.client, {
+      question_id: input.questionId,
+      after,
+      ceiling,
+      limit: input.limit,
+    });
+    return { partition: bound.partition, question, rows, after, ceiling };
+  });
+}
+
+async function observeQuestionHome(deps: Dependencies, questionId: string, deadline: number): Promise<Partition> {
+  const route = routeOf(questionId);
+  if (route === null) throw new ProblemError('not_found');
+  return withReadTransaction(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, deadline);
+    return (await partitionReadClientObservation(bounded, partitionOf(route))).partition;
+  });
+}
+
+/** Hydrate only consumed provenance through the current account allowlist, never
+ * copied profiles. Every author checkout is independently anchored and released. */
+async function presentLabels(deps: Dependencies, rows: LabelRow[], deadline: number): Promise<QuestionLabel[]> {
+  return labelValues(rows, (await observeAuthors(deps, rows, deadline)).identities);
 }
 
 /** Exact captions are distinct from both creation wording and today's head. */
@@ -191,49 +328,52 @@ export async function readQuestionLabelHistory(
   actor: Actor,
   input: { questionId: string; limit: number; cursor?: string },
   deadline: number,
-): Promise<{ labels: QuestionLabel[]; next: string | null }> {
+): Promise<QuestionLabelHistory> {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 20) throw new ProblemError('invalid_request');
   const question = await readableRealmQuestion(deps, actor, input.questionId, deadline);
+  const route = routeOf(input.questionId)!;
+  const home = partitionOf(route);
   const authority = actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
   const binding: CursorBinding = {
     operation: 'rating.question-label-history',
     parameters: {
       questionId: input.questionId,
       realmId: question.realmId,
+      partition: home,
       limit: input.limit,
       authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
     },
   };
   const now = () => (deps.clock?.() ?? new Date()).getTime();
-  let after = 0;
-  let ceiling = question.labelRevision ?? 1;
-  if (input.cursor !== undefined) {
-    const cursor = decodeCursor(deps.tokens, binding, input.cursor, now());
-    if (
-      !cursor.ok ||
-      cursor.epoch !== 1 ||
-      cursor.after.length !== 2 ||
-      !cursor.after.every((v) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 2_147_483_647) ||
-      Number(cursor.after[0]) >= Number(cursor.after[1])
-    )
-      throw new ProblemError('invalid_cursor');
-    after = Number(cursor.after[0]);
-    ceiling = Number(cursor.after[1]);
-  }
-  const raw = await withReadTransaction(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await partitionReadClient(bounded, partitionOf(routeOf(input.questionId)!));
-    return pageRead.run(bounded, { question_id: input.questionId, after, ceiling, limit: input.limit });
+  const initial = await observeLabelPage(deps, input, deadline, binding, input.cursor);
+  if (!sameQuestionDefinition(question, initial.question)) throw new ProblemError('not_found');
+  const consumed = initial.rows.slice(0, input.limit);
+  const firstAuthors = await observeAuthors(deps, consumed, deadline);
+  const latestAuthors = await observeAuthors(deps, consumed, deadline);
+  const authors = currentAuthors(firstAuthors, latestAuthors);
+  const finalSource = await observeLabelPage(deps, input, deadline, binding, undefined, {
+    after: initial.after,
+    ceiling: initial.ceiling,
   });
-  const consumed = raw.slice(0, input.limit);
-  const labels = await presentLabels(deps, consumed, deadline);
-  await readableRealmQuestion(deps, actor, input.questionId, deadline);
+  const currentQuestion = await readableRealmQuestion(deps, actor, input.questionId, deadline);
+  if (
+    !sameQuestionDefinition(initial.question, finalSource.question) ||
+    !sameQuestionDefinition(initial.question, currentQuestion)
+  )
+    throw new ProblemError('not_found');
+  if (initial.partition.epoch !== finalSource.partition.epoch) throw new ProblemError('stale_cursor');
+  if (!sameLabelRows(initial.rows, finalSource.rows))
+    throw new CommandUnavailableError('fenced', initial.partition.partitionNo);
+  const finalHome = await observeQuestionHome(deps, input.questionId, deadline);
+  if (finalHome.partitionNo !== initial.partition.partitionNo || finalHome.epoch !== initial.partition.epoch)
+    throw new ProblemError('stale_cursor');
+  const labels = labelValues(consumed, authors);
   const last = consumed.at(-1)?.labelRevision;
   return {
     labels,
     next:
-      raw.length > input.limit && last !== undefined
-        ? encodeCursor(deps.tokens, binding, { epoch: 1, after: [last, ceiling] }, now())
+      initial.rows.length > input.limit && last !== undefined
+        ? encodeCursor(deps.tokens, binding, { epoch: initial.partition.epoch, after: [last, initial.ceiling] }, now())
         : null,
   };
 }

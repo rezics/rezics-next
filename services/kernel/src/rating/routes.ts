@@ -702,7 +702,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             if (!['limit', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
-        response: { 200: RatingQuestionLabelHistorySchema, ...aggregateFailures },
+        response: { 200: RatingQuestionLabelHistorySchema, ...aggregateFailures, 409: problemSchema('stale_cursor') },
         detail: {
           ...publicReadDetail('rating.question_label_history', 'realm:read'),
           'x-resource-types': ['community.realm'],

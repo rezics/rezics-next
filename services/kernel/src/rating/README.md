@@ -382,14 +382,18 @@ presentation revision, independently of author/account history.
 
 History is ascending, with a signed initial revision ceiling, strict consumed-revision keyset and at most 20
 consumed rows plus one unconsumed lookahead. Tokens bind viewer credential/session authority, question, Realm,
-limit and ceiling through the existing 15-minute seal; another viewer, question or limit cannot reuse them.
-Appending later captions does not extend an existing traversal. Every request refreshes current question/Realm
-disclosure before reading and again after provenance hydration, releasing each anchored observation before the
-next checkout. Ban, concealment, question loss and account/session fences remain current native decisions;
-old tokens and exact references grant no disclosure authority. Failures propagate as unavailable, never as empty
-history. Retention follows the native question: revisions persist independently of author profile lifecycle,
-remain concealed with that question/Realm, and cascade only if the native question is physically removed. This
-command introduces no deletion, retirement, author-history restoration or lifecycle jobs.
+native home partition and epoch, limit and ceiling through the existing 15-minute seal; another viewer, question,
+limit or home cannot reuse them. A home epoch change retires a continuation as `stale_cursor`; same-epoch caption
+appends stay outside its signed ceiling. Every request checks current question/Realm disclosure before source reads,
+retains the native question and raw page observations while current author identities hydrate, then rechecks both
+before output. Each author uses Access's public identity allowlist twice, so a name change is reflected after later
+identities hydrate, erased accounts retain only the allowed tombstone, and absent/pending identities stay omitted.
+Every anchored observation releases before another home is checked out. Ban, concealment, question loss and
+account/session fences remain current native decisions; old tokens and exact references grant no disclosure
+authority. Failures propagate as unavailable, never as empty history. Retention follows the native question:
+revisions persist independently of author profile lifecycle, remain concealed with that question/Realm, and cascade
+only if the native question is physically removed. This command introduces no deletion, retirement, author-history
+restoration or lifecycle jobs.
 
 `question-read.sql` keeps canonical `label` and measurement `revision` unchanged and adds separate
 `presentationLabel`/`labelRevision`. Existing actual callers (`votes.ts`, `aggregate-read.ts`,
@@ -404,16 +408,24 @@ selection tokens. Latest captions come from a head point join, without history s
 
 - **Touches:** command: bounded native question/Realm authorization, one head lock, one revision insert, one
   head update and ordinary receipt/event; current point/directory: one head primary-key join per question;
-  exact caption: two disjoint revision-1/retained-revision point branches; history: one question-home indexed
-  `(question_id, revision)` keyset plus the revision-1 point, followed by current account presentation and final
-  disclosure. All observations release before checking out another home.
-- **Bound:** history consumes at most 20 labels, one lookahead and 20 distinct author point hydrations; exact
-  reads hydrate at most one author. SQL pushes the limit into the correction branch before union ordering.
-  No per-request census, refill or all-partition scan; command rows and statements are constant. Index descent
-  grows logarithmically with retained captions; full traversal grows by page count. Directory costs retain
-  their existing 20-row budget with one additional local head seek per row.
-- **Growth check:** `test/rating/question-label.test.ts` pins the connected native outcome and bounded keyset
-  behavior. Physical clause/growth measurements remain the dev verifier's work; no custom rank cost is inferred.
+  exact caption: two disjoint revision-1/retained-revision point branches; history: two question-home indexed
+  `(question_id, revision)` keysets and question points, current question/Realm disclosure at both ends, and a
+  final home epoch point. Up to 20 author IDs each use two released account-home identity reads. The read has no
+  runner phase; the existing writer retains its single registered event path.
+- **Bound:** Each raw page returns at most 21 label rows and only 20 consumed authors are hydrated, twice; source
+  materialization is at most 42 label rows and 40 identity results, with one partition row per anchored read.
+  Each read-only home transaction uses `BEGIN`, a local statement timeout and `COMMIT`; all pools are released
+  before the next home. Captions occupy at most 800 UTF-8 bytes each before JSON encoding; the response contains at
+  most 20 labels and 20 current public identity DTOs. SQL pushes the correction limit before union ordering. No
+  per-request census, refill, all-partition scan or invisible MVCC estimate is included. Index descent grows
+  logarithmically with retained captions; full traversal grows by page count. Directory costs retain their
+  existing 20-row budget with one additional local head seek per row.
+- **Growth check:** `test/rating/question-label.test.ts` pins the connected native journey, current author
+  disclosure, dependency retry and home-epoch retirement. Three-scale physical history growth remains part of the
+  controller's deferred acceptance; no custom rank cost is inferred.
+
+Decision: a native question-home epoch change returns `409 stale_cursor`, while same-epoch caption appends preserve
+the captured ceiling.
 
 `rating/events.ts` changes outside the declared paths to register the caption event; `test/kernel.test.ts`
 adds the three mounted paths to the exhaustive typed native route contract. No existing behavior assertion is
