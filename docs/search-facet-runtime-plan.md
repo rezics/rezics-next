@@ -1,21 +1,22 @@
-# Complete count-free facet runtime plan
+# Count-free facet runtime plan
 
-This is the implementation proposal for the adopted [facet wire](search-facets.md).
-It supplies the complete remaining in-row design and two whole implementation briefs.
-It supplies no runtime, native outcome, permission, measurement or catalogue provenance proof.
+This page records the implementation design and current boundary for the adopted [facet wire](search-facets.md).
+The unscoped count-free runtime and retained preparation are implemented in `facet-discovery-*`. Scoped population
+support extends that runtime through an internal source seam that requires native candidates, current membership and
+authorization observations. The seam does not establish that a scope owner has wired its producer or that native
+acceptance has passed.
 The wire and `facet-discovery-contract.ts` remain authoritative and unchanged.
 [Filtered lists](filtered-lists.md) owns meaning, privacy, useful pages and all numerical ceilings.
 The [Search consumer](../services/kernel/src/search/public-filter-consumer-contract.md) and
 [Semantic Source](../services/kernel/src/semantic/public-filter-source-contract.md) own native custody.
 
-New cross-owner choices below are **proposals pending owner adoption**, except the complete population
-declaration adopted by Semantic below.
-Search owns the proposed runtime, retained result and call-site changes.
+The owner contracts below remain authoritative for their respective sources and budgets.
+Search owns the delivered unscoped runtime, retained result and the scoped consumer seam.
 Semantic owns complete value population, selection, identity and Source extensions.
 Performance owns verification of existing budgets, without a proposed increase.
 Accounts, Content and rights owners retain their current authorities.
-A missing producer is an implementation prerequisite, not a reason to redesign this wire.
-Implementation must consume the owners' landed declarations; this plan does not recertify them.
+A missing scope producer is an implementation dependency, not a reason to redesign this wire.
+Implementation consumes owner declarations; this page does not recertify them.
 
 ## Outcome and implementation boundary
 
@@ -28,19 +29,19 @@ No public property facet response contains counts or a substitute for counts.
 Universal kind chips remain governed exclusively by the exception in `search-facets.md`.
 This plan neither adds kind-count work nor changes that exception.
 
-| Surface          | Specified now                         | Current implementation boundary             | Required closure                   |
-| ---------------- | ------------------------------------- | ------------------------------------------- | ---------------------------------- |
-| Facet HTTP wire  | Adopted count-free continuation       | Route has no cursor or required `next`      | Runtime brief                      |
-| Population       | Complete eligible distinct values     | Sampled relation projection and terms       | Complete retained preparation      |
-| Identity/order   | Canonical item/native code/type order | Count-ordered preview                       | Canonical unique retained keys     |
-| Privacy          | Whole query and current disclosure    | Candidate/label checks are insufficient     | Actual Source/consumer custody     |
-| Roster           | `facetProperties(release, types)`     | Web truncates at eight                      | Group full roster; separate ranges |
-| Native catalogue | Released shared fixture               | Existing acceptance writers own older cases | Native closure brief below         |
-| Renderer         | Adopted wire consumption              | Preview-oriented values and no continuation | Web consumer closure, no new DTO   |
+| Surface          | Specified now                         | Current implementation boundary                                        | Required closure                          |
+| ---------------- | ------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------- |
+| Facet HTTP wire  | Adopted count-free continuation       | Unscoped route and continuation are implemented                       | Scope admission call-site integration     |
+| Population       | Complete eligible distinct values     | Unscoped retained preparation and scoped native-source seam            | Scope-owner producer wiring and outcomes  |
+| Identity/order   | Canonical item/native code/type order | Retained keyset storage uses canonical value order                     | Native scoped value-order acceptance      |
+| Privacy          | Whole query and current disclosure    | Source START/FINAL and contributor/target checks; scoped identity bound | Current scope/membership integration proof |
+| Roster           | `facetProperties(release, types)`     | Web truncates at eight                                                 | Group full roster; separate ranges       |
+| Native catalogue | Released shared fixture               | Existing acceptance writers own older cases                           | Native closure brief below               |
+| Renderer         | Adopted wire consumption              | Unscoped consumer exists                                               | Scoped consumer closure, no new DTO       |
 
-### Why the current value population is incomplete
+### Why the former preview population was incomplete
 
-`query.ts:countFacets` executes a shard sampler and count-ordered terms aggregations.
+The former preview path in `query.ts:countFacets` executes a shard sampler and count-ordered terms aggregations.
 It asks for twice the requested output size, not a complete ordered value population.
 Its unsampled overflow probe detects possible incompleteness; it cannot enumerate missing values.
 `facets.ts:discloseFacetValues` checks target rows and labels, not every contributing subject.
@@ -461,36 +462,35 @@ Never close supplied pools, Source or unrelated workers.
 - Bound: failed/replayed work uses the same page/step ceilings; recovery rereads at most one step of input. Cleanup is a charged durable step, and replay has no fresh quota. No transaction spans external engine or another owner I/O.
 - Growth check: crash at frontier/effect/publication seams at 64/512/4096, CAS losers, lost responses, expired observations and cleanup restart; record actual discarded/reread work, resources and eventual useful pages.
 
-## Exact declarations and proposed native adapters
+## Current declarations and native runtime
 
 The following are currently callable exports, with the limits described above:
 `facetProperties(release, types)`, `parseFilter`, `admitFilter`, `walkFilter`,
 `validateHitOptions`, `chooseTexts`, `encodeSearchCursor`, `decodeSearchCursor`,
 `subjectSource(...).read/count/matchRelationFacets`, and the existing Search service/HTTP path.
 Only `facetProperties` owns structural roster traversal and deduplication.
-The type-only facet wire is available; it is not an installed validator or runtime factory.
+The count-free continuation validator and reader are implemented in `facets.ts`,
+`facet-discovery-contract.ts` and `facet-discovery-runtime.ts`; the native retained path is in
+`facet-discovery-native.ts`, `facet-discovery-operations.ts` and `facet-discovery-storage.ts`.
 
 `PublicFilterSource` declares `readPublicFilterProjectionPage`, `readPrivacyReductionHeads`
-and `readPrivacyReductionPage`; its production factory is not supplied by those declarations.
-`PublicFilterConsumerOperations` declares `capture`, `query`, `repairStep`, `readStatus`,
-`closeObservation`, and `close`.
-The selected future factory name `createPublicFilterConsumerOperations` remains a prerequisite.
-Its current `query` returns `SearchResult`, not a value enumeration page.
-Its capture input is a subject `SearchPlan`, not a facet descriptor.
-Do not cast a facet operation into these subject signatures or fabricate a successful adapter.
-The Source population request's consumer/start input still needs its exact observation join.
-Trust the owner closure of that gap; do not implement an alternate SQL safety oracle here.
+and `readPrivacyReductionPage`; `publicFilterSource(...)` supplies the registered runtime implementation.
+`PublicFilterConsumerOperations` retains subject capture, query and repair signatures. Facet enumeration uses the
+additive `FacetNativeOperations` boundary and the retained Search storage; it does not cast a facet request into a
+subject `query` operation. The Source population request binds its consumer observation through the existing Source
+binding before the retained build can publish.
 
 ### Adopted Semantic population declaration
 
 The separate complete population extension's closed types are exported from
 `services/kernel/src/semantic/facet-population-contract.ts` and additively from `semantic/index.ts`.
 The selected callable is `semantic/facet-population.ts:createFacetPopulationSource(config)`, with
-`config: Parameters<PublicFilterSourceFactory>[0]`. The retained runtime is implemented behind the agreed
-Source binding and key-page producer modules. Their provisional adapters fail unavailable until the real
-registered Source/definition, key-page and retained consumer readers are delivered.
-Type availability does not establish callable availability or native completeness.
-It enumerates anchored subject identities, not public response values or permission verdicts.
+`config: Parameters<PublicFilterSourceFactory>[0]`. The unscoped retained runtime consumes the registered Source
+definition and complete key-page producer; it still checks current contributor and target disclosure before output.
+The scoped runtime keeps this Source for complete property values and adds the scope owner's admitted native
+candidate/membership page. That page is bound to its actual source, query meaning, population observation and
+authorization revision, and is rechecked before retained publication and response disclosure.
+The population source enumerates anchored subject identities, not public response values or permission verdicts.
 Its retained window is native custody with ordinary creation/change coverage.
 
 ```ts
@@ -582,14 +582,15 @@ Permanent readiness or runtime placeholders cannot pass either implementation br
 - Bound: population/projection/build work executes only inside the stated preparation-step limits; readiness lookup and scheduling are charged request work. No new numerical allowance or method-shaped permission grant follows from these proposed declarations.
 - Growth check: real factories and current Source implementations at 64/512/4096, including sparse values and missing/moved owners; capture full native execution plus final status, not a type-only adapter or callback.
 
-## Whole implementation brief: continuation runtime
+## Original implementation brief: continuation runtime
 
-The following is one coherent runtime assignment, pending owner adoption of the proposed extensions.
-It includes transport, complete population, retained execution, current disclosure and generated closure.
-It does not split a runtime stub from the behavior needed to make it safe and useful.
+The unscoped continuation runtime and retained preparation described here are delivered. Scoped reads use the same
+retained storage and add their admitted source identity, meaning, population observation and authorization to the
+binding. Their population pages must come from the scope owner's finite native candidate and membership ports; an
+unscoped Global population cannot serve as a fallback.
 Estimate 1200 implementation lines across at most 24 files after owner ports are available.
-If the real diff requires more, reshape a complete bounded implementation boundary with the manager.
-Do not replace complete behavior with TODO factories to meet a line estimate.
+The estimate describes the original runtime assignment, not a new allowance or evidence that native scoped closure
+has passed.
 
 ### Dispatch metadata
 

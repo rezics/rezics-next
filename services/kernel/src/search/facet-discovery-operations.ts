@@ -22,6 +22,8 @@ import {
   type FacetNativePageResult,
 } from './facet-discovery-native.ts';
 import { createFacetDiscoveryStorage } from './facet-discovery-storage.ts';
+import { scopedFacetIdentityKey, type ScopedFacetAdmission, type ScopedFacetObservation } from './scoped-facet-source.ts';
+import type { createScopedFacetSource } from './scoped-facet-source.ts';
 
 type Meter = { -readonly [K in keyof PublicFilterCost]: number };
 const empty = (): Meter => ({
@@ -96,6 +98,7 @@ export function createFacetNativeOperations(
     source: PublicFilterSource;
     binding: PublicFilterSourceBinding;
     subjects: SubjectSource;
+    scopedFacets?: ReturnType<typeof createScopedFacetSource>;
     capture: (
       plan: PublicFilterConsumerCaptureInput,
       snapshot: 'pit' | 'prepared',
@@ -114,6 +117,7 @@ export function createFacetNativeOperations(
       access: config.access,
       clock: config.clock,
     }),
+    scopedFacets: config.scopedFacets,
     subjects: config.subjects,
     search: config.search,
     clock: config.clock,
@@ -139,6 +143,17 @@ export function createFacetNativeOperations(
 
   async function observe(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext) {
     return config.source.readPrivacyReductionHeads({ kind: 'population', queried, start: null, context });
+  }
+
+  async function observeScope(admission: ScopedFacetAdmission, context: PublicFilterConsumerContext) {
+    const current: ScopedFacetObservation = config.scopedFacets
+      ? await config.scopedFacets.observe(admission, context)
+      : { status: 'unready', cost: empty() };
+    return current.status === 'observed' && scopedFacetIdentityKey(current.identity) === scopedFacetIdentityKey(admission.identity)
+      ? current
+      : current.status === 'observed'
+        ? { status: 'unready' as const, cost: current.cost }
+        : current;
   }
 
   return {
@@ -185,6 +200,17 @@ export function createFacetNativeOperations(
         if (start.status === 'unready' || start.status === 'unavailable' || !clean(start))
           return { status: 'preparing' as const, cost: meter };
       }
+      seen.clear();
+      for (const read of reads) {
+        const admission = read.plan.scope;
+        if (!admission) continue;
+        const key = scopedFacetIdentityKey(admission.identity);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const start = await observeScope(admission, context);
+        add(meter, start.cost);
+        if (start.status !== 'observed') return { status: 'preparing' as const, cost: meter };
+      }
       const facets: Extract<FacetNativePageResult, { status: 'ready' }>['facets'][number][] = [];
       let asOf = '';
       for (const read of reads) {
@@ -224,6 +250,17 @@ export function createFacetNativeOperations(
         add(meter, final.cost);
         if (final.status === 'unready' || final.status === 'unavailable' || !clean(final))
           return { status: 'preparing' as const, cost: meter };
+      }
+      seen.clear();
+      for (const read of reads) {
+        const admission = read.plan.scope;
+        if (!admission) continue;
+        const key = scopedFacetIdentityKey(admission.identity);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const final = await observeScope(admission, context);
+        add(meter, final.cost);
+        if (final.status !== 'observed') return { status: 'preparing' as const, cost: meter };
       }
       return { status: 'ready' as const, facets, asOf, cost: meter };
     },

@@ -15,6 +15,12 @@ import { compileCurrentFilter } from './current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from './current-leaf.ts';
 import { subjectPartition, type SubjectSource, type RelationFacetMatch } from './source.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
+import {
+  scopedFacetIdentityKey,
+  type ScopedFacetAdmission,
+  type ScopedFacetObservation,
+  type ScopedFacetPage,
+} from './scoped-facet-source.ts';
 
 const idle = 24 * 60 * 60 * 1000;
 const emptyCost = (): PublicFilterCost => ({
@@ -65,9 +71,9 @@ type StoredValue = {
   target_terminal: string | null;
 };
 
-/** Search-owned value preparation and paging. Shared consumer capture/repair and Source's complete population
- * remain the sole lifecycle/coverage authorities. No registration, guard, bootstrap or ACK is implemented here.
- * Supply the actual native owners at composition; provisional Source adapters cannot make this runtime ready.
+/** Search-owned value preparation and paging. Shared consumer capture/repair plus Semantic's complete population
+ * or the admitted scoped candidate/membership source own lifecycle and coverage. No registration, guard,
+ * bootstrap or ACK is implemented here.
  */
 export function createFacetDiscoveryStorage(
   config: Readonly<{
@@ -75,12 +81,21 @@ export function createFacetDiscoveryStorage(
     source: PublicFilterSource;
     binding: PublicFilterSourceBinding;
     population: FacetPopulationSource;
+    scopedFacets?: Readonly<{
+      observe: (admission: ScopedFacetAdmission, context: PublicFilterConsumerContext) => Promise<ScopedFacetObservation>;
+      readPage: (
+        admission: ScopedFacetAdmission,
+        after: string | null,
+        inputLimit: number,
+        context: PublicFilterConsumerContext,
+      ) => Promise<ScopedFacetPage>;
+    }>;
     subjects: SubjectSource;
     search: OpenSearch;
     clock: KernelClock;
   }>,
 ) {
-  const { pool, source, binding, population, subjects, search, clock } = config;
+  const { pool, source, binding, population, scopedFacets, subjects, search, clock } = config;
   function check(context: PublicFilterConsumerContext) {
     if (Date.now() >= context.deadline) throw new Error('Facet deadline exceeded');
   }
@@ -112,10 +127,20 @@ export function createFacetDiscoveryStorage(
     };
   }
   function coordinates(plan: FacetNativePlan, queried: PublicFilterQueriedObservation, partition: number) {
+    const scope = plan.scope ? scopedFacetIdentityKey(plan.scope.identity) : null;
     return [
       partition,
-      hash({ consumer: queried.consumer, property: plan.property, meaning: plan.meaning.digest }),
-      hash({ observation: queried.snapshot.observation, property: plan.property }),
+      hash({
+        consumer: queried.consumer,
+        property: plan.property,
+        meaning: plan.meaning.digest,
+        ...(scope === null ? {} : { scope }),
+      }),
+      hash({
+        observation: queried.snapshot.observation,
+        property: plan.property,
+        ...(scope === null ? {} : { scope }),
+      }),
     ];
   }
   async function join(
@@ -153,6 +178,16 @@ export function createFacetDiscoveryStorage(
       observed.blocking.length === 0
       ? observed
       : null;
+  }
+  async function safeScope(plan: FacetNativePlan, context: PublicFilterConsumerContext, meter: Meter) {
+    if (!plan.scope) return true;
+    if (!scopedFacets) return false;
+    const observed = await scopedFacets.observe(plan.scope, context);
+    add(meter, observed.cost);
+    return (
+      observed.status === 'observed' &&
+      scopedFacetIdentityKey(observed.identity) === scopedFacetIdentityKey(plan.scope.identity)
+    );
   }
   /** One complete native input record per durable step. Lower producer limits, retries and rejects remain charged.
    * Effects and their frontier commit together by version CAS, after releasing connections for all owner I/O.
@@ -242,17 +277,23 @@ export function createFacetDiscoveryStorage(
     let contributions: (StoredValue & { key: string })[] = [];
     try {
       if (phase === 'population') {
-        const page = await population.readFacetPopulationPage({
-          population: joined.definition.readDefinition,
-          frontier,
-          inputLimit: 1,
-          capture: { kind: 'population', queried, start: null, context },
-        });
+        if (plan.scope && !scopedFacets) return false;
+        const page: ScopedFacetPage | Awaited<ReturnType<FacetPopulationSource['readFacetPopulationPage']>> = plan.scope
+          ? await scopedFacets!.readPage(plan.scope, frontier, 1, context)
+          : await population.readFacetPopulationPage({
+              population: joined.definition.readDefinition,
+              frontier,
+              inputLimit: 1,
+              capture: { kind: 'population', queried, start: null, context },
+            });
         add(meter, page.cost);
         if (page.status === 'changed') return changed();
         if (page.status !== 'progress' && page.status !== 'complete') return false;
+        const expectedPopulation = plan.scope
+          ? scopedFacetIdentityKey(plan.scope.identity)
+          : queried.snapshot.observation;
         if (
-          page.observation !== queried.snapshot.observation ||
+          page.observation !== expectedPopulation ||
           page.subjects.length > 1 ||
           !page.frontier ||
           (page.status === 'progress' && page.frontier === frontier)
@@ -419,7 +460,12 @@ export function createFacetDiscoveryStorage(
         }
       } else if (phase === 'seal') {
         // Complete is native finite population proof, including creation/change bridge and final validation.
-        if (!complete || !(await safe(queried, context, meter)) || !(await join(plan, queried, context, meter)))
+        if (
+          !complete ||
+          !(await safe(queried, context, meter)) ||
+          !(await safeScope(plan, context, meter)) ||
+          !(await join(plan, queried, context, meter))
+        )
           return false;
         publish = true;
       }

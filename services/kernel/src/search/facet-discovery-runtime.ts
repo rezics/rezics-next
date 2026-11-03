@@ -11,6 +11,7 @@ import type { FacetDiscoveryProvider, FacetNativePlan, FacetNativeRead } from '.
 import { codeFacet, typeFacetLabels, type Facet } from './facets.ts';
 import { chooseTexts } from './hits.ts';
 import type { TextNode } from './text.ts';
+import { scopedFacetIdentityKey, type ScopedFacetAdmission } from './scoped-facet-source.ts';
 
 const operation = 'POST /v1/subjects:facets';
 const ready = () => new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
@@ -38,6 +39,8 @@ export type FacetDiscoveryInput = Readonly<{
   languages: readonly string[] | undefined;
   now: number;
   context: PublicFilterConsumerContext;
+  /** Internal request supplied by the Realm/Collection admission owner; absent from the facet wire DTO. */
+  scope?: ScopedFacetAdmission;
 }>;
 
 function invalid(index: number): never {
@@ -126,7 +129,11 @@ export function validateFacetCursorRelease(positions: readonly (Position | undef
 // Native registration includes physical incarnation, complete meaning and the registered read definition.
 // Keep that context confidential and fixed-size under the existing Search cursor profile.
 function consumerBinding(read: FacetNativeRead): string {
-  const canonical = canonicalize({ consumer: read.queried.consumer, meaning: read.plan.meaning.digest });
+  const canonical = canonicalize({
+    consumer: read.queried.consumer,
+    meaning: read.plan.meaning.digest,
+    ...(read.plan.scope ? { scope: scopedFacetIdentityKey(read.plan.scope.identity) } : {}),
+  });
   if (canonical === undefined) throw ready();
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -214,6 +221,7 @@ export async function readFacetDiscovery(
     if (Date.now() >= input.context.deadline) throw new ProblemError('deadline_exceeded');
   };
   checkDeadline();
+  if (input.scope) scopedFacetIdentityKey(input.scope.identity);
   validateFacetCursorRelease(positions, input.release);
   if (!Number.isSafeInteger(provider.generation) || provider.generation < 1 || !provider.source) throw ready();
   if (positions.some((previous) => previous && previous.source !== provider.source)) throw restart();
@@ -231,6 +239,7 @@ export async function readFacetDiscovery(
       property: facet.property,
       valueKind: facet.property === 'type' ? 'type' : codeFacet(input.release, facet.property) ? 'code' : 'item',
       meaning: provider.meaning,
+      ...(input.scope ? { scope: input.scope } : {}),
     };
     const captured = await provider.operations.captureFacet({ plan }, input.context);
     charge(captured.cost);
