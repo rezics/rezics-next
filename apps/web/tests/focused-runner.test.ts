@@ -1,13 +1,29 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { admitExplicitHostTestCommand, runFocusedCommand } from '../scripts/focused.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-web-focused-test-'));
+const workspace = resolve(import.meta.dir, '../..');
 
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
+
+async function runFocused(
+  appDirectory: string,
+  command: string[],
+): Promise<{ status: number; output: string }> {
+  let output = '';
+  const status = await runFocusedCommand(command, {
+    appDirectory,
+    prepare: () => 0,
+    onOutput(_stream, chunk) {
+      output += new TextDecoder().decode(chunk);
+    },
+  });
+  return { status, output };
+}
 
 function command(source: string, args: string[] = []): string[] {
   return [process.execPath, '-e', source, ...args];
@@ -65,6 +81,36 @@ test('named host files use the host-runner path-ignore override', () => {
       'tests/pages-workers.host.test.ts',
     ]),
   ).toEqual(['bun', 'test', '--path-ignore-patterns=custom/**', 'tests/pages-workers.host.test.ts']);
+});
+
+test('an explicit nested host file executes when bunfig excludes host discovery', async () => {
+  mkdirSync(join(workspace, '.temp'), { recursive: true });
+  const project = mkdtempSync(join(workspace, '.temp/focused-host-exec-'));
+  try {
+    mkdirSync(join(project, 'tests', 'native'), { recursive: true });
+    writeFileSync(join(project, 'bunfig.toml'), '[test]\npathIgnorePatterns = ["**/*.host.test.ts"]\n');
+    writeFileSync(
+      join(project, 'tests', 'ordinary.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('ordinary witness', () => { console.log('ORDINARY_WITNESS_EXECUTED'); expect(1).toBe(1); });\n",
+    );
+    writeFileSync(
+      join(project, 'tests', 'native', 'native-purchases.host.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('nested host witness', () => { console.log('HOST_WITNESS_EXECUTED'); expect(1).toBe(1); });\n",
+    );
+
+    const discovery = await runFocused(project, ['bun', 'test']);
+    expect(discovery.status, discovery.output).toBe(0);
+    expect(discovery.output).toContain('ORDINARY_WITNESS_EXECUTED');
+    expect(discovery.output).not.toContain('HOST_WITNESS_EXECUTED');
+
+    const host = await runFocused(project, ['bun', 'test', 'tests/native/native-purchases.host.test.ts']);
+    expect(host.status, host.output).toBe(0);
+    expect(host.output).not.toContain('did not match any test files');
+    expect(host.output).toContain('HOST_WITNESS_EXECUTED');
+    expect(host.output).toMatch(/Ran [1-9]\d* tests? across [1-9]\d* files?/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
 });
 
 test('forwards the focused command, uses owned test state, and never requests a stack lease', async () => {
