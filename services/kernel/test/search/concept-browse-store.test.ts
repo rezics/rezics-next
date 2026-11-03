@@ -4,8 +4,11 @@ import { createPool } from '../../src/database/pool.ts';
 import { createScopePreparationStore } from '../../src/search/scope-preparation-store.ts';
 import { cleanupConceptBrowses, createConceptBrowseStore } from '../../src/search/concept-browse-store.ts';
 import {
-  advanceConceptBrowse, currentConceptMembership, startConceptBrowse,
-  type ConceptBrowseSource, type ConceptBrowseState,
+  advanceConceptBrowse,
+  currentConceptMembership,
+  startConceptBrowse,
+  type ConceptBrowseSource,
+  type ConceptBrowseState,
 } from '../../src/search/concept-browse.ts';
 
 // Real retained storage under the landing runner's isolated, migrated database.
@@ -13,13 +16,20 @@ import {
 const pool = createPool(process.env.DATABASE_URL!);
 afterAll(() => pool.end());
 const binding = {
-  release: 'release', graph: 'graph', scheme: 'scheme', membership: 'membership', principal: 'reader', request: 'request',
+  release: 'release',
+  graph: 'graph',
+  scheme: 'scheme',
+  membership: 'membership',
+  principal: 'reader',
+  request: 'request',
 };
 const selection = { property: 'schema:keywords', concept: 'root', scheme: 'scheme', includeChildren: true } as const;
 async function fixture() {
-  const prefix = `concept-${randomUUID().slice(0, 8)}-`, id = randomBytes(32).toString('hex');
+  const prefix = `concept-${randomUUID().slice(0, 8)}-`,
+    id = randomBytes(32).toString('hex');
   let clock = Date.now();
-  const expiresAt = clock + 60000, deadline = clock + 30000;
+  const expiresAt = clock + 60000,
+    deadline = clock + 30000;
   const options = { expiresAt, clock: () => clock };
   const reader = createConceptBrowseStore(pool, prefix, id, options);
   const initial = (await startConceptBrowse(selection, binding, reader))!;
@@ -28,9 +38,17 @@ async function fixture() {
   expect(claim).not.toBeNull();
   const writer = createConceptBrowseStore(pool, prefix, id, { ...options, leaseUntil: deadline });
   return {
-    prefix, id, reader, writer, plans, deadline, expiresAt,
+    prefix,
+    id,
+    reader,
+    writer,
+    plans,
+    deadline,
+    expiresAt,
     state: { ...initial, retained: { id, revision: claim!.revision } } as ConceptBrowseState,
-    expire: () => { clock = expiresAt + 1; },
+    expire: () => {
+      clock = expiresAt + 1;
+    },
   };
 }
 
@@ -44,7 +62,8 @@ test('root seeding owns the definition before awaiting storage', async () => {
   mutable.concept = 'changed';
   const retained = await creating;
   expect(await store.read({ version: 2, selection, binding, retained })).toEqual({
-    status: 'building', next: { parent: 'root', after: null },
+    status: 'building',
+    next: { parent: 'root', after: null },
   });
 });
 
@@ -57,11 +76,18 @@ test('complete closure above 64 survives interruption, cycles and replay without
     children: async ({ parent, after, limit }) => {
       sought.set(parent, (sought.get(parent) ?? 0) + 1);
       const edges = parent === 'root' ? children : ['root', 'child-000'];
-      const start = after === null ? 0 : Number(after), end = Math.min(start + limit, edges.length);
-      return { status: 'current', page: {
-        binding, children: edges.slice(start, end), examined: end - start,
-        after: end === start ? after : String(end).padStart(6, '0'), hasMore: end < edges.length,
-      } };
+      const start = after === null ? 0 : Number(after),
+        end = Math.min(start + limit, edges.length);
+      return {
+        status: 'current',
+        page: {
+          binding,
+          children: edges.slice(start, end),
+          examined: end - start,
+          after: end === start ? after : String(end).padStart(6, '0'),
+          hasMore: end < edges.length,
+        },
+      };
     },
   };
   let state = f.state;
@@ -70,9 +96,17 @@ test('complete closure above 64 survives interruption, cycles and replay without
   const first = await advanceConceptBrowse(source, f.writer, state, { pages: 1, edges: 64, pageSize: 64 });
   expect(first.status).toBe('preparing');
   if (first.status !== 'preparing') throw new Error('Expected retained preparation');
-  expect(await f.writer.advance(state, { parent: 'root', after: null }, {
-    children: ['uncommitted'], after: null, exhausted: true,
-  })).toBeNull();
+  expect(
+    await f.writer.advance(
+      state,
+      { parent: 'root', after: null },
+      {
+        children: ['uncommitted'],
+        after: null,
+        exhausted: true,
+      },
+    ),
+  ).toBeNull();
   state = first.state;
   await f.writer.checkpoint(state, 0);
   const interrupted = await f.plans.read(f.id);
@@ -92,8 +126,14 @@ test('complete closure above 64 survives interruption, cycles and replay without
   expect(sought.get('root')).toBe(3);
   expect([...sought.entries()].filter(([key]) => key !== 'root').every(([, count]) => count === 1)).toBe(true);
   expect(await f.reader.contains({ ...state, binding: { ...binding, release: 'changed' } }, 'root')).toBeNull();
-  expect(await currentConceptMembership({ ...source, observe: async () => ({ status: 'unavailable' }) }, f.reader, state, 'absent'))
-    .toBe('not_proven');
+  expect(
+    await currentConceptMembership(
+      { ...source, observe: async () => ({ status: 'unavailable' }) },
+      f.reader,
+      state,
+      'absent',
+    ),
+  ).toBe('not_proven');
   expect(await f.reader.contains(state, 'root')).toBeNull();
 });
 
@@ -109,9 +149,16 @@ test('one worker CAS wins; a stale retirement or checkpoint cannot change its su
   await f.writer.retire(f.state);
   await f.writer.checkpoint(f.state, 30000);
   expect((await f.reader.read(state)).status).toBe('building');
-  expect(await f.writer.advance({ ...state, selection: { ...selection, concept: 'foreign' } }, {
-    parent: 'root', after: '001',
-  }, { children: ['foreign'], after: null, exhausted: true })).toBeNull();
+  expect(
+    await f.writer.advance(
+      { ...state, selection: { ...selection, concept: 'foreign' } },
+      {
+        parent: 'root',
+        after: '001',
+      },
+      { children: ['foreign'], after: null, exhausted: true },
+    ),
+  ).toBeNull();
   await expect(f.reader.advance(state, { parent: 'root', after: '001' }, delta)).rejects.toThrow('lease');
   f.expire();
   await expect(f.writer.seal(state)).rejects.toThrow('lease');
@@ -121,9 +168,15 @@ test('one worker CAS wins; a stale retirement or checkpoint cannot change its su
 test('expiry immediately disables evidence; retirement cleanup is bounded and tombstones reject locator reuse', async () => {
   const f = await fixture();
   const children = Array.from({ length: 256 }, (_, n) => `key-${n}`);
-  const next = await f.writer.advance(f.state, { parent: 'root', after: null }, {
-    children, after: '256', exhausted: true,
-  });
+  const next = await f.writer.advance(
+    f.state,
+    { parent: 'root', after: null },
+    {
+      children,
+      after: '256',
+      exhausted: true,
+    },
+  );
   const state = { ...f.state, retained: next! };
   f.expire();
   expect(await f.reader.contains(state, 'root')).toBeNull();
@@ -133,6 +186,7 @@ test('expiry immediately disables evidence; retirement cleanup is bounded and to
   expect(await cleanupConceptBrowses(pool, f.prefix, f.expiresAt + 1)).toBe(0);
   const tombstone = await f.plans.read(f.id);
   expect(tombstone).toMatchObject({ state: 'retained', frontier: { kind: 'concept', cleaned: true } });
-  await expect(createConceptBrowseStore(pool, f.prefix, f.id, { expiresAt: Date.now() + 60000 })
-    .create(selection, binding)).rejects.toThrow('changed or expired');
+  await expect(
+    createConceptBrowseStore(pool, f.prefix, f.id, { expiresAt: Date.now() + 60000 }).create(selection, binding),
+  ).rejects.toThrow('changed or expired');
 });

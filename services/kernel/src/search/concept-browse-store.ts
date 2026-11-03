@@ -25,10 +25,19 @@ const validKey = (value: string) =>
 const definition = (selection: ConceptDescendantSelection, binding: ConceptBrowseBinding) =>
   JSON.stringify({
     kind: 'concept',
-    selection: { concept: selection.concept, property: selection.property, scheme: selection.scheme, includeChildren: true },
+    selection: {
+      concept: selection.concept,
+      property: selection.property,
+      scheme: selection.scheme,
+      includeChildren: true,
+    },
     binding: {
-      release: binding.release, graph: binding.graph, scheme: binding.scheme,
-      membership: binding.membership, principal: binding.principal, request: binding.request,
+      release: binding.release,
+      graph: binding.graph,
+      scheme: binding.scheme,
+      membership: binding.membership,
+      principal: binding.principal,
+      request: binding.request,
     },
   });
 const definitionOf = (state: ConceptBrowseState) => definition(state.selection, state.binding);
@@ -133,13 +142,20 @@ export function createConceptBrowseStore(pool: Pool, prefix: string, scopeId: st
     ) {
       const lease = workerLease();
       // Snapshot bounded caller data before the transaction acquires a connection.
-      const parent = expected.parent, previous = expected.after, after = delta.after, exhausted = delta.exhausted;
+      const parent = expected.parent,
+        previous = expected.after,
+        after = delta.after,
+        exhausted = delta.exhausted;
       const children = [...new Set(delta.children)];
       if (
-        delta.children.length > CONCEPT_BROWSE_LIMITS.pageSize || !children.every(validKey) || !validKey(parent) ||
-        (previous !== null && !validKey(previous)) || (after !== null && !validKey(after)) ||
+        delta.children.length > CONCEPT_BROWSE_LIMITS.pageSize ||
+        !children.every(validKey) ||
+        !validKey(parent) ||
+        (previous !== null && !validKey(previous)) ||
+        (after !== null && !validKey(after)) ||
         (!exhausted && (after === null || (previous !== null && after <= previous)))
-      ) throw new TypeError('Invalid concept frontier delta');
+      )
+        throw new TypeError('Invalid concept frontier delta');
       const values = [...matches(state), lease, parent, previous];
       // BEGIN, owning-plan CAS, frontier change, inserted-members-to-frontier CTE, COMMIT.
       // Each admitted child can write one member and one frontier, including index entries.
@@ -219,7 +235,8 @@ export function createConceptBrowseStore(pool: Pool, prefix: string, scopeId: st
     /** Release only this worker's current revision; replay cannot release a successor's lease. */
     async checkpoint(state: ConceptBrowseState, delay: number) {
       const lease = workerLease();
-      if (!Number.isSafeInteger(delay) || delay < 0 || delay > 30000) throw new RangeError('Invalid concept retry delay');
+      if (!Number.isSafeInteger(delay) || delay < 0 || delay > 30000)
+        throw new RangeError('Invalid concept retry delay');
       charge(1, 1, 16384);
       await pool.query(
         `UPDATE search.scope_preparation SET lease_until=0,due_at=$7,revision=revision+1
