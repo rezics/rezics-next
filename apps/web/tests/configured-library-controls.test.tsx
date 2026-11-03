@@ -499,7 +499,10 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
     revision: 3,
     amount: '12',
   });
-  root.unmount();
+  await act(async () => {
+    root.unmount();
+  });
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
   for (const [key, descriptor] of previous)
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
