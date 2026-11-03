@@ -7,8 +7,8 @@ import {
 } from '../../src/search/collection-discovery.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
-const id = '00000000-0000-4000-8000-000000000010';
-const otherId = '00000000-0000-4000-8000-000000000011';
+const id = '00000000-0000-7000-8000-000000000010';
+const otherId = '00000000-0000-7000-8000-000000000011';
 const route = routeOf(id)!;
 const partition = partitionOf(route);
 const publicRow = {
