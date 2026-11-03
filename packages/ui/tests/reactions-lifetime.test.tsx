@@ -27,9 +27,9 @@ declare global {
 
 function entrySource(componentPath: string): string {
   return `
-import React, { useState } from ${JSON.stringify(packageRequire.resolve('react'))};
-import { createRoot } from ${JSON.stringify(packageRequire.resolve('react-dom/client'))};
-import { flushSync } from ${JSON.stringify(packageRequire.resolve('react-dom'))};
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { Reactions } from ${JSON.stringify(componentPath)};
 
 const reactionKinds = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
@@ -203,7 +203,19 @@ test('shared Reactions serialize original choices and retire every obsolete visi
   let page: Page | undefined;
   try {
     writeFileSync(entry, entrySource(join(packageRoot, 'src/components/reactions.tsx')));
-    const built = await Bun.build({ entrypoints: [entry], target: 'browser', format: 'iife' });
+    const built = await Bun.build({
+      entrypoints: [entry],
+      target: 'browser',
+      format: 'iife',
+      plugins: [
+        {
+          name: 'workspace-react',
+          setup(build) {
+            build.onResolve({ filter: /^react(?:\/.*)?$/ }, ({ path }) => ({ path: packageRequire.resolve(path) }));
+          },
+        },
+      ],
+    });
     expect(built.success, built.logs.map(String).join('\n')).toBe(true);
 
     browser = await chromium.launch();
