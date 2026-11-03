@@ -139,7 +139,8 @@ function render({
   statement?: CreatorStatement;
   retireControl?: boolean;
 } = {}) {
-  const line = statement.id === historicalCreatorStatementFixture.id ? historicalCreatorLineFixture : creatorLineFixture;
+  const line =
+    statement.id === historicalCreatorStatementFixture.id ? historicalCreatorLineFixture : creatorLineFixture;
   return (
     <PatternStory visitor="Signed In" path={`/creator/statements/${statement.id}`}>
       <AppShell>

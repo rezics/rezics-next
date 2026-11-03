@@ -34,14 +34,15 @@ test('correction starts a new command while an uncertain retry preserves the ori
   expect(correction.beginCorrection()).toBe(true);
   correction.setCorrectionDraft('BANK/corrected reference');
   expect(correction.canSubmitCorrection('BANK/corrected reference')).toBe(true);
-  await correction.submit('BANK/corrected reference', async (input) => {
-    sent.push(input);
-    return saved(input);
-  }, () => true);
-  expect(sent.map(({ paidReference }) => paidReference)).toEqual([
-    'BANK/first reference',
+  await correction.submit(
     'BANK/corrected reference',
-  ]);
+    async (input) => {
+      sent.push(input);
+      return saved(input);
+    },
+    () => true,
+  );
+  expect(sent.map(({ paidReference }) => paidReference)).toEqual(['BANK/first reference', 'BANK/corrected reference']);
   expect(sent[1]!.idempotencyKey).not.toBe(sent[0]!.idempotencyKey);
   expect(correction.result).toMatchObject({ kind: 'saved', statement: { paidReference: 'BANK/corrected reference' } });
 
