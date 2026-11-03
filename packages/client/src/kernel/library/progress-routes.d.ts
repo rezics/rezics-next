@@ -1,3 +1,4 @@
+import type { EpisodeProgressWireRoutes } from './episode-progress-wire.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
@@ -5214,7 +5215,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
     };
-} & {
+} & EpisodeProgressWireRoutes & {
     v1: {
         progressSessions: {
             post: {

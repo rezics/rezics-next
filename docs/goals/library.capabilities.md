@@ -455,3 +455,13 @@ receipts. Private evidence retains fields without native admission, including si
 `services/kernel/test/library/list-import-mal.test.ts` covers parser losses and HTTP preview/review/apply,
 unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
 Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.
+
+## Canonical episode completion capability
+
+Owners can independently mark canonical episodes 1 and 3 while 2 stays unmarked, with specials and rereads kept
+separate. The mounted `progress_session.episodes` and `progress_session.record_episodes` operations use persisted
+Episode Subjects and admitted direct parent relationships; generic progress retains its existing meaning.
+[Exact shapes, limits and lifecycle](../library-episode-progress.md) include private bounded inspection, catalogue
+withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity.
+Focused native scenarios: `services/kernel/test/library/episode-progress.test.ts`. Broader frozen integration
+acceptance remains controller-owned; source presence is not an acceptance result.

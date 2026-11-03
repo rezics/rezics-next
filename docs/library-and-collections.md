@@ -475,3 +475,12 @@ admission against the current released role; scores, simultaneous progress measu
 dates, privacy and unsupported fields remain visible private source evidence. Identifier matching uses existing
 external claims, with explicit unmatched resolution and guarded conflict replacement. Uploads and reviews belong
 to Library account erasure. This source does not provide live synchronization, catalogue creation or public reviews.
+
+## Canonical episode facts
+
+[Canonical episode progress](library-episode-progress.md) defines the installed authenticated per-session checklist.
+Canonical completions are separate personal facts over real Episode Subject IDs and admitted direct parent
+relationships. They preserve noncontiguous holes, specials and rereads without converting scalar amounts or manual
+unit tokens. Catalogue order/membership/visibility changes never rewrite these rows; bounded owner reads redact
+concealed identities, and correction/clear survives missing current catalogue support. Native session/profile,
+receipt, revision and terminal fences apply. Web's existing canonical checklist consumes that exact contract.
