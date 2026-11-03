@@ -14,17 +14,25 @@ suppression, write admission and readback. Do not broaden the Subject assessment
 The page renders at most twenty original keys in native question/Subject order and keeps the opaque cursor byte for
 byte. An empty page with a continuation remains a continuation. It does not accumulate pages, refill after clear,
 search, sort, filter or infer a total. A same-key update retains its position; a clear removes only that visible row.
-The next page is always a fresh native request.
+The next page is always a fresh native request. A dependency failure exposes an explicit retry at the identical
+opaque cursor, even when no successful read remains. Signed-out/revoked access, unavailable dependencies, empty
+terminal pages and concealed empty pages with continuation have separate outcomes.
 
 An admitted editable question uses its integer minimum, maximum and step. Retired questions allow only the delivered
-Clear action. Merged-source and identity-pending rows have no mutation controls. Commands carry the exact original
+Clear action. Merged-source, identity-pending and read-only rows explain the current limitation without command or readback
+controls. Read-only answers retain their original pair, scale, zero or nonzero units, change time and admitted Subject
+navigation. Read-only advice is separate from retired-question Clear. Commands carry the exact original
 key and one idempotency intent; uncertain retry reuses the frozen method, path, body and key. Acknowledgement is
-reported separately from exact readback. A clear is confirmed by readback 404. No public aggregate can restore a
+reported separately from exact readback. An explicit exact read after an uncertain command reports the current
+answer without confirming the original command, even if the value matches; the original intent remains available for
+explicit same-intent replay while currently admitted. A clear is confirmed by readback 404. No public aggregate can restore a
 cleared row.
 
 The current viewer, `personal_library` exposure, locale, route address/cursor and native source bind the private
 query. It is no-store, has zero query retention, and stays out of URL/history payloads and persistent storage.
-Account, locale, exposure, address and admitted-reader replacement retire selection, draft and callbacks. Returning
+Account, credential/CSRF, locale, exposure, address and admitted-reader replacement retire selection, draft and
+callbacks. Replaced action advice also retires the form, confirmation and delayed command/readback callbacks; a
+later editable row requires explicit selection and never replays the previous command. Returning
 from Subject reading requests the current page again and restores focus. Dirty drafts use the shared departure
 confirmation; pending or uncertain command ownership requires review before departure.
 
@@ -44,7 +52,7 @@ confirmation; pending or uncertain command ownership requires review before depa
   - Presentation and indexing at N=1, 10 and 20 stay linear in the supplied page. A selected editor does not scan
     other rows or hydrate additional records.
   - Repeated terminal summaries remain distinct by original pair; zero remains a value; retired and merged-source
-    action variants expose only their admitted controls.
+    and read-only action variants expose only their admitted controls.
   - Sparse continuation, exact clear/readback, uncertain same-intent retry and callbacks after account/locale/address
     retirement are covered by focused Web acceptance.
   - Native indexed raw-page and cold summary/account/Realm costs belong to Content's producer acceptance. Native
@@ -52,3 +60,10 @@ confirmation; pending or uncertain command ownership requires review before depa
 
 Decision: until Content publishes the own-votes route in `@rezics/client`, Web uses a server-only adapter validated
 by the native schema while vote commands and readback use the existing typed client.
+
+The installed producer exports `createOwnVotesReader(deps).page(actor, { cursor? }, deadline)` and the register DTOs
+and schemas. Its source examples in `services/kernel/test/rating/own-votes-page.test.ts` cover populated zero,
+concealed continuation, identical-cursor dependency retry, fenced read-only advice and revoked access. Those cases
+inform the typed Web states; they are not native execution evidence or published response recordings. The generated
+own-votes client operation and mounted response recordings remain Content's seam. Connected stories exercise the
+existing workspace boundary; they do not substitute for generated publication or native acceptance.

@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "Diese Frage ist zurückgezogen. Du kannst die Antwort löschen, aber nicht ändern.",
   "library_my_ratings_merged": "Dieses ursprüngliche Subject wurde mit einer anderen Identität zusammengeführt. Änderungen sind nicht möglich und die Antwort wird nicht umgeleitet. Die zugelassene Subject-Zusammenfassung bleibt erreichbar.",
   "library_my_ratings_identity_pending": "Die ursprüngliche Subject-Identität wird noch geprüft. Änderungen sind nicht möglich; die zugelassene Zusammenfassung bleibt erreichbar.",
+  "library_my_ratings_read_only": "Du kannst diese Antwort lesen, sie derzeit aber weder ändern noch löschen oder erneut prüfen. Das Subject kannst du weiterhin öffnen.",
   "library_my_ratings_open_subject": "Subject öffnen",
   "library_my_ratings_confirm_clear_title": "Diese Antwort löschen?",
   "library_my_ratings_confirm_clear_text": "Dadurch wird die Antwort für das oben angezeigte ursprüngliche Subject und die Frage gelöscht.",

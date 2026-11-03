@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, queryOptions } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
 import {
@@ -139,13 +139,16 @@ export function useOwnVotesCurrentOrigin(
   }, [invalidAddress, query.isError, data, origin, admission, readIsCurrent]);
   const page = state === 'ready' && data?.state === 'ready' ? data.page : null;
   const dataUpdatedAt = client.getQueryState(options.queryKey)?.dataUpdatedAt ?? 0;
+  const visit = useRef({ data, dataUpdatedAt, generation: 0 });
+  if (visit.current.data !== data || visit.current.dataUpdatedAt !== dataUpdatedAt)
+    visit.current = { data, dataUpdatedAt, generation: visit.current.generation + 1 };
   const viewKey = JSON.stringify([
     origin.boundary.lifetime,
     origin.lifetime(0),
     cursor,
     locale,
     OWN_VOTES_SOURCE,
-    dataUpdatedAt,
+    visit.current.generation,
   ]);
 
   return {
@@ -157,7 +160,8 @@ export function useOwnVotesCurrentOrigin(
     locale,
     viewKey,
     isCurrent,
-    refresh: () => (isCurrent() ? query.refetch() : Promise.resolve(undefined)),
+    // A failed reader has no admitted data, but its account/address may still explicitly retry the same cursor.
+    refresh: () => (current() && !invalidAddress ? query.refetch() : Promise.resolve(undefined)),
     updatePage: (update: (page: OwnVotesPage) => OwnVotesPage) => {
       if (!isCurrent() || !page) return;
       const updatedAt = client.getQueryState(options.queryKey)?.dataUpdatedAt;
@@ -169,6 +173,8 @@ export function useOwnVotesCurrentOrigin(
             : currentRead,
         updatedAt === undefined ? undefined : { updatedAt },
       );
+      // A supported exact readback updates this visit; a replacement inventory starts another visit.
+      visit.current.data = client.getQueryData<OwnVotesRead>(options.queryKey);
     },
   };
 }

@@ -502,11 +502,21 @@ browser registries or client-side candidate scans for missing page capabilities.
 `/library/ratings` reads at most twenty votes in original question/Subject key order and preserves the native opaque
 cursor. It displays the admitted Subject summary, exact question scale, own integer value and native change time.
 Zero is a value. Retired questions expose only admitted Clear; merged-source identities explain why editing is
-unavailable and never redirect a write. A command has one stable idempotency intent and reads back the exact original
-pair before confirming its value. The account page stays separate from public figures and Library membership. Its
+unavailable and never redirect a write. Read-only advice explains that the answer is readable but changes, Clear
+and exact answer checks are currently unavailable, while admitted Subject navigation remains available in all eight
+locales. Replacing action advice closes the form and retires late command/readback effects; renewed editing requires
+explicit selection. Empty terminal pages, concealed sparse continuation, dependency failure and revoked access remain
+distinct; dependency retry uses the identical opaque cursor. A command has one stable idempotency intent and reads back the exact original
+pair before confirming its value. A newer current answer cannot confirm an uncertain original command, even when
+its value matches; only an explicit currently admitted replay reuses that frozen original intent. The account page stays separate from public figures and Library membership. Its
 current-viewer, exposure, locale, address and native-source lifetimes synchronously retire private rows, drafts and
 callbacks. The adjacent [My ratings guide](../../apps/web/src/ratings/own-votes/README.md) records bounds, cost and
-remaining producer ownership.
+remaining producer ownership, including the generated client/response seam and separate native execution. Cost
+remains one page of at most twenty, O(N) indexing/presentation at 1/10/20 and O(1) selection; no per-row reads,
+refill, polling or persistent private drafts.
+
+Decision: a matching current read after an uncertain write remains an observation; explicit same-intent replay is
+required to resolve the original command.
 
 Decision: until Content publishes the own-votes route in `@rezics/client`, Web uses a server-only adapter validated by
 the native schema while vote commands and readback use the existing typed client.

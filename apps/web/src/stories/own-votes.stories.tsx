@@ -16,7 +16,18 @@ import { OwnVotesWorkspace } from '../ratings/own-votes/page';
 import type { OwnVoteIntent } from '../ratings/own-votes/intent';
 import type { OwnVoteReadback } from '../ratings/own-votes/readback';
 
-type Mode = 'ready' | 'empty' | 'sparse' | 'retired' | 'merged' | 'uncertain' | 'denied' | 'long';
+type Mode =
+  | 'ready'
+  | 'empty'
+  | 'sparse'
+  | 'retired'
+  | 'merged'
+  | 'uncertain'
+  | 'denied'
+  | 'long'
+  | 'read-only'
+  | 'advice-replaced'
+  | 'dependency';
 type Fixture = { mode: Mode; locale: (typeof locales)[number] };
 const FixtureContext = createContext<Fixture>({ mode: 'ready', locale: 'en' });
 const Root = createRootRoute({ component: Outlet });
@@ -85,24 +96,27 @@ function fixture(mode: Mode): OwnVotesPage {
       ],
       next: null,
     };
+  if (mode === 'read-only' || mode === 'long') {
+    const vote = entry(targetA, questionA, { state: 'unavailable', reason: 'read_only' });
+    if (mode === 'long')
+      vote.question.label =
+        'Welche Bedeutung hat dieses Werk für dich, wenn du seine lange Geschichte, die einzelnen Veröffentlichungen und die Unterschiede zwischen den Fassungen berücksichtigst?';
+    return { viewer: { accountId: subjectId }, votes: [vote], next: null };
+  }
   if (mode === 'merged')
     return {
       viewer: { accountId: subjectId },
       votes: [entry(targetA, questionA, { state: 'unavailable', reason: 'merged_source' })],
       next: null,
     };
-  if (mode === 'long') {
-    const long = entry(targetA, questionA);
-    long.question.label =
-      'Welche Bedeutung hat dieses Werk für dich, wenn du seine lange Geschichte, die einzelnen Veröffentlichungen und die Unterschiede zwischen den Fassungen berücksichtigst?';
-    return { viewer: { accountId: subjectId }, votes: [long], next: null };
-  }
+
   return { viewer: { accountId: subjectId }, votes: [editableA, entry(targetB, questionB)], next: null };
 }
 
 function StoryScreen() {
   const { mode, locale } = useContext(FixtureContext);
   const [page, setPage] = useState(() => fixture(mode));
+  const [failed, setFailed] = useState(mode === 'dependency');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const execute = async ({ data }: { data: OwnVoteIntent }) => {
     if (mode === 'uncertain') return { kind: 'uncertain' as const };
@@ -123,18 +137,36 @@ function StoryScreen() {
       ? { kind: 'unavailable' }
       : { kind: 'current', units: data.intent.body?.units ?? 0, revision: 5, at: '2026-11-01T10:00:00.000Z' };
   return (
-    <OwnVotesWorkspace
-      state={mode === 'denied' ? 'denied' : 'ready'}
-      page={mode === 'denied' ? null : page}
-      cursor={null}
-      locale={locale}
-      isCurrent={() => true}
-      onRefresh={async () => undefined}
-      onUpdatePage={(update) => setPage(update)}
-      headingRef={headingRef}
-      execute={execute}
-      review={review}
-    />
+    <>
+      {mode === 'advice-replaced' ? (
+        <button
+          className="min-h-11 border p-3"
+          onClick={() =>
+            setPage({
+              ...page,
+              votes: page.votes.map((vote) => ({ ...vote, actions: { state: 'unavailable', reason: 'read_only' } })),
+            })
+          }
+        >
+          Receive current read-only advice
+        </button>
+      ) : null}
+      <OwnVotesWorkspace
+        state={mode === 'denied' ? 'denied' : failed ? 'unavailable' : 'ready'}
+        page={mode === 'denied' || failed ? null : page}
+        cursor={null}
+        locale={locale}
+        isCurrent={() => true}
+        onRefresh={async () => {
+          setFailed(false);
+          setPage(fixture('sparse'));
+        }}
+        onUpdatePage={(update) => setPage(update)}
+        headingRef={headingRef}
+        execute={execute}
+        review={review}
+      />
+    </>
   );
 }
 
@@ -162,7 +194,12 @@ export const SparseContinuation: StoryType = { render: () => <Story mode="sparse
 export const RetiredQuestion: StoryType = { render: () => <Story mode="retired" /> };
 export const MergedSource: StoryType = { render: () => <Story mode="merged" /> };
 export const Denied: StoryType = { render: () => <Story mode="denied" /> };
-export const LongLocalizedQuestion: StoryType = { render: () => <Story mode="long" locale="de" /> };
+export const LongLocalizedQuestion: StoryType = {
+  render: () => <Story mode="long" locale="de" />,
+  play: async ({ canvasElement }) => {
+    await inspectFirst(canvasElement);
+  },
+};
 export const UncertainCommand: StoryType = {
   render: () => <Story mode="uncertain" />,
   play: async ({ canvasElement }) => {
@@ -176,5 +213,43 @@ export const UncertainCommand: StoryType = {
     await userEvent.click(await canvas.findByRole('button', { name: m.library_my_ratings_save() }));
     await expect(await canvas.findByText(m.library_my_ratings_uncertain_text())).toBeVisible();
     await expect(await canvas.findByRole('button', { name: m.library_my_ratings_retry_original() })).toBeEnabled();
+  },
+};
+
+const inspectFirst = async (canvasElement: HTMLElement) => {
+  const canvas = within(canvasElement);
+  await userEvent.click((await canvas.findAllByRole('button', { name: m.library_my_ratings_inspect() }))[0]!);
+  return canvas;
+};
+export const ReadOnly: StoryType = {
+  render: () => <Story mode="read-only" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_read_only())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_clear() })).toBeNull();
+  },
+};
+export const EditingBecomesReadOnly: StoryType = {
+  render: () => <Story mode="advice-replaced" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await inspectFirst(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_edit() }));
+    await userEvent.clear(canvas.getByRole('spinbutton'));
+    await userEvent.type(canvas.getByRole('spinbutton'), '2');
+    await userEvent.click(canvas.getByRole('button', { name: 'Receive current read-only advice' }));
+    await expect(canvas.queryByRole('spinbutton')).toBeNull();
+    await inspectFirst(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_read_only())).toBeVisible();
+  },
+};
+export const DependencyRecovery: StoryType = {
+  render: () => <Story mode="dependency" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_retry_page() }));
+    await expect(canvas.getByText(m.library_my_ratings_sparse())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.library_my_ratings_continue() })).toBeVisible();
   },
 };

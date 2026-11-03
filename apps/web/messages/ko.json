@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "이 질문은 종료되었습니다. 답변을 지울 수 있지만 수정할 수는 없습니다.",
   "library_my_ratings_merged": "원래 Subject가 다른 ID에 병합되어 수정할 수 없습니다. 다른 대상으로 답변을 보내지 않습니다. 허용된 Subject 요약을 열 수 있습니다.",
   "library_my_ratings_identity_pending": "원래 Subject ID를 확인 중이어서 수정할 수 없습니다. 허용된 요약을 열 수 있습니다.",
+  "library_my_ratings_read_only": "이 답변은 볼 수 있지만 지금은 수정, 삭제하거나 답변을 다시 확인할 수 없습니다. Subject는 계속 열 수 있습니다.",
   "library_my_ratings_open_subject": "Subject 열기",
   "library_my_ratings_confirm_clear_title": "이 답변을 지울까요?",
   "library_my_ratings_confirm_clear_text": "위에 표시된 원래 Subject와 질문의 답변을 지웁니다.",

@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "Cette question est retirée. Vous pouvez effacer votre réponse, mais pas la modifier.",
   "library_my_ratings_merged": "Ce Subject d’origine a fusionné avec une autre identité. La modification est indisponible et la réponse ne sera pas redirigée. Vous pouvez ouvrir le résumé autorisé.",
   "library_my_ratings_identity_pending": "L’identité du Subject d’origine est en cours de vérification. La modification est indisponible ; vous pouvez ouvrir le résumé autorisé.",
+  "library_my_ratings_read_only": "Vous pouvez lire cette réponse, mais il est actuellement impossible de la modifier, de l’effacer ou de la vérifier à nouveau. Vous pouvez toujours ouvrir le Subject.",
   "library_my_ratings_open_subject": "Ouvrir le Subject",
   "library_my_ratings_confirm_clear_title": "Effacer cette réponse ?",
   "library_my_ratings_confirm_clear_text": "Cela efface votre réponse pour le Subject et la question d’origine affichés ci-dessus.",

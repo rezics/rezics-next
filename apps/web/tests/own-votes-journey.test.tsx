@@ -11,7 +11,7 @@ import {
 } from '@tanstack/react-router';
 import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
 import type { OwnVoteIntent } from '../src/ratings/own-votes/intent';
-import type { OwnVoteCommandResult } from '../src/ratings/own-votes/actions';
+import type { OwnVoteCommandResult, OwnVotesRead } from '../src/ratings/own-votes/actions';
 import type { OwnVoteReadback } from '../src/ratings/own-votes/readback';
 import { OwnVotesWorkspace } from '../src/ratings/own-votes/page';
 import { useOwnVotesReturn } from '../src/ratings/own-votes/return';
@@ -53,6 +53,8 @@ function row(retired = false, sourceTarget = target): OwnVoteEntry {
 
 type Harness = {
   page: OwnVotesPage;
+  state: OwnVotesRead['state'];
+  cursor: string | null;
   setPage: (page: OwnVotesPage) => void;
   execute: (input: { data: OwnVoteIntent }) => Promise<OwnVoteCommandResult>;
   review: (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
@@ -70,9 +72,9 @@ function RatingsScreen() {
   );
   return (
     <OwnVotesWorkspace
-      state="ready"
-      page={value.page}
-      cursor={null}
+      state={value.state}
+      page={value.state === 'ready' ? value.page : null}
+      cursor={value.cursor}
       locale="en"
       isCurrent={() => true}
       onRefresh={value.refresh}
@@ -97,7 +99,16 @@ const subjectRoute = createRoute({
 });
 const routeTree = rootRoute.addChildren([ratingsRoute, subjectRoute]);
 // Route context is supplied outside the router so a return remount reads the current page value.
-async function setup(initial: OwnVotesPage, execute: Harness['execute']) {
+async function setup(
+  initial: OwnVotesPage,
+  execute: Harness['execute'],
+  options: {
+    state?: OwnVotesRead['state'];
+    cursor?: string;
+    review?: Harness['review'];
+    recovered?: OwnVotesPage;
+  } = {},
+) {
   const history = createMemoryHistory({ initialEntries: ['/library/ratings'] });
   const router = createRouter({ routeTree, history });
   await router.load();
@@ -136,19 +147,33 @@ async function setup(initial: OwnVotesPage, execute: Harness['execute']) {
   const root = createRoot(host);
   const calls: OwnVoteIntent[] = [];
   const refreshCount = { value: 0 };
-  const review = async (): Promise<OwnVoteReadback> => ({ kind: 'unavailable' });
+  const reviewCalls: OwnVoteIntent[] = [];
+  let replace: (page: OwnVotesPage, state?: OwnVotesRead['state']) => void;
+  const refreshCursors: Array<string | null> = [];
   function Provider() {
     const [page, setPage] = useState(initial);
+    const [state, setState] = useState(options.state ?? 'ready');
+    replace = (next, nextState = 'ready') => {
+      setPage(next);
+      setState(nextState);
+    };
     const value: Harness = {
       page,
+      state,
+      cursor: options.cursor ?? null,
       setPage,
       execute: async ({ data }) => {
         calls.push(data);
         return execute({ data });
       },
-      review,
+      review: async (input) => {
+        reviewCalls.push(input.data.intent);
+        return options.review ? options.review(input) : { kind: 'unavailable' };
+      },
       refresh: async () => {
         refreshCount.value += 1;
+        refreshCursors.push(options.cursor ?? null);
+        if (options.recovered) replace(options.recovered);
       },
     };
     return (
@@ -166,6 +191,11 @@ async function setup(initial: OwnVotesPage, execute: Harness['execute']) {
     router,
     calls,
     refreshCount,
+    refreshCursors,
+    reviewCalls,
+    replace: async (page: OwnVotesPage, state?: OwnVotesRead['state']) => {
+      await act(async () => replace(page, state));
+    },
     close: async () => {
       await act(async () => root.unmount());
       await setLocale(previousLocale, { reload: false });
@@ -254,6 +284,131 @@ test('retired journey confirms Clear, treats readback 404 as cleared and preserv
     expect(view.host.querySelector('a[href*="cursor"]')?.getAttribute('href')).toContain(
       encodeURIComponent('opaque-next'),
     );
+  } finally {
+    await view.close();
+  }
+});
+
+const button = (view: Awaited<ReturnType<typeof setup>>, label: string) =>
+  [...view.host.querySelectorAll('button')].find((item) => item.textContent === label)!;
+const pageOf = (entry: OwnVoteEntry): OwnVotesPage => ({ viewer: { accountId: viewer }, votes: [entry], next: null });
+const readOnly = (entry = row()): OwnVoteEntry => ({
+  ...entry,
+  actions: { state: 'unavailable', reason: 'read_only' },
+});
+
+test('read-only zero and nonzero answers keep their original meaning and Subject navigation without command actions', async () => {
+  for (const units of [0, 6]) {
+    const original = readOnly({ ...row(), own: { ...row().own, units } });
+    const view = await setup(pageOf(original), async () => {
+      throw new Error('No command admitted');
+    });
+    try {
+      await click(view, button(view, m.library_my_ratings_inspect()));
+      expect(view.host.textContent).toContain(m.library_my_ratings_read_only());
+      expect(view.host.textContent).toContain(`${units} / 20`);
+      expect(view.host.textContent).toContain(original.question.label);
+      expect(view.host.textContent).toContain(`${target} · ${question}`);
+      expect(view.host.querySelector('time')?.getAttribute('datetime')).toBe(original.own.at);
+      expect(view.host.querySelector('a')?.getAttribute('href')).toContain(terminal);
+      expect(view.host.querySelector('section button')).toBeNull();
+      expect(view.calls).toHaveLength(0);
+    } finally {
+      await view.close();
+    }
+  }
+});
+
+test('replacement advice retires drafts, delayed commands and delayed exact readback; fresh edit requires selection', async () => {
+  for (const delayed of ['draft', 'command', 'review']) {
+    let resolve!: () => void;
+    const pending = new Promise<void>((done) => {
+      resolve = done;
+    });
+    const current: OwnVoteReadback = { kind: 'current', units: 8, revision: 2, at: row().own.at };
+    const view = await setup(
+      pageOf(row()),
+      async () => {
+        if (delayed === 'command') {
+          await pending;
+          return { kind: 'acknowledged', readback: current };
+        }
+        return { kind: 'uncertain' };
+      },
+      {
+        review: async () => {
+          await pending;
+          return current;
+        },
+      },
+    );
+    try {
+      await click(view, button(view, m.library_my_ratings_inspect()));
+      await click(view, button(view, m.library_my_ratings_edit()));
+      if (delayed !== 'draft') await click(view, button(view, m.library_my_ratings_save()));
+      if (delayed === 'review') await click(view, button(view, m.library_my_ratings_review_original()));
+      await view.replace(pageOf(readOnly()));
+      expect(view.host.querySelector('input')).toBeNull();
+      await click(view, button(view, m.library_my_ratings_inspect()));
+      expect(view.host.textContent).toContain(m.library_my_ratings_read_only());
+      await act(async () => resolve());
+      expect(view.host.textContent).not.toContain('8 / 20');
+      expect(view.host.textContent).not.toContain(m.library_my_ratings_saved());
+      await view.replace(pageOf(row()));
+      expect(button(view, m.library_my_ratings_edit())).toBeUndefined();
+      await click(view, button(view, m.library_my_ratings_inspect()));
+      expect(button(view, m.library_my_ratings_edit())).toBeDefined();
+      expect(view.calls).toHaveLength(delayed === 'draft' ? 0 : 1);
+    } finally {
+      await view.close();
+    }
+  }
+});
+
+test('a matching newer exact read leaves an uncertain original intent available for explicit identical replay', async () => {
+  const view = await setup(pageOf(row()), async () => ({ kind: 'uncertain' }), {
+    review: async () => ({ kind: 'current', units: 0, revision: 9, at: row().own.at }),
+  });
+  try {
+    await click(view, button(view, m.library_my_ratings_inspect()));
+    await click(view, button(view, m.library_my_ratings_edit()));
+    await click(view, button(view, m.library_my_ratings_save()));
+    await click(view, button(view, m.library_my_ratings_review_original()));
+    expect(view.host.textContent).toContain(m.library_my_ratings_uncertain_text());
+    await click(view, button(view, m.library_my_ratings_retry_original()));
+    expect(view.calls).toHaveLength(2);
+    expect(view.calls[1]).toBe(view.calls[0]);
+    expect(view.reviewCalls[0]).toBe(view.calls[0]);
+  } finally {
+    await view.close();
+  }
+});
+
+test('dependency recovery retries the identical cursor and keeps concealed continuation, empty and revoked outcomes distinct', async () => {
+  const cursor = 'sealed/+opaque=';
+  const sparse: OwnVotesPage = { viewer: { accountId: viewer }, votes: [], next: 'next/+sealed=' };
+  const view = await setup(pageOf(row()), async () => ({ kind: 'uncertain' }), {
+    state: 'unavailable',
+    cursor,
+    recovered: sparse,
+  });
+  try {
+    expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
+    expect(view.host.querySelectorAll('[data-own-vote-pair]')).toHaveLength(0);
+    await click(view, button(view, m.library_my_ratings_retry_page()));
+    expect(view.refreshCursors).toEqual([cursor]);
+    expect(view.host.textContent).toContain(m.library_my_ratings_sparse());
+    expect(view.host.querySelector('a[href*="cursor"]')?.getAttribute('href')).toContain(
+      encodeURIComponent(sparse.next!),
+    );
+    await view.replace({ ...sparse, next: null });
+    expect(view.host.textContent).toContain(m.library_my_ratings_empty());
+    await view.replace(pageOf(row()), 'denied');
+    expect(view.host.textContent).toContain(m.library_my_ratings_denied());
+    expect(view.host.textContent).not.toContain(m.library_my_ratings_empty());
+    expect(view.host.querySelectorAll('a')).toHaveLength(0);
+    await view.replace(pageOf(row()), 'signed-out');
+    expect(view.host.textContent).toContain(m.library_my_ratings_signed_out());
   } finally {
     await view.close();
   }

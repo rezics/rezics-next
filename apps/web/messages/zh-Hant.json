@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "此問題已停用。你可以清除回答，但不能修改。",
   "library_my_ratings_merged": "此原始主題已合併至其他身分，因此無法修改；系統不會將回答改寫至其他主題。你仍可開啟已核准的主題摘要。",
   "library_my_ratings_identity_pending": "原始主題身分仍在確認中，因此無法修改。你仍可開啟已核准的摘要。",
+  "library_my_ratings_read_only": "你可以查看這個回答，但目前無法修改、清除或再次確認回答。你仍可開啟主題。",
   "library_my_ratings_open_subject": "開啟主題",
   "library_my_ratings_confirm_clear_title": "要清除此回答嗎？",
   "library_my_ratings_confirm_clear_text": "這會清除上方所示原始主題與問題的回答。",

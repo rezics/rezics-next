@@ -118,6 +118,9 @@ export function OwnVoteEditor({
       {entry.actions.state === 'unavailable' && entry.actions.reason === 'identity_pending' ? (
         <p role="status">{m.library_my_ratings_identity_pending()}</p>
       ) : null}
+      {entry.actions.state === 'unavailable' && entry.actions.reason === 'read_only' ? (
+        <p role="status">{m.library_my_ratings_read_only()}</p>
+      ) : null}
 
       {editing && editable ? (
         <div className="space-y-3">
@@ -180,22 +183,28 @@ export function OwnVoteEditor({
               {m.library_my_ratings_retry_original()}
             </Button>
           ) : null}
-          <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
-            {m.library_my_ratings_review_original()}
-          </Button>
+          {isAdmittedVoteAction(entry, entry.actions, 'GET') ? (
+            <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
+              {m.library_my_ratings_review_original()}
+            </Button>
+          ) : null}
         </div>
       ) : feedback?.kind === 'review-pending' ? (
         <div className="flex flex-wrap gap-2">
-          <Button className="min-h-11" disabled={busy} onClick={onRetry}>
-            {m.library_my_ratings_retry_original()}
-          </Button>
-          <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
-            {m.library_my_ratings_review_original()}
-          </Button>
+          {canRetry ? (
+            <Button className="min-h-11" disabled={busy} onClick={onRetry}>
+              {m.library_my_ratings_retry_original()}
+            </Button>
+          ) : null}
+          {isAdmittedVoteAction(entry, entry.actions, 'GET') ? (
+            <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
+              {m.library_my_ratings_review_original()}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
-      <AlertDialog open={confirmingClear} onOpenChange={setConfirmingClear}>
+      <AlertDialog open={confirmingClear && canClear} onOpenChange={setConfirmingClear}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_my_ratings_confirm_clear_title()}</AlertDialogTitle>
@@ -248,7 +257,7 @@ function Feedback({ feedback, locale }: { feedback: OwnVoteFeedback; locale: str
       case 'review-current':
         return m.library_my_ratings_review_current({ value: value ?? '' });
       case 'review-pending':
-        return m.library_my_ratings_review_current({ value: value ?? '' });
+        return `${m.library_my_ratings_review_current({ value: value ?? '' })} ${m.library_my_ratings_uncertain_text()}`;
     }
   })();
   const alert =

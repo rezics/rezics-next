@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "此问题已停用。你可以清除回答，但不能修改。",
   "library_my_ratings_merged": "此原始主题已合并至其他身份，因此无法修改；系统不会将回答改写至其他主题。你仍可打开已准入的主题摘要。",
   "library_my_ratings_identity_pending": "原始主题身份仍在确认中，因此无法修改。你仍可打开已准入的摘要。",
+  "library_my_ratings_read_only": "你可以查看这个回答，但目前无法修改、清除或再次确认回答。你仍可打开主题。",
   "library_my_ratings_open_subject": "打开主题",
   "library_my_ratings_confirm_clear_title": "要清除此回答吗？",
   "library_my_ratings_confirm_clear_text": "这会清除上方所示原始主题与问题的回答。",

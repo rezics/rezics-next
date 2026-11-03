@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "Esta pregunta está retirada. Puedes borrar tu respuesta, pero no cambiarla.",
   "library_my_ratings_merged": "Este Subject original se fusionó con otra identidad. No se puede editar y la respuesta no se redirigirá. Puedes abrir el resumen admitido.",
   "library_my_ratings_identity_pending": "La identidad del Subject original aún se está comprobando. No se puede editar; puedes abrir el resumen admitido.",
+  "library_my_ratings_read_only": "Puedes leer esta respuesta, pero ahora no puedes modificarla, borrarla ni comprobarla de nuevo. Puedes seguir abriendo el Subject.",
   "library_my_ratings_open_subject": "Abrir Subject",
   "library_my_ratings_confirm_clear_title": "¿Borrar esta respuesta?",
   "library_my_ratings_confirm_clear_text": "Esto borra tu respuesta para el Subject y la pregunta originales que aparecen arriba.",

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
@@ -10,7 +10,7 @@ import { useOwnVotesCurrentOrigin } from './current-origin';
 import { OwnVotesDeparture } from './departure';
 import { OwnVoteEditor, type OwnVoteFeedback } from './editor';
 import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey } from './inventory';
-import { createOwnVoteIntent, type OwnVoteIntent } from './intent';
+import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
 import type { OwnVoteReadback } from './readback';
 import { OwnVotesInspection } from './inspection';
 import { useOwnVotesReturn } from './return';
@@ -80,6 +80,14 @@ export function OwnVotesWorkspace({
   const [busy, setBusy] = useState(false);
   const [awaitingCommand, setAwaitingCommand] = useState(false);
   const attempt = useRef(0);
+  const selection = useRef<{ entry: OwnVoteEntry; active: boolean } | null>(null);
+  useEffect(
+    () => () => {
+      if (selection.current) selection.current.active = false;
+      attempt.current += 1;
+    },
+    [],
+  );
   const index = useMemo(() => {
     if (!page) return new Map<string, OwnVoteEntry>();
     try {
@@ -90,6 +98,17 @@ export function OwnVotesWorkspace({
   }, [page]);
   const indexedPageValid = !page || index.size === page.votes.length;
   const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
+  // A new action observation requires a new explicit selection. Local readback retains the actions object.
+  if (selectedPair && (state !== 'ready' || !activeEntry || selection.current?.entry.actions !== activeEntry.actions)) {
+    if (selection.current) selection.current.active = false;
+    selection.current = null;
+    setSelectedPair(null);
+    setEditing(false);
+    setDraft('');
+    setFeedback(null);
+    clearIntent();
+  }
+  const observation = selection.current;
   const unresolved =
     feedback?.kind === 'uncertain' ||
     feedback?.kind === 'review-pending' ||
@@ -99,6 +118,7 @@ export function OwnVotesWorkspace({
   const locked = busy || unresolved;
   const selectedCurrent = () =>
     isCurrent() &&
+    observation?.active === true &&
     !!activeEntry &&
     (!intent ||
       (intent.pair === votePairKey(activeEntry) &&
@@ -114,6 +134,8 @@ export function OwnVotesWorkspace({
 
   function select(entry: OwnVoteEntry) {
     if (!isCurrent() || locked) return;
+    if (selection.current) selection.current.active = false;
+    selection.current = { entry, active: true };
     attempt.current += 1;
     intentRef.current = null;
     setIntent(null);
@@ -141,9 +163,17 @@ export function OwnVotesWorkspace({
   }
 
   async function send(active: OwnVoteIntent) {
-    if (!isCurrent() || intentRef.current !== active || busy) return;
+    if (
+      !selectedCurrent() ||
+      !activeEntry ||
+      intentRef.current !== active ||
+      busy ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, active.method) ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, 'GET')
+    )
+      return;
     const currentAttempt = ++attempt.current;
-    const ownsResult = () => isCurrent() && attempt.current === currentAttempt && intentRef.current === active;
+    const ownsResult = () => selectedCurrent() && attempt.current === currentAttempt && intentRef.current === active;
     setBusy(true);
     setFeedback({ kind: active.method === 'PUT' ? 'saving' : 'clearing' });
     try {
@@ -209,9 +239,16 @@ export function OwnVotesWorkspace({
 
   async function reviewOriginal() {
     const active = intentRef.current;
-    if (!active || !isCurrent() || busy) return;
+    if (
+      !active ||
+      !selectedCurrent() ||
+      !activeEntry ||
+      busy ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, 'GET')
+    )
+      return;
     const currentAttempt = ++attempt.current;
-    const ownsResult = () => isCurrent() && attempt.current === currentAttempt && intentRef.current === active;
+    const ownsResult = () => selectedCurrent() && attempt.current === currentAttempt && intentRef.current === active;
     const wasUncertain = awaitingCommand;
     setBusy(true);
     setFeedback({ kind: 'reviewing' });
@@ -221,7 +258,7 @@ export function OwnVotesWorkspace({
       setBusy(false);
       if (result.kind === 'current') {
         replaceFromReadback(result, active);
-        if (!wasUncertain || (active.method === 'PUT' && result.units === active.body?.units)) {
+        if (!wasUncertain) {
           setFeedback({ kind: 'review-current', value: result.units });
           clearIntent();
         } else {
@@ -229,13 +266,13 @@ export function OwnVotesWorkspace({
         }
         return;
       }
-      if ((result.kind === 'cleared' || result.kind === 'missing') && active.method === 'DELETE') {
+      if (!wasUncertain && (result.kind === 'cleared' || result.kind === 'missing') && active.method === 'DELETE') {
         replaceFromReadback({ kind: 'cleared' }, active);
         setFeedback({ kind: 'review-cleared' });
         clearIntent();
         return;
       }
-      if (result.kind === 'missing') {
+      if (result.kind === 'missing' || result.kind === 'cleared') {
         setFeedback({ kind: wasUncertain ? 'review-missing' : 'readback-unavailable' });
         return;
       }
@@ -315,7 +352,9 @@ export function OwnVotesWorkspace({
               locked={locked}
               busy={busy}
               feedback={feedback}
-              canRetry={awaitingCommand}
+              canRetry={
+                awaitingCommand && !!intent && isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
+              }
               onEdit={() => {
                 setDraft(String(activeEntry.own.units));
                 setEditing(true);

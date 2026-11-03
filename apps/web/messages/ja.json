@@ -7449,6 +7449,7 @@
   "library_my_ratings_retired": "この質問は終了しています。回答を消去できますが、変更はできません。",
   "library_my_ratings_merged": "元の Subject は別の ID に統合されているため編集できません。別の対象へ回答を移すことはありません。許可された Subject の概要は開けます。",
   "library_my_ratings_identity_pending": "元の Subject の ID を確認中のため編集できません。許可された概要は開けます。",
+  "library_my_ratings_read_only": "この回答は閲覧できますが、現在は変更、削除、回答の再確認ができません。Subject は引き続き開けます。",
   "library_my_ratings_open_subject": "Subject を開く",
   "library_my_ratings_confirm_clear_title": "この回答を消去しますか？",
   "library_my_ratings_confirm_clear_text": "上に表示された元の Subject と質問への回答を消去します。",

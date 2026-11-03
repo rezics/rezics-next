@@ -7499,6 +7499,7 @@
   "library_my_ratings_retired": "This question is retired. You can clear your answer, but cannot change it.",
   "library_my_ratings_merged": "This original Subject has merged into another identity. Editing is unavailable; no answer will be redirected. You can open the admitted Subject summary.",
   "library_my_ratings_identity_pending": "The original Subject identity is still being checked. Editing is unavailable; you can open the admitted summary.",
+  "library_my_ratings_read_only": "You can read this answer, but changes and answer checks are currently unavailable. You can still open the Subject.",
   "library_my_ratings_open_subject": "Open Subject",
   "library_my_ratings_confirm_clear_title": "Clear this answer?",
   "library_my_ratings_confirm_clear_text": "This clears your answer for the original Subject and question shown above.",
