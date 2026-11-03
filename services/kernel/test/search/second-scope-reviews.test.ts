@@ -144,7 +144,7 @@ describe('public review discovery adapter', () => {
       source_position: expect.any(String),
       version: expect.any(String),
       opening_revision_id: expect.any(String),
-      text: 'Public review opening 4.',
+      text: initial[4]!.text,
     });
     if (!fifthDocument || !lateDocument) throw new Error('Content continuation lost an eligible review');
     expect(fifthDocument).not.toHaveProperty('authorId');
@@ -167,7 +167,7 @@ describe('public review discovery adapter', () => {
     const firstCard = await adapter.currentSummaries([fifthDocument], context);
     expect(firstCard.status).toBe('ready');
     if (firstCard.status !== 'ready') return;
-    expect(firstCard.value.get(fifthDocument.identity)?.text).toBe('Public review opening 4.');
+    expect(firstCard.value.get(fifthDocument.identity)?.text).toBe(initial[4]!.text);
     const authorSummary = await adapter.readCurrent([initial[4]!.id], context);
     expect(authorSummary.get(initial[4]!.id)).toEqual({
       id: initial[4]!.id,
