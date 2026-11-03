@@ -7,8 +7,8 @@ import { installDbosSchema, migrate } from '../../scripts/database.ts';
 import { WORKFLOW_RETENTION_SELECTOR_INDEX } from '../../src/work/retention-selector.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const databaseUrl = process.env.DATABASE_URL ?? '';
+if (databaseUrl === '') throw new Error('DATABASE_URL must name the migrated test database');
 
 const kernelRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const migrationFile = resolve(kernelRoot, 'db/migrations/20261103020222_workflow_retention_selector.sql');

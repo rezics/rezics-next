@@ -6,8 +6,9 @@ import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { workflowRetentionWorkModule } from '../../../src/work/retention.ts';
 
-const [application, mode] = process.argv.slice(2);
-assert(application?.startsWith('retention-recovery:'));
+const application = process.argv[2] ?? '';
+const mode = process.argv[3];
+assert(application.startsWith('retention-recovery:'));
 const databaseUrl = process.env.DATABASE_URL!;
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const client = await createWorkClient(databaseUrl, pool);
@@ -37,7 +38,7 @@ const isolated = new Proxy(client, {
 });
 
 const originalQuery = pool.query.bind(pool);
-pool.query = ((query: unknown, values?: unknown, ...rest: unknown[]) => {
+pool.query = ((query: unknown, values?: unknown) => {
   const config = typeof query === 'string' ? { text: query, values } : (query as { text?: string; values?: unknown });
   const text = String(config.text ?? '');
   if (text.includes('work:workflow-retention-select') || text.includes('ORDER BY completed_at, workflow_uuid')) {
@@ -46,7 +47,7 @@ pool.query = ((query: unknown, values?: unknown, ...rest: unknown[]) => {
     console.log(`selection:${String(cutoff)}`);
     if (mode === 'after' && ++selections === 2) return pause() as never;
   }
-  return originalQuery(query as never, values as never, ...(rest as never[]));
+  return values === undefined ? originalQuery(query as never) : originalQuery(query as never, values as never);
 }) as typeof pool.query;
 
 DBOS.setConfig({
@@ -64,6 +65,6 @@ await workflowRetentionWorkModule.register({
   pool,
   queues: WORK_QUEUES,
   env: { KERNEL_WORKFLOW_RETENTION_DAYS: mode === 'recover' ? '7' : '30' },
-} as WorkContext);
+} as unknown as WorkContext);
 await DBOS.launch();
 console.log('ready');
