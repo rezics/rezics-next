@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { discoveryKey } from '../support/released-discovery.ts';
 import { createOwnerFilterFixture, ownerRecord, ownerStatus, ownerString } from './support/owner-filter-fixture.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 
 test('a saved positive/negative owner rule sees native writes and parent deletion; cursors retain their owner basis', async () => {
   const f = await createOwnerFilterFixture();

@@ -453,7 +453,13 @@ async function startDriver(
       [process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.accountId],
       {
         cwd: kernelRoot,
-        env: { ...process.env, DATABASE_URL: kernelUrl },
+        env: {
+          ...process.env,
+          DATABASE_URL: kernelUrl,
+          KERNEL_RECEIPT_KEYS: [...testReceiptKeys().keys]
+            .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+            .join(','),
+        },
         stdout: 'pipe',
         stderr: 'pipe',
       },
