@@ -100,7 +100,10 @@ function expectSelectorIndex(runs: readonly RunEvidence[]): void {
     const plans = runs
       .filter((run) => run.scale === scale)
       .flatMap((run) => run.plans)
-      .filter(({ query }) => query.includes('work:workflow-retention-select') || query.includes('ORDER BY completed_at, workflow_uuid'));
+      .filter(
+        ({ query }) =>
+          query.includes('work:workflow-retention-select') || query.includes('ORDER BY completed_at, workflow_uuid'),
+      );
     expect(plans.length, `retention selector plan at scale ${scale}`).toBeGreaterThan(0);
     const indexes = new Set(plans.flatMap(({ plan }) => indexNamesIn(plan)));
     expect([...indexes]).toContain(WORKFLOW_RETENTION_SELECTOR_INDEX);
