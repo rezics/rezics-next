@@ -963,6 +963,9 @@ is implemented here. Rendered acceptance and connected physical cost evidence re
 
 #### Web consumer handoff
 
+Decision: generate this envelope with `bun run --cwd services/kernel typecheck --emit-client --emit-openapi` so both
+repository generators share the admitted compiler database and return their installed outputs to the worktree.
+
 The installed call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
 its successful `data` contains the retained top-level decision, `viewer` and `targetContext`. Narrow on
 `targetContext.state` before accessing navigation, and on `viewer.appeal.state` before presenting an appeal action.
