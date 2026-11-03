@@ -38,7 +38,7 @@ unrecognized fields are retained, never applied. Unknown date components are not
 reviews; custom/private lists are not public Collections. No holdings, entitlements or labels are inferred.
 
 Limits: 1,048,576 UTF-8 upload bytes, JSON depth 24, 200 rows (65,536 bytes/128 fields each, 100-character field names),
-8,192-byte group metadata, five retained uploads per owner, 20 rows per
+8,192-byte group metadata, valid Unicode without NUL, five retained uploads per owner, 20 rows per
 read/apply page. Upload is JSON text inside the request envelope. Headers carry the ordinary quoted Idempotency-Key
 on preview/review/cancel. Apply confirms stored review ids; each review binds a stable native command key, original
 operands and client attribution. Failed commands resume with those operands. Acknowledged row outcomes replay

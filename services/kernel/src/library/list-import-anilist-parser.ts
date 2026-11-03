@@ -31,9 +31,17 @@ export function parseAniList(upload: string, scoreFormat?: string) {
   while (stack.length) {
     const [value, depth] = stack.pop()!;
     if (depth > ANILIST_LIMITS.depth) throw new AniListInputError();
+    if (typeof value === 'string' && (!value.isWellFormed() || value.includes('\0'))) throw new AniListInputError();
     if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value)) {
-        if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new AniListInputError();
+        if (
+          key === '__proto__' ||
+          key === 'constructor' ||
+          key === 'prototype' ||
+          !key.isWellFormed() ||
+          key.includes('\0')
+        )
+          throw new AniListInputError();
         stack.push([child, depth + 1]);
       }
     }

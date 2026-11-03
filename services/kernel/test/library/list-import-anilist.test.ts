@@ -24,7 +24,7 @@ test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, inv
   const invalid = parseAniList(JSON.stringify([{ status: 'FUTURE', score: 80, progress: -1, completedAt: { year: 2023, month: 2, day: 29 } }]));
   expect(invalid.rows[0]!.fields.map(f => f.validity)).toEqual(['invalid', 'unknown', 'invalid', 'invalid']);
   expect(parseAniList(JSON.stringify([{ id: 9 }])).rows[0]!.identifiers).toEqual([]);
-  for (const upload of ['{', '{}', JSON.stringify(Array(201).fill(row)), ' '.repeat(1048577), JSON.stringify([{ notes: 'x'.repeat(65536) }])])
+  for (const upload of ['{', '{}', JSON.stringify(Array(201).fill(row)), ' '.repeat(1048577), JSON.stringify([{ notes: 'x'.repeat(65536) }]), JSON.stringify([{ notes: '\0' }])])
     expect(() => parseAniList(upload)).toThrow(AniListInputError);
 });
 test('mounted own upload, admitted identifier match, explicit resolution, conflict, original-command retry and fences', async () => {

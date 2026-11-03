@@ -17,7 +17,7 @@ import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import { readEntry } from './entry-store.ts';
-import { ANILIST_LIMITS, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
+import { ANILIST_LIMITS, AniListInputError, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
 type Match = {
@@ -316,6 +316,7 @@ export function createAniListImport(deps: Dependencies) {
     return { header, rows, next: raw.length === 20 ? raw[raw.length - 1]!.ordinal : null };
   }
   async function review(actor: Actor, id: string, ordinal: number, input: AniListReviewInput, key: string) {
+    if (input.fields.some((field) => !field.isWellFormed() || field.includes('\0'))) throw new AniListInputError();
     const account = owner(actor),
       stored = await load(actor, id, ordinal);
     const matching = await match(actor, stored.source);
