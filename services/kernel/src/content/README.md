@@ -999,7 +999,9 @@ is implemented here. Rendered acceptance and connected physical cost evidence re
   bounds from the exact engine remain additive. Title caps, driver copies, full nested physical rows, pool controls,
   cold release and total HTTP serialization still require the connected accounting proof; this is not that proof.
 - Growth check: the focused source HTTP suite pins native author advice, pending/resolved readback, inclusive/late
-  deadline command agreement, independent reversal, current header presentation and source/authority withholding.
+  deadline command agreement, independent reversal, current header presentation, removed-target context, empty and
+  switched-account concealment, and source/authority withholding. A mounted author Inbox test projects the takedown
+  notice, opens its exact decision and retires an in-flight Inbox read when native account erasure revokes the author.
   Full-prefix/residual-join plans and independent 256/1024/4096 decision versus retained target/appeal/identity/authority
   histories, every pool/registered runner phase and empty/denied/revoked/retry accounting remain continuation work.
 

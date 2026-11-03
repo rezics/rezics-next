@@ -292,6 +292,42 @@ test('a board decision has no affected author or appeal deadline', async () => {
   expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).response.status).toBe(404);
 }, 120_000);
 
+test('removed targets keep the exact decision while ordinary header context becomes unavailable', async () => {
+  const { target, path } = await decide('Removed exact target');
+  await fixture.command('DELETE', `/v1/posts/${target.postId}`, undefined, {
+    bearer: fixture.author.bearer,
+    expectedStatus: 204,
+  });
+
+  const result = await fixture.call('GET', path, { bearer: fixture.author.bearer });
+  expect(result.response.status).toBe(200);
+  expect(result.value).toMatchObject({
+    targetId: target.postId,
+    statement: 'Retained private statement',
+    viewer: { affectedAuthor: true },
+    targetContext: { state: 'unavailable' },
+  });
+  expect(result.response.headers.get(SESSION_HEADER)).not.toBeNull();
+  expect((await fixture.call('GET', `/v1/posts/${target.postId}`, { bearer: fixture.author.bearer })).response.status).toBe(
+    404,
+  );
+}, 120_000);
+
+test('an empty exact source and an account switch remain indistinguishable', async () => {
+  const { path } = await decide('Switched account exact source');
+  const switched = await fixture.call('GET', path, { bearer: fixture.reader.bearer });
+  const empty = await fixture.call('GET', `/v1/moderation-decisions/${fixture.reader.accountId}`, {
+    bearer: fixture.author.bearer,
+  });
+
+  for (const result of [switched, empty]) {
+    expect(result.response.status).toBe(404);
+    expect(result.value?.code).toBe('not_found');
+    expect(result.response.headers.get(SESSION_HEADER)).toBeNull();
+    expect(result.text).not.toContain('Retained private statement');
+  }
+}, 120_000);
+
 test('suspending the independent author during selection retires disclosure and session provenance', async () => {
   const { path } = await decide('Revoked native author session');
   await changeDuringRead(path, fixture.author.bearer, () =>
