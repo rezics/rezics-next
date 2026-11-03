@@ -147,7 +147,7 @@ The installed Kernel source emits optional `reactionTarget`, `reactions` and `vi
 thread/post summaries and optional `reactionsAsOf` on the page. The current generated Web client has not published
 those fields: its `FeedContentSummary` still has only author and excerpt, and its page type lacks `reactionsAsOf`.
 Until normal client generation publishes them, Home keeps reactions unavailable and binds none of these values.
-Publish the installed Content contract with `bun run --cwd services/kernel client` before binding these fields. Do
+Publish the installed Content contract with `bun run --cwd services/kernel typecheck --emit-client` before binding these fields. Do
 not add a browser DTO or cast, infer a thread target from `summary.id`, or read each row. Once present, bind the exact
 target: use `reactionTarget` verbatim. The installed thread projector supplies its thread ID; never infer it from
 `summary.id` or replace it with an opening post. A post target keeps its supplied post ID only after the native
