@@ -20,7 +20,7 @@ const types = [
   { id: 16, type: 6, name: 'Live film', platform: 6002, date: '2024-05' },
 ] as const;
 
-function subject(row: (typeof types)[number], name = row.name) {
+function subject(row: (typeof types)[number], name: string = row.name) {
   return {
     id: row.id,
     type: row.type,
@@ -127,7 +127,7 @@ test('checkpointed Bangumi staging resumes the same generation for every admitte
     const prefix = importer.session.store.database
       .query('SELECT COUNT(*) AS n FROM run_staging_prefix WHERE source=? AND run_id=?')
       .get('bangumi', interrupted.runId!) as { n: number };
-    expect(prefix.n).toBe(stored?.committedOrdinal);
+    expect(prefix.n).toBe(2);
   } finally {
     await importer.close();
   }

@@ -248,6 +248,26 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'result_json',
     'created_at',
   ],
+  run_disappearance_stops: [
+    'source',
+    'run_id',
+    'evidence_id',
+    'baseline_generation',
+    'supplied',
+    'survivors',
+    'prior',
+    'missing',
+    'threshold',
+    'input_complete',
+  ],
+  run_disappearance_missing: [
+    'source',
+    'run_id',
+    'record_key',
+    'record_revision',
+    'digest',
+    'converter_revision',
+  ],
 };
 
 const REQUIRED_EXISTING_INDEXES = [
