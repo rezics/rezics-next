@@ -120,7 +120,8 @@ test('duplicate native rows and names cannot select repeated effects or guess la
   refuses(archive([named(), named(randomUUID())]), 'duplicate_label');
   refuses(archive([named(), assignment(), assignment()]), 'duplicate_record');
   refuses(archive([assignment()]), 'incomplete_capture');
-  refuses(archive([entry(first), { ...named(), section: 'future-section' }]), 'invalid_record');
+  const futureSection = { ...named(), section: 'future-section' } as unknown as ArchiveRecord;
+  refuses(archive([entry(first), futureSection]), 'invalid_record');
   refuses(archive([named(), entry(first)]), 'invalid_record');
   expect(decode(archive([named(label, 'Weekend'), named(randomUUID(), 'weekend')])).records).toHaveLength(2);
 });

@@ -173,9 +173,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.units?.map((r) => r.unit_id)).toEqual(['chapter-1', 'chapter-9']);
   expect(JSON.stringify(records)).not.toContain('secret-other-state');
   expect(JSON.stringify(records)).not.toMatch(/transaction_id|never-export-/);
-  expect(sections.bangumiEvidence?.[0]?.evidence.source).toMatchObject({ subject_id: 42, type: 99 });
-  expect(sections.malEvidence?.[0]?.evidence.identifier.value).toBe('17');
-  expect(sections.malEvidence?.[0]?.evidence.dates.started.precision).toBe('year');
+  expect(sections.bangumiEvidence?.[0]).toMatchObject({ evidence: { source: { subject_id: 42, type: 99 } } });
+  expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { identifier: { value: '17' } } });
+  expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
   const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
   expect(decoded.records).toEqual(records);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
@@ -225,8 +225,8 @@ test('native owner export streams independent persisted facts, preserves dates, 
     'first occurrence',
   ]);
   expect(occurrencePage.data.occurrences.map((item) => item.sourceOccurrenceId)).toEqual([
-    sourceMemberIds[1],
-    sourceMemberIds[0],
+    sourceMemberIds[1]!,
+    sourceMemberIds[0]!,
   ]);
   const reviewed = await client.libraryArchiveCollectionRecoveries({ id: recoveryUploadId }).review.post(
     {
