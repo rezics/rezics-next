@@ -30,7 +30,6 @@ export type {
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
 
-export type { QuestionLabel, QuestionLabelHistory } from './kernel/rating/question-label';
 
 type Routes = KernelType['~Routes']['v1'];
 
