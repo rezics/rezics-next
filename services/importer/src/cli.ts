@@ -49,6 +49,7 @@ import {
   parseDumpCompression,
   type DumpCompression,
 } from './compressed-dump.ts';
+import { probeZstdExecutable, resolveZstdExecutable } from './zstd-input.ts';
 import {
   DumpInputError,
   fileChunks,
@@ -137,6 +138,7 @@ type Config = {
   progressMode?: ImportProgressMode;
   compression: DumpCompression;
   decodeBudget?: number;
+  zstdExecutable?: string;
   mode: 'ordinary' | 'checkpoint-staging' | 'resume-staging';
   generation?: string;
 };
@@ -148,7 +150,7 @@ function usage(): string {
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
-    '       [--compression none|gzip] [--decode-budget <bytes>]',
+    '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
@@ -166,8 +168,8 @@ function usage(): string {
     '       rezics-import batch --manifest <path> --run --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--progress human|jsonl] [--json]',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --checkpoint-staging --resume-staging --generation --help',
-    'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set.',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --help',
+    'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
     '--checkpoint-staging and --resume-staging apply only to one uncompressed Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation. Default import still discards unsealed staging. After sealing, resume with the ordinary command; do not replace input. Dump-set manifests are not a checkpointed capture.',
     STAGING_COST,
   ].join('\n');
@@ -201,6 +203,7 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--compression',
     '--decode-budget',
     '--generation',
+    '--zstd-executable',
   ]);
   const booleanFlags = new Set(['--checkpoint-staging', '--resume-staging']);
   for (let index = 0; index < argv.length; index++) {
@@ -279,9 +282,16 @@ function parse(argv: readonly string[]): Config | 'help' {
   };
   const compression = values.get('--compression');
   if (compression !== undefined) result.compression = parseDumpCompression(compression);
+  if (result.compression === 'zstd' && dump === '-') throw new InputFailure();
+  const zstdExecutable = values.get('--zstd-executable');
+  if (zstdExecutable !== undefined) {
+    if (result.compression !== 'zstd') throw new InputFailure();
+    result.zstdExecutable = zstdExecutable;
+  }
   const decodeBudget = values.get('--decode-budget');
   if (decodeBudget !== undefined) {
-    if (result.dumpSet === undefined && result.compression !== 'gzip') throw new InputFailure();
+    if (result.dumpSet === undefined && result.compression !== 'gzip' && result.compression !== 'zstd')
+      throw new InputFailure();
     if (!/^[1-9][0-9]{0,15}$/.test(decodeBudget)) throw new InputFailure();
     const parsedBudget = Number(decodeBudget);
     if (!Number.isSafeInteger(parsedBudget) || parsedBudget <= 0) throw new InputFailure();
@@ -479,9 +489,14 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   }
 
   let registration: SourceRegistration;
+  let zstdExecutable: string | undefined;
   try {
     registration = createSourceRegistration(config.source, { source: config.sourceAlias ?? config.source });
     admitDumpCompression(config.source, config.compression);
+    if (config.compression === 'zstd') {
+      zstdExecutable = await resolveZstdExecutable(config.zstdExecutable);
+      await probeZstdExecutable(zstdExecutable);
+    }
   } catch (error) {
     return {
       code: 2,
@@ -757,15 +772,26 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         options.entries !== undefined
           ? observedEntries(options.entries, signal, options.observer, progress)
           : readArchive(
-              ownedChunks(
-                dumpHandle
-                  ? fileChunks(dumpHandle, signal)
-                  : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
-                signal,
-                'dump',
-                options.observer,
-                dumpHandle !== undefined,
-                progress,
+              decodeDumpBytes(
+                ownedChunks(
+                  dumpHandle
+                    ? fileChunks(dumpHandle, signal)
+                    : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
+                  signal,
+                  'dump',
+                  options.observer,
+                  dumpHandle !== undefined,
+                  progress,
+                ),
+                {
+                  compression: config.compression,
+                  signal,
+                  ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
+                  ...(progress ? { progress } : {}),
+                  observer: { onDecodedChunk: (_bytes, backing) => options.observer?.onInputBuffer?.(backing) },
+                  ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
+                  zstdProbe: false,
+                },
               ),
               {
                 maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
@@ -886,6 +912,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
           ...(progress ? { progress } : {}),
           observer: { onDecodedChunk: (_bytes, backing) => options.observer?.onInputBuffer?.(backing) },
+          ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
+          zstdProbe: false,
         },
       );
       const nativeInput = config.source === 'openlibrary' ? openLibraryMetadata(input, signal) : input;

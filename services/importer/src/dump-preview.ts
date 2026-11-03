@@ -59,6 +59,7 @@ export type DumpPreviewOptions = Readonly<{
   maxStoreBytes?: number;
   compression?: DumpCompression;
   decodeBudget?: number;
+  zstdExecutable?: string;
 }>;
 
 export type CapturedBaseline = Readonly<{
@@ -367,7 +368,8 @@ async function vndbRecords(
         }),
       );
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof DumpInputError) throw error;
     throw new VndbInputError();
   }
   if (tables.inspect(source, run).state !== 'ready') throw new VndbInputError();
@@ -430,6 +432,8 @@ export class DumpPreview {
         'Dump-set members declare none or gzip in the manifest; --compression does not apply.',
         2,
       );
+    if (compression === 'zstd' && options.dump === '-')
+      throw new DumpPreviewFailure('zstd compression requires one regular local dump file, not stdin.', 2);
     const retain = Boolean(options.outputDir);
     const ownedDir = options.outputDir
       ? await createOutputDir(options.outputDir)
@@ -509,6 +513,9 @@ export class DumpPreview {
               compression,
               signal,
               ...(options.decodeBudget === undefined ? {} : { decodeBudget: options.decodeBudget }),
+              ...(options.zstdExecutable === undefined
+                ? {}
+                : { zstdExecutable: options.zstdExecutable, zstdProbe: false }),
             },
           );
           if (options.source === 'vndb') {

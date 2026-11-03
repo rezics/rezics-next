@@ -1,5 +1,6 @@
 import type { SourceId } from '@rezics/conversion';
 import { admitDumpCompression, parseDumpCompression, type DumpCompression } from './compressed-dump.ts';
+import { probeZstdExecutable, resolveZstdExecutable } from './zstd-input.ts';
 import { DumpInputError, type RawVndbEntry } from './dump-input.ts';
 import { DumpPreview, DumpPreviewFailure, type DumpPreviewOptions } from './dump-preview.ts';
 import {
@@ -20,7 +21,7 @@ const RECORD_KEY =
 const USAGE = [
   'Usage: rezics-import preview --source <bangumi|vndb|openlibrary|wikidata> --dump <path|->',
   '       [--source-alias <configured-source-id>] [--baseline <sqlite-path>] [--output-dir <path>]',
-  '       [--compression none|gzip] [--decode-budget <bytes>]',
+  '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
   '       [--page new|changed|unchanged|vanished] [--limit 1..100] [--cursor <opaque-cursor>]',
   '       [--record <native-record-key>] [--json]',
   '       rezics-import preview --source openlibrary --dump-set <manifest-path>',
@@ -29,9 +30,9 @@ const USAGE = [
   '       rezics-import preview --plan-dir <path> [--page ...] [--record ...] [--json]',
   '       rezics-import preview --help',
   'Pages default to 20 rows. Preview is local and offline; it never imports, writes import state, or contacts the API.',
-  'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. --plan-dir does not reopen or decompress input.',
+  'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps as one regular local file. Default --compression none. --plan-dir does not reopen or decompress input.',
   '--dump-set is Open Library only and mutually exclusive with --dump and --plan-dir. Members declare none or gzip in a version-2 manifest; version 1 stays plain.',
-  '--decode-budget is the whole-set decoded-byte ceiling for gzip or a dump set (default 256 GiB), never a per-member multiple.',
+  '--decode-budget is the whole-set decoded-byte ceiling for gzip, zstd or a dump set (default 256 GiB), never a per-member multiple.',
 ].join('\n');
 
 export type PreviewCliResult = Readonly<{ code: number; stdout: string; stderr: string; openHandles: number }>;
@@ -57,6 +58,7 @@ export type ParsedPreviewArgs = Readonly<{
   json: boolean;
   compression: DumpCompression;
   decodeBudget?: number;
+  zstdExecutable?: string;
 }>;
 
 class UsageFailure extends DumpPreviewFailure {
@@ -95,6 +97,7 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
     '--record',
     '--compression',
     '--decode-budget',
+    '--zstd-executable',
   ]);
   let json = false;
   for (let index = 0; index < argv.length; index++) {
@@ -125,7 +128,8 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
       values.has('--baseline') ||
       values.has('--output-dir') ||
       values.has('--compression') ||
-      values.has('--decode-budget')
+      values.has('--decode-budget') ||
+      values.has('--zstd-executable')
     )
       throw new UsageFailure(
         '--plan-dir reopens a retained preview and cannot be combined with dump acquisition flags.',
@@ -144,11 +148,19 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   const compressionValue = values.get('--compression');
   if (compressionValue !== undefined) compression = parseDumpCompression(compressionValue);
   if (source && !dumpSet) admitDumpCompression(source, compression);
+  if (compression === 'zstd' && dump === '-')
+    throw new UsageFailure('zstd compression requires one regular local dump file, not stdin.');
+  let zstdExecutable: string | undefined;
+  const zstdExecutableValue = values.get('--zstd-executable');
+  if (zstdExecutableValue !== undefined) {
+    if (compression !== 'zstd') throw new UsageFailure('--zstd-executable applies only with --compression zstd.');
+    zstdExecutable = zstdExecutableValue;
+  }
   let decodeBudget: number | undefined;
   const decodeBudgetValue = values.get('--decode-budget');
   if (decodeBudgetValue !== undefined) {
-    if (!dumpSet && compression !== 'gzip')
-      throw new UsageFailure('--decode-budget applies only with --compression gzip or --dump-set.');
+    if (!dumpSet && compression !== 'gzip' && compression !== 'zstd')
+      throw new UsageFailure('--decode-budget applies only with --compression gzip or zstd or --dump-set.');
     if (!/^[1-9][0-9]{0,15}$/.test(decodeBudgetValue))
       throw new UsageFailure('--decode-budget must be a positive safe integer byte count.');
     decodeBudget = Number(decodeBudgetValue);
@@ -197,6 +209,7 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
     ...(record ? { record } : {}),
     compression,
     ...(decodeBudget === undefined ? {} : { decodeBudget }),
+    ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
   };
 }
 
@@ -401,6 +414,13 @@ export async function runPreviewCli(
   let preview: DumpPreview | undefined;
   try {
     if (options.signal?.aborted) throw new DumpPreviewFailure('Preview was cancelled.', 130);
+    let zstdExecutable = parsed.zstdExecutable;
+    if (!parsed.planDir && parsed.compression === 'zstd') {
+      zstdExecutable = await resolveZstdExecutable(parsed.zstdExecutable);
+      await probeZstdExecutable(zstdExecutable, {
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+    }
     preview = parsed.planDir
       ? await DumpPreview.open(parsed.planDir)
       : await DumpPreview.build({
@@ -415,6 +435,7 @@ export async function runPreviewCli(
           ...(options.signal ? { signal: options.signal } : {}),
           compression: parsed.compression,
           ...(parsed.decodeBudget === undefined ? {} : { decodeBudget: parsed.decodeBudget }),
+          ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
         } satisfies DumpPreviewOptions);
     const code = preview.plan.complete ? 0 : 2;
     if (parsed.json)
