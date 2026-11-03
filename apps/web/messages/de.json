@@ -5754,7 +5754,7 @@
   "library_anilist_whose_upload": "Du prüfst den privaten Upload der angemeldeten Bibliotheksbesitzerin. Eine andere Betrachterin kann diesen Besuch nicht fortsetzen.",
   "library_anilist_not_official": "Dies ist der v1-MediaList-Dialekt aus AniList-GraphQL-Typen, kein universeller offizieller Export. Veraltete statusLists- und customLists-Hüllen werden abgelehnt.",
   "library_anilist_not_account": "Von dieser Seite laufen keine AniList-Token, Kontoabrufe, Katalogaktualisierungen oder Subjekterstellungen.",
-  "library_anilist_dialect": "Zulässige Formen sind ein MediaList-Array, {lists:[{entries:[]}]}, {MediaListCollection:…} oder {data:{MediaListCollection:…}}.",
+  "library_anilist_dialect": "Zulässige Formen sind ein MediaList-Array, gruppierte Listen mit Einträgen, eine MediaListCollection-Hülle oder eine GraphQL-Datenhülle.",
   "library_anilist_guidance": "Verwende eine UTF-8-JSON-Datei mit höchstens {size} KiB und {rows} Zeilen. Dieser Browser wertet die Datei nicht aus, um Felder zuzulassen oder Treffer zu erfinden.",
   "library_anilist_file_label": "AniList-MediaList-JSON-Datei",
   "library_anilist_score_format": "Deklarierte AniList-Punkteskala",

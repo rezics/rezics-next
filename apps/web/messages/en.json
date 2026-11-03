@@ -5811,7 +5811,7 @@
   "library_anilist_whose_upload": "You are reviewing the private upload of the signed-in Library owner. Another viewer cannot continue this visit.",
   "library_anilist_not_official": "This is the v1 MediaList dialect from AniList GraphQL types, not a universal official export. Deprecated statusLists and customLists wrappers are refused.",
   "library_anilist_not_account": "No AniList tokens, account fetches, catalogue refresh or subject creation run from this page.",
-  "library_anilist_dialect": "Accepted shapes are a MediaList array, {lists:[{entries:[]}]}, {MediaListCollection:…} or {data:{MediaListCollection:…}}.",
+  "library_anilist_dialect": "Accepted shapes are a MediaList array, grouped lists with entries, a MediaListCollection wrapper, or a GraphQL data envelope.",
   "library_anilist_guidance": "Use a UTF-8 JSON file up to {size} KiB and {rows} rows. This browser does not parse the file to admit fields or invent matches.",
   "library_anilist_file_label": "AniList MediaList JSON file",
   "library_anilist_score_format": "Declared AniList score scale",

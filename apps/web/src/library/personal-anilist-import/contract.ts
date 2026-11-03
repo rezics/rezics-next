@@ -66,7 +66,7 @@ export type AniListCurrent = { state: string; revision: number; incarnationId: s
 export type AniListObservation = {
   subjectId: string;
   epoch: string;
-  pin: unknown;
+  pin: AniListJson | null;
   proposedState: string | null;
   current: AniListCurrent | null;
   states: { id: string; role?: string }[];
@@ -92,7 +92,7 @@ export type AniListOutcome = {
   retained: string[];
 };
 export type AniListHeader = {
-  document: unknown;
+  document: AniListJson | null;
   rawUpload: string;
   scoreFormat: AniListScoreFormat | null;
   count: number;

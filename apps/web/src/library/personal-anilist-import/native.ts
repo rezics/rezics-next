@@ -173,6 +173,7 @@ function isCurrent(value: unknown): value is AniListCurrent {
 function isObservation(value: unknown): value is AniListObservation {
   if (!record(value) || typeof value.subjectId !== 'string' || !SUBJECT_ID.test(value.subjectId)) return false;
   if (typeof value.epoch !== 'string' || !Array.isArray(value.states)) return false;
+  if (value.pin !== null && !isJson(value.pin)) return false;
   if (value.proposedState !== null && typeof value.proposedState !== 'string') return false;
   if (value.current !== null && !isCurrent(value.current)) return false;
   return value.states.every(
@@ -214,6 +215,7 @@ function isOutcome(value: unknown): value is AniListOutcome {
 function isHeader(value: unknown): value is AniListHeader {
   if (!record(value) || typeof value.count !== 'number' || typeof value.cancelled !== 'boolean') return false;
   if (typeof value.rawUpload !== 'string') return false;
+  if (value.document !== null && value.document !== undefined && !isJson(value.document)) return false;
   if (value.scoreFormat !== null && !isScoreFormat(value.scoreFormat)) return false;
   return true;
 }

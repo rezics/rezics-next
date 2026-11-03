@@ -5754,7 +5754,7 @@
   "library_anilist_whose_upload": "你正在審閱已登入資料庫擁有者的私人上傳。其他檢視者無法繼續這次造訪。",
   "library_anilist_not_official": "這是基於 AniList GraphQL 類型的 v1 MediaList 方言，不是通用官方匯出。已棄用的 statusLists 與 customLists 包裝會被拒絕。",
   "library_anilist_not_account": "此頁面不會使用 AniList 權杖、拉取帳號、重新整理目錄或建立條目。",
-  "library_anilist_dialect": "可接受的形態是 MediaList 陣列、{lists:[{entries:[]}]}、{MediaListCollection:…} 或 {data:{MediaListCollection:…}}。",
+  "library_anilist_dialect": "可接受的形態是 MediaList 陣列、帶條目的分組列表、MediaListCollection 包裝或 GraphQL 資料信封。",
   "library_anilist_guidance": "使用最多 {size} KiB、{rows} 列的 UTF-8 JSON 檔。此瀏覽器不會解析檔案以接納欄位或編造相符。",
   "library_anilist_file_label": "AniList MediaList JSON 檔",
   "library_anilist_score_format": "宣告的 AniList 分數尺度",

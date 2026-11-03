@@ -5754,7 +5754,7 @@
   "library_anilist_whose_upload": "Tu examines le téléversement privé de la personne propriétaire de la bibliothèque connectée. Une autre personne ne peut pas poursuivre cette visite.",
   "library_anilist_not_official": "Ceci est le dialecte MediaList v1 issu des types GraphQL AniList, pas un export officiel universel. Les enveloppes dépréciées statusLists et customLists sont refusées.",
   "library_anilist_not_account": "Cette page n’utilise ni jeton AniList, ni lecture de compte, ni actualisation de catalogue, ni création de sujet.",
-  "library_anilist_dialect": "Les formes acceptées sont un tableau MediaList, {lists:[{entries:[]}]}, {MediaListCollection:…} ou {data:{MediaListCollection:…}}.",
+  "library_anilist_dialect": "Les formes acceptées sont un tableau MediaList, des listes groupées avec des entrées, une enveloppe MediaListCollection ou une enveloppe de données GraphQL.",
   "library_anilist_guidance": "Utilise un fichier JSON UTF-8 d’au plus {size} Kio et {rows} lignes. Ce navigateur n’analyse pas le fichier pour admettre des champs ni inventer des correspondances.",
   "library_anilist_file_label": "Fichier JSON MediaList AniList",
   "library_anilist_score_format": "Échelle de score AniList déclarée",

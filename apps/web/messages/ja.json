@@ -5754,7 +5754,7 @@
   "library_anilist_whose_upload": "サインイン中のライブラリ所有者の非公開アップロードを確認しています。別の閲覧者はこの訪問を続けられません。",
   "library_anilist_not_official": "これは AniList GraphQL 型に基づく v1 MediaList 方言であり、万能の公式エクスポートではありません。非推奨の statusLists / customLists ラッパーは拒否されます。",
   "library_anilist_not_account": "このページから AniList トークン、アカウント取得、カタログ更新、対象の作成は行われません。",
-  "library_anilist_dialect": "受け付ける形は MediaList 配列、{lists:[{entries:[]}]}、{MediaListCollection:…}、または {data:{MediaListCollection:…}} です。",
+  "library_anilist_dialect": "受け付ける形は MediaList 配列、entries を含むグループ化リスト、MediaListCollection ラッパー、または GraphQL のデータ封筒です。",
   "library_anilist_guidance": "UTF-8 の JSON ファイルで最大 {size} KiB、{rows} 行までです。このブラウザはフィールドの取り込みや一致の作成のためにファイルを解析しません。",
   "library_anilist_file_label": "AniList MediaList JSON ファイル",
   "library_anilist_score_format": "宣言する AniList スコア尺度",
