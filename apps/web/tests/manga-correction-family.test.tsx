@@ -293,8 +293,8 @@ test('Complete Manga correction groups and deliberate submission family retains 
       expect(membership.textContent).toContain(m.subject_value_unknown());
       expect(membership.textContent).toContain(m.subject_value_none());
       const genre = field(mount, pickText(read.release.properties['schema:genre']!.labels, 'en').text);
-      expect(genre.textContent).toContain(m.facts_no_value());
-      expect(genre.querySelector('button')).toBeNull();
+      expect(button(genre, m.facts_edit_field()).disabled).toBe(false);
+      expect(genre.textContent).not.toContain(m.manga_classification_help());
       const count = heading(mount, 2, m.facts_selection({ count: 0, limit: factLimit }));
       expect(count.getAttribute('data-content-item-slot')).toBe('title');
       const submit = button(mount, m.facts_submit());

@@ -447,10 +447,12 @@ fields are omitted, qualifiers and citations survive replacement, and each uncer
 Membership and creator changes use the integrated relation editor's actual qualified slots and target discovery.
 Original abstracts use the shared authored-text, explicit language and licence controls. Names and descriptions
 link to the existing terms adapter and its native conditional PATCH; `schema:name` proposals do not substitute
-for term-map writes. Its current denied, unavailable and conflict outcomes remain authoritative. Current
-classifications are visible; the shared relation editor currently excludes classification proposals, so no successful
-classification mutation is implied. A later proposal awaits
-review and does not alter the current reading. Existing disclosure and source-or-consent rules remain native.
+for term-map writes. Its current denied, unavailable and conflict outcomes remain authoritative. Classification
+corrections reuse the shared item-value control already used for Character: an admitted Concept through the
+existing picker, ordinary citations, per-field candidates and explicit decision/selection. Decision: Manga,
+Album and Screen bind that control; Game keeps its existing specialized classification workspace. A later
+proposal awaits review and does not alter the current reading. Existing disclosure and source-or-consent rules
+remain native.
 
 The real-route story IDs are:
 
@@ -577,8 +579,8 @@ with admitted person/organization targets. Its emitted qualifiers supply credite
 position and an applies-to-part target. Positions follow the native string constraint; applies-to-part currently
 accepts a story arc, not an invented track. `wdt:P361` part-of-work has no order qualifier. Series membership uses
 its separate native relation and position. No track, recording, audio store, streaming service or lyric controls
-are supplied. The initial classification picker is native; correction currently displays selected classifications
-without inventing another proposal producer.
+are supplied. The initial classification picker is native; correction reuses the shared item-value control for
+admitted classification fields, with independent drafts and the ordinary candidate review.
 
 Correction reuses the scalar multi-field staging and per-field partial results, exact candidate review, qualified
 relation editor and original authored-text composer. Unchanged language maps, qualifiers and references remain
@@ -645,9 +647,9 @@ The terms entry uses the shared native writer and reports its actual availabilit
 Ordinary forms send no ingestion Source metadata and confer no prose, cover or other reuse rights.
 
 Original long descriptions are contributed through the existing authored-document editor after creation.
-Classification facts may be entered at creation when emitted; their current values are shown on correction,
-where the missing common classification correction control is explicit. No substitute writer or fabricated
-successful classification mutation is supplied.
+Classification facts may be entered at creation when emitted. Correction reuses the shared item-value
+classification control for those emitted fields, with independent drafts and explicit candidate
+decision/selection. No substitute writer or Concept seed is supplied.
 
 ## Browser flow: definition guide
 

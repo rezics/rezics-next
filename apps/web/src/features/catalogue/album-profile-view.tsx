@@ -23,6 +23,7 @@ import { DefinitionMeaning } from './definition-meaning';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { RelationEditor } from './relation-editor';
+import { CharacterClassifications, classificationFields } from './character-profile-classification';
 import { EditorFailure, PartValue } from './statement-editor-view';
 import { ExactReview, FactField, SelectedFacts } from './subject-facts-view';
 import {
@@ -655,21 +656,32 @@ function AlbumCorrectionWorkspaceLive({
       {visible && !!fields!.classifications.length && (
         <section className="space-y-4">
           <h2 className="text-xl font-semibold">{m.album_classification({}, o)}</h2>
-          {fields!.classifications.map((property) => (
-            <div key={property} className="space-y-2">
-              <h3 className="font-medium">
-                <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
-              </h3>
-              {(subject!.statements[property] ?? []).map((statement) => (
-                <div key={statement.id}>
-                  <PartValue part={statement} read={current} locale={locale} />
-                </div>
-              ))}
-              {!subject!.statements[property]?.length && (
-                <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
-              )}
-            </div>
-          ))}
+          {enabled ? (
+            <CharacterClassifications
+              properties={classificationFields(current.release, albumType, fields!.classifications)}
+              read={current}
+              locale={locale}
+              search={search}
+              transport={editors.facts}
+              review={editors.review}
+            />
+          ) : (
+            fields!.classifications.map((property) => (
+              <div key={property} className="space-y-2">
+                <h3 className="font-medium">
+                  <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
+                </h3>
+                {(subject!.statements[property] ?? []).map((statement) => (
+                  <div key={statement.id}>
+                    <PartValue part={statement} read={current} locale={locale} />
+                  </div>
+                ))}
+                {!subject!.statements[property]?.length && (
+                  <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                )}
+              </div>
+            ))
+          )}
         </section>
       )}
       {visible && !!fields!.authored.length && (

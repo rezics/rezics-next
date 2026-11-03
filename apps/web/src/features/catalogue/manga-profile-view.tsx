@@ -179,6 +179,7 @@ function MangaProfileEditorLive({
             locale={locale}
             disabled={session !== 'signed-in'}
             ports={correction}
+            search={search}
             reload={() => query.refetch()}
           />
         ) : (

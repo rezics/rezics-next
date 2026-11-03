@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import type { Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -22,6 +23,20 @@ import { statementInput, type StatementInput } from './statement-editor';
 import { EditorFailure, StatementFields } from './statement-editor-view';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
+
+/** Native definition grouping owns admission; callers only choose which emitted fields to present. */
+export function classificationFields(
+  release: Release,
+  type: string,
+  properties: readonly string[] = release.types[type]?.properties ?? [],
+): string[] {
+  return [...new Set(properties)].filter(
+    (property) =>
+      release.properties[property]?.datatype === 'wikibase-item' &&
+      release.properties[property]?.relation?.group === 'classification' &&
+      !!release.types[type]?.properties.includes(property),
+  );
+}
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
+import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { pageText } from '../pages/data';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -21,6 +22,7 @@ import { isMangaType, mangaGroups } from './manga-profile';
 import { CatalogueCurrentReading, useCurrentReadingActive } from './editor-lifetime';
 import { mangaGroupLabels, type MangaReady } from './manga-profile-view';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { CharacterClassifications, classificationFields } from './character-profile-classification';
 
 export type MangaCorrectionPorts = {
   facts: FactsTransport;
@@ -61,6 +63,7 @@ type CorrectionProps = {
   ports?: MangaCorrectionPorts | undefined;
   revision?: string | undefined;
   reload: () => Promise<unknown>;
+  search?: EntityPickerSearch | undefined;
 };
 
 const correctionAddress = (location: AuthoringLocation) => JSON.stringify([location.pathname, location.search]);
@@ -88,7 +91,14 @@ export function MangaCorrections(props: CorrectionProps) {
   );
 }
 
-function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: CorrectionProps) {
+function MangaCorrectionsLive({
+  read,
+  locale,
+  disabled,
+  ports,
+  reload,
+  search = async () => [],
+}: CorrectionProps) {
   // Reading recovery keeps this holder; departure and caller retirement never do.
   const workspace = useCatalogueLifetime('manga-corrections');
   const readingActive = useCurrentReadingActive();
@@ -331,11 +341,18 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                   {labels[group as keyof typeof labels]}
                 </ContentItemHeading>
                 {group === 'membership' && <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>}
-                {group === 'classification' && (
-                  <p className="text-sm text-muted-foreground">{m.manga_classification_help({}, o)}</p>
-                )}
-                {fields.map((property) =>
-                  correctionProperty(current.release, subject.type, property) ? (
+                {group === 'classification' && current && ports && !disabled ? (
+                  <CharacterClassifications
+                    properties={classificationFields(current.release, subject.type, fields)}
+                    read={current}
+                    locale={locale}
+                    search={search}
+                    transport={ports.facts}
+                    review={ports.review}
+                  />
+                ) : (
+                  fields.map((property) =>
+                    correctionProperty(current.release, subject.type, property) ? (
                     <FactField
                       key={property}
                       property={property}
@@ -432,6 +449,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                       </ContentItemFrame>
                     </section>
                   ),
+                  )
                 )}
               </section>
             ))}

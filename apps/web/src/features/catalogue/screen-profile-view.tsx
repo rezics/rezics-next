@@ -24,6 +24,8 @@ import { PublicationEditorEntry } from './publication-editor-entry';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
+import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
+import { CharacterClassifications, classificationFields } from './character-profile-classification';
 import { EditorFailure } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
 import { ScreenInitialFields, screenCreationControl, screenGroupLabel, type ScreenRow } from './screen-profile-fields';
@@ -517,9 +519,6 @@ function ScreenCorrection({
                         </div>
                       ))}
                     </dl>
-                    {group === 'classification' && (
-                      <p className="text-sm text-muted-foreground">{m.screen_classification_pending({}, o)}</p>
-                    )}
                     {group === 'authored' && <AuthoredFieldEntry id={id} title={label.text} locale={locale} />}
                   </section>
                 ))}
@@ -547,6 +546,25 @@ function ScreenCorrection({
                   transport={transport.facts}
                   review={transport.review}
                 />
+              </details>
+            )}
+            {privateCurrent && transport.facts && transport.review && (
+              <details hidden={!visible} className="min-w-0 rounded-xl border border-border p-4" open>
+                {visible && <summary className={screenSummaryClassName}>{m.screen_classification({}, o)}</summary>}
+                <AuthoringDepartureBoundary>
+                  <CharacterClassifications
+                    properties={classificationFields(
+                      privateCurrent.release,
+                      privateCurrent.public.subject.type,
+                      screenGroups(privateCurrent.release, privateCurrent.public.subject.type).classification,
+                    )}
+                    read={privateCurrent}
+                    locale={locale}
+                    search={search}
+                    transport={transport.facts}
+                    review={transport.review}
+                  />
+                </AuthoringDepartureBoundary>
               </details>
             )}
             {privateCurrent && transport.relations && (
