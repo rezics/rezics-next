@@ -7,11 +7,14 @@ import type { editionRoutes } from './edition-routes.ts';
 import { readBoardWatchState, setBoardWatch } from './board-watch.ts';
 import { listWatches, removeWatch } from './watch-management.ts';
 import { ContentNotFoundError } from './reads.ts';
-import { strictContentSchema } from './schemas.ts';
+import {
+  WatchManagementKindSchema,
+  WatchManagementPageSchema,
+  strictContentSchema,
+} from './schemas.ts';
 import type { WatchDependencies } from './watch-authority.ts';
 
 const closed = { additionalProperties: false };
-const selection = t.Union([t.Literal('thread'), t.Literal('board')]);
 const revision = t.Integer({ minimum: 0, maximum: 2147483646 });
 const state = t.Object({ watching: t.Boolean(), revision }, closed);
 const sessionHeader = { [SESSION_HEADER]: t.String() };
@@ -33,14 +36,6 @@ const failures = {
     'dependency_unavailable',
   ),
 };
-const identity = { id: t.String(), kind: selection, revision, createdAt: t.String() };
-const item = t.Union([
-  t.Object(
-    { ...identity, state: t.Literal('available'), resourceId: t.String(), title: t.Union([t.String(), t.Null()]) },
-    closed,
-  ),
-  t.Object({ ...identity, state: t.Literal('unavailable') }, closed),
-]);
 const readDetail = { 'x-exposure': 'public', 'x-action': 'account:read', security: [{ bearerAuth: [] }] };
 const writeDetail = {
   'x-exposure': 'public',
@@ -113,17 +108,14 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
         params: t.Object({ accountId: t.String() }, closed),
         query: t.Object(
           {
-            kind: selection,
+            kind: WatchManagementKindSchema,
             limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })),
             cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
           },
           closed,
         ),
         response: {
-          200: withHeaders(
-            t.Object({ items: t.Array(item), next: t.Union([t.String(), t.Null()]) }, closed),
-            sessionHeader,
-          ),
+          200: withHeaders(WatchManagementPageSchema, sessionHeader),
           ...failures,
         },
         detail: { ...readDetail, operationId: 'watch.list' },
@@ -141,7 +133,7 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
       {
         params: t.Object({ accountId: t.String(), watchId: t.String() }, closed),
         headers,
-        query: t.Object({ kind: selection }, closed),
+        query: t.Object({ kind: WatchManagementKindSchema }, closed),
         body: strictContentSchema(t.Object({ expectedRevision: revision }, closed)),
         response: { 200: withHeaders(t.Object({ removed: t.Boolean() }, closed), sessionHeader), ...failures },
         detail: { ...writeDetail, operationId: 'watch.remove' },

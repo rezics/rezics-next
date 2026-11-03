@@ -3303,6 +3303,7 @@ ready population. The factory and disclosure owners remain the sole owners of th
 Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
 `kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
 Private watch methods refuse an operator acting as a different account, even with a cursor from that account.
+Decision: inventory retains each original active watch episode and native target observation through final disclosure; a missing or concealed target remains privately removable, while a changed live episode or still-disclosed target requires a safe retry.
 Native watch receipts and private change events enroll their account owner in shared history erasure; the permanent
 command-kind assignments are `content.board.watch=8` and `content.watch.remove=9`.
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
@@ -3320,6 +3321,10 @@ Web board controls and Performance Settings watch management remain unavailable 
 are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery keep their existing shapes and storage.
 A thread management row has revision 1 for its unique edge. Board state retains a CAS tombstone; rewatch rotates its
 identity and creation cutoff. Neither kind uses common Following. Listing/removal sends no notice.
+
+The installed factory is
+`listWatches(deps: WatchDependencies, actor: Actor, accountId: string, input: {kind: WatchManagementKind; limit?: number; cursor?: string}, deadline: number): Promise<WatchManagementPage>`;
+`WatchManagementItem` is the closed available/unavailable union and `WatchManagementPage` is `{items,next}`.
 
 Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title}`. Denied and absent resources
 both return `{id,kind,revision,createdAt,state:'unavailable'}`. They contain no title, author, place, owner, destination
@@ -3359,16 +3364,14 @@ existing mandatory path.
 
 ### Cost: selected management page
 
-- Touches: shared `account:read`, one generation point, one actor-home range of B≤100 raw candidates, existing
-  `readThread`/`readBoard` disclosure per examined candidate, and one exact own-edge presence recheck per candidate.
-- Bound: `Q_self + Q_partition + Q_range(B) + B*(Q_native_disclosure + Q_point)`. The range is one data statement
-  and at most 100 physical subscription rows; presence is one statement/one row. P≤20 outputs are retained. Native
-  source, board, Realm/place and presentation dependencies and their transaction controls remain additive, including
-  unavailable results. Memory is O(B+P+D); D includes the existing 33-post ancestry ceiling and Access's finite
-  membership preparation (at most 1,000 memberships per identity, two identities). No all-partition query is used.
-- Growth check: the native growth journey grows both actor-home ranges, verifies physical rows/statements/blocks,
-  rejects large sequential scans, and reads both explicit selections with available and unavailable rows. Connected
-  outcome tests cover cursor refusal, current denial and exact self-removal.
+- Touches: current shared `account:read` and home epoch at entry, one actor-home indexed range, an ordinary native
+  `readThread` or `readBoard` plus an exact current source-row read for each examined key, then a second ordinary
+  native disclosure and exact source-row read for each retained key after all first-pass hydration, followed by the
+  same account and home checks. Each source-row read returns at most one active episode and preserves its resource,
+  creation time and revision; the page stores compact native context witnesses, not first-post bodies or copied Realm
+  authority.
+- Bound: `Q_self + Q_home + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target witnesses and the returned title, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs and a cursor of at most 4096 characters. There is no refill or all-partition query.
+- Growth check: `board-watch-growth.test.ts` continues to execute both mounted selections at 256/1024/4096 histories, with the repeated native disclosures and source observations included in captured SQL, rows, blocks, controls and actual UTF-8 request/response bytes. It rejects large sequential scans. Controller acceptance owns independent inactive-source, selected-target and authority-history growth, retained/materialized byte caps, cold-retry and registered-runner measurements.
 
 ### Cost: native command envelope used above
 

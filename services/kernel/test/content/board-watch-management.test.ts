@@ -8,6 +8,7 @@ import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { BOARD_WATCH_RECIPIENT_BUDGET, processBoardWatchNoticePage } from '../../src/content/board-watch-notices.ts';
+import { interceptThreadSnapshot } from './support/watch-management-fixture.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof replyNoticeFixture>>;
@@ -197,6 +198,13 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
   expect(
     (
       await f.call(reader, 'DELETE', `/v1/accounts/${reader}/watches/${board.id}?kind=board`, {
+        expectedRevision: board.revision + 1,
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await f.call(reader, 'DELETE', `/v1/accounts/${reader}/watches/${board.id}?kind=board`, {
         expectedRevision: board.revision,
       })
     ).status,
@@ -205,7 +213,210 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
   expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 0 }, initialWatchKey)).status).toBe(
     404,
   );
-  expect((await f.call(reader, 'GET', management(reader))).value.items).toEqual([]);
+  expect((await f.call(reader, 'GET', management(reader))).value).toEqual({ items: [], next: null });
+});
+
+test('inventory retries a reused source identity and the exact same cursor after an unavailable native read', async () => {
+  const reader = f.accounts.actor;
+  const route = routeOf(reader)!;
+  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+  const first = await f.thread();
+  const later = await f.thread();
+  for (const thread of [first, later])
+    expect((await f.call(reader, 'PUT', `/v1/threads/${thread.id}/watch`)).status).toBe(204);
+  const watches = (
+    await f.db.admin.query(
+      `SELECT watch_id,thread_id FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2`,
+      [route, reader],
+    )
+  ).rows as { watch_id: string; thread_id: string }[];
+  const firstWatch = watches.find((row) => row.thread_id === first.id)!;
+  const laterWatch = watches.find((row) => row.thread_id === later.id)!;
+  await f.db.admin.query(
+    `UPDATE content.thread_watch SET created_at=CASE watch_id WHEN $1 THEN '2026-11-01T00:00:00Z'::timestamptz
+       ELSE '2026-11-02T00:00:00Z'::timestamptz END WHERE watch_id=ANY($2::uuid[])`,
+    [firstWatch.watch_id, [firstWatch.watch_id, laterWatch.watch_id]],
+  );
+
+  const sourceGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await sourceGate.reached;
+    await f.db.admin.query(
+      'DELETE FROM content.thread_watch WHERE watch_id=$1',
+      [firstWatch.watch_id],
+    );
+    await f.db.admin.query(
+      `INSERT INTO content.thread_watch(route,thread_id,watcher_account_id,watch_id,created_at)
+       VALUES($1,$2,$3,$4,'2026-11-01T12:00:00Z'::timestamptz)`,
+      [route, first.id, reader, firstWatch.watch_id],
+    );
+    sourceGate.release();
+    expect((await pending).status).toBe(503);
+  } finally {
+    sourceGate.restore();
+  }
+  expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).toContainEqual(
+    expect.objectContaining({ id: firstWatch.watch_id, resourceId: first.id, createdAt: '2026-11-01T12:00:00.000Z' }),
+  );
+
+  const cursorPage = await f.call(reader, 'GET', management(reader, 'thread', 1));
+  expect(cursorPage.status).toBe(200);
+  const cursor = cursorPage.value.next as string;
+  expect(cursor).toBeString();
+  const retryPath = `${management(reader, 'thread', 1)}&cursor=${encodeURIComponent(cursor)}`;
+  const failureGate = interceptThreadSnapshot(f.db.pool, later.id, 'fail');
+  try {
+    expect((await f.call(reader, 'GET', retryPath)).status).toBe(503);
+  } finally {
+    failureGate.restore();
+  }
+  expect((await f.call(reader, 'GET', retryPath))).toMatchObject({
+    status: 200,
+    value: { items: [{ resourceId: later.id, state: 'available' }], next: null },
+  });
+});
+
+test('inventory finishes current target disclosure after later rows hydrate', async () => {
+  const reader = f.accounts.actor;
+  const route = routeOf(f.boardId)!;
+  const secondaryBoard = newId(route);
+  const space = newId(route);
+  const realm = newId(route);
+  const spaceRevision = newId(route);
+  const realmRevision = newId(route);
+  const context = newId(route);
+  await f.db.admin.query(
+    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+     VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
+    [route, space, spaceRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+     VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
+    [route, space, spaceRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+     VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
+    [route, realm, space, context, realmRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+     VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
+    [route, realm, realmRevision, context, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
+     VALUES($1,$2,$3,'Realm watch board',$4,'published',1,$5)`,
+    [route, secondaryBoard, newId(route), realm, crypto.randomUUID()],
+  );
+  await f.accounts.grant(reader, 'realm:read', { route, id: realm });
+  await f.accounts.grant(reader, 'realm:participate', { route, id: realm });
+  await f.accounts.grant(reader, 'board:read', { route, id: secondaryBoard });
+  await f.accounts.grant(f.accounts.recipient, 'thread:create', { route, id: secondaryBoard });
+  const realmThread = await f.thread(f.accounts.recipient, 'published', secondaryBoard);
+  const later = await f.thread();
+  for (const thread of [realmThread, later])
+    expect((await f.call(reader, 'PUT', `/v1/threads/${thread.id}/watch`)).status).toBe(204);
+  await f.db.admin.query(
+    `UPDATE content.thread_watch SET created_at=CASE thread_id WHEN $1 THEN '2026-11-01T00:00:00Z'::timestamptz
+       ELSE '2026-11-02T00:00:00Z'::timestamptz END WHERE watcher_account_id=$2 AND thread_id=ANY($3::uuid[])`,
+    [realmThread.id, reader, [realmThread.id, later.id]],
+  );
+
+  const targetGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await targetGate.reached;
+    await f.db.admin.query(
+      'UPDATE content.thread SET board_id=$2,security_revision=security_revision+1 WHERE thread_id=$1',
+      [realmThread.id, f.boardId],
+    );
+    targetGate.release();
+    expect((await pending).status).toBe(503);
+  } finally {
+    targetGate.restore();
+  }
+  expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).toContainEqual(
+    expect.objectContaining({ id: expect.any(String), resourceId: realmThread.id, state: 'available' }),
+  );
+
+  const revokedThread = await f.thread(f.accounts.recipient, 'published', secondaryBoard);
+  expect((await f.call(reader, 'PUT', `/v1/threads/${revokedThread.id}/watch`)).status).toBe(204);
+  await f.db.admin.query(
+    `UPDATE content.thread_watch SET created_at='2026-10-31T00:00:00Z'::timestamptz WHERE thread_id=$1 AND watcher_account_id=$2`,
+    [revokedThread.id, reader],
+  );
+  const revokedWatch = (
+    await f.db.admin.query('SELECT watch_id FROM content.thread_watch WHERE thread_id=$1 AND watcher_account_id=$2', [
+      revokedThread.id,
+      reader,
+    ])
+  ).rows[0]!.watch_id as string;
+  const realmDenial = newId(route);
+  const realmGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await realmGate.reached;
+    await f.db.admin.query(
+      `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+       VALUES($1,$2,$3,'realm:read','resource','(,)',$4)`,
+      [route, realm, reader, realmDenial],
+    );
+    realmGate.release();
+    const result = await pending;
+    expect(result.status).toBe(200);
+    expect(result.value.items).toContainEqual({
+      id: revokedWatch,
+      kind: 'thread',
+      revision: 1,
+      createdAt: '2026-10-31T00:00:00.000Z',
+      state: 'unavailable',
+    });
+  } finally {
+    realmGate.restore();
+    await f.db.admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [realmDenial]);
+  }
+
+  const removalThread = await f.thread(f.accounts.recipient, 'published', secondaryBoard);
+  expect((await f.call(reader, 'PUT', `/v1/threads/${removalThread.id}/watch`)).status).toBe(204);
+  await f.db.admin.query(
+    `UPDATE content.thread_watch SET created_at='2026-11-01T00:00:00Z'::timestamptz WHERE thread_id=$1 AND watcher_account_id=$2`,
+    [removalThread.id, reader],
+  );
+  const removalWatch = (
+    await f.db.admin.query('SELECT watch_id FROM content.thread_watch WHERE thread_id=$1 AND watcher_account_id=$2', [
+      removalThread.id,
+      reader,
+    ])
+  ).rows[0]!.watch_id as string;
+  const removalGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await removalGate.reached;
+    await f.db.admin.query("UPDATE content.thread SET visibility='draft' WHERE thread_id=$1", [removalThread.id]);
+    removalGate.release();
+    const result = await pending;
+    expect(result.status).toBe(200);
+    expect(result.value.items).toContainEqual({
+      id: removalWatch,
+      kind: 'thread',
+      revision: 1,
+      createdAt: '2026-11-01T00:00:00.000Z',
+      state: 'unavailable',
+    });
+  } finally {
+    removalGate.restore();
+  }
+  const removePath = `/v1/accounts/${reader}/watches/${removalWatch}?kind=thread`;
+  const removalKey = crypto.randomUUID();
+  expect((await f.call(reader, 'DELETE', removePath, { expectedRevision: 1 }, removalKey)).status).toBe(200);
+  expect((await f.call(reader, 'DELETE', removePath, { expectedRevision: 1 }, removalKey)).status).toBe(200);
+  expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).not.toContainEqual(
+    expect.objectContaining({ id: removalWatch }),
+  );
+
 });
 
 test('unwatch, erasure and late replay cannot recreate subscriptions or old notice presentation', async () => {
@@ -219,11 +430,30 @@ test('unwatch, erasure and late replay cannot recreate subscriptions or old noti
   expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 })).status).toBe(200);
   await effect().run(event);
   expect((await f.notices(opening.firstPost.id)).filter((notice) => notice.recipient_id === reader)).toHaveLength(0);
+  const ownerRoute = routeOf(reader)!;
+  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [ownerRoute, reader]);
+  const first = await f.thread();
+  const later = await f.thread();
+  for (const thread of [first, later])
+    expect((await f.call(reader, 'PUT', `/v1/threads/${thread.id}/watch`)).status).toBe(204);
+  await f.db.admin.query(
+    `UPDATE content.thread_watch SET created_at=CASE thread_id WHEN $1 THEN '2026-11-01T00:00:00Z'::timestamptz
+       ELSE '2026-11-02T00:00:00Z'::timestamptz END WHERE watcher_account_id=$2 AND thread_id=ANY($3::uuid[])`,
+    [first.id, reader, [first.id, later.id]],
+  );
   const suspendedOpening = await f.thread();
   const suspendedEvent = await publication(suspendedOpening.firstPost.id);
   configureTestReceiptKeys(f.db.admin);
-  await suspendAccount(f.db.admin, reader);
-  expect((await f.call(reader, 'GET', management(reader))).status).toBe(401);
+  const sessionGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await sessionGate.reached;
+    await suspendAccount(f.db.admin, reader);
+    sessionGate.release();
+    expect((await pending).status).toBe(404);
+  } finally {
+    sessionGate.restore();
+  }
   await effect().run(suspendedEvent);
   expect(
     (
