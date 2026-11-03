@@ -54,6 +54,11 @@ type CommonOptions = {
   operationalHistory?: true | OperationalWorkOriginal;
   /** Private phase capability issued only by the authentic selected invocation runner. */
   selectedRuntime?: SelectedOperationalPhase;
+  /** Trusted transaction observation; callbacks cannot replace persistence. */
+  transactionObservation?: {
+    beforeCommit(): void | Promise<void>;
+    afterRollback(): void | Promise<void>;
+  };
 };
 export type OperationalOptions = CommonOptions &
   (
@@ -258,6 +263,7 @@ export async function runOperationalTransaction<T>(
               if (Date.now() >= deadline) throw unavailable('deadline');
               if (selected) await selected.hold(tx, client);
               await finalizeOperationalHistoryAttempt(tx);
+              await options.transactionObservation?.beforeCommit();
               live.delete(tx);
               active = false;
               await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
@@ -268,6 +274,7 @@ export async function runOperationalTransaction<T>(
             });
           } catch (error) {
             await client.query('ROLLBACK').catch((failure: Error) => discardConnection(client, failure));
+            await options.transactionObservation?.afterRollback();
             throw error;
           } finally {
             active = false;

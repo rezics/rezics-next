@@ -12,7 +12,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { workStepDeadline } from './command-support.ts';
-import { pinLegacyFactsPage } from './profile-migration-page.ts';
+import { pinLegacyFactsPage, type LibraryProfileMigrationSource } from './profile-migration-page.ts';
 import ensureHead from './profile-migration-lock.sql';
 import lockCheckpoint from './profile-migration-checkpoint.sql';
 import readCheckpoint from './profile-migration-progress.sql';
@@ -31,7 +31,30 @@ export type LibraryProfileMigrationRuntime = Readonly<{
   resume(input: { accountId: string }): Promise<LibraryProfileMigrationProgress>;
   readProgress(input: { accountId: string }): Promise<LibraryProfileMigrationProgress>;
 }>;
-type Dependencies = { pool: Pool; client: WorkClient; clock?: KernelClock };
+export type LibraryProfileMigrationBoundary =
+  | 'after-page-read-before-cas'
+  | 'before-page-commit'
+  | 'after-page-commit-before-ack'
+  | 'before-owner-ready';
+export type LibraryProfileMigrationPageObservation = {
+  transactionId: string;
+  backendId: number;
+  checkpointBefore: LibraryProfileMigrationProgress;
+  checkpointAfter: LibraryProfileMigrationProgress;
+  sources: { phase: LibraryProfileMigrationPhase; rows: readonly LibraryProfileMigrationSource[]; changedIds: readonly string[] }[];
+  ownerFenceChecked: boolean;
+  committed: boolean;
+};
+export type LibraryProfileMigrationObservation =
+  | { kind: 'boundary'; boundary: LibraryProfileMigrationBoundary; page: LibraryProfileMigrationPageObservation }
+  | { kind: 'settled'; page: LibraryProfileMigrationPageObservation };
+type Dependencies = {
+  pool: Pool;
+  client: WorkClient;
+  clock?: KernelClock;
+  /** Trusted host observation only; never accepted in migration input. */
+  observe?: (event: LibraryProfileMigrationObservation) => void | Promise<void>;
+};
 type Checkpoint = NonNullable<Awaited<ReturnType<typeof readCheckpoint.run>>>;
 type Locator = {
   accounts: [string];
@@ -101,7 +124,15 @@ async function enqueue(tx: OperationalTransaction, state: LibraryProfileMigratio
     input,
   });
 }
-function transaction<T>(deps: Dependencies, accountId: string, body: (tx: OperationalTransaction) => Promise<T>) {
+function transaction<T>(
+  deps: Dependencies,
+  accountId: string,
+  body: (tx: OperationalTransaction) => Promise<T>,
+  transactionObservation?: {
+    beforeCommit(): void | Promise<void>;
+    afterRollback(): void | Promise<void>;
+  },
+) {
   const key = ownerKey(accountId);
   return runOperationalTransaction(
     deps.pool,
@@ -113,6 +144,7 @@ function transaction<T>(deps: Dependencies, accountId: string, body: (tx: Operat
       workClient: deps.client,
       deadline: workStepDeadline(),
       ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+      ...(transactionObservation ? { transactionObservation } : {}),
     },
     async (tx) => {
       await fenceShelfTechnicalWrite(tx, { route: key.route, accountId });
@@ -129,11 +161,25 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
   parseLocator(input);
   const accountId = input.accounts[0];
   const key = ownerKey(accountId);
-  return transaction(deps, accountId, async (tx) => {
-    const row = await lockCheckpoint.run(tx, key);
+  let observed: LibraryProfileMigrationPageObservation | undefined;
+  const boundary = async (boundary: LibraryProfileMigrationBoundary) => {
+    if (observed) await deps.observe?.({ kind: 'boundary', boundary, page: structuredClone(observed) });
+  };
+  const result = await transaction(deps, accountId, async (tx) => {
+    observed = undefined;
+    const row = await readCheckpoint.run(tx, key);
     const state = progress(accountId, row);
     if (!row || state.releaseDigest !== input.releaseDigest) throw new Error('Unknown Library profile migration');
     if (state.phase !== input.phase || state.after !== input.after) return state;
+    if (deps.observe) {
+      const identity = (await tx.query<{ transactionId: string; backendId: number }>(
+        'SELECT pg_current_xact_id()::text AS "transactionId", pg_backend_pid() AS "backendId"',
+      )).rows[0]!;
+      observed = {
+        ...identity, checkpointBefore: { ...state }, checkpointAfter: { ...state },
+        sources: [], committed: false, ownerFenceChecked: true,
+      };
+    }
     let remaining = 100;
     while (state.phase !== 'ready' && remaining > 0) {
       const page = await pinLegacyFactsPage(tx, {
@@ -142,6 +188,13 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
         releaseDigest: input.releaseDigest,
         after: state.after,
         limit: remaining,
+        ...(observed ? {
+          observeRead: async (rows: readonly LibraryProfileMigrationSource[]) => {
+            observed!.sources.push({ phase: state.phase as LibraryProfileMigrationPhase, rows: structuredClone(rows), changedIds: [] });
+            await boundary('after-page-read-before-cas');
+          },
+          observeChanged: (ids: readonly string[]) => { observed!.sources.at(-1)!.changedIds = [...ids]; },
+        } : {}),
       });
       remaining -= page.examined;
       state.after = page.after;
@@ -149,10 +202,39 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
       state.phase = phases[phases.indexOf(state.phase) + 1] ?? 'ready';
       state.after = null;
     }
-    await advanceCheckpoint.run(tx, { ...key, phase: state.phase, digest: input.releaseDigest, after: state.after });
+    if (observed) observed.checkpointAfter = { ...state };
+    if (state.phase === 'ready') await boundary('before-owner-ready');
+    // Do not hold the source-head row while a source read is paused. Ordinary
+    // writers also advance this head. The exact old locator is the checkpoint
+    // CAS; a lost CAS rolls back every pin in this serializable attempt.
+    const advanced = await tx.query(
+      `UPDATE library.fact_source_head
+       SET profile_migration_phase=$3, profile_migration_digest=$4, profile_migration_after=$5::uuid
+       WHERE route=$1 AND account_id=$2 AND profile_migration_phase=$6
+         AND profile_migration_digest=$4 AND profile_migration_after IS NOT DISTINCT FROM $7::uuid
+       RETURNING account_id`,
+      [key.route, accountId, state.phase, input.releaseDigest, state.after, input.phase, input.after],
+    );
+    if (advanced.rowCount !== 1)
+      throw Object.assign(new Error('Library profile migration checkpoint CAS lost'), { code: '40001' });
     await enqueue(tx, state);
     return state;
-  });
+  }, deps.observe ? {
+    beforeCommit: () => boundary('before-page-commit'),
+    afterRollback: async () => {
+      if (observed) await deps.observe!({ kind: 'settled', page: structuredClone(observed) });
+      observed = undefined;
+    },
+  } : undefined);
+  if (observed) {
+    observed.committed = true;
+    try {
+      await boundary('after-page-commit-before-ack');
+    } finally {
+      await deps.observe!({ kind: 'settled', page: structuredClone(observed) });
+    }
+  }
+  return result;
 }
 
 /** Trusted host/operator API only. No caller-supplied verifier, profile body or pin.

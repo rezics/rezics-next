@@ -13,6 +13,7 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
 import { addLabel, json, write, unavailable, grantSubjectRead, deleteAccount } from './native-conformance.ts';
 import { createLibraryProfileMigrationRuntime } from '../../../src/library/profile-migration-runtime.ts';
+import { LifecycleDeniedError } from '../../../src/access/lifecycle-20261025094010-command.ts';
 import { costOf } from '../../support/growth.ts';
 import { idempotencyKeyOf } from '../../../src/http/request.ts';
 import {
@@ -20,6 +21,7 @@ import {
   createProfileReceiptObservations,
   type StoredProfileReceipt,
 } from './profile-historical-native-fixture.ts';
+import { createProfileMigrationObservation, ProfileMigrationCrash } from './profile-migration-observation.ts';
 
 export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriver> {
   const world = await createLibraryDriver();
@@ -35,10 +37,12 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
     const assertFixture = (candidate: LibraryProfilesFixture) => {
       if (candidate !== fixture) throw new Error('Library profiles fixture belongs to another native world');
     };
+    const migration = createProfileMigrationObservation();
     const runtime = createLibraryProfileMigrationRuntime({
       pool: world.native.pool,
       client: world.native.workClient,
       clock: () => new Date(world.now()),
+      observe: migration.observe,
     });
     const database = world.native.reader;
     const args = [world.accounts.owner.route, world.accounts.owner.id];
@@ -120,20 +124,31 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
       },
       async migrateOwner(f, digest) {
         assertFixture(f);
-        let state = await runtime.start({ accountId: world.accounts.owner.id, releaseDigest: digest });
-        while (state.phase !== 'ready') state = await runtime.resume({ accountId: world.accounts.owner.id });
+        try {
+          let state = await runtime.start({ accountId: world.accounts.owner.id, releaseDigest: digest });
+          while (state.phase !== 'ready')
+            state = await migration.capture(
+              () => runtime.resume({ accountId: world.accounts.owner.id }),
+              (operation) => world.native.capture(operation),
+            );
+        } catch (error) {
+          // The injected executor exit leaves the actual rollback/commit and
+          // durable intent intact. Recovery below lets DBOS consume that intent.
+          if (!(error instanceof ProfileMigrationCrash) && !(error instanceof LifecycleDeniedError)) throw error;
+        }
       },
       async pauseNextMigration(f, boundary: ProfileMigrationBoundary) {
         assertFixture(f);
-        return unavailable(`native migration ${boundary} persistence latch`);
+        return migration.pause(boundary);
       },
       async crashNextMigration(f, boundary) {
         assertFixture(f);
-        return unavailable(`native migration ${boundary} executor crash binding`);
+        migration.crash(boundary);
       },
       async recoverMigration(f) {
         assertFixture(f);
         await world.settle();
+        await world.native.hold();
       },
       async revoke(f, persona, action, resourceId) {
         assertFixture(f);
@@ -256,7 +271,7 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
           migration: {
             jobs,
             checkpoints,
-            pages: unavailable('native migration page transaction and EXPLAIN observations'),
+            pages: migration.pages(),
           },
           importRuns: unavailable('exact native profile-fixture import-run inspection'),
         };

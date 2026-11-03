@@ -92,14 +92,14 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     const consumed = new WeakMap<object, number>();
     const rawPages: number[] = [];
     await observeRetentionQueries(f.pool, ({ connection, sql, result }) => {
-      if (/AS incompatible/i.test(sql)) {
+      if (/library\.profileMigration\.source:/i.test(sql)) {
         const total = (consumed.get(connection) ?? 0) + result.rows.length;
         consumed.set(connection, total);
         rawPages.push(total);
         expect(total).toBeLessThanOrEqual(100);
       }
       if (/^(COMMIT|ROLLBACK)$/i.test(sql.trim())) consumed.delete(connection);
-      if (/SET profile_migration_phase =/i.test(sql)) {
+      if (/SET profile_migration_phase\s*=/i.test(sql)) {
         advanced = true;
         if (fault === 'before') {
           fault = null;
