@@ -1,13 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import {
-  libraryListQuery,
-  readLibraryResult,
-  StaleCursorError,
-  subjectOf,
-  type LibrarySubject,
-} from './reads';
+import { libraryListQuery, readLibraryResult, StaleCursorError, subjectOf, type LibrarySubject } from './reads';
 import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
 type FollowRead = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>;

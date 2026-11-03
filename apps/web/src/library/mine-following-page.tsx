@@ -156,7 +156,9 @@ export function CurrentViewerMineFollowingPage({
         invalidAddress={addressInvalid}
         origin={rowOrigin}
         status={status}
-        onRefresh={() => { if (current()) void read.refetch(); }}
+        onRefresh={() => {
+          if (current()) void read.refetch();
+        }}
         onReview={async (targetId) => {
           if (addressInvalid || !current() || !readCurrent()) return null;
           const result = await read.refetch();
@@ -286,22 +288,25 @@ function MineFollowingPageState({
   const locale = getLocale();
   const prepared = useMemo(() => prepareFollowing(page, locale), [page, locale]);
   const active = useMemo(() => {
-    const activeIds = new Set(follows.map(follow => follow.targetId));
-    return prepared.rows.filter(row => activeIds.has(row.follow.targetId));
+    const activeIds = new Set(follows.map((follow) => follow.targetId));
+    return prepared.rows.filter((row) => activeIds.has(row.follow.targetId));
   }, [prepared, follows]);
   const readingOrigin = useHistoryCurrentOrigin(JSON.stringify([locale, cursor]), followingOperations, null, origin);
   const reading = useFollowingSelection(page, locale, {
     lifetime: readingOrigin.boundary.lifetime,
-    isCurrent: () => readingOrigin.current(0) && origin.isCurrent() && getLocale() === locale && !status && !addressRejected,
+    isCurrent: () =>
+      readingOrigin.current(0) && origin.isCurrent() && getLocale() === locale && !status && !addressRejected,
   });
-  useFollowingReturn(reading.current, reading.close, onRefresh);
+  useFollowingReturn(reading.current, reading.close, onRefresh, reading.restoreFocus);
   const restart = !addressRejected && (!!cursor || !!page.cursorReset || removed);
   const firstPageEmpty = !restart && !page.next;
 
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header>
-        <PageHeading ref={listHeading} tabIndex={-1}>{m.library_following_heading()}</PageHeading>
+        <PageHeading ref={listHeading} tabIndex={-1}>
+          {m.library_following_heading()}
+        </PageHeading>
       </header>
       {!addressRejected && status ? (
         <div className="space-y-3">
@@ -325,44 +330,94 @@ function MineFollowingPageState({
         <p role="status">{m.library_collections_cursor_reset()}</p>
       ) : null}
       {!addressRejected && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
-      {!addressRejected && page.signedIn && onRefresh ? <Button className="min-h-11" variant="outline" disabled={!!status} onClick={() => {
-        if (!reading.current()) return;
-        reading.close(false);
-        onRefresh();
-      }}>{m.following_reading_refresh()}</Button> : null}
-      {reading.selection ? <FollowingInspection key={reading.selection.id} selection={reading.selection}
-        subject={readingOrigin.subject} locale={locale} canReadCollection={canReadCollection} close={reading.close} readSpace={readSpace} /> : null}
+      {!addressRejected && page.signedIn && onRefresh ? (
+        <Button
+          className="min-h-11"
+          variant="outline"
+          disabled={!!status}
+          onClick={() => {
+            if (!reading.current()) return;
+            reading.close(false);
+            onRefresh();
+          }}
+        >
+          {m.following_reading_refresh()}
+        </Button>
+      ) : null}
+      {reading.selection ? (
+        <FollowingInspection
+          key={reading.selection.id}
+          selection={reading.selection}
+          subject={readingOrigin.subject}
+          locale={locale}
+          canReadCollection={canReadCollection}
+          close={reading.close}
+          readSpace={readSpace}
+        />
+      ) : null}
       {!addressRejected && active.length ? (
         <ul className="list-none space-y-1" aria-label={m.library_following_heading()}>
-          {active.map(row => {
+          {active.map((row) => {
             const { follow, title, kind, reason, destination } = row;
             const href = destination?.kind === 'collection' && !canReadCollection ? undefined : destination?.href;
-            return <ContentItem key={follow.targetId} data-follow-target-type={follow.targetType} className="px-4" title={title.text}
-              {...(title.lang ? { titleLang: title.lang } : {})} headingLevel={3} {...(href ? { href } : {})}
-              onClickCapture={event => { if (event.target instanceof Element && event.target.closest('a') && !reading.current()) event.preventDefault(); }}
-              visual={follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" /> : undefined}
-              metadata={<div className="min-w-0 space-y-1"><p>{kind}</p><p>{reason}</p></div>}
-              actions={<div className="flex flex-wrap items-center gap-2">
-                <span hidden={!canUnfollow}>
-                  <FollowTargetControl origin={origin} targetId={follow.targetId} following disabled={!!status}
-                    idempotencyKey={follow.idempotencyKey} menuTitle={m.library_follow_more_actions({ title: title.text })}
-                    onReview={onReview ? () => onReview(follow.targetId) : undefined}
-                    onRemoved={() => {
-                      if (!origin.isCurrent()) return;
-                      if (reading.selection?.row.follow.targetId === follow.targetId) {
-                        reading.close(false);
-                        listHeading.current?.focus();
-                      }
-                      setFollows(items => items.filter(item => item.targetId !== follow.targetId));
-                      setRemoved(true);
-                    }} />
-                </span>
-                <Button className="min-h-11" variant="outline" disabled={!!status}
-                  aria-label={m.following_reading_inspect_target({ title: title.text })}
-                  onClick={event => { const current = prepared.byId.get(follow.targetId); if (current) reading.select(current, event.currentTarget); }}>
-                  {m.following_reading_inspect()}
-                </Button>
-              </div>} />;
+            return (
+              <ContentItem
+                key={follow.targetId}
+                data-follow-target-type={follow.targetType}
+                className="px-4"
+                title={title.text}
+                {...(title.lang ? { titleLang: title.lang } : {})}
+                headingLevel={3}
+                {...(href ? { href } : {})}
+                onClickCapture={(event) => {
+                  if (event.target instanceof Element && event.target.closest('a') && !reading.current())
+                    event.preventDefault();
+                }}
+                visual={follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" /> : undefined}
+                metadata={
+                  <div className="min-w-0 space-y-1">
+                    <p>{kind}</p>
+                    <p>{reason}</p>
+                  </div>
+                }
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span hidden={!canUnfollow}>
+                      <FollowTargetControl
+                        origin={origin}
+                        targetId={follow.targetId}
+                        following
+                        disabled={!!status}
+                        idempotencyKey={follow.idempotencyKey}
+                        menuTitle={m.library_follow_more_actions({ title: title.text })}
+                        onReview={onReview ? () => onReview(follow.targetId) : undefined}
+                        onRemoved={() => {
+                          if (!origin.isCurrent()) return;
+                          if (reading.selection?.row.follow.targetId === follow.targetId) {
+                            reading.close(false);
+                            listHeading.current?.focus();
+                          }
+                          setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
+                          setRemoved(true);
+                        }}
+                      />
+                    </span>
+                    <Button
+                      className="min-h-11"
+                      variant="outline"
+                      disabled={!!status}
+                      aria-label={m.following_reading_inspect_target({ title: title.text })}
+                      onClick={(event) => {
+                        const current = prepared.byId.get(follow.targetId);
+                        if (current) reading.select(current, event.currentTarget);
+                      }}
+                    >
+                      {m.following_reading_inspect()}
+                    </Button>
+                  </div>
+                }
+              />
+            );
           })}
         </ul>
       ) : !addressRejected && page.signedIn ? (

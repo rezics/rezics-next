@@ -9,21 +9,31 @@ test('keyboard close restores only the current trigger; ordinary links keep the 
     const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
     expect(link.getAttribute('href')).toContain('/en/subjects/');
     expect(link.target).toBe('');
-    await h.settle(() => h.host.querySelector('[role="dialog"]')!.dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await h.settle(() =>
+      h.host
+        .querySelector('[role="dialog"]')!
+        .dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     expect(h.window.document.activeElement).toBe(trigger);
-    expect(new URL(h.host.querySelector<HTMLAnchorElement>('nav a')!.href).searchParams.get('cursor')).toBe('opaque/page+');
+    expect(new URL(h.host.querySelector<HTMLAnchorElement>('nav a')!.href).searchParams.get('cursor')).toBe(
+      'opaque/page+',
+    );
     await h.inspect(spaceId);
     await h.settle(() => h.window.dispatchEvent(new h.window.Event('pagehide')));
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
-    const show = new h.window.Event('pageshow'); Object.defineProperty(show, 'persisted', { value: true });
+    const show = new h.window.Event('pageshow');
+    Object.defineProperty(show, 'persisted', { value: true });
     await h.settle(() => h.window.dispatchEvent(show));
     expect(h.refreshes).toBe(1);
+    expect(h.window.document.activeElement).toBe(trigger);
     await h.inspect(spaceId);
     await h.router.navigate({ to: '/library/following', search: { cursor: 'new-page' } });
     await h.settle();
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
-  } finally { await h.dispose(); }
+  } finally {
+    await h.dispose();
+  }
 });
 
 test('clipboard refusal is honest and delayed success cannot restore feedback or focus after source replacement', async () => {
@@ -31,7 +41,9 @@ test('clipboard refusal is honest and delayed success cannot restore feedback or
   try {
     await h.inspect(spaceId);
     const copy = () => h.host.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label^="Copy "]')!;
-    h.window.navigator.clipboard.writeText = async () => { throw new Error('clipboard denied'); };
+    h.window.navigator.clipboard.writeText = async () => {
+      throw new Error('clipboard denied');
+    };
     await h.settle(() => copy().click());
     expect(h.host.textContent).toContain('Could not copy');
     const pending = deferred<void>();
@@ -43,5 +55,15 @@ test('clipboard refusal is honest and delayed success cannot restore feedback or
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     expect(h.host.textContent).not.toContain('Copied');
     expect(h.window.document.activeElement).not.toBe(oldTrigger);
-  } finally { await h.dispose(); }
+    await h.inspect(spaceId);
+    const accountCopy = deferred<void>();
+    h.window.navigator.clipboard.writeText = () => accountCopy.promise;
+    await h.settle(() => copy().click());
+    await h.account('other');
+    await h.settle(() => accountCopy.resolve());
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+    expect(h.host.textContent).not.toContain('Copied');
+  } finally {
+    await h.dispose();
+  }
 });

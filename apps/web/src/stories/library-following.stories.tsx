@@ -197,7 +197,11 @@ export const UnfollowMenuDesktop: Story = {
 async function inspectCommunity(canvasElement: HTMLElement) {
   await libraryHeadingReady({ canvasElement }, m.library_following_heading);
   const row = canvasElement.querySelector<HTMLElement>('[data-follow-target-type="space"]')!;
-  await userEvent.click(within(row).getByRole('button', { name: m.following_reading_inspect_target({ title: row.querySelector('h3')!.textContent! }) }));
+  await userEvent.click(
+    within(row).getByRole('button', {
+      name: m.following_reading_inspect_target({ title: row.querySelector('h3')!.textContent! }),
+    }),
+  );
 }
 
 export const InspectionReady: Story = {

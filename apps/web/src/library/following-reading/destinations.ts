@@ -13,12 +13,18 @@ export function suppliedDestination(follow: MineFollow, title: string, locale: s
   if (follow.targetType === 'subject')
     return { kind: 'subject', href: subjectHref({ id: follow.target.id, label: title }, locale).href };
   if (follow.targetType === 'collection')
-    return { kind: 'collection', href: `/${encodeURIComponent(locale)}/collections/${encodeURIComponent(follow.target.id)}` };
+    return {
+      kind: 'collection',
+      href: `/${encodeURIComponent(locale)}/collections/${encodeURIComponent(follow.target.id)}`,
+    };
   return null;
 }
 
 /** Same encoded address and Realm routes as the installed community readers. */
-export function spaceDestination(space: { address: string | null; realmId: string | null }, locale: string): FollowingDestination | null {
+export function spaceDestination(
+  space: { address: string | null; realmId: string | null },
+  locale: string,
+): FollowingDestination | null {
   if (v.is(address, space.address))
     return { kind: 'space', href: `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(space.address)}` };
   if (v.is(uuid, space.realmId))

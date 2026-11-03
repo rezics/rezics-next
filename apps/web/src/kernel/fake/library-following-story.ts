@@ -34,11 +34,17 @@ function list() {
   const base = followsRecording.follows;
   if (mode === 'reading-long' || mode === 'reading-current-source') {
     observation++;
-    const label = mode === 'reading-long'
-      ? '長い夜にゆっくり読む本を探している人たちのための、長い名前を持つ静かな読書コミュニティ '.repeat(3)
-      : `Current community observation ${observation}`;
-    return { status: 200, follows: base.map(follow => follow.targetType === 'space'
-      ? { ...follow, target: { ...follow.target, label } } : follow), next: null };
+    const label =
+      mode === 'reading-long'
+        ? '長い夜にゆっくり読む本を探している人たちのための、長い名前を持つ静かな読書コミュニティ '.repeat(3)
+        : `Current community observation ${observation}`;
+    return {
+      status: 200,
+      follows: base.map((follow) =>
+        follow.targetType === 'space' ? { ...follow, target: { ...follow.target, label } } : follow,
+      ),
+      next: null,
+    };
   }
   if (mode === 'none') return { status: 200, follows: [], next: null };
   if (mode === 'inactive-page')
@@ -71,10 +77,14 @@ export const routes: FakeRoute[] = [
     story: () => {
       if (mode === 'reading-preparing') return new Promise(() => {});
       if (mode === 'reading-unavailable') return { status: 503, code: 'unavailable' };
-      return { status: 200, space: { ...spaceRecording.space,
-        spaceId: followsRecording.follows[0]!.targetId,
-        ...(mode === 'reading-no-destination' ? { address: null, realmId: null } : {}),
-      } };
+      return {
+        status: 200,
+        space: {
+          ...spaceRecording.space,
+          spaceId: followsRecording.follows[0]!.targetId,
+          ...(mode === 'reading-no-destination' ? { address: null, realmId: null } : {}),
+        },
+      };
     },
   },
   {

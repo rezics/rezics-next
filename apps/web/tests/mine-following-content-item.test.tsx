@@ -152,7 +152,12 @@ test('Following uses shared item headings and independent native actions while p
     });
     const nativeRows = [...host.querySelectorAll<HTMLElement>('li[data-slot="list-row"]')];
     // Native order replaces type grouping; the other assertions retain their target identities.
-    expect(nativeRows.map(row => row.dataset.followTargetType)).toEqual(['space', 'collection', 'subject', 'subject']);
+    expect(nativeRows.map((row) => row.dataset.followTargetType)).toEqual([
+      'space',
+      'collection',
+      'subject',
+      'subject',
+    ]);
     const rows = [nativeRows[2]!, nativeRows[3]!, nativeRows[1]!, nativeRows[0]!];
     expect(host.textContent).not.toContain(m.library_directory_address_invalid());
     expect(rows).toHaveLength(4);
