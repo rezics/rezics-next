@@ -309,6 +309,8 @@ constructed shapes. Broader mixed Home and rendering integration belong to Conte
 
 ### Account deletion and adopted public output
 
+Saved rule private-family admission follows native own-account reads: bearer scopes, current account standing and exposure, without synthetic account resource grants.
+
 Account deletion is terminal at fresh authentication plus typed confirmation time `T`; only `account-tombstoned.v1`
 exists. There is no account restore, scheduled/cancelled event, `accountDeletionState` port, or account-generation
 counter. Private, UNLISTED and already-deleted payloads hide at `T`; bounded durable purge starts at once and erases them

@@ -22,7 +22,6 @@ beforeAll(async () => {
     'progress_session:read',
     'copy:read',
     'account:manage',
-    'access:grant',
   ];
   await registerTestClient(f.auth.host.service, { clientId, firstParty: true, scopes });
   for (const person of [f.people.alice, f.people.bob]) {
@@ -36,12 +35,6 @@ beforeAll(async () => {
     const issued = await f.auth.request('/token', {}, cookies(signed));
     expect(issued.status).toBe(200);
     person.bearer = (await issued.json()).access_token;
-    await f.json(person, 'POST', '/v1/grants', 201, {
-      resource: { route: routeOf(person.accountId), id: person.accountId },
-      subject: { kind: 'account', id: person.accountId },
-      actions: ['library_entry:read', 'progress_session:read', 'copy:read'],
-      valid: '(,)',
-    });
   }
 }, 360000);
 afterAll(async () => {

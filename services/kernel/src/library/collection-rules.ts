@@ -1,6 +1,6 @@
 import { admitFilter, FilterError, parseFilter, walkFilter, type FilterDocument } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
-import { commandAccessContext } from '../access/command-admission.ts';
+import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import {
@@ -10,7 +10,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
+import { type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
@@ -139,17 +139,20 @@ export async function prepareCollectionRuleAuthority(
       deadline,
       clock: () => new Date(authoritativeTimeValue(attempt.time)),
     });
-    checks.push(
-      await accessCheck(
-        config.access,
-        actor,
-        action,
-        { route, id: actor.accountId },
-        'read' in attempt
-          ? { pool: config.pool, deadline }
-          : commandAccessContext({ pool: config.pool, deadline }, attempt),
-      ),
-    );
+    // These are the actor's private families, using the same intrinsic ownership
+    // boundary as native entry/session/copy reads, rather than resource grants.
+    checks.push(async (client) => {
+      const current = await readAccount(client, route, actor.accountId);
+      return (
+        !!current &&
+        current.kind === 'actor' &&
+        current.state === 'active' &&
+        !current.fenced &&
+        Number.isSafeInteger(actor.authnEpoch) &&
+        actor.authnEpoch >= 1 &&
+        current.minimumAuthnEpoch <= BigInt(actor.authnEpoch)
+      );
+    });
   }
   return checks;
 }
