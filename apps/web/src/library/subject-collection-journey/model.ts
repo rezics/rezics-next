@@ -169,8 +169,7 @@ export function projectPublicPage(page: unknown): {
   next: string | null;
   count: ExactPublicCount;
 } {
-  if (!page || typeof page !== 'object' || Array.isArray(page))
-    throw new Error('Kernel library read failed');
+  if (!page || typeof page !== 'object' || Array.isArray(page)) throw new Error('Kernel library read failed');
   const value = page as { collections?: unknown; next?: unknown; count?: unknown };
   if (!Array.isArray(value.collections)) throw new Error('Kernel library read failed');
   return {
@@ -184,8 +183,7 @@ export function projectPublicPage(page: unknown): {
 }
 
 export function projectChooserPage(page: unknown): { collections: ChooserCollectionRow[]; next: string | null } {
-  if (!page || typeof page !== 'object' || Array.isArray(page))
-    throw new Error('Kernel library read failed');
+  if (!page || typeof page !== 'object' || Array.isArray(page)) throw new Error('Kernel library read failed');
   const value = page as { collections?: unknown; next?: unknown };
   if (!Array.isArray(value.collections)) throw new Error('Kernel library read failed');
   return {
@@ -199,9 +197,15 @@ export function projectChooserPage(page: unknown): { collections: ChooserCollect
 
 export function collectionReadFailure(error: unknown): 'expired' | 'closed' | 'unavailable' {
   const value = error as { name?: unknown; message?: unknown } | null;
-  if (value?.name === 'StaleCursorError' || (typeof value?.message === 'string' && value.message.includes('stale_cursor')))
+  if (
+    value?.name === 'StaleCursorError' ||
+    (typeof value?.message === 'string' && value.message.includes('stale_cursor'))
+  )
     return 'expired';
-  if (typeof value?.message === 'string' && (value.message.includes('closed') || value.message.includes('PlatformClosed')))
+  if (
+    typeof value?.message === 'string' &&
+    (value.message.includes('closed') || value.message.includes('PlatformClosed'))
+  )
     return 'closed';
   return 'unavailable';
 }

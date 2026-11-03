@@ -449,7 +449,8 @@ test('subject collection pages stay O(page) at 32, 256 and 2048 Collections', as
         if (url.pathname.startsWith('/auth/')) return new Response(null, { status: 404 });
         recorded.push({ path: url.pathname, cursor: url.searchParams.get('cursor') });
         expect(url.searchParams.get('limit')).toBe('20');
-        const offset = url.searchParams.get('cursor') === 'empty' ? catalogue : Number(url.searchParams.get('cursor') ?? 0);
+        const offset =
+          url.searchParams.get('cursor') === 'empty' ? catalogue : Number(url.searchParams.get('cursor') ?? 0);
         const remaining = Math.max(0, catalogue - offset);
         const rows = url.searchParams.get('cursor') === 'empty' ? 0 : Math.min(20, remaining);
         const next =
@@ -475,9 +476,11 @@ test('subject collection pages stay O(page) at 32, 256 and 2048 Collections', as
       }) as typeof fetch,
     }),
   );
-  const stub = { async credential() {
-    return { status: 'active' as const, subject: 'owner', accessToken: 'token', csrfToken: 'csrf' };
-  } };
+  const stub = {
+    async credential() {
+      return { status: 'active' as const, subject: 'owner', accessToken: 'token', csrfToken: 'csrf' };
+    },
+  };
   const env = {
     AUTH_ISSUER: 'https://auth.example.test',
     API_RESOURCE: 'https://api.rezics.test',

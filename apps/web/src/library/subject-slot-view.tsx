@@ -197,8 +197,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     if (provenance) observed.seen.add(provenance.readId);
     ready[family] = accepted;
   }
-  const memberResult =
-    data.result === 'added' || data.result === 'collection-full' || data.result === 'dynamic';
+  const memberResult = data.result === 'added' || data.result === 'collection-full' || data.result === 'dynamic';
   const current: SubjectLibrarySlotData = !browser
     ? data
     : {
@@ -843,7 +842,9 @@ function SubjectLibrarySlotView({
   function addToCollection(collectionId: string) {
     if (
       !collectionLifetime.current('collection.list', 'collection_member.create') ||
-      (uncertainMember.current ? uncertainMember.current.input.collectionId !== collectionId : chooserTargetRef.current?.id !== collectionId)
+      (uncertainMember.current
+        ? uncertainMember.current.input.collectionId !== collectionId
+        : chooserTargetRef.current?.id !== collectionId)
     )
       return;
     return mutate({

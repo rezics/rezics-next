@@ -71,9 +71,7 @@ export function CollectionChooserPanel({
   const callbacks = useRef({ current, readPage, onSelect });
   callbacks.current = { current, readPage, onSelect };
   const [page, setPage] = useState<BoundCollectionPage<ChooserCollectionRow>>(() =>
-    loaded
-      ? replaceCollectionPage(undefined, collections ?? [], next, firstCollectionVisit())
-      : emptyCollectionPage(),
+    loaded ? replaceCollectionPage(undefined, collections ?? [], next, firstCollectionVisit()) : emptyCollectionPage(),
   );
   const [issue, setIssue] = useState<'expired' | 'closed' | 'unavailable' | null>(problem);
   const [busy, setBusy] = useState(false);
@@ -233,7 +231,9 @@ export function CollectionChooserPanel({
           <p className="text-sm [overflow-wrap:anywhere]">
             {m.library_subject_chooser_selected({ title: selectedStill.title })}
           </p>
-          <p className="text-sm [overflow-wrap:anywhere]">{m.library_subject_add_review({ title: selectedStill.title })}</p>
+          <p className="text-sm [overflow-wrap:anywhere]">
+            {m.library_subject_add_review({ title: selectedStill.title })}
+          </p>
           <button
             type="button"
             className={`${buttonClass} ${controlClass}`}

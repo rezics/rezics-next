@@ -176,11 +176,9 @@ async function readCollections(
   return projectChooserPage(readLibraryResult<unknown>(result as never));
 }
 
-function collectionsFailure(
-  error: unknown,
-  provenance?: SubjectLibraryReadIdentity,
-): SubjectSlotCollectionsResult {
-  const state = collectionReadFailure(error) === 'expired' ? 'expired' : isPlatformClosedError(error) ? 'closed' : 'unavailable';
+function collectionsFailure(error: unknown, provenance?: SubjectLibraryReadIdentity): SubjectSlotCollectionsResult {
+  const state =
+    collectionReadFailure(error) === 'expired' ? 'expired' : isPlatformClosedError(error) ? 'closed' : 'unavailable';
   return { state, collections: null, next: null, ...(provenance ? { provenance } : {}) };
 }
 
