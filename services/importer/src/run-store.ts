@@ -124,6 +124,7 @@ export const RUN_TABLES = [
   'run_conversion_diagnostic_records',
   'run_aggregate_operations',
   'run_aggregate_heads',
+  'run_retention_work',
 ] as const;
 
 export type AggregateOperation = Readonly<{
@@ -445,6 +446,19 @@ export class RunStore<Projection = BatchStatement[]> {
         source TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
         digest TEXT NOT NULL, head_json TEXT NOT NULL,
         PRIMARY KEY(source, subject_id, provider)) WITHOUT ROWID`);
+      this.database.exec('CREATE INDEX IF NOT EXISTS run_generation_seq ON run_generations(source, seq)');
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
+        plan_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        selected_json TEXT NOT NULL,
+        bound_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        generation_id TEXT NOT NULL DEFAULT '',
+        phase TEXT NOT NULL DEFAULT '',
+        cursor TEXT NOT NULL DEFAULT '',
+        result_json TEXT,
+        created_at TEXT NOT NULL
+      ) WITHOUT ROWID`);
     } catch (error) {
       db.close();
       throw error;
