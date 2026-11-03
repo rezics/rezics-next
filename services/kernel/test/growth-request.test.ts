@@ -364,10 +364,8 @@ beforeEach(async () => {
       },
       async authorize(client, checkedActor, action, resource, evidence, time) {
         dispatchedActions.add(action);
-        // These growth checks measure request dispatch and session handling; the semantic
-        // outcome suite exercises subject-read eligibility with the same published fixture.
-        if (action === 'subject:read') return true;
-        return permissions.authorize(client, checkedActor, action, resource, evidence, time);
+        // Keep the real Access check in the measured request; the wrapper only records dispatch.
+        return permissions.authorize!(client, checkedActor, action, resource, evidence, time);
       },
     };
   };
