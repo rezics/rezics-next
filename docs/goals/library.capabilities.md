@@ -96,6 +96,16 @@ The original Web personal specification retains 23 cases. Library-relevant entri
 - specs/web-personal-outcomes.test.ts:349 — suspension signs out at the next BFF request and refuses a
   suspended-account sign-in.
 
+## Private cross-subject diary
+
+The [private consumption diary](../library-consumption-diary.md) installs `GET /v1/libraryDiary` and
+`POST /v1/libraryDiary:cancel`, with exact reopening through the existing presented progress-session detail.
+Recording-start/UUID descending navigation preserves repeats and incomplete sessions without a shelf entry,
+publication or historical-date dependency. Native owner/subject authority, caller-bound absolute expiry,
+bounded indexed slots and terminal erasure are part of the reader contract. The compact native scenarios are
+`services/kernel/test/library/diary.test.ts`; frozen acceptance and the reserved integrating Web surface remain
+controller-owned. No competing interface or new historical-date writer is introduced.
+
 ## Capability map
 
 ### 1. Shared curated and built-in Collections
