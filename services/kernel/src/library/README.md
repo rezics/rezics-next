@@ -1650,6 +1650,14 @@ Library primary keys are B-trees beginning with `route`.
 `listing-counts.sql` is the search reader. One statement probes `subject_listing` by primary key, `LIMIT 1`, once per supplied id in one partition. No library growth test measures that reader, so this Cost section does not cite it.
 Where a named test does not call the operation, or does not grow the rows that operation can touch, the subsection says so. A bound the indexes do not support is stated as not derivable.
 
+### Private saved-query member evaluation
+
+- Operation/touches: `readMembers -> readDynamicMembers`, stored rule/release, both saved-rule authority brackets,
+  native Source and complete original/fact closure, scoped currentness and repeated Collection revision/generation.
+- Bound/test: [the composed derivation](cost-saved-query-evaluation.md) identifies finite expansion and ordered
+  seeks, but the unidentified-label negative probe lacks an indexed history-independent row bound. Dedicated
+  64/512/4096 first/deep/terminal/refusal growth remains unmeasured; ad-hoc and command suites do not cover it.
+
 ### Native entry incarnation cutover page
 
 - Touches: one partition metadata point and at most 100 materialized raw live entry keys through the route-leading
