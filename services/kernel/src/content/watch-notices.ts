@@ -23,6 +23,7 @@ type WorkRow = {
   thread_id: string;
   published_at: Date;
   cursor_created_at: string | null;
+  cursor_route: number | null;
   cursor_watch_id: string | null;
   done: boolean;
 };
@@ -55,7 +56,7 @@ async function loadPage(
       [route, source.itemId, source.threadId, publishedAt.toISOString()],
     );
     const progress = await client.query<WorkRow>(
-      `SELECT thread_id::text, published_at, cursor_created_at::text, cursor_watch_id::text, done
+      `SELECT thread_id::text, published_at, cursor_created_at::text, cursor_route, cursor_watch_id::text, done
        FROM content.thread_watch_notice_work
        WHERE route=$1 AND post_id=$2 FOR UPDATE`,
       [route, source.itemId],
@@ -69,6 +70,7 @@ async function loadPage(
       actor_id: source.actorId,
       published_at: publishedAt.toISOString(),
       cursor_created_at: work.cursor_created_at,
+      cursor_route: work.cursor_route,
       cursor_watch_id: work.cursor_watch_id,
       limit: WATCH_PAGE_SIZE,
     })) as WatchRow[];
@@ -83,10 +85,10 @@ async function advancePage(pool: Pool, route: number, postId: string, rows: read
     if (last) {
       await client.query(
         `UPDATE content.thread_watch_notice_work
-         SET cursor_created_at=$3::timestamptz,cursor_watch_id=$4::uuid,done=$5
+         SET cursor_created_at=$3::timestamptz,cursor_route=$4::integer,cursor_watch_id=$5::uuid,done=$6
          WHERE route=$1 AND post_id=$2 AND NOT done
-           AND (cursor_created_at IS NULL OR (cursor_created_at,cursor_watch_id) <= ($3::timestamptz,$4::uuid))`,
-        [route, postId, last.created_at, last.watch_id, done],
+           AND (cursor_created_at IS NULL OR (cursor_created_at,cursor_route,cursor_watch_id) <= ($3::timestamptz,$4::integer,$5::uuid))`,
+        [route, postId, last.created_at, last.route, last.watch_id, done],
       );
     } else {
       await client.query(

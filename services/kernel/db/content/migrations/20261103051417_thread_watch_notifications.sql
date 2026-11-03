@@ -34,15 +34,18 @@ CREATE TABLE content.thread_watch_notice_work (
   thread_id uuid NOT NULL,
   published_at timestamptz NOT NULL,
   cursor_created_at timestamptz,
+  cursor_route integer,
   cursor_watch_id uuid,
   done boolean NOT NULL DEFAULT false,
   CONSTRAINT thread_watch_notice_work_post_route_check
     CHECK (route = get_byte(uuid_send(post_id), 10) * 256 + get_byte(uuid_send(post_id), 11)),
   CONSTRAINT thread_watch_notice_work_thread_route_check
     CHECK (route = get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11)),
-  CONSTRAINT thread_watch_notice_work_cursor_check CHECK ((cursor_created_at IS NULL) = (cursor_watch_id IS NULL)),
-  CONSTRAINT thread_watch_notice_work_cursor_route_check
-    CHECK (cursor_watch_id IS NULL OR route = get_byte(uuid_send(cursor_watch_id), 10) * 256 + get_byte(uuid_send(cursor_watch_id), 11)),
+  CONSTRAINT thread_watch_notice_work_cursor_check
+    CHECK ((cursor_created_at IS NULL) = (cursor_route IS NULL) AND (cursor_route IS NULL) = (cursor_watch_id IS NULL)),
+  CONSTRAINT thread_watch_notice_work_cursor_route_check CHECK (cursor_route IS NULL OR cursor_route BETWEEN 0 AND 65535),
+  CONSTRAINT thread_watch_notice_work_cursor_watch_route_check
+    CHECK (cursor_watch_id IS NULL OR cursor_route = get_byte(uuid_send(cursor_watch_id), 10) * 256 + get_byte(uuid_send(cursor_watch_id), 11)),
   CONSTRAINT thread_watch_notice_work_published_at_check CHECK (isfinite(published_at)),
   PRIMARY KEY (route, post_id)
 );
