@@ -170,7 +170,9 @@ test('production operator imports authored Bangumi episodes through ordinary acc
             value: { type: 'value', content: episodeTypeConceptUri('1') },
             references: [
               {
-                parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: episodeTypeConceptUri('1') } }],
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: episodeTypeConceptUri('1') } },
+                ],
               },
             ],
           },
@@ -192,7 +194,9 @@ test('production operator imports authored Bangumi episodes through ordinary acc
             value: { type: 'value', content: schemeId },
             references: [
               {
-                parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: episodeTypeConceptUri('1') } }],
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: episodeTypeConceptUri('1') } },
+                ],
               },
             ],
           },
@@ -244,21 +248,32 @@ test('production operator imports authored Bangumi episodes through ordinary acc
     const unknown = first.readings.find((row) => row.externalId === 'episode:900003');
     const parent = first.readings.find((row) => row.externalId === '81');
     expect(fractional && special && unknown && parent).toBeTruthy();
-    const fractionalId = (fractional!.subject as { subject?: { id: string } }).subject?.id ?? (fractional!.subject as { id?: string }).id;
+    const fractionalId =
+      (fractional!.subject as { subject?: { id: string } }).subject?.id ?? (fractional!.subject as { id?: string }).id;
     const specialEpisodeId =
       (special!.subject as { subject?: { id: string } }).subject?.id ?? (special!.subject as { id?: string }).id;
-    const unknownId = (unknown!.subject as { subject?: { id: string } }).subject?.id ?? (unknown!.subject as { id?: string }).id;
-    const parentId = (parent!.subject as { subject?: { id: string } }).subject?.id ?? (parent!.subject as { id?: string }).id;
+    const unknownId =
+      (unknown!.subject as { subject?: { id: string } }).subject?.id ?? (unknown!.subject as { id?: string }).id;
+    const parentId =
+      (parent!.subject as { subject?: { id: string } }).subject?.id ?? (parent!.subject as { id?: string }).id;
     expect(fractionalId && specialEpisodeId && unknownId && parentId).toBeTruthy();
     expect(fractionalId).not.toBe(specialEpisodeId);
-    for (const property of ['schema:episodeNumber', 'schema:datePublished', 'schema:duration', 'schema:abstract', 'schema:isPartOf'])
+    for (const property of [
+      'schema:episodeNumber',
+      'schema:datePublished',
+      'schema:duration',
+      'schema:abstract',
+      'schema:isPartOf',
+    ])
       await acceptAdopt(fractionalId!, property);
     await acceptAdopt(specialEpisodeId!, 'schema:keywords');
     await acceptAdopt(specialEpisodeId!, 'schema:isPartOf');
     const read = async (id: string) => {
       const response = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
       expect(response.status).toBe(200);
-      return response.body as { subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> } };
+      return response.body as {
+        subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> };
+      };
     };
     const current = await read(fractionalId!);
     expect(current.subject.type).toBe('schema:Episode');
@@ -284,7 +299,9 @@ test('production operator imports authored Bangumi episodes through ordinary acc
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });
-    expect(again.readings.map((row) => row.externalId).sort()).toEqual(first.readings.map((row) => row.externalId).sort());
+    expect(again.readings.map((row) => row.externalId).sort()).toEqual(
+      first.readings.map((row) => row.externalId).sort(),
+    );
     const changed = structuredClone(baseEpisodes);
     changed[0] = { ...changed[0]!, airdate: '2006-04-07' };
     const successor = await importBangumiEpisodeFidelity({

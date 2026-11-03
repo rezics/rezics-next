@@ -259,9 +259,9 @@ function gregorianDay(year: number, month: number, day: number): boolean {
 }
 
 /** Gregorian year/month/day only. Unparseable source text is withheld, never coerced. */
-export function episodeAirdate(value: unknown):
-  | { time: string; precision: 9 | 10 | 11; calendarmodel: typeof gregorianCalendar }
-  | undefined {
+export function episodeAirdate(
+  value: unknown,
+): { time: string; precision: 9 | 10 | 11; calendarmodel: typeof gregorianCalendar } | undefined {
   if (typeof value !== 'string' || !value.trim()) return;
   const iso = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/u.exec(value.trim());
   if (!iso || iso[0] !== value.trim()) return;
@@ -278,7 +278,9 @@ export function episodeAirdate(value: unknown):
 }
 
 /** Explicit second/minute/hour or ISO-8601 playback length. Unitless and clock-style values stay unknown. */
-export function episodeDuration(value: unknown): { amount: string; unit: typeof durationSecond } | 'unknown' | undefined {
+export function episodeDuration(
+  value: unknown,
+): { amount: string; unit: typeof durationSecond } | 'unknown' | undefined {
   if (value === undefined || value === null) return;
   if (typeof value === 'string' && !value.trim()) return;
   if (typeof value === 'number') {

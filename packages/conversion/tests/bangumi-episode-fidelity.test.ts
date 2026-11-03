@@ -101,21 +101,27 @@ test('production episode caller admits fractional ordinal, special kind, duratio
     record.description,
   );
   expect(bound.sourceVocabularyGaps).toEqual([]);
-  expect(convertCrossMediaEntity({ external_id: 'episode:900001', record_revision: null, record }).proposals).toHaveLength(
-    1,
-  );
+  expect(
+    convertCrossMediaEntity({ external_id: 'episode:900001', record_revision: null, record }).proposals,
+  ).toHaveLength(1);
 });
 
 test('unknown duration units and unknown or missing kind remain visible review gaps', () => {
   const convert = registration();
   const unknownDuration = convert.convert(
-    { external_id: 'episode:900002', record_revision: null, record: authoredEpisode({ id: 900002, duration: '24:00' }) },
+    {
+      external_id: 'episode:900002',
+      record_revision: null,
+      record: authoredEpisode({ id: 900002, duration: '24:00' }),
+    },
     { source: convert.source, subjectId },
   );
   expect(unknownDuration.diagnostics).toContainEqual({ pointer: '/duration', code: 'unknown_duration_unit' });
-  expect(unknownDuration.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:duration')).toBe(
-    false,
-  );
+  expect(
+    unknownDuration.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:duration',
+    ),
+  ).toBe(false);
   const unknownKind = convert.convert(
     { external_id: 'episode:900001', record_revision: null, record: authoredEpisode() },
     {
@@ -144,7 +150,9 @@ test('unknown duration units and unknown or missing kind remain visible review g
   expect(missing.sourceVocabularyGaps).toMatchObject([
     { provider: 'bangumi', path: '/episode/900001/type', code: '1', reason: 'missing_scheme' },
   ]);
-  expect(missing.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:keywords')).toBe(
-    false,
-  );
+  expect(
+    missing.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:keywords',
+    ),
+  ).toBe(false);
 });

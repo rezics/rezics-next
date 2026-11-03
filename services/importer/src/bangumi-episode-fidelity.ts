@@ -46,8 +46,8 @@ export function episodeTypeConceptCode(uri: string): string | undefined {
 }
 
 function adoptedContent(read: unknown, property: string): string | undefined {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } }).subject
-    ?.statements?.[property];
+  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
+    .subject?.statements?.[property];
   const content = statements?.[0]?.value?.content;
   return typeof content === 'string' ? content : undefined;
 }
@@ -123,9 +123,9 @@ export function episodeKindVocabulary(
   ];
 }
 
-export function episodeVocabularyAdmission(bindings: SourceVocabularyBindings): NonNullable<
-  ImporterOptions['vocabularyAdmission']
-> {
+export function episodeVocabularyAdmission(
+  bindings: SourceVocabularyBindings,
+): NonNullable<ImporterOptions['vocabularyAdmission']> {
   return {
     request({ owner, conversion, subject }) {
       if (!subject) return;
