@@ -98,7 +98,10 @@ test('a bounded summary omission withholds presentation while an empty recorded 
       expect(view.host.textContent).toContain(
         subjectIds.length ? m.post_history_target_concealed() : m.post_history_targets_absent(),
       );
-      if (subjectIds.length) expect(view.host.textContent).not.toContain(m.post_history_targets_absent());
+      if (subjectIds.length) {
+        expect(view.host.textContent).not.toContain(m.post_history_targets_absent());
+        expect(view.host.textContent).toContain(m.post_history_original_target({ id: subjectIds[0]! }));
+      }
     } finally {
       await view.dispose();
     }
