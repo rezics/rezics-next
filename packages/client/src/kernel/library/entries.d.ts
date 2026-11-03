@@ -1,10 +1,16 @@
 import type { Pool } from 'pg';
-import { type CommandEvent, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import { type CommandEvent, type CommandOutcome, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type ShelfTypeDigest } from './shelf-type-keys.ts';
 import type { Entry, EntryState, EntryDeletion } from './entry-model.ts';
+import type {
+    EntryStateChangeReview,
+    EntryStateHistoryOptions,
+    EntryStateHistoryPage,
+    EntryStateRestoreRequest,
+} from './entry-state-history.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
@@ -44,6 +50,10 @@ export declare class LibraryEntryLifecycleConflictError extends LibraryConflictE
     readonly reason: 'stale' | 'occupied' | 'expired';
     constructor(reason: 'stale' | 'occupied' | 'expired');
 }
+export declare class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
+    readonly reason: 'stale' | 'unavailable' | 'unchanged';
+    constructor(reason: 'stale' | 'unavailable' | 'unchanged');
+}
 /** Ordinary deletion transition, on the caller's authorized native owner transaction. */
 export declare function deleteLibraryEntryInTransaction(tx: CommandTransaction, command: {
     transactionId: string;
@@ -60,6 +70,11 @@ export declare function createEntryCommands(config: Dependencies): {
     }>>>) => Promise<import("../command/command.ts").CommandOutcome<{
         entry: Entry;
         created: boolean;
+    }>>;
+    listEntryStateHistory: (actor: Actor, subjectId: string, options?: EntryStateHistoryOptions) => Promise<EntryStateHistoryPage>;
+    reviewEntryStateChange: (actor: Actor, subjectId: string, selectedRevision: number) => Promise<EntryStateChangeReview>;
+    restoreEntryState: (actor: Actor, subjectId: string, selectedRevision: number, input: EntryStateRestoreRequest, requestKey: string) => Promise<CommandOutcome<{
+        entry: Entry;
     }>>;
     deleteEntry: (actor: Actor, subjectId: string, expectedRevision: number, requestKey: string, expectedIncarnationId?: string) => Promise<import("../command/command.ts").CommandOutcome<{
         deletionId: string;

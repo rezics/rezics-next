@@ -179,6 +179,9 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
   const expected = {
     '/v1/libraryEntries': ['get'],
     '/v1/libraryEntries/{subjectId}': ['get', 'put', 'delete'],
+    '/v1/libraryEntries/{subjectId}/state-history': ['get'],
+    '/v1/libraryEntries/{subjectId}/state-history/{changeRevision}': ['get'],
+    '/v1/libraryEntries/{subjectId}/state-history/{changeRevision}:restore': ['post'],
     '/v1/copies': ['post', 'get'],
     '/v1/copies/{copyId}': ['get', 'patch', 'delete'],
     '/v1/follows': ['get'],
@@ -188,9 +191,16 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
     for (const method of methods) {
       expect(document.paths[path]?.[method]?.['x-exposure']).toBe('gate:personal_library');
       const native = path.replace(/\{(\w+)\}/g, ':$1');
-      expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
-        1,
-      );
+      const route =
+        path.endsWith(':restore')
+          ? native.replace(/:restore$/, '/$restore')
+          : native;
+      expect(
+        app.routes.filter(
+          (candidate) =>
+            candidate.path === route && candidate.method.toLowerCase() === method,
+        ),
+      ).toHaveLength(1);
     }
 });
 
@@ -234,6 +244,150 @@ test('entry states revisions deletion and signed pages use the frozen HTTP views
   expect((await request('DELETE', `/v1/libraryEntries/${id}?revision=${current.revision}`)).status).toBe(204);
   await problem(await request('GET', `/v1/libraryEntries/${id}`), 404, 'not_found');
 });
+
+test('entry state history is private, bounded by change and restores only the reviewed live incarnation', async () => {
+  const id = await subject();
+  let current = await entry(id);
+  current = await entry(id, 'planned', current.revision);
+  current = await entry(id, 'in_progress', current.revision);
+  current = await entry(id, 'completed', current.revision);
+
+  const first = await json(await request('GET', `/v1/libraryEntries/${id}/state-history?limit=2`));
+  expect(first).toMatchObject({
+    currentRevision: current.revision,
+    coverage: 'complete',
+    changes: [{ revision: 4 }, { revision: 3 }],
+  });
+  expect(first.next).toEqual(expect.any(String));
+  const last = await json(
+    await request('GET', `/v1/libraryEntries/${id}/state-history?limit=2&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(last).toMatchObject({ coverage: 'complete', changes: [{ revision: 1, beforeState: null }] });
+  expect(last.next).toBeNull();
+  await problem(await request('GET', `/v1/libraryEntries/${id}/state-history`, undefined, 'other'), 404, 'not_found');
+
+  const review = await json(await request('GET', `/v1/libraryEntries/${id}/state-history/3`));
+  expect(review).toMatchObject({
+    change: { revision: 3, beforeState: 'planned', afterState: 'in_progress' },
+    current: { revision: current.revision, state: 'completed' },
+    availability: 'available',
+  });
+  const restoreKey = randomUUID();
+  const restorePath = `/v1/libraryEntries/${id}/state-history/3:restore`;
+  const restoreBody = { incarnationId: first.incarnationId, currentRevision: current.revision };
+  const restored = await json(await request('POST', restorePath, restoreBody, 'owner', restoreKey));
+  expect(restored.libraryEntry).toMatchObject({ state: 'planned', revision: current.revision + 1 });
+  expect(await json(await request('POST', restorePath, restoreBody, 'owner', restoreKey))).toEqual(restored);
+  expect(
+    (await db.admin.query(`SELECT revision,command_kind FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3 ORDER BY revision`, [
+      routeOf(accounts.owner),
+      accounts.owner,
+      id,
+    ])).rows,
+  ).toHaveLength(4);
+
+  const otherId = await subject();
+  const otherEntry = await entry(otherId, 'paused');
+  const staleReview = await json(await request('GET', `/v1/libraryEntries/${id}/state-history/4`));
+  const changed = await entry(id, 'paused', restored.libraryEntry.revision);
+  await problem(
+    await request(
+      'POST',
+      `/v1/libraryEntries/${id}/state-history/4:restore`,
+      { incarnationId: first.incarnationId, currentRevision: staleReview.current.revision },
+    ),
+    409,
+    'library_entry_state_restore_stale',
+  );
+  expect((await json(await request('GET', `/v1/libraryEntries/${otherId}`))).libraryEntry).toEqual(otherEntry);
+
+  expect((await request(
+    'DELETE',
+    `/v1/libraryEntries/${id}?revision=${changed.libraryEntry.revision}&incarnationId=${first.incarnationId}`,
+  )).status).toBe(204);
+  await problem(await request('GET', `/v1/libraryEntries/${id}/state-history`), 404, 'not_found');
+  const recreated = await entry(id, 'planned');
+  const recreatedHistory = await json(await request('GET', `/v1/libraryEntries/${id}/state-history`));
+  expect(recreatedHistory.incarnationId).not.toBe(first.incarnationId);
+  await problem(
+    await request(
+      'POST',
+      `/v1/libraryEntries/${id}/state-history/4:restore`,
+      { incarnationId: first.incarnationId, currentRevision: recreated.revision },
+    ),
+    409,
+    'library_entry_state_restore_stale',
+  );
+});
+
+test('history exposes unknown legacy coverage and refuses a former state outside the current profile', async () => {
+  const legacyId = await subject();
+  const legacyEntry = await entry(legacyId);
+  const legacyPage = await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`));
+  await db.admin.query(
+    `DELETE FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+    [routeOf(accounts.owner), accounts.owner, legacyId],
+  );
+  expect(await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`))).toMatchObject({
+    incarnationId: legacyPage.incarnationId,
+    currentRevision: legacyEntry.revision,
+    changes: [],
+    coverage: 'unknown',
+    next: null,
+  });
+
+  const subjectId = await subject();
+  const current = await entry(subjectId);
+  const history = await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history`));
+  const oldRevision = current.revision + 1;
+  await db.admin.query(
+    `INSERT INTO library.entry_state_change
+      (route,account_id,subject_id,incarnation_id,prior_revision,revision,before_state,after_state,
+       command_id,command_kind,changed_at,coverage_complete)
+     VALUES($1,$2,$3,$4,$5,$6,'retired.meaning','planned',$7,'library.entry.put',$8,false)`,
+    [
+      routeOf(accounts.owner),
+      accounts.owner,
+      subjectId,
+      history.incarnationId,
+      current.revision,
+      oldRevision,
+      randomUUID(),
+      new Date().toISOString(),
+    ],
+  );
+  expect(await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}`))).toMatchObject({
+    change: { beforeState: 'retired.meaning' },
+    availability: 'state_unavailable',
+  });
+  await problem(
+    await request(
+      'POST',
+      `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}:restore`,
+      { incarnationId: history.incarnationId, currentRevision: current.revision },
+    ),
+    409,
+    'library_entry_state_restore_unavailable',
+  );
+});
+
+test('state history prunes at the retained cap and keeps continuation coverage truthful', async () => {
+  const subjectId = await subject();
+  let current = await entry(subjectId);
+  const states = ['in_progress', 'completed', 'paused', 'dropped', 'planned'];
+  for (let index = 0; index < 65; index++)
+    current = await entry(subjectId, states[index % states.length]!, current.revision);
+  const first = await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history?limit=50`));
+  expect(first.changes).toHaveLength(50);
+  expect(first.coverage).toBe('partial');
+  const second = await json(
+    await request('GET', `/v1/libraryEntries/${subjectId}/state-history?limit=50&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(second.changes).toHaveLength(14);
+  expect(second.coverage).toBe('partial');
+  expect(second.next).toBeNull();
+  expect(second.currentRevision).toBe(current.revision);
+}, 120_000);
 
 test('copies remain independent and conceal missing and foreign rows before revision conflicts', async () => {
   const id = await subject();

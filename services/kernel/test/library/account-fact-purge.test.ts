@@ -18,6 +18,15 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
     [route, id(1), id(2), id(10), id(11), time],
   );
   await pool.query(
+    `INSERT INTO library.entry_state_change
+      (route,account_id,subject_id,incarnation_id,prior_revision,revision,before_state,after_state,
+       command_id,command_kind,changed_at,coverage_complete)
+     VALUES($1,$2,$4,$7,1,2,'planned','completed',$9,'library.entry.put',$10,false),
+           ($1,$2,$5,$8,1,2,'planned','completed',$11,'library.entry.put',$10,false),
+           ($1,$3,$4,$7,1,2,'planned','completed',$12,'library.entry.put',$10,false)`,
+    [route, id(1), id(2), id(10), id(11), time, id(50), id(51), randomUUID(), time, randomUUID(), randomUUID()],
+  );
+  await pool.query(
     `INSERT INTO library.copy(route,copy_id,account_id,subject_id,status,note,revision,created_at,updated_at,transaction_id) VALUES($1,$2,$4,$6,'owned','Private erased note',1,$7,$7,$4),($1,$3,$5,$6,'owned','Keep note',1,$7,$7,$5)`,
     [route, id(20), id(21), id(1), id(2), id(10), time],
   );
@@ -34,6 +43,9 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(first.value.examined).toBe(1);
   expect(first.value.removed).toBe(1);
   expect(first.value.exhausted).toBe(false);
+  expect(
+    (await pool.query(`SELECT subject_id FROM library.entry_state_change WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+  ).toEqual([{ subject_id: id(11) }]);
   const replay = await purgeAccountFactsPage({ pool }, input);
   expect(replay.replayed).toBe(true);
   expect(replay.value).toEqual(first.value);
@@ -45,6 +57,9 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(second.value.examined).toBe(1);
   expect(second.value.removed).toBe(1);
   expect(second.value.exhausted).toBe(true);
+  expect(
+    (await pool.query(`SELECT account_id FROM library.entry_state_change WHERE route=$1 ORDER BY account_id`, [route])).rows,
+  ).toEqual([{ account_id: id(2) }]);
   expect(
     (await pool.query(`SELECT account_id FROM library.entry WHERE route=$1 ORDER BY account_id`, [route])).rows,
   ).toEqual([{ account_id: id(2) }]);

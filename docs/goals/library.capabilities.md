@@ -68,6 +68,7 @@ points from the worktree root; they are listed as evidence entry points and were
 | Shelf outcomes                            | services/kernel/test/library/shelves-outcomes.test.ts imports specs/library-shelves-outcomes.test.ts     | bun run --cwd services/kernel check test/library/shelves-outcomes.test.ts                                                                                                                                                                                                                                                                     |
 | Private follow counts                     | services/kernel/test/library/follow-counts-outcomes.test.ts imports specs/follow-counts-outcomes.test.ts | bun run --cwd services/kernel check test/library/follow-counts-outcomes.test.ts                                                                                                                                                                                                                                                               |
 | Entry Undo and terminal lifecycle support | Existing Kernel command, Undo, incarnation, participant, owned-graph and custody suites                  | bun run --cwd services/kernel check test/library/entry-lifecycle-command.test.ts test/library/entry-undo-http.test.ts test/library/entry-incarnation.test.ts test/library/entry-incarnation-precondition.test.ts test/library/erasure-participant.test.ts test/library/erasure-owned-graph.test.ts test/library/native-source-custody.test.ts |
+| Entry state history and recovery            | Focused owner history, restore, continuation, incarnation and account-purge scenarios                    | bun run --cwd services/kernel check test/library/personal-http.test.ts test/library/account-fact-purge.test.ts |
 | Served Web personal outcomes              | apps/web/tests/native/web-personal-driver.host.test.ts binds specs/web-personal-outcomes.test.ts         | bun apps/web/scripts/check.ts --personal-host                                                                                                                                                                                                                                                                                                 |
 | Web visual capture                        | Web screenshots use the existing Storybook runner and exact source exports                               | bun run --cwd apps/web screenshots --story 'pages-library-*' --width 390 --width 1280 --out .temp/library-page-review/pages                                                                                                                                                                                                                   |
 
@@ -175,6 +176,11 @@ Each existing occurrence also has a private journal for partial reported start/f
 one revision independent of progress values. [Private progress-session journal](../library-occurrence-reflections.md)
 defines the exact producer and Web318 receiving contract; [Personal consumption dates](../library-consumption-history.md)
 owns reported-date meaning.
+Entry state recovery is a separate owner-only journey: inspect exact native transitions, review one before-state
+against the current live incarnation and profile, then restore it through a revision-guarded fresh edit.
+[Library entry state history and recovery](../library-entry-state-history.md) owns the installed methods, coverage,
+conflicts, retention and cost bounds. Focused HTTP and account-erasure coverage lives in `personal-http.test.ts` and
+`account-fact-purge.test.ts`.
 
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
 immediately. The union includes live state, effective labels, retained sessions/history and holdings; following,

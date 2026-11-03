@@ -23,6 +23,7 @@ import {
   LibraryConflictError,
   LibraryEntryInvalidError,
   LibraryEntryLifecycleConflictError,
+  LibraryEntryStateRestoreConflictError,
 } from './entries.ts';
 import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
@@ -74,6 +75,43 @@ const entrySchema = t.Object(
     revision,
     createdAt: id,
     updatedAt: id,
+  },
+  closed,
+);
+const entryStateChangeSchema = t.Object(
+  {
+    revision,
+    priorRevision: t.Union([revision, t.Null()]),
+    beforeState: t.Union([libraryStoredVocabularySchema, t.Null()]),
+    afterState: libraryStoredVocabularySchema,
+    commandId: t.String({ format: 'uuid' }),
+    commandKind: t.Union([t.Literal('library.entry.put'), t.Literal('library.entry.state.restore')]),
+    changedAt: id,
+  },
+  closed,
+);
+const entryStateHistorySchema = t.Object(
+  {
+    incarnationId: t.Union([incarnationId, t.Null()]),
+    currentRevision: revision,
+    changes: t.Array(entryStateChangeSchema),
+    coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
+    next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+  },
+  closed,
+);
+const entryStateReviewSchema = t.Object(
+  {
+    change: entryStateChangeSchema,
+    current: t.Object(
+      { incarnationId: t.Union([incarnationId, t.Null()]), revision, state: libraryStoredVocabularySchema },
+      closed,
+    ),
+    availability: t.Union([
+      t.Literal('available'),
+      t.Literal('no_prior_state'),
+      t.Literal('state_unavailable'),
+    ]),
   },
   closed,
 );
@@ -360,6 +398,83 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ),
           ),
         });
+      },
+    )
+    .get(
+      '/v1/libraryEntries/:subjectId/state-history',
+      {
+        params: t.Object({ subjectId: id }),
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 50, default: 20 })),
+          },
+          closed,
+        ),
+        response: { 200: entryStateHistorySchema, ...failures },
+        detail: detail('library_entry.state_history.list', 'library_entry:read'),
+      },
+      async ({ actor, params, query, admission, job }) => {
+        point(actor, params.subjectId, 'library_entry:read');
+        return admission.run('normal', job, () =>
+          command(() => entries().listEntryStateHistory(actor, params.subjectId, query), 'not_found'),
+        );
+      },
+    )
+    .get(
+      '/v1/libraryEntries/:subjectId/state-history/:changeRevision',
+      {
+        params: t.Object({ subjectId: id, changeRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_646 }) }),
+        response: { 200: entryStateReviewSchema, ...failures },
+        detail: detail('library_entry.state_history.review', 'library_entry:read'),
+      },
+      async ({ actor, params, admission, job }) => {
+        point(actor, params.subjectId, 'library_entry:read');
+        return admission.run('normal', job, () =>
+          command(() => entries().reviewEntryStateChange(actor, params.subjectId, params.changeRevision), 'not_found'),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/libraryEntries/:subjectId/state-history/:changeRevision', 'restore'),
+      {
+        params: t.Object({ subjectId: id, changeRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_646 }) }),
+        headers,
+        body: t.Object({ incarnationId, currentRevision: revision }, closed),
+        response: {
+          200: entryResponse,
+          ...failures,
+          409: problemSchema(
+            'library_entry_state_restore_stale',
+            'library_entry_state_restore_unavailable',
+            'library_entry_state_restore_unchanged',
+          ),
+          422: problemSchema('idempotency_conflict'),
+        },
+        detail: personalDetail('library_entry.state_history.restore', 'library_entry:update'),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(async () => {
+            try {
+              return await entries().restoreEntryState(actor, params.subjectId, params.changeRevision, body, key);
+            } catch (error) {
+              if (error instanceof LibraryEntryStateRestoreConflictError) {
+                const codes = {
+                  stale: 'library_entry_state_restore_stale',
+                  unavailable: 'library_entry_state_restore_unavailable',
+                  unchanged: 'library_entry_state_restore_unchanged',
+                } as const;
+                throw new ProblemError(codes[error.reason]);
+              }
+              throw error;
+            }
+          }),
+        );
+        session.record(result);
+        return { libraryEntry: entryView(result.value.entry) };
       },
     )
     .put(
