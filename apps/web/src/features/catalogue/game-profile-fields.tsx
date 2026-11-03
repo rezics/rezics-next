@@ -213,7 +213,7 @@ export function GameStatementFields({
       current={context}
       locale={locale}
       change={change}
-      localDraft={localDraft}
+      {...(localDraft !== undefined ? { localDraft } : {})}
       valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
       {...(stablePartAddresses ? { stablePartAddresses: true } : {})}
