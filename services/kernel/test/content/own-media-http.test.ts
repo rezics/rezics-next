@@ -253,7 +253,7 @@ test('native uploader cursors expire and bind the complete viewer and observed h
       { ...binding, parameters },
       {
         epoch,
-        after: ['00000000-0000-0000-0000-000000000000'],
+        after: [actor.accountId],
       },
       issuedAt,
     );
