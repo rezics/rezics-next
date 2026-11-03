@@ -18,6 +18,7 @@ import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
+import type { Access } from '../request/access.ts';
 import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
 import { requestReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import { startSearchIndexing } from './runner.ts';
@@ -298,12 +299,14 @@ export const searchWorkModule: WorkModule = {
       const defaults = createKernelRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
       let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
       let reviewSource: ReviewDiscoverySource | undefined;
+      let searchAccess: Access | undefined;
       createKernel({
         pool: context.pool,
         routeKey,
         ...defaults,
         workClient: context.client,
         onAccessReady(access) {
+          searchAccess = access;
           bindErasureAccess(access);
           reviewSource = createReviewDiscoverySource(
             {
@@ -332,7 +335,7 @@ export const searchWorkModule: WorkModule = {
           });
         },
       });
-      if (!runtime || !reviewSource) throw new Error('Search worker Access composition is incomplete');
+      if (!runtime || !reviewSource || !searchAccess) throw new Error('Search worker Access composition is incomplete');
       const publicRuntime = runtime;
       if (active) {
         await publicRuntime.close();
@@ -370,7 +373,7 @@ export const searchWorkModule: WorkModule = {
           listing,
           prefix: config.prefix,
           concurrency: 2,
-          discovery: { routeKey, reviewSource, access, clock: context.clock },
+          discovery: { routeKey, reviewSource, access: searchAccess, clock: context.clock },
           publicPreparation: preparation,
         });
       } catch (error) {

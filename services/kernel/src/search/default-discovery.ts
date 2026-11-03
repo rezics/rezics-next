@@ -51,19 +51,20 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
     review: { id: 'review', labels: { en: 'Reviews' }, icon: 'message-square' },
     space: { id: 'space', labels: { en: 'Spaces' }, icon: 'users' },
   } as const;
+  const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
-    { pool: config.pool, access: config.access, routeKey: config.routeKey, clock: config.clock },
+    { pool: config.pool, access: config.access, routeKey: config.routeKey, ...clock },
     metadata.collection,
   );
   const review = config.reviewSource
     ? createReviewDiscoveryAdapter(config.reviewSource)
     : config.keys
       ? createNativeReviewDiscoveryAdapter(
-          { pool: config.pool, access: config.access, tokens: config.keys, clock: config.clock },
+          { pool: config.pool, access: config.access, tokens: config.keys, ...clock },
           () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
         )
       : undefined;
-  const space = nativeSpaceDiscoveryAdapter({ pool: config.pool, access: config.access, clock: config.clock });
+  const space = nativeSpaceDiscoveryAdapter({ pool: config.pool, access: config.access, ...clock });
   const ownerContext = (context: DiscoveryReadContext) => ({ deadline: context.deadline });
   const reviewSlot = review
     ? {
