@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { compileFilter } from '../../src/search/filter.ts';
-import { compileCurrentFilter, currentConceptStatementsMatch, currentClauseKey } from '../../src/search/current-filter-plan.ts';
+import {
+  compileCurrentFilter,
+  currentConceptStatementsMatch,
+  currentClauseKey,
+} from '../../src/search/current-filter-plan.ts';
 
 const scheme = '018f0000-0000-7000-8000-00a000000010';
 const concept = '018f0000-0000-7000-8000-00a000000011';

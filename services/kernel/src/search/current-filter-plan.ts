@@ -1,9 +1,4 @@
-import type {
-  DiscoveryFilterDocument,
-  FilterDocument,
-  FilterQualifier,
-  OwnerLeaf,
-} from '@rezics/filter';
+import type { DiscoveryFilterDocument, FilterDocument, FilterQualifier, OwnerLeaf } from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
 import type { RelationFacetMatch } from './source.ts';
 
