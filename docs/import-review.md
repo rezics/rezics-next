@@ -47,8 +47,9 @@ apply current disclosure, identity, lifecycle and account fences. Exact queue as
 Semantic minimization and cannot restore an association after its native fence.
 
 Post-integration proof is `bun run --cwd services/kernel check test/semantic/provider-review-queue.test.ts` and
-`bun scripts/worker-check.ts --local -- bun test apps/web/tests/provider-review-queue.test.ts`. Story and visual
-review remain separate from source/type verification.
+`bun scripts/worker-check.ts --local -- bun test apps/web/tests/provider-review-queue.test.ts`. Native website
+acceptance of the served `/imports/review` BFF is `apps/web/tests/native/catalogue-provider-review.host.test.ts`.
+Story and visual review remain separate from source/type verification.
 
 Review stories use `Pages/Imports/Review queue`: `pages-imports-review-queue--loaded`, `--preparing`, `--empty`,
 `--denied`, `--unavailable`, `--invalid`, `--loading` and `--decision` (each suffix uses the same full prefix).

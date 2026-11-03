@@ -57,5 +57,6 @@ standalone recorded seams remain compatible; standalone initial results make no 
 The connected assertions in `tests/provider-context-choice.test.tsx`, the additive queue/action assertions and the
 named journey stories are authored **UNRUN**. They cover actual mounted server adapters/session cache, delayed work,
 same-subject equal success/token/sign-out/QueryClient/scope/visit replacement and ABA, original token writes, unknown
-readback, sparse pages, bounded growth and eight locales at phone390/desktop1280. Native/public/browser/growth and
-private-SSR acceptance remain owed after integration; source delivery and workspace typing do not prove them.
+readback, sparse pages, bounded growth and eight locales at phone390/desktop1280. Native website acceptance is
+`tests/native/catalogue-provider-review.host.test.ts`. Public/browser/growth, private-SSR and visual review remain
+owed after integration; source delivery and workspace typing do not prove them.
