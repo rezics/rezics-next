@@ -100,7 +100,7 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
   const zeroReview = await select(0, { kind: 'start', primaryUnit: 'episode' });
   const selectedPage = await json('GET', `${base}/${id}`);
   expect(selectedPage.rows[0].progressMeasures[0]).toMatchObject({ state: 'zero', unitSupported: true });
-  expect(selectedPage.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: true });
+  expect(selectedPage.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
   const zero = await confirmed(0, zeroReview);
   expect(zero.outcomes[0].progress.measures).toMatchObject([
     { status: 'applied', sourceAmount: '0', currentAmount: '0' },
