@@ -932,22 +932,24 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       !identity.request
     )
       throw new TypeError('Invalid concept browse definition');
+    const conceptRoute = route;
+    const conceptSchemeRoute = schemeRoute;
 
     const allowance = (cost: ConceptBrowseNativeReservation) => reserve?.(cost);
     async function snapshot() {
       return inSearchSnapshot(pool, async (client) => {
-        const home = await readPartition(client, partitionOf(route));
+        const home = await readPartition(client, partitionOf(conceptRoute));
         const schemeHome =
-          partitionOf(route) === partitionOf(schemeRoute)
+          partitionOf(conceptRoute) === partitionOf(conceptSchemeRoute)
             ? home
-            : await readPartition(client, partitionOf(schemeRoute));
+            : await readPartition(client, partitionOf(conceptSchemeRoute));
         if (!home || !schemeHome || home.writeState === 'moved' || schemeHome.writeState === 'moved') return null;
         const runtime = await activeRelease(client);
         if (!runtime) return null;
-        const [row] = await readConceptObservation.run(client, {
+        const row = await readConceptObservation.run(client, {
           concept: selection.concept,
           scheme: selection.scheme,
-          route,
+          route: conceptRoute,
         });
         if (!row) return null;
         const graph = await client.query<{ last_value: string; is_called: boolean }>(
@@ -1034,7 +1036,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             (!cursor ||
               !Number.isSafeInteger(cursorRoute) ||
               cursorRoute! > 65535 ||
-              routeOf(cursor[2]) !== cursorRoute ||
+              routeOf(cursor[2]!) !== cursorRoute ||
               !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cursor[3]!) ||
               !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cursor[4]!)))
         )
@@ -1058,9 +1060,9 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           const observation = await readConceptObservation.run(client, {
             concept: selection.concept,
             scheme: selection.scheme,
-            route,
+            route: conceptRoute,
           });
-          const root = observation[0];
+          const root = observation;
           if (!root) return null;
           const currentBinding = bind({
             runtime: current,
@@ -1078,7 +1080,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           const values = cursor
             ? {
                 after_route: Number(cursor[1]),
-                after_subject: cursor[2],
+                after_subject: cursor[2]!,
                 after_slot: cursor[3],
                 after_candidate: cursor[4],
               }

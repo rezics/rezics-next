@@ -234,6 +234,12 @@ function containsUnsupportedDiscoveryLeaf(value: unknown): boolean {
   return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsUnsupportedDiscoveryLeaf));
 }
 
+/** Narrow the opt-in discovery grammar before passing it to catalogue-only readers. */
+function catalogueFilter(value: SearchFilterDocument): FilterDocument {
+  if (containsRealmPredicate(value) || containsUnsupportedDiscoveryLeaf(value)) unsupported('/filter');
+  return value as FilterDocument;
+}
+
 function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
   const allowance = work.remaining();
   const remaining = allowance.remaining;
@@ -1035,7 +1041,7 @@ export function createSearchService({
             clauses,
             admitted && !preparedScope
               ? {
-                  filter: admitted,
+                  filter: catalogueFilter(admitted),
                   relationProperties,
                   ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
                   observeRelationRelease: async () => {
@@ -1396,13 +1402,14 @@ export function createSearchService({
           const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
           const admitted = await admitQuery(normalized.text, predicate, current);
           if (!admitted) throw indexNotReady();
+          const catalogue = catalogueFilter(admitted);
 
           // Content owns Realm enumeration. Keep its scoped facet factory closed until that source is installed.
           if (scopedRequest.scope.kind !== 'collection') throw indexNotReady();
           const scope = createSearchScopeForService(service, context.scope);
           const scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
           const prepared = await sourceRequest(() =>
-            scope.prepare(admitted, {
+            scope.prepare(catalogue, {
               releaseDigest: kindDigest(current),
               allowance: scopeWork.remaining(),
             }),
@@ -1411,7 +1418,7 @@ export function createSearchService({
           return {
             principal,
             text: normalized.text,
-            filter: admitted,
+            filter: catalogue,
             originalFilter: normalized.filter,
             release: current,
             languages,
@@ -1453,7 +1460,8 @@ export function createSearchService({
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       validateFacetCursorRelease(positions, current);
       const admitted = await admitQuery(text, filter, current);
-      admitFacets(facets, admitted, current);
+      const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
+      admitFacets(facets, catalogue, current);
       // The native factory must resolve the actual registered catalogue/meaning/identity context.
       // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
       const provider =
@@ -1465,7 +1473,7 @@ export function createSearchService({
         {
           principal,
           text,
-          filter: admitted,
+          filter: catalogue,
           originalFilter: filter,
           release: current,
           facets,
@@ -1497,6 +1505,7 @@ export function createSearchService({
       const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
       const current = parsed ? await activeRelease(pool) : undefined;
       const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
+      const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
       if (parsed && !admitted) throw indexNotReady();
       if (admitted && !publicFilters) throw indexNotReady();
 
@@ -1528,12 +1537,12 @@ export function createSearchService({
           let scope: ReturnType<typeof createSearchScopeForService> | undefined;
           let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
           let scopeWork: ScopeWork | undefined;
-          if (containsOwnerPredicate(admitted)) {
+          if (catalogue && containsOwnerPredicate(catalogue)) {
             if (!read?.scope) throw indexNotReady();
             scope = createSearchScopeForService(service, read.scope);
             scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
             preparedScope = await sourceRequest(() =>
-              scope!.prepare(admitted, {
+              scope!.prepare(catalogue, {
                 releaseDigest: current.digest,
                 allowance: scopeWork!.remaining(),
               }),
@@ -1546,7 +1555,7 @@ export function createSearchService({
             context,
             limit,
             generation,
-            filter: admitted,
+            filter: catalogue,
             release: current.release,
             source,
             ...(scope ? { scope } : {}),
