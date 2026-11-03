@@ -341,7 +341,7 @@ function projectAppeal(
 
 async function selectedAppeal(deps: AppealDependencies, scope: AppealScope, context: ReadContext, appealId: string) {
   const route = routeOf(appealId);
-  if (route === null || route !== routeOf(scope.id)) throw missing();
+  if (route === null) throw missing();
   const initial = await appealReviewSnapshot(deps.pool, route, context.deadline, (client) =>
     readAppealReviewRow(client, route, appealId),
   );
@@ -422,7 +422,7 @@ export async function listAppeals(
   const admitted: Array<{ row: AppealSourceRow; anchor: AppealReviewAnchor }> = [];
   for (const candidate of selected) {
     const candidateRoute = routeOf(candidate.appeal_id);
-    if (candidateRoute === null || candidateRoute !== route) continue;
+    if (candidateRoute === null) continue;
     const result = await appealReviewSnapshot(deps.pool, candidateRoute, context.deadline, (client) =>
       readAppealReviewRow(client, candidateRoute, candidate.appeal_id),
     );

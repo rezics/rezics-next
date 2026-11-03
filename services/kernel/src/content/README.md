@@ -1143,6 +1143,8 @@ other owners' takedowns.
 Decision: exact review uses `inspect=<appealId>` and returns `selectedAppeal` beside unchanged queue paging; optional
 identity and destination context use explicit `concealed` and `unavailable` states.
 
+Decision: board appeal projections locate each case on its native appeal route; exact board membership comes from the retained case link, not equality with the board route.
+
 Decision: growth evidence varies pending cases, retained decisions, unrelated routed identities and expired queue grants independently, keeping the two-row budget and exact selected key fixed.
 
 Decision: queue rows and the exact selection share bounded target preparation, then repeat ordinary native disclosure for those same keys after final identity, case and action observations; only the final context and identity results are serialized, including reductions or unavailability.

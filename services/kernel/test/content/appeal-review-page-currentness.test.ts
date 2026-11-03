@@ -16,6 +16,7 @@ async function selected(label: string, resolved = false) {
   const { people } = fixture;
   const boardId = await fixture.createBoard(label);
   const thread = await fixture.createThread(boardId, label);
+  expect(fixture.routed(thread.threadId)).not.toBe(fixture.routed(boardId));
   const reply = await fixture.command<{ post: { id: string } }>(
     'POST',
     `/v1/threads/${thread.threadId}/posts`,
@@ -40,10 +41,15 @@ async function selected(label: string, resolved = false) {
 for (const resolved of [false, true]) {
   test(`final native target disclosure qualifies the ${resolved ? 'exact retained selection' : 'pending queue row'}`, async () => {
     const item = await selected(`Final target ${resolved}`, resolved);
-    const path = item.path + (resolved ? `&inspect=${item.record.appealId}` : '');
+    const path = `${item.path}&inspect=${item.record.appealId}`;
     const read = () => fixture.call('GET', path, { bearer: fixture.people.reviewer.bearer });
     const before = await read();
     expect(before.response.status).toBe(200);
+    expect(before.body?.selectedAppeal).toMatchObject({ id: item.record.appealId, canResolve: !resolved });
+    const queue = await fixture.call('GET', item.path, { bearer: fixture.people.reviewer.bearer });
+    expect(queue.response.status).toBe(200);
+    expect(before.body?.appeals).toEqual(queue.body?.appeals);
+    expect(before.body?.next).toBe(queue.body?.next);
     const row = (body: Record<string, any> | null) => (resolved ? body?.selectedAppeal : body?.appeals[0]);
     expect(row(before.body).targetContext).toMatchObject({ state: 'available' });
     // The initial target read is complete; retire its destination while the final identity read prepares.
