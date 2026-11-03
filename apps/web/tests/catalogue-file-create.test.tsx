@@ -80,12 +80,7 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
         metadata: { ready: true, pending: false, failure: null, types },
         retainTypeDrafts: true,
         initialLanguage: 'en',
-        fields: (
-          type: string,
-          disabled: boolean,
-          canEdit: () => boolean,
-          invalidate?: () => void,
-        ) => (
+        fields: (type: string, disabled: boolean, canEdit: () => boolean, invalidate?: () => void) => (
           <CatalogueFileCreateFields
             type={type}
             release={release}
@@ -189,7 +184,9 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
     await act(async () => user.selectOptions(type, 'rezics:ReleaseGroup'));
     expect(host.textContent).toContain(m.catalogue_file_create_group_grain());
     await act(async () => user.selectOptions(type, 'schema:MediaObject'));
-    await act(async () => user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed file'));
+    await act(async () =>
+      user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed file'),
+    );
     async function addProperty(property: string) {
       const add = canvas.getByRole('combobox', { name: m.catalogue_file_create_add_fact() });
       await act(async () => user.selectOptions(add, property));
@@ -209,7 +206,9 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
     await waitFor(() => expect(host.querySelector('[data-catalogue-file-create-review]')).not.toBeNull());
     expect(host.textContent).toContain(m.catalogue_file_create_file_grain());
     expect(host.textContent).toContain('https://example.org/file-source');
-    await act(async () => user.click(canvas.getAllByRole('button', { name: m.catalogue_file_create_review_open() })[0]!));
+    await act(async () =>
+      user.click(canvas.getAllByRole('button', { name: m.catalogue_file_create_review_open() })[0]!),
+    );
     await act(async () => user.keyboard('{Tab}'));
     await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());

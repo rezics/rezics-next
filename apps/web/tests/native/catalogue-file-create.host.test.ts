@@ -46,9 +46,9 @@ test('File creation reviews grouped evidence, copies a reference, and retries un
   page.setDefaultTimeout(60_000);
   await page.locator('form').waitFor({ state: 'visible' });
   const type = page.getByLabel('Type', { exact: true });
-  const options = await type.locator('option').evaluateAll((nodes) =>
-    nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value.length > 0),
-  );
+  const options = await type
+    .locator('option')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value.length > 0));
   expect(options.length).toBeGreaterThan(0);
   await type.selectOption(options[0]!);
   const token = crypto.randomUUID().slice(0, 8);
@@ -56,9 +56,11 @@ test('File creation reviews grouped evidence, copies a reference, and retries un
   await page.locator('#create-label-0').fill(label);
   const addFact = page.getByLabel('Add an initial fact', { exact: true });
   if (await addFact.count()) {
-    const properties = await addFact.locator('option').evaluateAll((nodes) =>
-      nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value.length > 0),
-    );
+    const properties = await addFact
+      .locator('option')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value.length > 0),
+      );
     if (properties.includes('schema:sameAs')) {
       await addFact.selectOption('schema:sameAs');
       await page.getByRole('button', { name: 'Add an initial fact', exact: true }).click();

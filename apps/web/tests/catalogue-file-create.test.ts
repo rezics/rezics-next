@@ -45,9 +45,8 @@ test('file and group creation offers released grains, grouped fields and the ord
     catalogueFileCreatePreparedFacts,
     catalogueFileCreateTypes,
   } = await import('../src/features/catalogue/catalogue-file-create');
-  const { isCatalogueFileType, isReleaseGroupType } = await import(
-    '../src/features/catalogue/catalogue-file-profile/model'
-  );
+  const { isCatalogueFileType, isReleaseGroupType } =
+    await import('../src/features/catalogue/catalogue-file-profile/model');
   const offered = catalogueFileCreateTypes(release, 'en');
   expect(offered.map(({ id }) => id).sort()).toEqual(
     Object.keys(release.types)
@@ -108,12 +107,19 @@ test('file and group creation offers released grains, grouped fields and the ord
   const ranked = catalogueFileCreateDraft(release, { type: fileType, labels: { en: 'Hashed' } }, entered);
   expect(ranked.errors.some((error) => error.pointer.includes('/rank'))).toBe(true);
   const reader = catalogueFileCreateAdmitReader(
-    { state: 'ready', href: '/en/subjects/00000000-0000-4000-8000-00000000a201/episode-1-file-a', identity: { id: '00000000-0000-4000-8000-00000000a201', type: fileType, label: 'Episode 1 file A' } },
+    {
+      state: 'ready',
+      href: '/en/subjects/00000000-0000-4000-8000-00000000a201/episode-1-file-a',
+      identity: { id: '00000000-0000-4000-8000-00000000a201', type: fileType, label: 'Episode 1 file A' },
+    },
     '00000000-0000-4000-8000-00000000a201',
     release,
     fileType,
   );
-  expect(reader).toMatchObject({ state: 'ready', href: '/en/subjects/00000000-0000-4000-8000-00000000a201/episode-1-file-a/file' });
+  expect(reader).toMatchObject({
+    state: 'ready',
+    href: '/en/subjects/00000000-0000-4000-8000-00000000a201/episode-1-file-a/file',
+  });
   expect(
     catalogueFileCreateAdmitReader(
       { state: 'ready', href: '/en/subjects/x/x', identity: { id: 'x', type: 'schema:Book', label: 'x' } },
@@ -121,10 +127,7 @@ test('file and group creation offers released grains, grouped fields and the ord
       release,
     ).state,
   ).toBe('stale');
-  const rows = [
-    fact('a', 'schema:sameAs', [2]),
-    fact('b', 'schema:sameAs', [1]),
-  ];
+  const rows = [fact('a', 'schema:sameAs', [2]), fact('b', 'schema:sameAs', [1])];
   const captured = catalogueFileCreateHolders(rows);
   const nested = catalogueFileCreateControl(
     '/statements/schema:sameAs/0/references/0/parts/1/value/content',
@@ -151,7 +154,9 @@ test('file and group creation offers released grains, grouped fields and the ord
     group: 'create',
     href: '/fr/catalogue/file',
   });
-  expect(catalogueEntries.catalogueFile({ id: '00000000-0000-4000-8000-00000000a201', type: 'bf:Instance', locale: 'en' })).toBeUndefined();
+  expect(
+    catalogueEntries.catalogueFile({ id: '00000000-0000-4000-8000-00000000a201', type: 'bf:Instance', locale: 'en' }),
+  ).toBeUndefined();
   expect(genericCreateSpecializedPath('schema:MediaObject')).toBe('/catalogue/file');
   expect(genericCreateSpecializedPath('rezics:ReleaseGroup')).toBe('/catalogue/file');
 });

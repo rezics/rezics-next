@@ -193,7 +193,8 @@ function CatalogueFileCreateSessionLive({ locale, initial }: { locale: string; i
                 return next;
               });
             },
-            canEditType: (type: string) => reading.ok && activeTypeIds.has(type) && isFileOrGroupType(reading.release, type),
+            canEditType: (type: string) =>
+              reading.ok && activeTypeIds.has(type) && isFileOrGroupType(reading.release, type),
             canCreateType: (type: string) => reading.ok && activeTypeIds.has(type),
             labelLanguage: (type: string) => pickText(release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type: string) =>
