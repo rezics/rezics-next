@@ -237,7 +237,11 @@ function DecisionBoundPage(props: DecisionPageProps) {
               isCurrent: owner.isCurrent,
               canCommand: owner.canCommand,
               accepts: owner.accepts,
-              adopt: (next) => setPage({ ...next, readGeneration: page.readGeneration }),
+              adopt: (next) =>
+                setPage({
+                  ...next,
+                  ...(page.readGeneration === undefined ? {} : { readGeneration: page.readGeneration }),
+                }),
               replace: (state: DecisionReadState = 'closed') => {
                 setPage(null);
                 setRetiredReadState(state);

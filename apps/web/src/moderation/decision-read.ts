@@ -43,7 +43,9 @@ export async function bindDecisionSource(
   expectedActorId?: string,
 ): Promise<DecisionSourceBinding> {
   if (!record(response) || !Object.hasOwn(response, 'provenance')) return { state: 'unavailable' };
-  const provenance = response['provenance'];
+  const descriptor = Object.getOwnPropertyDescriptor(response, 'provenance');
+  if (!descriptor || !('value' in descriptor)) return { state: 'unavailable' };
+  const provenance: unknown = descriptor.value;
   if (
     !record(provenance) ||
     typeof provenance['actorId'] !== 'string' ||
