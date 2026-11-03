@@ -419,7 +419,8 @@ function CreateSubjectFormLive({
           if (directoryMode && directoryType) {
             setDirectoryPending(true);
             setDirectoryRefreshToken((token) => token + 1);
-          } else await reloadDefinitions();
+          } else if (profile?.refreshMetadata) await profile.refreshMetadata();
+          else await reloadDefinitions();
         }
       }
     } catch {
