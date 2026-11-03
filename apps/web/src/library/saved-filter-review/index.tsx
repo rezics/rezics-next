@@ -214,7 +214,7 @@ export function SavedFilterReviewPanel({
         const result = await readValues(request, new AbortController().signal);
         if (!isCurrent(sequence, 'values', binding)) return;
         if (result.status !== 'ready') {
-          failure ??= result.status;
+          failure ??= result.status === 'invalid' ? 'unavailable' : result.status;
           continue;
         }
         succeeded += 1;
