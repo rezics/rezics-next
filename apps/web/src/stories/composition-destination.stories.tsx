@@ -16,7 +16,7 @@ export const Review = {
   render: () => (
     <PageStory
       visitor="Signed In"
-      path={`/boards/${reviewBoard.id}/new?${new URLSearchParams({ subject: reviewSubject.id, subjectTitle: 'Review subject' })}`}
+      path={`/boards/${reviewBoard.id}/new?${new URLSearchParams({ subject: reviewSubject.subject.id, subjectTitle: 'Review subject' })}`}
     />
   ),
 };
