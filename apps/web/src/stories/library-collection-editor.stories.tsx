@@ -82,9 +82,7 @@ async function openEditor(canvasElement: HTMLElement, details = true) {
   return canvas;
 }
 function minimumActionTarget() {
-  return window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
-    ? 44
-    : 36;
+  return window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches ? 44 : 36;
 }
 
 async function menuForTrigger(trigger: HTMLElement, title: string) {
