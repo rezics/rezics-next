@@ -43,8 +43,8 @@ background refresh never moves focus.
   Cursor failure keeps Start again; other retryable failures keep the original callback. An owner's
   `failureActions` slot can supply its existing gate. Private error codes and source payloads are never copy.
 
-Decision: filtered empty recovery opens the existing filter controls rather than introducing a bulk clear;
-the existing per-filter removal retains the other selections and its URL/history/reader retirement owner.
+Decision: filtered empty recovery opens the existing filter controls. The filter surface and persistent summary
+offer independent removal and clear-all through the same URL/history/reader retirement owner.
 Home Search and sign-in destinations remain localized. No new Follow destination is invented: Following
 can navigate through its existing Discover control. Source availability remains native authority.
 
@@ -204,3 +204,37 @@ old identity, preview, image and destination. Reader/session/source retirement s
 They exercise the same shared FeedResults projection at 390 and 1280, in light/dark, long text and keyboard states.
 The focused reading tests pin all installed branches, occurrence/creation meaning, independent destinations, missing
 metadata and 1/10/20-row read cost; existing Home lifetime tests retain ownership of request and session retirement.
+
+
+## Home selection context
+
+Home and Following keep one selection owner for type, one exact-address Space and one rating question. The
+`HomeFeedControls` surface consumes typed `HomeFeedFilterSummary` slots with localized labels, supplied metadata,
+state and removal callbacks. It never inspects React labels, copies query state, fetches on open/close, or applies
+an intermediate draft. Closing simply returns to the results. Search retains its independent interface.
+
+Decision: use one mounted selector tree in a compact anchored desktop dialog and a bottom sheet below 640px;
+selection is immediate and clear-all retains the stream, removes the cursor and issues at most one feed read.
+The sheet contains a heading, localized close action and a persistent selected-context footer. Phone targets are
+at least 44px. Opening focuses the first selector; Tab/Shift+Tab stay inside the surface, Escape/outside dismissal
+returns focus to the opener, and phone modality makes sibling content inert and locks body scrolling. Individual
+chip removal moves focus to the next surviving chip or its surface control. No second Apply step exists.
+
+The narrow Home adapter synchronously retires every selection before bulk clear and suppresses only intermediate
+store callbacks, then replaces the feed once through the existing window. In-flight metadata cannot restore a
+cleared selection. Back/Forward still restores the exact native history descriptor and revalidates Space/question
+metadata; account replacement retains the route's current-viewer remount boundary. FeedResults, card projection,
+row actions and explicit next-page focus keep their existing ports. Local presentation does not add subscriptions.
+
+Type choices use only the supplied bounded page; question choices use only the current question page plus the
+retained selection. Page actions are explicit, replace the old page and do not enumerate other pages. The selected
+Space remains one exact lookup plus its installed point validation. Projection is O(K+Q), plus one Space, and no
+panel action creates discovery or Following sources. Missing native labels, Space directories, default questions
+or additional choice methods remain unavailable producer features; Content/Community must supply those before
+Home can offer them. Space context uses its supplied title/address only. Question context retains its actual
+label, revision, grain, scale and review meaning. Failed restored metadata has an independently removable summary
+and the existing retry, never an invented readable choice or a successful unfiltered feed.
+
+`16-home-filter-context` uses visibly prepared responses for phone 390, desktop 1280, light/dark, long strings,
+keyboard interaction, retained unavailable selections, delayed choices and account replacement. Its focused tests
+pin clear/removal/history/pagination retirement and 1/10/100 supplied-choice growth without automatic reads.

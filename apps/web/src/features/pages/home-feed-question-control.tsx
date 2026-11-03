@@ -11,10 +11,14 @@ export function HomeFeedQuestionControl({
   choices,
   snapshot,
   locale,
+  selectedId,
+  onRestore,
 }: {
   choices: Choices;
   snapshot: ReturnType<Choices['snapshot']>;
   locale: string;
+  selectedId?: string | undefined;
+  onRestore?: (() => void) | undefined;
 }) {
   const id = useId();
   const options = { locale: locale as Locale };
@@ -52,15 +56,20 @@ export function HomeFeedQuestionControl({
         <NativeSelect
           id={id}
           className="max-w-full [&_select]:min-h-11 [&_select]:max-w-full"
-          value={selected?.id ?? ''}
-          disabled={!snapshot.page && !selected}
+          value={selected?.id ?? selectedId ?? ''}
+          disabled={!snapshot.page && !selected && !selectedId}
           onChange={(event) => {
             const question = [...retained, ...values].find((value) => value.id === event.target.value);
             if (question || event.target.value === '') void choices.select(question);
           }}
         >
-          {snapshot.status !== 'idle' || selected ? (
+          {snapshot.status !== 'idle' || selected || selectedId ? (
             <NativeSelectOption value="">{m.home_question_all({}, options)}</NativeSelectOption>
+          ) : null}
+          {selectedId && !selected && !values.some((question) => question.id === selectedId) ? (
+            <NativeSelectOption value={selectedId}>
+              {m.home_filter_metadata_unavailable({}, options)}
+            </NativeSelectOption>
           ) : null}
           {[...retained, ...values].map((question) => (
             <NativeSelectOption key={question.id} value={question.id}>
@@ -82,7 +91,7 @@ export function HomeFeedQuestionControl({
                 ? m.home_questions_next({}, options)
                 : m.home_questions_load({}, options)}
         </Button>
-        {selected ? (
+        {selected || selectedId ? (
           <>
             <Button
               className="min-h-11 whitespace-normal"
@@ -95,7 +104,7 @@ export function HomeFeedQuestionControl({
               className="min-h-11 whitespace-normal"
               variant="outline"
               disabled={snapshot.selection === 'loading'}
-              onClick={() => void choices.refresh()}
+              onClick={() => (selected ? void choices.refresh() : onRestore?.())}
             >
               {m.home_question_refresh({}, options)}
             </Button>

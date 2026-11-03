@@ -31,7 +31,11 @@ export function HomeFeedSpaceControl({
     closed: m.home_feed_closed,
   };
   return (
-    <section className="space-y-3" aria-label={m.home_space_label({}, options)} aria-busy={busy}>
+    <section
+      className="space-y-3 [&_button]:min-h-11 [&_button]:whitespace-normal [&_input]:min-h-11"
+      aria-label={m.home_space_label({}, options)}
+      aria-busy={busy}
+    >
       <form
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {

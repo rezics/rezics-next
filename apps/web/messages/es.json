@@ -6410,5 +6410,9 @@
   "route_retry_failed": "La página sigue sin poder cargarse. Inténtalo de nuevo o usa Inicio o Buscar.",
   "route_retry_unavailable": "No se puede volver a cargar esta página aquí. Puedes continuar desde Inicio o Buscar.",
   "route_retry_later": "El servicio te pide que lo intentes más tarde. Mientras tanto, puedes usar Inicio o Buscar.",
-  "route_retry_after": "Espera {seconds} segundos antes de volver a intentarlo."
+  "route_retry_after": "Espera {seconds} segundos antes de volver a intentarlo.",
+  "home_filter_title": "Elige el contexto de Inicio",
+  "home_filter_help": "Los resultados se actualizan al elegir. Cierra para volver al feed.",
+  "home_filter_context": "{stream} con los filtros seleccionados.",
+  "home_filter_metadata_unavailable": "La información de la selección no está disponible"
 }

@@ -6410,5 +6410,9 @@
   "route_retry_failed": "まだページを読み込めません。もう一度試すか、ホームまたは検索に移動してください。",
   "route_retry_unavailable": "ここでは再試行できません。ホームまたは検索から閲覧を続けられます。",
   "route_retry_later": "サービスから時間をおいて再試行するよう案内されています。それまではホームまたは検索を利用できます。",
-  "route_retry_after": "再試行するまで {seconds} 秒お待ちください。"
+  "route_retry_after": "再試行するまで {seconds} 秒お待ちください。",
+  "home_filter_title": "ホームの表示条件を選ぶ",
+  "home_filter_help": "選択すると結果がすぐに更新されます。閉じるとフィードに戻ります。",
+  "home_filter_context": "{stream}に選択した絞り込み条件を適用しています。",
+  "home_filter_metadata_unavailable": "選択した項目の情報を取得できません"
 }

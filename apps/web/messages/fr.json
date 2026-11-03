@@ -6410,5 +6410,9 @@
   "route_retry_failed": "La page ne peut toujours pas être chargée. Réessayez ou utilisez l’accueil ou la recherche.",
   "route_retry_unavailable": "Cette page ne peut pas être rechargée ici. Vous pouvez poursuivre depuis l’accueil ou la recherche.",
   "route_retry_later": "Le service vous demande de réessayer plus tard. En attendant, vous pouvez utiliser l’accueil ou la recherche.",
-  "route_retry_after": "Attendez {seconds} secondes avant de réessayer."
+  "route_retry_after": "Attendez {seconds} secondes avant de réessayer.",
+  "home_filter_title": "Choisir le contexte du fil d’accueil",
+  "home_filter_help": "Les résultats sont mis à jour dès la sélection. Fermez pour revenir au fil.",
+  "home_filter_context": "{stream} avec les filtres sélectionnés.",
+  "home_filter_metadata_unavailable": "Les informations de la sélection sont indisponibles"
 }

@@ -6460,5 +6460,9 @@
   "route_retry_failed": "The page still could not be loaded. Try again when you are ready, or use Home or Search.",
   "route_retry_unavailable": "This page cannot be retried here. You can use Home or Search to continue.",
   "route_retry_later": "The service has asked you to try again later. You can use Home or Search in the meantime.",
-  "route_retry_after": "Wait {seconds} seconds before trying again."
+  "route_retry_after": "Wait {seconds} seconds before trying again.",
+  "home_filter_title": "Choose your Home context",
+  "home_filter_help": "Selections update results immediately. Close to return to the feed.",
+  "home_filter_context": "{stream} with your selected filters.",
+  "home_filter_metadata_unavailable": "Selected metadata is unavailable"
 }

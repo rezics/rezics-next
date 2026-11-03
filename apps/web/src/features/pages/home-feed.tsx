@@ -12,6 +12,8 @@ import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spac
 import { HomeFeedSpaceControl } from './home-feed-space-control';
 import { HomeFeedKindControl } from './home-feed-kind-control';
 import { HomeFeedQuestionControl } from './home-feed-question-control';
+import { HomeFeedControls } from './home-feed-controls';
+import type { HomeFeedFilterSummary } from './home-feed-filter-summary';
 import {
   createHomeQuestionChoices,
   questionFeedFailure,
@@ -48,6 +50,8 @@ export function HomeFeed({
   input,
   onSelect,
   activeFilters = [],
+  filterSelections = [],
+  onClearFilters,
   kindControl,
   spaceControl,
   questionControl,
@@ -67,6 +71,8 @@ export function HomeFeed({
   input?: FeedInput;
   onSelect?: (stream: FeedStream) => void;
   activeFilters?: ReactNode[];
+  filterSelections?: readonly HomeFeedFilterSummary[];
+  onClearFilters?: (() => void) | undefined;
   kindControl?: ReactNode;
   spaceControl?: ReactNode;
   questionControl?: ReactNode;
@@ -130,7 +136,7 @@ export function HomeFeed({
         : { state: result.state, code: result.code };
   const emptyContext: FeedEmptyContext = input?.cursor
     ? 'continuation'
-    : activeFilters.length || input?.kind || input?.spaceId || input?.ratingQuestionId
+    : filterSelections.length || activeFilters.length || input?.kind || input?.spaceId || input?.ratingQuestionId
       ? 'filtered'
       : stream === 'following'
         ? 'following'
@@ -173,35 +179,21 @@ export function HomeFeed({
             </Button>
           ) : null}
         </nav>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <Button
-            className="min-h-11 whitespace-nowrap"
-            type="button"
-            variant="outline"
-            aria-expanded={filtersOpen}
-            aria-controls={filterId}
-            onClick={() => setFiltersOpen((open) => !open)}
-          >
-            {filtersOpen ? m.search_close_filters({}, options) : m.search_filters({}, options)}
-          </Button>
-          {activeFilters.length ? (
-            <ul
-              aria-label={m.refinement_selected({}, options)}
-              className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground"
-            >
-              {activeFilters.map((filter, index) => (
-                <li key={index} className="break-words">
-                  {filter}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      </div>
-      <div ref={filterPanel} id={filterId} hidden={!filtersOpen} className={filtersOpen ? 'grid gap-3' : 'hidden'}>
-        {kindControl}
-        {spaceControl}
-        {questionControl}
+        <HomeFeedControls
+          locale={locale}
+          stream={stream}
+          open={filtersOpen}
+          onOpenChange={setFiltersOpen}
+          id={filterId}
+          panelRef={filterPanel}
+          selections={filterSelections}
+          onClear={onClearFilters}
+          legacySummary={activeFilters}
+        >
+          {kindControl}
+          {spaceControl}
+          {questionControl}
+        </HomeFeedControls>
       </div>
       {catalogue}
       {stream === 'home' ? (
@@ -337,6 +329,7 @@ export function HomeFeedConsumer({
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
   const restoreGeneration = useRef(0);
+  const clearingSelections = useRef(false);
   const saveNavigation = (input: FeedInput, mode: 'push' | 'replace') => {
     if (typeof globalThis.window === 'undefined') return;
     const browser = globalThis.window;
@@ -348,6 +341,7 @@ export function HomeFeedConsumer({
   // Store callbacks run after construction, when both independent selection stores exist.
   const questions = useState(() =>
     createHomeQuestionChoices(readQuestions, readQuestion, (question, result) => {
+      if (clearingSelections.current) return;
       if (result === undefined) {
         restoreGeneration.current++;
         const { cursor: _cursor, ratingQuestionId: _question, ...selection } = window.snapshot().input;
@@ -363,6 +357,7 @@ export function HomeFeedConsumer({
   )[0];
   const spaces = useState(() =>
     createHomeSpaceSelection(readSpace, (space, available) => {
+      if (clearingSelections.current) return;
       restoreGeneration.current++;
       choices.retire();
       questions.retire();
@@ -385,7 +380,7 @@ export function HomeFeedConsumer({
       return true;
     }
     const question = questions.snapshot();
-    if (question.selected && question.selection !== 'ready') {
+    if (input.ratingQuestionId && question.selection !== 'ready') {
       window.retire(
         question.selection === 'loading'
           ? undefined
@@ -409,8 +404,10 @@ export function HomeFeedConsumer({
     if (!spaces.snapshot().available) {
       if (spaces.snapshot().selected) void spaces.refresh();
       else void spaces.retry();
-    } else if (questions.snapshot().selected && questions.snapshot().selection !== 'ready') void questions.refresh();
-    else void window.load(window.snapshot().input);
+    } else if (window.snapshot().input.ratingQuestionId && questions.snapshot().selection !== 'ready') {
+      if (questions.snapshot().selected) void questions.refresh();
+      else void restoreSelection(window.snapshot().input);
+    } else void window.load(window.snapshot().input);
   };
   const questionSnapshot = useSyncExternalStore(questions.subscribe, questions.snapshot, questions.snapshot);
   const spaceSnapshot = useSyncExternalStore(spaces.subscribe, spaces.snapshot, spaces.snapshot);
@@ -425,56 +422,100 @@ export function HomeFeedConsumer({
     [choices, spaces, questions],
   );
   const options = { locale: locale as Locale };
-  const activeFilters: ReactNode[] = [];
-  if (kinds.selected) {
-    activeFilters.push(
-      <span key="kind">
-        {m.home_kind_label({}, options)}:{' '}
-        <bdi lang={kinds.selected.lang}>{kinds.selected.text || m.home_kind_unnamed({}, options)}</bdi>
-        <Button
-          variant="ghost"
-          className="min-h-11"
-          aria-label={m.refinement_remove({ value: kinds.selected.text || m.home_kind_unnamed({}, options) }, options)}
-          onClick={() => {
-            choices.select(undefined);
-            const { cursor: _cursor, kind: _kind, ...selection } = window.snapshot().input;
-            loadSelection(selection);
-          }}
-        >
-          ×
-        </Button>
-      </span>,
-    );
+  const removeKind = () => {
+    choices.select(undefined);
+    const { cursor: _cursor, kind: _kind, ...selection } = window.snapshot().input;
+    loadSelection(selection);
+  };
+  const clearFilters = () => {
+    // Store callbacks normally own independent selection changes. A bulk clear retires all
+    // three synchronously, then passes one replacement through the same feed owner.
+    const stream = window.snapshot().input.stream;
+    restoreGeneration.current++;
+    clearingSelections.current = true;
+    try {
+      choices.select(undefined);
+      spaces.clear();
+      void questions.select(undefined);
+    } finally {
+      clearingSelections.current = false;
+    }
+    loadSelection({ stream });
+  };
+  const filterSelections: HomeFeedFilterSummary[] = [];
+  if (snapshot.input.kind) {
+    filterSelections.push({
+      key: 'kind',
+      label: m.home_kind_label({}, options),
+      value: kinds.selected?.text || m.home_kind_unnamed({}, options),
+      lang: kinds.selected?.lang,
+      onRemove: removeKind,
+    });
   }
-  if (spaceSnapshot.selected) {
-    activeFilters.push(
-      <span key="space">
-        {m.home_space_label({}, options)}: {spaceSnapshot.selected.title}
-        <Button
-          variant="ghost"
-          className="min-h-11"
-          aria-label={m.refinement_remove({ value: spaceSnapshot.selected.title }, options)}
-          onClick={spaces.clear}
-        >
-          ×
-        </Button>
-      </span>,
-    );
+  if (snapshot.input.spaceId) {
+    const selected = spaceSnapshot.selected;
+    filterSelections.push({
+      key: 'space',
+      label: m.home_space_selected({}, options),
+      value: selected?.title ?? m.home_filter_metadata_unavailable({}, options),
+      description: selected?.address ? `/spaces/${selected.address}` : undefined,
+      state:
+        spaceSnapshot.status === 'loading'
+          ? m.home_space_loading({}, options)
+          : !spaceSnapshot.available
+            ? spaceSnapshot.status === 'denied'
+              ? m.home_feed_denied({}, options)
+              : spaceSnapshot.status === 'auth'
+                ? m.home_feed_auth({}, options)
+                : spaceSnapshot.status === 'closed'
+                  ? m.home_feed_closed({}, options)
+                  : m.home_space_unavailable({}, options)
+            : undefined,
+      onRemove: spaces.clear,
+    });
   }
-  if (questionSnapshot.selected) {
-    activeFilters.push(
-      <span key="question">
-        {m.home_question_label({}, options)}: {questionSnapshot.selected.label}
-        <Button
-          variant="ghost"
-          className="min-h-11"
-          aria-label={m.refinement_remove({ value: questionSnapshot.selected.label }, options)}
-          onClick={() => void questions.select(undefined)}
-        >
-          ×
-        </Button>
-      </span>,
-    );
+  if (snapshot.input.ratingQuestionId) {
+    const selected = questionSnapshot.selected;
+    const grains = {
+      work: m.home_question_work,
+      release: m.home_question_release,
+      episode: m.home_question_episode,
+      character: m.home_question_character,
+    };
+    const states = {
+      loading: m.home_questions_loading,
+      unavailable: m.home_questions_unavailable,
+      auth: m.home_feed_auth,
+      denied: m.home_questions_denied,
+      closed: m.home_feed_closed,
+      restart: m.home_questions_restart,
+      invalid: m.home_questions_invalid,
+      lost: m.home_questions_lost,
+    };
+    const number = new Intl.NumberFormat(locale);
+    filterSelections.push({
+      key: 'question',
+      label: m.home_question_label({}, options),
+      value: selected?.label ?? m.home_filter_metadata_unavailable({}, options),
+      description: selected
+        ? `${m.home_question_help({}, options)} ${m.home_question_metadata(
+            {
+              label: selected.label,
+              revision: number.format(selected.revision),
+              grain: grains[selected.grain]({}, options),
+              min: number.format(selected.scale.min),
+              max: number.format(selected.scale.max),
+              step: number.format(selected.scale.displayStep),
+            },
+            options,
+          )}`
+        : m.home_question_help({}, options),
+      state:
+        questionSnapshot.selection !== 'none' && questionSnapshot.selection !== 'ready'
+          ? states[questionSnapshot.selection]({}, options)
+          : undefined,
+      onRemove: () => void questions.select(undefined),
+    });
   }
   const currentResult = snapshot.result;
   const spaceOwnsResultMessage =
@@ -583,12 +624,21 @@ export function HomeFeedConsumer({
       stream={snapshot.input.stream}
       busy={snapshot.busy}
       input={snapshot.input}
-      activeFilters={activeFilters}
+      filterSelections={filterSelections}
+      onClearFilters={clearFilters}
       suppressResultMessage={filterOwnsResultMessage}
       spaceControl={
         <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
       }
-      questionControl={<HomeFeedQuestionControl choices={questions} snapshot={questionSnapshot} locale={locale} />}
+      questionControl={
+        <HomeFeedQuestionControl
+          choices={questions}
+          snapshot={questionSnapshot}
+          locale={locale}
+          selectedId={snapshot.input.ratingQuestionId}
+          onRestore={() => void restoreSelection(window.snapshot().input)}
+        />
+      }
       kindControl={
         <HomeFeedKindControl
           choices={choices}

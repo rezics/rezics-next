@@ -6410,5 +6410,9 @@
   "route_retry_failed": "Die Seite konnte weiterhin nicht geladen werden. Versuche es erneut oder nutze Startseite oder Suche.",
   "route_retry_unavailable": "Diese Seite kann hier nicht erneut geladen werden. Über Startseite oder Suche kannst du fortfahren.",
   "route_retry_later": "Der Dienst bittet dich, es später erneut zu versuchen. In der Zwischenzeit kannst du Startseite oder Suche nutzen.",
-  "route_retry_after": "Warte {seconds} Sekunden, bevor du es erneut versuchst."
+  "route_retry_after": "Warte {seconds} Sekunden, bevor du es erneut versuchst.",
+  "home_filter_title": "Kontext für den Home-Feed wählen",
+  "home_filter_help": "Die Auswahl aktualisiert die Ergebnisse sofort. Schließe dieses Fenster, um zum Feed zurückzukehren.",
+  "home_filter_context": "{stream} mit deinen ausgewählten Filtern.",
+  "home_filter_metadata_unavailable": "Informationen zur Auswahl sind nicht verfügbar"
 }

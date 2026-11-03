@@ -6410,5 +6410,9 @@
   "route_retry_failed": "아직 페이지를 불러올 수 없습니다. 다시 시도하거나 홈 또는 검색을 이용해 주세요.",
   "route_retry_unavailable": "여기서는 다시 시도할 수 없습니다. 홈 또는 검색에서 계속 탐색할 수 있습니다.",
   "route_retry_later": "서비스에서 나중에 다시 시도하도록 요청했습니다. 그동안 홈 또는 검색을 이용할 수 있습니다.",
-  "route_retry_after": "{seconds}초 후에 다시 시도해 주세요."
+  "route_retry_after": "{seconds}초 후에 다시 시도해 주세요.",
+  "home_filter_title": "홈 표시 조건 선택",
+  "home_filter_help": "선택하면 결과가 바로 업데이트됩니다. 닫으면 피드로 돌아갑니다.",
+  "home_filter_context": "{stream}에 선택한 필터를 적용합니다.",
+  "home_filter_metadata_unavailable": "선택한 항목의 정보를 사용할 수 없습니다"
 }
