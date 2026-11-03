@@ -154,7 +154,8 @@ function tableColumns(database: Database, table: string): Set<string> {
 
 function requireColumns(actual: Set<string>, required: readonly string[], table: string): void {
   const missing = required.find((column) => !actual.has(column));
-  if (missing) throw new PlanComparisonFailure(`Unsupported preview plan schema: column ${table}.${missing} is missing.`, 2);
+  if (missing)
+    throw new PlanComparisonFailure(`Unsupported preview plan schema: column ${table}.${missing} is missing.`, 2);
 }
 
 function mapPreviewPlan(row: Record<string, unknown>): PreviewPlan {
@@ -205,7 +206,8 @@ async function openPreviewSqlite(directory: string): Promise<OpenedPlan> {
     requireColumns(tableColumns(database, 'preview_records'), REQUIRED_RECORD_COLUMNS, 'preview_records');
     tableColumns(database, 'preview_vanished');
     const rows = database.query('SELECT * FROM preview_plans LIMIT 2').all() as Record<string, unknown>[];
-    if (rows.length !== 1) throw new PlanComparisonFailure('Preview directory does not contain exactly one completed plan.', 2);
+    if (rows.length !== 1)
+      throw new PlanComparisonFailure('Preview directory does not contain exactly one completed plan.', 2);
     const plan = mapPreviewPlan(rows[0]!);
     if (!plan.complete)
       throw new PlanComparisonFailure('Preview plan is incomplete and cannot enter a completed comparison.', 2);
@@ -246,7 +248,10 @@ async function openPreviewSqlite(directory: string): Promise<OpenedPlan> {
     const code = (error as NodeJS.ErrnoException)?.code;
     if (code === 'ENOENT') throw new PlanComparisonFailure('Preview plan directory or database does not exist.', 2);
     if (code === 'ELOOP') throw new PlanComparisonFailure('Preview plan path must not be a symbolic link.', 2);
-    if (error instanceof Error && /not a database|unable to open database|database disk image is malformed/i.test(error.message))
+    if (
+      error instanceof Error &&
+      /not a database|unable to open database|database disk image is malformed/i.test(error.message)
+    )
       throw new PlanComparisonFailure('Preview plan file is not a supported readable SQLite database.', 2);
     throw new PlanComparisonFailure(
       `Unable to open preview plan ${JSON.stringify(resolved)}${code ? ` (${code})` : ''}.`,
@@ -327,8 +332,7 @@ function sideFromRecord(record: PreviewRecordRow): { side: SideProjection | null
   const operations = parseJsonField(record.operationsJson, 'operations');
   const provenance = parseJsonField(record.provenanceJson, 'provenance');
   const diagnostics = parseJsonField(record.diagnosticsJson, 'diagnostics');
-  if (!display.ok || !operations.ok || !provenance.ok || !diagnostics.ok)
-    return { side: null, unavailable: true };
+  if (!display.ok || !operations.ok || !provenance.ok || !diagnostics.ok) return { side: null, unavailable: true };
   return {
     unavailable: false,
     side: {
@@ -403,12 +407,18 @@ async function createOutputDir(path: string): Promise<string> {
   const sqlite = join(resolved, 'comparison.sqlite');
   try {
     await stat(sqlite);
-    throw new PlanComparisonFailure('Comparison output directory already contains a database; refusing to overwrite it.', 2);
+    throw new PlanComparisonFailure(
+      'Comparison output directory already contains a database; refusing to overwrite it.',
+      2,
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return resolved;
     throw error instanceof PlanComparisonFailure
       ? error
-      : new PlanComparisonFailure('Comparison output directory already contains a database; refusing to overwrite it.', 2);
+      : new PlanComparisonFailure(
+          'Comparison output directory already contains a database; refusing to overwrite it.',
+          2,
+        );
   }
 }
 
@@ -562,7 +572,9 @@ export class PlanComparison {
               truncated: false,
               retainedEqual: false,
               digestDiffers: Boolean(emitLeft && emitRight && emitLeft.digest !== emitRight.digest),
-              converterDiffers: Boolean(emitLeft && emitRight && emitLeft.converterRevision !== emitRight.converterRevision),
+              converterDiffers: Boolean(
+                emitLeft && emitRight && emitLeft.converterRevision !== emitRight.converterRevision,
+              ),
               revisionDiffers: Boolean(emitLeft && emitRight && emitLeft.recordRevision !== emitRight.recordRevision),
               skippedDiffers: Boolean(emitLeft && emitRight && emitLeft.skipped !== emitRight.skipped),
               unavailable: true,

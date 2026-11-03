@@ -55,7 +55,10 @@ function boundedJson(value: unknown): string {
   return text;
 }
 
-export function parseJsonField(value: string, label: string): { ok: true; value: unknown } | { ok: false; label: string } {
+export function parseJsonField(
+  value: string,
+  label: string,
+): { ok: true; value: unknown } | { ok: false; label: string } {
   if (Buffer.byteLength(value, 'utf8') > MAX_DUMP_RECORD_BYTES) return { ok: false, label };
   try {
     return { ok: true, value: JSON.parse(value) as unknown };
@@ -98,7 +101,8 @@ export function valueDiscriminator(value: unknown): string {
   if (record.type === 'somevalue' || record.type === 'novalue') return String(record.type);
   if (record.type === 'value') return `value:${valueDiscriminator(record.content)}`;
   if (record.kind === 'document' && typeof record.digest === 'string') return `document:${record.digest}`;
-  if (record.kind === 'unresolved-or-bound-target') return `target:${record.present === true ? 'present' : 'unresolved'}`;
+  if (record.kind === 'unresolved-or-bound-target')
+    return `target:${record.present === true ? 'present' : 'unresolved'}`;
   if (typeof record.amount === 'string' && typeof record.unit === 'string')
     return `quantity:${record.amount}:${record.unit}:${typeof record.lowerBound === 'string' ? record.lowerBound : ''}:${typeof record.upperBound === 'string' ? record.upperBound : ''}`;
   if (typeof record.time === 'string' && typeof record.precision === 'number')
@@ -122,8 +126,10 @@ function itemKey(value: unknown): string | null {
   const record = value as Record<string, unknown>;
   const property = propertyId(record.property);
   if (property) return `snak:${property}:${valueDiscriminator(record.value ?? record.content)}`;
-  if (typeof record.language === 'string' && typeof record.text === 'string') return `term:${record.language}:${record.text}`;
-  if (typeof record.language === 'string' && typeof record.value === 'string') return `term:${record.language}:${record.value}`;
+  if (typeof record.language === 'string' && typeof record.text === 'string')
+    return `term:${record.language}:${record.text}`;
+  if (typeof record.language === 'string' && typeof record.value === 'string')
+    return `term:${record.language}:${record.value}`;
   if (record.kind === 'media-intent')
     return `media:${String(record.role)}:${String(record.license)}:${String(record.rightsHolder)}`;
   if (Array.isArray(record.parts)) return `group:${canonicalJson(record.parts)}`;
@@ -150,19 +156,33 @@ function domainForAddress(address: string, fallback: ComparisonDomain): Comparis
   if (address.startsWith('media/')) return 'media';
   if (address.startsWith('statistic')) return 'statistic';
   if (address.startsWith('metadata')) return 'metadata';
-  if (address.startsWith('digest') || address.startsWith('converter') || address.startsWith('revision')) return 'digest';
+  if (address.startsWith('digest') || address.startsWith('converter') || address.startsWith('revision'))
+    return 'digest';
   if (address.includes('unresolved') || address.includes('/target')) return 'target';
   if (address.startsWith('skipped')) return 'classification';
   return fallback;
 }
 
 function emit(buffer: PartBuffer, address: string, domain: ComparisonDomain, before: unknown, after: unknown): void {
-  const change = before === undefined ? 'added' : after === undefined ? 'removed' : equalJson(before, after) ? 'unchanged' : 'changed';
+  const change =
+    before === undefined
+      ? 'added'
+      : after === undefined
+        ? 'removed'
+        : equalJson(before, after)
+          ? 'unchanged'
+          : 'changed';
   if (change === 'unchanged') return;
   buffer.push({ address, domain: domainForAddress(address, domain), change, before, after });
 }
 
-function diffOrdered(buffer: PartBuffer, address: string, domain: ComparisonDomain, left: unknown[], right: unknown[]): void {
+function diffOrdered(
+  buffer: PartBuffer,
+  address: string,
+  domain: ComparisonDomain,
+  left: unknown[],
+  right: unknown[],
+): void {
   const leftUsed = new Uint8Array(left.length);
   const rightUsed = new Uint8Array(right.length);
   for (let i = 0; i < left.length; i++) {
@@ -199,7 +219,10 @@ function diffValue(buffer: PartBuffer, address: string, domain: ComparisonDomain
   }
   if (equalJson(left, right)) return;
   if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.every((item) => typeof item !== 'object' || item === null) && right.every((item) => typeof item !== 'object' || item === null)) {
+    if (
+      left.every((item) => typeof item !== 'object' || item === null) &&
+      right.every((item) => typeof item !== 'object' || item === null)
+    ) {
       if (equalJson(left, right)) return;
       emit(buffer, address, domain, left, right);
       return;
@@ -207,17 +230,36 @@ function diffValue(buffer: PartBuffer, address: string, domain: ComparisonDomain
     diffOrdered(buffer, address, domain, left, right);
     return;
   }
-  if (left && right && typeof left === 'object' && typeof right === 'object' && !Array.isArray(left) && !Array.isArray(right)) {
+  if (
+    left &&
+    right &&
+    typeof left === 'object' &&
+    typeof right === 'object' &&
+    !Array.isArray(left) &&
+    !Array.isArray(right)
+  ) {
     const leftRecord = left as Record<string, unknown>;
     const rightRecord = right as Record<string, unknown>;
-    if (leftRecord.type !== rightRecord.type && (leftRecord.type === 'somevalue' || rightRecord.type === 'somevalue' || leftRecord.type === 'novalue' || rightRecord.type === 'novalue')) {
+    if (
+      leftRecord.type !== rightRecord.type &&
+      (leftRecord.type === 'somevalue' ||
+        rightRecord.type === 'somevalue' ||
+        leftRecord.type === 'novalue' ||
+        rightRecord.type === 'novalue')
+    ) {
       emit(buffer, `${address}/discriminator`, domain, leftRecord.type, rightRecord.type);
     }
     const keys = new Set([...Object.keys(leftRecord), ...Object.keys(rightRecord)]);
     for (const key of [...keys].sort()) {
       if (SKIP_KEYS.has(key) || SECRET.test(key)) continue;
       const nextDomain =
-        key === 'qualifiers' ? 'qualifier' : key === 'references' || key === 'parts' ? 'reference' : key === 'labels' || key === 'aliases' || key === 'descriptions' ? 'term' : domain;
+        key === 'qualifiers'
+          ? 'qualifier'
+          : key === 'references' || key === 'parts'
+            ? 'reference'
+            : key === 'labels' || key === 'aliases' || key === 'descriptions'
+              ? 'term'
+              : domain;
       diffValue(buffer, `${address}/${key}`, nextDomain, leftRecord[key], rightRecord[key]);
     }
     return;
@@ -286,9 +328,7 @@ function diffOperations(buffer: PartBuffer, left: unknown, right: unknown): void
   }
   for (let i = 0; i < leftRecords.length; i++) {
     if (leftUsed[i]) continue;
-    const sameFamily = rightRecords
-      .map((item, j) => j)
-      .filter((j) => !rightUsed[j] && rightKeys[j] === leftKeys[i]);
+    const sameFamily = rightRecords.map((item, j) => j).filter((j) => !rightUsed[j] && rightKeys[j] === leftKeys[i]);
     if (sameFamily.length !== 1) continue;
     const remainingLeft = leftRecords
       .map((item, index) => index)
@@ -360,7 +400,8 @@ function diffDisplay(buffer: PartBuffer, left: unknown, right: unknown): void {
   diffValue(buffer, 'media', 'media', leftRecord.mediaIntents ?? [], rightRecord.mediaIntents ?? []);
   if (leftRecord.sourceStatistic !== undefined || rightRecord.sourceStatistic !== undefined)
     emit(buffer, 'statistic', 'statistic', leftRecord.sourceStatistic, rightRecord.sourceStatistic);
-  if (leftRecord.ignored !== rightRecord.ignored) emit(buffer, 'ignored', 'classification', leftRecord.ignored, rightRecord.ignored);
+  if (leftRecord.ignored !== rightRecord.ignored)
+    emit(buffer, 'ignored', 'classification', leftRecord.ignored, rightRecord.ignored);
 }
 
 export function compareRetainedProjections(left: SideProjection | null, right: SideProjection | null): ProjectionDiff {
@@ -390,8 +431,12 @@ export function compareRetainedProjections(left: SideProjection | null, right: S
       truncated: false,
       retainedEqual: false,
       digestDiffers: Boolean(left?.digest && right?.digest && left.digest !== right.digest),
-      converterDiffers: Boolean(left?.converterRevision && right?.converterRevision && left.converterRevision !== right.converterRevision),
-      revisionDiffers: Boolean(left?.recordRevision && right?.recordRevision && left.recordRevision !== right.recordRevision),
+      converterDiffers: Boolean(
+        left?.converterRevision && right?.converterRevision && left.converterRevision !== right.converterRevision,
+      ),
+      revisionDiffers: Boolean(
+        left?.recordRevision && right?.recordRevision && left.recordRevision !== right.recordRevision,
+      ),
       skippedDiffers: Boolean(left && right && left.skipped !== right.skipped),
       unavailable: false,
     };

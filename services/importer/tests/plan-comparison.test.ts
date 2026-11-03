@@ -27,7 +27,13 @@ function archive(): Uint8Array {
     put(156, '0');
     put(257, 'ustar\0');
     put(263, '00');
-    put(148, `${header.reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, '0')}\0 `);
+    put(
+      148,
+      `${header
+        .reduce((sum, byte) => sum + byte, 0)
+        .toString(8)
+        .padStart(6, '0')}\0 `,
+    );
     return Buffer.concat([header, bytes, new Uint8Array((512 - (bytes.length % 512)) % 512)]);
   };
   const parts: Uint8Array[] = [];
@@ -89,7 +95,12 @@ async function completedBaseline(path: string, keys: string[], generationHint = 
 async function persistPreview(
   directory: string,
   name: string,
-  input: { source: 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata'; dump: string; baseline?: string; sourceAlias?: string },
+  input: {
+    source: 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata';
+    dump: string;
+    baseline?: string;
+    sourceAlias?: string;
+  },
 ) {
   const output = join(directory, name);
   const preview = await DumpPreview.build({ ...input, outputDir: output });
@@ -122,7 +133,9 @@ test('structured diff reports nested native values, unresolved targets and order
         property: { id: 'wdt:P186' },
         value: { type: 'somevalue' },
         unresolvedTarget: true,
-        qualifiers: [{ property: { id: 'schema:sameAs' }, value: { type: 'value', content: 'http://www.wikidata.org/entity/Q2' } }],
+        qualifiers: [
+          { property: { id: 'schema:sameAs' }, value: { type: 'value', content: 'http://www.wikidata.org/entity/Q2' } },
+        ],
         references: [
           { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/a' } }] },
           { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/b' } }] },
@@ -139,13 +152,28 @@ test('structured diff reports nested native values, unresolved targets and order
         operation: 'propose',
         fieldGroup: 'facts',
         property: { id: 'schema:datePublished' },
-        value: { type: 'value', content: { time: '+2020-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' } },
+        value: {
+          type: 'value',
+          content: {
+            time: '+2020-00-00T00:00:00Z',
+            precision: 9,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
       },
     ],
     display: {
       normalized: { labels: { en: 'Lantern' }, aliases: { en: ['Lamp', 'Light'] } },
-      mediaIntents: [{ kind: 'media-intent', role: 'cover', rightsHolder: 'A', license: 'CC-BY-SA-3.0', via: 'bangumi' }],
-      sourceStatistic: { kind: 'source-statistic', source: 'vndb', count: 10, mean: 8, note: 'Source statistic only; not a local vote or publication.' },
+      mediaIntents: [
+        { kind: 'media-intent', role: 'cover', rightsHolder: 'A', license: 'CC-BY-SA-3.0', via: 'bangumi' },
+      ],
+      sourceStatistic: {
+        kind: 'source-statistic',
+        source: 'vndb',
+        count: 10,
+        mean: 8,
+        note: 'Source statistic only; not a local vote or publication.',
+      },
     },
   });
   const right = side({
@@ -159,7 +187,9 @@ test('structured diff reports nested native values, unresolved targets and order
         property: { id: 'wdt:P186' },
         value: { type: 'value', content: '00000000-0000-4000-8000-000000000002' },
         unresolvedTarget: false,
-        qualifiers: [{ property: { id: 'schema:sameAs' }, value: { type: 'value', content: 'http://www.wikidata.org/entity/Q2' } }],
+        qualifiers: [
+          { property: { id: 'schema:sameAs' }, value: { type: 'value', content: 'http://www.wikidata.org/entity/Q2' } },
+        ],
         references: [
           { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/b' } }] },
           { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/c' } }] },
@@ -176,13 +206,28 @@ test('structured diff reports nested native values, unresolved targets and order
         operation: 'propose',
         fieldGroup: 'facts',
         property: { id: 'schema:datePublished' },
-        value: { type: 'value', content: { time: '+2020-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' } },
+        value: {
+          type: 'value',
+          content: {
+            time: '+2020-05-00T00:00:00Z',
+            precision: 10,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
       },
     ],
     display: {
       normalized: { labels: { en: 'Lantern' }, aliases: { en: ['Lamp', 'Beacon'] } },
-      mediaIntents: [{ kind: 'media-intent', role: 'cover', rightsHolder: 'A', license: 'CC-BY-SA-3.0', via: 'bangumi' }],
-      sourceStatistic: { kind: 'source-statistic', source: 'vndb', count: 12, mean: 8, note: 'Source statistic only; not a local vote or publication.' },
+      mediaIntents: [
+        { kind: 'media-intent', role: 'cover', rightsHolder: 'A', license: 'CC-BY-SA-3.0', via: 'bangumi' },
+      ],
+      sourceStatistic: {
+        kind: 'source-statistic',
+        source: 'vndb',
+        count: 12,
+        mean: 8,
+        note: 'Source statistic only; not a local vote or publication.',
+      },
     },
   });
   const diff = compareRetainedProjections(left, right);
@@ -194,9 +239,11 @@ test('structured diff reports nested native values, unresolved targets and order
   expect(addresses).toContain('aliases');
   expect(addresses).toContain('statistic');
   expect(diff.parts.some((part) => part.domain === 'reference' && part.change !== 'unchanged')).toBe(true);
-  expect(diff.parts.some((part) => /precision|time/.test(part.address) || JSON.stringify(part.before ?? {}).includes('precision'))).toBe(
-    true,
-  );
+  expect(
+    diff.parts.some(
+      (part) => /precision|time/.test(part.address) || JSON.stringify(part.before ?? {}).includes('precision'),
+    ),
+  ).toBe(true);
   expect(diff.parts.some((part) => part.domain === 'media')).toBe(false);
   expect(diff.parts.some((part) => part.domain === 'statistic')).toBe(true);
   expect(JSON.stringify(diff.parts)).toContain('not a local vote');
@@ -221,7 +268,11 @@ test('four launch sources compare completed persistent plans without credentials
     for (const [source, dump] of cases) {
       const left = await persistPreview(directory, `${source}-left`, { source, dump });
       const right = await persistPreview(directory, `${source}-right`, { source, dump });
-      const comparison = await PlanComparison.build({ leftDir: left, rightDir: right, outputDir: join(directory, `${source}-cmp`) });
+      const comparison = await PlanComparison.build({
+        leftDir: left,
+        rightDir: right,
+        outputDir: join(directory, `${source}-cmp`),
+      });
       try {
         expect(comparison.plan.complete, source).toBe(true);
         expect(comparison.plan.sourceKind, source).toBe(source);
@@ -252,9 +303,17 @@ test('corrected input, converter pins, vanished distinction and baseline mismatc
     await completedBaseline(baselineA, keys);
     await completedBaseline(baselineB, [...keys, 'Q1999']);
     const leftDump = await dumpFile(directory, 'left.json', wikidataItems(3));
-    const rightDump = await dumpFile(directory, 'right.json', wikidataItems(4, (index) => (index === 0 ? 'Changed' : `Item ${index}`)));
+    const rightDump = await dumpFile(
+      directory,
+      'right.json',
+      wikidataItems(4, (index) => (index === 0 ? 'Changed' : `Item ${index}`)),
+    );
     const left = await persistPreview(directory, 'left', { source: 'wikidata', dump: leftDump, baseline: baselineA });
-    const right = await persistPreview(directory, 'right', { source: 'wikidata', dump: rightDump, baseline: baselineA });
+    const right = await persistPreview(directory, 'right', {
+      source: 'wikidata',
+      dump: rightDump,
+      baseline: baselineA,
+    });
     const comparison = await PlanComparison.build({ leftDir: left, rightDir: right });
     try {
       expect(comparison.plan.complete).toBe(true);
@@ -273,7 +332,11 @@ test('corrected input, converter pins, vanished distinction and baseline mismatc
       await comparison.close();
     }
 
-    const other = await persistPreview(directory, 'other-base', { source: 'wikidata', dump: rightDump, baseline: baselineB });
+    const other = await persistPreview(directory, 'other-base', {
+      source: 'wikidata',
+      dump: rightDump,
+      baseline: baselineB,
+    });
     await expect(PlanComparison.build({ leftDir: left, rightDir: other })).rejects.toThrow(/fresh common capture/);
 
     const aliased = await persistPreview(directory, 'alias', {
@@ -281,7 +344,9 @@ test('corrected input, converter pins, vanished distinction and baseline mismatc
       dump: leftDump,
       sourceAlias: 'catalogue-wikidata',
     });
-    await expect(PlanComparison.build({ leftDir: left, rightDir: aliased })).rejects.toThrow(/different configured sources/);
+    await expect(PlanComparison.build({ leftDir: left, rightDir: aliased })).rejects.toThrow(
+      /different configured sources/,
+    );
 
     const copied = await persistPreview(directory, 'copied-plan', {
       source: 'wikidata',

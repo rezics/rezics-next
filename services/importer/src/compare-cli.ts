@@ -54,7 +54,8 @@ function boundedArguments(argv: readonly string[]): void {
     if (typeof argument !== 'string' || argument.length > MAX_ARGUMENT_BYTES || argument.includes('\0'))
       throw new UsageFailure('Comparison arguments exceed the supported size.');
     totalBytes += Buffer.byteLength(argument, 'utf8');
-    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES) throw new UsageFailure('Comparison arguments exceed the supported size.');
+    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES)
+      throw new UsageFailure('Comparison arguments exceed the supported size.');
   }
 }
 
@@ -116,7 +117,8 @@ export function parseCompareArgs(argv: readonly string[]): ParsedCompareArgs | '
       throw new UsageFailure('--limit must be an integer from 1 through 100.');
     limit = Number(limitValue);
     if (limit > MAX_COMPARISON_PAGE) throw new UsageFailure('--limit must be an integer from 1 through 100.');
-    if (page === undefined) throw new UsageFailure('--limit requires --page only-left|only-right|changed|unchanged|skipped|unavailable.');
+    if (page === undefined)
+      throw new UsageFailure('--limit requires --page only-left|only-right|changed|unchanged|skipped|unavailable.');
   }
   const cursor = values.get('--cursor');
   if (cursor !== undefined && page === undefined && values.get('--record') === undefined)
@@ -198,7 +200,9 @@ function renderPlan(plan: ComparisonPlan, directory: string): string[] {
   if (plan.leftBaseline === null && plan.rightBaseline === null)
     lines.push('Neither plan captured a baseline; this first-import comparison does not establish server emptiness.');
   if (plan.inputDiffers && plan.converterDiffers)
-    lines.push('Different admitted input and different converter revisions are both present; the captures do not assign causal responsibility.');
+    lines.push(
+      'Different admitted input and different converter revisions are both present; the captures do not assign causal responsibility.',
+    );
   lines.push(...importInvocation(plan));
   return lines;
 }
@@ -218,7 +222,7 @@ function renderRecord(
   ];
   if (detail.kind === 'only-left' || detail.kind === 'only-right') {
     lines.push(
-      '  Presence in a preview is prospective source membership. Absence from the other dump is an input comparison difference; source withdrawal eligibility still belongs to that plan\'s complete acquisition.',
+      "  Presence in a preview is prospective source membership. Absence from the other dump is an input comparison difference; source withdrawal eligibility still belongs to that plan's complete acquisition.",
     );
   }
   if (detail.leftVanished || detail.rightVanished) {
@@ -235,7 +239,7 @@ function renderRecord(
   lines.push(
     parts.end === 'more'
       ? `  More difference parts are available. Next cursor: ${parts.nextCursor}`
-      : '  End of this record\'s difference parts; no next cursor.',
+      : "  End of this record's difference parts; no next cursor.",
   );
   return lines;
 }

@@ -99,14 +99,7 @@ export type ComparisonPartPage = Readonly<{
 const RECORD_KEY =
   /^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u;
 const SOURCE_ID = /^[a-z][a-z0-9_-]{0,31}$/u;
-const KINDS = new Set<ComparisonKind>([
-  'only-left',
-  'only-right',
-  'changed',
-  'unchanged',
-  'skipped',
-  'unavailable',
-]);
+const KINDS = new Set<ComparisonKind>(['only-left', 'only-right', 'changed', 'unchanged', 'skipped', 'unavailable']);
 
 export class ComparisonStoreFailure extends Error {
   constructor(
@@ -347,7 +340,8 @@ export class PlanComparisonStore {
   insertRecord(comparisonId: string, record: ComparisonRecordRow): void {
     this.assertOpen();
     validComparisonRecordKey(record.recordKey);
-    if (!isComparisonKind(record.kind)) throw new ComparisonStoreFailure('Comparison difference kind is unsupported.', 2);
+    if (!isComparisonKind(record.kind))
+      throw new ComparisonStoreFailure('Comparison difference kind is unsupported.', 2);
     const payload =
       bytes(record.summaryJson) +
       (record.leftJson ? bytes(record.leftJson) : 0) +
@@ -386,7 +380,8 @@ export class PlanComparisonStore {
         record.leftJson,
         record.rightJson,
       );
-    if (!inserted.changes) throw new ComparisonStoreFailure('Duplicate comparison record key invalidates the merge.', 2);
+    if (!inserted.changes)
+      throw new ComparisonStoreFailure('Duplicate comparison record key invalidates the merge.', 2);
     const column =
       record.kind === 'only-left'
         ? 'only_left_count'
@@ -408,8 +403,12 @@ export class PlanComparisonStore {
     this.assertOpen();
     if (part.ordinal < 0 || part.ordinal >= MAX_COMPARISON_PARTS_PER_RECORD)
       throw new ComparisonStoreFailure('Comparison part page exceeds its bound.', 2);
-    const payload = bytes(part.address) + (part.beforeJson ? bytes(part.beforeJson) : 0) + (part.afterJson ? bytes(part.afterJson) : 0);
-    if (payload > MAX_DUMP_RECORD_BYTES) throw new ComparisonStoreFailure('Comparison part projection exceeds its bound.');
+    const payload =
+      bytes(part.address) +
+      (part.beforeJson ? bytes(part.beforeJson) : 0) +
+      (part.afterJson ? bytes(part.afterJson) : 0);
+    if (payload > MAX_DUMP_RECORD_BYTES)
+      throw new ComparisonStoreFailure('Comparison part projection exceeds its bound.');
     this.charge(payload + 64);
     this.database
       .query(
@@ -426,7 +425,9 @@ export class PlanComparisonStore {
         part.afterJson,
         part.ordinal,
       );
-    this.database.query('UPDATE comparison_plans SET stored_bytes=? WHERE comparison_id=?').run(this.storedBytes, comparisonId);
+    this.database
+      .query('UPDATE comparison_plans SET stored_bytes=? WHERE comparison_id=?')
+      .run(this.storedBytes, comparisonId);
   }
 
   seal(
@@ -485,9 +486,7 @@ export class PlanComparisonStore {
     const limit = options.limit ?? DEFAULT_COMPARISON_PAGE;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_COMPARISON_PAGE)
       throw new ComparisonStoreFailure('Page size must be an integer from 1 through 100.', 2);
-    const after = options.cursor
-      ? this.decodeRecordCursor(options.cursor, plan, kind)
-      : null;
+    const after = options.cursor ? this.decodeRecordCursor(options.cursor, plan, kind) : null;
     const rows =
       after === null
         ? (this.database
@@ -553,7 +552,10 @@ export class PlanComparisonStore {
     return { kind, limit, end: 'end', rows: page };
   }
 
-  recordDetail(comparisonId: string, recordKey: string): { found: false; recordKey: string } | ({ found: true } & ComparisonRecordRow) {
+  recordDetail(
+    comparisonId: string,
+    recordKey: string,
+  ): { found: false; recordKey: string } | ({ found: true } & ComparisonRecordRow) {
     this.assertOpen();
     validComparisonRecordKey(recordKey);
     const row = this.database
@@ -566,30 +568,28 @@ export class PlanComparisonStore {
                 retained_equal AS retainedEqual, summary_json AS summaryJson, left_json AS leftJson, right_json AS rightJson
          FROM comparison_records WHERE comparison_id=? AND record_key=?`,
       )
-      .get(comparisonId, recordKey) as
-      | {
-          recordKey: string;
-          kind: ComparisonKind;
-          leftKind: string | null;
-          rightKind: string | null;
-          leftDigest: string | null;
-          rightDigest: string | null;
-          leftRevision: string | null;
-          rightRevision: string | null;
-          leftConverter: string | null;
-          rightConverter: string | null;
-          leftSkipped: number | null;
-          rightSkipped: number | null;
-          leftVanished: number;
-          rightVanished: number;
-          digestDiffers: number;
-          converterDiffers: number;
-          retainedEqual: number;
-          summaryJson: string;
-          leftJson: string | null;
-          rightJson: string | null;
-        }
-      | null;
+      .get(comparisonId, recordKey) as {
+      recordKey: string;
+      kind: ComparisonKind;
+      leftKind: string | null;
+      rightKind: string | null;
+      leftDigest: string | null;
+      rightDigest: string | null;
+      leftRevision: string | null;
+      rightRevision: string | null;
+      leftConverter: string | null;
+      rightConverter: string | null;
+      leftSkipped: number | null;
+      rightSkipped: number | null;
+      leftVanished: number;
+      rightVanished: number;
+      digestDiffers: number;
+      converterDiffers: number;
+      retainedEqual: number;
+      summaryJson: string;
+      leftJson: string | null;
+      rightJson: string | null;
+    } | null;
     if (!row) return { found: false, recordKey };
     return {
       found: true,
@@ -616,11 +616,7 @@ export class PlanComparisonStore {
     };
   }
 
-  pageParts(
-    comparisonId: string,
-    recordKey: string,
-    options: { limit?: number; cursor?: string },
-  ): ComparisonPartPage {
+  pageParts(comparisonId: string, recordKey: string, options: { limit?: number; cursor?: string }): ComparisonPartPage {
     this.assertOpen();
     validComparisonRecordKey(recordKey);
     const plan = this.plan(comparisonId);
@@ -686,8 +682,10 @@ export class PlanComparisonStore {
       captureDigest: plan.captureDigest,
       keys: ['v', 'comparison', 'capture', 'kind', 'record'],
     });
-    if (cursor.kind !== kind) throw new ComparisonStoreFailure('Cursor belongs to a different comparison, capture or page.', 2);
-    if (typeof cursor.record !== 'string') throw new ComparisonStoreFailure('Cursor record ordering key is invalid.', 2);
+    if (cursor.kind !== kind)
+      throw new ComparisonStoreFailure('Cursor belongs to a different comparison, capture or page.', 2);
+    if (typeof cursor.record !== 'string')
+      throw new ComparisonStoreFailure('Cursor record ordering key is invalid.', 2);
     validComparisonRecordKey(cursor.record);
     return cursor.record;
   }
@@ -698,7 +696,8 @@ export class PlanComparisonStore {
       captureDigest: plan.captureDigest,
       keys: ['v', 'comparison', 'capture', 'record', 'part'],
     });
-    if (cursor.record !== recordKey) throw new ComparisonStoreFailure('Cursor belongs to a different comparison, capture or page.', 2);
+    if (cursor.record !== recordKey)
+      throw new ComparisonStoreFailure('Cursor belongs to a different comparison, capture or page.', 2);
     if (typeof cursor.part !== 'number' || !Number.isInteger(cursor.part) || cursor.part < 0)
       throw new ComparisonStoreFailure('Cursor part ordering key is invalid.', 2);
     return cursor.part;

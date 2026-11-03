@@ -9,7 +9,12 @@ import { DumpPreview } from '../src/dump-preview.ts';
 
 const fixture = (path: string) => new URL(`../../../specs/fixtures/imports/${path}`, import.meta.url);
 
-async function completedPlan(directory: string, name: string, dump: string, source: 'bangumi' | 'wikidata' = 'wikidata') {
+async function completedPlan(
+  directory: string,
+  name: string,
+  dump: string,
+  source: 'bangumi' | 'wikidata' = 'wikidata',
+) {
   const output = join(directory, name);
   const preview = await DumpPreview.build({ source, dump, outputDir: output });
   await preview.close();
@@ -52,11 +57,16 @@ test('compare CLI inspects two completed plans and returns to ordinary import wi
   try {
     const leftDump = join(directory, 'left.json');
     const rightDump = join(directory, 'right.json');
-    await writeFile(leftDump, wikidataItems(3, (index) => (index === 0 ? 'Original' : `Item ${index}`)));
+    await writeFile(
+      leftDump,
+      wikidataItems(3, (index) => (index === 0 ? 'Original' : `Item ${index}`)),
+    );
     await writeFile(
       rightDump,
-      wikidataItems(3, (index) => (index === 0 ? 'Corrected \u202ehostile' : `Item ${index}`), (index) =>
-        index === 1 ? { aliases: { en: [{ language: 'en', value: 'Harbor alias' }] } } : {},
+      wikidataItems(
+        3,
+        (index) => (index === 0 ? 'Corrected \u202ehostile' : `Item ${index}`),
+        (index) => (index === 1 ? { aliases: { en: [{ language: 'en', value: 'Harbor alias' }] } } : {}),
       ),
     );
     const left = await completedPlan(directory, 'left-plan', leftDump);
@@ -64,7 +74,20 @@ test('compare CLI inspects two completed plans and returns to ordinary import wi
     const output = join(directory, 'comparison');
     const requests: string[] = [];
     const result = await runImportCli(
-      ['compare', '--left', left, '--right', right, '--output-dir', output, '--json', '--page', 'changed', '--record', 'Q1000'],
+      [
+        'compare',
+        '--left',
+        left,
+        '--right',
+        right,
+        '--output-dir',
+        output,
+        '--json',
+        '--page',
+        'changed',
+        '--record',
+        'Q1000',
+      ],
       {
         fetch: (async (input: RequestInfo | URL) => {
           requests.push(String(input));
