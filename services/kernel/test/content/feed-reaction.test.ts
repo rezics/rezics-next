@@ -136,7 +136,9 @@ test('Following feed projects native counts and only the current viewer slot for
     const sparse = await page(world.other.bearer, { kind: 'thread', limit: 1 });
     expect(sparse.feedItems).toEqual([]);
     expect(sparse.next).toBeString();
-    expect((await page(world.other.bearer, { kind: 'thread', limit: 1, cursor: sparse.next! })).feedItems).toHaveLength(1);
+    expect((await page(world.other.bearer, { kind: 'thread', limit: 1, cursor: sparse.next! })).feedItems).toHaveLength(
+      1,
+    );
     const selectedPost = await page(world.other.bearer, { kind: 'post', limit: 1 });
     expect(selectedPost.feedItems).toHaveLength(1);
     expect(selectedPost.next).toBeString();
