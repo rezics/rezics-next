@@ -28,11 +28,7 @@ describe('Realm rating controls', () => {
     expect(url.searchParams.get('filter')).toBe(filter);
     expect(url.searchParams.get('cursor')).toBeNull();
 
-    const relevance = searchSortHref(
-      'en',
-      { ...state, sort: 'rating', ratingPopulation: realmId },
-      'relevance',
-    );
+    const relevance = searchSortHref('en', { ...state, sort: 'rating', ratingPopulation: realmId }, 'relevance');
     const restored = new URL(relevance, 'https://rezics.invalid');
     expect(restored.searchParams.get('ratingPopulation')).toBe(realmId);
     expect(restored.searchParams.get('sort')).toBeNull();

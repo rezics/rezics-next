@@ -9,13 +9,7 @@ import {
   type RealmRatingReadiness,
 } from './rating-population';
 
-function ReadinessMessage({
-  readiness,
-  restartHref,
-}: {
-  readiness: RealmRatingReadiness;
-  restartHref: string;
-}) {
+function ReadinessMessage({ readiness, restartHref }: { readiness: RealmRatingReadiness; restartHref: string }) {
   switch (readiness.status) {
     case 'ready':
       return (
@@ -47,8 +41,8 @@ function ReadinessMessage({
     case 'refused':
       return (
         <p role="alert">
-          Native Search refused this Realm rating request. The population choice is separate from resource
-          membership; review the supported Realm choice or search conditions, or select Relevance.
+          Native Search refused this Realm rating request. The population choice is separate from resource membership;
+          review the supported Realm choice or search conditions, or select Relevance.
         </p>
       );
     case 'generation-change':
