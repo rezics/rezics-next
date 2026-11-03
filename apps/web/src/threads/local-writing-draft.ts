@@ -65,9 +65,9 @@ export const sameWritingScope = (a: WritingScope, b: WritingScope) => JSON.strin
 
 /** Explicit allowlist at the composer boundary; generic submission context is never serialized. */
 export function writingScope(input: {
-  boardId?: string;
-  containerId?: string;
-  replyTargetId?: string | null;
+  boardId?: string | undefined;
+  containerId?: string | undefined;
+  replyTargetId?: string | null | undefined;
   submissionContext?: unknown;
 }): WritingScope | null {
   const context = input.submissionContext;
@@ -180,7 +180,7 @@ export class BrowserWritingStore {
       if (exact?.state === 'unknown') throw new WritingError('changed');
       const matched = index.entries.find((entry) => entry.actor === actor && sameWritingScope(entry.scope, scope));
       const oldest = [...index.entries].sort((a, b) => a.updated - b.updated)[0];
-      const victim = !exact && (matched ?? (index.entries.length === writingLimits.entries ? oldest : undefined));
+      const victim = exact ? undefined : (matched ?? (index.entries.length === writingLimits.entries ? oldest : undefined));
       if (victim && consent !== victim.revision)
         return { replace: { revision: victim.revision, updated: victim.updated, expired: this.now() - victim.updated > writingLimits.age } };
       const occupied = new Set(index.entries.map((entry) => entry.slot));
