@@ -122,7 +122,9 @@ const outboxHistory: Population = {
   rows: ({ ordinal }) => {
     const other = controlPartitions[1 + (ordinal % (controlPartitions.length - 1))]!;
     const position = historyBase + 1 + ordinal;
-    return { 'core.outbox': [outbox(anchorPartition, position, ordinal), outbox(other, position, ordinal + 1_000_000)] };
+    return {
+      'core.outbox': [outbox(anchorPartition, position, ordinal), outbox(other, position, ordinal + 1_000_000)],
+    };
   },
   finish: async (admin) => {
     await admin.query(
@@ -195,10 +197,10 @@ beforeAll(async () => {
       [partition, historyBase, newId(partition * 16), eventType, { id: 'idle-control' }],
     );
   }
-  await db.admin.query(`UPDATE core.partition p SET position = GREATEST(p.position, $2) WHERE p.partition_no = ANY($1)`, [
-    controlPartitions,
-    historyBase,
-  ]);
+  await db.admin.query(
+    `UPDATE core.partition p SET position = GREATEST(p.position, $2) WHERE p.partition_no = ANY($1)`,
+    [controlPartitions, historyBase],
+  );
   await db.admin.query(
     `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
      SELECT partition_no, $1, 1, 1 FROM unnest($2::integer[]) AS partition_no`,
