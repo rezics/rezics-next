@@ -12,6 +12,10 @@ export const RatingVoteInputSchema = strictContentSchema(t.Object({ units: t.Int
 export const ClassificationBallotInputSchema = strictContentSchema(
   t.Object({ assessment: t.Union([t.Literal('support'), t.Literal('oppose')]), falsePositive: t.Boolean() }, closed),
 );
+export const ClassificationBallotMutationQuerySchema = t.Object(
+  { expectedRevision: t.Optional(t.String({ minLength: 1, maxLength: 19, pattern: '^[1-9][0-9]*$' })) },
+  closed,
+);
 export const ClassificationBallotSetResponseSchema = t.Object(
   {
     associationId: id,

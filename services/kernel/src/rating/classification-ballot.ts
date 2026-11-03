@@ -33,6 +33,7 @@ export type SetClassificationBallotInput = {
   associationId: string;
   assessment: Assessment;
   falsePositive: boolean;
+  expectedRevision?: string;
 };
 export type BallotSlot = {
   binding_hash: Buffer;
@@ -69,6 +70,19 @@ export class ClassificationBallotInvalidError extends Error {
     super(`Invalid classification ballot field: ${field}`);
     this.name = 'ClassificationBallotInvalidError';
   }
+}
+
+export class ClassificationBallotConflictError extends Error {
+  constructor() {
+    super('Classification ballot revision changed');
+    this.name = 'ClassificationBallotConflictError';
+  }
+}
+
+function validateExpectedRevision(value: string | undefined): void {
+  if (value === undefined) return;
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value) || BigInt(value) > 9_223_372_036_854_775_807n)
+    throw new ClassificationBallotInvalidError('expectedRevision');
 }
 
 export function classificationAggregateView(associationId: string, row: Aggregate | null) {
@@ -197,6 +211,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
     )
       throw new ClassificationBallotInvalidError('assessment');
     if (typeof input.falsePositive !== 'boolean') throw new ClassificationBallotInvalidError('falsePositive');
+    validateExpectedRevision(input.expectedRevision);
     if (routeOf(input.subjectId) === null || routeOf(input.associationId) === null)
       throw new ClassificationBallotNotFoundError();
 
@@ -240,6 +255,8 @@ export function createClassificationBallotCommands(config: Dependencies) {
           subject_id: prepared.subjectId,
           association_id: prepared.associationId,
         })) as BallotSlot | null;
+        if (input.expectedRevision !== undefined && prior?.revision !== input.expectedRevision)
+          throw new ClassificationBallotConflictError();
         if (prior && hashBytes(prior.binding_hash) !== prepared.bindingHash)
           throw new ClassificationBallotNotFoundError();
         const unchanged =
@@ -289,16 +306,23 @@ export function createClassificationBallotCommands(config: Dependencies) {
 
   /** DELETE is deliberately own-account only. It returns no slot state, so a person can withdraw
    * their own retained ballot after association visibility is lost without learning anything. */
-  async function clear(actor: Actor, subjectId: string, associationId: string, idempotencyKey: string): Promise<void> {
+  async function clear(
+    actor: Actor,
+    subjectId: string,
+    associationId: string,
+    idempotencyKey: string,
+    expectedRevision?: string,
+  ): Promise<void> {
     const owner = account(actor, CLASSIFICATION_BALLOT_SET);
     if (routeOf(subjectId) === null || routeOf(associationId) === null) throw new ClassificationBallotNotFoundError();
+    validateExpectedRevision(expectedRevision);
     await runner.ownAccountPrepared(
       actor,
       {
         action: CLASSIFICATION_BALLOT_SET,
         kind: 'rating.classification-ballot.clear',
         requestKey: idempotencyKey,
-        input: { subjectId, associationId },
+        input: { subjectId, associationId, ...(expectedRevision === undefined ? {} : { expectedRevision }) },
         prepare: async (attempt) =>
           readCurrentClassificationAssociation({
             pool,
@@ -322,6 +346,8 @@ export function createClassificationBallotCommands(config: Dependencies) {
           subject_id: subjectId,
           association_id: associationId,
         })) as BallotSlot | null;
+        if (expectedRevision !== undefined && prior?.revision !== expectedRevision)
+          throw new ClassificationBallotConflictError();
         if (current && prior && hashBytes(prior.binding_hash) !== current.bindingHash)
           throw new ClassificationBallotNotFoundError();
         if (!prior || prior.assessment === null) {

@@ -1447,3 +1447,102 @@ Decision: support fraction is support divided by support plus oppose, false-posi
 **Bound:** No actor-home query, request-time count or scan. Suppressed responses omit the stored numeric totals.
 
 **Growth check:** One aggregate and one retained contribution per actor/association; actor cleanup visits at most 50 indexed slots per durable step.
+
+### Return to classification assessments
+
+`GET /v1/me/classification-assessments` returns only the authenticated account's current retained classification slots.
+The cursor is sealed to the account, client, authentication epoch, actor lifecycle generation, selected exact slot and
+raw `(subject, association)` order. Each response selects at most 20 raw slots. `selectedSubjectId` and
+`selectedAssociationId` may independently promote one exact owned slot; the selected key is excluded from the raw
+page so it appears once in a traversal. The response says `complete: false` for lifetime coverage: withdrawn,
+superseded and removed inventory is not reconstructed. `traversal` and `next` describe only the current retained
+generation.
+
+The association identity includes its current Semantic candidate, slot, property, Global Context, release, revision,
+statement digest and qualifier digest. The page exposes current Work and Concept summaries only while the exact
+association and both identities remain readable. If visibility is gone, a retained own slot has no old label,
+qualifier or destination; only the existing own-account withdrawal may remain. The `set` and `clear` links carry the
+slot revision as `expectedRevision`. A stale link returns 409; clients refresh the page before trying again. These
+links describe current advice only. The mounted commands repeat current authorization and keep their receipt/replay
+rules.
+
+Decision: When current Semantic disclosure is absent, return a retained own slot without labels, qualifiers,
+destinations or aggregate only when the existing own-account clear action is available; otherwise omit it while
+advancing the raw continuation.
+
+Native classification counts use the existing five-ballot suppression rule. The provider's confidence and lie flag
+remain source data from `POST /v1/subjects/:id/source-classifications:read`; this page returns no source figure and
+never combines it with native counts.
+
+Populated response:
+
+```json
+{
+  "viewer": { "accountId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702001" },
+  "inventory": { "kind": "current-retained", "complete": false, "generation": "1", "cleanup": "settled" },
+  "items": [{
+    "state": "available",
+    "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
+    "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
+    "subject": { "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101", "type": "schema:Book", "label": "Example book", "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101" },
+    "target": { "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103", "type": "skos:Concept", "label": "Mystery", "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702103" },
+    "association": {
+      "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
+      "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
+      "slotId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702104",
+      "property": "schema:keywords",
+      "targetId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103",
+      "contextId": "00000000-0000-8000-8000-000000000000",
+      "origin": "global",
+      "release": "example-release-digest",
+      "revision": 3,
+      "bindingHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "statementDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "qualifiersDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "pending" },
+    "aggregate": { "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "state": "suppressed", "pending": "unknown" },
+    "actions": {
+      "state": "editable",
+      "readback": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment",
+      "set": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1",
+      "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1"
+    }
+  }],
+  "traversal": "complete",
+  "next": null
+}
+```
+
+An empty current inventory has the same viewer and retention fields with `items: []`, `traversal: "complete"` and
+`next: null`. If association visibility is lost but the current own-account rule still permits withdrawal, the retained
+slot is minimal:
+
+```json
+{
+  "state": "withheld",
+  "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
+  "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
+  "subject": null,
+  "target": null,
+  "association": null,
+  "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "unknown" },
+  "aggregate": null,
+  "actions": { "state": "withdraw-only", "readback": null, "set": null, "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1" }
+}
+```
+
+Signed-out and revoked callers receive distinct current authorization errors; completed withdrawal is `204 No Content`.
+The retryable dependency failure returns no partial page or replacement cursor, so the caller retries the same frontier.
+
+```json
+{ "type": "https://rezics.com/problems/authentication_required", "title": "Authentication Required", "status": 401, "code": "authentication_required", "retryable": false, "effect_status": "not_applicable", "request_id": "request-id" }
+{ "type": "https://rezics.com/problems/forbidden", "title": "Forbidden", "status": 403, "code": "forbidden", "retryable": false, "effect_status": "not_applicable", "request_id": "request-id" }
+{ "type": "https://rezics.com/problems/partition_unavailable", "title": "Partition Unavailable", "status": 503, "code": "partition_unavailable", "retryable": true, "effect_status": "not_applicable", "request_id": "request-id" }
+```
+
+### Cost: own classification page
+
+- Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution and aggregate reads each use supplied-key joins, capped at 21 identities per represented association home.
+- Bound: Raw slots are fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters, and a 1 MiB serialized body ceiling. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
+- Growth check: `classification-ballot-own-page.test.ts` creates real Semantic associations and ballots, traverses more than one page and checks selected-item deduplication, stale revision, withdrawal and viewer isolation. Independent 256/1024/4096 unrelated-slot growth and strict physical-prefix plans remain controller native acceptance; they were deferred by this attempt's validation policy.

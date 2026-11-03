@@ -42,10 +42,16 @@ import {
   CLASSIFICATION_BALLOT_READ_AGGREGATE,
   CLASSIFICATION_BALLOT_READ_OWN,
   CLASSIFICATION_BALLOT_SET,
+  ClassificationBallotConflictError,
   ClassificationBallotInvalidError,
   ClassificationBallotNotFoundError,
   createClassificationBallotCommands,
 } from './classification-ballot.ts';
+import { createClassificationBallotOwnPageReader } from './classification-ballot-own-page.ts';
+import {
+  ClassificationBallotOwnPageQuerySchema,
+  ClassificationBallotOwnPageSchema,
+} from './classification-ballot-own-page-schemas.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 import { createOwnVotesReader } from './own-votes-page.ts';
 import { OwnVotesPageQuerySchema, OwnVotesPageSchema } from './own-votes-schemas.ts';
@@ -54,6 +60,7 @@ import {
   RatingPopulationPageResponseSchema,
   ClassificationBallotAggregateResponseSchema,
   ClassificationBallotInputSchema,
+  ClassificationBallotMutationQuerySchema,
   ClassificationBallotOwnResponseSchema,
   ClassificationBallotSetResponseSchema,
   RatingQuestionCreateInputSchema,
@@ -127,12 +134,12 @@ function publicReadDetail(operationId: string, action: string) {
 function classificationDetail(
   operationId: string,
   action: string,
-  options: { publicRead?: boolean; write?: boolean } = {},
+  options: { publicRead?: boolean; write?: boolean; personal?: boolean } = {},
 ) {
   return {
     operationId,
     'x-action': action,
-    'x-exposure': 'public',
+    'x-exposure': options.personal ? 'gate:personal_library' : 'public',
     'x-resource-types': ['semantic.subject'],
     security: options.publicRead ? [{ bearerAuth: [] }, {}] : bearer,
     ...(options.write ? { 'x-rate-limit': writeRate } : {}),
@@ -178,6 +185,7 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     if (error instanceof RatingQuestionRetiredError || error instanceof QuestionLifecycleConflictError)
       throw new ProblemError('conflict');
     if (error instanceof ClassificationBallotNotFoundError) throw new ProblemError('not_found');
+    if (error instanceof ClassificationBallotConflictError) throw new ProblemError('conflict');
     if (error instanceof ClassificationBallotInvalidError)
       throw new ProblemError('invalid_request', {
         errors: [{ pointer: `/${error.field}`, code: 'out_of_range' }],
@@ -214,6 +222,37 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         set.headers['cache-control'] = 'no-store';
         return admission.run('normal', job, () =>
           command(() => createOwnVotesReader(config()).page(actor, query, job.deadline)),
+        );
+      },
+    )
+    .get(
+      '/v1/me/classification-assessments',
+      {
+        query: ClassificationBallotOwnPageQuerySchema,
+        response: { 200: ClassificationBallotOwnPageSchema, ...aggregateFailures },
+        detail: classificationDetail(
+          'classification_ballot.own_page',
+          CLASSIFICATION_BALLOT_READ_OWN,
+          { personal: true },
+        ),
+      },
+      async ({ actor, query, admission, job, set }) => {
+        requireClassificationAccount(actor, CLASSIFICATION_BALLOT_READ_OWN);
+        if ((query.selectedSubjectId === undefined) !== (query.selectedAssociationId === undefined))
+          throw new ProblemError('invalid_request');
+        set.headers['cache-control'] = 'no-store';
+        const selected =
+          query.selectedSubjectId && query.selectedAssociationId
+            ? { subjectId: query.selectedSubjectId, associationId: query.selectedAssociationId }
+            : undefined;
+        return admission.run('normal', job, () =>
+          command(() =>
+            createClassificationBallotOwnPageReader(config()).page(
+              actor,
+              { ...(query.cursor === undefined ? {} : { cursor: query.cursor }), ...(selected ? { selected } : {}) },
+              job.deadline,
+            ),
+          ),
         );
       },
     )
@@ -424,12 +463,13 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/classification-associations/:associationId/assessment',
       {
         params: t.Object({ id, associationId: id }, closed),
+        query: ClassificationBallotMutationQuerySchema,
         headers,
         body: ClassificationBallotInputSchema,
         response: { 200: ClassificationBallotSetResponseSchema, ...failures },
         detail: classificationDetail('classification_ballot.set', CLASSIFICATION_BALLOT_SET, { write: true }),
       },
-      async ({ actor, params, body, headers, admission, job }) => {
+      async ({ actor, params, body, query, headers, admission, job }) => {
         requireClassificationAccount(actor, CLASSIFICATION_BALLOT_SET, params.id, params.associationId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
@@ -441,6 +481,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 associationId: params.associationId,
                 assessment: body.assessment,
                 falsePositive: body.falsePositive,
+                ...(query.expectedRevision === undefined ? {} : { expectedRevision: query.expectedRevision }),
               },
               key,
             ),
@@ -453,15 +494,18 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/classification-associations/:associationId/assessment',
       {
         params: t.Object({ id, associationId: id }, closed),
+        query: ClassificationBallotMutationQuerySchema,
         headers,
         response: { 204: t.Void(), ...failures },
         detail: classificationDetail('classification_ballot.clear', CLASSIFICATION_BALLOT_SET, { write: true }),
       },
-      async ({ actor, params, headers, admission, job, set }) => {
+      async ({ actor, params, query, headers, admission, job, set }) => {
         requireClassificationAccount(actor, CLASSIFICATION_BALLOT_SET, params.id, params.associationId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         await admission.run('normal', job, () =>
-          command(() => classificationBallots().clear(actor, params.id, params.associationId, key)),
+          command(() =>
+            classificationBallots().clear(actor, params.id, params.associationId, key, query.expectedRevision),
+          ),
         );
         set.status = 204;
       },
