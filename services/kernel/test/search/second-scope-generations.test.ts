@@ -272,6 +272,10 @@ test('the public reader preserves Collection typed readiness instead of returnin
     asOf: async () => new Date().toISOString(),
   });
   await expect(
-    search('anonymous', {}, { actor: { kind: 'anonymous' }, access: {} as never, deadline: Date.now() + 10_000 }),
+    search(
+      'anonymous',
+      { representation: 'discovery-v1' },
+      { actor: { kind: 'anonymous' }, access: {} as never, deadline: Date.now() + 10_000 },
+    ),
   ).rejects.toBe(failure);
 });
