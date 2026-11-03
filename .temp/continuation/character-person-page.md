@@ -29,10 +29,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "The installed universal API and character/person page find characters by admitted trait/gender concepts and same-statement appearances/roles, and people by active released credits and selected works, including repeated voice credits for different characters."
-    - "Thresholds 0/1/2 govern membership and every returned label, context, and link; unavailable or hidden evidence stays unknown under Boolean/NOT, and stale source or release changes retire unsafe pages and continuations."
-    - "The localized /search/characters journey preserves mode, name, works, role, ordered languages, threshold, sort, and pagination through reload/back navigation; request/principal/locale/release changes retire stale output and repair states remain usable in eight locales."
-    - "Native 1x/4x/16x growth runs the installed route and compares every touched pool with the derived whole-page bound, including high-degree actors, sparse qualifiers, dense rejects, overflow, and current mutations."
+    - 'The installed universal API and character/person page find characters by admitted trait/gender concepts and same-statement appearances/roles, and people by active released credits and selected works, including repeated voice credits for different characters.'
+    - 'Thresholds 0/1/2 govern membership and every returned label, context, and link; unavailable or hidden evidence stays unknown under Boolean/NOT, and stale source or release changes retire unsafe pages and continuations.'
+    - 'The localized /search/characters journey preserves mode, name, works, role, ordered languages, threshold, sort, and pagination through reload/back navigation; request/principal/locale/release changes retire stale output and repair states remain usable in eight locales.'
+    - 'Native 1x/4x/16x growth runs the installed route and compares every touched pool with the derived whole-page bound, including high-degree actors, sparse qualifiers, dense rejects, overflow, and current mutations.'
   workerOwned: true
 estimate:
   lines: 1200
