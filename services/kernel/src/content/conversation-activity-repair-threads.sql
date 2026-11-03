@@ -2,8 +2,7 @@ WITH input AS (
   SELECT :first_route::integer AS first_route,
          :last_route::integer AS last_route,
          :after_route::nullable(integer) AS after_route,
-         :after_thread_id::nullable(uuid) AS after_thread_id,
-         :limit::integer AS page_limit
+         :after_thread_id::nullable(uuid) AS after_thread_id
 )
 SELECT thread.route, thread.thread_id, thread.first_post_id,
        thread.security_revision::text AS thread_security_revision,
@@ -17,4 +16,4 @@ WHERE thread.route BETWEEN input.first_route AND input.last_route
       (COALESCE(input.after_route, input.first_route - 1),
        COALESCE(input.after_thread_id, '00000000-0000-0000-0000-000000000000'::uuid))
 ORDER BY thread.route, thread.thread_id
-LIMIT input.page_limit;
+LIMIT :limit::integer;
