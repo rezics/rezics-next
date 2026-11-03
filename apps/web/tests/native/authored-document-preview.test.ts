@@ -2,7 +2,12 @@ import { afterAll, expect as bunExpect, setDefaultTimeout, test } from 'bun:test
 import { documentText, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { expect } from 'playwright/test';
 import { m } from '../../src/paraglide/messages.js';
-import { authoredDocumentError, authoredStatement, validateAuthored } from '../../src/features/catalogue/authored-field';
+import {
+  authoredDocumentError,
+  authoredDocumentErrors,
+  authoredStatement,
+  validateAuthored,
+} from '../../src/features/catalogue/authored-field';
 import type { StatementInput } from '../../src/features/catalogue/statement-editor';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
@@ -90,6 +95,12 @@ test('malformed authored documents stay unchanged and grouped evidence stays exa
   bunExpect(malformed).toEqual(original);
   bunExpect(statement.references).toEqual(references);
   bunExpect(statement.references).not.toBe(references);
+
+  const oversizedWithMedia = fromPlainText('x'.repeat(2 * 1024 * 1024)) as unknown as {
+    doc: { content: { type: string }[] };
+  };
+  oversizedWithMedia.doc.content.push({ type: 'media' });
+  bunExpect(authoredDocumentErrors(oversizedWithMedia)).toEqual(['out_of_range', 'unsupported']);
 });
 
 test('a contributor previews, edits, submits and explicitly selects the exact authored document', async () => {

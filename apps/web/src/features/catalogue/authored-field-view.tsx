@@ -10,8 +10,7 @@ import {
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
-import { catalogueEditor } from './editor-lifetime';
+import { catalogueEditor, useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { RichTextEditor } from '@rezics/ui';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';

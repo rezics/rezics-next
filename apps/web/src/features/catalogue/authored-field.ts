@@ -86,24 +86,36 @@ export function authoredStatement(
 }
 
 /** A preview accepts only the same bounded, authored document shapes that native validation accepts. */
-export function authoredDocumentError(document: unknown): Violation['code'] | undefined {
-  if (!checkDocument(document) || !hasDocumentContent(document)) return 'invalid_format';
-  if (new TextEncoder().encode(serializeDocument(document)).byteLength > 2 * 1024 * 1024) return 'out_of_range';
-  const pending = [document.doc];
-  while (pending.length) {
-    const node = pending.pop()!;
-    if (node.type === 'image' || node.type === 'media') return 'unsupported';
-    pending.push(...(node.content ?? []));
+export function authoredDocumentErrors(document: unknown): Violation['code'][] {
+  const valid = checkDocument(document);
+  const errors: Violation['code'][] = [];
+  if (!valid || !hasDocumentContent(document)) errors.push('invalid_format');
+  if (valid) {
+    if (new TextEncoder().encode(serializeDocument(document)).byteLength > 2 * 1024 * 1024)
+      errors.push('out_of_range');
+    const pending = [document.doc];
+    while (pending.length) {
+      const node = pending.pop()!;
+      if (node.type === 'image' || node.type === 'media') {
+        errors.push('unsupported');
+        break;
+      }
+      pending.push(...(node.content ?? []));
+    }
   }
-  return undefined;
+  return errors;
+}
+
+export function authoredDocumentError(document: unknown): Violation['code'] | undefined {
+  return authoredDocumentErrors(document)[0];
 }
 
 export function validateAuthored(statement: unknown, release?: Release): Violation[] {
   const errors = checkStatementInput(statement, release, { authoredDocuments: true }).violations;
   const value = statement as { value?: { content?: { document?: unknown } } } | null;
   const document = value?.value?.content?.document;
-  const documentError = authoredDocumentError(document);
-  if (documentError) errors.push({ pointer: '/statement/value/content/document', code: documentError });
+  for (const code of authoredDocumentErrors(document))
+    errors.push({ pointer: '/statement/value/content/document', code });
   return errors;
 }
 
