@@ -86,7 +86,10 @@ test('creating a story arc keeps parent linking, read recovery, and selection as
     status: 503,
     body: '{"title":"Temporarily unavailable"}',
   });
-  await page.getByRole('button', { name: 'Create subject', exact: true }).click();
+  const create = page.getByRole('button', { name: 'Create subject', exact: true });
+  await create.click();
+  await playExpect(page.getByRole('region', { name: 'Review this story arc' })).toBeVisible();
+  await create.click();
   await playExpect(page.getByRole('status').filter({ hasText: 'Subject created.' })).toBeVisible();
   await playExpect(
     page.getByText('The subject was created, but its ordinary reader is unavailable. Retry opening it.'),

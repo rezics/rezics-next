@@ -16,8 +16,8 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import { pageText } from '../pages/data';
 import { ViewHeadingActions } from '../pages/view-heading';
-import { CreateSubjectForm } from './create-subject-form';
 import type { CreateResult } from './create-subject';
+import { StoryArcCreate } from './story-arc-create';
 import { EditorFailure } from './statement-editor-view';
 import { SubjectFacts } from './subject-facts-view';
 import { CharacterClassifications } from './character-profile-classification';
@@ -347,26 +347,17 @@ function StoryArcProfileLive({
                   if (canEdit() && items[0]) choose({ id: items[0].id });
                 }}
               />
-              <CreateSubjectForm
+              <StoryArcCreate
                 locale={locale}
                 session={session}
-                transport={transport.creation}
-                onNavigate={() => {}}
+                transport={transport}
+                release={privateRead.release}
+                work={work}
+                href={address}
                 onCreated={setCreated}
                 navigation={({ dirty, pending, confirmed }) => (
                   <StoryArcDraftDeparture dirty={!confirmed && dirty} pending={!confirmed && pending} />
                 )}
-                profile={{
-                  scope: 'story-arc',
-                  hideHeading: true,
-                  readOnlyType: true,
-                  fields: () => null,
-                  prepare: (item) => ({ item, errors: [] }),
-                  type: storyArcType,
-                  title: m.story_arc_create({}, o),
-                  intro: m.story_arc_creation_help({}, o),
-                  href: address,
-                }}
               />
               {created?.reader.state === 'ready' && (
                 <a

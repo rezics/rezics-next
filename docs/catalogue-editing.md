@@ -391,11 +391,15 @@ without silently submitting to Global. A physical volume, release, season or pag
 an arc. The editor selects real native IDs and the current emitted Type and properties; it creates no schema,
 mapping or inferred membership.
 
-Initial creation reuses the ordinary multilingual terms form, its frozen retry key and actual created-Subject
-reread. The form creates names first; existing names link to the terms editor. Later scalar and classification
-facts reuse the shared multi-field/statement controls and candidate review, with independent partial results.
-The workspace links to the actual Subject and its current context review. A created identity and a proposed fact
-remain separate outcomes; a concealed or unavailable reader never becomes a fabricated success preview.
+Initial creation reuses the ordinary multilingual terms form, its frozen retry key and exact created-Subject
+reread. It also binds only the current StoryArc Type's admitted scalar properties, with independent statement,
+qualifier and grouped-reference holders, to that same prepared item. The contributor reviews the complete native
+item and repairs native diagnostics before confirming. The workspace retains the acknowledged UUID and offers an
+explicit continue action; a work query remains a suggestion and creates no membership. A concealed or unavailable
+reader never becomes a fabricated success preview.
+
+Decision: the current StoryArc release gives its scalar properties no qualifier slots, so initial evidence uses
+their declared multiplicity and complete citation groups without inventing qualifier vocabulary.
 
 An explicitly selected existing parent work owns the forward `rezics:storyArc` relation. Its shared relationship
 editor retains exact arc target slots, `schema:position`, `rezics:firstPart`, `rezics:lastPart` and grouped citations
