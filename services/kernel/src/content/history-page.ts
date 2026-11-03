@@ -24,9 +24,10 @@ type Dependencies = Readonly<{
   tokens: KeyRing;
   now(): number;
   observe(revisionId?: string): Promise<HistoryPostObservation>;
-  select(after: RevisionKey | null, limit: number): Promise<
-    Anchored<Readonly<{ candidates: readonly RevisionKey[]; nextKey: RevisionKey | null }>>
-  >;
+  select(
+    after: RevisionKey | null,
+    limit: number,
+  ): Promise<Anchored<Readonly<{ candidates: readonly RevisionKey[]; nextKey: RevisionKey | null }>>>;
   unavailable(): never;
 }>;
 
