@@ -77,6 +77,8 @@ or copies a body. Author labels are bounded to 120 code points and licence label
 Deleted authors follow the existing Byline disclosure and do not reveal retained names or handles. Missing
 identity batches remain unknown; selecting a row cannot fetch an author. Counts and provenance presence use
 only admitted metadata, without comparing neighbouring revisions or deriving an edit explanation.
+Removed and unavailable rows use only their originating page's author disclosure, retained by the history
+owner beside that entry. A merged identity batch from another page cannot fill in a missing author.
 
 One selected index and one destination value describe the entire inspection state. No expansion map or per-body
 cache is created. At most one inspector mounts, using the original DocumentBody, media authorization and

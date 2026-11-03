@@ -60,8 +60,12 @@ export function projectRevisionSummaries(
   authors: HistoryPage['authors'],
   locale: string,
 ): RevisionSummary[] {
-  return entries.map(({ revision }, index) => {
-    const author = authorDisclosure(authors?.[revision.authorId], locale);
+  return entries.map((entry, index) => {
+    const { revision } = entry;
+    const author = authorDisclosure(
+      revision.availability === 'available' ? authors?.[revision.authorId] : entry.summaryAuthor,
+      locale,
+    );
     return {
       index,
       postId: revision.id,

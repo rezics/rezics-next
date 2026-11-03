@@ -222,7 +222,11 @@ function HistoryDisclosure({
         return;
       }
       const page = result.data;
-      const entries = page.revisions.map((revision) => ({ revision, documentMedia: page.documentMedia }));
+      const entries = page.revisions.map((revision) => ({
+        revision,
+        documentMedia: page.documentMedia,
+        summaryAuthor: page.authors?.[revision.authorId],
+      }));
       if (cursor !== undefined && entries.length > 0 && lifetime.snapshot().open) {
         setAdditionStatus(m.revision_history_added({ count: new Intl.NumberFormat(locale).format(entries.length) }));
       }

@@ -176,6 +176,18 @@ test('1/10/100 supplied revisions project once per row without touching bodies, 
     expect(boundedHistoryText('abc', 0)).toBe('');
     expect(boundedHistoryText('abc', 3)).toBe('abc');
     expect(boundedHistoryText('😀😀😀😀', 3)).toBe('😀😀…');
+    const removed = { ...selected, availability: 'erased' as const, body: null, sha256: null, removed: true as const };
+    expect(
+      projectRevisionSummaries([{ revision: removed, documentMedia: { kind: 'unavailable' } }], authors, 'en')[0]
+        ?.author,
+    ).toBe(m.thread_author_unknown());
+    expect(
+      projectRevisionSummaries(
+        [{ revision: removed, documentMedia: { kind: 'unavailable' }, summaryAuthor: author }],
+        authors,
+        'en',
+      )[0]?.author,
+    ).toBe(author.displayName);
     expect(calls).toBe(0);
   } finally {
     await view.dispose();

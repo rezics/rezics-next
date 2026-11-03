@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import type { PageAuthor } from '../identity/read';
 import type { readPostHistory } from './reads';
 import {
   createHistoricalReadBinding,
@@ -32,7 +33,12 @@ export type HistoryView = {
   loaded: boolean;
   available: boolean;
   failedCursor: string | undefined;
-  revisions: { revision: HistoryPage['revisions'][number]; documentMedia: HistoryPage['documentMedia'] }[];
+  revisions: {
+    revision: HistoryPage['revisions'][number];
+    documentMedia: HistoryPage['documentMedia'];
+    /** The originating page's author disclosure; removed rows never borrow a later/earlier page's identity. */
+    summaryAuthor?: PageAuthor | undefined;
+  }[];
   authors: HistoryPage['authors'];
   mentions: HistoryPage['mentions'];
   subjects: HistoryPage['subjects'];
