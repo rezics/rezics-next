@@ -96,6 +96,12 @@ async function createBoard(): Promise<{ board: Board; realmId: string }> {
       crypto.randomUUID(),
     ],
   );
+  await json(author, 'POST', '/v1/roleGrants', {
+    resource: { route: routeOf(realm.realmId), id: realm.realmId },
+    subject: { kind: 'account', id: member().actor.accountId },
+    role: 'community.realm.member',
+    valid: '(,)',
+  });
   return { board, realmId: realm.realmId };
 }
 
@@ -240,13 +246,14 @@ test.serial(
       const decisions = await prepare.call(system.access, input);
       return {
         ...decisions,
-        async decide(client, input) {
+        async decide(...args: Parameters<typeof decisions.decide>) {
+          const input = args[1];
           if (!held && input.action === 'thread:read') {
             held = true;
             entered.resolve();
             await released.promise;
           }
-          return decisions.decide(client, input);
+          return decisions.decide(...args);
         },
       };
     };
