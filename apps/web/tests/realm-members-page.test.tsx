@@ -114,12 +114,23 @@ test('producer lifetime retirement conceals the mounted page and delayed selecti
     let selections = 0;
     await render({
       ...fixture,
-      observe: () => ({ current: () => current, subscribe: (listener) => {
-        notify = listener;
-        return () => { stops++; };
-      } }),
-      readPage: async (address) => { pages++; return phase === 'page' ? pending.promise : fixture.readPage(address); },
-      readSelected: async (address) => { selections++; return phase === 'return' ? fixture.readSelected(address) : selected.promise; },
+      observe: () => ({
+        current: () => current,
+        subscribe: (listener) => {
+          notify = listener;
+          return () => {
+            stops++;
+          };
+        },
+      }),
+      readPage: async (address) => {
+        pages++;
+        return phase === 'page' ? pending.promise : fixture.readPage(address);
+      },
+      readSelected: async (address) => {
+        selections++;
+        return phase === 'return' ? fixture.readSelected(address) : selected.promise;
+      },
     });
     if (phase !== 'page') await click(m.realm_members_inspect());
     await act(async () => {
@@ -139,7 +150,9 @@ test('producer lifetime retirement conceals the mounted page and delayed selecti
     const focus = document.activeElement;
     await act(async () => {
       pending.resolve(await fixture.readPage({ realmId: 'realm', cursor: null }));
-      selected.resolve(await fixture.readSelected({ realmId: 'realm', accountId: 'a', episode: 'episode', authority: 'grant' }));
+      selected.resolve(
+        await fixture.readSelected({ realmId: 'realm', accountId: 'a', episode: 'episode', authority: 'grant' }),
+      );
       await tick();
     });
     expect(host.textContent).not.toContain('Exact selected account');
