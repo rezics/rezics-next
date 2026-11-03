@@ -21,6 +21,8 @@ import {
 } from '../request/access.ts';
 import { readRealm } from '../community/realm.ts';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
+import { downloadMedia } from './media-download.ts';
+import type { DownloadVariant } from './media.ts';
 import type { OwnMediaInventoryPage } from './schemas.ts';
 import insertLocator from './own-media-locator.sql';
 import page from './own-media-page.sql';
@@ -454,6 +456,39 @@ async function currentRealmActions(
   return candidates.map((candidate) => updates.get(candidate.row.id) ?? candidate);
 }
 
+/** Ownership qualifies the private row, while the existing byte transport owns
+ * its disclosure chain. Keep only actual slots that transport currently admits;
+ * its internal storage decision never becomes part of the inventory DTO. */
+async function currentDownloadActions(
+  deps: OwnMediaDependencies,
+  actor: AccountActor,
+  candidates: readonly Candidate[],
+  deadline: number,
+): Promise<readonly Candidate[]> {
+  const qualified: Candidate[] = [];
+  for (const candidate of candidates) {
+    const read = candidate.actions.read;
+    // Realm slots already use the native authorizedRealmMedia reader above.
+    if (!read || candidate.row.container_kind === 'realm') {
+      qualified.push(candidate);
+      continue;
+    }
+    const variants: string[] = [];
+    for (const variant of read.variants) {
+      const decision = await downloadMedia(deps, candidate.row.id, actor, variant as DownloadVariant, { deadline });
+      if (decision.allowed) variants.push(variant);
+      // A transport timeout must not turn a failed dependency into withheld
+      // advice and consume this page's raw frontier.
+      if (Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+    }
+    qualified.push({
+      ...candidate,
+      actions: { ...candidate.actions, read: variants.length ? { ...read, variants } : null },
+    });
+  }
+  return qualified;
+}
+
 function entry(candidate: Candidate): OwnMediaInventoryPage['entries'][number] {
   const row = candidate.row;
   const createdAt = timestamp(row.created_at);
@@ -522,7 +557,12 @@ export async function readOwnMediaInventory(
   )
     .flat()
     .sort((left, right) => left.row.id.localeCompare(right.row.id));
-  const current = await currentRealmActions(deps, actor, candidates, deadline);
+  const current = await currentDownloadActions(
+    deps,
+    actor,
+    await currentRealmActions(deps, actor, candidates, deadline),
+    deadline,
+  );
   // Foreign Realm preparation releases its checkouts. Reprepare native media and
   // container Access and repeat exact object/variant episodes afterward; any
   // changed selected advice retires the response, preserving the input frontier.
@@ -537,6 +577,13 @@ export async function readOwnMediaInventory(
     .flat()
     .sort((left, right) => left.row.id.localeCompare(right.row.id));
   if (JSON.stringify(finalCandidates) !== JSON.stringify(candidates)) throw new ProblemError('dependency_unavailable');
+  const finalCurrent = await currentDownloadActions(
+    deps,
+    actor,
+    await currentRealmActions(deps, actor, finalCandidates, deadline),
+    deadline,
+  );
+  if (JSON.stringify(finalCurrent) !== JSON.stringify(current)) throw new ProblemError('dependency_unavailable');
   // Empty pages receive the same final viewer and home qualification. No failed
   // authority round can return a terminal empty page or consume a raw frontier.
   await within(deadline, () =>
