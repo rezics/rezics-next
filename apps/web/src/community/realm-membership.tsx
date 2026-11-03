@@ -57,7 +57,7 @@ export function RealmMembership({
       <NativeMembership
         realmId={realm.id}
         returnTo={returnTo}
-        spaceId={spaceId}
+        {...(spaceId ? { spaceId } : {})}
         observation={nativeObservation}
         session={session}
         subject={subject ?? null}
