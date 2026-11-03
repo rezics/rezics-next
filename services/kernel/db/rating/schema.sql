@@ -1226,7 +1226,10 @@ CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no
 
 CREATE UNIQUE INDEX vote_counted_target_idx ON rating.vote USING btree (route, voter_id, question_id, counted_target) WHERE (counted_target IS NOT NULL);
 
+
+--
 -- Name: vote_own_current_page_idx; Type: INDEX; Schema: rating; Owner: -
+--
 
 CREATE INDEX vote_own_current_page_idx ON rating.vote USING btree (route, voter_id, question_id, target_id) INCLUDE (units, revision, changed_at, counted_target) WHERE (units IS NOT NULL);
 
