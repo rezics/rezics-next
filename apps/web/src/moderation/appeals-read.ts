@@ -1,4 +1,4 @@
-import { SESSION_HEADER, type KernelClient } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import { decodeJwt } from 'jose';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
@@ -292,6 +292,9 @@ export function admitAppealInspection(
   const provenance = page.provenance;
   const selected = page.selectedAppeal;
   if (
+    !Array.isArray(page.appeals) ||
+    page.appeals.length > MODERATION_APPEALS_PAGE_SIZE ||
+    (page.next !== null && typeof page.next !== 'string') ||
     !origin ||
     origin.subject !== viewerId ||
     !origin.csrfFingerprint ||

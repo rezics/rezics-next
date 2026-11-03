@@ -146,6 +146,7 @@ test('composed inspection seam admits only current actor/session, exact outcome,
     ).selectedAppeal,
   ).toBe(resolved);
   for (const invalid of [
+    { ...page, appeals: Array.from({ length: 21 }, () => selected) },
     { ...page, provenance: { ...provenance, actorId: 'other' } },
     { ...page, provenance: { ...provenance, session: { clientId: 'other', authnEpoch: 1 } } },
     { ...page, provenance: { ...provenance, session: { clientId: 'web', authnEpoch: 2 } } },
