@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { authoritativeTimeValue, runCommand, type CommandEvent } from '../command/command.ts';
+import { authoritativeTimeValue, runCommand, type AuthoritativeTime, type CommandEvent, type CommandTransaction } from '../command/command.ts';
 import type { RatingCounter } from '../access/rating-counter.ts';
 import { applyRatingSegmentPageEvent } from './aggregate-effect.ts';
 import { withConnection } from '../database/pool.ts';
@@ -274,7 +274,7 @@ export async function finishRatingPopulationJob(
   for (const populationId of populationsForJob(job)) await changePopulationPending(pool, job, populationId, false);
 }
 
-/** Process one page in the voter's partition. The stored cursor makes a command replay return a checkpoint, not a page twice. */
+/** Page in the voter home; production receipts replay the committed page until its aggregate delivery completes. */
 export async function processRatingSegmentPage(
   pool: Pool,
   input: RatingSegmentJob & { after: SegmentCursor | null },
@@ -286,7 +286,7 @@ export async function processRatingSegmentPage(
     isRatingRekeyJob(input)
       ? { voterId: input.voterId, direction: 'rekey', at: input.at, allowMissing, votes }
       : { voterId: input.voterId, direction: input.direction, votes };
-  const outcome = await runCommand(pool, {
+  const options = {
     partition: partitionOf(voterRoute),
     ...(ratingCounter ? { receipt: {
       actorAccountId: input.voterId,
@@ -294,12 +294,11 @@ export async function processRatingSegmentPage(
       key: `${input.transitionId}:${input.after?.questionId ?? ''}:${input.after?.targetId ?? ''}`,
       digest: createHash('sha256').update(JSON.stringify(input)).digest(),
     } } : {}),
-  }, async (tx, command) => {
-    // The receipt replays the exact committed page, including after a crash before foreground delivery.
-    const result = await producePage();
-    return { ...result, value: { ...result.value, eventTime: authoritativeTimeValue(command.time) } };
-
-    async function producePage(): Promise<{ value: SegmentPageResult; events: CommandEvent[] }> {
+  };
+  const producePage = async (
+    tx: CommandTransaction,
+    command: { transactionId: string; time: AuthoritativeTime },
+  ): Promise<{ value: SegmentPageResult; events: CommandEvent[] }> => {
     if (isRatingEligibilityJob(input)) {
       const row = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
       const activeState = input.direction === 'removing' ? 'leaving' : 'returning';
@@ -570,7 +569,11 @@ export async function processRatingSegmentPage(
         })),
       ],
     };
-    }
+  };
+  const outcome = await runCommand(pool, options, async (tx, command) => {
+    // A crash before foreground delivery replays the exact page and its native source position.
+    const result = await producePage(tx, command);
+    return { ...result, value: { ...result.value, eventTime: authoritativeTimeValue(command.time) } };
   });
   if (!outcome) throw new Error('Voter partition is unavailable while paging rating votes');
   if (ratingCounter) {

@@ -492,7 +492,7 @@ export async function applyRatingSegmentPageEvent(
       questionId: string;
       targetId: string;
       countedTargetId?: string | null;
-          changedAt?: string;
+      changedAt?: string;
       units: number | null;
       revision: number;
     },
