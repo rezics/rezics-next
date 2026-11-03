@@ -33,6 +33,7 @@ import { observationsUsage, runObservationsCli } from './source-observation-cli.
 import { runPreviewCli } from './preview-cli.ts';
 import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
+import { retentionUsage, runRetentionCli } from './retention-cli.ts';
 import {
   admitDumpCompression,
   decodeDumpBytes,
@@ -61,6 +62,7 @@ export type ImportCliObserver = {
   onTokenRead?(path: string, bytes: number): void;
   onAccountKey?: CredentialsObserver['onAccountKey'];
   onDatabaseOpen?(path: string): void;
+  beforeRetentionPage?(input: { generation: string; phase: string }): void;
   onInputPass?(kind: 'dump' | 'vndb-entries'): void;
   onInputChunk?(kind: 'dump' | 'vndb-entries', bytes: number, backingBytes: number): void;
   onInputBuffer?(bytes: number): void;
@@ -125,6 +127,9 @@ function usage(): string {
     '       [--compression none|gzip] [--decode-budget <bytes>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
+    '       rezics-import retention --state <sqlite-path> --source <configured-source-id> [--after <id>] [--limit 1..100]',
+    '       rezics-import retention --state <sqlite-path> --source <configured-source-id> --generation <id> [--generation <id> ...] --output <plan-path>',
+    '       rezics-import retention --state <sqlite-path> --plan <plan-path> --confirm <plan-id> --apply',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
@@ -350,6 +355,21 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     });
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'diagnostics')
     return { code: 0, stdout: `${diagnosticsUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'retention')
+    return runRetentionCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      ...(options.observer?.onDatabaseOpen || options.observer?.beforeRetentionPage
+        ? {
+            observer: {
+              ...(options.observer.onDatabaseOpen ? { onDatabaseOpen: options.observer.onDatabaseOpen } : {}),
+              ...(options.observer.beforeRetentionPage ? { beforePage: options.observer.beforeRetentionPage } : {}),
+            },
+          }
+        : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'retention')
+    return { code: 0, stdout: `${retentionUsage()}\n`, stderr: '', openHandles: 0 };
   let config: Config;
   try {
     const parsed = parse(argv);

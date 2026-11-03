@@ -309,3 +309,24 @@ test('unfenced media intent cannot acknowledge without resolver, while fenced co
     await fenced.close();
   }
 });
+
+test('assertHeld and readOwner expose the exact held PID/birth capability', () => {
+  const dir = directory();
+  const session = new ImportSession(`${dir}/state.sqlite`);
+  try {
+    const own = session.acquire('wikidata');
+    if (own === 'busy') throw new Error('busy');
+    session.assertHeld(own);
+    const owner = session.readOwner('wikidata');
+    expect(owner?.pid).toBe(process.pid);
+    expect(owner?.birth).toBeString();
+    expect(() => session.assertHeld({ source: 'wikidata', capability: '0'.repeat(48) })).toThrow(
+      'Stale import ownership',
+    );
+    session.release(own);
+    expect(session.readOwner('wikidata')).toBeNull();
+  } finally {
+    session.close();
+    rmSync(dir, { recursive: true });
+  }
+});

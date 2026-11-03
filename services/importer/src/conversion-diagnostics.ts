@@ -325,7 +325,7 @@ export class ConversionDiagnosticsView {
       };
     if (this.capability === 'unsupported')
       return { source, generation: id, status: row.status, live: LIVE_STATUS.has(row.status), coverage: 'unsupported' };
-    if (!row.diagnostics_recorded)
+    if (row.status === 'retired' || row.status === 'retiring' || !row.diagnostics_recorded)
       return { source, generation: id, status: row.status, live: LIVE_STATUS.has(row.status), coverage: 'unavailable' };
     return {
       source,

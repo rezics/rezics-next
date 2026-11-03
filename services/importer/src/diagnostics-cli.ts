@@ -157,6 +157,10 @@ function openState(path: string): { database: Database; close(): void; handles: 
 function coverageLine(generation: ConversionDiagnosticGenerationView): string {
   if (generation.coverage === 'unsupported')
     return 'Evidence: unsupported on this database; conversion diagnostics require a current writer store.';
+  if (generation.status === 'retired')
+    return 'Evidence: deliberately retired; diagnostic vectors for this generation were removed and are unavailable.';
+  if (generation.status === 'retiring')
+    return 'Evidence: retirement is in progress; remaining diagnostic vectors are being removed and are unavailable for review.';
   if (generation.coverage === 'unavailable')
     return 'Evidence: unavailable for this generation; a recognized empty set is distinct from missing historical evidence.';
   const records = generation.diagnosticRecords ?? 0;
