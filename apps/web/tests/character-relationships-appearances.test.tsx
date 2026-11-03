@@ -19,7 +19,6 @@ import {
   characterAssociationStreams,
   unavailableConfigurations,
 } from '../src/features/catalogue/character-relationships/reading';
-import { CharacterRelationshipsView } from '../src/features/catalogue/character-relationships/view';
 import { characterType } from '../src/features/catalogue/character-profile';
 
 async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Promise<void>) => Promise<void>) {
@@ -151,6 +150,7 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
   expect(unreadableRead.rows).toEqual([]);
 
   const { m } = await import('../src/paraglide/messages.js');
+  const { CharacterRelationshipsView } = await import('../src/features/catalogue/character-relationships/view');
   await withHost(async (host, render) => {
     await render(
       h(CharacterRelationshipsView, {
