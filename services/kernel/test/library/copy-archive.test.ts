@@ -114,7 +114,7 @@ test('private paged inspection, original upload replay, cancellation, expiry and
 test('terminal account fencing denies inspection and bounded owner erasure removes evidence', async () => {
   const uploaded = await json(await send('POST','',artifact));
   await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
-    { actor: owner.actor, pool: f.pool, deadline: Date.now() + 30000 },
+    { actor: owner.actor, deadline: Date.now() + 30000 },
     { accountId: owner.actor.accountId, key: entryKey() });
   expect([401,403]).toContain((await send('GET',`/${uploaded.uploadId}`)).status);
   expect((await purgeOwnedGraphPage(f.pool,{ accountId: owner.actor.accountId, kind: 'copy_archive',

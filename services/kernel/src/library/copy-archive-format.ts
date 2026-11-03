@@ -119,6 +119,8 @@ function holding(value: Record<string, unknown>): ArchivedHolding {
   if (reference.id !== value.subject_id || reference.href !== `https://rezics.com/subjects/${value.subject_id}`) invalid();
   for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin'] as const) {
     try { decodeLibraryProfilePin(value[field]); } catch { invalid(); }
+    if (value[field] !== null && Object.values(object(value[field])).some((v) =>
+      typeof v === 'string' && (!v.isWellFormed() || v.includes('\u0000')))) invalid();
   }
   // Evidence only: no UUID, pin, revision or timestamp here is a command operand.
   return value as ArchivedHolding;
