@@ -135,12 +135,8 @@ test('current native identity and presentation follow membership completion and 
   await join();
   const rejoined = (await inventory(fixture.member)).items.find((item) => item.realmId === realm.realmId)!;
   expect(rejoined.current.viewer.membership.since).not.toBe(first.current.viewer.membership.since);
-  expect(rejoined.current.viewer.membership.reservationId).not.toBe(
-    first.current.viewer.membership.reservationId,
-  );
-  expect(rejoined.current.viewer.membership.transactionId).not.toBe(
-    first.current.viewer.membership.transactionId,
-  );
+  expect(rejoined.current.viewer.membership.reservationId).not.toBe(first.current.viewer.membership.reservationId);
+  expect(rejoined.current.viewer.membership.transactionId).not.toBe(first.current.viewer.membership.transactionId);
   expect(rejoined.current.actions.leave.state).toBe('available');
 
   // A revision between the locating read and first advice round cannot become
@@ -196,8 +192,7 @@ test('current native identity and presentation follow membership completion and 
   const owned = (await inventory(fixture.owner)).items.find((item) => item.realmId === realm.realmId)!;
   const manage = owned.current.actions.manage;
   expect(manage.state).toBe('available');
-  if (manage.state !== 'available' || manage.method !== 'GET')
-    throw new Error('Native management unavailable');
+  if (manage.state !== 'available' || manage.method !== 'GET') throw new Error('Native management unavailable');
   expect(
     (
       await driver.request({

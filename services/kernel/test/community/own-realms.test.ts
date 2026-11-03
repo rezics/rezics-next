@@ -1,20 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { closeCommunityDrivers, createCommunityDriver, queryCommunityDatabase } from './community-driver.ts';
-import type {
-  Account,
-  CommunityDriver,
-  CommunityGrowth,
-  Fixture,
-} from '../../../../specs/community-driver.ts';
+import type { Account, CommunityDriver, CommunityGrowth, Fixture } from '../../../../specs/community-driver.ts';
 import { partitionOf, newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
-const growthBounds = {
-  rows: 'constant',
-  blocks: 'logarithmic',
-  statements: 'constant',
-} as const;
+const growthBounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 
 let driver: CommunityDriver;
 let fixture: Fixture;
@@ -223,11 +214,7 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   growth = await driver.growthFixture();
   const actor = growth.actor;
 
-  const current = await driver.request({
-    actor,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const current = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
   expect(current.status).toBe(200);
   expect(await body(current)).toMatchObject({
     items: [
@@ -241,11 +228,7 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
           actions: {
             state: 'current',
             enter: { state: 'available', method: 'GET', expectedStatus: 200 },
-            leave: {
-              state: 'available',
-              method: 'DELETE',
-              expectedStatus: 202,
-            },
+            leave: { state: 'available', method: 'DELETE', expectedStatus: 202 },
           },
         },
       },
@@ -253,11 +236,7 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
     next: null,
   });
 
-  const openapiResponse = await driver.request({
-    actor: null,
-    method: 'GET',
-    path: '/v1/openapi.json',
-  });
+  const openapiResponse = await driver.request({ actor: null, method: 'GET', path: '/v1/openapi.json' });
   expect(openapiResponse.status).toBe(200);
   const openapi = await body<{ paths: Record<string, unknown> }>(openapiResponse);
   const contract = JSON.parse(
@@ -273,11 +252,7 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   expect(left.status).toBe(202);
   await driver.settle();
   await addStaleInverse(growth.database, actor, growth.realmId);
-  const afterLeave = await driver.request({
-    actor,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const afterLeave = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
   expect(afterLeave.status).toBe(200);
   expect((await body<{ items: { realmId: string }[] }>(afterLeave)).items).toEqual([]);
 
@@ -300,31 +275,22 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   expect(ban.status).toBe(200);
   await driver.settle();
   await addStaleInverse(growth.database, actor, bannedRealm.realmId);
-  const afterBan = await driver.request({
-    actor,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const afterBan = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
   expect(afterBan.status).toBe(200);
   expect((await body<{ items: { realmId: string }[] }>(afterBan)).items).toEqual([]);
 
   const pagePopulation = membershipPopulation(actor, fixture.contextId, 'pages');
   await seed(growth.database, pagePopulation, { from: 0, to: 21 });
-  const first = await driver.request({
-    actor,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const first = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
   expect(first.status).toBe(200);
-  const firstPage = await body<{
-    items: { realmId: string; name: string; role: string }[];
-    next: string | null;
-  }>(first);
+  const firstPage = await body<{ items: { realmId: string; name: string; role: string }[]; next: string | null }>(
+    first,
+  );
   expect(firstPage.items).toHaveLength(20);
   expect(firstPage.next).toEqual(expect.any(String));
-  expect(
-    firstPage.items.every((item) => item.role === 'member' && item.name.startsWith('Own Realm pages ')),
-  ).toBe(true);
+  expect(firstPage.items.every((item) => item.role === 'member' && item.name.startsWith('Own Realm pages '))).toBe(
+    true,
+  );
 
   const second = await driver.request({
     actor,
@@ -332,19 +298,12 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
     path: `/v1/me/realms?cursor=${encodeURIComponent(firstPage.next!)}`,
   });
   expect(second.status).toBe(200);
-  const secondPage = await body<{
-    items: { realmId: string }[];
-    next: string | null;
-  }>(second);
+  const secondPage = await body<{ items: { realmId: string }[]; next: string | null }>(second);
   expect(secondPage.items).toHaveLength(1);
   expect(secondPage.next).toBeNull();
   expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.realmId)).size).toBe(21);
 
-  const outsider = await driver.request({
-    actor: fixture.outsider,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const outsider = await driver.request({ actor: fixture.outsider, method: 'GET', path: '/v1/me/realms' });
   expect(outsider.status).toBe(200);
   expect((await body<{ items: unknown[] }>(outsider)).items).toEqual([]);
   const rebound = await driver.request({
@@ -370,11 +329,7 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
       await seed(database, growthPopulation, { from: previous, to: scale });
     },
     async operation() {
-      const response = await driver.request({
-        actor,
-        method: 'GET',
-        path: '/v1/me/realms',
-      });
+      const response = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
       expect(response.status).toBe(200);
       const page = await body<{ items: unknown[] }>(response);
       expect(page.items).toHaveLength(20);
@@ -383,21 +338,13 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   });
   expect(report.name).toBe('Own Realm page');
 
-  const anonymous = await driver.request({
-    actor: null,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const anonymous = await driver.request({ actor: null, method: 'GET', path: '/v1/me/realms' });
   expect(anonymous.status).toBe(401);
   await growth.close();
   growth = undefined;
   const suspended = await driver.suspend(fixture.outsider);
   expect(suspended.status).toBe(200);
-  const refused = await driver.request({
-    actor: fixture.outsider,
-    method: 'GET',
-    path: '/v1/me/realms',
-  });
+  const refused = await driver.request({ actor: fixture.outsider, method: 'GET', path: '/v1/me/realms' });
   expect(refused.status).toBe(401);
 });
 
@@ -432,42 +379,22 @@ test.serial(
       const created = await driver.request(creation);
       expect(created.status).toBe(201);
       const initial = (await created.json()) as {
-        space: {
-          spaceId: string;
-          headRevisionId: string;
-          realmId: string | null;
-        };
+        space: { spaceId: string; headRevisionId: string; realmId: string | null };
       };
       expect(initial.space.realmId).toBeNull();
       const path = `/v1/spaces/${initial.space.spaceId}`;
       expect(
-        (
-          await request(fixture.owner, 'POST', '/v1/spaces', {
-            title: 'Invalid carry',
-            realmId: null,
-          })
-        ).status,
+        (await request(fixture.owner, 'POST', '/v1/spaces', { title: 'Invalid carry', realmId: null })).status,
       ).toBe(400);
       expect(
-        (
-          await request(
-            fixture.owner,
-            'PATCH',
-            path,
-            { realmId: null },
-            JSON.stringify(initial.space.headRevisionId),
-          )
-        ).status,
+        (await request(fixture.owner, 'PATCH', path, { realmId: null }, JSON.stringify(initial.space.headRevisionId)))
+          .status,
       ).toBe(400);
       const viewers = [null, fixture.owner, fixture.member, fixture.outsider];
       const empty = await Promise.all(
         viewers.map(async (actor) => {
           const response = await request(actor, 'GET', path);
-          return {
-            status: response.status,
-            headers: [...response.headers],
-            text: await response.text(),
-          };
+          return { status: response.status, headers: [...response.headers], text: await response.text() };
         }),
       );
       const realmResponse = await request(fixture.owner, 'POST', '/v1/realms', {
@@ -484,11 +411,9 @@ test.serial(
       // The same Space before it carries a Realm is the byte-for-byte no-Realm control.
       for (const index of [0, 2, 3]) {
         const response = await request(viewers[index]!, 'GET', path);
-        expect({
-          status: response.status,
-          headers: [...response.headers],
-          text: await response.text(),
-        }).toEqual(empty[index]!);
+        expect({ status: response.status, headers: [...response.headers], text: await response.text() }).toEqual(
+          empty[index]!,
+        );
         expect((await request(viewers[index]!, 'GET', realmPath)).status).toBe(404);
       }
       const visible = async (actor: Account | null) => {
@@ -504,35 +429,21 @@ test.serial(
       expect((await replay.json()).space.realmId).toBe(realm.realmId);
       expect(replay.headers.get('etag')).toBe(JSON.stringify(initial.space.headRevisionId));
       expect(
-        (
-          await request(fixture.owner, 'POST', `${realmPath}/members`, {
-            accountId: fixture.member.id,
-          })
-        ).status,
+        (await request(fixture.owner, 'POST', `${realmPath}/members`, { accountId: fixture.member.id })).status,
       ).toBe(202);
       await driver.settle();
       await visible(fixture.member);
       expect(
-        (
-          await request(fixture.owner, 'PUT', `${realmPath}/bans/${fixture.member.id}`, {
-            reason: 'Remove membership',
-          })
-        ).status,
+        (await request(fixture.owner, 'PUT', `${realmPath}/bans/${fixture.member.id}`, { reason: 'Remove membership' }))
+          .status,
       ).toBe(200);
       await driver.settle();
       const banned = await request(fixture.member, 'GET', path);
-      expect({
-        status: banned.status,
-        headers: [...banned.headers],
-        text: await banned.text(),
-      }).toEqual(empty[2]!);
+      expect({ status: banned.status, headers: [...banned.headers], text: await banned.text() }).toEqual(empty[2]!);
       expect((await request(fixture.member, 'GET', realmPath)).status).toBe(404);
 
       // Removing Realm ownership leaves Space management intact.
-      const realmResource = {
-        route: routeOf(realm.realmId)!,
-        id: realm.realmId,
-      };
+      const realmResource = { route: routeOf(realm.realmId)!, id: realm.realmId };
       const [nativeOwner] = await queryCommunityDatabase<{ valid: string }>(
         `SELECT valid::text FROM access.resource_role_grant
          WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='community.realm.owner'`,
@@ -544,18 +455,12 @@ test.serial(
         role: 'community.realm.owner',
         valid,
       });
+      expect((await request(fixture.owner, 'POST', '/v1/roleGrants', ownerRole(fixture.moderator, '(,)'))).status).toBe(
+        201,
+      );
       expect(
-        (await request(fixture.owner, 'POST', '/v1/roleGrants', ownerRole(fixture.moderator, '(,)'))).status,
-      ).toBe(201);
-      expect(
-        (
-          await request(
-            fixture.owner,
-            'POST',
-            '/v1/roleGrants:revoke',
-            ownerRole(fixture.owner, nativeOwner!.valid),
-          )
-        ).status,
+        (await request(fixture.owner, 'POST', '/v1/roleGrants:revoke', ownerRole(fixture.owner, nativeOwner!.valid)))
+          .status,
       ).toBe(200);
       expect((await request(fixture.owner, 'GET', realmPath)).status).toBe(404);
       const hiddenUpdate = await request(
@@ -578,9 +483,9 @@ test.serial(
       expect(hiddenAddress.status).toBe(200);
       const hiddenAddressed = (await hiddenAddress.json()).space;
       expect(hiddenAddressed.realmId).toBeNull();
-      expect(
-        (await request(fixture.moderator, 'POST', '/v1/roleGrants', ownerRole(fixture.owner, '(,)'))).status,
-      ).toBe(201);
+      expect((await request(fixture.moderator, 'POST', '/v1/roleGrants', ownerRole(fixture.owner, '(,)'))).status).toBe(
+        201,
+      );
       const updated = await request(
         fixture.owner,
         'PATCH',

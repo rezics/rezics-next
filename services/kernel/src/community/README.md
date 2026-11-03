@@ -1058,11 +1058,6 @@ remain failed requests, never an empty inventory. Revocation returns the native 
 failure or conceals the entry; readable source or episode change returns the retry problem and retains
 the caller's original cursor. Optional image unavailability remains independent of supported actions.
 
-The public client exports `OwnRealmsPage`, `OwnRealmItem` and `RealmViewerActions` from
-`packages/client/src/index.ts`, derived from the installed `account.realms` response, without a
-parallel DTO declaration. The native factory remains a Kernel composition export; it is not a
-browser authority or an HTTP client factory.
-
 The independent Realm-home assembler has not installed this factory. The current Web inventory formatter
 still admits only realmId/name, and its shared phone/desktop view has no action or recovery control for
 this advice; installed backend advice alone does not close that experience gap.
