@@ -82,7 +82,7 @@ export const sessionSchema = t.Object(
     locator: nullableString,
     position: nullableString,
     completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state,
+    state: t.Union([state, t.Literal('retired')]),
     revision,
     startedAt: t.String(),
     completedAt: nullableString,
@@ -106,6 +106,11 @@ export const sessionSchema = t.Object(
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const changeIntent = t.Union([
+  t.Object({
+    lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
+    previousState: state,
+    previousCompletedAt: nullableString,
+  }, closed),
   t.Object({ clear: t.Literal(true) }, closed),
   t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
   t.Object({ amount: t.String() }, closed),
@@ -486,6 +491,62 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => sessionCommands().abandonSession(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { progressSession: sessionView(result.value) };
+      },
+    )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'reopen'),
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders,
+        body: transitionBody,
+        response: {
+          200: progressSessionResponse,
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: problemSchema('conflict'),
+          422: idempotencyConflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.reopen', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().reopenSession(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { progressSession: sessionView(result.value) };
+      },
+    )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'retire'),
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders,
+        body: transitionBody,
+        response: {
+          200: progressSessionResponse,
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: problemSchema('conflict'),
+          422: idempotencyConflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.retire', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().retireSession(actor, params.sessionId, body, requestKey)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         return { progressSession: sessionView(result.value) };

@@ -19,6 +19,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, sameAccountRoute } from './command-support.ts';
 import {
   changeIntent,
+  correctOccurrence,
   nextUnitCount,
   parseRecord,
   parseProgressMeasureCreate,
@@ -201,7 +202,7 @@ export function createSessionCommands(config: Dependencies) {
     sessionId: string,
     input: unknown,
     requestKey: string,
-    action: ProgressAction | 'record',
+    action: ProgressAction | 'record' | 'reopen' | 'retire',
   ) {
     const owner = account(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId);
@@ -224,6 +225,17 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
           try {
+            if (action === 'reopen' || action === 'retire') {
+              const session = await snapshot(owner, 'progress_session:update', (client) => load(client, owner, sessionId));
+              const source = await readLibraryProfileSource(
+                { pool, access, actor: owner, at: attempt.time, deadline },
+                session.subjectId,
+              );
+              if (!source) throw new LibraryNotFoundError();
+              // No new value is admitted. The original session identity and meaning stay intact,
+              // including when the current profile no longer offers its unit.
+              return { original: null, source, pin: null };
+            }
             if (action !== 'record' || clearing) return { original: null, source: null, pin: null };
             // Release the owner snapshot before any source or Global connection is acquired.
             const fact = await withConnection(pool, async (client) => {
@@ -318,18 +330,26 @@ export function createSessionCommands(config: Dependencies) {
             const added = 'add' in parsed ? await store.addUnits(tx, route, sessionId, parsed.add, context) : 0;
             changes.completedUnitCount = valid(nextUnitCount(current.completedUnitCount, added, removed));
           }
+        } else if (action === 'reopen' || action === 'retire') {
+          changes.state = valid(correctOccurrence(current.state, action));
+          changes.completedAt = null;
+          intent = { lifecycle: action, previousState: current.state, previousCompletedAt: current.completedAt };
         } else {
           changes.state = valid(transition(current.state, action));
           changes.completedAt = action === 'complete' ? context.time : null;
         }
         const session = await store.updateSession(tx, route, sessionId, revision, changes, context);
         if (!session) throw new ProgressConflictError();
-        if (action === 'record') await store.appendChange(tx, route, sessionId, session.revision, intent, context);
-        await activity.touch(write, {
-          subjectId: session.subjectId,
-          time: context.time,
-          completed: action === 'complete',
-        });
+        if (action === 'record' || action === 'reopen' || action === 'retire')
+          await store.appendChange(tx, route, sessionId, session.revision, intent, context);
+        // Corrections leave the current shelf and holdings untouched. Native source hooks
+        // invalidate derived membership; they do not rewrite an independent Library entry.
+        if (action !== 'reopen' && action !== 'retire')
+          await activity.touch(write, {
+            subjectId: session.subjectId,
+            time: context.time,
+            completed: action === 'complete',
+          });
         return { value: session, events: [event(session)] };
       },
     );
@@ -341,6 +361,10 @@ export function createSessionCommands(config: Dependencies) {
     update(actor, sessionId, input, requestKey, 'complete');
   const abandonSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
     update(actor, sessionId, input, requestKey, 'abandon');
+  const reopenSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
+    update(actor, sessionId, input, requestKey, 'reopen');
+  const retireSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
+    update(actor, sessionId, input, requestKey, 'retire');
 
   async function snapshot<T>(
     actor: Actor,
@@ -541,6 +565,8 @@ export function createSessionCommands(config: Dependencies) {
     recordProgress,
     completeSession,
     abandonSession,
+    reopenSession,
+    retireSession,
     readSession,
     readPresentedSession,
     listSessions,

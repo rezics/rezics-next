@@ -22,7 +22,7 @@ FROM input i CROSS JOIN LATERAL (
    ORDER BY a.assignment_id LIMIT i.batch_limit)
   UNION ALL
   (SELECT 3, s.session_id, NULL::uuid FROM library.progress_session s
-   WHERE s.route=i.route AND s.account_id=i.account_id AND s.subject_id=i.subject_id
+   WHERE s.state <> 'retired' AND s.route=i.route AND s.account_id=i.account_id AND s.subject_id=i.subject_id
    ORDER BY s.session_id LIMIT i.batch_limit)
   UNION ALL
   (SELECT 4, c.copy_id, NULL::uuid FROM library.copy c

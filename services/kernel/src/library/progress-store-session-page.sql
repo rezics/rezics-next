@@ -31,6 +31,7 @@ candidates AS (
   FROM library.progress_session AS session
   CROSS JOIN args
   WHERE session.route = args.route
+    AND session.state <> 'retired'
     AND session.account_id = args.account_id
     AND session.subject_id = args.subject_id
     AND (NOT args.has_cursor OR session.started_at < args.after_started_at)
@@ -61,6 +62,7 @@ UNION ALL
   FROM library.progress_session AS session
   CROSS JOIN args
   WHERE session.route = args.route
+    AND session.state <> 'retired'
     AND session.account_id = args.account_id
     AND session.subject_id = args.subject_id
     AND args.has_cursor
