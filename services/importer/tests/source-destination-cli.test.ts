@@ -132,10 +132,11 @@ function seedLegacy(state: string, source = 'wikidata') {
 }
 
 async function importBangumi(dir: ReturnType<typeof directory>, api = origin, requests: string[] = []) {
-  return runImportCli(
-    ['--source', 'bangumi', '--dump', dir.dump, '--state', dir.state, ...credentials(dir.key, api)],
-    { fetch: importFetch(requests) as unknown as typeof fetch, testOrigin: api, clock },
-  );
+  return runImportCli(['--source', 'bangumi', '--dump', dir.dump, '--state', dir.state, ...credentials(dir.key, api)], {
+    fetch: importFetch(requests) as unknown as typeof fetch,
+    testOrigin: api,
+    clock,
+  });
 }
 
 test('destination help is local and does not require credentials', async () => {
@@ -287,9 +288,16 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     expect(keyRead).toBe(false);
     expect(requests).toEqual([]);
 
-    const review = await runImportCli(
-      ['destination', '--state', dir.state, '--source', 'wikidata', '--api', 'https://api.a.example', '--json'],
-    );
+    const review = await runImportCli([
+      'destination',
+      '--state',
+      dir.state,
+      '--source',
+      'wikidata',
+      '--api',
+      'https://api.a.example',
+      '--json',
+    ]);
     expect(review.code, review.stderr).toBe(0);
     const document = JSON.parse(review.stdout) as { status: string; reviewRevision: string; recorded: null };
     expect(document.status).toBe('unbound');
@@ -343,7 +351,9 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     expect(rebound.stderr).toContain('already has recorded origin');
 
     const session = new ImportSession(dir.state, { create: false });
-    expect(session.store.database.query('SELECT source,record_key,bytes FROM run_envelopes').all()).toEqual(before.journal);
+    expect(session.store.database.query('SELECT source,record_key,bytes FROM run_envelopes').all()).toEqual(
+      before.journal,
+    );
     expect(session.store.database.query('SELECT record_key FROM run_acknowledged').all()).toEqual(before.acknowledged);
     session.close();
   } finally {

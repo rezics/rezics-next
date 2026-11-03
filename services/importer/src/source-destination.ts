@@ -80,8 +80,7 @@ export function normalizeApiOrigin(value: string, testOrigin?: string): string {
       'usage',
     );
   if (testOrigin === undefined) {
-    if (url.protocol !== 'https:')
-      throw new SourceDestinationError('API origin must be an HTTPS origin.', 'usage');
+    if (url.protocol !== 'https:') throw new SourceDestinationError('API origin must be an HTTPS origin.', 'usage');
     return url.origin;
   }
   let test: URL;
@@ -211,7 +210,10 @@ function generationStatus(database: Database, source: string, id: string | null)
   return row && typeof row.status === 'string' ? row.status : null;
 }
 
-function sourcePointers(database: Database, source: string): {
+function sourcePointers(
+  database: Database,
+  source: string,
+): {
   leaseRun: string | null;
   generation: string | null;
   presentCount: number | null;
@@ -281,8 +283,7 @@ export function inspectDestination(
   recorded: 'first-use' | 'operator-declared' | null;
 }> {
   const binding = readSourceDestination(database, source);
-  if (binding === 'unavailable')
-    return { status: 'unavailable', origin: null, provenance: null, recorded: null };
+  if (binding === 'unavailable') return { status: 'unavailable', origin: null, provenance: null, recorded: null };
   if (!binding) return { status: 'unbound', origin: null, provenance: null, recorded: null };
   return { status: 'bound', origin: binding.origin, provenance: binding.provenance, recorded: binding.provenance };
 }
@@ -434,7 +435,8 @@ export async function openDestinationReview(input: {
 export const DESTINATION_REVIEW_REVISION = REVIEW_REVISION;
 
 export function throwAdmissionRefusal(source: string, origin: string, refusal: SourceDestinationRefusal): never {
-  if (refusal.kind === 'mismatch') throw new SourceDestinationError(mismatchMessage(source, origin, refusal.binding), 'mismatch');
+  if (refusal.kind === 'mismatch')
+    throw new SourceDestinationError(mismatchMessage(source, origin, refusal.binding), 'mismatch');
   if (refusal.kind === 'unbound') throw new SourceDestinationError(unboundMessage(source), 'unbound');
   throw new SourceDestinationError(refusal.message, 'unavailable');
 }

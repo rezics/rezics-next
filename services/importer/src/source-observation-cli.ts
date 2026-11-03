@@ -300,18 +300,11 @@ async function runResolve(
       missingState: 'error',
     });
     if (destinationPreflight.status === 'mismatch')
-      throw new SourceDestinationError(
-        mismatchMessage(parsed.source, api, destinationPreflight.binding),
-        'mismatch',
-      );
+      throw new SourceDestinationError(mismatchMessage(parsed.source, api, destinationPreflight.binding), 'mismatch');
     if (destinationPreflight.status === 'unbound')
       throw new SourceDestinationError(unboundMessage(parsed.source), 'unbound');
     if (destinationPreflight.status === 'unavailable')
-      throw new SourceDestinationError(
-        destinationPreflight.message,
-        'unavailable',
-        destinationPreflight.exitCode,
-      );
+      throw new SourceDestinationError(destinationPreflight.message, 'unavailable', destinationPreflight.exitCode);
     const tokenProvider = await createAccountTokenProvider({
       accountKeyPath: parsed.accountKey!,
       account: parsed.account!,
@@ -391,8 +384,7 @@ async function runResolve(
       return { code: error.exitCode, stdout: '', stderr: `${error.message}\n`, openHandles: 0 };
     if (error instanceof CredentialInputError)
       return { code: 2, stdout: '', stderr: 'Input or account key is unavailable or invalid.\n', openHandles: 0 };
-    if (error instanceof InputFailure)
-      return { code: 2, stdout: '', stderr: `${error.message}\n`, openHandles: 0 };
+    if (error instanceof InputFailure) return { code: 2, stdout: '', stderr: `${error.message}\n`, openHandles: 0 };
     return {
       code: 1,
       stdout: '',

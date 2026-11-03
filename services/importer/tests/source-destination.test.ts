@@ -71,7 +71,9 @@ function dropDestination(path: string) {
 test('origin parser normalizes equivalent HTTPS origins and rejects credentials, path and http', () => {
   expect(normalizeApiOrigin('https://API.Example.com:443')).toBe('https://api.example.com');
   expect(normalizeApiOrigin('https://api.example.com')).toBe('https://api.example.com');
-  expect(() => normalizeApiOrigin('https://user:pass@api.example.com')).toThrow('no path, query, fragment or credentials');
+  expect(() => normalizeApiOrigin('https://user:pass@api.example.com')).toThrow(
+    'no path, query, fragment or credentials',
+  );
   expect(() => normalizeApiOrigin('https://api.example.com/v1')).toThrow('no path, query, fragment or credentials');
   expect(() => normalizeApiOrigin('https://api.example.com/?x=1')).toThrow('no path, query, fragment or credentials');
   expect(() => normalizeApiOrigin('http://api.example.com')).toThrow('HTTPS origin');
@@ -166,7 +168,10 @@ test('first-use races to different origins leave one winner and an unchanged los
     const refused = loser.admit('wikidata', originB);
     expect(refused).toMatchObject({ kind: 'mismatch', binding: { origin: originA } });
     expect(loser.readOwner('wikidata')).toEqual(winner.readOwner('wikidata'));
-    expect(readSourceDestination(loser.store.database, 'wikidata')).toMatchObject({ origin: originA, provenance: 'first-use' });
+    expect(readSourceDestination(loser.store.database, 'wikidata')).toMatchObject({
+      origin: originA,
+      provenance: 'first-use',
+    });
     winner.close();
     loser.close();
   } finally {

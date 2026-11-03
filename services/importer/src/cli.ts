@@ -687,8 +687,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       statePath: config.state,
       source: destinationSource,
       origin: config.api,
-      missingState:
-        config.mode === 'resume-staging' || config.mode === 'resume-acquisition' ? 'error' : 'first-use',
+      missingState: config.mode === 'resume-staging' || config.mode === 'resume-acquisition' ? 'error' : 'first-use',
     });
     if (destinationPreflight.status === 'mismatch')
       throw new SourceDestinationError(
@@ -698,11 +697,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     if (destinationPreflight.status === 'unbound')
       throw new SourceDestinationError(unboundMessage(destinationSource), 'unbound');
     if (destinationPreflight.status === 'unavailable')
-      throw new SourceDestinationError(
-        destinationPreflight.message,
-        'unavailable',
-        destinationPreflight.exitCode,
-      );
+      throw new SourceDestinationError(destinationPreflight.message, 'unavailable', destinationPreflight.exitCode);
     if (config.mode !== 'checkpoint-acquisition' && config.mode !== 'resume-acquisition') {
       tokenProvider = await createAccountTokenProvider({
         accountKeyPath: config.accountKey,

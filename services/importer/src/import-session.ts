@@ -5,11 +5,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { RecordBindings } from './record-bindings.ts';
 import { closeExistingImporterState, openExistingImporterState, ResumeStateError } from './resume-state.ts';
 import { RunStore, type Run, type SourceProjection } from './run-store.ts';
-import {
-  evaluateAdmission,
-  insertSourceDestination,
-  type SourceDestinationRefusal,
-} from './source-destination.ts';
+import { evaluateAdmission, insertSourceDestination, type SourceDestinationRefusal } from './source-destination.ts';
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;

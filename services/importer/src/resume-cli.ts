@@ -405,11 +405,7 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
     if (destinationPreflight.status === 'unbound')
       throw new SourceDestinationError(unboundMessage(destinationSource), 'unbound');
     if (destinationPreflight.status === 'unavailable')
-      throw new SourceDestinationError(
-        destinationPreflight.message,
-        'unavailable',
-        destinationPreflight.exitCode,
-      );
+      throw new SourceDestinationError(destinationPreflight.message, 'unavailable', destinationPreflight.exitCode);
   } catch (error) {
     try {
       session.close();

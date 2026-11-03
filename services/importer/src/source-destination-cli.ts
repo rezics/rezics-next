@@ -165,7 +165,9 @@ export function renderDestinationReview(document: SourceDestinationReview, decla
       `Declare with: bun services/importer/src/cli.ts destination --state <same-state-path> --source ${JSON.stringify(document.source)} --api ${document.selectedOrigin} --review-revision ${document.reviewRevision} --declare --acknowledge-unverified`,
     );
   else if (document.status === 'absent')
-    lines.push('Ordinary import records the API origin on first use. Declaration is only for existing unbound history.');
+    lines.push(
+      'Ordinary import records the API origin on first use. Declaration is only for existing unbound history.',
+    );
   return `${lines.map(terminalSafe).join('\n')}\n`;
 }
 
@@ -229,7 +231,8 @@ function declareOnSession(
 
 function failure(error: unknown, json: boolean): DestinationCliResult {
   const missing =
-    error instanceof Error && /No importer state database exists|unable to open database|SQLITE_CANTOPEN/i.test(error.message);
+    error instanceof Error &&
+    /No importer state database exists|unable to open database|SQLITE_CANTOPEN/i.test(error.message);
   const code =
     error instanceof SourceDestinationError
       ? error.exitCode
@@ -258,8 +261,7 @@ export async function runDestinationCli(
     parsed = parseDestinationArgs(argv);
   } catch (error) {
     const result = failure(error, jsonRequested);
-    if (result.code === 2 && !jsonRequested)
-      return { ...result, stderr: `${result.stderr}${DESTINATION_USAGE}\n` };
+    if (result.code === 2 && !jsonRequested) return { ...result, stderr: `${result.stderr}${DESTINATION_USAGE}\n` };
     return result;
   }
   if (parsed === 'help') return { code: 0, stdout: `${DESTINATION_USAGE}\n`, stderr: '', openHandles: 0 };
