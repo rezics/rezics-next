@@ -52,6 +52,8 @@ export function createSubjectIndexer(options: {
   listing: SubjectListingSource;
   index: string;
   consumer: string;
+  /** Matches the target physical mapping; historical generations keep the year-only writer shape. */
+  calendarFormat?: 1;
   aroundApply?: SubjectApplyGuard;
   /** Trusted native runner composition; independent of aroundApply/privacy repair. */
   writer?: SearchWriterGuard;
@@ -235,7 +237,10 @@ async function guardedApply(
 
 /** The sole ordinary writer path, shared by finite cold population and event replay. */
 export async function applySubjectKeys(
-  options: Pick<Parameters<typeof createSubjectIndexer>[0], 'search' | 'source' | 'listing' | 'index' | 'writer'>,
+  options: Pick<
+    Parameters<typeof createSubjectIndexer>[0],
+    'search' | 'source' | 'listing' | 'index' | 'writer' | 'calendarFormat'
+  >,
   partition: number,
   ids: readonly string[],
   obligation: bigint,
@@ -260,7 +265,7 @@ export async function applySubjectKeys(
       const actions = await prepareBoundedSortKeys(
         options.search,
         options.index,
-        documentActions(snapshot, chunk, counts),
+        documentActions(snapshot, chunk, counts, options.calendarFormat),
       );
       await writeIndexActions(options.search, options.index, actions);
     }

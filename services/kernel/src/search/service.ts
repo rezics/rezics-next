@@ -47,6 +47,7 @@ import {
 export { validateSearchLimit } from './hits.ts';
 import {
   discoveryIndexUuid,
+  readSubjectCalendarFormat,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
   subjectGenerations,
@@ -135,6 +136,18 @@ function unsupported(pointer: string, code: FieldErrorCode = 'unsupported'): nev
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function containsCalendarRange(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsCalendarRange);
+  if (!isRecord(value)) return false;
+  if (
+    isRecord(value.statement) &&
+    isRecord(value.statement.range) &&
+    value.statement.range.type === 'time'
+  )
+    return true;
+  return Object.values(value).some(containsCalendarRange);
 }
 
 /** Remove the one top-level request scope leaf; the admitted native Scope carries its membership. */
@@ -929,11 +942,19 @@ export function createSearchService({
         throw new ProblemError('search_restart_required');
       const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+      const calendarFormat =
+        admitted && containsCalendarRange(admitted)
+          ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))
+          : null;
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const compiledFilter =
         admitted && !preparedScope
-          ? compileFilter(admitted as FilterDocument, { prefix: 'f', relationOverflow: true })
+          ? compileFilter(admitted as FilterDocument, {
+              prefix: 'f',
+              relationOverflow: true,
+              ...(calendarFormat === null ? {} : { calendarFormat }),
+            })
           : undefined;
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),

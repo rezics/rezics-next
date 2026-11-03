@@ -30,6 +30,7 @@ import {
   ensureSubjectActivationMetadata,
   ensureSubjectRatingMapping,
   observedWrite,
+  readSubjectCalendarMappingFormat,
   readSubjectActivationTime,
   subjectGenerations,
   subjectIndexName,
@@ -184,23 +185,28 @@ export async function startSearchIndexing(options: {
         currentGenerations = undefined;
         if (previous) await previous.stop();
         if (stopped) return;
-        const relays = liveGenerations.map((generation) =>
-          createSubjectIndexer({
-            pool: options.pool,
-            search: options.search,
-            source: options.source,
-            listing: options.listing,
-            index: subjectIndexName(options.prefix, generation),
-            consumer: subjectConsumer(options.prefix, generation),
-            writer: createSearchWriterGuard({
-              consumer: subjectConsumer(options.prefix, generation),
+        const relays = await Promise.all(
+          liveGenerations.map(async (generation) => {
+            const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, generation);
+            return createSubjectIndexer({
               pool: options.pool,
               search: options.search,
               source: options.source,
               listing: options.listing,
               index: subjectIndexName(options.prefix, generation),
-            }),
-            ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
+              consumer: subjectConsumer(options.prefix, generation),
+              ...(calendarFormat === null ? {} : { calendarFormat }),
+              writer: createSearchWriterGuard({
+                consumer: subjectConsumer(options.prefix, generation),
+                pool: options.pool,
+                search: options.search,
+                source: options.source,
+                listing: options.listing,
+                index: subjectIndexName(options.prefix, generation),
+                ...(calendarFormat === null ? {} : { calendarFormat }),
+              }),
+              ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
+            });
           }),
         );
         const next = startRelays(options.pool, relays, {
