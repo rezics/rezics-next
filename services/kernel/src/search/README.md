@@ -919,7 +919,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   and sorting is bounded batch data rather than history.
 - Growth check: [test/growth-events.test.ts](../../test/growth-events.test.ts): “Batch log stays within its bound as
   H grows”; “Full batch log reads only the batch's outbox rows at every partition history” uses histories `[32, 256,
-2048]`.
+  2048]`.
 
 ### Checkpoint snapshot and advance
 
@@ -1076,7 +1076,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 ### Listing counts
 
 - Touches: `subjectListingSource(pool).read(partition, ids)` runs `listing-counts.sql` once, selecting `subject_id,
-public_collection_count` from `library.subject_listing` by primary key `(route, subject_id)` for the ids in that
+  public_collection_count` from `library.subject_listing` by primary key `(route, subject_id)` for the ids in that
   partition. An id without a row is absent. Grow N and the number of Collections, fixing b.
 - Bound: One statement per call: primary-key lookups of at most b rows, constant in N stored subjects and in the
   number of Collections. The document gains one integer field, `public_collection_count`, and no field per
