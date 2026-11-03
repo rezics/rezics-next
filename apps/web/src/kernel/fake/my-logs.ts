@@ -11,7 +11,10 @@ export type MyLogsScenario =
   | 'unavailable'
   | 'preparing'
   | 'restart'
-  | 'restart-empty';
+  | 'restart-empty'
+  | 'public-refused'
+  | 'public-withdrawn'
+  | 'public-recovery';
 let scenario: MyLogsScenario | undefined;
 let listReads = 0;
 let detailReads = 0;
@@ -102,9 +105,16 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/publishedLogs\/([^/]+)$/,
     story: ({ match }) => {
-      if (scenario !== 'long' || match?.[1] !== firstLog().id) return undefined;
+      if ((!scenario?.startsWith('public-') && scenario !== 'long') || match?.[1] !== firstLog().id)
+        return undefined;
       detailReads += 1;
       detailId = match[1];
+      const headers = { 'cache-control': 'private, no-store' };
+      if (scenario === 'public-refused') return { status: 403, code: 'forbidden', headers };
+      if (scenario === 'public-withdrawn')
+        return { status: 200, publishedLog: { id: detailId, deleted: true }, headers };
+      if (scenario === 'public-recovery' && detailReads === 1)
+        return { status: 503, code: 'dependency_unavailable', headers };
       return {
         status: 200,
         publishedLog: firstLog(),

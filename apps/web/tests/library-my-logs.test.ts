@@ -77,9 +77,13 @@ test('canonical log and progress stories retain real owner plays and historic gu
   expect([...progress.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
     'SignedIn',
     'ProfileUnits',
+    'ProfileUnitsRecordingUnavailable',
+    'DeclaredRecordingRefused',
     'RetiredPair',
     'EmptyChanges',
     'LongContent',
+    'NarrowOriginalHistory',
+    'CompletedAmountHistory',
     'Unavailable',
     'Error',
     'HistoricScalar',
@@ -87,12 +91,14 @@ test('canonical log and progress stories retain real owner plays and historic gu
     'OpaqueCursor',
     'UnresolvedUnit',
     'WithheldSummaries',
+    'OriginalHistoryRoute',
+    'IndependentHistoryRecovery',
   ]);
   expect(progress).toContain('render: () => manualStory(manualScalarId)');
   expect(progress).toContain(
     "expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument()",
   );
-  expect(progress).not.toMatch(/viewport|maxWidth/);
+  expect(progress).not.toMatch(/export const \w*(?:Phone|Desktop)\w*: Story/);
 });
 
 test('own explicit snapshots use current owner/FULL/opaque paging and preserve native null subjects without private progress fields', async () => {

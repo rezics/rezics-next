@@ -2,6 +2,9 @@ import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import sessionsRecording from '../recorded/library-progress-sessions.json';
 import changesRecording from '../recorded/library-progress-changes.json';
+import sessionRecording from '../recorded/library-progress-session.json';
+import logsRecording from '../recorded/library-published-logs.json';
+import { storyViewerId } from './identities';
 
 export type LibraryProgressStoryMode =
   | 'recorded'
@@ -11,7 +14,15 @@ export type LibraryProgressStoryMode =
   | 'unavailable'
   | 'error'
   | 'detail-empty'
-  | 'detail-long';
+  | 'detail-long'
+  | 'original-history';
+
+export const originalHistoryCursors = {
+  changes: 'changes/+?q=原文#一% &==',
+  units: 'units/+?q=原文#二% &==',
+  logs: 'logs/+?q=原文#三% &==',
+};
+export const originalHistoryUnit = `historic-unit-${'unbroken-original-key-'.repeat(5)}`;
 
 export const libraryProgressStoryRequestCursor = 'earlier/opaque+==';
 export const libraryProgressStoryNextCursor = 'next/opaque+==';
@@ -82,13 +93,40 @@ export const routes: FakeRoute[] = [
     story: () => {
       if (mode === 'unavailable') return failed('unavailable');
       if (mode === 'error') return failed('internal_error');
+      if (mode === 'original-history')
+        return {
+          status: 200,
+          progressSession: {
+            ...sessionRecording.progressSession,
+            mode: 'completed_units',
+            unit: 'historic-unit-x',
+            locator: null,
+            position: null,
+            completedUnitCount: 3,
+            revision: 13,
+            presentation: { meaning: 'unknown', structure: 'unverified', recording: { state: 'unavailable' } },
+          },
+        };
       return undefined;
     },
   },
   {
     method: 'GET',
     path: /^\/v1\/progressSessions\/[^/]+\/changes$/,
-    story: () => {
+    story: ({ request }) => {
+      if (mode === 'original-history')
+        return {
+          status: 200,
+          changes: new URL(request.url).searchParams.has('cursor')
+            ? []
+            : Array.from({ length: 12 }, (_, index) => ({
+                ...changesRecording.changes[0],
+                id: `${sessionRecording.progressSession.id}:${index + 2}`,
+                revision: index + 2,
+                intent: { add: [index === 0 ? originalHistoryUnit : `original-${index}`] },
+              })),
+          next: new URL(request.url).searchParams.has('cursor') ? null : originalHistoryCursors.changes,
+        };
       if (mode === 'detail-empty') return { status: 200, changes: [], next: null };
       if (mode !== 'detail-long') return undefined;
       const template = changesRecording.changes[0];
@@ -101,6 +139,32 @@ export const routes: FakeRoute[] = [
           intent: { ...template.intent, locator: `Progress story change ${index + 1}` },
         })),
         next: null,
+      };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/progressSessions\/[^/]+\/completedUnits$/,
+    story: ({ request }) => {
+      if (mode !== 'original-history') return;
+      const later = new URL(request.url).searchParams.has('cursor');
+      return {
+        status: 200,
+        completedUnits: later ? [] : [originalHistoryUnit, 'original-3', 'original-7'],
+        next: later ? null : originalHistoryCursors.units,
+      };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/v1/publishedLogs',
+    story: ({ request }) => {
+      if (mode !== 'original-history') return;
+      const later = new URL(request.url).searchParams.has('cursor');
+      return {
+        status: 200,
+        publishedLogs: later ? [] : logsRecording.publishedLogs.map((log) => ({ ...log, accountId: storyViewerId })),
+        next: later ? null : originalHistoryCursors.logs,
       };
     },
   },

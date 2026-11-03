@@ -3,7 +3,7 @@ import { m } from '../paraglide/messages.js';
 import { profileSession, profileSessionId, retiredSessionId } from '../kernel/fake/progress-profiles';
 import { ProgressSessionPage } from '../library/progress-session';
 import type { NativeProgressPresentation, ProgressSessionPage as ProgressPageData } from '../library/progress-reads';
-import { setLibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
+import { originalHistoryCursors, setLibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
 import {
   manualScalarId,
   manualSparseId,
@@ -13,6 +13,7 @@ import {
 } from '../kernel/fake/progress-profile-stories';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory, PatternStory, libraryProgressSessionReady, pagePaths, pageReady } from './page';
+import { getLocale } from '../paraglide/runtime.js';
 
 // UNRUN: story interactions, responsive layout and native recording/authority evidence remain deferred.
 const meta = {
@@ -27,6 +28,10 @@ const meta = {
     },
   },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  beforeEach() {
+    setLibraryProgressStoryMode('recorded');
+    return () => setLibraryProgressStoryMode('recorded');
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -425,4 +430,50 @@ export const WithheldSummaries: Story = {
     expect(canvas.queryByText('Selected version A')).not.toBeInTheDocument();
   },
   render: () => manualStory(manualWithheldId),
+};
+
+// Constructed native-shape responses, through the actual route tree and shell; not native recordings.
+export const OriginalHistoryRoute: Story = {
+  render: () => {
+    setLibraryProgressStoryMode('original-history');
+    return <PageStory visitor="Signed In" path={pagePaths['library-progress-session']} />;
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_progress_meaning_unknown());
+    const changes = canvas.getByRole('region', { name: m.library_progress_changes() });
+    expect(within(changes).getAllByRole('heading', { level: 3 })).toHaveLength(12);
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).toBeNull();
+  },
+};
+export const IndependentHistoryRecovery: Story = {
+  render: () => {
+    setLibraryProgressStoryMode('original-history');
+    return (
+      <PageStory
+        visitor="Signed In"
+        path={`${pagePaths['library-progress-session']}?${new URLSearchParams(originalHistoryCursors)}`}
+      />
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_progress_history_reader_changes_page_empty());
+    for (const [field, heading] of [
+      ['changes', m.library_progress_changes()], ['units', m.library_progress_units()],
+    ] as const) {
+      const section = canvas.getByRole('region', { name: heading });
+      const first = within(section).getByRole('link', { name: m.library_collections_first_page() });
+      const query = new URL(first.getAttribute('href')!, 'https://rezics.test').searchParams;
+      expect(query.has(field)).toBe(false);
+      for (const [key, cursor] of Object.entries(originalHistoryCursors))
+        if (key !== field) expect(query.get(key)).toBe(cursor);
+    }
+    const firstLogs = canvas.getByRole('link', { name: m.library_progress_log_reader_first_page() });
+    const url = new URL(firstLogs.getAttribute('href')!, 'https://rezics.test');
+    expect(url.pathname).toBe(`/${getLocale()}${pagePaths['library-progress-session']}`);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      changes: originalHistoryCursors.changes, units: originalHistoryCursors.units,
+    });
+  },
 };

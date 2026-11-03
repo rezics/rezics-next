@@ -85,10 +85,17 @@ export const NewestPage: Story = {
   },
 };
 export const Restarted: Story = {
-  beforeEach: scenario('restart'),
+  name: 'Restarted owner history is empty',
+  beforeEach: scenario('restart-empty'),
   render: () => <PageStory visitor="Signed In" path="/library/logs?cursor=expired-epoch" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_logs_empty());
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.library_my_logs_restarted());
+  },
 };
 export const SignedOut: Story = {
+  name: 'Signed out owner route requires sign in',
   render: () => <PageStory visitor="Signed Out" path="/library/logs" />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
