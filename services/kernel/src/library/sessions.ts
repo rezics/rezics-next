@@ -310,8 +310,7 @@ export function createSessionCommands(config: Dependencies) {
                 measure.unit === measureId ? { ...measure, amount: parsed.amount } : measure,
               );
             else throw new ProgressInvalidError('measureId');
-          }
-          else if ('locator' in parsed) {
+          } else if ('locator' in parsed) {
             changes.locator = parsed.locator;
             changes.position = parsed.position;
           } else {

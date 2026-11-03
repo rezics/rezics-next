@@ -402,9 +402,21 @@ test('owners keep chapter and volume measures independent in one session with re
   });
   expect(staleCorrection.response.status).toBe(409);
   const correctionBody = { revision: 3, measureId: 'chapter', amount: '2.5' };
-  const corrected = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, correctionBody, 'chapter-correction');
+  const corrected = await request(
+    'owner',
+    'POST',
+    `/v1/progressSessions/${created.id}:record`,
+    correctionBody,
+    'chapter-correction',
+  );
   expect(corrected.response.status).toBe(200);
-  const replay = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, correctionBody, 'chapter-correction');
+  const replay = await request(
+    'owner',
+    'POST',
+    `/v1/progressSessions/${created.id}:record`,
+    correctionBody,
+    'chapter-correction',
+  );
   expect(replay.body).toEqual(corrected.body);
   const clearedVolume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
     revision: 4,

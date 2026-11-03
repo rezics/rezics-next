@@ -4,6 +4,7 @@ import type { LibraryProgressUnitDescriptor } from './profile.ts';
  * A reread is a new session; nothing here rewrites another one.
  */
 export declare const MAX_COMPLETED_UNITS = 20000;
+export declare const MAX_PROGRESS_MEASURES = 8;
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = string;
 export type ProgressState = 'active' | 'completed' | 'abandoned';
@@ -14,7 +15,9 @@ export type ProgressSessionCreate = {
     mode: ProgressMode;
     unit: ProgressUnit;
     total: string | null;
+    additionalMeasures?: ProgressMeasureCreate[];
 };
+export type ProgressMeasureCreate = { unit: ProgressUnit; total: string | null };
 export type ScalarRecord = {
     amount: string;
 };
@@ -35,6 +38,12 @@ export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 export type ProgressIntent = {
     clear: true;
 } | {
+    measureId: string;
+    clear: true;
+} | {
+    amount: string;
+} | {
+    measureId: string;
     amount: string;
 } | {
     locator: string;
@@ -62,6 +71,8 @@ export type ProgressRecordContext = {
 };
 /** Validate one new session. `total` belongs only to `scalar_amount` and is null when unknown. */
 export declare function parseSessionCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressSessionCreate>;
+/** Validate one additional scalar measure admitted with a session. */
+export declare function parseProgressMeasureCreate(input: unknown): ProgressOutcome<ProgressMeasureCreate>;
 /**
  * Validate one record for `mode`. Only an active session records.
  * Legacy percent amounts stay within 0 to 100; profiled amounts use only declared bounds.
@@ -70,7 +81,7 @@ export declare function parseRecord(mode: ProgressMode, input: unknown, context:
 /** Complete or abandon an active session. An amount, position, or unit count is not an action. */
 export declare function transition(state: ProgressState, action: ProgressAction): ProgressOutcome<ProgressState>;
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */
-export declare function changeIntent(record: ProgressRecord): ProgressIntent;
+export declare function changeIntent(record: ProgressRecord, measureId?: string): ProgressIntent;
 /**
  * Next sparse-set size. `added` is how many submitted ids were new.
  * `removed` is how many submitted ids already existed.

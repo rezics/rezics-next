@@ -25,6 +25,12 @@ export declare const sessionSchema: import("typebox").TObject<{
     revision: import("typebox").TInteger;
     startedAt: import("typebox").TString;
     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnsafe<{
+        unit: string;
+        amount: string | null;
+        total: string | null;
+        presentation?: import("./progress-model.ts").ProgressPresentation;
+    }>>>;
 }>;
 export declare const progressPresentationSchema: import("typebox").TUnsafe<Readonly<{
     meaning: 'known' | 'unknown' | 'unavailable';
@@ -5205,6 +5211,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     mode: "completed_units" | "cursor_position" | "scalar_amount";
                     unit: string;
                     total?: string | null;
+                    additionalMeasures?: { unit: string; total?: string | null; }[];
                 };
                 params: {};
                 query: unknown;
@@ -5228,6 +5235,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
+                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                         };
                     };
                     201: {
@@ -5246,6 +5254,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
+                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                         };
                     };
                     400: Response | {
@@ -5429,6 +5438,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
+                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                         }[];
                         next: string | null;
                     };
@@ -5629,6 +5639,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 revision: number;
                                 startedAt: string;
                                 completedAt: string | null;
+                                measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                                 presentation?: Readonly<{
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
@@ -5729,6 +5740,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     post: {
                         body: {
                             revision: number;
+                            measureId?: string;
                             clear?: true;
                             amount?: string;
                             locator?: string;
@@ -5760,6 +5772,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
+                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                                 };
                             };
                             400: Response | {
@@ -5879,6 +5892,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
+                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                                 };
                             };
                             400: Response | {
@@ -5998,6 +6012,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
+                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
                                 };
                             };
                             400: Response | {
@@ -6195,6 +6210,12 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     intent: {
                                         clear: true;
                                     } | {
+                                        measureId: string;
+                                        clear: true;
+                                    } | {
+                                        amount: string;
+                                    } | {
+                                        measureId: string;
                                         amount: string;
                                     } | {
                                         locator: string;
