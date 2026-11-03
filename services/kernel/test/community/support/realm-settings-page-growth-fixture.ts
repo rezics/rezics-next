@@ -4,7 +4,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { capture, openGrowthDatabase, type Population } from '../../support/growth.ts';
 import { explainPlanEntries, walkPlanTree } from '../../support/growth-plan-walk.ts';
 import type { Capture } from '../../support/growth-cost.ts';
-import { presentationSettingsFixture, type Axis, type PresentationSettingsFixture } from './growth-realm-presentation-settings-fixture.ts';
+import { empty, presentationSettingsFixture, type Axis, type PresentationSettingsFixture } from './growth-realm-presentation-settings-fixture.ts';
 
 type Selected = Awaited<ReturnType<PresentationSettingsFixture['select']>>;
 export type SettingsBranch = 'available' | 'empty' | 'denied' | 'revoked' | 'unavailable' | 'retry' | 'withheld';
@@ -49,7 +49,7 @@ export async function settingsPageGrowthFixture() {
           'community.space': [{ ...space, space_id: spaceId, head_revision_id: head }],
           'community.space_revision': [{ ...spaceRevision, space_id: spaceId, revision_id: head, predecessor: null }],
           'community.realm': [{ ...realm, realm_id: realmId, space_id: spaceId, head_revision_id: revisionId }],
-          'community.realm_revision': [{ ...revision, realm_id: realmId, revision_id: revisionId, predecessor: null }],
+          'community.realm_revision': [{ ...revision, realm_id: realmId, revision_id: revisionId, predecessor: null, presentation: empty }],
         };
       },
     };

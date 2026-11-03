@@ -1882,8 +1882,12 @@ writer, asset picker or upload/lifecycle engine here.
 - **Remaining composition:** retain full Realm/Space/binding/home comparisons, including
   discarded fields, repeated vote-map copies and temporary JSON strings. Source title/summary
   limits are code-point bounds; UTF-8 expansion is at most four bytes per code point and JSON
-  escaping at most six. Space address must use the normalized-handle writer invariant, not an
-  invented schema constraint. GET has authentication in its actual Auth/identity and Access
+  escaping at most six. Space address admission calls `normalizeHandle` through
+  `space-address.ts`: the lowercased claim pattern in `access/handle-policy.ts` admits
+  3..64 ASCII characters. An admitted non-null address therefore acquires at most 64 UTF-8
+  bytes and serializes to at most 66 JSON bytes including quotes; null serializes to four.
+  This is a native writer invariant, not a database constraint. The address remains charged
+  in full host comparisons even though the final host omits it. GET has authentication in its actual Auth/identity and Access
   pools, no declared rate counter and no worker. `releaseOperationalTime` has zero SQL. Failure,
   rollback, withheld and cold-release work is charged where dispatched; a caller retry pays a
   complete new attempt. Complete statement/transaction, examined-row, retained-copy and
