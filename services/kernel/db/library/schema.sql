@@ -3177,31 +3177,6 @@ CREATE TABLE library.label_assignment (
 
 
 --
--- Name: library_archive_merge_upload; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.library_archive_merge_upload (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    upload_id uuid NOT NULL,
-    manifest jsonb NOT NULL,
-    coverage jsonb NOT NULL,
-    row_count integer NOT NULL,
-    record_bytes integer NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    cancelled_at timestamp with time zone,
-    CONSTRAINT library_archive_merge_upload_manifest_check CHECK ((octet_length((manifest)::text) <= 131072)),
-    CONSTRAINT library_archive_merge_upload_coverage_check CHECK ((octet_length((coverage)::text) <= 8192)),
-    CONSTRAINT library_archive_merge_upload_row_count_check CHECK (((row_count >= 0) AND (row_count <= 100000))),
-    CONSTRAINT library_archive_merge_upload_record_bytes_check CHECK (((record_bytes >= 0) AND (record_bytes <= 33554432))),
-    CONSTRAINT library_archive_merge_upload_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT library_archive_merge_upload_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT library_archive_merge_upload_id_route_check CHECK ((route = ((get_byte(uuid_send(upload_id), 10) * 256) + get_byte(uuid_send(upload_id), 11))))
-);
-
-
---
 -- Name: library_archive_merge_item; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3231,6 +3206,31 @@ CREATE TABLE library.library_archive_merge_item (
     CONSTRAINT library_archive_merge_item_native_request_key_check CHECK (((native_request_key IS NULL) OR (octet_length(native_request_key) <= 128))),
     CONSTRAINT library_archive_merge_item_native_operands_check CHECK (((native_operands IS NULL) OR (octet_length((native_operands)::text) <= 16384))),
     CONSTRAINT library_archive_merge_item_result_check CHECK (((result IS NULL) OR (octet_length((result)::text) <= 8192)))
+);
+
+
+--
+-- Name: library_archive_merge_upload; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.library_archive_merge_upload (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    manifest jsonb NOT NULL,
+    coverage jsonb NOT NULL,
+    row_count integer NOT NULL,
+    record_bytes integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    cancelled_at timestamp with time zone,
+    CONSTRAINT library_archive_merge_upload_manifest_check CHECK ((octet_length((manifest)::text) <= 131072)),
+    CONSTRAINT library_archive_merge_upload_coverage_check CHECK ((octet_length((coverage)::text) <= 8192)),
+    CONSTRAINT library_archive_merge_upload_row_count_check CHECK (((row_count >= 0) AND (row_count <= 100000))),
+    CONSTRAINT library_archive_merge_upload_record_bytes_check CHECK (((record_bytes >= 0) AND (record_bytes <= 33554432))),
+    CONSTRAINT library_archive_merge_upload_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT library_archive_merge_upload_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT library_archive_merge_upload_id_route_check CHECK ((route = ((get_byte(uuid_send(upload_id), 10) * 256) + get_byte(uuid_send(upload_id), 11))))
 );
 
 
