@@ -38,7 +38,7 @@ function staged(recordSource: string, key: string, digest = 'a'.repeat(64)) {
   };
 }
 
-function command(recordSource: string, recordKey: string): BatchCommand {
+function command(recordSource: string, recordKey: string, digest = 'a'.repeat(64)): BatchCommand {
   return {
     op: 'create',
     key: `cmd-${recordKey}`,
@@ -46,7 +46,7 @@ function command(recordSource: string, recordKey: string): BatchCommand {
       source: recordSource,
       external_id: recordKey,
       record_revision: 'revision-1',
-      digest: 'a'.repeat(64),
+      digest,
       converter_revision: 'test@1',
       field_group: 'facts',
     },
@@ -115,7 +115,7 @@ function seedJourney(path: string) {
       store.classify(active, key, { commands: [] });
       store.acknowledgeNoEffects(active, key, { reason: 'no-owned-candidates' });
     }
-    store.prepare(active, 'Q3', { commands: [command(source, 'Q3')] });
+    store.prepare(active, 'Q3', { commands: [command(source, 'Q3', 'c'.repeat(64))] });
     const payload = store.database
       .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
       .all(source) as { command_key: string; body: string }[];
