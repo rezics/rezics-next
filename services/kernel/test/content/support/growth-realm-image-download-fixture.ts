@@ -56,7 +56,8 @@ export async function growthRealmImageDownloadFixture(): Promise<GrowthRealmImag
 
     await base.grant(reader.accountId, realmId, ['realm:manage']);
     const readable = await base.readRealm(realmId, reader.bearer);
-    if (readable.response.status !== 200) throw new Error(`Realm reader admission failed with ${readable.response.status}`);
+    if (readable.response.status !== 200)
+      throw new Error(`Realm reader admission failed with ${readable.response.status}`);
 
     const bytes = Uint8Array.from(
       await sharp({ create: { width: 96, height: 48, channels: 3, background: '#245a91' } })
@@ -83,20 +84,14 @@ export async function growthRealmImageDownloadFixture(): Promise<GrowthRealmImag
       sha256,
     };
     const completionKey = randomUUID();
-    const completionValue = await base.checked(
-      'POST',
-      `/v1/media/${media.id}:complete`,
-      completionInput,
-      200,
-      { bearer: reader.websiteBearer, key: completionKey },
-    );
-    const completionReplayValue = await base.checked(
-      'POST',
-      `/v1/media/${media.id}:complete`,
-      completionInput,
-      200,
-      { bearer: reader.websiteBearer, key: completionKey },
-    );
+    const completionValue = await base.checked('POST', `/v1/media/${media.id}:complete`, completionInput, 200, {
+      bearer: reader.websiteBearer,
+      key: completionKey,
+    });
+    const completionReplayValue = await base.checked('POST', `/v1/media/${media.id}:complete`, completionInput, 200, {
+      bearer: reader.websiteBearer,
+      key: completionKey,
+    });
 
     const published = await createImageJob(base.db.pool, base.storage.storage).process(media.id);
     if (published.state !== 'available' || published.variants.length === 0)

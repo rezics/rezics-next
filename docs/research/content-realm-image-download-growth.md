@@ -16,10 +16,10 @@ After measurement, Alice loses only `realm:read`. Her `realm:manage` grant and u
 
 Both checks use the shared physical observer and SQL classifier in `test/support/growth.ts`, one warm-up and one measured repetition at each scale. Scales are 256, 1024 and 4096; the route home, partition count, selected Realm, selected media, selected derivative, byte sizes and request set stay fixed.
 
-| Axis | Fixture-only pressure | Measured rows |
-| --- | --- | --- |
-| Unrelated same-home population | One unrelated Space, Realm, current Realm revision and reserved media item per ordinal | Space, Realm, Realm revision and media |
-| Retained history | One unrelated Realm with detached retained settings revisions, expired non-overlapping grant and ban ranges, reserved media rows and receipt history | Realm, Realm revision, ban, grant and media |
+| Axis                           | Fixture-only pressure                                                                                                                                | Measured rows                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Unrelated same-home population | One unrelated Space, Realm, current Realm revision and reserved media item per ordinal                                                               | Space, Realm, Realm revision and media      |
+| Retained history               | One unrelated Realm with detached retained settings revisions, expired non-overlapping grant and ban ranges, reserved media rows and receipt history | Realm, Realm revision, ban, grant and media |
 
 Only unrelated pressure is seeded directly. The selected reservation, completion, publication and Realm settings claim all use their registered production paths. The checks bound examined rows and statements as constant, shared blocks as logarithmic, and request/response bytes as constant. They also assert fixed relation row work and indexed access on the physically grown relations. Each sample emits exact statement, row, buffer, byte and seeding/settling values as `REALM_IMAGE_GROWTH` output.
 

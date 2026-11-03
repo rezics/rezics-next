@@ -270,14 +270,16 @@ function retainedHistoryPopulation(fixture: GrowthRealmImageDownloadFixture): Po
   };
 }
 
-function assertGrowthReport(name: string, report: Awaited<ReturnType<typeof checkGrowth>>, growsHistory: boolean): void {
+function assertGrowthReport(
+  name: string,
+  report: Awaited<ReturnType<typeof checkGrowth>>,
+  growsHistory: boolean,
+): void {
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
   expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
   expect(
-    report.samples.every(
-      ({ cost }) => typeof cost.requestBytes === 'number' && typeof cost.responseBytes === 'number',
-    ),
+    report.samples.every(({ cost }) => typeof cost.requestBytes === 'number' && typeof cost.responseBytes === 'number'),
   ).toBe(true);
 
   const observedRelations = growsHistory
@@ -387,28 +389,16 @@ test('native Realm image derivative download stays bounded across unrelated home
     presentation: { avatarMediaId: fixture.image.id, bannerMediaId: null, rules: null },
   };
   const selectionKey = crypto.randomUUID();
-  const selection = await fixture.checked(
-    'PATCH',
-    `/v1/realms/${fixture.realmId}`,
-    selectionBody,
-    200,
-    {
-      bearer: fixture.alice.bearer,
-      key: selectionKey,
-      headers: { 'if-match': JSON.stringify(currentHeadRevisionId) },
-    },
-  );
-  const replay = await fixture.checked(
-    'PATCH',
-    `/v1/realms/${fixture.realmId}`,
-    selectionBody,
-    200,
-    {
-      bearer: fixture.alice.bearer,
-      key: selectionKey,
-      headers: { 'if-match': JSON.stringify(currentHeadRevisionId) },
-    },
-  );
+  const selection = await fixture.checked('PATCH', `/v1/realms/${fixture.realmId}`, selectionBody, 200, {
+    bearer: fixture.alice.bearer,
+    key: selectionKey,
+    headers: { 'if-match': JSON.stringify(currentHeadRevisionId) },
+  });
+  const replay = await fixture.checked('PATCH', `/v1/realms/${fixture.realmId}`, selectionBody, 200, {
+    bearer: fixture.alice.bearer,
+    key: selectionKey,
+    headers: { 'if-match': JSON.stringify(currentHeadRevisionId) },
+  });
   expect(replay).toEqual(selection);
   const revisionsAfterReplay = await fixture.db.admin.query<{ count: number }>(
     'SELECT count(*)::integer AS count FROM community.realm_revision WHERE route=$1 AND realm_id=$2',
@@ -453,10 +443,19 @@ test('native Realm image derivative download stays bounded across unrelated home
     expect(conditional.response.headers.get('cache-control')).toBe('private, no-store');
 
     const original = await fixture.download(fixture.image.id, 'original', fixture.alice.bearer);
-    const unknown = await fixture.download(unknownId, fixture.image.variantName, fixture.alice.bearer, conditionalHeaders);
+    const unknown = await fixture.download(
+      unknownId,
+      fixture.image.variantName,
+      fixture.alice.bearer,
+      conditionalHeaders,
+    );
     expect(original.response.status).toBe(404);
     expect(unknown.response.status).toBe(404);
-    assertAbsentMetadata(original.value, [fixture.image.sha256, fixture.image.variant.sha256, `m/${fixture.image.id}/`]);
+    assertAbsentMetadata(original.value, [
+      fixture.image.sha256,
+      fixture.image.variant.sha256,
+      `m/${fixture.image.id}/`,
+    ]);
     assertAbsentMetadata(unknown.value, [fixture.image.sha256, fixture.image.variant.sha256, `m/${fixture.image.id}/`]);
   };
 
@@ -502,8 +501,18 @@ test('native Realm image derivative download stays bounded across unrelated home
   expect(retainedAuthority.rows).toEqual([{ uploader_id: fixture.alice.accountId, manager_count: 1 }]);
   expect((await summary()).avatar).toEqual({ state: 'none', value: null });
 
-  const revoked = await fixture.download(fixture.image.id, fixture.image.variantName, fixture.alice.bearer, conditionalHeaders);
-  const unknownAfterRevoke = await fixture.download(unknownId, fixture.image.variantName, fixture.alice.bearer, conditionalHeaders);
+  const revoked = await fixture.download(
+    fixture.image.id,
+    fixture.image.variantName,
+    fixture.alice.bearer,
+    conditionalHeaders,
+  );
+  const unknownAfterRevoke = await fixture.download(
+    unknownId,
+    fixture.image.variantName,
+    fixture.alice.bearer,
+    conditionalHeaders,
+  );
   expect(revoked.response.status).toBe(404);
   expect(unknownAfterRevoke.response.status).toBe(404);
   expect(normalizedProblem(revoked.value)).toEqual(normalizedProblem(unknownAfterRevoke.value));
@@ -512,11 +521,20 @@ test('native Realm image derivative download stays bounded across unrelated home
   await fixture.grant(fixture.alice.accountId, fixture.realmId, ['realm:read']);
   await fixture.checked('DELETE', `/v1/media/${fixture.image.id}`, undefined, 204, { bearer: fixture.alice.bearer });
   expect((await summary()).avatar).toEqual({ state: 'none', value: null });
-  const erased = await fixture.download(fixture.image.id, fixture.image.variantName, fixture.alice.bearer, conditionalHeaders);
+  const erased = await fixture.download(
+    fixture.image.id,
+    fixture.image.variantName,
+    fixture.alice.bearer,
+    conditionalHeaders,
+  );
   expect(erased.response.status).toBe(404);
   expect(normalizedProblem(erased.value)).toEqual(normalizedProblem(unknownAfterRevoke.value));
 
-  const retainedClaim = await fixture.db.admin.query<{ claimed_realm_id: string | null; claimed_at: string | null; erased: boolean }>(
+  const retainedClaim = await fixture.db.admin.query<{
+    claimed_realm_id: string | null;
+    claimed_at: string | null;
+    erased: boolean;
+  }>(
     `SELECT claimed_realm_id::text AS claimed_realm_id, claimed_at::text AS claimed_at, erased
      FROM content.media WHERE route=$1 AND media_id=$2`,
     [fixture.route, fixture.image.id],
