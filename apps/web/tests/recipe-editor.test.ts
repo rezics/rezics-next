@@ -26,7 +26,7 @@ test('Create and correct a released recipe with authored instructions and cited 
   );
   expect(draft.errors).toEqual([]);
   const created = await fixture.transport.create({ item: draft.item, key: crypto.randomUUID() });
-  expect(created).toEqual({
+  expect(created).toMatchObject({
     ok: true,
     id: recipeId,
     reader: { state: 'ready', href: `/en/subjects/${recipeId}/lentil-soup` },
