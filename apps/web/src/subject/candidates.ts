@@ -269,8 +269,8 @@ export async function selectCandidate(
           ? 'rejected'
           : input.operation === 'accept'
             ? context === candidateContext &&
-                current &&
-                candidateIsPublic(current, input.property, input.candidate, input.slot)
+              current &&
+              candidateIsPublic(current, input.property, input.candidate, input.slot)
               ? 'selected'
               : 'accepted'
             : context === candidateContext &&

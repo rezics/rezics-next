@@ -127,9 +127,7 @@ function commandPosts(requests: readonly NativeKernelRequest[], id: string): Nat
   return requests.filter((request) => {
     if (request.fixtureRequest || request.method !== 'POST') return false;
     const url = new URL(request.url, stack.kernelOrigin);
-    return (
-      url.pathname === `/v1/subjects/${id}:adopt` || url.pathname.startsWith(`/v1/subjects/${id}/candidates/`)
-    );
+    return url.pathname === `/v1/subjects/${id}:adopt` || url.pathname.startsWith(`/v1/subjects/${id}/candidates/`);
   });
 }
 
@@ -195,9 +193,9 @@ nativeTest(
         request.url.startsWith(`/v1/subjects/${subject.id}/candidates/${subject.japanese.id}:accept`),
       ),
     ).toBe(true);
-    expect(commandPosts(traffic, subject.id).some((request) => request.url === `/v1/subjects/${subject.id}:adopt`)).toBe(
-      true,
-    );
+    expect(
+      commandPosts(traffic, subject.id).some((request) => request.url === `/v1/subjects/${subject.id}:adopt`),
+    ).toBe(true);
 
     const anonymous = await (await auth.context('anonymous')).newPage();
     anonymous.setDefaultTimeout(30_000);
