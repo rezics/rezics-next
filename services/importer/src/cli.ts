@@ -6,7 +6,7 @@ import { createImportTransport } from './import-client.ts';
 import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import { observeDumpRetention } from './dumps-bytes.ts';
+import { DEFAULT_DUMP_CHUNK_BYTES, observeDumpRetention } from './dumps-bytes.ts';
 import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
@@ -271,10 +271,10 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
   if (Array.isArray(argv) && argv[0] === 'preview')
     return runPreviewCli(argv.slice(1), {
-      stdin: options.stdin,
-      entries: options.entries,
-      signal: options.signal,
-      fetch: options.fetch,
+      ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
+      ...(options.entries === undefined ? {} : { entries: options.entries }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
 
   let config: Config;

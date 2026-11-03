@@ -143,8 +143,14 @@ export class RecordStore {
 
   constructor(path: string | Database, options: RecordStoreOptions = {}) {
     this.onStatement = options.onStatement;
-    this.ownsDatabase = typeof path === 'string';
-    const database = this.ownsDatabase ? new Database(path, { create: true, strict: true }) : path;
+    let database: Database;
+    if (typeof path === 'string') {
+      this.ownsDatabase = true;
+      database = new Database(path, { create: true, strict: true });
+    } else {
+      this.ownsDatabase = false;
+      database = path;
+    }
     try {
       this.database = options.instrumentDatabase?.(database) ?? database;
     } catch (error) {

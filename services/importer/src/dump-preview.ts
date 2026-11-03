@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { SourceId, SourceRecord } from '@rezics/conversion';
 import type { BatchCommand } from '@rezics/definitions/bulk';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { readDump } from './dumps.ts';
 import { observeDumpRetention } from './dumps-bytes.ts';
 import {
@@ -125,7 +126,8 @@ function operationList(conversion: ImportConversion): unknown[] {
 }
 
 function mediaDescriptors(conversion: ImportConversion): unknown[] {
-  const intents = 'mediaImportIntents' in conversion ? conversion.mediaImportIntents : [];
+  const intents =
+    'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as readonly MediaImportRequest[]) : [];
   return intents.map((intent) => ({
     kind: 'media-intent',
     role: 'cover',
@@ -260,29 +262,21 @@ function captureBaseline(database: Database, source: string, store: DumpPreviewS
                 NULL AS subject
          FROM run_members AS m
          LEFT JOIN run_acknowledged AS a ON a.source=m.source AND a.record_key=m.record_key`;
+    type BaselineCopyRow = {
+      recordKey: string;
+      rowJson: string;
+      projectionJson: string | null;
+      subject: string | null;
+    };
     let after: string | null = null;
     for (;;) {
-      const rows =
+      const sql =
         after === null
-          ? (database
-              .query(`${memberSql} WHERE m.source=? AND m.active=1 ORDER BY m.record_key LIMIT 101`)
-              .all(source) as {
-              recordKey: string;
-              rowJson: string;
-              projectionJson: string | null;
-              subject: string | null;
-            }[])
-          : (database
-              .query(
-                `${memberSql} WHERE m.source=? AND m.active=1 AND m.record_key>? ORDER BY m.record_key LIMIT 101`,
-              )
-              .all(source, after) as {
-              recordKey: string;
-              rowJson: string;
-              projectionJson: string | null;
-              subject: string | null;
-            }[]);
-      const page = rows.slice(0, 100);
+          ? `${memberSql} WHERE m.source=? AND m.active=1 ORDER BY m.record_key LIMIT 101`
+          : `${memberSql} WHERE m.source=? AND m.active=1 AND m.record_key>? ORDER BY m.record_key LIMIT 101`;
+      const statement: ReturnType<Database['query']> = database.query(sql);
+      const rows = (after === null ? statement.all(source) : statement.all(source, after)) as BaselineCopyRow[];
+      const page: BaselineCopyRow[] = rows.slice(0, 100);
       for (const item of page) {
         const row = JSON.parse(item.rowJson) as RecordRow;
         if (row.source !== source || row.recordKey !== item.recordKey || row.state !== 'present')
@@ -451,7 +445,7 @@ export class DumpPreview {
           records = await vndbRecords(store, source, options.entries ?? dumpBytes, {
             entries: options.entries !== undefined,
             signal,
-            observer: options.observer,
+            ...(options.observer === undefined ? {} : { observer: options.observer }),
           });
         } else {
           const native = options.source === 'openlibrary' ? openLibraryMetadata(dumpBytes, signal) : dumpBytes;

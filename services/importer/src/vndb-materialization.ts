@@ -122,8 +122,8 @@ export class VndbMaterialization {
           AND (materialized_generation IS NULL OR materialized_generation<>?)`)
         .run(active.id, self.source, run, self.importer.session.store.source(self.source).generation ?? '');
       yield* iterateVndbRecords(self.tables, self.source, run, {
-        pageSize: self.options?.pageSize,
-        onPageRecords,
+        ...(self.options?.pageSize === undefined ? {} : { pageSize: self.options.pageSize }),
+        ...(onPageRecords === undefined ? {} : { onPageRecords }),
       });
     }
     return this.importer.runRecords(this.registration, records(), runOptions);

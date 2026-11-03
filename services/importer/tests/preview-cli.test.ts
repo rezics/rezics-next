@@ -32,7 +32,7 @@ test('preview CLI decodes a dump without credentials, leases or network', async 
         fetch: (async (input: RequestInfo | URL) => {
           requests.push(String(input));
           throw new Error('network must not be called');
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       },
     );
     expect(requests).toEqual([]);

@@ -59,10 +59,8 @@ export type PreviewVanishedRow = Readonly<{
 export type PreviewPage<T> = Readonly<{
   kind: PreviewKind;
   limit: number;
-  end: 'end' | 'more';
-  nextCursor?: string;
   rows: readonly T[];
-}>;
+}> & (Readonly<{ end: 'more'; nextCursor: string }> | Readonly<{ end: 'end' }>);
 
 const RECORD_KEY =
   /^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u;
@@ -481,29 +479,28 @@ export class DumpPreviewStore {
           }[]);
     const more = rows.length > limit;
     const page = rows.slice(0, limit);
-    return {
-      kind,
-      limit,
-      end: more ? 'more' : 'end',
-      ...(more
-        ? {
-            nextCursor: cursorEncode({
-              v: 1,
-              preview: previewId,
-              source,
-              kind,
-              record: page.at(-1)!.recordKey,
-            }),
-          }
-        : {}),
-      rows: page.map((row) => ({
-        recordKey: row.recordKey,
-        kind: row.kind,
-        recordRevision: row.recordRevision,
-        digest: row.digest,
-        skipped: row.skipped === 1,
-      })),
-    };
+    const mapped = page.map((row) => ({
+      recordKey: row.recordKey,
+      kind: row.kind,
+      recordRevision: row.recordRevision,
+      digest: row.digest,
+      skipped: row.skipped === 1,
+    }));
+    if (more)
+      return {
+        kind,
+        limit,
+        end: 'more',
+        nextCursor: cursorEncode({
+          v: 1,
+          preview: previewId,
+          source,
+          kind,
+          record: page.at(-1)!.recordKey,
+        }),
+        rows: mapped,
+      };
+    return { kind, limit, end: 'end', rows: mapped };
   }
 
   pageVanished(
@@ -553,23 +550,21 @@ export class DumpPreviewStore {
           }[]);
     const more = rows.length > limit;
     const page = rows.slice(0, limit);
-    return {
-      kind: 'vanished',
-      limit,
-      end: more ? 'more' : 'end',
-      ...(more
-        ? {
-            nextCursor: cursorEncode({
-              v: 1,
-              preview: previewId,
-              source,
-              kind: 'vanished',
-              record: page.at(-1)!.recordKey,
-            }),
-          }
-        : {}),
-      rows: page,
-    };
+    if (more)
+      return {
+        kind: 'vanished',
+        limit,
+        end: 'more',
+        nextCursor: cursorEncode({
+          v: 1,
+          preview: previewId,
+          source,
+          kind: 'vanished',
+          record: page.at(-1)!.recordKey,
+        }),
+        rows: page,
+      };
+    return { kind: 'vanished', limit, end: 'end', rows: page };
   }
 
   recordDetail(
@@ -590,9 +585,19 @@ export class DumpPreviewStore {
                 operations_json AS operationsJson, provenance_json AS provenanceJson
          FROM preview_records WHERE preview_id=? AND source=? AND record_key=?`,
       )
-      .get(previewId, source, recordKey) as
-      | (PreviewRecordRow & { kind: Exclude<PreviewKind, 'vanished'>; skipped: number })
-      | null;
+      .get(previewId, source, recordKey) as {
+      recordKey: string;
+      kind: Exclude<PreviewKind, 'vanished'>;
+      recordRevision: string;
+      digest: string;
+      converterRevision: string;
+      skipped: number;
+      comparisonJson: string;
+      displayJson: string;
+      diagnosticsJson: string;
+      operationsJson: string;
+      provenanceJson: string;
+    } | null;
     if (present)
       return {
         found: true,

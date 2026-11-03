@@ -136,7 +136,8 @@ test('baseline comparison pages changed and vanished keys and withholds vanished
       const changed = preview.page('changed', { limit: 20 });
       expect(changed.rows.length).toBeGreaterThan(0);
       const first = preview.page('new', { limit: 20 });
-      const next = first.end === 'more' ? preview.page('new', { limit: 20, cursor: first.nextCursor }) : first;
+      const next =
+        first.end === 'more' ? preview.page('new', { limit: 20, cursor: first.nextCursor }) : first;
       expect(next.rows.length).toBeLessThanOrEqual(20);
       const detail = preview.record(keys[0]!);
       expect(detail.found).toBe(true);

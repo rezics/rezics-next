@@ -314,7 +314,7 @@ export async function runPreviewCli(
       ...options,
       fetch: (async () => {
         throw new Error('Dump preview must not perform network effects.');
-      }) as typeof fetch,
+      }) as unknown as typeof fetch,
     };
     void forbidden;
   }
