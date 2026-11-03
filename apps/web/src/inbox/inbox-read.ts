@@ -321,7 +321,7 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
         data.post.removed === true
       )
         return null;
-      return { text: postText(data.post), id: data.post.id, threadId: data.post.threadId };
+      return { text: postText(data.post), ...(data.post.id ? { id: data.post.id } : {}), threadId: data.post.threadId };
     },
     decision: async (id) => {
       const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });

@@ -54,7 +54,7 @@ function items(): ResolvedInboxPage['items'] {
       id: 'moderation-example',
       kind: 'moderation_decision',
       actorId: null,
-      actorName: undefined,
+      actorName: m.inbox_actor_moderation(),
       threadId: null,
       postId: null,
       decisionId: 'decision',
