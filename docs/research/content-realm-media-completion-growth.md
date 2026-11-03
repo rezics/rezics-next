@@ -102,6 +102,12 @@ The shared runner classified run `mvzyt1ve-a647f983` as `infrastructure-failure`
 This reaches no compiler assertion and supplies no growth observations. The focused landing launch uses the
 following committed document revision; any reached three-scale observations are emitted with its full source hash.
 
+The focused launch on `a2de20321359529d857dae119f5fd876d75ca05a` reached the runner's schema preparation gate,
+then exited with `error: Schema dump differs from db/library/schema.sql.` (run `mvzzh3xs-a3698361`).
+The schema and migrations are unchanged from the retained base; no library file was opened or changed for this slice.
+No test assertion, completion request, growth classifier or registered publication ran. All 256/1024/4096 measured
+values therefore remain unavailable, rather than zero or passing. Frozen acceptance remains deferred to integration.
+
 Read for binding: the Content Goal and Realm media/Cost sections; agent conduct and workflow verification;
 the existing functional Realm assets and media/download growth tests; the shared native Realm/download and
 native collection fixtures; media completion, its HTTP/schema/SQL and image/work registration seams;
