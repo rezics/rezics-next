@@ -1,7 +1,13 @@
 import type { ReactNode, Ref } from 'react';
 import { ContentItem, type ContentItemHeadingLevel, type ContentItemProps } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
-import { FeedEmptyState, feedAvailability, type FeedEmptyContext, type FeedEmptyExplanation, type FeedEmptyKind } from './feed-empty-state';
+import {
+  FeedEmptyState,
+  feedAvailability,
+  type FeedEmptyContext,
+  type FeedEmptyExplanation,
+  type FeedEmptyKind,
+} from './feed-empty-state';
 
 export type FeedItemPresentation = Omit<ContentItemProps, 'headingLevel'> & {
   'data-feed-id'?: string;
@@ -95,9 +101,18 @@ export function FeedResults<T>({
   const availability = result.state === 'ready' ? feedAvailability(result.availability) : undefined;
   const partial = availability?.partial === true;
   const noItems = result.state === 'ready' && result.items.length === 0;
-  const readyKind: FeedEmptyKind = result.state !== 'ready' ? 'loading'
-    : partial ? result.availability.state === 'unavailable' ? 'unavailable' : 'partial'
-    : busy ? 'loading' : result.hasNext ? 'sparse' : 'empty';
+  const readyKind: FeedEmptyKind =
+    result.state !== 'ready'
+      ? 'loading'
+      : partial
+        ? result.availability.state === 'unavailable'
+          ? 'unavailable'
+          : 'partial'
+        : busy
+          ? 'loading'
+          : result.hasNext
+            ? 'sparse'
+            : 'empty';
   const retryControl = onRetry ? (
     <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRetry}>
       {messages.retry}
@@ -114,13 +129,19 @@ export function FeedResults<T>({
       ) : null}
     </>
   );
-  const problemActions = result.state === 'ready' || result.state === 'loading' ? undefined
-    : failureActions?.[result.state] ?? (result.state === 'cursor' ? onRestart ? (
-      <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
-        {messages.restart}
-      </Button>
-    ) : null : result.state === 'auth' || result.state === 'closed' || result.state === 'denied'
-      ? null : retryControl);
+  const problemActions =
+    result.state === 'ready' || result.state === 'loading'
+      ? undefined
+      : (failureActions?.[result.state] ??
+        (result.state === 'cursor' ? (
+          onRestart ? (
+            <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+              {messages.restart}
+            </Button>
+          ) : null
+        ) : result.state === 'auth' || result.state === 'closed' || result.state === 'denied' ? null : (
+          retryControl
+        )));
 
   return (
     <section
@@ -133,7 +154,9 @@ export function FeedResults<T>({
       data-feed-source-state={availability?.sources}
     >
       {busy && result.state === 'ready' && !noItems && !partial && !suppressResultMessage ? (
-        <p role="status" className="text-sm text-muted-foreground">{messages.loading}</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          {messages.loading}
+        </p>
       ) : null}
       {result.state === 'ready' ? (
         <>
@@ -153,7 +176,9 @@ export function FeedResults<T>({
           ) : (
             <>
               {partial ? (
-                <p role="status" className="text-sm text-muted-foreground">{messages.partial}</p>
+                <p role="status" className="text-sm text-muted-foreground">
+                  {messages.partial}
+                </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">{readyActions}</div>
             </>

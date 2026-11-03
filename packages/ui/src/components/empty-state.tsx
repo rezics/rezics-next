@@ -55,7 +55,10 @@ export function EmptyState({
           </EmptyMedia>
         ) : null}
         <div role={role} aria-atomic={role ? true : undefined} className="min-w-0 space-y-2">
-          <Heading id={`${id}-title`} className="text-balance text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">
+          <Heading
+            id={`${id}-title`}
+            className="text-balance text-lg font-semibold tracking-tight [overflow-wrap:anywhere]"
+          >
             {title}
           </Heading>
           {description ? (

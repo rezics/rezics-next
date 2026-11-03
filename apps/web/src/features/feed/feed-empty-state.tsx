@@ -73,13 +73,17 @@ export function FeedEmptyState({
   context?: FeedEmptyContext | undefined;
 }) {
   const explanation = messages.explanations?.[kind];
-  const title = explanation?.title ?? (kind in messages.failure
-    ? messages.failure[kind as keyof typeof messages.failure]
-    : messages[kind as 'empty' | 'sparse' | 'partial' | 'loading']);
-  const Icon = kind === 'empty' && context
-    ? { discovery: CompassIcon, following: UsersIcon, continuation: ListEndIcon, filtered: FilterIcon }[context]
-    : icons[kind];
-  const alert = kind === 'request' || kind === 'denied' || kind === 'cursor' || kind === 'deadline' || kind === 'unavailable';
+  const title =
+    explanation?.title ??
+    (kind in messages.failure
+      ? messages.failure[kind as keyof typeof messages.failure]
+      : messages[kind as 'empty' | 'sparse' | 'partial' | 'loading']);
+  const Icon =
+    kind === 'empty' && context
+      ? { discovery: CompassIcon, following: UsersIcon, continuation: ListEndIcon, filtered: FilterIcon }[context]
+      : icons[kind];
+  const alert =
+    kind === 'request' || kind === 'denied' || kind === 'cursor' || kind === 'deadline' || kind === 'unavailable';
   return (
     <div data-feed-empty-state={kind} data-feed-empty-context={context}>
       <EmptyState
@@ -101,7 +105,10 @@ export function homeFeedRecoveryMessages(locale: string, context: FeedEmptyConte
   const options = { locale: locale as Locale };
   const empty = {
     discovery: { title: m.home_empty_discovery_title({}, options), description: m.home_feed_empty({}, options) },
-    following: { title: m.home_empty_following_title({}, options), description: m.home_feed_following_empty({}, options) },
+    following: {
+      title: m.home_empty_following_title({}, options),
+      description: m.home_feed_following_empty({}, options),
+    },
     continuation: { title: m.home_empty_end_title({}, options), description: m.home_empty_end_body({}, options) },
     filtered: { title: m.home_empty_filtered_title({}, options), description: m.home_empty_filtered_body({}, options) },
   }[context];
@@ -132,7 +139,10 @@ export function homeFeedRecoveryMessages(locale: string, context: FeedEmptyConte
       closed: { title: m.home_empty_closed_title({}, options), description: m.home_feed_closed({}, options) },
       cursor: { title: m.home_empty_cursor_title({}, options), description: m.home_feed_cursor({}, options) },
       deadline: { title: m.home_empty_deadline_title({}, options), description: m.home_feed_deadline({}, options) },
-      unavailable: { title: m.home_feed_unavailable({}, options), description: m.home_empty_unavailable_body({}, options) },
+      unavailable: {
+        title: m.home_feed_unavailable({}, options),
+        description: m.home_empty_unavailable_body({}, options),
+      },
     },
   };
 }

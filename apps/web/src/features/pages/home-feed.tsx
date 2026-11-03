@@ -99,7 +99,9 @@ export function HomeFeed({
   const filterPanel = useRef<HTMLDivElement>(null);
   const focusFilters = useRef(false);
   const focusFirstFilter = () =>
-    filterPanel.current?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], select:not(:disabled)')?.focus();
+    filterPanel.current
+      ?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], select:not(:disabled)')
+      ?.focus();
   useEffect(() => {
     if (!filtersOpen || !focusFilters.current) return;
     focusFilters.current = false;
@@ -126,9 +128,13 @@ export function HomeFeed({
       : result.state === 'loading'
         ? { state: 'loading', code: result.code }
         : { state: result.state, code: result.code };
-  const emptyContext: FeedEmptyContext = input?.cursor ? 'continuation'
-    : activeFilters.length || input?.kind || input?.spaceId || input?.ratingQuestionId ? 'filtered'
-    : stream === 'following' ? 'following' : 'discovery';
+  const emptyContext: FeedEmptyContext = input?.cursor
+    ? 'continuation'
+    : activeFilters.length || input?.kind || input?.spaceId || input?.ratingQuestionId
+      ? 'filtered'
+      : stream === 'following'
+        ? 'following'
+        : 'discovery';
   const resultMessages = homeFeedRecoveryMessages(locale, emptyContext);
   return (
     <main
