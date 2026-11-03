@@ -16,17 +16,17 @@ Decision: select individual registered workflows with the SDK's queue delay/rele
 retry, expiry and ten-minute sleep settings, and cancel only this fixture's observed sleeper before resuming its persisted
 next step through the native enqueue seam already used by `account-erasure.test.ts`.
 
-| Operation | Selected work and asserted completion |
-| --- | --- |
-| Fence closure | Real tombstone effect, stable close workflow, one progress row and closed fence. |
-| Authored page | One published contribution and one draft; published body retained with erased author, draft title and physical revision bytes cleared by registered follow-up work. |
-| Upload phases | One pending reserved avatar; fields pass records the unchanged 600,000 ms durable delay and leaves both acknowledgements pending. |
-| Collection settlement | Registered partition worker collects exactly one pending prefix, joins its effects and removes bytes and media row before participant resumption. |
-| Reactions/reports | Empty selected ranges, including final reaction source-version cleanup. Existing positive functional scenarios remain unchanged. |
-| Moderation | One recent decision, decider removed, statement retained under one exception and expiry key. |
-| Final proof | Separate media and fields operations, actual residual probes, content/delivery `none` for empty accounts and `erased` for contributions. |
-| Replay | Actual registered `effect` workflow replays the committed tombstone; original close workflow and progress are unchanged, with exactly one acknowledgement per participant. |
-| Expiry | Registered retention page at the original due time, statement cleared, expiry key removed and exception resolved. |
+| Operation             | Selected work and asserted completion                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fence closure         | Real tombstone effect, stable close workflow, one progress row and closed fence.                                                                                           |
+| Authored page         | One published contribution and one draft; published body retained with erased author, draft title and physical revision bytes cleared by registered follow-up work.        |
+| Upload phases         | One pending reserved avatar; fields pass records the unchanged 600,000 ms durable delay and leaves both acknowledgements pending.                                          |
+| Collection settlement | Registered partition worker collects exactly one pending prefix, joins its effects and removes bytes and media row before participant resumption.                          |
+| Reactions/reports     | Empty selected ranges, including final reaction source-version cleanup. Existing positive functional scenarios remain unchanged.                                           |
+| Moderation            | One recent decision, decider removed, statement retained under one exception and expiry key.                                                                               |
+| Final proof           | Separate media and fields operations, actual residual probes, content/delivery `none` for empty accounts and `erased` for contributions.                                   |
+| Replay                | Actual registered `effect` workflow replays the committed tombstone; original close workflow and progress are unchanged, with exactly one acknowledgement per participant. |
+| Expiry                | Registered retention page at the original due time, statement cleared, expiry key removed and exception resolved.                                                          |
 
 Each operation has its own `checkGrowth` series at 256, 1024 and 4096. The independent axes are unrelated completed
 progress, unrelated authored source/locator rows, and retained moderation decisions/expiry keys. Only that axis varies;

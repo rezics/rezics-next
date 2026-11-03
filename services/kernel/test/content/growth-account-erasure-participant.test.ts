@@ -14,11 +14,11 @@ test('registered Content participant phases, closure, pending Collection, retent
     expect(result.completed.length).toBeGreaterThanOrEqual(3 * 3 * 2 * 2);
     for (const item of fixture.selected) {
       if (!result.completed.includes(item.person.accountId) || item.mode === 'empty') continue;
-      const response = await fixture.system.kernel.handle(new Request(
-        `https://content.test/v1/posts/${item.published!.firstPost.id}`,
-      ));
+      const response = await fixture.system.kernel.handle(
+        new Request(`https://content.test/v1/posts/${item.published!.firstPost.id}`),
+      );
       expect(response.status).toBe(200);
-      const value = await response.json() as { post: { authorId: string; body: Parameters<typeof documentText>[0] } };
+      const value = (await response.json()) as { post: { authorId: string; body: Parameters<typeof documentText>[0] } };
       expect(value.post.authorId).toBe(item.person.accountId);
       expect(documentText(value.post.body)).toBe('Selected published body');
       const draft = await fixture.system.database.pool.query(
