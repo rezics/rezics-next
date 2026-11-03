@@ -73,7 +73,7 @@ const AvatarSchema = t.Union([
   ),
   t.Null(),
 ]);
-const AuthorSchema = t.Object(
+const AuthorSchema = t.Unsafe<AuthorView>(t.Object(
   {
     id: t.String({ format: 'uuid' }),
     displayName: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
@@ -81,7 +81,7 @@ const AuthorSchema = t.Object(
     avatar: AvatarSchema,
   },
   closed,
-);
+));
 const SafeWithheldEntrySchema = t.Object(
   {
     id: t.String({ format: 'uuid' }),
