@@ -5,14 +5,18 @@ Context. This is derived discovery; acceptance and selection remain separate nat
 
 ## Cross-media dump seed
 
-`scripts/datasets/cross-media-seed.ts` imports named Steins;Gate, Clannad and Fate works from extracted native
-Bangumi and VNDB dumps. It requires an anime from Bangumi and a VN from VNDB for each franchise, and validates
-all selected records with the existing registered converters before starting an import. A synopsis mentioning
-another franchise does not elect a work. The command consumes dump records; it does not replace them with live
-API records or fabricated catalogue examples.
+`scripts/datasets/cross-media-seed.ts` imports the Steins;Gate, Clannad and Fate families from extracted native
+Bangumi and VNDB dumps. Title matching locates franchise entry works; family membership then follows mapped source
+relations, capped at 256 works per franchise. Collaboration, catch-all related-to, other character appearances,
+staff credits, episodes, releases and `chars.main` / `releases_supersedes.rid` endpoints stay referenced rather
+than expanding through unrelated filmography. A synopsis mentioning another franchise does not elect a work. The
+command consumes dump records; it does not replace them with live API records or fabricated catalogue examples.
 
 Decision: seed each provider under separate `cross_media` source aliases, match franchise titles only, and report
 unmapped source rows as explicit gaps without merging identities by name.
+
+Decision: Bangumi type 3 maps to MusicAlbum and type 6 to Movie or TVSeries by pinned platform codes 6002 (film)
+and 1/2/3/6001 (TV), including `Movie`/`TV` labels; unknown live-action platforms stay exact `/platform` gaps.
 
 Extract a [Bangumi Archive](https://github.com/bangumi/Archive) release into a directory containing the original
 `subject.jsonlines`, `subject-relations.jsonlines`, `subject-characters.jsonlines`, `subject-persons.jsonlines`,
@@ -45,21 +49,23 @@ aliases keep this subset's membership independent of a complete provider import.
 idempotent retries; keep both extracted snapshots unchanged during selection. Missing input and invalid conversion
 fail before API writes. A later API failure retains the ordinary importer's recoverable state and exits nonzero.
 
-The JSON result includes franchise membership, per-provider run counts, actual `GET /v1/subjects/{id}` responses,
-source-file SHA-256 digests and explicit `gaps`. Each gap retains its complete original row and names its exact
-source columns in `fields`, including ordering, role, episode participation, revision-independent source IDs and
-other qualifications. Incident work relations, episodes, character appearances (including other works), staff,
-voice credits, person relations, releases, release producers, aliases and VNDB anime links remain gaps until their
-registered native mappings exist. `vn_anime.aid` identifies AniDB; it cannot be treated as a Bangumi subject ID.
-The result reports `imported-with-gaps`, rather than claiming that API readings already contain that graph.
+The JSON result includes franchise membership, native subject IDs, readable `/subjects/{id}/{slug}` routes,
+per-provider work and entity run counts, actual `GET /v1/subjects/{id}` responses, source-file SHA-256 digests,
+explicit `gaps` and resumable `unresolved` edges. Each gap retains its complete original row and names its exact
+source columns in `fields`. Create bootstrap facts are selected; later relations remain proposed until an editor
+with independent accept/adopt authority reviews them. The command never grants those permissions. `vn_anime.aid`
+identifies AniDB; it cannot be treated as a Bangumi subject ID. Cited `bgm.tv` URLs bind VNDB records to Bangumi
+identifiers; titles and names never merge identities. Reopening the same state resumes unresolved graph work and
+does not duplicate accepted records or change selection.
 
-This first stage imports named works and exposes those missing mappings. It does not yet expand the complete
-transitive family/reference catalogue, character versions, superseded releases or all producer neighborhoods.
-The remaining outcome is assigned in `.temp/continuation/cross-media-relations.md`: real-dump per-persona API
-proof, cross-provider identity bindings, native character/staff/episode/release conversions, all relation frontiers,
-and selected graph readings. The focused `specs/cross-media-seed.test.ts` cases use synthetic dump-shaped input
-and an importer transport fixture to pin selection, explicit gaps, COPY decoding and idempotent reopen; they do
-not establish the live, licensed-dump product acceptance. That acceptance remains deferred to integration.
+Representable family relations, character appearances, qualified voice credits, staff credits, episodes, releases
+and producer credits are written through ordinary batch APIs using `cross-media-entities@1` for non-work grains
+and the existing Bangumi/VNDB work converters for types 1/2/4 and visual novels. Missing Concept/Scheme bindings,
+omitted relation.3/6 and staff.3/6 inventories, unknown live-action platforms and missing target records stay
+exact-field gaps or unresolved edges. The focused `specs/cross-media-seed.test.ts` cases use synthetic dump-shaped
+input and an importer transport fixture to pin family election, explicit gaps, COPY decoding and idempotent reopen.
+`specs/cross-media-seed-api.test.ts` drives the production seed through ordinary batch/read/accept/adopt personas.
+Licensed-dump native acceptance remains deferred to integration.
 
 The selection and incident-edge shape comes from `legacy-final:scripts/datasets/bangumi.ts` and
 `legacy-final:scripts/datasets/vndb.ts`; COPY text decoding retains the latter's escaping behavior. Format
