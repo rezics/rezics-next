@@ -65,7 +65,7 @@ test('signed-out and restarted-empty stories enter the actual history route', ()
   const signedOut = logs.slice(logs.indexOf('export const SignedOut'));
   expect(signedOut).toContain('<PageStory visitor="Signed Out" path="/library/logs" />');
   expect(signedOut).toContain('myLogsStoryActivity().listReads');
-  expect(signedOut).toContain("`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`");
+  expect(signedOut).toContain('`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`');
   expect(signedOut).not.toContain('MyLogsPageView');
   expect(source('../src/session/guard.ts')).toContain(
     'href: `/auth/sign-in?return_to=${encodeURIComponent(url.pathname + url.search)}`',
