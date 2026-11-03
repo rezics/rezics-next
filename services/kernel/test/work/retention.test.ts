@@ -4,6 +4,7 @@ import { ConfigError } from '../../src/commerce/config.ts';
 import {
   readWorkflowRetentionConfig,
   runWorkflowRetentionSweep,
+  WORKFLOW_RETENTION_WORKFLOW,
   type WorkflowRetentionSdk,
 } from '../../src/work/retention.ts';
 import { createWorkClient, enqueueWorkIntent } from '../../src/work/client.ts';
@@ -282,3 +283,142 @@ test('the retention sweep keeps pending, enqueued, delayed and recently complete
   expect((await client.getWorkflow(onCutoff))?.completedAt).toBe(cutoff);
   expect((await client.getWorkflow(noCompletedAt))?.completedAt).toBeUndefined();
 });
+
+function recoveryWorker(application: string, mode: 'before' | 'after' | 'recover') {
+  const child = Bun.spawn([process.execPath, `${import.meta.dir}/support/retention-runtime.ts`, application, mode], {
+    env: process.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const timeout = setTimeout(() => child.kill('SIGKILL'), 60_000);
+  const reader = child.stdout.getReader();
+  const errors = new Response(child.stderr).text();
+  let output = '';
+  return {
+    async until(marker: string) {
+      while (!output.includes(marker)) {
+        const next = await reader.read();
+        if (next.done) throw new Error(`Missing ${marker}: ${output}\n${await errors}`);
+        output += new TextDecoder().decode(next.value);
+      }
+      return output;
+    },
+    async stop() {
+      child.kill('SIGKILL');
+      await child.exited;
+      clearTimeout(timeout);
+    },
+  };
+}
+
+for (const checkpoint of ['before', 'after'] as const) {
+  test(`native recovery ${checkpoint} the batch checkpoint keeps the identity, cutoff and independent resources`, async () => {
+    const application = `retention-recovery:${crypto.randomUUID()}`;
+    const ids = Array.from({ length: 1001 }, (_, i) => `${application}:${String(i).padStart(4, '0')}`);
+    const sweep = `${application}:sweep`;
+    const child = `${application}:child`;
+    const recent = `${application}:recent`;
+    const foreign = `${application}:foreign`;
+    for (const value of [...ids, sweep, child, recent, foreign]) owned.add(value);
+    let worker: ReturnType<typeof recoveryWorker> | undefined;
+    await client.registerQueue(application, { applicationName: application });
+    try {
+      const old = Date.now() - 45 * 86400000;
+      await database.query(
+        `INSERT INTO dbos.workflow_status
+           (workflow_uuid, status, name, authenticated_roles, recovery_attempts,
+            created_at, updated_at, completed_at, application_name)
+         SELECT value, 'SUCCESS', 'retention.recovery.fixture', '[]', 0, $2::bigint - 1, $2, $2, $3
+         FROM unnest($1::text[]) AS value`,
+        [ids, old, application],
+      );
+      // Seed every deletable SDK family, including the three payload tables without FKs.
+      for (const [table, columns, values] of [
+        ['workflow_input', 'inputs', "'[]'"],
+        ['workflow_output', 'output', "'null'"],
+        ['operation_outputs', 'function_id, function_name, output', "1, 'fixture.step', 'null'"],
+        ['workflow_events', 'key, value', "'event', 'null'"],
+        ['workflow_events_history', 'function_id, key, value', "1, 'event', 'null'"],
+        ['notifications', 'topic, message, serialization', "'fixture', 'null', 'portable_json'"],
+        ['streams', 'key, value, "offset", function_id, serialization', "'fixture', 'null', 0, 1, 'portable_json'"],
+      ]) {
+        const key = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
+        await database.query(
+          `INSERT INTO dbos.${table} (${key}, ${columns}) SELECT value, ${values} FROM unnest($1::text[]) AS value`,
+          [ids],
+        );
+      }
+      for (const value of [child, recent, foreign]) await enqueue(value);
+      await setTerminal(recent, 'SUCCESS', Date.now() - 15 * 86400000);
+      await setTerminal(foreign, 'SUCCESS', old);
+      await database.query('UPDATE dbos.workflow_status SET application_name=$2 WHERE workflow_uuid=ANY($1)', [
+        [child, recent],
+        application,
+      ]);
+      await database.query('UPDATE dbos.workflow_status SET parent_workflow_id=$2 WHERE workflow_uuid=$1', [
+        child,
+        ids[0],
+      ]);
+      const closure = await retireSdkWorkflowWriters(ids[0]!, client);
+      const handle = await client.enqueue({
+        workflowID: sweep,
+        workflowName: WORKFLOW_RETENTION_WORKFLOW,
+        queueName: application,
+      });
+      await database.query('UPDATE dbos.workflow_status SET application_name=$2 WHERE workflow_uuid=$1', [
+        sweep,
+        application,
+      ]);
+      worker = recoveryWorker(application, checkpoint);
+      const firstOutput = await worker.until('interrupted');
+      expect(firstOutput).toContain('deleted:1000');
+      const steps = (await client.listWorkflowSteps(sweep))!;
+      const start = steps.find((step) => step.name === 'kernel.workflowRetention.start')!.output as {
+        now: number;
+        retentionDays: number;
+      };
+      expect(start.retentionDays).toBe(30);
+      const batches = steps.filter((step) => step.name === 'kernel.workflowRetention.batch');
+      expect(batches.map((step) => step.output)).toEqual(checkpoint === 'after' ? [1000] : []);
+      await worker.stop();
+      worker = recoveryWorker(application, 'recover');
+      await worker.until('ready');
+      // Launch performs native recovery for this attempt's executor only. No resume,
+      // status rewrite or replacement workflow ID supplies the missing checkpoint.
+      expect(await handle.getResult()).toBe(checkpoint === 'after' ? 1001 : 1);
+      const recoveredOutput = await worker.until('deleted:1');
+      const cutoffs = [...`${firstOutput}${recoveredOutput}`.matchAll(/selection:([^\s]+)/g)].map((match) => match[1]);
+      expect(new Set(cutoffs)).toEqual(new Set([new Date(start.now - 30 * 86400000 - 1).toISOString()]));
+      expect((await client.getWorkflow(sweep))?.workflowID).toBe(sweep);
+      expect(
+        (await client.listWorkflowSteps(sweep))!
+          .filter((step) => step.name === 'kernel.workflowRetention.batch')
+          .map((step) => step.output),
+      ).toEqual(checkpoint === 'after' ? [1000, 1] : [1]);
+      for (const table of [
+        'workflow_status',
+        'workflow_input',
+        'workflow_output',
+        'operation_outputs',
+        'workflow_events',
+        'workflow_events_history',
+        'notifications',
+        'streams',
+      ]) {
+        const key = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
+        expect(
+          (await database.query(`SELECT 1 FROM dbos.${table} WHERE ${key}=ANY($1) LIMIT 1`, [ids])).rowCount,
+          table,
+        ).toBe(0);
+      }
+      expect(await readSdkWorkflowRetirement(ids[0]!, client)).toEqual(closure);
+      for (const value of [child, recent, foreign]) expect(await client.getWorkflow(value)).toBeDefined();
+      expect((await client.getWorkflow(child))?.status).toBe('ENQUEUED');
+    } finally {
+      await worker?.stop();
+      // Delete only this attempt's workflows and queue, including a failed sweep.
+      await client.deleteWorkflows([...ids, sweep, child, recent, foreign], false);
+      await client.deleteQueue(application);
+    }
+  }, 180_000);
+}
