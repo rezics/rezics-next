@@ -1,3 +1,5 @@
+import { useId } from 'react';
+import { useSubjectCommunityReading } from '../pages/subject-community-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -264,7 +266,6 @@ export function MusicAlbumReader({
           <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
         </ContentItemHeading>
         <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.music_reader_tracks_unpublished({}, o)}</p>
         <ProfileLibraryNote library={visit.library} unpublished={visit.unpublished} locale={locale} kind="music" />
       </header>
       {visit.state !== 'ready' && visit.state !== 'empty' ? (
@@ -298,25 +299,42 @@ export function MusicAlbumReader({
 
 /** Ordinary MusicAlbum overview: composed public facts with the released album grouping. */
 export function MusicAlbumOverview({
+  source,
+  reader = null,
   locale,
   public: publicRead,
   bounds,
   link = PlainLink,
 }: {
+  source?: object;
+  reader?: string | null;
   locale: string;
   public: SubjectRead;
   bounds?: readonly ProfileBound[];
   link?: PageLink;
 }) {
+  const instance = useId();
+  const reading = useSubjectCommunityReading({
+    source: source ?? publicRead,
+    reader,
+    descriptor: JSON.stringify([publicRead.subject.id, locale]),
+  });
   const query = useQuery({
-    queryKey: ['music-album-reader', publicRead.subject.id, locale],
-    queryFn: () => loadAlbumProfile({ data: publicRead.subject.id }),
+    queryKey: ['music-album-reader', instance, publicRead.subject.id, locale, reading.key],
+    enabled: reading.available,
+    queryFn: async () => {
+      if (!reading.isCurrent()) throw new Error('Retired album source');
+      const result = await loadAlbumProfile({ data: publicRead.subject.id });
+      if (!reading.isCurrent()) throw new Error('Retired album source');
+      return result;
+    },
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (!reading.available) return <p role="status">{m.music_reader_stale({}, options(locale))}</p>;
   const release = query.data?.ok ? query.data.release : undefined;
   const reason = query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
   return (

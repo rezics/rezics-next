@@ -7827,5 +7827,19 @@
   "organization_reader_inspect": "날짜와 출처 확인",
   "organization_reader_return": "연혁으로 돌아가기",
   "organization_reader_no_fields": "연혁 항목이 설정되지 않았습니다. 지원되는 정보는 사실과 관계에서 확인하세요.",
-  "organization_reader_bounded": "이 개요의 표시 범위는 제한됩니다. 나머지는 사실이나 관계를 열어 확인하세요."
+  "organization_reader_bounded": "이 개요의 표시 범위는 제한됩니다. 나머지는 사실이나 관계를 열어 확인하세요.",
+  "album_tracks_title": "앨범 내용",
+  "album_tracks_scope": "허용된 각 소속 관계의 순서, 한정자와 대상 식별 정보를 유지합니다. 기본 설정이 없는 트랙이나 발매 정보는 사용할 수 없습니다.",
+  "album_tracks_unconfigured": "트랙 또는 발매 설정을 사용할 수 없습니다. 트랙 목록을 추론하지 않습니다.",
+  "album_tracks_unavailable": "이 앨범 범위를 불러올 수 없습니다. 같은 범위를 다시 읽어 보세요.",
+  "album_tracks_withheld": "이 앨범 또는 소속 관계는 이 사용자에게 공개되지 않았습니다.",
+  "album_tracks_next_unavailable": "다음 범위를 읽지 못했습니다. 이전 범위는 계속 표시됩니다.",
+  "album_tracks_open": "항목 열기(새 탭)",
+  "album_tracks_return": "이 탭으로 돌아오면 앨범 범위를 그대로 볼 수 있습니다.",
+  "album_tracks_retry": "이 범위 다시 읽기",
+  "album_tracks_correction": "소속 관계 검토(새 탭)",
+  "album_tracks_kind": "항목 유형",
+  "album_tracks_complete": "이 스트림에 대한 이어보기가 반환되지 않았습니다.",
+  "album_tracks_membership": "소속 관계 서술",
+  "album_tracks_target": "대상 식별 정보"
 }

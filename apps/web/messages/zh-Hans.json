@@ -7827,5 +7827,19 @@
   "organization_reader_inspect": "查看日期与来源",
   "organization_reader_return": "返回沿革",
   "organization_reader_no_fields": "尚未配置原生沿革字段。请通过事实与关系查看受支持的信息。",
-  "organization_reader_bounded": "此概览的显示范围有限。请打开事实或关系查看其余信息。"
+  "organization_reader_bounded": "此概览的显示范围有限。请打开事实或关系查看其余信息。",
+  "album_tracks_title": "专辑内容",
+  "album_tracks_scope": "每条已准入的成员关系保留各自的顺序、限定信息和目标身份。缺少原生配置的曲目或发行详情不可用。",
+  "album_tracks_unconfigured": "曲目或发行配置不可用。不会推测曲目列表。",
+  "album_tracks_unavailable": "此专辑窗口暂不可用，请重试读取同一窗口。",
+  "album_tracks_withheld": "此专辑或成员关系未向当前浏览者披露。",
+  "album_tracks_next_unavailable": "无法读取下一窗口，仍显示上一窗口。",
+  "album_tracks_open": "打开条目（新标签页）",
+  "album_tracks_return": "返回此标签页即可保留专辑窗口。",
+  "album_tracks_retry": "重试此窗口",
+  "album_tracks_correction": "检查成员关系（新标签页）",
+  "album_tracks_kind": "条目类型",
+  "album_tracks_complete": "此数据流未返回后续窗口。",
+  "album_tracks_membership": "成员关系陈述",
+  "album_tracks_target": "目标身份"
 }

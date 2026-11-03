@@ -37,7 +37,7 @@ qualified credits and related work with human field labels from the current immu
 source provenance, distinct from editorial acceptance. Relation pages that return a following `next` token are the
 loaded page only; they never imply a complete tracklist or episode list.
 
-Type3 maps to MusicAlbum with no work/release/track split. Individual tracks and recordings stay unpublished. MusicAlbum
+Type3 maps to MusicAlbum with no work/release/track split. The ordinary album contents reader consumes only admitted canonical containment streams; it does not publish tracks or recordings. MusicAlbum
 has no Library profile, so Library states, copies and progress stay unpublished. Type6 maps pinned movie platforms to
 Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
 existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`
@@ -49,7 +49,7 @@ reread of the same subject. Empty, loading, denied, stale and unavailable readin
 retry never creates. A contributor list previews the credits view.
 
 Decision: MusicAlbum keeps no Library profile; type3 tracks and type6 episode families stay unpublished until those
-immutable native profiles and source bindings are published.
+immutable native profiles and source bindings are published. Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
 
 ## Create a catalogue subject
 

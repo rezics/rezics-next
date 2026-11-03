@@ -7902,5 +7902,19 @@
   "organization_reader_inspect": "Inspect dates and sources",
   "organization_reader_return": "Return to history",
   "organization_reader_no_fields": "No native history fields are configured. Use facts and relations for supported information.",
-  "organization_reader_bounded": "This overview is bounded. Open facts or relations to inspect the remaining information."
+  "organization_reader_bounded": "This overview is bounded. Open facts or relations to inspect the remaining information.",
+  "album_tracks_title": "Album contents",
+  "album_tracks_scope": "Each admitted membership keeps its own order, qualifiers and target identity. Track or release details without native configuration remain unavailable.",
+  "album_tracks_unconfigured": "Track or release configuration is unavailable. No track list has been inferred.",
+  "album_tracks_unavailable": "This album window is unavailable. Try reading the same window again.",
+  "album_tracks_withheld": "This album or membership is not disclosed to this viewer.",
+  "album_tracks_next_unavailable": "The next window could not be read. The previous window remains visible.",
+  "album_tracks_open": "Open subject (new tab)",
+  "album_tracks_return": "Return to this tab to keep your album window.",
+  "album_tracks_retry": "Retry this window",
+  "album_tracks_correction": "Review memberships (new tab)",
+  "album_tracks_kind": "Subject type",
+  "album_tracks_complete": "No continuation was returned for this stream.",
+  "album_tracks_membership": "Membership statement",
+  "album_tracks_target": "Target identity"
 }
