@@ -138,7 +138,10 @@ test('the identifier editor filters the released edition fields and reviews its 
   expect(privateResponse?.headers()['cache-control']).toContain('private');
   expect(privateResponse?.headers()['cache-control']).toContain('no-store');
   await anonymous.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-  await anonymous.getByRole('status').filter({ hasText: /sign in/i }).waitFor({ state: 'visible' });
+  await anonymous
+    .getByRole('status')
+    .filter({ hasText: /sign in/i })
+    .waitFor({ state: 'visible' });
   expect(await anonymous.getByRole('region', { name: 'ISBN-13', exact: true }).count()).toBe(0);
   expect(await anonymous.locator('meta[name="robots"]').getAttribute('content')).toBe('noindex, nofollow');
   await anonymous.close();
@@ -174,7 +177,8 @@ test('the identifier editor filters the released edition fields and reviews its 
   expect(proposalReader(proposalResponse)).toBe(fixture.aliceAccountId);
   let candidate: string | undefined;
   walk(await proposalResponse.json(), (record) => {
-    if (record.kind === 'proposed-awaiting-review' && typeof record.candidate === 'string') candidate = record.candidate;
+    if (record.kind === 'proposed-awaiting-review' && typeof record.candidate === 'string')
+      candidate = record.candidate;
   });
   expect(candidate).toMatch(/^[0-9a-f-]{36}$/i);
 
@@ -201,7 +205,9 @@ test('the identifier editor filters the released edition fields and reviews its 
   ]);
   expect(browserAuthorization).toEqual([]);
 
-  const reviewLink = await isbnField.getByRole('link', { name: 'Review this proposal', exact: true }).getAttribute('href');
+  const reviewLink = await isbnField
+    .getByRole('link', { name: 'Review this proposal', exact: true })
+    .getAttribute('href');
   expect(reviewLink).toBeTruthy();
   const reviewAddress = new URL(reviewLink!, fixture.stack.web);
   expect(reviewAddress.searchParams.get('reviewProperty')).toBe('schema:isbn');
