@@ -69,10 +69,7 @@ test('Realm and Space reports follow current readable targets through concealmen
   const spaceRead = await fixture.call('GET', spacePath, { bearer: fixture.author.bearer });
   expect(spaceRead.response.status).toBe(200);
 
-  const realmReportId = await fixture.submit(
-    { kind: 'realm', id: created.realmId },
-    { bearer: fixture.other.bearer },
-  );
+  const realmReportId = await fixture.submit({ kind: 'realm', id: created.realmId }, { bearer: fixture.other.bearer });
   const spaceReportId = await fixture.submit({ kind: 'space', id: spaceId }, { bearer: fixture.other.bearer });
   const page = await fixture.call('GET', '/v1/reports/me', { bearer: fixture.other.bearer });
   expect(page.response.status).toBe(200);
@@ -89,12 +86,12 @@ test('Realm and Space reports follow current readable targets through concealmen
     label: spaceRead.value!.space.title,
     href: spacePath,
   });
-  expect((await fixture.call('GET', realmEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status).toBe(
-    200,
-  );
-  expect((await fixture.call('GET', spaceEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status).toBe(
-    200,
-  );
+  expect(
+    (await fixture.call('GET', realmEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status,
+  ).toBe(200);
+  expect(
+    (await fixture.call('GET', spaceEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status,
+  ).toBe(200);
 
   const hidden = await fixture.call('PATCH', realmPath, {
     bearer: fixture.author.bearer,
@@ -128,8 +125,10 @@ test('Realm and Space reports follow current readable targets through concealmen
     label: 'Reporter history community',
     href: realmPath,
   });
-  expect((await fixture.call('GET', `/v1/reports/me?reportId=${spaceReportId}`, { bearer: fixture.other.bearer })).response
-    .status).toBe(200);
+  expect(
+    (await fixture.call('GET', `/v1/reports/me?reportId=${spaceReportId}`, { bearer: fixture.other.bearer })).response
+      .status,
+  ).toBe(200);
 }, 120_000);
 
 test('raw continuation survives an exact old selection, replay and another viewer cannot reuse it', async () => {

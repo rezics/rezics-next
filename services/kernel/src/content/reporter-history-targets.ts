@@ -31,8 +31,8 @@ export async function readReporterHistoryTargets(
 ): Promise<TargetRead> {
   if (targets.length > 21) throw new RangeError('At most 21 report targets');
   const unique = [...new Map(targets.map((target) => [key(target), target])).values()];
-  const communityTargets = unique.filter((target): target is CommunityTarget =>
-    target.kind === 'realm' || target.kind === 'space',
+  const communityTargets = unique.filter(
+    (target): target is CommunityTarget => target.kind === 'realm' || target.kind === 'space',
   );
   const communityChecks = new Map<string, CommunityCheck>();
   for (const target of communityTargets)
@@ -42,7 +42,9 @@ export async function readReporterHistoryTargets(
     summaries: initial.summaries,
     async verify() {
       const current = await observeTargets(dependencies, unique, communityTargets, communityChecks, context);
-      return sameMap(initial.summaries, current.summaries) && sameMap(initial.communitySources, current.communitySources);
+      return (
+        sameMap(initial.summaries, current.summaries) && sameMap(initial.communitySources, current.communitySources)
+      );
     },
   };
 }
@@ -53,10 +55,12 @@ async function observeTargets(
   communityTargets: readonly CommunityTarget[],
   communityChecks: ReadonlyMap<string, CommunityCheck>,
   context: Context,
-): Promise<Readonly<{
-  summaries: Map<string, ReporterTargetSummary>;
-  communitySources: Map<string, CommunitySource>;
-}>> {
+): Promise<
+  Readonly<{
+    summaries: Map<string, ReporterTargetSummary>;
+    communitySources: Map<string, CommunitySource>;
+  }>
+> {
   const output = new Map<string, ReporterTargetSummary>(unique.map((target) => [key(target), unavailable]));
   const readers = {
     pool: dependencies.pool,
