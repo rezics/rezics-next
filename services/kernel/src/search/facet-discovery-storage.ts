@@ -82,7 +82,10 @@ export function createFacetDiscoveryStorage(
     binding: PublicFilterSourceBinding;
     population: FacetPopulationSource;
     scopedFacets?: Readonly<{
-      observe: (admission: ScopedFacetAdmission, context: PublicFilterConsumerContext) => Promise<ScopedFacetObservation>;
+      observe: (
+        admission: ScopedFacetAdmission,
+        context: PublicFilterConsumerContext,
+      ) => Promise<ScopedFacetObservation>;
       readPage: (
         admission: ScopedFacetAdmission,
         after: string | null,

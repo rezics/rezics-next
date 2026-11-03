@@ -22,7 +22,11 @@ import {
   type FacetNativePageResult,
 } from './facet-discovery-native.ts';
 import { createFacetDiscoveryStorage } from './facet-discovery-storage.ts';
-import { scopedFacetIdentityKey, type ScopedFacetAdmission, type ScopedFacetObservation } from './scoped-facet-source.ts';
+import {
+  scopedFacetIdentityKey,
+  type ScopedFacetAdmission,
+  type ScopedFacetObservation,
+} from './scoped-facet-source.ts';
 import type { createScopedFacetSource } from './scoped-facet-source.ts';
 
 type Meter = { -readonly [K in keyof PublicFilterCost]: number };
@@ -149,7 +153,8 @@ export function createFacetNativeOperations(
     const current: ScopedFacetObservation = config.scopedFacets
       ? await config.scopedFacets.observe(admission, context)
       : { status: 'unready', cost: empty() };
-    return current.status === 'observed' && scopedFacetIdentityKey(current.identity) === scopedFacetIdentityKey(admission.identity)
+    return current.status === 'observed' &&
+      scopedFacetIdentityKey(current.identity) === scopedFacetIdentityKey(admission.identity)
       ? current
       : current.status === 'observed'
         ? { status: 'unready' as const, cost: current.cost }

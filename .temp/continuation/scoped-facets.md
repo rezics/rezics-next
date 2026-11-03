@@ -1,37 +1,34 @@
 ---
 {
-  "goal": "search",
-  "manager": "search",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/search/facet-discovery-runtime.ts",
-    "services/kernel/src/search/facet-discovery-operations.ts",
-    "services/kernel/src/search/facet-discovery-storage.ts",
-    "services/kernel/src/search/scoped-facet-source.ts",
-    "services/kernel/src/search/service.ts",
-    "services/kernel/src/search/public-runtime.ts",
-    "services/kernel/src/search/scope-source.ts",
-    "services/kernel/src/search/service-scope.ts",
-    "services/kernel/test/search/second-scope-facet-source.test.ts",
-    "docs/search-facet-runtime-plan.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "Scoped native facets enumerate only values contributed by the complete authorized matching population, with useful pages and proven exhaustion.",
-      "Scope/membership/authorization changes invalidate or repair the retained observation before disclosure; no private rows, sampled counts or Global fallback establish success."
-    ]
-  },
-  "estimate": {
-    "lines": 650,
-    "files": 10
-  }
+  'goal': 'search',
+  'manager': 'search',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/search/facet-discovery-runtime.ts',
+      'services/kernel/src/search/facet-discovery-operations.ts',
+      'services/kernel/src/search/facet-discovery-storage.ts',
+      'services/kernel/src/search/scoped-facet-source.ts',
+      'services/kernel/src/search/service.ts',
+      'services/kernel/src/search/public-runtime.ts',
+      'services/kernel/src/search/scope-source.ts',
+      'services/kernel/src/search/service-scope.ts',
+      'services/kernel/test/search/second-scope-facet-source.test.ts',
+      'docs/search-facet-runtime-plan.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'Scoped native facets enumerate only values contributed by the complete authorized matching population, with useful pages and proven exhaustion.',
+          'Scope/membership/authorization changes invalidate or repair the retained observation before disclosure; no private rows, sampled counts or Global fallback establish success.',
+        ],
+    },
+  'estimate': { 'lines': 650, 'files': 10 },
 }
 ---
 

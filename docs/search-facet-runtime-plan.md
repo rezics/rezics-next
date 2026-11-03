@@ -29,15 +29,15 @@ No public property facet response contains counts or a substitute for counts.
 Universal kind chips remain governed exclusively by the exception in `search-facets.md`.
 This plan neither adds kind-count work nor changes that exception.
 
-| Surface          | Specified now                         | Current implementation boundary                                        | Required closure                          |
-| ---------------- | ------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------- |
-| Facet HTTP wire  | Adopted count-free continuation       | Unscoped route and continuation are implemented                       | Scope admission call-site integration     |
-| Population       | Complete eligible distinct values     | Unscoped retained preparation and scoped native-source seam            | Scope-owner producer wiring and outcomes  |
-| Identity/order   | Canonical item/native code/type order | Retained keyset storage uses canonical value order                     | Native scoped value-order acceptance      |
+| Surface          | Specified now                         | Current implementation boundary                                         | Required closure                           |
+| ---------------- | ------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| Facet HTTP wire  | Adopted count-free continuation       | Unscoped route and continuation are implemented                         | Scope admission call-site integration      |
+| Population       | Complete eligible distinct values     | Unscoped retained preparation and scoped native-source seam             | Scope-owner producer wiring and outcomes   |
+| Identity/order   | Canonical item/native code/type order | Retained keyset storage uses canonical value order                      | Native scoped value-order acceptance       |
 | Privacy          | Whole query and current disclosure    | Source START/FINAL and contributor/target checks; scoped identity bound | Current scope/membership integration proof |
-| Roster           | `facetProperties(release, types)`     | Web truncates at eight                                                 | Group full roster; separate ranges       |
-| Native catalogue | Released shared fixture               | Existing acceptance writers own older cases                           | Native closure brief below               |
-| Renderer         | Adopted wire consumption              | Unscoped consumer exists                                               | Scoped consumer closure, no new DTO       |
+| Roster           | `facetProperties(release, types)`     | Web truncates at eight                                                  | Group full roster; separate ranges         |
+| Native catalogue | Released shared fixture               | Existing acceptance writers own older cases                             | Native closure brief below                 |
+| Renderer         | Adopted wire consumption              | Unscoped consumer exists                                                | Scoped consumer closure, no new DTO        |
 
 ### Why the former preview population was incomplete
 
