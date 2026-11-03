@@ -171,6 +171,13 @@ export function searchRoutes<App>(
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
+  let actionCatalogueApp: Parameters<typeof actionCatalogue>[0] | undefined;
+  const routeAccess = (): Access | undefined => {
+    if (gateAccess) return gateAccess();
+    if (typeof access !== 'function') return access;
+    if (!actionCatalogueApp) throw new Error('Search route action catalogue is not mounted');
+    return access({ actions: actionCatalogue(actionCatalogueApp) });
+  };
   async function fill<T extends { subjects: { id: string; type: string; labels: Record<string, string> }[] }>(
     page: T,
     authorize: (resource: Resource) => Promise<AccessCheck>,
@@ -238,7 +245,7 @@ export function searchRoutes<App>(
   }
 
   const trending = createTrendingSearchesService({ pool, clock });
-  const routed: ReturnType<typeof createApp> = (app as ReturnType<typeof createApp>)
+  const routed = (app as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
     .get(
       '/v1/trendingSearches',
@@ -354,7 +361,7 @@ export function searchRoutes<App>(
               pool,
               access:
                 gateAccess ??
-                (() => (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access!)),
+                (() => routeAccess()!),
               actor,
               group: 'search_advanced',
               clientAction: 'subject:read',
@@ -372,7 +379,7 @@ export function searchRoutes<App>(
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
             if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const ownerAccess: Access | undefined =
-              gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+              routeAccess();
             if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             return discoveryHttpPage(
               await discovery(
@@ -393,16 +400,14 @@ export function searchRoutes<App>(
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const realmAccess = body.population
-              ? (gateAccess?.() ??
-                (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access))
+              ? routeAccess()
               : undefined;
             if (body.population && !realmAccess)
               throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             const scopeAccess: Access | undefined =
               realmAccess ??
-              gateAccess?.() ??
-              (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+              routeAccess();
             const scopeOptions = scopeAccess
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }
               : undefined;
@@ -488,8 +493,7 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          const scopeAccess: Access | undefined =
-            gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+          const scopeAccess = routeAccess();
           return search.facets(
             actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
             body,
@@ -551,8 +555,7 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          const scopeAccess =
-            gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+          const scopeAccess = routeAccess();
           let completed: Static<typeof suggestResponse> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
@@ -567,5 +570,6 @@ export function searchRoutes<App>(
         });
       },
     );
+  actionCatalogueApp = routed as Parameters<typeof actionCatalogue>[0];
   return routed as typeof routed & App;
 }
