@@ -102,7 +102,7 @@ const reviewBody = t.Object({
     maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
   }),
 }, closed);
-const reviewHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }, closed);
+const reviewHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const applyBody = t.Object({ reviewId: id, digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -190,7 +190,7 @@ export function libraryArchiveCollectionRecoveryRoutes(
   const service = () => createLibraryArchiveCollectionRecovery({ ...deps, access: deps.access() });
   return app
     .post('/v1/libraryArchiveCollectionRecoveries', {
-      headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }, closed),
+      headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
       body: uploadBody,
       response: { 200: status, ...failures },
       detail: detail('create', true),
