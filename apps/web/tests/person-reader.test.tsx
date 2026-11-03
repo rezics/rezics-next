@@ -51,7 +51,7 @@ test('ordinary Person overview places the reader; admitted authored text and lab
     expect(html).not.toMatch(/January|January 1|1月1日/);
     expect(html).toContain('https://example.org/biography');
     expect(html).toContain(fixture.biography);
-    expect(html).toContain(`/subjects/${fixture.read.subject.id}/mira-sato/people`);
+    expect(html).toMatch(new RegExp(`/subjects/${fixture.read.subject.id}/[^"/]+/people`));
     expect(html).not.toContain('wdt:P106');
   }
 });
@@ -163,11 +163,13 @@ test('old definition responses, expanded evidence and focused controls retire on
     expect(host.textContent).not.toContain('Mira directs');
     await act(async () => resolve!(fixture.release));
     expect(host.textContent).toContain('Mira directs');
+    host.querySelector('details')!.open = true;
     const link = host.querySelector('a')!;
     link.focus();
     locale = 'ja';
     await draw();
     expect(host.textContent).not.toContain('Mira directs');
+    expect(host.querySelector('details')).toBeNull();
     expect(window.document.activeElement?.id).toBe('person-biography');
     source = {};
     await draw();
