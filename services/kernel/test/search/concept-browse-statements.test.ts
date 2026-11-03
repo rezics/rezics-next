@@ -67,7 +67,11 @@ const statement = (value: string, level: string): IndexedStatement => ({
 });
 
 test('native absence requires a ready complete first prefix', () => {
-  const after = { slot: '00000000-0000-4000-8000-000000000001', candidate: '00000000-0000-4000-8000-000000000002', observation: 'a'.repeat(64) };
+  const after = {
+    slot: '00000000-0000-4000-8000-000000000001',
+    candidate: '00000000-0000-4000-8000-000000000002',
+    observation: 'a'.repeat(64),
+  };
   expect([
     completeNativeStatementPrefix(true, null, 0, 64),
     completeNativeStatementPrefix(true, after, 1, 64),
