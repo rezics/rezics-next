@@ -1,3 +1,4 @@
+-- migrate:up
 -- Widen native storage to the bounded question-scale delivery contract. Existing rows remain unchanged.
 ALTER TABLE rating.vote DROP CONSTRAINT vote_units_check;
 ALTER TABLE rating.vote ADD CONSTRAINT vote_units_check
