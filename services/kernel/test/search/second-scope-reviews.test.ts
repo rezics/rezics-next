@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
-import { erasePost } from '../../src/content/moderation.ts';
+import { softDeletePost } from '../../src/content/erase-post.ts';
 import { restorePost } from '../../src/content/restore-post.ts';
 import {
   createNativeReviewDiscoveryAdapter,
@@ -207,7 +207,7 @@ describe('public review discovery adapter', () => {
       route: routeOf(initial[4]!.postId)!,
       id: initial[4]!.postId,
     });
-    await erasePost(
+    await softDeletePost(
       { pool: fixture.pool, access: fixture.access, routeKey },
       author,
       { postId: initial[4]!.postId, reason: 'Author withdrew the review opening' },
