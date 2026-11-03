@@ -25,11 +25,13 @@ test('published watch selection, removal and board CAS inputs remain explicit', 
   expect(selection).toMatchObject({ in: 'query', required: true, schema: { enum: ['thread', 'board'] } });
   const removal = contract.paths['/v1/accounts/{accountId}/watches/{watchId}'].delete;
   expect(removal.requestBody.content['application/json'].schema).toMatchObject({
-    additionalProperties: false, required: ['expectedRevision'],
+    additionalProperties: false,
+    required: ['expectedRevision'],
   });
   const board = contract.paths['/v1/boards/{id}/watch'];
   expect(board.get.responses['200'].content['application/json'].schema.required).toEqual(['watching', 'revision']);
   expect(board.put.requestBody.content['application/json'].schema).toMatchObject({
-    additionalProperties: false, required: ['watching', 'expectedRevision'],
+    additionalProperties: false,
+    required: ['watching', 'expectedRevision'],
   });
 });
