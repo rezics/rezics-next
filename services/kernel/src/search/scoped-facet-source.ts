@@ -353,7 +353,7 @@ export function createServiceScopeFacetPorts(
         request.work.native(page.work);
         if (page.basis.canonical !== request.prepared.basis.canonical)
           return { status: 'changed', cost: scopeWorkCost(request) };
-        const subjects = page.hits.map(({ id }) => id);
+        const subjects = page.candidates.map(({ subjectId }) => subjectId);
         const frontier = page.coveredThrough ?? subjects.at(-1) ?? after ?? 'empty';
         const result: ScopedFacetCandidatePage = {
           status: page.exhausted ? 'complete' : 'progress',
@@ -374,10 +374,10 @@ export function createServiceScopeFacetPorts(
         const result = await evaluate(request, subjects);
         if (!result) return { status: 'unready', cost: scopeWorkCost(request) };
         if (result.basis.canonical !== request.prepared.basis.canonical) {
-          request.pendingPage = undefined;
+          delete request.pendingPage;
           return { status: 'changed', cost: scopeWorkCost(request) };
         }
-        if (result.values.every((value) => value !== 'not_proven')) request.pendingPage = undefined;
+        if (result.values.every((value) => value !== 'not_proven')) delete request.pendingPage;
         return {
           status: 'matched',
           identity: request.identity,

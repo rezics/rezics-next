@@ -238,7 +238,7 @@ export function searchRoutes<App>(
   }
 
   const trending = createTrendingSearchesService({ pool, clock });
-  const routed = (app as ReturnType<typeof createApp>)
+  const routed: ReturnType<typeof createApp> = (app as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
     .get(
       '/v1/trendingSearches',
@@ -488,7 +488,7 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          const scopeAccess =
+          const scopeAccess: Access | undefined =
             gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
           return search.facets(
             actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
