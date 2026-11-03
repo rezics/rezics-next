@@ -1066,26 +1066,23 @@ CREATE TABLE content.catalogue_report_candidate (
 
 
 --
--- Name: conversation_activity_episode; Type: TABLE; Schema: content; Owner: -
+-- Name: conversation_activity_board_frontier; Type: TABLE; Schema: content; Owner: -
 --
 
-CREATE TABLE content.conversation_activity_episode (
+CREATE TABLE content.conversation_activity_board_frontier (
     route integer NOT NULL,
-    post_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    opening boolean NOT NULL,
-    contributed_at timestamp with time zone,
-    native_eligible boolean NOT NULL,
-    security_revision bigint NOT NULL,
+    board_id uuid NOT NULL,
+    generation bigint NOT NULL,
     source_epoch integer NOT NULL,
     source_position bigint NOT NULL,
-    CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
-    CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
-    CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
-    CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
-    CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
+    source_event_seq integer NOT NULL,
+    after_thread_id uuid,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT conversation_activity_board_frontier_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT conversation_activity_board_frontier_generation_check CHECK ((generation > 0)),
+    CONSTRAINT conversation_activity_board_frontier_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT conversation_activity_board_frontier_source_event_seq_check CHECK (((source_event_seq >= 0) AND (source_event_seq <= 999))),
+    CONSTRAINT conversation_activity_board_frontier_source_position_check CHECK ((source_position > 0))
 );
 
 
@@ -1103,13 +1100,66 @@ CREATE TABLE content.conversation_activity_episode (
     security_revision bigint NOT NULL,
     source_epoch integer NOT NULL,
     source_position bigint NOT NULL,
+    public_eligible boolean DEFAULT false NOT NULL,
+    source_event_seq integer DEFAULT 0 NOT NULL,
+    coverage_state text DEFAULT 'uncovered'::text NOT NULL,
+    coverage_generation bigint DEFAULT 1 NOT NULL,
+    coverage_epoch integer DEFAULT 0 NOT NULL,
+    coverage_position bigint DEFAULT 0 NOT NULL,
+    coverage_event_seq integer DEFAULT 0 NOT NULL,
+    coverage_reply_count bigint DEFAULT 0 NOT NULL,
+    coverage_latest_post_id uuid,
+    coverage_latest_at timestamp with time zone,
+    coverage_thread_security_revision bigint,
+    coverage_board_id uuid,
+    coverage_board_security_revision bigint,
+    coverage_board_generation bigint DEFAULT 0 CONSTRAINT conversation_activity_episod_coverage_board_generation_not_null NOT NULL,
+    repair_generation bigint,
+    repair_after_created_at timestamp with time zone,
+    repair_after_post_id uuid,
+    repair_missing_publication boolean DEFAULT false CONSTRAINT conversation_activity_episo_repair_missing_publication_not_null NOT NULL,
+    repair_source_epoch integer,
+    repair_source_position bigint,
     CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
+    CONSTRAINT conversation_activity_episode_coverage_board_generation_check CHECK ((coverage_board_generation >= 0)),
+    CONSTRAINT conversation_activity_episode_coverage_board_route_check CHECK (((coverage_board_id IS NULL) OR (route = ((get_byte(uuid_send(coverage_board_id), 10) * 256) + get_byte(uuid_send(coverage_board_id), 11))))),
+    CONSTRAINT conversation_activity_episode_coverage_count_check CHECK ((coverage_reply_count >= 0)),
+    CONSTRAINT conversation_activity_episode_coverage_event_seq_check CHECK (((coverage_event_seq >= 0) AND (coverage_event_seq <= 1000))),
+    CONSTRAINT conversation_activity_episode_coverage_generation_check CHECK ((coverage_generation > 0)),
+    CONSTRAINT conversation_activity_episode_coverage_latest_check CHECK (((coverage_latest_post_id IS NULL) = (coverage_latest_at IS NULL))),
+    CONSTRAINT conversation_activity_episode_coverage_latest_route_check CHECK (((coverage_latest_post_id IS NULL) OR (route = ((get_byte(uuid_send(coverage_latest_post_id), 10) * 256) + get_byte(uuid_send(coverage_latest_post_id), 11))))),
+    CONSTRAINT conversation_activity_episode_coverage_position_check CHECK ((coverage_position >= 0)),
+    CONSTRAINT conversation_activity_episode_coverage_state_check CHECK ((coverage_state = ANY (ARRAY['uncovered'::text, 'repairing'::text, 'current'::text, 'unrecoverable'::text]))),
+    CONSTRAINT conversation_activity_episode_repair_cursor_check CHECK (((repair_after_created_at IS NULL) = (repair_after_post_id IS NULL))),
     CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT conversation_activity_episode_source_event_seq_check CHECK (((source_event_seq >= 0) AND (source_event_seq <= 999))),
     CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
+-- Name: conversation_activity_repair_frontier; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.conversation_activity_repair_frontier (
+    partition_no integer NOT NULL,
+    cut_epoch integer NOT NULL,
+    cut_position bigint NOT NULL,
+    after_route integer,
+    after_thread_id uuid,
+    complete boolean DEFAULT false NOT NULL,
+    repair_after_route integer,
+    repair_after_thread_id uuid,
+    CONSTRAINT conversation_activity_repair_frontier_check CHECK (((after_route IS NULL) = (after_thread_id IS NULL))),
+    CONSTRAINT conversation_activity_repair_frontier_check1 CHECK (((repair_after_route IS NULL) = (repair_after_thread_id IS NULL))),
+    CONSTRAINT conversation_activity_repair_frontier_check2 CHECK (((after_route IS NULL) OR ((after_route >= (partition_no * 16)) AND (after_route <= ((partition_no * 16) + 15))))),
+    CONSTRAINT conversation_activity_repair_frontier_check3 CHECK (((repair_after_route IS NULL) OR ((repair_after_route >= (partition_no * 16)) AND (repair_after_route <= ((partition_no * 16) + 15))))),
+    CONSTRAINT conversation_activity_repair_frontier_cut_epoch_check CHECK ((cut_epoch > 0)),
+    CONSTRAINT conversation_activity_repair_frontier_cut_position_check CHECK ((cut_position >= 0))
 );
 
 
@@ -1496,6 +1546,21 @@ CREATE TABLE content.notice (
 
 
 --
+-- Name: notice_ack; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.notice_ack (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    notice_id uuid NOT NULL,
+    acknowledged_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    CONSTRAINT notice_ack_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT notice_ack_check1 CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
+    CONSTRAINT notice_ack_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: notice_finalization; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1525,21 +1590,6 @@ CREATE TABLE content.notice_seen (
     CONSTRAINT notice_seen_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT notice_seen_check1 CHECK ((route = ((get_byte(uuid_send(seen_notice_id), 10) * 256) + get_byte(uuid_send(seen_notice_id), 11)))),
     CONSTRAINT notice_seen_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
--- Name: notice_ack; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.notice_ack (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    notice_id uuid NOT NULL,
-    acknowledged_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
-    CONSTRAINT notice_ack_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT notice_ack_notice_route_check CHECK ((route = ((get_byte(uuid_send(notice_id), 10) * 256) + get_byte(uuid_send(notice_id), 11)))),
-    CONSTRAINT notice_ack_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -2633,11 +2683,27 @@ ALTER TABLE ONLY content.catalogue_report_candidate
 
 
 --
+-- Name: conversation_activity_board_frontier conversation_activity_board_frontier_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.conversation_activity_board_frontier
+    ADD CONSTRAINT conversation_activity_board_frontier_pkey PRIMARY KEY (route, board_id);
+
+
+--
 -- Name: conversation_activity_episode conversation_activity_episode_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.conversation_activity_episode
     ADD CONSTRAINT conversation_activity_episode_pkey PRIMARY KEY (route, post_id);
+
+
+--
+-- Name: conversation_activity_repair_frontier conversation_activity_repair_frontier_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.conversation_activity_repair_frontier
+    ADD CONSTRAINT conversation_activity_repair_frontier_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -2801,6 +2867,14 @@ ALTER TABLE ONLY content.moderation_decision
 
 
 --
+-- Name: notice_ack notice_ack_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice_ack
+    ADD CONSTRAINT notice_ack_pkey PRIMARY KEY (route, account_id, notice_id);
+
+
+--
 -- Name: notice_finalization notice_finalization_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2822,22 +2896,6 @@ ALTER TABLE ONLY content.notice
 
 ALTER TABLE ONLY content.notice_seen
     ADD CONSTRAINT notice_seen_pkey PRIMARY KEY (route, account_id);
-
-
---
--- Name: notice_ack notice_ack_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.notice_ack
-    ADD CONSTRAINT notice_ack_pkey PRIMARY KEY (route, account_id, notice_id);
-
-
---
--- Name: notice_ack notice_ack_notice_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.notice_ack
-    ADD CONSTRAINT notice_ack_notice_fkey FOREIGN KEY (route, notice_id) REFERENCES content.notice(route, notice_id) ON DELETE CASCADE;
 
 
 --
@@ -3400,10 +3458,52 @@ CREATE INDEX catalogue_report_candidate_page_idx ON content.catalogue_report_can
 
 
 --
+-- Name: conversation_activity_board_frontier_pending_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_board_frontier_pending_idx ON content.conversation_activity_board_frontier USING btree (route, board_id) WHERE (NOT complete);
+
+
+--
+-- Name: conversation_activity_board_threads_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_board_threads_idx ON content.thread USING btree (route, board_id, thread_id);
+
+
+--
 -- Name: conversation_activity_live_prefix_idx; Type: INDEX; Schema: content; Owner: -
 --
 
 CREATE INDEX conversation_activity_live_prefix_idx ON content.conversation_activity_episode USING btree (route, thread_id, contributed_at DESC, post_id DESC) INCLUDE (opening) WHERE (native_eligible AND (contributed_at IS NOT NULL));
+
+
+--
+-- Name: conversation_activity_opening_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX conversation_activity_opening_idx ON content.conversation_activity_episode USING btree (route, thread_id) WHERE opening;
+
+
+--
+-- Name: conversation_activity_public_latest_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_public_latest_idx ON content.conversation_activity_episode USING btree (route, thread_id, contributed_at DESC, post_id DESC) WHERE (native_eligible AND public_eligible AND (contributed_at IS NOT NULL));
+
+
+--
+-- Name: conversation_activity_public_post_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_public_post_page_idx ON content.post USING btree (route, thread_id, created_at, post_id) WHERE ((availability = 'available'::text) AND (visibility = 'published'::text) AND (NOT author_erased));
+
+
+--
+-- Name: conversation_activity_repair_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_repair_idx ON content.conversation_activity_episode USING btree (route, thread_id, post_id) WHERE (opening AND (coverage_state = ANY (ARRAY['uncovered'::text, 'repairing'::text])));
 
 
 --
@@ -3946,6 +4046,14 @@ ALTER TABLE ONLY content.board_slow_permit
 
 
 --
+-- Name: conversation_activity_repair_frontier conversation_activity_repair_frontier_partition_no_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.conversation_activity_repair_frontier
+    ADD CONSTRAINT conversation_activity_repair_frontier_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
 -- Name: edition_publication edition_publication_route_edition_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3967,6 +4075,14 @@ ALTER TABLE ONLY content.media_variant
 
 ALTER TABLE ONLY content.moderation_appeal
     ADD CONSTRAINT moderation_appeal_route_decision_id_fkey FOREIGN KEY (route, decision_id) REFERENCES content.moderation_decision(route, decision_id);
+
+
+--
+-- Name: notice_ack notice_ack_route_notice_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.notice_ack
+    ADD CONSTRAINT notice_ack_route_notice_id_fkey FOREIGN KEY (route, notice_id) REFERENCES content.notice(route, notice_id) ON DELETE CASCADE;
 
 
 --

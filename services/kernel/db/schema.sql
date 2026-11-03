@@ -3220,6 +3220,13 @@ CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING 
 
 
 --
+-- Name: conversation_activity_publication_source_idx; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX conversation_activity_publication_source_idx ON core.outbox USING btree (partition_no, subject, "position", event_seq) WHERE ((type = 'com.rezics.content.post.published.v1'::text) AND (payload_state = 'present'::text));
+
+
+--
 -- Name: history_event_consumer_open_consumer; Type: INDEX; Schema: core; Owner: -
 --
 
