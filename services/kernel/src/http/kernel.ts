@@ -54,11 +54,8 @@ import { noticeRoutes } from '../content/notice-routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
-<<<<<<< HEAD
 import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
-=======
 import { malImportRoutes } from '../library/list-import-mal-routes.ts';
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
@@ -608,7 +605,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       });
     },
   });
-<<<<<<< HEAD
   const bangumi = bangumiImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -616,14 +612,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(bangumi), realmRoleReader }),
   });
-  const labels = personalLabelRoutes(bangumi as unknown as ReturnType<typeof definitionRoutes>, {
-=======
-  const mal = malImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+  const mal = malImportRoutes(bangumi as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey, pool: dependencies.pool, tokens, clock,
     access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
   });
   const labels = personalLabelRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
@@ -777,11 +770,8 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof pinRoutes> &
   ReturnType<typeof personalLabelRoutes> &
   ReturnType<typeof personalLibraryRoutes> &
-<<<<<<< HEAD
   ReturnType<typeof bangumiImportRoutes> &
-=======
   ReturnType<typeof malImportRoutes> &
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &

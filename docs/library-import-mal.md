@@ -65,3 +65,5 @@ Cancellation stops new dispatch; an already-started native command may finish. R
 stops subsequent rows without undoing prior effects. Return outcomes and remaining rows drive partial resumption;
 failed rows are retried with their original review/operands, never a fresh identity. Preview changes only private
 import evidence; native facts change only after review and explicit field confirmation.
+
+Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.

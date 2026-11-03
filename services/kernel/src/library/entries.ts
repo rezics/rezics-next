@@ -37,11 +37,7 @@ import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
 import { resolveSubject } from './subject-anchor.ts';
-<<<<<<< HEAD
 import { assertPreProfileLibraryRead, readLibraryProfileSourceObservation } from './profile-source.ts';
-=======
-import { assertPreProfileLibraryRead, readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
@@ -298,17 +294,15 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-<<<<<<< HEAD
   async function putEntry(
     actor: Actor,
     subjectId: string,
     input: unknown,
     requestKey: string,
-    reviewGuard?: import('./list-import-bangumi-model.ts').BangumiGuard,
+    guard?: import('./list-import-bangumi-model.ts').BangumiGuard | ReviewedEntrySource,
   ) {
-=======
-  async function putEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string, reviewedSource?: ReviewedEntrySource) {
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
+    const reviewedSource = guard && 'release' in guard ? guard : undefined;
+    const reviewGuard = guard && 'releaseDigest' in guard ? guard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -352,12 +346,6 @@ export function createEntryCommands(config: Dependencies) {
           async prepare(attempt) {
             try {
               const observation = await readLibraryProfileSourceObservation(
-<<<<<<< HEAD
-                { pool, access, actor: owner, at: attempt.time, deadline },
-                subjectId,
-              );
-              const source = observation?.source;
-=======
                 { pool, access, actor: owner, at: attempt.time, deadline }, subjectId);
               const source = observation?.source;
               if (reviewedSource) {
@@ -372,7 +360,6 @@ export function createEntryCommands(config: Dependencies) {
                   if (claim.rows[0]?.subject_id !== b.subject) throw new LibraryConflictError();
                 }
               }
->>>>>>> f7f0ab5dc6 (Squash worker branch changes)
               if (!source) throw new LibraryNotFoundError();
               if (
                 reviewGuard &&
