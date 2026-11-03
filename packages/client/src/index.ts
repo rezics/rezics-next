@@ -8,12 +8,6 @@ import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
-  BanReviewIdentity,
-  BanReviewPage,
-  BanReviewPageItem,
-  BanReviewPageQuery,
-} from './kernel/community/ban-review-page-schemas.ts';
-export type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,
   PersonalEntryFieldChange,
@@ -37,6 +31,11 @@ export type {
 } from './kernel/library/entry-annotation-correction';
 
 type Routes = KernelType['~Routes']['v1'];
+type BanReviewGetRoute = Routes['realms'][':realmId']['bans'] extends { get: infer Get } ? Get : never;
+export type BanReviewPageQuery = BanReviewGetRoute extends { query: infer Query } ? Query : never;
+export type BanReviewPage = BanReviewGetRoute extends { response: { 200: infer Page } } ? Page : never;
+export type BanReviewPageItem = BanReviewPage extends { items: readonly (infer Item)[] } ? Item : never;
+export type BanReviewIdentity = BanReviewPageItem extends { account: infer Identity } ? Identity : never;
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
