@@ -214,9 +214,7 @@ function containsUnsupportedDiscoveryLeaf(value: unknown): boolean {
   const node = value as Record<string, unknown>;
   if (Object.hasOwn(node, 'kind') || Object.hasOwn(node, 'ratingQuestion')) return true;
   if ('not' in node && containsUnsupportedDiscoveryLeaf(node.not)) return true;
-  return ['and', 'or'].some((key) =>
-    Array.isArray(node[key]) && node[key].some(containsUnsupportedDiscoveryLeaf),
-  );
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsUnsupportedDiscoveryLeaf));
 }
 
 function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
@@ -569,7 +567,11 @@ export function createSearchService({
           if (containsUnsupportedDiscoveryLeaf(filter)) unsupported('/filter');
           admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), { owner: true });
         } else {
-          admitted = admitFilter(filter as FilterDocument, active, containsOwnerPredicate(filter) ? { owner: true } : undefined);
+          admitted = admitFilter(
+            filter as FilterDocument,
+            active,
+            containsOwnerPredicate(filter) ? { owner: true } : undefined,
+          );
         }
       } catch (error) {
         if (error instanceof FilterError)
@@ -584,10 +586,12 @@ export function createSearchService({
       !nativeOrder &&
       (text || admitted) &&
       !(text && positiveText(text)) &&
-      !(admitted &&
+      !(
+        admitted &&
         (containsRealmPredicate(admitted)
           ? positiveDiscoveryFilter(admitted as DiscoveryFilterDocument)
-          : positiveFilter(admitted as FilterDocument)))
+          : positiveFilter(admitted as FilterDocument))
+      )
     )
       unsupported(text ? '/text' : '/filter');
     return admitted;
@@ -698,7 +702,9 @@ export function createSearchService({
           scopeWork.native(scope.work(preparedScope));
         }
       }
-      const cursorRequest = preparedScope ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis) : bindingRequest;
+      const cursorRequest = preparedScope
+        ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
+        : bindingRequest;
       const binding = { operation: 'subjects.search', request: cursorRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
@@ -764,7 +770,9 @@ export function createSearchService({
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const compiledFilter =
-        admitted && !preparedScope ? compileFilter(admitted as FilterDocument, { prefix: 'f', relationOverflow: true }) : undefined;
+        admitted && !preparedScope
+          ? compileFilter(admitted as FilterDocument, { prefix: 'f', relationOverflow: true })
+          : undefined;
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
