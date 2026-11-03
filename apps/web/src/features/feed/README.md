@@ -205,7 +205,6 @@ They exercise the same shared FeedResults projection at 390 and 1280, in light/d
 The focused reading tests pin all installed branches, occurrence/creation meaning, independent destinations, missing
 metadata and 1/10/20-row read cost; existing Home lifetime tests retain ownership of request and session retirement.
 
-
 ## Home selection context
 
 Home and Following keep one selection owner for type, one exact-address Space and one rating question. The
