@@ -45,7 +45,13 @@ import {
   type SearchHit,
 } from './hits.ts';
 export { validateSearchLimit } from './hits.ts';
-import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
+import {
+  discoveryIndexUuid,
+  readSubjectSortFormat,
+  SUBJECT_SORT_FORMAT,
+  subjectGenerations,
+  subjectIndexName,
+} from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
 import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
@@ -333,7 +339,8 @@ function validate(request: SearchRequest) {
     throw error;
   }
 
-  const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
+  const realmFilter = filter !== undefined && containsRealmPredicate(filter);
+  const sort = request.sort === undefined ? (realmFilter ? 'name' : text ? 'relevance' : 'name') : request.sort;
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
@@ -344,6 +351,7 @@ function validate(request: SearchRequest) {
     spoilerThreshold = value as SpoilerThreshold;
   }
   if (spoilerThreshold !== undefined && !filter) unsupported('/spoilerThreshold');
+  if (realmFilter && sort !== 'name') unsupported('/sort');
   if (request.population !== undefined) {
     const population = request.population;
     if (
@@ -439,6 +447,14 @@ export function createSearchService({
 }) {
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
+  const realmRelease = releaseOverride
+    ? async (expected?: string) => {
+        const current = await releaseOverride();
+        if (!current) return null;
+        const digest = kindDigest(current);
+        return expected !== undefined && expected !== digest ? null : { digest, release: current };
+      }
+    : undefined;
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
@@ -703,13 +719,123 @@ export function createSearchService({
         scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
         if (realmScopedRequest) {
           if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
-          const realm = await sourceRequest(() =>
+          const preparedRealm = await sourceRequest(() =>
             scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining()),
           );
-          scopeWork.native(realm.work);
-          // population_ready is only a prefix/evaluation preparation handle. This
-          // Search path cannot yet turn it into complete retained canonical pages.
-          throw indexNotReady();
+          scopeWork.native(preparedRealm.work);
+          const generation = await indexRequest(aliasGeneration);
+          const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+          if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+          const index = subjectIndexName(prefix, generation);
+          const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
+          const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
+          const textBoost = compiledText?.leaves
+            .filter((leaf) => !leaf.negated)
+            .map((leaf) => leaf.value)
+            .join(' ');
+          const searchBasis = scope!.realm.searchBasis(preparedRealm.scope, {
+            ...(request.text === undefined ? {} : { text: request.text }),
+            ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
+            generation,
+            indexUuid,
+          });
+          const binding = {
+            operation: 'subjects.search',
+            request: bindSearchScopeCursorRequest(bindingRequest, searchBasis),
+            principal,
+          };
+          let cursor: Awaited<ReturnType<typeof decodeSearchCursor>> | undefined =
+            request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
+          if (cursor && !cursor.ok) {
+            if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+          if (cursor?.ok && cursor.generation !== generation) throw new ProblemError('search_restart_required');
+          const after = cursor?.ok ? scopeCursorAfter('name', cursor.after) : null;
+          const kindAfter =
+            request.kindCursor === undefined
+              ? undefined
+              : kinds
+                ? await decodeKindCursor(cursors, binding, request.kindCursor, generation, kinds.digest, now)
+                : (() => {
+                    throw new ProblemError('search_restart_required');
+                  })();
+          const page = await sourceRequest(() =>
+            scope!.realm.searchPage(preparedRealm.scope, {
+              basis: searchBasis,
+              ...(request.text === undefined ? {} : { text: request.text }),
+              ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
+              generation,
+              indexUuid,
+              after,
+              quota: limit,
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          scopeWork.native(page.work);
+          if (page.status !== 'ready' || !isDeepStrictEqual(page.basis, searchBasis)) throw indexNotReady();
+          const shown = [...page.subjects];
+          if (shown.length !== page.hits.length) throw new ProblemError('search_restart_required');
+          const results = shown.map((subject) => projectHit(subject, hitOptions));
+          if (hitOptions.properties) {
+            const facts = await sourceRequest(() =>
+              projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
+            );
+            results.forEach((hit, index) => (hit.facts = facts[index]!));
+          }
+          const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+          const as_of = await asOf(generation);
+          const witnesses = new Map<string, number>();
+          if (request.cursor === undefined && request.kindCursor === undefined)
+            for (const subject of shown.slice(0, 2))
+              witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+          const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+          const nextAfter = page.after;
+          if (!page.exhausted && nextAfter === null) throw new ProblemError('search_restart_required');
+          const response: PublicSearchPage = {
+            subjects: publicResults,
+            ...(metadata
+              ? {
+                  kinds: {
+                    values: metadata.values,
+                    next:
+                      metadata.after === null
+                        ? null
+                        : await encodeKindCursor(cursors, binding, generation, kinds!.digest, metadata.after, now),
+                  },
+                }
+              : {}),
+            next: page.exhausted
+              ? null
+              : await encodeSearchCursor(cursors, binding, { generation, after: [...nextAfter!] }, now),
+            as_of,
+          };
+          await readContext?.complete(response);
+          const currentHits = await sourceRequest(() => checkHits(source, page.hits, new Map()));
+          if (
+            currentHits.passed.length !== shown.length ||
+            currentHits.passed.some(({ subject }, position) => subject.id !== shown[position]!.id)
+          )
+            throw new ProblemError('search_restart_required');
+          const final = await sourceRequest(() =>
+            scope!.realm.evaluate(
+              preparedRealm.scope,
+              shown.map((subject) => subject.id),
+              scopeWork!.remaining(),
+            ),
+          );
+          scopeWork.native(final.work);
+          if (
+            final.basis !== preparedRealm.scope.basis ||
+            final.values.length !== shown.length ||
+            final.values.some((value) => value !== true)
+          )
+            throw new ProblemError('search_restart_required');
+          if ((await indexRequest(() => discoveryIndexUuid(client, index))) !== indexUuid)
+            throw new ProblemError('search_restart_required');
+          if ((await indexRequest(freshAliasGeneration)) !== generation)
+            throw new ProblemError('search_restart_required');
+          return response;
         } else {
           const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
           preparedScope = await sourceRequest(() =>
@@ -1469,6 +1595,7 @@ export function createSearchService({
     source,
     release,
     clock,
+    ...(realmRelease ? { realmRelease } : {}),
     ...(realmSubjects ? { realmSubjects } : {}),
     ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
   });
