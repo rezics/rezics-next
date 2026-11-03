@@ -14,6 +14,7 @@ import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
+import { projectFeedReactions } from './feed-reactions.ts';
 import { feedDiscoveryItem } from './feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
@@ -467,10 +468,6 @@ export function createFeedReads(deps: FeedDependencies) {
           }
         }),
       );
-      // Repeat the original selected Space authority after all native hydration
-      // and final follow checks, including on an empty/sparse examined page.
-      await space?.finish();
-      await spacePopulation?.finish();
       // Keep rejected candidates in their original slots: they still consume the native
       // raw budget and examined frontier, including Continue's fingerprint/resume keys.
       if (kind !== undefined)
@@ -513,11 +510,31 @@ export function createFeedReads(deps: FeedDependencies) {
           };
       }
       next.turn = turn;
+      let reactionsAsOf: FeedPage['reactionsAsOf'];
+      try {
+        const projected = await projectFeedReactions(content, actor, feedItems, deadline);
+        feedItems.splice(0, feedItems.length, ...projected.items);
+        reactionsAsOf = projected.reactionsAsOf;
+      } catch (error) {
+        // A feed row must not escape with a zero or guessed viewer slot when either
+        // native reaction reader fails. Retain the lane frontier for retry as a whole.
+        sources.following = sourceState(error);
+        lanes.following = [];
+        next.following = position.following;
+        for (let index = feedItems.length - 1; index >= 0; index--)
+          if (feedItems[index]!.source === 'following') feedItems.splice(index, 1);
+        reactionsAsOf = undefined;
+      }
+      // Repeat the original selected Space authority after all native hydration,
+      // reaction projection and final follow checks, including sparse examined pages.
+      await space?.finish();
+      await spacePopulation?.finish();
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,
         sources,
         asOf: personal ? position.boundary : (discoveryAsOf ?? position.boundary),
+        ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),
         next: hasNext ? await encodeFeedCursor(deps.tokens, binding, next, now) : null,
       };
     },
