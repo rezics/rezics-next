@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { CONTENT_COLLECTION_SCHEDULE } from '../../src/content/work.ts';
 import {
   assertGrowthAccessPaths,
