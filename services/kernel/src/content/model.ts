@@ -15,22 +15,9 @@ export type Route = number;
 export type SecurityRevision = string;
 export type Visibility = 'published' | 'draft' | 'protected' | 'taken_down';
 export type Availability = 'available' | 'erased';
-export type Component = Readonly<{
-  partition: number;
-  epoch: number;
-  position: bigint;
-  transactionId: string;
-}>;
-export type ContentCommandValue = Readonly<{
-  threadId: ThreadId;
-  itemId: PostId;
-  revisionId: RevisionId;
-}>;
-export type ReviewVoteCitation = Readonly<{
-  questionId: string;
-  units: number;
-  revision: number;
-}>;
+export type Component = Readonly<{ partition: number; epoch: number; position: bigint; transactionId: string }>;
+export type ContentCommandValue = Readonly<{ threadId: ThreadId; itemId: PostId; revisionId: RevisionId }>;
+export type ReviewVoteCitation = Readonly<{ questionId: string; units: number; revision: number }>;
 
 export type ItemMetadata = Readonly<{
   id: PostId;
@@ -105,10 +92,7 @@ export type ThreadView = Readonly<{
 }>;
 
 export function isErasedPlaceholder(
-  entry: Readonly<{
-    availability: Availability | 'withheld';
-    revisionId?: RevisionId;
-  }>,
+  entry: Readonly<{ availability: Availability | 'withheld'; revisionId?: RevisionId }>,
 ): entry is ErasedPlaceholder {
   return entry.availability === 'erased' && 'removed' in entry && !('revisionId' in entry);
 }
@@ -161,23 +145,11 @@ export type RevisionInput = Readonly<{
   expectedRevisionId?: string | null;
   voteCitation?: ReviewVoteCitation;
 }>;
-export type RequestContext = Readonly<{
-  idempotencyKey: string;
-  deadline: number;
-  requestId: string;
-}>;
-export type AnchoredPosition = Readonly<{
-  partition: Partition;
-  epoch: number;
-  position: bigint;
-}>;
+export type RequestContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
+export type AnchoredPosition = Readonly<{ partition: Partition; epoch: number; position: bigint }>;
 export type Anchored<T> = Readonly<{ value: T; anchor: AnchoredPosition }>;
 export type ReadContext = Readonly<{ actor: Actor; deadline: number }>;
-export type Page<T> = Readonly<{
-  entries: readonly T[];
-  nextCursor: string | null;
-  anchor: AnchoredPosition;
-}>;
+export type Page<T> = Readonly<{ entries: readonly T[]; nextCursor: string | null; anchor: AnchoredPosition }>;
 export type UnfinishedPortError = Error & { readonly port: string };
 
 export function unfinishedPort(port: string): UnfinishedPortError {

@@ -37,11 +37,7 @@ const valid = {
     ...threadIndex,
   },
   'com.rezics.content.post.published.v1': {
-    threadId: ids.threadId,
-    itemId: ids.postId,
-    revisionId: ids.revisionId,
-    actorId: ids.actorId,
-    ...threadIndex,
+    threadId: ids.threadId, itemId: ids.postId, revisionId: ids.revisionId, actorId: ids.actorId, ...threadIndex,
   },
   'com.rezics.content.revision.created.v1': {
     threadId: ids.threadId,
@@ -51,33 +47,16 @@ const valid = {
     ...threadIndex,
     previousSubjectIds: [ids.itemId],
   },
-  'com.rezics.content.media.reserved.v1': {
-    mediaId: ids.mediaId,
-    containerId: ids.containerId,
-    actorId: ids.actorId,
-  },
-  'com.rezics.content.media.uploaded.v1': {
-    mediaId: ids.mediaId,
-    containerId: ids.containerId,
-    actorId: ids.actorId,
-  },
-  'com.rezics.content.media.available.v1': {
-    mediaId: ids.mediaId,
-    containerId: ids.containerId,
-  },
+  'com.rezics.content.media.reserved.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },
+  'com.rezics.content.media.uploaded.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },
+  'com.rezics.content.media.available.v1': { mediaId: ids.mediaId, containerId: ids.containerId },
   'com.rezics.content.media.rejected.v1': {
     mediaId: ids.mediaId,
     containerId: ids.containerId,
     decisionId: ids.revisionId,
   },
-  'com.rezics.content.media.erased.v1': {
-    mediaId: ids.mediaId,
-    containerId: ids.containerId,
-  },
-  'com.rezics.content.media.collected.v1': {
-    mediaId: ids.mediaId,
-    containerId: ids.containerId,
-  },
+  'com.rezics.content.media.erased.v1': { mediaId: ids.mediaId, containerId: ids.containerId },
+  'com.rezics.content.media.collected.v1': { mediaId: ids.mediaId, containerId: ids.containerId },
   'com.rezics.content.moderation.takedown.v1': {
     targetKind: 'post',
     targetId: ids.postId,
@@ -139,59 +118,26 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
 
   const takedown = CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'];
   for (const securityRevision of ['1', '9223372036854775807', '999999999999999999999999999999999999']) {
-    expect(
-      Value.Check(takedown, {
-        targetKind: 'board',
-        targetId: ids.containerId,
-        securityRevision,
-      }),
-    ).toBe(true);
+    expect(Value.Check(takedown, { targetKind: 'board', targetId: ids.containerId, securityRevision })).toBe(true);
   }
   for (const securityRevision of ['0', '01', '-1', '1.0', '', 1]) {
-    expect(
-      Value.Check(takedown, {
-        targetKind: 'post',
-        targetId: ids.postId,
-        securityRevision,
-      }),
-    ).toBe(false);
+    expect(Value.Check(takedown, { targetKind: 'post', targetId: ids.postId, securityRevision })).toBe(false);
   }
-  expect(
-    Value.Check(takedown, {
-      targetKind: 'media',
-      targetId: ids.mediaId,
-      securityRevision: '1',
-    }),
-  ).toBe(false);
+  expect(Value.Check(takedown, { targetKind: 'media', targetId: ids.mediaId, securityRevision: '1' })).toBe(false);
 
   const report = CONTENT_EVENTS['com.rezics.content.report.created.v1'];
   for (const targetKind of ['board', 'thread', 'post']) {
-    expect(
-      Value.Check(report, {
-        reportId: ids.reportId,
-        targetKind,
-        targetId: ids.itemId,
-      }),
-    ).toBe(true);
+    expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(true);
   }
   for (const targetKind of ['revision', 'media', 'account']) {
-    expect(
-      Value.Check(report, {
-        reportId: ids.reportId,
-        targetKind,
-        targetId: ids.itemId,
-      }),
-    ).toBe(false);
+    expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(false);
   }
 });
 
 test('a synthetic closed additive event coexists with every required original contract', () => {
   const type = 'com.rezics.content.media.collection-pending.v1';
   const schema = Type.Object(
-    {
-      mediaId: Type.Literal(ids.mediaId),
-      containerId: Type.Literal(ids.containerId),
-    },
+    { mediaId: Type.Literal(ids.mediaId), containerId: Type.Literal(ids.containerId) },
     { additionalProperties: false },
   );
   const extended = { ...CONTENT_EVENTS, [type]: schema };

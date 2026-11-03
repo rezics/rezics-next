@@ -341,11 +341,7 @@ async function prepareContentParticipation(
       const route = routeOf(realmId);
       if (route !== null) {
         const history = await withConnection(dependencies.pool, (client) =>
-          membershipHistory.run(client, {
-            route,
-            realm_id: realmId,
-            account_id: actor.accountId,
-          }),
+          membershipHistory.run(client, { route, realm_id: realmId, account_id: actor.accountId }),
         );
         if (history?.hadMembership) throw new ContentUndisclosedError();
       }
@@ -414,16 +410,8 @@ function containerAuthorization(
             throw new ContentForbiddenError();
           checks = [];
           const nodes = [
-            {
-              id: threadId,
-              kind: 'thread',
-              visibility: prepared.thread.visibility,
-            },
-            ...prepared.posts.map((row) => ({
-              id: row.post_id,
-              kind: 'post',
-              visibility: row.visibility,
-            })),
+            { id: threadId, kind: 'thread', visibility: prepared.thread.visibility },
+            ...prepared.posts.map((row) => ({ id: row.post_id, kind: 'post', visibility: row.visibility })),
           ];
           for (const node of nodes) {
             if (node.visibility !== 'published')
@@ -446,10 +434,7 @@ function containerAuthorization(
             { pool: dependencies.pool, deadline: context.deadline },
           );
           await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, async (client) => {
-            const board = await readBoard.run(client, {
-              route: route(boardId),
-              id: boardId,
-            });
+            const board = await readBoard.run(client, { route: route(boardId), id: boardId });
             if (
               !board ||
               board.visibility === 'taken_down' ||
@@ -499,10 +484,7 @@ function containerAuthorization(
  * this transaction. An existing resource cannot acquire fresh creation rights. */
 function creationEntries(
   actor: Actor,
-  resources: readonly {
-    resource: Resource;
-    type: 'content.thread' | 'content.post';
-  }[],
+  resources: readonly { resource: Resource; type: 'content.thread' | 'content.post' }[],
   inserted: WeakMap<CommandTransaction, string>,
 ): ResourceCreationEntry[] {
   return resources.map(({ resource, type }) => ({
@@ -586,8 +568,7 @@ function result<Noun extends keyof typeof CREATED_EVENT>(
   index: ThreadIndexEventFields,
   firstPublication = false,
 ) {
-  // Publication pins the revision chosen by this transaction. Keep creation
-  // and revision events intact for indexing and other existing consumers.
+  // Pin the revision chosen by this transaction while preserving existing events.
   const { previousSubjectIds: _previous, ...publicationIndex } = index;
   return {
     value,
@@ -598,17 +579,11 @@ function result<Noun extends keyof typeof CREATED_EVENT>(
         data: { ...value, actorId: account(actor).accountId, ...index },
       },
       ...(firstPublication
-        ? [
-            {
-              type: 'com.rezics.content.post.published.v1',
-              subject: value.itemId,
-              data: {
-                ...value,
-                actorId: account(actor).accountId,
-                ...publicationIndex,
-              },
-            },
-          ]
+        ? [{
+            type: 'com.rezics.content.post.published.v1',
+            subject: value.itemId,
+            data: { ...value, actorId: account(actor).accountId, ...publicationIndex },
+          }]
         : []),
     ],
   };
@@ -632,11 +607,7 @@ export async function createThread(
     threadKind === 'review' ? route(author.accountId) : undefined,
   );
   const postTarget = { route: target.route, id: newId(target.route) };
-  const value = {
-    threadId: target.id,
-    itemId: postTarget.id,
-    revisionId: newId(target.route),
-  };
+  const value = { threadId: target.id, itemId: postTarget.id, revisionId: newId(target.route) };
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(
     actor,
@@ -659,10 +630,7 @@ export async function createThread(
       async validate(client, time) {
         const partition = await readPartition(client, partitionOf(board.route));
         if (!partition || partition.writeState === 'moved') throw new ContentNotFoundError();
-        const row = await readBoard.run(client, {
-          route: board.route,
-          id: board.id,
-        });
+        const row = await readBoard.run(client, { route: board.route, id: board.id });
         if (
           !row ||
           row.visibility === 'taken_down' ||
@@ -735,11 +703,7 @@ export async function createThread(
             attempt.time,
             context.deadline,
           );
-          if (binding)
-            discovery.set(attempt.time, {
-              boardVersion: original.security_revision,
-              binding,
-            });
+          if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
         }
       }
       return base.prepare!(attempt);
@@ -748,10 +712,7 @@ export async function createThread(
   try {
     return await runCommand(
       dependencies.pool,
-      {
-        ...options(dependencies, actor, target.route, CREATE_THREAD, body, context),
-        authorization,
-      },
+      { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
       async (tx, command) => {
         if (
           typeof body.title !== 'string' ||
@@ -817,18 +778,12 @@ export async function createThread(
             revisionId: value.revisionId,
             boardId: body.boardId,
           });
-        const created = result(
-          value,
-          actor,
-          'thread',
-          {
-            placeId: threadPlaceId,
-            kind: threadKind,
-            subjectIds,
-            activityAt: eventActivityAt(command.time),
-          },
-          body.visibility === 'published',
-        );
+        const created = result(value, actor, 'thread', {
+          placeId: threadPlaceId,
+          kind: threadKind,
+          subjectIds,
+          activityAt: eventActivityAt(command.time),
+        }, body.visibility === 'published');
         const qualified = discovery.get(command.time);
         const deltas = qualified
           ? await appendDiscoveryStart(tx, {
@@ -858,11 +813,7 @@ export async function createPost(
   const body = request(input);
   const r = route(body.threadId);
   const target = { route: r, id: newId(r) };
-  const value = {
-    threadId: body.threadId,
-    itemId: target.id,
-    revisionId: newId(r),
-  };
+  const value = { threadId: body.threadId, itemId: target.id, revisionId: newId(r) };
   const container = containerAuthorization(
     dependencies,
     actor,
@@ -891,10 +842,7 @@ export async function createPost(
   );
   return runCommand(
     dependencies.pool,
-    {
-      ...options(dependencies, actor, r, CREATE_POST, body, context),
-      authorization,
-    },
+    { ...options(dependencies, actor, r, CREATE_POST, body, context), authorization },
     async (tx, command) => {
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
       if (body.visibility !== undefined && body.visibility !== 'published' && body.visibility !== 'draft')
@@ -932,18 +880,12 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(
-        value,
-        actor,
-        'post',
-        {
-          placeId: container.placeId,
-          kind: container.current.thread.kind,
-          subjectIds: storedSubjectIds(firstPost.subject_ids),
-          activityAt: eventActivityAt(command.time),
-        },
-        visibility === 'published',
-      );
+      return result(value, actor, 'post', {
+        placeId: container.placeId,
+        kind: container.current.thread.kind,
+        subjectIds: storedSubjectIds(firstPost.subject_ids),
+        activityAt: eventActivityAt(command.time),
+      }, visibility === 'published');
     },
   );
 }
@@ -955,16 +897,9 @@ export async function revisePost(
   context: RequestContext,
 ): Promise<CommandOutcome<ContentCommandValue>> {
   const author = account(actor);
-  const body = request({
-    ...input,
-    expectedRevisionId: input.expectedRevisionId ?? null,
-  });
+  const body = request({ ...input, expectedRevisionId: input.expectedRevisionId ?? null });
   const r = route(body.threadId);
-  const value = {
-    threadId: body.threadId,
-    itemId: body.itemId,
-    revisionId: newId(r),
-  };
+  const value = { threadId: body.threadId, itemId: body.itemId, revisionId: newId(r) };
   const container = containerAuthorization(dependencies, actor, body.threadId, body.itemId, context, true);
   const authorization = container.wrap(
     resourceAuthorization({
@@ -972,19 +907,12 @@ export async function revisePost(
       actor,
       action: 'post:revise',
       anchor: { resource: container.resource, validate: container.validate },
-      context: {
-        pool: dependencies.pool,
-        deadline: context.deadline,
-        partition: partitionOf(r),
-      },
+      context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
     }),
   );
   return runCommand(
     dependencies.pool,
-    {
-      ...options(dependencies, actor, r, REVISE_POST, body, context),
-      authorization,
-    },
+    { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
     async (tx, command) => {
       const previous = container.current.posts[0]!;
       // A fresh key cannot revise an erased post or any erased ancestor. Replay
@@ -1058,19 +986,13 @@ export async function revisePost(
       const indexSubjectIds = isFirstPost
         ? revisedSubjectIds
         : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
-      return result(
-        value,
-        actor,
-        'revision',
-        {
-          placeId: container.placeId,
-          kind: container.current.thread.kind,
-          subjectIds: indexSubjectIds,
-          activityAt: eventActivityAt(command.time),
-          ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
-        },
-        firstPublication,
-      );
+      return result(value, actor, 'revision', {
+        placeId: container.placeId,
+        kind: container.current.thread.kind,
+        subjectIds: indexSubjectIds,
+        activityAt: eventActivityAt(command.time),
+        ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
+      }, firstPublication);
     },
   );
 }
