@@ -105,12 +105,7 @@ function partitionNumber(value: unknown): asserts value is number {
 }
 
 function position(value: unknown, minimum = 0n): asserts value is bigint {
-  if (
-    typeof value !== 'bigint' ||
-    value < minimum ||
-    value < 0n ||
-    value > MAX_NATIVE_VERSION
-  )
+  if (typeof value !== 'bigint' || value < minimum || value < 0n || value > MAX_NATIVE_VERSION)
     throw new TypeError('Review discovery position must cover the native observation');
 }
 
@@ -204,7 +199,12 @@ function observation(value: unknown, partition: number): ReviewDiscoveryObservat
     value.version > MAX_NATIVE_VERSION
   )
     throw new TypeError('Invalid review discovery lifecycle observation');
-  return { state: value.state as 'withdrawn' | 'deleted' | 'concealed', id: value.id, route: value.route, version: value.version };
+  return {
+    state: value.state as 'withdrawn' | 'deleted' | 'concealed',
+    id: value.id,
+    route: value.route,
+    version: value.version,
+  };
 }
 
 function recordWithoutState(value: Record<string, unknown>, partition: number): ReviewDiscoveryRecord {
@@ -318,7 +318,14 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       limit: number,
       snapshot: ReviewDiscoveryCensus,
       consumed: number,
-    ): Promise<ReviewDiscoveryResult<{ position: bigint; documents: readonly ReviewDiscoveryDocument[]; next: ReviewDiscoveryFrontier | null; consumed: number }>> {
+    ): Promise<
+      ReviewDiscoveryResult<{
+        position: bigint;
+        documents: readonly ReviewDiscoveryDocument[];
+        next: ReviewDiscoveryFrontier | null;
+        consumed: number;
+      }>
+    > {
       partitionNumber(partition);
       const expected = census(snapshot, partition);
       if (
@@ -364,8 +371,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
         throw new TypeError('Review page is incomplete for its retained population position');
       if (next !== null && (remaining <= limit || prior === null || compare(prior, next) !== 0))
         throw new TypeError('Review continuation must identify the last full-page key');
-      if (next === null && remaining > limit)
-        throw new TypeError('Review page omitted a required continuation');
+      if (next === null && remaining > limit) throw new TypeError('Review page omitted a required continuation');
       const documents = reviews.map((row) => reviewDiscoveryDocument(partition, expected.position, row));
       return {
         status: 'ready',
@@ -417,7 +423,11 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
         const partitionRows = currentRows.filter(([, row]) => partitionOf(row.route) === partition);
         for (let offset = 0; offset < partitionRows.length; offset += REVIEW_DISCOVERY_BATCH_SIZE) {
           const chunk = partitionRows.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE);
-          const summaries = await source!.summaries(partition, chunk.map(([, row]) => row.id), context);
+          const summaries = await source!.summaries(
+            partition,
+            chunk.map(([, row]) => row.id),
+            context,
+          );
           if (!Array.isArray(summaries) || summaries.length > chunk.length)
             throw new TypeError('Invalid current review summary batch');
           const expected = new Map(chunk.map(([identity, row]) => [row.id, { identity, row }]));
@@ -425,7 +435,8 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
           for (const raw of summaries) {
             const id = object(raw) ? raw.id : undefined;
             const selected = typeof id === 'string' ? expected.get(id) : undefined;
-            if (!selected || seen.has(id as string)) throw new TypeError('Review summary returned a wrong or duplicate key');
+            if (!selected || seen.has(id as string))
+              throw new TypeError('Review summary returned a wrong or duplicate key');
             const summary = record(raw, partition);
             seen.add(summary.id);
             if (!sameRecord(summary, selected.row)) continue;
