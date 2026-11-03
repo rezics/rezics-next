@@ -115,7 +115,7 @@ function validateChange(change: RatingChange): { route: number; at: string; appl
   };
 }
 
-function histogramSize(scale: QuestionScale): number {
+function histogramSize(scale: Pick<QuestionScale, 'minimumUnits' | 'maximumUnits' | 'stepUnits'>): number {
   const distance = scale.maximumUnits - scale.minimumUnits;
   if (
     !Number.isSafeInteger(scale.minimumUnits) ||
