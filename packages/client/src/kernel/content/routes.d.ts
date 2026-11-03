@@ -9828,7 +9828,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     kind?: "discussion" | "review";
                     title: string;
                     body: import("@rezics/document").DocumentSnapshot;
-                    visibility: "draft" | "published";
+                    visibility: "draft" | "protected" | "published";
                     mediaIds?: string[];
                     voteCitation?: {
                         questionId: string;
@@ -10148,7 +10148,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 posts: {
                     post: {
                         body: {
-                            visibility?: "draft" | "published";
+                            visibility?: "draft" | "protected" | "published";
                             body: import("@rezics/document").DocumentSnapshot;
                             licence: string;
                             parentId?: string | null;
@@ -11290,6 +11290,35 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         headers: unknown;
                         response: {
                             200: {
+                                pinnedThreads: (Omit<Readonly<{
+                                    id: import("./model.ts").ThreadId;
+                                    route: import("./model.ts").Route;
+                                    authorId: import("./model.ts").ContentId;
+                                    kind: 'discussion' | 'review';
+                                    title: string | null;
+                                    licence: string;
+                                    subjectIds: readonly import("./model.ts").ContentId[];
+                                    boardId: import("./model.ts").BoardId;
+                                    visibility: import("./model.ts").Visibility;
+                                    securityRevision: import("./model.ts").SecurityRevision;
+                                    availability: import("./model.ts").Availability;
+                                    createdAt: string;
+                                    firstPost: import("./model.ts").PostEntry;
+                                }>, "firstPost"> & Readonly<{
+                                    firstPost: PostEntry;
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
+                                })[];
                                 threads: (Omit<Readonly<{
                                     id: import("./model.ts").ThreadId;
                                     route: import("./model.ts").Route;
@@ -11394,6 +11423,151 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                threads: {
+                    ":threadId": {
+                        pin: {
+                            post: {
+                                body: {
+                                    pinned: boolean;
+                                };
+                                params: {
+                                    id: string;
+                                    threadId: string;
+                                };
+                                query: unknown;
+                                headers: {
+                                    "idempotency-key": string;
+                                };
+                                response: {
+                                    200: {
+                                        boardId: string;
+                                        threadId: string;
+                                        pinned: boolean;
+                                        pinPosition: number | null;
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    409: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    413: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    429: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };

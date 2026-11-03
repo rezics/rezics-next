@@ -29,6 +29,13 @@ export declare const CONTENT_EVENTS: {
         sourceEpoch: Type.TInteger;
         sourcePosition: Type.TString;
     }>;
+    readonly 'com.rezics.content.board-thread.pin.changed.v1': Type.TObject<{
+        boardId: Type.TString;
+        threadId: Type.TString;
+        actorId: Type.TString;
+        pinned: Type.TBoolean;
+        pinPosition: Type.TUnion<[Type.TInteger, Type.TNull]>;
+    }>;
     readonly 'com.rezics.content.media.reserved.v1': Type.TObject<{
         mediaId: Type.TString;
         containerId: Type.TString;

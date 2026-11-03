@@ -12,6 +12,7 @@ export type BoardPageInput = {
     query?: string;
 };
 export type BoardThreadPage = Page<ThreadView> & {
+    pinnedThreads: readonly ThreadView[];
     anchors: readonly AnchoredPosition[];
     /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
     rankRefreshedAt: string | null;

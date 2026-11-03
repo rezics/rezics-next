@@ -27451,6 +27451,816 @@
                         "null"
                       ]
                     },
+                    "pinnedThreads": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "authorId": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "availability": {
+                            "enum": [
+                              "available",
+                              "erased"
+                            ],
+                            "type": "string"
+                          },
+                          "boardId": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "firstPost": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "authorId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "availability": {
+                                        "const": "available",
+                                        "type": "string"
+                                      },
+                                      "boardId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "anyOf": [
+                                          {
+                                            "$ref": "#/components/schemas/text_Document"
+                                          },
+                                          {
+                                            "$ref": "#/components/schemas/blocks_Document"
+                                          }
+                                        ]
+                                      },
+                                      "createdAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "licence": {
+                                        "maxLength": 128,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "mediaIds": {
+                                        "items": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "maxItems": 32,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                      },
+                                      "parentId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "reactions": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "downvote": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "insightful": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "laugh": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "like": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "love": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "sad": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "upvote": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [],
+                                        "type": "object"
+                                      },
+                                      "revisedAt": {
+                                        "format": "date-time",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "revisionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "route": {
+                                        "maximum": 65535,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "securityRevision": {
+                                        "pattern": "^[1-9][0-9]*$",
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "subjectIds": {
+                                        "items": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "maxItems": 128,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                      },
+                                      "threadId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "viewerReaction": {
+                                        "enum": [
+                                          "upvote",
+                                          "downvote",
+                                          "like",
+                                          "love",
+                                          "laugh",
+                                          "insightful",
+                                          "sad"
+                                        ],
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "visibility": {
+                                        "enum": [
+                                          "published",
+                                          "draft",
+                                          "protected",
+                                          "taken_down"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "voteCitation": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "maximum": 2147483647,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "units": {
+                                            "maximum": 20,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "questionId",
+                                          "units",
+                                          "revision"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "route",
+                                      "visibility",
+                                      "securityRevision",
+                                      "createdAt",
+                                      "licence",
+                                      "subjectIds",
+                                      "boardId",
+                                      "threadId",
+                                      "authorId",
+                                      "parentId",
+                                      "revisionId",
+                                      "sha256",
+                                      "mediaIds",
+                                      "voteCitation",
+                                      "revisedAt",
+                                      "availability",
+                                      "body"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "authorId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "availability": {
+                                        "const": "erased",
+                                        "type": "string"
+                                      },
+                                      "boardId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "body": {
+                                        "type": "null"
+                                      },
+                                      "createdAt": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "licence": {
+                                        "maxLength": 128,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "mediaIds": {
+                                        "items": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "maxItems": 32,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                      },
+                                      "parentId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "reactions": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "downvote": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "insightful": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "laugh": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "like": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "love": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "sad": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "upvote": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [],
+                                        "type": "object"
+                                      },
+                                      "removed": {
+                                        "const": true,
+                                        "type": "boolean"
+                                      },
+                                      "restorableUntil": {
+                                        "format": "date-time",
+                                        "type": "string"
+                                      },
+                                      "revisedAt": {
+                                        "format": "date-time",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "revisionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "route": {
+                                        "maximum": 65535,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "securityRevision": {
+                                        "pattern": "^[1-9][0-9]*$",
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "type": "null"
+                                      },
+                                      "subjectIds": {
+                                        "items": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "maxItems": 128,
+                                        "type": "array",
+                                        "uniqueItems": true
+                                      },
+                                      "threadId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "viewerReaction": {
+                                        "enum": [
+                                          "upvote",
+                                          "downvote",
+                                          "like",
+                                          "love",
+                                          "laugh",
+                                          "insightful",
+                                          "sad"
+                                        ],
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "visibility": {
+                                        "enum": [
+                                          "published",
+                                          "draft",
+                                          "protected",
+                                          "taken_down"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "voteCitation": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "maximum": 2147483647,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "units": {
+                                            "maximum": 20,
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "questionId",
+                                          "units",
+                                          "revision"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "route",
+                                      "visibility",
+                                      "securityRevision",
+                                      "createdAt",
+                                      "licence",
+                                      "subjectIds",
+                                      "boardId",
+                                      "threadId",
+                                      "authorId",
+                                      "parentId",
+                                      "revisionId",
+                                      "sha256",
+                                      "mediaIds",
+                                      "voteCitation",
+                                      "revisedAt",
+                                      "availability",
+                                      "removed",
+                                      "body"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "availability": {
+                                    "const": "erased",
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "null"
+                                  },
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "parentId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "removed": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "restorableUntil": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "maximum": 65535,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "sha256": {
+                                    "type": "null"
+                                  },
+                                  "threadId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "threadId",
+                                  "route",
+                                  "parentId",
+                                  "removed",
+                                  "availability",
+                                  "body",
+                                  "sha256"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "authorId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "availability": {
+                                    "const": "withheld",
+                                    "type": "string"
+                                  },
+                                  "boardId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "body": {
+                                    "type": "null"
+                                  },
+                                  "createdAt": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "decisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "licence": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "mediaIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "parentId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
+                                  "removed": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "revisedAt": {
+                                    "format": "date-time",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revisionId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "route": {
+                                    "maximum": 65535,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "securityRevision": {
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "type": "string"
+                                  },
+                                  "sha256": {
+                                    "type": "null"
+                                  },
+                                  "subjectIds": {
+                                    "items": {
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "maxItems": 128,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "threadId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "viewerReaction": {
+                                    "enum": [
+                                      "upvote",
+                                      "downvote",
+                                      "like",
+                                      "love",
+                                      "laugh",
+                                      "insightful",
+                                      "sad"
+                                    ],
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "visibility": {
+                                    "enum": [
+                                      "published",
+                                      "draft",
+                                      "protected",
+                                      "taken_down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "voteCitation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "maximum": 2147483647,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "units": {
+                                        "maximum": 20,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "questionId",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "route",
+                                  "visibility",
+                                  "securityRevision",
+                                  "createdAt",
+                                  "licence",
+                                  "subjectIds",
+                                  "boardId",
+                                  "threadId",
+                                  "authorId",
+                                  "parentId",
+                                  "revisionId",
+                                  "sha256",
+                                  "mediaIds",
+                                  "voteCitation",
+                                  "revisedAt",
+                                  "availability",
+                                  "removed",
+                                  "body"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "discussion",
+                              "review"
+                            ],
+                            "type": "string"
+                          },
+                          "licence": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "reactions": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "downvote": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "insightful": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "laugh": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "like": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "love": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "sad": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "upvote": {
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [],
+                            "type": "object"
+                          },
+                          "route": {
+                            "maximum": 65535,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "securityRevision": {
+                            "pattern": "^[1-9][0-9]*$",
+                            "type": "string"
+                          },
+                          "subjectIds": {
+                            "items": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "maxItems": 128,
+                            "type": "array",
+                            "uniqueItems": true
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "viewerReaction": {
+                            "enum": [
+                              "upvote",
+                              "downvote",
+                              "like",
+                              "love",
+                              "laugh",
+                              "insightful",
+                              "sad"
+                            ],
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "visibility": {
+                            "enum": [
+                              "published",
+                              "draft",
+                              "protected",
+                              "taken_down"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "route",
+                          "visibility",
+                          "securityRevision",
+                          "createdAt",
+                          "licence",
+                          "subjectIds",
+                          "boardId",
+                          "authorId",
+                          "kind",
+                          "title",
+                          "availability",
+                          "firstPost"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 3,
+                      "type": "array"
+                    },
                     "rankRefreshedAt": {
                       "format": "date-time",
                       "type": [
@@ -28270,6 +29080,7 @@
                     }
                   },
                   "required": [
+                    "pinnedThreads",
                     "threads",
                     "next",
                     "rankRefreshedAt"
@@ -28759,6 +29570,1020 @@
         "x-exposure": "public",
         "x-resource-types": [
           "content.board"
+        ]
+      }
+    },
+    "/v1/boards/{id}/threads/{threadId}/pin": {
+      "post": {
+        "operationId": "board_thread.set_pin",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "pinned": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "pinned"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "boardId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "pinPosition": {
+                      "maximum": 3,
+                      "minimum": 1,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "pinned": {
+                      "type": "boolean"
+                    },
+                    "threadId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "boardId",
+                    "threadId",
+                    "pinned",
+                    "pinPosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200",
+            "headers": {
+              "rezics-session-token": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "invalid_request",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Invalid Request",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/invalid_request",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "forbidden",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Forbidden",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/forbidden",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "not_found",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Not Found",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/not_found",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "conflict",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Conflict",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/conflict",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "content_too_large",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 413,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Content Too Large",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/content_too_large",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Content too large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "idempotency_conflict",
+                        "too_many_events"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Idempotency Key Reused",
+                        "Too Many Events"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/idempotency_conflict",
+                        "https://rezics.com/problems/too_many_events"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Idempotency conflict; Too many events"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "rate_limited",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 429,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Request Budget Exhausted",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/rate_limited",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "internal_error",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Internal Server Error",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/internal_error",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Internal error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "overloaded",
+                        "deadline_exceeded",
+                        "partition_unavailable",
+                        "transaction_retry_exhausted",
+                        "dependency_unavailable",
+                        "rate_limit_unavailable"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        true
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Service Overloaded",
+                        "Deadline Exceeded",
+                        "Partition Unavailable",
+                        "Transaction Retry Exhausted",
+                        "Dependency Unavailable",
+                        "Request Budget Unavailable"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/overloaded",
+                        "https://rezics.com/problems/deadline_exceeded",
+                        "https://rezics.com/problems/partition_unavailable",
+                        "https://rezics.com/problems/transaction_retry_exhausted",
+                        "https://rezics.com/problems/dependency_unavailable",
+                        "https://rezics.com/problems/rate_limit_unavailable"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Overloaded; Deadline exceeded; Partition unavailable; Transaction retry exhausted; Dependency unavailable; Rate limit unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-action": "moderation:takedown",
+        "x-exposure": "public",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        },
+        "x-resource-types": [
+          "content.board",
+          "content.thread"
         ]
       }
     },
@@ -256077,6 +257902,7 @@
     },
     "/v1/threads": {
       "post": {
+        "description": "Create a published, draft, or protected thread and opening post.",
         "operationId": "thread.create",
         "parameters": [
           {
@@ -256146,7 +257972,8 @@
                   "visibility": {
                     "enum": [
                       "published",
-                      "draft"
+                      "draft",
+                      "protected"
                     ],
                     "type": "string"
                   },
@@ -261320,6 +263147,7 @@
         ]
       },
       "post": {
+        "description": "Create a published, draft, or protected post within an existing thread.",
         "operationId": "post.create",
         "parameters": [
           {
@@ -261392,7 +263220,8 @@
                   "visibility": {
                     "enum": [
                       "published",
-                      "draft"
+                      "draft",
+                      "protected"
                     ],
                     "type": "string"
                   }
