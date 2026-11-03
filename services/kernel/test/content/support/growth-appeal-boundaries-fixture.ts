@@ -99,11 +99,7 @@ export async function createGrowthAppealBoundariesFixture() {
     );
     await work.launch();
 
-    async function call(
-      method: string,
-      path: string,
-      options: { bearer?: string; key?: string; body?: unknown } = {},
-    ) {
+    async function call(method: string, path: string, options: { bearer?: string; key?: string; body?: unknown } = {}) {
       const headers = new Headers();
       if (options.bearer) headers.set('authorization', `Bearer ${options.bearer}`);
       if (options.key !== undefined) headers.set('idempotency-key', JSON.stringify(options.key));
@@ -204,7 +200,10 @@ export async function createGrowthAppealBoundariesFixture() {
       );
     }
 
-    async function submitAppeal(boardId: string, target: ThreadTarget): Promise<{
+    async function submitAppeal(
+      boardId: string,
+      target: ThreadTarget,
+    ): Promise<{
       record: QueueRecord;
       reportReceipt: Awaited<ReturnType<typeof call>>;
       appeal: Awaited<ReturnType<typeof call>>;
@@ -251,7 +250,9 @@ export async function createGrowthAppealBoundariesFixture() {
         body: { statement: 'Please reconsider' },
       });
       if (appealReplay.response.status !== 201)
-        throw new Error(`POST /v1/moderation-decisions/${decision.decision_id}:appeal replay: ${appealReplay.response.status}`);
+        throw new Error(
+          `POST /v1/moderation-decisions/${decision.decision_id}:appeal replay: ${appealReplay.response.status}`,
+        );
       await completeRegisteredCommand(people.author.accountId, appeal.key);
 
       const reportReceipt = await call('GET', `/v1/reports/${report.body.reportId}`, {
