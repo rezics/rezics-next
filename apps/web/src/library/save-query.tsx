@@ -55,8 +55,15 @@ export function SaveQueryLink({
 }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['saved-query-source', id]));
   if (selection.state === 'empty') return null;
-  if (selection.state === 'invalid')
-    return <p role="status">{m.library_saved_query_invalid()}</p>;
+  if (selection.state === 'invalid') {
+    const stateFilter = selection.issues.some((issue) => issue.key === 'state');
+    return (
+      <div role="status">
+        <p>{m.library_saved_query_invalid()}</p>
+        {stateFilter ? <p>{m.library_saved_query_state()}</p> : null}
+      </div>
+    );
+  }
 
   return (
     <Link

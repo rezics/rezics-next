@@ -32,7 +32,11 @@ function searchParams(search: string | URLSearchParams | undefined): URLSearchPa
 export function hasSavedQueryInput(input: Pick<SavedQueryInput, 'document' | 'search' | 'invalid'>): boolean {
   if (input.document || input.invalid) return true;
   const params = searchParams(input.search);
-  return [...params.keys()].some((key) => !['cursor', 'layout', 'view'].includes(key) && !key.startsWith('l.'));
+  return (
+    [...params.keys()].some(
+      (key) => !['cursor', 'layout', 'view', 'size', 'columns'].includes(key) && !key.startsWith('l.'),
+    )
+  );
 }
 
 function unsupportedSearch(params: URLSearchParams, type: string | undefined, issues: SavedQueryIssue[]) {
@@ -44,7 +48,7 @@ function unsupportedSearch(params: URLSearchParams, type: string | undefined, is
   if (sorts.length && (sorts.length !== 1 || sorts[0] !== 'id'))
     issues.push({ key: 'sort', reason: 'unrepresentable' });
 
-  const ignored = new Set(['type', 'sort', 'cursor', 'layout', 'view']);
+  const ignored = new Set(['type', 'sort', 'cursor', 'layout', 'view', 'size', 'columns']);
   const keys = new Set([...params.keys()]);
   for (const key of keys) {
     if (ignored.has(key) || /^[frl]\./.test(key)) continue;

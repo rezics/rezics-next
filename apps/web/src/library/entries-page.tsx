@@ -20,7 +20,8 @@ import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { ShelfTypes } from './shelf-types';
-import { SaveQueryLink } from './saved-query-editor/link';
+import { SaveQueryLink } from './save-query';
+import { admitSavedQuerySelection } from './saved-query-editor/selection';
 
 type Display = ShelfDisplay;
 
@@ -89,6 +90,14 @@ export function PersonalLibraryPage({
   const effectiveCursor = page.cursorReset ? undefined : cursor;
   const typeSearch = page.type ? { type: page.type } : {};
   const firstPage = { ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display };
+  const saveQuerySearch = new URL(
+    shelfHref(locale, { ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display }),
+    'https://rezics.local',
+  ).searchParams;
+  const saveQuerySelection = admitSavedQuerySelection({
+    ...(page.type ? { type: page.type } : {}),
+    search: saveQuerySearch,
+  });
   const clearTypeHref = shelfHref(locale, { ...(page.state ? { state: page.state } : {}), ...sort, ...display });
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const heading = page.state
@@ -181,16 +190,7 @@ export function PersonalLibraryPage({
           ) : null}
           {page.type || page.state ? (
             <Exposure operation="collection.create">
-              <SaveQueryLink
-                {...(page.type ? { type: page.type } : {})}
-                {...(page.state ? { state: page.state } : {})}
-                from={shelfHref(locale, {
-                  ...typeSearch,
-                  ...(page.state ? { state: page.state } : {}),
-                  ...sort,
-                  ...display,
-                })}
-              />
+              <SaveQueryLink id="library" selection={saveQuerySelection} />
             </Exposure>
           ) : null}
         </div>
