@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 import type { Release } from '@rezics/definitions';
-import { prepareStoryArcInitial, storyArcCreateProperties, storyArcCreateRowErrors, createStoryArcFactStore, storyArcCreateControl } from '../src/features/catalogue/story-arc-create-model';
+import {
+  prepareStoryArcInitial,
+  storyArcCreateProperties,
+  storyArcCreateRowErrors,
+  createStoryArcFactStore,
+  storyArcCreateControl,
+} from '../src/features/catalogue/story-arc-create-model';
 import { storyArcType } from '../src/features/catalogue/story-arc-profile';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
 import { captureReuse, cloneReferenceGroup, reuseIsStale } from '../src/features/catalogue/reference-reuse';
@@ -22,7 +28,11 @@ const release = {
   },
 } as unknown as Release;
 
-function fact(id: string, property: string, content: unknown): { id: string; property: string; statement: StatementInput } {
+function fact(
+  id: string,
+  property: string,
+  content: unknown,
+): { id: string; property: string; statement: StatementInput } {
   return {
     id,
     property,
@@ -58,9 +68,7 @@ test('preparation preserves multilingual terms, full groups, normal rank, and un
   const store = createStoryArcFactStore();
   const name = fact('name-ja', 'schema:name', { text: '旅の編', language: 'ja' });
   const unsupported = fact('relation', 'rezics:storyArc', '123e4567-e89b-12d3-a456-426614174000');
-  unsupported.statement.qualifiers = [
-    { property: { id: 'schema:position' }, value: { type: 'value', content: '1' } },
-  ];
+  unsupported.statement.qualifiers = [{ property: { id: 'schema:position' }, value: { type: 'value', content: '1' } }];
   store.update([name, unsupported]);
   const result = prepareStoryArcInitial(terms, store.getSnapshot(), release, store);
 
@@ -115,9 +123,7 @@ test('reference reuse review is invalidated when its source or destination chang
   const capture = captureReuse(reference, drafts);
   expect(reuseIsStale(reference, drafts, [destination.id], capture)).toBe(false);
   const changed = drafts.map((draft) =>
-    draft.holder === destination.id
-      ? { ...draft, statement: { ...draft.statement, references: [] } }
-      : draft,
+    draft.holder === destination.id ? { ...draft, statement: { ...draft.statement, references: [] } } : draft,
   );
   expect(reuseIsStale(reference, changed, [destination.id], capture)).toBe(true);
 });

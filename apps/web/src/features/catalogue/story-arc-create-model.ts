@@ -63,7 +63,9 @@ export function createStoryArcFactStore() {
           id: draft.id,
           property: draft.property,
           qualifiers: (statement.qualifiers ?? []).map((part, index) =>
-            statementHolderKey(part) === undefined ? `${draft.id}-qualifier-${index}` : `part-${statementHolderKey(part)}`,
+            statementHolderKey(part) === undefined
+              ? `${draft.id}-qualifier-${index}`
+              : `part-${statementHolderKey(part)}`,
           ),
           references: statement.references.map((group, groupIndex) => ({
             id: `${draft.id}-reference-${groupIndex}`,
@@ -138,7 +140,9 @@ export function storyArcCreateRowErrors(
     const segments = pointerSegments(error.pointer);
     if (segments?.[0] !== 'statements' || segments[1] !== draft.property) return [];
     if (segments.length > 2 && segments[2] !== String(ordinal)) return [];
-    const tail = segments.slice(segments.length > 2 ? 3 : 2).map((part) => part.replaceAll('~', '~0').replaceAll('/', '~1'));
+    const tail = segments
+      .slice(segments.length > 2 ? 3 : 2)
+      .map((part) => part.replaceAll('~', '~0').replaceAll('/', '~1'));
     return [{ pointer: `/statement${tail.length ? `/${tail.join('/')}` : ''}`, code: error.code }];
   });
 }

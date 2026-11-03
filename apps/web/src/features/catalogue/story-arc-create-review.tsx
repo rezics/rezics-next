@@ -25,11 +25,23 @@ export function StoryArcCreateReview({
   onOpen: (id: string) => void;
 }) {
   const o = { locale: locale as never };
-  const context: StatementFieldsRead = { release, source: null, public: { related: {}, subject: { type: storyArcType } } };
+  const context: StatementFieldsRead = {
+    release,
+    source: null,
+    public: { related: {}, subject: { type: storyArcType } },
+  };
   const aliases = Object.entries(item.aliases ?? {}) as [string, string[]][];
   const terms: { kind: string; language: string; value: string }[] = [
-    ...Object.entries(item.labels).map(([language, value]) => ({ kind: m.catalogue_create_label({}, o), language, value })),
-    ...Object.entries(item.descriptions ?? {}).map(([language, value]) => ({ kind: m.catalogue_create_description({}, o), language, value })),
+    ...Object.entries(item.labels).map(([language, value]) => ({
+      kind: m.catalogue_create_label({}, o),
+      language,
+      value,
+    })),
+    ...Object.entries(item.descriptions ?? {}).map(([language, value]) => ({
+      kind: m.catalogue_create_description({}, o),
+      language,
+      value,
+    })),
     ...aliases.flatMap(([language, values]) =>
       values.map((value) => ({ kind: m.catalogue_create_aliases({}, o), language, value })),
     ),
@@ -61,7 +73,9 @@ export function StoryArcCreateReview({
             <li key={`${term.kind}-${term.language}-${index}`} className="min-w-0 rounded-md bg-muted/50 p-3">
               <span className="font-medium">{term.kind}</span>
               <span className="ms-2 text-muted-foreground">{term.language}</span>
-              <p lang={term.language} className="break-words">{term.value}</p>
+              <p lang={term.language} className="break-words">
+                {term.value}
+              </p>
             </li>
           ))}
         </ul>
@@ -80,7 +94,9 @@ export function StoryArcCreateReview({
                     <p className="text-sm">
                       <PartValue part={statement} read={context} locale={locale} />
                     </p>
-                    <p className="text-xs text-muted-foreground">{property} · {statement.rank ?? 'normal'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {property} · {statement.rank ?? 'normal'}
+                    </p>
                   </div>
                   <Button type="button" variant="outline" className={action} onClick={() => onOpen(id)}>
                     {m.character_create_review_open({}, o)}
@@ -93,9 +109,12 @@ export function StoryArcCreateReview({
                       return (
                         <li key={qualifierId} data-part-id={qualifierId} className="min-w-0">
                           <span className="font-medium">
-                            {definitionText(release.properties[part.property.id]?.labels, locale).text || part.property.id}
+                            {definitionText(release.properties[part.property.id]?.labels, locale).text ||
+                              part.property.id}
                           </span>
-                          <span className="ms-2"><PartValue part={part} read={context} locale={locale} /></span>
+                          <span className="ms-2">
+                            <PartValue part={part} read={context} locale={locale} />
+                          </span>
                         </li>
                       );
                     })}
@@ -109,13 +128,17 @@ export function StoryArcCreateReview({
                         <li key={reference?.id ?? `${id}-reference-${groupIndex}`} data-reference-id={reference?.id}>
                           <ol className="space-y-1">
                             {group.parts.map((part, partIndex) => {
-                              const partId = reference?.parts[partIndex] ?? `${id}-reference-${groupIndex}-part-${partIndex}`;
+                              const partId =
+                                reference?.parts[partIndex] ?? `${id}-reference-${groupIndex}-part-${partIndex}`;
                               return (
                                 <li key={partId} data-part-id={partId} className="min-w-0">
                                   <span className="font-medium">
-                                    {definitionText(release.properties[part.property.id]?.labels, locale).text || part.property.id}
+                                    {definitionText(release.properties[part.property.id]?.labels, locale).text ||
+                                      part.property.id}
                                   </span>
-                                  <span className="ms-2"><PartValue part={part} read={context} locale={locale} /></span>
+                                  <span className="ms-2">
+                                    <PartValue part={part} read={context} locale={locale} />
+                                  </span>
                                 </li>
                               );
                             })}

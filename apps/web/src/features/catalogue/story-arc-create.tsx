@@ -56,7 +56,8 @@ export function StoryArcCreate({
     }
   }, [propDigest, release]);
 
-  const createTypesForRelease = (candidate: Release) => createTypes(candidate, locale).filter(({ id }) => id === storyArcType);
+  const createTypesForRelease = (candidate: Release) =>
+    createTypes(candidate, locale).filter(({ id }) => id === storyArcType);
   const createTransport: CreateTransport = {
     definitions: async (refresh = false) => {
       let next = active;
@@ -123,8 +124,7 @@ export function StoryArcCreate({
         href,
         prepare: (initial: InitialSubject) => {
           const prepared = prepareStoryArcInitial(initial, store.getSnapshot(), active.release, store);
-          if (!admitted)
-            prepared.errors.push({ pointer: '/type', code: 'unsupported' });
+          if (!admitted) prepared.errors.push({ pointer: '/type', code: 'unsupported' });
           setErrors(prepared.errors);
           return prepared;
         },

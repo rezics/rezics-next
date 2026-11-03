@@ -26,7 +26,8 @@ async function addCitationPart(group: Locator, property: string, label: RegExp, 
 
 function createPosts(label: string): NativeKernelRequest[] {
   return fixture.stack.kernelRequests().filter((request) => {
-    if (request.fixtureRequest || request.method !== 'POST' || request.url !== '/v1/subjects' || !request.body) return false;
+    if (request.fixtureRequest || request.method !== 'POST' || request.url !== '/v1/subjects' || !request.body)
+      return false;
     return (JSON.parse(request.body) as { labels?: Record<string, string> }).labels?.en === label;
   });
 }
@@ -64,7 +65,10 @@ test('creates cited StoryArc evidence, repairs a native nested diagnostic, and r
 
   await page.getByLabel('Initial fact property', { exact: true }).selectOption('schema:sameAs');
   await page.getByRole('button', { name: /Add same as/i }).click();
-  const sameAsRow = form.locator('fieldset[id^="story-arc-initial-fact-"]').filter({ hasText: /same as/i }).first();
+  const sameAsRow = form
+    .locator('fieldset[id^="story-arc-initial-fact-"]')
+    .filter({ hasText: /same as/i })
+    .first();
   await sameAsRow.locator('[id$="-fact"]').getByRole('textbox', { name: 'URL', exact: true }).fill(externalUrl);
   await urlRow.getByRole('button', { name: /Reuse this reference/ }).click();
   const reuse = page.locator('[data-fact-reuse]');

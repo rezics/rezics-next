@@ -8,7 +8,14 @@ import { EditorFailure, PartValue, StatementFields, type StatementFieldsRead } f
 import { presentStatementViolations } from './statement-validation-presentation';
 import { creationStatement, emptyCreationStatement, type StatementInput } from './statement-editor';
 import { ReferenceReusePanel } from './reference-reuse-view';
-import { applyReuse, captureReuse, cloneReferenceGroup, type ReuseCapture, type ReuseRefusal, type ReuseSource } from './reference-reuse';
+import {
+  applyReuse,
+  captureReuse,
+  cloneReferenceGroup,
+  type ReuseCapture,
+  type ReuseRefusal,
+  type ReuseSource,
+} from './reference-reuse';
 import type { FactDraft } from './subject-facts';
 import type { Violation } from '@rezics/definitions/validate';
 import {
@@ -64,7 +71,11 @@ export function StoryArcCreateFields({
 }) {
   const o = { locale: locale as never };
   const rows = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const context: StatementFieldsRead = { release, source: null, public: { related: {}, subject: { type: storyArcType } } };
+  const context: StatementFieldsRead = {
+    release,
+    source: null,
+    public: { related: {}, subject: { type: storyArcType } },
+  };
   const properties = storyArcCreateProperties(release);
   const [property, setProperty] = useState('');
   const [reuse, setReuse] = useState<ReuseState | null>(null);
@@ -77,7 +88,9 @@ export function StoryArcCreateFields({
     previousRelease.current = digest;
   }, [digest, invalidate]);
 
-  const options = properties.filter((id) => release.properties[id]?.multivalued || !rows.some((row) => row.property === id));
+  const options = properties.filter(
+    (id) => release.properties[id]?.multivalued || !rows.some((row) => row.property === id),
+  );
   const selectedName = definitionText(release.properties[property]?.labels, locale).text || property;
   const drafts = factDrafts(rows);
   const factsRead = { release, public: { related: {} } };
@@ -150,7 +163,13 @@ export function StoryArcCreateFields({
     const group = origin?.statement.references[reuse.source.groupIndex];
     if (!origin || !group) return;
     const source = { ...reuse.source, snapshot: cloneReferenceGroup(group) };
-    setReuse({ ...reuse, source, capture: captureReuse(source, factDrafts(store.getSnapshot())), applied: [], refused: [] });
+    setReuse({
+      ...reuse,
+      source,
+      capture: captureReuse(source, factDrafts(store.getSnapshot())),
+      applied: [],
+      refused: [],
+    });
   }
 
   return (
@@ -177,7 +196,12 @@ export function StoryArcCreateFields({
             ))}
           </select>
         </label>
-        <Button type="button" className={action} disabled={disabled || !canEdit() || !available(property)} onClick={add}>
+        <Button
+          type="button"
+          className={action}
+          disabled={disabled || !canEdit() || !available(property)}
+          onClick={add}
+        >
           {m.people_profile_add_fact({ field: selectedName }, o)}
         </Button>
       </div>
@@ -186,7 +210,10 @@ export function StoryArcCreateFields({
         const name = definitionText(release.properties[row.property]?.labels, locale).text || row.property;
         const supported = storyArcCreatePropertyAdmitted(release, row.property);
         const violations = storyArcCreateRowErrors(errors, row, identity);
-        const feedback = { id: row.id, errors: presentStatementViolations(violations, row.statement, release, locale, row.id) };
+        const feedback = {
+          id: row.id,
+          errors: presentStatementViolations(violations, row.statement, release, locale, row.id),
+        };
         return (
           <fieldset
             key={row.id}
@@ -221,13 +248,31 @@ export function StoryArcCreateFields({
               />
             )}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className={action} disabled={disabled || !canEdit() || index === 0} onClick={() => move(row.id, -1)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={action}
+                disabled={disabled || !canEdit() || index === 0}
+                onClick={() => move(row.id, -1)}
+              >
                 {m.story_arc_create_move_up({}, o)}
               </Button>
-              <Button type="button" variant="outline" className={action} disabled={disabled || !canEdit() || index === rows.length - 1} onClick={() => move(row.id, 1)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={action}
+                disabled={disabled || !canEdit() || index === rows.length - 1}
+                onClick={() => move(row.id, 1)}
+              >
                 {m.story_arc_create_move_down({}, o)}
               </Button>
-              <Button type="button" variant="ghost" className={action} disabled={disabled || !canEdit()} onClick={() => remove(row.id)}>
+              <Button
+                type="button"
+                variant="ghost"
+                className={action}
+                disabled={disabled || !canEdit()}
+                onClick={() => remove(row.id)}
+              >
                 {m.people_profile_remove_fact({}, o)}
               </Button>
             </div>
