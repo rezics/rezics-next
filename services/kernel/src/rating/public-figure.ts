@@ -412,8 +412,9 @@ async function drainFigurePage(
     const clock = await readPopulationTotalClock(tx, partition);
     if (clock.pending !== '0') return { clock, keys: [] as FigureInputKey[] };
     const keys = filter
-      ? (await tx.query<FigureInputKey>(
-          `SELECT figure.subject_id::text AS "subjectId",figure.question_id::text AS "questionId",
+      ? (
+          await tx.query<FigureInputKey>(
+            `SELECT figure.subject_id::text AS "subjectId",figure.question_id::text AS "questionId",
                   figure.population_id::text AS "populationId"
            FROM unnest($1::uuid[]) AS key(subject_id)
            JOIN rating.public_figure AS figure
@@ -421,15 +422,16 @@ async function drainFigurePage(
             AND figure.subject_id=key.subject_id AND figure.question_id=$2 AND figure.population_id=$3
            WHERE figure.partition_no=$4 AND figure.pending_position IS NOT NULL
            ORDER BY figure.route,figure.question_id,figure.population_id,figure.subject_id LIMIT $5`,
-          [filter.subjectIds, filter.questionId, filter.populationId, partition, limit],
-        )).rows
-      : (await readFigureInputPage.run(tx, {
+            [filter.subjectIds, filter.questionId, filter.populationId, partition, limit],
+          )
+        ).rows
+      : ((await readFigureInputPage.run(tx, {
           partition_no: partition,
           limit,
           subject_ids: null,
           question_id: null,
           population_id: null,
-        })) as FigureInputKey[];
+        })) as FigureInputKey[]);
     return { clock, keys };
   });
   const { keys, clock } = prepared;
