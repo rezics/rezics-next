@@ -495,28 +495,51 @@ Admission retries races against other callers. The default probe interval is fiv
    cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
    A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Native identities compare by package name and version, so a verified older publication with a different traversal order remains reusable. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
    Source and native artifacts share an eventual LRU maintenance target capped at 10% of filesystem capacity and
-   reduced to preserve 10% free space. Publication derives allocated bytes from its verification inventory and never
-   scans legacy entries, takes a cache-wide lock or waits for eviction. ENOSPC skips optional publication without a
-   sweep or retry; install validation and the actual command result still apply. Partial staging stays inside the owned
-   run for normal post-command cleanup.
-   After result classification and reaping the run tree, the host registers the independent systemd
-   `rezics-check-cache-maintenance` timer/service with `--no-block`; registration failure leaves the result unchanged.
-   Registration is bounded to one second and its launcher is reaped before terminal admission is published. The host
-   captures the maintenance program before starting the command, so mutable run files cannot replace its code.
-   The timer starts after one second and repeats 60 seconds after service exit. Its self-contained program survives
-   run-directory cleanup; systemd owns its control group, 256 MiB memory limit, 20% CPU quota, idle I/O priority,
-   three-second runtime limit and one-second stop timeout. Controller deployment must restart this timer to update it.
-   Each sweep admits two seconds of monotonic work, at most 128 namespace records, eight detachments and 128 deletion
-   steps. Directory cookies persist scan progress; completed passes restart to reconcile concurrent mutations.
-   Accounting reports attached measured bytes and unknown entry counts separately; detached garbage is excluded
-   from those totals and still consumes disk space until deletion. Decision: unmeasured or malformed legacy
-   entries are conservatively eligible for incremental eviction, without recursively measuring them.
-   Hits/publications refresh directory mtime. Maintenance takes global and per-key locks nonblockingly, revalidates
-   inode and last-use snapshots, then atomically detaches eligible entries into `.garbage` under the per-key lock.
-   Lock files remain stable. Recursive deletion runs afterward under a separate garbage-directory lock, with neither
-   the global nor per-key lock held; interrupted deletion resumes on later ticks. Active entries and newly reused or
-   replaced snapshots are skipped. Backlogs and unknown sizes may temporarily exceed the target; maintenance never
-   makes that target a preparation or result-delivery condition.
+   reduced to preserve 10% free space. Capacity includes attached and detached allocated storage. Foreground preparation
+   never traverses the cache backlog or waits for eviction. ENOSPC and other optional publication I/O failures skip
+   caching without a sweep or retry; native validation and the command result still apply. Partial staging remains
+   private inside the owned run for normal cleanup. Corrupt source/native replacements skip publication and mark the
+   existing entry invalid for background retirement, even when capacity is below target.
+   After result classification and reaping the run tree, a bounded one-second `systemd-run --no-block` registration
+   starts `rezics-check-cache-registration.service`. The independent reconciler stops the legacy timer, checks the
+   captured program's digest, replaces stale maintenance services and starts stopped current services. A stable
+   registration lock serializes simultaneous registrations; registration failure is logged without changing results.
+   The captured program survives run-directory cleanup and command modification. Reconciliation retries on failure.
+   `rezics-check-cache-maintenance.service` runs continuously between checks, with restart on exit, 256 MiB memory,
+   20% CPU quota, nice 19, idle I/O class and IOWeight 1. It has no runtime or deletion-node limit. Its stable
+   `.maintenance.lock` admits one owner, including manual sweeps; shutdown cooperates between filesystem operations,
+   with a 15-second systemd stop timeout and whole-control-group teardown. Interrupted deletion restarts from the
+   remaining namespace, without a recursive call stack or one descriptor per tree depth. Symlinks are unlinked.
+   Namespace discovery still pages through 128 records per pass using directory cookies. Physical entry measurement
+   streams in the background; neither measurement nor recursive deletion holds a global cache or preparation lock.
+   Stable per-key locks, inode and last-use revalidation protect active or newly reused/replaced entries. Cache copies
+   remain private to each run. Unknown/malformed legacy sizes receive the same physical measurement as other entries.
+
+   Decision: the accounting window is one singleton maintenance process lifetime, starting with zero credit; only
+   durable unlink/rmdir reclamation earns allocated-byte credit, capped at 64 MiB, and an empty cache bootstraps by
+   tombstoning and deleting one eligible attached entry in place outside preparation locks; replacement publishers skip.
+
+   Credit uses Linux `st_blocks * 512`, never file length, manifest estimates, rename, elapsed time or free-space
+   changes. Each deletion fsyncs its parent before credit is usable; files with other hardlinks earn no credit.
+   Detachment debits the freshly measured complete entry before rename. Aggregate admitted bytes cannot exceed
+   reclaimed bytes in that window; every detachment drains before the next candidate. A restart discards remaining
+   credit. With no detached backlog, insufficient credit (including oversized legacy entries) selects in-place
+   reclamation instead of a rename. A durable `<key>.retiring` tombstone makes this single entry unavailable to readers
+   and publishers before locks are released; restart resumes it after validating its inode. No second entry is retired
+   until deletion completes. Pending tombstones count as garbage. Existing detached garbage always drains first.
+   Allocated-byte observations conservatively count shared legacy hardlinks at each name; all new artifacts are private
+   copies. The stable empty `.garbage` directory itself is metadata overhead, excluded from garbage-byte totals.
+
+   Garbage above **5% of the containing filesystem's total capacity** logs `ALARM garbage exceeds 5%` with host,
+   cache path, measured bytes, total bytes and threshold. `.maintenance-status.json` and the systemd journal expose
+   physical garbage, fraction, attached samples, total measured cache storage, bytes/nodes deleted, admitted bytes,
+   credit and timestamps. Progress emits at most every five seconds between operations; measurement, transitions and
+   errors also emit. Attached samples span a paged pass and are timestamped separately. Traversal uses bounded memory
+   and runs only in the idle-priority service, never in checks. An incomplete/failed observation has
+   `measurementValid=false`; it retains the previous alarm. Only a valid observation strictly below threshold clears
+   it. An absent status or `updatedAt` older than 120 seconds is unhealthy, including a blocked deletion syscall;
+   `observedAt` records the last complete garbage measurement. A live deletion can retain an old observation while
+   reporting progress. Use the commands below to distinguish a draining backlog from a stale or failed service.
    Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
    bounded diagnostic receipt with host, run, phase, elapsed time and actual active package names/versions from owned
    process working directories and package metadata. Unknown package identity stays unknown; previously observed packages
@@ -527,6 +550,7 @@ Admission retries races against other callers. The default probe interval is fiv
    After preparation succeeds, teardown of residual command descendants preserves the command's native exit status;
    it does not relabel a native failure as an installer failure. Local command custody also reacts to runner death
    and reaps detached descendants before their inherited capacity locks become free.
+
    The existing transfer timeout does not apply to preparation or a quiet command.
    Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
    The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
@@ -534,6 +558,7 @@ Admission retries races against other callers. The default probe interval is fiv
    runtime from the npm registry; the next run needs that download to recreate the cache.
    `BUN_RUNTIME_TRANSPILER_CACHE_PATH=<run-directory>/bun-runtime-transpiler-cache` isolates runtime transpilation.
    Chromium uses the shared `/srv/rezics-check/browsers` installation.
+
 5. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.
    The slice name replaces run-ID hyphens with underscores. `REZICS_CHECK_SLICE` names that slice.
    Remote runs set `REZICS_STACK_LEASE=off`; remote admission has already reserved their slots.
@@ -653,6 +678,44 @@ Worker memory admission uses a separate FIFO lease under `/tmp/rezics-check-memo
 before local execution or after remote transport failure. A nested `stack-run` recognizes the worker's memory lease
 and remains local for that admitted command; explicit `--local` is propagated to nested stack runs even when no
 memory lease is needed.
+
+### Dependency garbage maintenance operations
+
+The supermanager deploys this repair after coordinating the maintainer's manual cleanup. These commands do not
+remove garbage or touch check scopes. Run from the reviewed checkout; `a` and `b` below are the configured SSH
+endpoints, and include `c` in the loop only when configured. The explicit stop replaces the old transient timer and
+its captured three-second program; source changes alone cannot update that running program. The new reconciler
+subsequently checks program digests automatically. Installing/restarting maintenance interrupts only its own cleanup.
+
+```sh
+mkdir -p .temp
+bun -e 'import { dependencyPreparationProgram } from "./scripts/remote-check.ts"; await Bun.write(".temp/check-cache-maintenance.py", dependencyPreparationProgram)'
+for host in a b; do
+  scp .temp/check-cache-maintenance.py "$host:/srv/rezics-check/cache-maintenance.py.next"
+  ssh "$host" 'sudo systemctl stop rezics-check-cache-registration.service rezics-check-cache-maintenance.timer rezics-check-cache-maintenance.service; sudo systemctl reset-failed rezics-check-cache-registration.service rezics-check-cache-maintenance.service; sudo mv /srv/rezics-check/cache-maintenance.py.next /srv/rezics-check/cache-maintenance.py && sudo systemd-run --unit=rezics-check-cache-registration --collect --no-block -p Restart=on-failure -p RestartSec=5s -p MemoryMax=256M -p CPUQuota=20% -p IOSchedulingClass=idle python3 /srv/rezics-check/cache-maintenance.py register /srv/rezics-check/dependency-artifacts'
+done
+```
+
+For a deployed current program, restart only the owned service with
+`ssh a 'sudo systemctl restart rezics-check-cache-maintenance.service'` (repeat for `b`, and `c` when configured).
+Restart resets credit to zero and resumes tombstones and remaining garbage. Inspect each host exactly as follows:
+
+```sh
+ssh a 'sudo systemctl status rezics-check-cache-registration.service rezics-check-cache-maintenance.service --no-pager; sudo journalctl -u rezics-check-cache-registration.service -u rezics-check-cache-maintenance.service --since "10 minutes ago" --no-pager; python3 -' <<'PYTHON'
+import json, time
+from pathlib import Path
+status = json.loads(Path("/srv/rezics-check/dependency-artifacts/.maintenance-status.json").read_text())
+print(json.dumps(status, indent=2))
+unhealthy = (time.time() - status["updatedAt"] > 120 or bool(status.get("error"))
+             or not status.get("measurementValid") or bool(status.get("alarm")))
+print("UNHEALTHY" if unhealthy else "HEALTHY")
+raise SystemExit(int(unhealthy))
+PYTHON
+```
+
+A missing/invalid status raises an error rather than displaying zero. Compare `deletedBytes`/`deletedNodes` and timestamps
+across observations; journal errors or stale progress require operator attention even when the last alarm was clear.
+Do not run a second recursive measurement from a check or clear status files to dismiss an alarm.
 
 ### Provisioning
 

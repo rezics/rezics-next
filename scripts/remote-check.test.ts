@@ -4449,7 +4449,7 @@ const stateFile = directory + '/state';
 const state = JSON.parse(readFileSync(stateFile, 'utf8'));
 const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + slice;
 if (command === 'systemd-run') {
-  if (args.includes('--unit=rezics-check-cache-maintenance')) process.exit(0);
+  if (args.some((arg) => ['--unit=rezics-check-cache-maintenance', '--unit=rezics-check-cache-registration'].includes(arg))) process.exit(0);
   if (args.includes('--help')) {
     if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment');
     process.exit(0);
@@ -7198,8 +7198,9 @@ def install():`,
     expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('23\n');
     expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
     const request = readFileSync(join(run.run, 'maintenance-request'), 'utf8');
-    for (const option of ['--no-block', '--on-unit-inactive=60s', 'RuntimeMaxSec=3s', 'KillMode=control-group'])
+    for (const option of ['--no-block', 'Restart=always', 'IOSchedulingClass=idle', 'KillMode=control-group'])
       expect(request).toContain(option);
+    expect(request).not.toContain('RuntimeMaxSec');
     expect(Number(readFileSync(join(cache, run.artifacts().key, '.cache-bytes'), 'utf8'))).toBeGreaterThan(0);
     expect(readdirSync(cache).filter((name) => /^[a-f0-9]{64}$/.test(name))).toHaveLength(195);
   } finally {
@@ -7208,7 +7209,7 @@ def install():`,
   }
 });
 
-test('maintenance resumes bounded legacy batches, preserves entry locks and never deletes under the global lock', async () => {
+test('maintenance measures legacy batches, preserves active entries and locks, and deletes outside coordination', async () => {
   const fixture = preparationFixture();
   const cache = join(fixture.directory, 'dependency-artifacts');
   const entries = Array.from({ length: 140 }, (_, index) =>
@@ -7229,7 +7230,7 @@ test('maintenance resumes bounded legacy batches, preserves entry locks and neve
   const guarded = dependencyPreparationProgram.replace(
     'def install():',
     `
-${smallCacheDisk}
+${smallCacheDisk.replace("'free': 3000000", "'free': 0")}
 original_unlink = os.unlink
 def guarded_unlink(path, *args, **kwargs):
     with contextlib.ExitStack() as owned:
@@ -7251,7 +7252,7 @@ def install():`,
       expect(existsSync(entries[0]!)).toBe(true);
     }
     expect(entries.slice(1).some(existsSync)).toBe(false);
-    expect(last).toContain('unknown=');
+    expect(last).toContain('attachedBytes');
     expect(existsSync(entries[0] + '.lock')).toBe(true);
     expect(spawnSync('flock', ['-n', entries[0] + '.lock', 'true']).status).not.toBe(0);
   } finally {
@@ -7268,20 +7269,25 @@ test('maintenance revalidates last use and replacement identity before detaching
   );
   for (const [index, entry] of entries.entries()) {
     mkdirSync(entry, { recursive: true });
-    writeFileSync(join(entry, '.cache-bytes'), '200000');
+    writeFileSync(join(entry, '.cache-bytes'), '1'); // Manifest estimates cannot fund detachment.
+    writeFileSync(join(entry, 'allocated'), 'x'.repeat(200000));
     utimesSync(entry, index + 1, index + 1);
   }
   const program = dependencyPreparationProgram.replace(
     'def install():',
     `
+changed = [False]
 def changed_since_snapshot(_):
+    if changed[0] or sys._getframe(1).f_code.co_name != 'evict_artifacts':
+        return type('Disk', (), {'total': 3000000, 'free': 3000000})()
+    changed[0] = True
     touch_artifacts(Path(${JSON.stringify(entries[0])}))
     entry = Path(${JSON.stringify(entries[1])})
     with (entry.parent / (entry.name + '.lock')).open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        detach_artifacts(Path(${JSON.stringify(cache)}), entry)
+        entry.rename(Path(${JSON.stringify(fixture.directory)}) / 'replaced')
         entry.mkdir()
-        (entry / '.cache-bytes').write_text('200000')
+        (entry / 'allocated').write_bytes(b'x' * 200000)
         os.utime(entry, ns=(2000000000, 2000000000))
     return type('Disk', (), {'total': 3000000, 'free': 3000000})()
 shutil.disk_usage = changed_since_snapshot
@@ -7297,7 +7303,7 @@ def install():`,
   expect(entries.some(existsSync)).toBe(false); // Free-space pressure reduces the same target to zero.
 });
 
-test('slow interrupted deletion releases coordination, preserves warm reuse and resumes within time and step budgets', async () => {
+test('unbounded background deletion recovers interruption, preserves warm reuse, and drains large deep symlink trees', async () => {
   const fixture = preparationFixture();
   const run = fixture.create({
     command: ['sh', '-c', 'touch command-invoked; printf broken > .temp/check-host/prepare.py'],
@@ -7309,7 +7315,7 @@ test('slow interrupted deletion releases coordination, preserves warm reuse and 
   const cache = join(fixture.directory, 'dependency-artifacts');
   const garbage = join(cache, '.garbage', 'interrupted');
   mkdirSync(garbage, { recursive: true });
-  for (let index = 0; index < 150; index++) writeFileSync(join(garbage, String(index)), 'old bytes');
+  for (let index = 0; index < 1200; index++) writeFileSync(join(garbage, String(index)), 'old bytes');
   const ready = join(fixture.directory, 'deleting');
   const program = dependencyPreparationProgram.replace(
     'def install():',
@@ -7335,35 +7341,224 @@ def install():`,
     expect(publisher.artifacts().cache).toBe('miss');
     child.kill('SIGKILL');
     await child.exited;
-    const offset = `
-clock = time.monotonic
-shift = [0]
-time.monotonic = lambda: clock() + shift[0]
-original_unlink = os.unlink
-def timed_unlink(path, *args, **kwargs):
-    shift[0] += 3
-    return original_unlink(path, *args, **kwargs)
-os.unlink = timed_unlink
-`;
-    sweepArtifacts(
-      fixture.directory,
-      dependencyPreparationProgram.replace('def install():', offset + '\ndef install():'),
-    );
-    expect(readdirSync(garbage)).toHaveLength(149);
     sweepArtifacts(fixture.directory);
-    expect(existsSync(garbage)).toBe(true); // 128 steps cannot finish 149 files.
-    sweepArtifacts(fixture.directory);
-    expect(existsSync(garbage)).toBe(false);
+    expect(existsSync(garbage)).toBe(false); // One invocation drains beyond the former 128-node limit.
     const deep = join(cache, '.garbage', 'deep');
-    mkdirSync(join(deep, ...Array(160).fill('child')), { recursive: true });
-    writeFileSync(join(cache, '.garbage-cursor'), Buffer.from([255]));
-    for (let tick = 0; tick < 4 && existsSync(deep); tick++) sweepArtifacts(fixture.directory);
+    mkdirSync(join(deep, ...Array(600).fill('d')), { recursive: true });
+    const outside = join(fixture.directory, 'keep');
+    writeFileSync(outside, 'unrelated');
+    symlinkSync(outside, join(deep, 'link'));
+    writeFileSync(join(cache, '.garbage-cursor'), Buffer.from([255])); // Ignore obsolete cursors.
+    sweepArtifacts(fixture.directory);
     expect(existsSync(deep)).toBe(false);
+    expect(readFileSync(outside, 'utf8')).toBe('unrelated');
   } finally {
     if (child.exitCode === null) child.kill('SIGKILL');
     await child.exited;
     await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   }
+});
+
+test('registration replaces a stale captured service once, reuses current code, and serializes concurrent publishers', async () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const program = join(fixture.directory, 'maintenance.py');
+  const current = join(fixture.directory, 'current');
+  const events = join(fixture.directory, 'registration-events');
+  writeFileSync(program, dependencyPreparationProgram);
+  writeFileSync(current, 'old captured timer program');
+  writeFileSync(
+    join(fixture.directory, 'bin/systemctl'),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> registration-events
+if [ "$1" = show ]; then cat current; fi
+`,
+  );
+  writeFileSync(
+    join(fixture.directory, 'bin/systemd-run'),
+    `#!/bin/sh
+printf '%s\\n' create >> registration-events
+for last do :; done
+printf '%s' "$last" > current
+`,
+  );
+  const start = () =>
+    Bun.spawn(['python3', program, 'register', cache], {
+      cwd: fixture.directory,
+      env: { ...process.env, PATH: `${join(fixture.directory, 'bin')}:${process.env.PATH}` },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+  const one = start(),
+    two = start();
+  expect(await one.exited, await new Response(one.stderr).text()).toBe(0);
+  expect(await two.exited, await new Response(two.stderr).text()).toBe(0);
+  const log = readFileSync(events, 'utf8').trim().split('\n');
+  expect(log.filter((line) => line === 'create')).toHaveLength(1);
+  expect(log).toContain('stop rezics-check-cache-maintenance.service');
+  expect(log).toContain('start rezics-check-cache-maintenance.service');
+  expect(log.filter((line) => line === 'stop rezics-check-cache-maintenance.timer')).toHaveLength(2);
+});
+
+test('physical deletion funds aggregate detachment, while competing owners and restarts mint no credit', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const garbage = join(cache, '.garbage');
+  mkdirSync(garbage, { recursive: true });
+  writeFileSync(join(garbage, 'old'), 'x'.repeat(65536));
+  for (const name of ['a', 'b']) {
+    const entry = join(cache, name.repeat(64));
+    mkdirSync(entry);
+    writeFileSync(join(entry, 'payload'), 'x'.repeat(40000));
+  }
+  const probe = `
+def evict_artifacts(cache):
+    initial = RECLAIM_CREDIT
+    assert initial > 0
+    entries = [cache / ('a' * 64), cache / ('b' * 64)]
+    admitted = 0
+    for entry in entries:
+        size = measure_tree(cache, entry)
+        with (cache / (entry.name + '.lock')).open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if detach_artifacts(cache, entry, size):
+                admitted += size
+    assert 0 < admitted <= initial
+    assert sum(entry.exists() for entry in entries) == 1
+    assert RECLAIM_CREDIT == initial - admitted
+    competitor = subprocess.run(['python3', '-c', ${JSON.stringify(dependencyPreparationProgram)}, 'sweep', str(cache)])
+    assert competitor.returncode == 0
+    assert RECLAIM_CREDIT == initial - admitted
+`;
+  sweepArtifacts(fixture.directory, dependencyPreparationProgram.replace('def install():', probe + '\ndef install():'));
+  const restart = `
+assert RECLAIM_CREDIT == 0
+entry = Path(${JSON.stringify(cache)}) / ('b' * 64)
+assert not detach_artifacts(entry.parent, entry, measure_tree(entry.parent, entry))
+assert entry.exists()
+sys.exit(0)
+`;
+  const result = spawnSync(
+    'python3',
+    ['-c', dependencyPreparationProgram.replace('attempt_started = time.monotonic()', restart), 'sweep', cache],
+    { encoding: 'utf8' },
+  );
+  expect(result.status, result.stderr).toBe(0);
+});
+
+test('sparse logical bytes and legacy hardlinks do not create reclamation credit', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const garbage = join(cache, '.garbage');
+  mkdirSync(garbage, { recursive: true });
+  writeFileSync(join(garbage, 'sparse'), '');
+  truncateSync(join(garbage, 'sparse'), 128 * 1024 * 1024);
+  const retained = join(fixture.directory, 'retained');
+  writeFileSync(retained, 'x'.repeat(8192));
+  linkSync(retained, join(garbage, 'linked'));
+  const probe = '\ndef evict_artifacts(cache):\n    assert RECLAIM_CREDIT == 0\n';
+  sweepArtifacts(fixture.directory, dependencyPreparationProgram.replace('def install():', probe + '\ndef install():'));
+  expect(readFileSync(retained, 'utf8')).toHaveLength(8192);
+});
+
+test('idle service reports physical garbage alarm and recovery and continues without completed checks', async () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const garbage = join(cache, '.garbage');
+  mkdirSync(garbage, { recursive: true });
+  writeFileSync(join(garbage, 'allocated'), 'x'.repeat(256000));
+  const program = dependencyPreparationProgram
+    .replace(
+      'def install():',
+      `
+${smallCacheDisk}
+original_unlink = os.unlink
+def observable_unlink(path, *args, **kwargs):
+    time.sleep(.02)
+    return original_unlink(path, *args, **kwargs)
+os.unlink = observable_unlink
+def install():`,
+    )
+    .replace('for _ in range(30):', 'for _ in range(1):')
+    .replace('time.sleep(1)', 'time.sleep(.02)');
+  const child = Bun.spawn(['python3', '-c', program, 'maintain', cache], { stdout: 'ignore', stderr: 'pipe' });
+  const logs = new Response(child.stderr).text();
+  const status = () => JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'));
+  try {
+    await waitFor(() => existsSync(join(cache, '.maintenance-status.json')) && status().alarm === true);
+    expect(status()).toMatchObject({ cache, totalBytes: 3000000, thresholdBytes: 150000 });
+    expect(status().garbageBytes).toBeGreaterThan(150000);
+    await waitFor(() => status().measurementValid && status().alarm === false);
+    mkdirSync(join(garbage, 'later'));
+    writeFileSync(join(garbage, 'later', 'bytes'), 'x'.repeat(8192));
+    const incoming = Array.from({ length: 6 }, (_, index) => join(cache, index.toString(16).padStart(64, '0')));
+    for (const entry of incoming) {
+      mkdirSync(entry);
+      writeFileSync(join(entry, 'allocated'), 'x'.repeat(40000));
+      writeFileSync(entry + '.invalid', '');
+    }
+    await waitFor(() => {
+      expect(status().admittedBytes).toBeLessThanOrEqual(status().deletedBytes);
+      return !incoming.some(existsSync) && !existsSync(join(garbage, 'later')) && status().measurementValid;
+    });
+    expect(status().deletedBytes).toBeGreaterThan(256000);
+    expect(status().garbageBytes).toBe(0);
+  } finally {
+    child.kill('SIGTERM');
+    expect(await child.exited).toBe(0);
+  }
+  expect(await logs).toContain('ALARM garbage exceeds 5%');
+});
+
+test('unavailable measurement after restart retains the last alarm and exposes the error', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  mkdirSync(cache);
+  writeFileSync(
+    join(cache, '.maintenance-status.json'),
+    JSON.stringify({ cache, alarm: true, garbageBytes: 900000, totalBytes: 3000000 }),
+  );
+  const program = dependencyPreparationProgram.replace(
+    'def install():',
+    `
+def unavailable(_):
+    raise OSError('capacity unavailable')
+shutil.disk_usage = unavailable
+def install():`,
+  );
+  const result = spawnSync('python3', ['-c', program, 'sweep', cache], { encoding: 'utf8' });
+  expect(result.status).toBe(70);
+  const status = JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'));
+  expect(status).toMatchObject({
+    alarm: true,
+    garbageBytes: 900000,
+    measurementValid: false,
+    state: 'error',
+    error: 'capacity unavailable',
+  });
+});
+
+test('concurrent corrupt source/native replacements skip optional publication and retain command outcomes', async () => {
+  const fixture = preparationFixture();
+  const cold = fixture.create();
+  expect(cold.execute().status).toBe(0);
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  rmSync(join(cache, cold.artifacts().key, 'manifest.json'));
+  const native = join(cache, 'native');
+  for (const name of readdirSync(native).filter((name) => /^[a-f0-9]{64}$/.test(name)))
+    rmSync(join(native, name, 'manifest.json'));
+  const one = fixture.create({ command: ['sh', '-c', 'touch command-invoked; exit 23'] });
+  const two = fixture.create();
+  const first = one.start(),
+    second = two.start();
+  expect(await first.child.exited, await first.stderr).toBe(23);
+  expect(await second.child.exited, await second.stderr).toBe(0);
+  await Promise.all([first.stdout, second.stdout]);
+  expect(existsSync(join(cache, '.garbage'))).toBe(false);
+  expect(existsSync(join(one.run, 'command-invoked'))).toBe(true);
+  sweepArtifacts(fixture.directory); // Invalid replacements retire even below the capacity target.
+  expect(existsSync(join(cache, cold.artifacts().key))).toBe(false);
+  expect(fixture.create().execute().status).toBe(0);
 });
 
 test('full-disk source/native publication skips optional caching without eviction, retry or command failure', () => {

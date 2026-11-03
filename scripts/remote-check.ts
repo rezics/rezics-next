@@ -1882,6 +1882,8 @@ def copy_entries(source, destination, entries):
 
 def verified(entry, key, allocated=None):
     try:
+        if retirement_marker(entry).exists():
+            return None
         manifest = json.loads((entry / 'manifest.json').read_text())
         if manifest['key'] != key or manifest['schema'] != 2:
             return None
@@ -1963,26 +1965,31 @@ def native_entries(root, entries):
     return selected
 
 
-def artifact_bytes(entry):
-    # Unknown legacy sizes stay unknown. Publication never accounts for any other artifact.
-    try:
-        with (entry / '.cache-bytes').open() as record:
-            value = record.read(65)
-        value = value.strip() if len(value) <= 64 else ''
-        return int(value) if re.fullmatch(r'[0-9]{1,30}', value) else None
-    except (OSError, UnicodeError):
-        return None
-
-
 def touch_artifacts(entry):
     os.utime(entry, None)
 
 
-def detach_artifacts(cache, entry):
-    # Caller holds the stable per-key lock. Never unlink that lock or recursively remove its entry here.
+# Credit belongs to one maintenance ownership interval. A new process always starts at zero.
+# Foreground publishers have no credit and never scan old entries to obtain any.
+RECLAIM_CREDIT = 0
+RECLAIM_LIMIT = 64 * 1024 * 1024
+MAINTENANCE_STOP = False
+MAINTENANCE_STATUS = {}
+LAST_REPORT = 0
+
+
+def detach_artifacts(cache, entry, measured=None):
+    global RECLAIM_CREDIT
+    # Caller holds the stable per-key lock and has revalidated the measured inode/mtime.
+    # Debit before rename: interruption can lose credit, never invent it. Only the singleton owns credit.
+    if measured is None or measured > RECLAIM_CREDIT:
+        return False
+    RECLAIM_CREDIT -= measured
     garbage = cache / '.garbage'
     garbage.mkdir(exist_ok=True)
     entry.rename(garbage / uuid.uuid4().hex)
+    MAINTENANCE_STATUS['admittedBytes'] = MAINTENANCE_STATUS.get('admittedBytes', 0) + measured
+    return True
 
 
 # Linux directory cookies let a bounded scan resume without re-listing an arbitrarily large namespace.
@@ -2023,140 +2030,400 @@ def directory_entries(namespace, cookie):
         libc.closedir(stream)
 
 
-def clean_garbage(cache, deadline):
-    garbage = cache / '.garbage'
-    if not garbage.exists():
+def tree_nodes(root):
+    # Postorder without Python recursion, a wide in-memory list or one open fd per depth.
+    # Linux directory cookies resume each parent after descent; no symlink is followed.
+    parents = []
+    path, cookie = root, 0
+    while not MAINTENANCE_STOP:
+        with contextlib.closing(directory_entries(path, cookie)) as stream:
+            descended = False
+            for name, cookie in stream:
+                if MAINTENANCE_STOP:
+                    return
+                if name is None:
+                    break
+                if name in ('.', '..'):
+                    continue
+                child = path / name
+                info = child.lstat()
+                if stat.S_ISDIR(info.st_mode):
+                    parents.append((path, cookie))
+                    path, cookie = child, 0
+                    descended = True
+                    break
+                yield child, info
+            if descended:
+                continue
+        yield path, path.lstat()
+        if not parents:
+            return
+        path, cookie = parents.pop()
+
+
+def maintenance_report(cache, force=False, **values):
+    global LAST_REPORT
+    MAINTENANCE_STATUS.update(values)
+    now = time.monotonic()
+    if not force and now - LAST_REPORT < 5:
         return
-    # A separate deletion owner survives per-key replacement. No global or per-key lock is held during deletion.
-    with contextlib.ExitStack() as cleanup:
-        descriptor = os.open(garbage, os.O_RDONLY)
-        cleanup.callback(os.close, descriptor)
+    LAST_REPORT = now
+    MAINTENANCE_STATUS.update(host=platform.node(), cache=str(cache), updatedAt=time.time(),
+                              creditBytes=RECLAIM_CREDIT, accountingWindow='current singleton process')
+    snapshot = dict(MAINTENANCE_STATUS)
+    try:
+        temporary = cache / '.maintenance-status.pending'
+        temporary.write_text(json.dumps(snapshot, sort_keys=True))
+        temporary.replace(cache / '.maintenance-status.json')
+    except OSError as error:
+        print('remote-check: cache diagnostics write failed: ' + str(error), file=sys.stderr, flush=True)
+    print('remote-check: cache maintenance ' + json.dumps(snapshot, sort_keys=True), file=sys.stderr, flush=True)
+
+
+def measure_tree(cache, entry):
+    size = 0
+    for _, info in tree_nodes(entry):
+        size += info.st_blocks * 512
+        maintenance_report(cache, state='measuring')
+    if MAINTENANCE_STOP:
+        raise InterruptedError('cache measurement interrupted')
+    return size
+
+
+def observe_garbage(cache):
+    # Only the maintenance owner traverses garbage. A failed/incomplete observation cannot clear an alarm.
+    maintenance_report(cache, force=True, state='measuring', measurementValid=False)
+    garbage = cache / '.garbage'
+    size = measure_tree(cache, garbage) - garbage.lstat().st_blocks * 512 if garbage.exists() else 0
+    for namespace in [cache, cache / 'native']:
+        with contextlib.closing(directory_entries(namespace, 0)) as stream:
+            for name, _ in stream:
+                if name is None:
+                    break
+                if re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
+                    entry = namespace / name[:-9]
+                    if entry.exists():
+                        size += measure_tree(cache, entry)
+    total = shutil.disk_usage(cache).total
+    if total <= 0:
+        raise OSError('filesystem capacity unavailable')
+    alarm = size > total * .05 or (size == total * .05 and MAINTENANCE_STATUS.get('alarm', False))
+    maintenance_report(cache, force=True, state='observed', measurementValid=True,
+        garbageBytes=size, totalBytes=total, thresholdBytes=total * .05, garbageFraction=size / total,
+        alarm=alarm, observedAt=time.time())
+    if alarm:
+        print('remote-check: ALARM garbage exceeds 5% host=' + platform.node() + ' cache=' + str(cache) +
+              ' measuredBytes=' + str(size) + ' totalBytes=' + str(total) + ' thresholdBytes=' +
+              str(total * .05), file=sys.stderr, flush=True)
+    return size
+
+
+def delete_tree(cache, root, keep_root=False):
+    global RECLAIM_CREDIT
+    for path, info in tree_nodes(root):
+        if keep_root and path == root:
+            continue
+        parent = path.parent
+        if stat.S_ISDIR(info.st_mode):
+            path.rmdir()
+        else:
+            os.unlink(path)
+        # Make removal durable before admitting more garbage. A crash before this point loses credit.
+        # Hardlinked legacy files earn nothing until their final link is removed.
+        descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        freed = info.st_blocks * 512 if stat.S_ISDIR(info.st_mode) or info.st_nlink == 1 else 0
+        RECLAIM_CREDIT = min(RECLAIM_LIMIT, RECLAIM_CREDIT + freed)
+        MAINTENANCE_STATUS['deletedBytes'] = MAINTENANCE_STATUS.get('deletedBytes', 0) + freed
+        MAINTENANCE_STATUS['deletedNodes'] = MAINTENANCE_STATUS.get('deletedNodes', 0) + 1
+        # Progress is not a new measurement and cannot clear the last observed alarm.
+        maintenance_report(cache, state='deleting', measurementValid=False)
+
+
+def clean_garbage(cache):
+    garbage = cache / '.garbage'
+    if garbage.exists():
+        delete_tree(cache, garbage, keep_root=True)
+
+
+def retirement_marker(entry):
+    return entry.parent / (entry.name + '.retiring')
+
+
+def finish_retirement(entry):
+    with (entry.parent / (entry.name + '.lock')).open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        cursor = cache / '.garbage-cursor'
+        (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
+        retirement_marker(entry).unlink(missing_ok=True)
+
+
+def retire_in_place(cache, entry, identity):
+    # Bootstrap/oversized legacy admission: one unavailable attached entry is reclaimed in place,
+    # rather than renaming unmeasured bytes into garbage. All users consult its durable tombstone.
+    # No recursive work holds a preparation lock. A crash leaves the tombstone for the next owner.
+    marker = retirement_marker(entry)
+    with (entry.parent / (entry.name + '.lock')).open('a') as lock:
         try:
-            relative = cursor.read_text()
-            path = garbage / relative
-            if '..' in Path(relative).parts or Path(relative).is_absolute() or path.resolve() != path or not path.is_dir():
-                path = garbage
-        except (OSError, UnicodeError):
-            path = garbage
-        for _ in range(128):
-            if time.monotonic() >= deadline:
-                break
-            with os.scandir(path) as stream:
-                item = next(stream, None)
-            if item is None:
-                if path == garbage:
-                    break  # Keep the deletion lock's directory inode stable.
-                path.rmdir()
-                path = path.parent
-            elif item.is_dir(follow_symlinks=False):
-                path = Path(item.path)
-            else:
-                os.unlink(item.path)
-        # Resume deep trees too: repeated descent must not consume every later tick's entire step budget.
-        cursor.write_text(str(path.relative_to(garbage)))
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        if entry.exists():
+            info = entry.lstat()
+            if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
+                return
+            with marker.open('w') as record:
+                record.write(json.dumps(identity))
+                record.flush()
+                os.fsync(record.fileno())
+            descriptor = os.open(entry.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
+    observe_garbage(cache)
+    delete_tree(cache, entry)
+    if not MAINTENANCE_STOP:
+        finish_retirement(entry)
+        maintenance_report(cache, force=True, retiringEntry=None)
+        observe_garbage(cache)
+
+
+def resume_retirements(cache):
+    for namespace in [cache, cache / 'native']:
+        with contextlib.closing(directory_entries(namespace, 0)) as stream:
+            for name, _ in stream:
+                if name is None or MAINTENANCE_STOP:
+                    break
+                if not re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
+                    continue
+                entry = namespace / name[:-9]
+                # Revalidate identity under its stable lock, but never retain that lock while deleting.
+                with (namespace / (entry.name + '.lock')).open('a') as lock:
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        continue
+                    marker = namespace / name
+                    identity = json.loads(marker.read_text())
+                    if entry.exists():
+                        info = entry.lstat()
+                        if [info.st_dev, info.st_ino] != identity[1:]:
+                            raise RuntimeError('retirement inode changed: ' + str(entry))
+                    else:
+                        (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
+                        marker.unlink()
+                        continue
+                maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
+                delete_tree(cache, entry)
+                if not MAINTENANCE_STOP:
+                    finish_retirement(entry)
+                    maintenance_report(cache, force=True, retiringEntry=None)
 
 
 def evict_artifacts(cache):
-    # Maintenance only: two seconds, 128 directory records, eight detachments and 128 deletion steps per tick.
-    deadline = time.monotonic() + 2
-    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'unknown': 0, 'known': [], 'legacy': []}
-    with contextlib.ExitStack() as cleanup:
-        descriptor = os.open(cache, os.O_RDONLY)
-        cleanup.callback(os.close, descriptor)
-        try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
-        state_file = cache / '.sweep-state.json'
-        try:
-            state = json.loads(state_file.read_text())
-        except (OSError, ValueError):
-            state = dict(fresh, known=[], legacy=[])
-        remaining = 128
-        while remaining and state['namespace'] < 2 and time.monotonic() < deadline - 1:
-            namespace = cache if state['namespace'] == 0 else cache / 'native'
-            with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
-                for name, cookie in stream:
-                    if not remaining or time.monotonic() >= deadline - 1:
-                        break
-                    remaining -= 1
-                    state['cookie'] = cookie
-                    if name is None:
-                        state['namespace'] += 1
-                        break
-                    if not re.fullmatch(r'[a-f0-9]{64}', name):
-                        continue
-                    entry = namespace / name
-                    try:
-                        info = entry.lstat()
-                        if not stat.S_ISDIR(info.st_mode):
-                            continue
-                        size = artifact_bytes(entry)
-                        state['bytes'] += size if size is not None else 0
-                        state['unknown'] += size is None
-                        with (namespace / (name + '.lock')).open('a') as lock:
-                            try:
-                                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                            except BlockingIOError:
-                                continue
-                            bucket = state['legacy' if size is None else 'known']
-                            bucket.append([info.st_mtime_ns, info.st_dev, info.st_ino,
-                                           str(entry.relative_to(cache)), size])
-                            bucket.sort()
-                            del bucket[32:]
-                    except FileNotFoundError:
-                        continue
-        if state['namespace'] == 2:
-            disk = shutil.disk_usage(cache)
-            bound = max(0, min(disk.total // 10, state['bytes'] + disk.free - disk.total // 10))
-            candidates = sorted(state['known'] + state['legacy'], key=lambda item: item[0]) if state['bytes'] > bound else state['legacy']
-            for last_use, device, inode, name, size in candidates[:8]:
-                if time.monotonic() >= deadline - 1:
+    # Bounded namespace discovery; physical measurement and reclamation run outside all preparation locks.
+    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'known': []}
+    state_file = cache / '.sweep-state.json'
+    try:
+        state = json.loads(state_file.read_text())
+        if state.get('schema') != 3:
+            raise ValueError('old sweep state')
+    except (OSError, ValueError):
+        state = dict(fresh, known=[])
+    remaining = 128
+    while remaining and state['namespace'] < 2 and not MAINTENANCE_STOP:
+        namespace = cache if state['namespace'] == 0 else cache / 'native'
+        with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
+            for name, cookie in stream:
+                if not remaining or MAINTENANCE_STOP:
                     break
-                if size is not None and state['bytes'] <= bound:
+                remaining -= 1
+                state['cookie'] = cookie
+                if name is None:
+                    state['namespace'] += 1
+                    break
+                if not re.fullmatch(r'[a-f0-9]{64}', name):
                     continue
-                entry = cache / name
+                entry = namespace / name
+                try:
+                    info = entry.lstat()
+                    if not stat.S_ISDIR(info.st_mode):
+                        continue
+                    identity = [info.st_mtime_ns, info.st_dev, info.st_ino]
+                    size = measure_tree(cache, entry)
+                    current = entry.lstat()
+                    if [current.st_mtime_ns, current.st_dev, current.st_ino] != identity:
+                        continue
+                    state['bytes'] += size
+                    invalid = (entry.parent / (entry.name + '.invalid')).exists()
+                    with (namespace / (name + '.lock')).open('a') as lock:
+                        try:
+                            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except BlockingIOError:
+                            continue
+                    state['known'].append([*identity, str(entry.relative_to(cache)), size, invalid])
+                    state['known'].sort(key=lambda item: (not item[5], item[0]))
+                    del state['known'][32:]
+                except FileNotFoundError:
+                    continue
+    if state['namespace'] == 2 and not MAINTENANCE_STOP:
+        disk = shutil.disk_usage(cache)
+        garbage = observe_garbage(cache)
+        bound = max(0, min(disk.total // 10, state['bytes'] + garbage + disk.free - disk.total // 10))
+        for last_use, device, inode, name, old_size, invalid in state['known']:
+            if (state['bytes'] + garbage <= bound and not invalid) or MAINTENANCE_STOP:
+                break
+            entry = cache / name
+            try:
+                # Measure again outside locks; timestamps and inode are revalidated under the key lock.
+                size = measure_tree(cache, entry)
                 with (entry.parent / (entry.name + '.lock')).open('a') as lock:
                     try:
                         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        info = entry.lstat()
-                        if (info.st_mtime_ns, info.st_dev, info.st_ino) != (last_use, device, inode):
-                            continue
-                        detach_artifacts(cache, entry)
-                        state['bytes'] -= size if size is not None else 0
-                        state['unknown'] -= size is None
-                    except (BlockingIOError, FileNotFoundError):
+                    except BlockingIOError:
                         continue
-            print('remote-check: dependency artifacts attached measured bytes=' + str(state['bytes']) +
-                  ' unknown=' + str(state['unknown']) + ' bound=' + str(bound), file=sys.stderr, flush=True)
-            state = fresh
-        temporary = state_file.with_suffix('.pending')
-        temporary.write_text(json.dumps(state))
-        temporary.replace(state_file)
-    clean_garbage(cache, deadline)
+                    info = entry.lstat()
+                    identity = [last_use, device, inode]
+                    if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
+                        continue
+                    detached = detach_artifacts(cache, entry, size)
+                if detached:
+                    (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
+                    state['bytes'] -= old_size
+                    garbage += size
+                    # Drain before selecting the next producer; no detachment can outrun earned credit.
+                    clean_garbage(cache)
+                    garbage = observe_garbage(cache)
+                elif garbage == 0:
+                    retire_in_place(cache, entry, identity)
+                    if not entry.exists():
+                        state['bytes'] -= old_size
+            except FileNotFoundError:
+                continue
+        maintenance_report(cache, force=True, attachedBytes=state['bytes'], attachedObservedAt=time.time(),
+                           totalMeasuredCacheBytes=state['bytes'] + garbage, boundBytes=bound)
+        state = dict(fresh, known=[])
+    state['schema'] = 3
+    temporary = state_file.with_suffix('.pending')
+    temporary.write_text(json.dumps(state))
+    temporary.replace(state_file)
+
+
+def maintain(cache, continuous=False):
+    global RECLAIM_CREDIT, MAINTENANCE_STOP
+    cache.mkdir(parents=True, exist_ok=True)
+    # Stable across service replacement and independent of run scopes. A competing registration exits harmlessly.
+    with (cache / '.maintenance.lock').open('a') as owner:
+        try:
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 0
+        RECLAIM_CREDIT = 0
+        try:
+            previous = json.loads((cache / '.maintenance-status.json').read_text())
+            if previous.get('cache') == str(cache):
+                MAINTENANCE_STATUS.update(previous)
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError, TypeError) as error:
+            maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
+        MAINTENANCE_STATUS.update(windowStartedAt=time.time(), pid=os.getpid(),
+                                  deletedBytes=0, deletedNodes=0, admittedBytes=0, measurementValid=False)
+        for number in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP]:
+            signal.signal(number, lambda *_: globals().__setitem__('MAINTENANCE_STOP', True))
+        while not MAINTENANCE_STOP:
+            try:
+                observe_garbage(cache)
+                clean_garbage(cache)
+                resume_retirements(cache)
+                if not MAINTENANCE_STOP:
+                    observe_garbage(cache)
+                    evict_artifacts(cache)
+                    observe_garbage(cache)
+                    maintenance_report(cache, force=True, state='idle', error=None)
+            except Exception as error:
+                maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
+                if not continuous:
+                    raise
+            if not continuous:
+                return 0
+            # Idle checks are unnecessary: systemd retains this process between checks and restarts failures.
+            for _ in range(30):
+                if MAINTENANCE_STOP:
+                    break
+                time.sleep(1)
+        maintenance_report(cache, force=True, state='stopped', measurementValid=False)
+    return 0
+
+
+def captured_maintenance(source):
+    import base64, zlib
+    encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
+    # ExecStart expands dollars and percent specifiers; transfer only inert compressed source.
+    return 'import base64,zlib;MAINTENANCE_SOURCE=zlib.decompress(base64.b64decode(' + repr(encoded) + '));exec(MAINTENANCE_SOURCE)'
+
+
+def register_maintenance(cache):
+    # Reconciliation itself is systemd-owned: no check waits for stop/restart or a stale captured program.
+    # A stable file lock also protects simultaneous registrations from different completed checks.
+    cache.mkdir(parents=True, exist_ok=True)
+    with (cache / '.maintenance-registration.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        unit = 'rezics-check-cache-maintenance'
+        source = globals().get('MAINTENANCE_SOURCE')
+        if source is None:
+            source = Path(__file__).read_bytes()
+        generation = hashlib.sha256(source).hexdigest()
+        def control(*args):
+            return subprocess.run(['systemctl', *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, timeout=30)
+        # The previous timer can otherwise continue running its old three-second program.
+        stopped = control('stop', unit + '.timer')
+        if stopped.returncode and 'not loaded' not in stopped.stderr and 'not found' not in stopped.stderr:
+            raise RuntimeError(stopped.stderr.strip() or 'cannot stop legacy maintenance timer')
+        current = control('show', unit + '.service', '--property=ExecStart', '--value')
+        if current.returncode == 0 and generation in current.stdout:
+            started = control('start', unit + '.service')
+            if started.returncode:
+                raise RuntimeError(started.stderr.strip() or 'cannot start cache maintenance')
+            return 0
+        stopped = control('stop', unit + '.service')
+        if stopped.returncode and 'not loaded' not in stopped.stderr and 'not found' not in stopped.stderr:
+            raise RuntimeError(stopped.stderr.strip() or 'cannot stop stale cache maintenance')
+        control('reset-failed', unit + '.service')
+        result = subprocess.run(['systemd-run', '--unit=' + unit, '--collect', '--no-block',
+            '-p', 'Restart=always', '-p', 'RestartSec=5s',
+            '-p', 'TimeoutStopSec=15s', '-p', 'KillMode=control-group',
+            '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
+            '-p', 'IOWeight=1', '-p', 'Nice=19',
+            'python3', '-c', captured_maintenance(source), 'maintain', str(cache), generation],
+            timeout=30)
+        if result.returncode:
+            raise RuntimeError('maintenance service registration failed: ' + str(result.returncode))
+    return 0
 
 
 def schedule_maintenance(root, source):
-    # systemd owns a singleton timer/service outside the completed run's scope. Its program is independent of run files.
-    # --no-block waits only for registration, never a sweep; failure cannot change the command's status.
+    # --no-block only registers a reconciler outside the run. Its retries and replacement cannot delay the result.
     try:
-        import base64, zlib
-        encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
-        # ExecStart expands dollars and percent specifiers; carry source as inert encoded bytes instead.
-        program = 'import base64,zlib;exec(zlib.decompress(base64.b64decode(' + repr(encoded) + ')))'
-        subprocess.run(['systemd-run', '--unit=rezics-check-cache-maintenance', '--collect', '--no-block',
-            '--on-active=1s', '--on-unit-inactive=60s', '--timer-property=RemainAfterElapse=no',
-            '-p', 'RuntimeMaxSec=3s', '-p', 'TimeoutStopSec=1s', '-p', 'KillMode=control-group',
+        result = subprocess.run(['systemd-run', '--unit=rezics-check-cache-registration', '--collect', '--no-block',
+            '-p', 'Restart=on-failure', '-p', 'RestartSec=5s', '-p', 'TimeoutStopSec=15s',
             '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
-            'python3', '-c', program, 'sweep', str(root.parent.parent / 'dependency-artifacts')],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1, cwd=root)
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+            'python3', '-c', captured_maintenance(source), 'register', str(root.parent.parent / 'dependency-artifacts')],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=1, cwd=root)
+        if result.returncode:
+            # An existing registration owns reconciliation. Other errors remain in the host diagnostics.
+            print('remote-check: cache registration: ' + result.stderr.decode(errors='replace').strip(),
+                  file=sys.stderr, flush=True)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print('remote-check: cache registration unavailable: ' + str(error), file=sys.stderr, flush=True)
 
 
 def publish_artifacts(root, entry, manifest):
@@ -2175,14 +2442,16 @@ def publish_artifacts(root, entry, manifest):
         size = allocated[0] + sum(path.lstat().st_blocks * 512 for path in
             [stage, stage / 'payload', stage / 'manifest.json', stage / '.cache-bytes'])
         (stage / '.cache-bytes').write_text(str(size))
-        if entry.exists():
-            detach_artifacts(cache, entry)
+        if entry.exists() or retirement_marker(entry).exists():
+            (entry.parent / (entry.name + '.invalid')).touch()
+            print('remote-check: dependency artifacts replacement publication skipped: awaiting background reclamation',
+                  file=sys.stderr, flush=True)
+            return
         stage.rename(entry)
         touch_artifacts(entry)
     except OSError as error:
-        if error.errno != errno.ENOSPC:
-            raise
-        print('remote-check: dependency artifacts publication skipped after ENOSPC', file=sys.stderr, flush=True)
+        reason = 'ENOSPC' if error.errno == errno.ENOSPC else str(error)
+        print('remote-check: dependency artifacts publication skipped after ' + reason, file=sys.stderr, flush=True)
     # Partial staging stays private inside the owned run for normal post-command cleanup.
 
 
@@ -2831,7 +3100,7 @@ if sys.argv[1] == 'phase':
     preparation_progress(Path(sys.argv[2]), sys.argv[3])
     sys.exit(0)
 try:
-    sys.exit(evict_artifacts(Path(sys.argv[2])) if sys.argv[1] == 'sweep' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
+    sys.exit(maintain(Path(sys.argv[2]), sys.argv[1] == 'maintain') if sys.argv[1] in ['sweep', 'maintain'] else register_maintenance(Path(sys.argv[2])) if sys.argv[1] == 'register' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
 except Exception as error:
     stop_owned(signal.SIGKILL)
     while True:

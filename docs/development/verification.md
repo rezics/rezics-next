@@ -85,6 +85,12 @@ alone is load evidence, as in the landing check; a reproducible assertion remain
 acceptance, root typecheck and the applicable individual reruns pass. This exception does not excuse transport,
 setup or cleanup failures and does not authorize a discretionary whole-suite run.
 
+Check-host dependency garbage is reclaimed by a continuous systemd service, independent of routed runs. Inspect
+physical bytes, alarm, deletion progress and observation validity using the exact commands in
+[dependency garbage maintenance operations](../../scripts/README.md#dependency-garbage-maintenance-operations).
+Missing/stale measurements and cleanup errors remain unhealthy; command success does not prove cache health.
+Deployment must replace the legacy captured timer/program on each configured host before claiming live recovery.
+
 ## Temporary files
 
 Workers use `.temp/worker-tmp` in their task worktree; deleting the worktree deletes their scratch files. Each gate,
