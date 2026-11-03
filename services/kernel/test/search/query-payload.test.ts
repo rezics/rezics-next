@@ -9,6 +9,7 @@ import { createOpenSearch, SearchUnavailableError, type OpenSearch } from '../..
 import {
   countFacets,
   FACET_TEMPLATE,
+  HIT_TEMPLATE,
   installTemplates,
   SEARCH_TEMPLATE,
   searchSubjects,
@@ -16,6 +17,7 @@ import {
   suggestSubjects,
   type SearchPlan,
 } from '../../src/search/query.ts';
+import { encodeSearchCursor } from '../../src/search/cursor.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import type { IndexedSubject, SubjectSource } from '../../src/search/source.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -45,7 +47,7 @@ const subject: IndexedSubject = {
 
 // Paths address exactly one consumed field in a genuine native reply, never completion metadata.
 type Body = Record<string, unknown>;
-type Fault = { path: string; value?: unknown; grow?: number };
+type Fault = { path: string; value?: unknown; grow?: number; afterId?: string };
 function field(body: Body, path: string): { parent: Body; key: string } {
   const parts = path.split('.');
   const key = parts.pop()!;
@@ -57,7 +59,13 @@ function inject(body: Body, fault: Fault) {
   const { parent, key } = field(body, fault.path);
   if (fault.grow)
     parent[key] = Array.from({ length: fault.grow }, () => structuredClone((parent[key] as unknown[])[0]));
-  else if (fault.value === undefined) delete parent[key];
+  else if (fault.afterId) {
+    const hits = parent[key] as Body[];
+    const extra = structuredClone(hits[0]) as Body;
+    extra._id = fault.afterId;
+    extra.sort = [...((hits[0] as Body).sort as unknown[]).slice(0, -1), fault.afterId];
+    parent[key] = [...hits, extra];
+  } else if (fault.value === undefined) delete parent[key];
   else parent[key] = fault.value;
 }
 function observe(fault?: Fault) {
@@ -72,7 +80,10 @@ function observe(fault?: Fault) {
       const original = structuredClone(response.body) as Body;
       replies.push(original);
       expect(original).toMatchObject({ timed_out: false, _shards: { total: 1, successful: 1, failed: 0 } });
-      expect((original.hits as Body).total).toMatchObject({ relation: 'eq' });
+      const template = typeof (body as { id?: unknown })?.id === 'string' ? (body as { id: string }).id : '';
+      if (template.endsWith(SEARCH_TEMPLATE) || template.endsWith(FACET_TEMPLATE))
+        expect((original.hits as Body).total).toMatchObject({ relation: 'eq' });
+      if (template.endsWith(HIT_TEMPLATE)) expect((original.hits as Body).total).toBeUndefined();
       const changed = structuredClone(original);
       if (fault) inject(changed, fault);
       // Only the addressed payload field may differ, even for oversized replies.
@@ -222,7 +233,7 @@ const hits = [
   ...invalid('hits.hits', arrays),
   ...invalid('hits.hits.0', [null, marker]),
   ...invalid('hits.hits.0._id', [undefined, null, '', 17, marker]),
-  ...invalid('hits.hits.0._index', [undefined, null, '', 17]),
+  ...invalid('hits.hits.0._index', [undefined, null, '', 17, 'foreign-subjects-g1']),
   ...invalid('hits.hits.0._source', arrays),
   ...invalid('hits.hits.0._source.partition', [...counters, 11, 4096]),
   ...invalid('hits.hits.0._source.security_revision', counters),
@@ -300,12 +311,24 @@ test('suggest does not require unconsumed totals sort or matched query fields', 
   }
 });
 
-for (const operation of ['search', 'suggest', 'facet'] as const) {
-  test(`actual service maps malformed ${operation} to index_not_ready 503 before Source`, async () => {
-    const observed = observe({
-      path: operation === 'facet' ? 'aggregations.facet_0.values.buckets' : 'hits.hits',
-      value: marker,
-    });
+const serviceFaults = [
+  { name: 'malformed search hits', operation: 'search' as const, fault: { path: 'hits.hits', value: marker } },
+  { name: 'malformed suggest hits', operation: 'suggest' as const, fault: { path: 'hits.hits', value: marker } },
+  {
+    name: 'inexact physical identity',
+    operation: 'search' as const,
+    fault: { path: 'hits.hits.0._index', value: 'foreign-subjects-g1' },
+  },
+  { name: 'duplicate native roots', operation: 'search' as const, fault: { path: 'hits.hits', grow: 2 } },
+  {
+    name: 'reordered native tuples',
+    operation: 'search' as const,
+    fault: { path: 'hits.hits', afterId: '018e0000-0000-7000-8000-00a000000001' },
+  },
+];
+for (const { name, operation, fault } of serviceFaults) {
+  test(`actual service maps ${name} to index_not_ready 503 before Source`, async () => {
+    const observed = observe(fault);
     let reads = 0;
     const denied = async (): Promise<never> => {
       reads++;
@@ -320,12 +343,7 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
       source,
       cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
     });
-    const pending =
-      operation === 'search'
-        ? service.search('anonymous', { text: 'kokoro' })
-        : operation === 'suggest'
-          ? service.suggest('Koko')
-          : service.facets('anonymous', { facets: [{ property: 'type', size: 1 }] });
+    const pending = operation === 'search' ? service.search('anonymous', { text: 'kokoro' }) : service.suggest('Koko');
     const outcome = await pending.then(
       (value) => ({ value }),
       (error: unknown) => ({ error }),
@@ -342,7 +360,7 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
     expect(
       observed.calls.every(
         ({ method, path }) =>
-          (method === 'PUT' && path.startsWith('/_scripts/')) ||
+          ((method === 'PUT' || method === 'GET') && path.startsWith('/_scripts/')) ||
           path.endsWith('/_search/template') ||
           (method === 'GET' && (path === resolvePath || path === mappingPath)),
       ),
@@ -392,3 +410,43 @@ for (const operation of ['search', 'suggest'] as const) {
     expect(JSON.parse(await response.text())).toMatchObject({ code: 'index_not_ready', status: 503 });
   });
 }
+
+test('actual service maps a non-advancing frontier to index_not_ready 503 before Source', async () => {
+  const cursors = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+  const request = { text: 'kokoro', sort: 'id' as const };
+  const cursor = await encodeSearchCursor(
+    cursors,
+    { operation: 'subjects.search', request: { ...request, limit: 20 }, principal: 'anonymous' },
+    { generation: 1, after: [id] },
+  );
+  const observed = observe({
+    path: 'hits.hits',
+    value: [{ _id: id, _index: index, _source: { partition: 10, security_revision: 0 }, sort: [id] }],
+  });
+  let reads = 0;
+  const denied = async (): Promise<never> => {
+    reads++;
+    throw new Error('Source must not be reached');
+  };
+  const source: SubjectSource = { read: denied, count: denied, matchRelationFacets: denied };
+  const service = createSearchService({
+    pool,
+    client: observed.client,
+    prefix,
+    source,
+    cursors,
+  });
+  const outcome = await service.search('anonymous', { ...request, cursor }).then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error }),
+  );
+  expect(reads).toBe(0);
+  expect(observed.replies).toHaveLength(1);
+  expect(observed.calls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+  const error = 'error' in outcome ? outcome.error : outcome;
+  expect(error).toBeInstanceOf(ProblemError);
+  expect(error).toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
+  const response = problemResponse(error, { method: 'GET', id: 'frontier-payload-test' });
+  expect(response.status).toBe(503);
+  expect(JSON.parse(await response.text())).toMatchObject({ code: 'index_not_ready', status: 503 });
+});

@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createSubjectIndex, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
 import {
@@ -16,7 +18,15 @@ describe('native hit-only query and parser', () => {
   const prefix = `hit-query-${crypto.randomUUID().slice(0, 8)}-`;
   const index = subjectIndexName(prefix, 1);
   const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
-  const plans: SearchPlan[] = [{ sort: 'id', size: 3, generation: 1 }];
+  const plans: SearchPlan[] = [
+    { sort: 'id', size: 3, generation: 1 },
+    {
+      sort: 'rating',
+      size: 3,
+      generation: 1,
+      rating: { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: 7 },
+    },
+  ];
   beforeAll(async () => {
     await createSubjectIndex(native, prefix, 1);
     await installTemplates(native, prefix);
@@ -31,6 +41,7 @@ describe('native hit-only query and parser', () => {
           name_sort: `Book ${n}`,
           search_text: 'needle',
           names: ['needle'],
+          ...(n < 3 ? { rating_score: 9 - n, rating_prior_epoch: 7 } : {}),
         },
       ]),
       { query: { refresh: 'wait_for' } },
@@ -70,7 +81,12 @@ describe('native hit-only query and parser', () => {
       for (const hit of result.hits) {
         expect(hit.index).toBe(index);
         expect(hit.partition).toBe(10);
-        if (plan.sort === 'rating') expect(['scored', 'unscored']).toContain(hit.ratingPhase!);
+        expect(hit.sort.at(-1)).toBe(hit.id);
+        if (plan.sort === 'id') expect(hit.sort).toEqual([hit.id]);
+        if (plan.sort === 'rating') {
+          expect(['scored', 'unscored']).toContain(hit.ratingPhase!);
+          expect(hit.sort.length).toBe(hit.ratingPhase === 'scored' ? 3 : 2);
+        }
       }
     });
     const faults: ((body: any) => void)[] = [
