@@ -185,9 +185,10 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   expect(restored.revisionId).toBe(before.revisionId);
   expect(restored.sourceVersion).not.toBe(before.sourceVersion);
   expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+  expect(await source.count(partition)).toMatchObject({ unavailable: true });
   expect(await maintainReviewCensusBatch(partition, resumed.maintainCensus)).toMatchObject({ state: 'exhausted' });
   expect((await source.censusCoverage(partition)).generation).not.toBe(beforeRestoration.generation);
-  expect(await source.count(partition)).toMatchObject({ unavailable: true });
+  expect(await source.count(partition)).toMatchObject({ total: 26, coverage: 'complete' });
 
   // Repair an already-exhausted generation without a domain publication. The
   // bounded coverage read must reject it even though there is no page to hydrate.
