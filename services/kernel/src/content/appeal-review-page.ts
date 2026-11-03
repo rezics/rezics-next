@@ -167,7 +167,10 @@ export async function readAppealReviewTargetContexts(
             target_ids: group.map((target) => target.id),
           }),
         );
-        for (const row of value) locations.set(`${row.kind}:${row.target_id}`, row);
+        for (const row of value) {
+          if (typeof row.kind !== 'string' || typeof row.target_id !== 'string') continue;
+          locations.set(`${row.kind}:${row.target_id}`, row);
+        }
       } catch {
         failedHomes.add(home);
       }
