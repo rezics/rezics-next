@@ -69,7 +69,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
         .setAudience(audience)
         .setSubject(accountId)
         .setIssuedAt()
-        .setExpirationTime('1h')
+        .setExpirationTime('5m')
         .sign(keys.privateKey);
 
     let access: ReturnType<typeof createAccess>;
@@ -117,7 +117,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
 
     async function identityCommand(action: string) {
       const context = { pool: database!.pool, deadline: Date.now() + 30_000 };
-      const actor = await access.authenticate(`Bearer ${fullBearer}`, context);
+      const actor = await access.authenticate(fullBearer, context);
       if (actor.kind !== 'account') throw new Error('Expected authenticated lifecycle account');
       const authorization = await accessCommandAuthorization(
         access,
