@@ -77,7 +77,8 @@ export async function loadSavedFilterReview(
     const ruleResponse = await client.collections({ collectionId: id }).rule.get({ headers: { authorization } });
     if (ruleResponse.error || !ruleResponse.data) return { state: accessFailure(ruleResponse.status) };
     const collectionResponse = await client.collections({ collectionId: id }).get({ headers: { authorization } });
-    if (collectionResponse.error || !collectionResponse.data) return { state: accessFailure(collectionResponse.status) };
+    if (collectionResponse.error || !collectionResponse.data)
+      return { state: accessFailure(collectionResponse.status) };
 
     const collection = collectionResponse.data.collection;
     if (

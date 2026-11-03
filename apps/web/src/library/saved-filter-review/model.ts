@@ -29,7 +29,13 @@ export type ReviewOperand = {
 
 export type ReviewTree =
   | { kind: 'operand'; value: ReviewOperand }
-  | { kind: 'group'; path: string; operator: 'and' | 'or' | 'not' | 'saved'; reference?: string; children: ReviewTree[] };
+  | {
+      kind: 'group';
+      path: string;
+      operator: 'and' | 'or' | 'not' | 'saved';
+      reference?: string;
+      children: ReviewTree[];
+    };
 
 function label(labels: Record<string, string> | undefined, locale: string): string | undefined {
   const language = locale.split('-')[0]!;
@@ -72,7 +78,12 @@ function fieldMeaning(
   };
 }
 
-function valueViews(values: readonly string[], metadata: ConditionMetadata | undefined, current: ReviewRelease, locale: string) {
+function valueViews(
+  values: readonly string[],
+  metadata: ConditionMetadata | undefined,
+  current: ReviewRelease,
+  locale: string,
+) {
   return values.map((exact) => {
     const acceptedLabel = label(metadata?.types[exact]?.labels, locale);
     const currentTypeLabel = label(current.metadata?.types[exact]?.labels, locale);
@@ -149,7 +160,14 @@ export function savedFilterReviewTree(
       const values = valueViews(node.type.in, accepted.metadata, current, locale);
       return {
         kind: 'operand',
-        value: { role: 'type', path, operation: 'in', fieldId: 'type', currentState: typeState(values, current, locale), values },
+        value: {
+          role: 'type',
+          path,
+          operation: 'in',
+          fieldId: 'type',
+          currentState: typeState(values, current, locale),
+          values,
+        },
       };
     }
     if ('statement' in node) {
@@ -188,13 +206,15 @@ export function savedFilterReviewTree(
   return expand(filter, '', []);
 }
 
-function positiveTypes(filter: FilterDocument, metadata: ConditionMetadata | undefined, stack: readonly string[]): string[] {
+function positiveTypes(
+  filter: FilterDocument,
+  metadata: ConditionMetadata | undefined,
+  stack: readonly string[],
+): string[] {
   if ('type' in filter) return [...filter.type.in];
   if ('saved' in filter) {
     const expanded = savedDefinition(metadata, filter.saved);
-    return expanded && !stack.includes(filter.saved)
-      ? positiveTypes(expanded, metadata, [...stack, filter.saved])
-      : [];
+    return expanded && !stack.includes(filter.saved) ? positiveTypes(expanded, metadata, [...stack, filter.saved]) : [];
   }
   if ('and' in filter)
     return filter.and.flatMap((child) =>
@@ -204,7 +224,10 @@ function positiveTypes(filter: FilterDocument, metadata: ConditionMetadata | und
 }
 
 /** Search value labels need one exact positive Type and current Collection scope; never guess a Global fallback. */
-export function savedFilterFacetType(filter: FilterDocument, accepted: ConditionMetadata | undefined): string | undefined {
+export function savedFilterFacetType(
+  filter: FilterDocument,
+  accepted: ConditionMetadata | undefined,
+): string | undefined {
   const values = [...new Set(positiveTypes(filter, accepted, []))];
   return values.length === 1 ? values[0] : undefined;
 }

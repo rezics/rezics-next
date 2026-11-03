@@ -1,6 +1,10 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { FilterDocument } from '@rezics/filter';
-import { collectionFacetRequest, loadCollectionFacetValues, type CollectionFacetLoader } from '../collection-facet-values';
+import {
+  collectionFacetRequest,
+  loadCollectionFacetValues,
+  type CollectionFacetLoader,
+} from '../collection-facet-values';
 import { RuleEditLink } from '../saved-query-results';
 import { useCollectionOwnerCurrent } from '../collection-owner-current';
 import { requestLanguages } from '../../kernel/languages';
@@ -116,7 +120,8 @@ export function SavedFilterReviewPanel({
   const [state, setState] = useState<PanelState>({ phase: 'closed', binding: '' });
   const [values, setValues] = useState<ValueState>({ phase: 'idle', binding: '', labels: emptyLabels() });
   const shown: PanelState = state.binding === binding ? state : { phase: 'closed', binding };
-  const shownValues = values.binding === binding ? values : ({ phase: 'idle', binding, labels: emptyLabels() } as const);
+  const shownValues =
+    values.binding === binding ? values : ({ phase: 'idle', binding, labels: emptyLabels() } as const);
   const authorized =
     scope.viewerId === scope.ownerId &&
     authority.subject === scope.viewerId &&
@@ -214,7 +219,8 @@ export function SavedFilterReviewPanel({
         }
         succeeded += 1;
         for (const facet of result.page.facets)
-          for (const value of facet.values) labels[facet.property] = { ...labels[facet.property], [value.value]: value.labels };
+          for (const value of facet.values)
+            labels[facet.property] = { ...labels[facet.property], [value.value]: value.labels };
       }
       if (!isCurrent(sequence, 'values', binding)) return;
       if (failure) setValues({ phase: failure, binding, labels, ...(succeeded ? { partial: true } : {}) });
@@ -246,12 +252,20 @@ export function SavedFilterReviewPanel({
         {expanded ? m.saved_filter_review_return() : m.saved_filter_review_open()}
       </button>
       {shown.phase === 'closed' ? (
-        shown.returned ? <p role="status">{m.saved_filter_review_returned()}</p> : null
+        shown.returned ? (
+          <p role="status">{m.saved_filter_review_returned()}</p>
+        ) : null
       ) : (
-        <section id={panelId} aria-labelledby={panelId + '-heading'} className="min-w-0 space-y-4 rounded-xl border border-border p-4">
+        <section
+          id={panelId}
+          aria-labelledby={panelId + '-heading'}
+          className="min-w-0 space-y-4 rounded-xl border border-border p-4"
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-2">
-              <h2 id={panelId + '-heading'} className="text-lg font-semibold">{m.saved_filter_review_heading()}</h2>
+              <h2 id={panelId + '-heading'} className="text-lg font-semibold">
+                {m.saved_filter_review_heading()}
+              </h2>
               <p className="max-w-prose text-sm text-muted-foreground">{m.saved_filter_review_intro()}</p>
             </div>
             <button type="button" className={reviewButtonClass} onClick={returnUnchanged}>
@@ -262,13 +276,17 @@ export function SavedFilterReviewPanel({
           {shown.phase === 'denied' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_denied()}</p>
-              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>{m.saved_filter_review_retry()}</button>
+              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>
+                {m.saved_filter_review_retry()}
+              </button>
             </div>
           ) : null}
           {shown.phase === 'unavailable' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_unavailable()}</p>
-              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>{m.saved_filter_review_retry()}</button>
+              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>
+                {m.saved_filter_review_retry()}
+              </button>
             </div>
           ) : null}
           {shown.phase === 'ready' ? (
@@ -302,19 +320,34 @@ function ReviewContent({
   const locale = getLocale();
   const tree = savedFilterReviewTree(page.rule.filter, page.accepted, page.current, locale);
   const valueType = savedFilterFacetType(page.rule.filter, page.accepted.metadata);
-  const valueButtonLabel = values.phase === 'idle' || values.phase === 'no-scope'
-    ? m.saved_filter_review_value_labels()
-    : m.saved_filter_review_value_labels_retry();
+  const valueButtonLabel =
+    values.phase === 'idle' || values.phase === 'no-scope'
+      ? m.saved_filter_review_value_labels()
+      : m.saved_filter_review_value_labels_retry();
   return (
     <div className="min-w-0 space-y-4">
       <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-        <div className="min-w-0"><dt className="text-sm font-medium">{m.saved_filter_review_accepted_release()}</dt><dd className="break-all"><code>{page.rule.releaseDigest}</code></dd></div>
-        {page.current.digest ? <div className="min-w-0"><dt className="text-sm font-medium">{m.saved_filter_review_current_release()}</dt><dd className="break-all"><code>{page.current.digest}</code></dd></div> : null}
+        <div className="min-w-0">
+          <dt className="text-sm font-medium">{m.saved_filter_review_accepted_release()}</dt>
+          <dd className="break-all">
+            <code>{page.rule.releaseDigest}</code>
+          </dd>
+        </div>
+        {page.current.digest ? (
+          <div className="min-w-0">
+            <dt className="text-sm font-medium">{m.saved_filter_review_current_release()}</dt>
+            <dd className="break-all">
+              <code>{page.current.digest}</code>
+            </dd>
+          </div>
+        ) : null}
       </dl>
       {page.accepted.state !== 'ready' ? (
         <div role="status" className="space-y-2">
           <p>{m.saved_filter_review_accepted_unavailable()}</p>
-          <button type="button" className={reviewButtonClass} onClick={onRefresh}>{m.saved_filter_review_retry()}</button>
+          <button type="button" className={reviewButtonClass} onClick={onRefresh}>
+            {m.saved_filter_review_retry()}
+          </button>
         </div>
       ) : null}
       {page.current.state !== 'ready' ? <p role="status">{m.saved_filter_review_current_unavailable()}</p> : null}
@@ -323,8 +356,12 @@ function ReviewContent({
         <ul className="min-w-0 space-y-3">{renderReviewTree(tree, labels, locale)}</ul>
       </div>
       <details className="min-w-0">
-        <summary className="cursor-pointer py-2 underline underline-offset-4 focus-visible:outline-2">{m.saved_filter_review_exact()}</summary>
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">{JSON.stringify(page.rule.filter, null, 2)}</pre>
+        <summary className="cursor-pointer py-2 underline underline-offset-4 focus-visible:outline-2">
+          {m.saved_filter_review_exact()}
+        </summary>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+          {JSON.stringify(page.rule.filter, null, 2)}
+        </pre>
       </details>
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{m.saved_filter_review_value_help()}</p>
@@ -367,7 +404,14 @@ function renderReviewTree(
             : m.saved_filter_review_group_saved();
     return (
       <li key={node.path || 'root'} className="min-w-0 rounded-lg border border-border p-3">
-        <p className="mb-2 font-medium">{groupLabel}{node.reference ? <>: <code>{node.reference}</code></> : null}</p>
+        <p className="mb-2 font-medium">
+          {groupLabel}
+          {node.reference ? (
+            <>
+              : <code>{node.reference}</code>
+            </>
+          ) : null}
+        </p>
         <ul className="min-w-0 space-y-2">{node.children.map((child) => renderReviewTree(child, labels, locale))}</ul>
       </li>
     );
@@ -388,39 +432,73 @@ function renderReviewTree(
         {value.fieldId ? <code className="break-all">{value.fieldId}</code> : null}
         <code>{value.operation}</code>
       </div>
-      {value.acceptedLabel ? <p>{m.saved_filter_review_accepted_label()} {value.acceptedLabel}</p> : null}
-      {value.currentLabel ? <p>{m.saved_filter_review_current_label()} {value.currentLabel}</p> : null}
+      {value.acceptedLabel ? (
+        <p>
+          {m.saved_filter_review_accepted_label()} {value.acceptedLabel}
+        </p>
+      ) : null}
+      {value.currentLabel ? (
+        <p>
+          {m.saved_filter_review_current_label()} {value.currentLabel}
+        </p>
+      ) : null}
       <CurrentFieldStatus state={value.currentState} />
       {value.values?.length ? (
         <ul className="min-w-0 space-y-1">
           {value.values.map((entry, index) => {
-            const currentLabel = value.fieldId && value.role === 'property'
-              ? disclosedValueLabel(labels, value.fieldId, entry.exact, locale)
-              : entry.currentTypeLabel;
+            const currentLabel =
+              value.fieldId && value.role === 'property'
+                ? disclosedValueLabel(labels, value.fieldId, entry.exact, locale)
+                : entry.currentTypeLabel;
             return (
               <li key={value.path + '-value-' + index} className="min-w-0 break-words">
-                {entry.acceptedLabel ? <span>{m.saved_filter_review_accepted_label()} {entry.acceptedLabel} </span> : null}
-                {currentLabel ? <span>{m.saved_filter_review_current_label()} {currentLabel} </span> : null}
-                {!currentLabel && value.role === 'property' ? <span>{m.saved_filter_review_value_unlabelled()} </span> : null}
+                {entry.acceptedLabel ? (
+                  <span>
+                    {m.saved_filter_review_accepted_label()} {entry.acceptedLabel}{' '}
+                  </span>
+                ) : null}
+                {currentLabel ? (
+                  <span>
+                    {m.saved_filter_review_current_label()} {currentLabel}{' '}
+                  </span>
+                ) : null}
+                {!currentLabel && value.role === 'property' ? (
+                  <span>{m.saved_filter_review_value_unlabelled()} </span>
+                ) : null}
                 <code className="break-all">{entry.exact}</code>
               </li>
             );
           })}
         </ul>
       ) : null}
-      {value.range ? <p>{m.saved_filter_review_range()} <code>{JSON.stringify(value.range)}</code></p> : null}
+      {value.range ? (
+        <p>
+          {m.saved_filter_review_range()} <code>{JSON.stringify(value.range)}</code>
+        </p>
+      ) : null}
       {value.qualifiers?.length ? (
         <ul className="min-w-0 space-y-2 border-l-2 border-border pl-3">
           {value.qualifiers.map((qualifier, index) => (
             <li key={value.path + '-qualifier-' + index} className="min-w-0 break-words">
-              <p>{m.saved_filter_review_qualifier()} <code>{qualifier.property}</code></p>
-              {qualifier.acceptedLabel ? <p>{m.saved_filter_review_accepted_label()} {qualifier.acceptedLabel}</p> : null}
-              {qualifier.currentLabel ? <p>{m.saved_filter_review_current_label()} {qualifier.currentLabel}</p> : null}
+              <p>
+                {m.saved_filter_review_qualifier()} <code>{qualifier.property}</code>
+              </p>
+              {qualifier.acceptedLabel ? (
+                <p>
+                  {m.saved_filter_review_accepted_label()} {qualifier.acceptedLabel}
+                </p>
+              ) : null}
+              {qualifier.currentLabel ? (
+                <p>
+                  {m.saved_filter_review_current_label()} {qualifier.currentLabel}
+                </p>
+              ) : null}
               <CurrentFieldStatus state={qualifier.currentState} />
               <ul className="min-w-0 space-y-1">
                 {qualifier.values.map((entry, valueIndex) => (
                   <li key={value.path + '-qualifier-value-' + index + '-' + valueIndex}>
-                    <span>{m.saved_filter_review_value_unlabelled()} </span><code className="break-all">{entry.exact}</code>
+                    <span>{m.saved_filter_review_value_unlabelled()} </span>
+                    <code className="break-all">{entry.exact}</code>
                   </li>
                 ))}
               </ul>

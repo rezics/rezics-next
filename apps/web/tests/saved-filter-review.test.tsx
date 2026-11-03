@@ -25,13 +25,20 @@ const ruleFilter = {
 } as const;
 const acceptedMetadata: ConditionMetadata = {
   types: { 'schema:Book': { labels: { en: 'Book' }, bases: [], facets: properties } },
-  properties: Object.fromEntries(properties.map((property, index) => [property, { datatype: 'wikibase-item', labels: { en: 'Accepted topic ' + index } }])),
+  properties: Object.fromEntries(
+    properties.map((property, index) => [
+      property,
+      { datatype: 'wikibase-item', labels: { en: 'Accepted topic ' + index } },
+    ]),
+  ),
   filters: {},
 };
 const currentMetadata: ConditionMetadata = {
   types: { 'schema:Book': { labels: { en: 'Book' }, bases: [], facets: [...properties.slice(0, 8), properties[9]!] } },
   properties: Object.fromEntries([
-    ...properties.slice(0, 8).map((property, index) => [property, { datatype: 'wikibase-item', labels: { en: 'Current topic ' + index } }]),
+    ...properties
+      .slice(0, 8)
+      .map((property, index) => [property, { datatype: 'wikibase-item', labels: { en: 'Current topic ' + index } }]),
     [properties[9]!, { datatype: 'wikibase-item', labels: {} }],
   ]),
   filters: {},
@@ -41,7 +48,14 @@ const page: ReadyPage = {
   id: 'alpha',
   viewerId: 'alice',
   title: 'Private Collection',
-  rule: { filter: ruleFilter, sort: 'id', revision: 4, collectionRevision: 8, releaseDigest: 'accepted-digest', sourceGeneration: '12' },
+  rule: {
+    filter: ruleFilter,
+    sort: 'id',
+    revision: 4,
+    collectionRevision: 8,
+    releaseDigest: 'accepted-digest',
+    sourceGeneration: '12',
+  },
   accepted: { state: 'ready', digest: 'accepted-digest', metadata: acceptedMetadata },
   current: { state: 'ready', digest: 'current-digest', metadata: currentMetadata },
 };
@@ -58,7 +72,9 @@ function owner(subject: string, generation: number) {
 }
 
 async function mount(initial: Partial<PanelProps> = {}) {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/collections/alpha' });
   const globals = {
     window,
@@ -92,7 +108,9 @@ async function mount(initial: Partial<PanelProps> = {}) {
     host,
     render,
     async click(text: string) {
-      const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === text);
+      const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (item) => item.textContent?.trim() === text,
+      );
       expect(button).toBeDefined();
       await act(async () => button!.click());
     },
@@ -134,7 +152,11 @@ test('owner review lists all retained operands, pins accepted labels, and keeps 
     await ui.click(m.saved_filter_review_value_labels());
     expect(requests).toHaveLength(2);
     for (const value of requests) {
-      const request = value as { resource: { kind: string; id: string }; facets: { property: string }[]; filter?: unknown };
+      const request = value as {
+        resource: { kind: string; id: string };
+        facets: { property: string }[];
+        filter?: unknown;
+      };
       expect(request.resource).toEqual({ kind: 'collection', id: 'alpha' });
       expect(request.facets.length).toBeLessThanOrEqual(8);
       expect(request.filter).toBeUndefined();
