@@ -213,3 +213,47 @@ test('the same proxy rewrites a custom method and retains viewer headers', async
   expect(sent[0]!.headers.get(SESSION_HEADER)).toBe('viewer');
   expect(sent[0]!.headers.get('idempotency-key')).toBe('"merge"');
 });
+
+import { expectTypeOf as expectLabelType, test as labelConsolidationTest } from 'bun:test';
+import type { KernelClient as LabelConsolidationClient } from '@rezics/client';
+
+const labelConsolidationCallSites = async (client: LabelConsolidationClient): Promise<void> => {
+  const sourceLabelId = 'source-label';
+  const targetLabelId = 'target-label';
+  const confirmationId = 'confirmation';
+  const options = { headers: { 'idempotency-key': 'label-consolidation' } };
+  const review = await client.libraryLabels({ id: sourceLabelId }).$reviewConsolidation.post({
+    targetLabelId,
+    items: [{ subjectId: 'subject', assignmentId: 'assignment', revision: 1 }],
+  });
+  if (review.data === null) return;
+  const evidence = {
+    selection: review.data.selection,
+    sourceLabel: review.data.sourceLabel,
+    targetLabel: review.data.targetLabel,
+    items: review.data.items.filter((item) => item.outcome === 'movable' && item.source !== null),
+  };
+  const confirmation = await client.libraryLabels({ id: sourceLabelId }).$confirmConsolidation.post(evidence, options);
+  if (confirmation.data === null) return;
+  const applied = await client.libraryLabels({ id: sourceLabelId }).$applyConsolidation.post(
+    { confirmationId: confirmation.data.confirmationId },
+    options,
+  );
+  if (applied.data === null) return;
+  const item = applied.data.items[0];
+  if (item) {
+    await client.libraryLabels({ id: sourceLabelId }).$retryConsolidation.post(
+      { confirmationId: confirmation.data.confirmationId, item: item.item },
+      options,
+    );
+  }
+  await client.libraryLabels({ id: sourceLabelId }).$cancelConsolidation.post(
+    { confirmationId: confirmation.data.confirmationId },
+    options,
+  );
+  await client.libraryLabels({ id: sourceLabelId }).consolidations({ confirmationId }).get();
+};
+
+labelConsolidationTest('generated label consolidation routes have typed call sites', () => {
+  expectLabelType<ReturnType<typeof labelConsolidationCallSites>>().toEqualTypeOf<Promise<void>>();
+});
