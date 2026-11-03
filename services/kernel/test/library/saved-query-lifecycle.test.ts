@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { runCommand } from '../../src/command/command.ts';
+import { createHash } from 'node:crypto';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { principalCommandIdentity, type CommandTransaction, runCommand } from '../../src/command/command.ts';
 import {
   beginCollectionSourceOutput,
   appendCollectionSourceOutput,
@@ -97,31 +99,65 @@ test('terminal saved views retain only completed public A; pending B, private an
   const subjectId = await f.subject();
   const route = routeOf(collection.id)!,
     a = { route, collectionId: collection.id, generation: newId(route) };
+  const actor = await f.kernel.testAccess.authenticate(as.bearer, { pool: f.db.pool, deadline: Date.now() + 30000 });
+  const output = async (body: (tx: CommandTransaction) => Promise<void>, input: unknown, key = crypto.randomUUID()) => {
+    const deadline = Date.now() + 30000;
+    const authorization = resourceAuthorization({
+      access: f.kernel.testAccess,
+      actor,
+      action: 'collection:update',
+      anchor: {
+        resource: { route, id: collection.id },
+        async validate(client) {
+          return (
+            (
+              await client.query(
+                "SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active'",
+                [route, collection.id],
+              )
+            ).rows.length === 1
+          );
+        },
+      },
+      context: { pool: f.db.pool, partition: partitionOf(route), deadline },
+    });
+    return runCommand(
+      f.db.pool,
+      {
+        ...principalCommandIdentity(actor),
+        partition: partitionOf(route),
+        deadline,
+        authorization,
+        receipt: {
+          kind: 'library.collection.explicit-output',
+          key,
+          digest: createHash('sha256').update(JSON.stringify(input)).digest(),
+        },
+      },
+      async (tx) => {
+        await body(tx);
+        return {
+          value: null,
+          events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: collection.id } }],
+        };
+      },
+    );
+  };
   // The native producer commits actual A and its Core publication proof. Private
   // evaluation/preparation is a different owner and is not fabricated at erasure T.
-  await runCommand(f.db.pool, { partition: partitionOf(route), deadline: Date.now() + 30000 }, async (tx) => {
-    await beginCollectionSourceOutput(tx, { ...a, expectedMembers: 1 });
-    await appendCollectionSourceOutput(tx, { ...a, after: null, subjectIds: [subjectId] });
+  await output(async (tx) => {
     await tx.query(
       `UPDATE library.collection SET visibility='public',revision=revision+1 WHERE route=$1 AND collection_id=$2`,
       [route, collection.id],
     );
+    await beginCollectionSourceOutput(tx, { ...a, expectedMembers: 1 });
+    await appendCollectionSourceOutput(tx, { ...a, after: null, subjectIds: [subjectId] });
     await completeCollectionSourceOutput(tx, a);
-    return {
-      value: null,
-      events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: collection.id } }],
-    };
-  });
+  }, a);
   const generation = newId(route);
   const b = { route, collectionId: collection.id, generation, expectedMembers: 1 };
-  const writeB = () =>
-    runCommand(f.db.pool, { partition: partitionOf(route), deadline: Date.now() + 30000 }, async (tx) => {
-      await beginCollectionSourceOutput(tx, b);
-      return {
-        value: null,
-        events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: collection.id } }],
-      };
-    });
+  const bKey = crypto.randomUUID();
+  const writeB = () => output((tx) => beginCollectionSourceOutput(tx, b), b, bKey);
   await writeB();
   await deletePersona(f.options, as);
   expect((await f.request(null, 'GET', `/v1/collections/${privateView.id}`)).status).toBe(404);
