@@ -65,7 +65,7 @@ Choose preserve by default; replace explicitly authorizes the reviewed revision/
 Apply validates the original identity epoch and release. Stale rows need a new review, never a remap.
 Outcomes distinguish applied/skipped/stale/unsupported/failed with applied and retained field names.
 
-Bounds: 256 KiB UTF-8 file, 1–100 rows, 8 KiB source row, nesting 16, 10 rows per read, 5 per apply.
+Bounds: 256 KiB UTF-8 file, 1–100 rows, 8 KiB source row, 32 KiB expanded evidence row, nesting 16, 10 rows per read, 5 per apply.
 Credentials and malformed envelopes are rejected. Native request/command deadlines and abort stop new rows;
 already admitted commands may finish. Cancel stops new row admission; acknowledged effects remain.
 Retries retain the original token, target, state, revision and native command key; failed rows retry that command,
