@@ -11,5 +11,4 @@ SELECT q.id, q.owner_id AS "ownerId", q.realm_id AS "realmId", q.meaning,
        COALESCE(lifecycle.state, 'active') AS state,
        COALESCE(lifecycle.revision, 1) AS "lifecycleRevision"
 FROM question q
-LEFT JOIN rating.question_lifecycle lifecycle ON lifecycle.question_id = q.id
-WHERE q.id = :question_id::uuid;
+LEFT JOIN rating.question_lifecycle lifecycle ON lifecycle.question_id = q.id;
