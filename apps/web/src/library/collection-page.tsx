@@ -1,4 +1,5 @@
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
+import { CollectionFilteredStatus } from './bulk-filtered-status-view';
 import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
@@ -1902,6 +1903,12 @@ function CollectionPageLifetime({
               boundary={JSON.stringify([page.visibility, cursor, search, queryKey])}
               eligible={(page.memberState ?? 'ready') === 'ready' && !page.filterStatus && !page.filterIgnored?.length}
               isCurrent={() => isCurrent()}
+            />
+            <CollectionFilteredStatus
+              page={page}
+              address={JSON.stringify([page.id, cursor, search, queryKey])}
+              ready={(page.memberState ?? 'ready') === 'ready'}
+              isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
             />
           </>
         ) : null}

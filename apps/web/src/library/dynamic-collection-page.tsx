@@ -1,4 +1,5 @@
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
+import { CollectionFilteredStatus } from './bulk-filtered-status-view';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -234,6 +235,12 @@ function DynamicCollectionPageLifetime({
             {m.library_dynamic_page_reader_empty()}
           </p>
         ) : null}
+        <CollectionFilteredStatus
+          page={current}
+          address={JSON.stringify([current.id, current.cursor, search, queryKey])}
+          ready={membersReady}
+          isCurrent={() => active.current}
+        />
         {current.preparing ? (
           current.filterStatus === 'preparing' ? null : (
             <p role="status">{m.library_dynamic_preparing()}</p>
