@@ -415,8 +415,8 @@ outcome remains incomplete.
 
 The mounted method is `KernelClient.feedItems.get` (`GET /v1/feedItems`). Its response is
 `FeedPageSchema`; `FeedItemSchema` embeds the closed `FeedReviewContextSchema` and, for posts,
-`FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem`, `FeedContentItem`,
-`FeedReviewContext` and `FeedParentContext` from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
+`FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem` and `FeedContentItem`
+from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
 `list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
 `prepareFeedContentContext(dependencies: ContentReadDependencies, references: readonly FeedContentContextReference[],
 context: ReadContext, languages: readonly string[] = [], options: { observeThreads?: FeedThreadObserver } = {})`
