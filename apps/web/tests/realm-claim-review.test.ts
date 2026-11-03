@@ -364,7 +364,9 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     expect(calls).toBe(0);
     expect(
       await readRealmClaimReview(
-        createKernelClient('https://kernel.example.test', { fetch: async () => Response.json({ claimRequests: [], next: null }) }),
+        createKernelClient('https://kernel.example.test', {
+          fetch: async () => Response.json({ claimRequests: [], next: null }),
+        }),
         request(),
         {},
         { realmId },
@@ -462,7 +464,9 @@ describe('installed generated Realm claim review reader', () => {
       [200, { claimRequests: [row], next: null, mayApprove: true }, 'unavailable'],
     ] as const) {
       const client = createKernelClient(origin, { fetch: async () => Response.json(body, { status }) });
-      expect(await readRealmClaimReview(client, request(), {}, { realmId, cursor: 'original-cursor' })).toEqual({ kind });
+      expect(await readRealmClaimReview(client, request(), {}, { realmId, cursor: 'original-cursor' })).toEqual({
+        kind,
+      });
     }
     const client = createKernelClient(origin, { fetch: async () => new Response('not JSON') });
     expect(await readRealmClaimReview(client, request(), {}, { realmId })).toEqual({ kind: 'unavailable' });
@@ -476,7 +480,9 @@ describe('installed generated Realm claim review reader', () => {
         throw new Error('Read response lost');
       },
     });
-    expect(await readRealmClaimReview(client, new Request('https://site.example.test/action'), {}, { realmId })).toEqual({
+    expect(
+      await readRealmClaimReview(client, new Request('https://site.example.test/action'), {}, { realmId }),
+    ).toEqual({
       kind: 'signed-out',
     });
     await expect(readRealmClaimReview(client, request(), {}, { realmId: 'invalid' })).rejects.toThrow();

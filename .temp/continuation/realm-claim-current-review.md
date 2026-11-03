@@ -1,38 +1,50 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "interface",
-  "riskAreas": ["authorization", "disclosure", "rights", "account", "deletion"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "paths": [
-    "apps/web/src/community/realm-claim-review*.ts*",
-    "apps/web/src/community/realm-claim-status*.ts*",
-    "apps/web/src/community/realm-claim-caller-lifetime.ts",
-    "apps/web/src/community/realm-claim-callers.md",
-    "apps/web/src/community/realm-claim-current*.md",
-    "apps/web/src/routes/realms/$id_.claims.tsx",
-    "apps/web/src/routes/realms/$id_.claim-requests.$requestId.tsx",
-    "apps/web/src/stories/realm-claim-current-review.stories.tsx",
-    "apps/web/tests/realm-claim-current*.test.ts*",
-    "apps/web/messages/*.json",
-    "docs/goals/web.md"
-  ],
-  "acceptance": {
-    "command": ["bun", "apps/web/scripts/focused.ts", "--private-network", "--", "bun", "test", "tests/realm-claim-current-review.test.tsx"],
-    "placement": "default",
-    "tests": [
-      "The existing approver queue recognizes permitted current claimant identity and orphan episode; one selected request uses installed native action advice and exact inspection before existing approval/readback.",
-      "Claimant own status remains separately authorized and distinguishes legitimate absence, pending, approved and historical episode without exposing approver-only facts.",
-      "Sparse raw20 continuation, same-input retry and exact selected inspection remain independent; no clock, Realm role or transport success grants Global approval.",
-      "Unknown approval preserves original request, episode, sender, credentials and key; retirement conceals private facts and late effects without claiming cancellation or replaying the write.",
-      "One page and one selection stay bounded at 1/10/20 rows without per-claim identity or authority calls. Native eligibility, succession and growth stay Content/Accounts evidence."
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'interface',
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'paths':
+    [
+      'apps/web/src/community/realm-claim-review*.ts*',
+      'apps/web/src/community/realm-claim-status*.ts*',
+      'apps/web/src/community/realm-claim-caller-lifetime.ts',
+      'apps/web/src/community/realm-claim-callers.md',
+      'apps/web/src/community/realm-claim-current*.md',
+      'apps/web/src/routes/realms/$id_.claims.tsx',
+      'apps/web/src/routes/realms/$id_.claim-requests.$requestId.tsx',
+      'apps/web/src/stories/realm-claim-current-review.stories.tsx',
+      'apps/web/tests/realm-claim-current*.test.ts*',
+      'apps/web/messages/*.json',
+      'docs/goals/web.md',
     ],
-    "failing": true
-  },
-  "estimate": {"lines": 2200, "files": 24}
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/realm-claim-current-review.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'The existing approver queue recognizes permitted current claimant identity and orphan episode; one selected request uses installed native action advice and exact inspection before existing approval/readback.',
+          'Claimant own status remains separately authorized and distinguishes legitimate absence, pending, approved and historical episode without exposing approver-only facts.',
+          'Sparse raw20 continuation, same-input retry and exact selected inspection remain independent; no clock, Realm role or transport success grants Global approval.',
+          'Unknown approval preserves original request, episode, sender, credentials and key; retirement conceals private facts and late effects without claiming cancellation or replaying the write.',
+          'One page and one selection stay bounded at 1/10/20 rows without per-claim identity or authority calls. Native eligibility, succession and growth stay Content/Accounts evidence.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 2200, 'files': 24 },
 }
 ---
 

@@ -245,8 +245,8 @@ test('current session credentials and before/final read and participation bind e
       return path.endsWith('/claimRequests/mine')
         ? Response.json({ claimRequest: pending })
         : path.endsWith('/participation')
-        ? new Response(null, { status: 204 })
-        : Response.json({ realm: { ...recording.realm, ...source } });
+          ? new Response(null, { status: 204 })
+          : Response.json({ realm: { ...recording.realm, ...source } });
     },
   });
   for (const next of ['session-one', 'session-two']) {
@@ -285,26 +285,28 @@ test('source failures, unrelated identity, closure and revoked final access neve
     [503, 'unavailable', 'unavailable'],
   ] as const) {
     claimResponse = Response.json({ code }, { status });
-    expect(
-      await readRealmClaimStatus(client, request(), env, { realmId }),
-    ).toEqual({ kind });
+    expect(await readRealmClaimStatus(client, request(), env, { realmId })).toEqual({ kind });
     round = 0;
   }
   finalStatus = 403;
   claimResponse = Response.json({ claimRequest: pending });
-  expect(
-    await readRealmClaimStatus(client, request(), env, { realmId, requestId }),
-  ).toEqual({ kind: 'denied' });
+  expect(await readRealmClaimStatus(client, request(), env, { realmId, requestId })).toEqual({ kind: 'denied' });
   finalStatus = 204;
   round = 0;
   claimResponse = Response.json({ claimRequest: null });
-  expect(
-    await readRealmClaimStatus(client, request(), env, { realmId }),
-  ).toEqual({ kind: 'ready', claimRequest: null, source });
+  expect(await readRealmClaimStatus(client, request(), env, { realmId })).toEqual({
+    kind: 'ready',
+    claimRequest: null,
+    source,
+  });
   expect(await readRealmClaimStatus(client, new Request('https://site.example.test/action'), env, { realmId })).toEqual(
     { kind: 'signed-out' },
   );
-  expect(await readRealmClaimStatus(client, request(), {}, { realmId })).toEqual({ kind: 'ready', claimRequest: null, source });
+  expect(await readRealmClaimStatus(client, request(), {}, { realmId })).toEqual({
+    kind: 'ready',
+    claimRequest: null,
+    source,
+  });
   for (const kind of ['denied', 'closed', 'unavailable', 'signed-out'] as const) {
     const html = display({ kind });
     expect(html).not.toContain(requestId);

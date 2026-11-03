@@ -271,10 +271,7 @@ export function createRealmClaimReview(
       await readPage(state.cursor);
     },
     async restart() {
-      if (
-        !['unavailable', 'invalid-cursor', 'stale-cursor'].includes(state.read.kind) ||
-        state.outcome === 'uncertain'
-      )
+      if (!['unavailable', 'invalid-cursor', 'stale-cursor'].includes(state.read.kind) || state.outcome === 'uncertain')
         return;
       await readPage(undefined);
     },
