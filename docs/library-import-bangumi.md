@@ -24,12 +24,12 @@ No third-party exporter format is claimed supported. The HTTP test uses real-sha
 | `type`                                  | 1 planned, 2 completed, 3 active, 4 paused, 5 dropped roles; only one state with that role in the current released target profile maps. Unknown/invalid values remain evidence.                                      |
 | `rate`                                  | Original 1–10 scale, 0 means unrated, missing means absent; never a native vote or aggregate.                                                                                                                        |
 | `ep_status`, `vol_status`               | Original counts including zero: book chapters and volumes, anime/live-action episodes; other ep_status measures remain unverified. No sessions inferred.                                                             |
-| `tags`, `comment`, `notes`, `private`   | Private retained source evidence, never labels, reviews or public disclosure.                                                                                                                                        |
+| `tags`, `comment`, `notes`, `private`   | Private retained source evidence; only explicitly reviewed tags may enter native private labels through the separate label journey. Never public reviews or disclosure.                                                                                                                                        |
 | `*_at`, `*_date`, unknown fields        | Original values and precision remain evidence with reasons. Bangumi warns updated_at is unreliable as collection time; no timestamp orders a command.                                                                |
 
 `fields[]` contains each present source field, original value, known/unknown/invalid meaning and retention
 reason. Missing fields have no entry; they never become zero or null. No unsupported field is reported applied.
-Only the explicitly confirmed collection state enters native Library. Other fields remain downloadable in
+Only explicitly confirmed state and separately confirmed [tag mappings](library-import-bangumi-labels.md) enter native Library. Other fields remain downloadable in
 owner reads until deletion. Catalogue ingestion's excluded source media do not become available by upload.
 
 ## Web HTTP contract
@@ -106,3 +106,10 @@ work may finish. Evidence deletion removes evidence and reviews, not admitted fa
 - Growth check: Web focused test `apps/web/tests/personal-bangumi-import.test.tsx` drives 10, 50 and 100 native-shaped
   rows through the same controller and asserts call counts, 10-row reads, 5-row writes and the retained-byte bound.
   Native statement/index bounds stay with the Commerce engine; this journey introduces no new kernel query path.
+
+## Selected retained tag adoption
+
+The [label adoption contract](library-import-bangumi-labels.md) specifies installed `tags`, `reviewLabels` and
+`applyLabels` routes and generated methods, separate confirmation epochs, native name/capacity limits, per-item
+outcomes, source-evidence exclusions and continuation boundaries. State review and its original receipt remain
+unchanged. Web324 consumes this typed delivery in the existing complete Bangumi interface.

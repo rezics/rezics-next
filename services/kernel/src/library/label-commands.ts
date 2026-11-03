@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -112,10 +113,10 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
     });
   }
 
-  async function createLabel(actor: Actor, input: unknown, key: string) {
+  async function createLabel(actor: Actor, input: unknown, key: string, admission?: LabelCommandAdmission) {
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
-    return run(actor, 'library_label.create', { name: parsed.name }, key, async (tx, command) => {
+    const body: LibraryCommandBody<LabelValue> = async (tx, command) => {
       const route = routeOf(owner.accountId)!;
       const label = await store.insertPersonalLabel(
         tx,
@@ -124,7 +125,22 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
         { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
       );
       return { value: minimal(label), events: events(owner, label.id) };
-    });
+    };
+    if (!admission) return run(actor, 'library_label.create', { name: parsed.name }, key, body);
+    try {
+      return await runner.ownAccountPrepared(actor, {
+        action: 'library_entry:update', kind: 'library_label.create', requestKey: key,
+        input: { name: parsed.name, review: admission.input },
+        prepare: (attempt) => admission.prepare(attempt.time),
+      }, async (tx, command, validate) => {
+        await validate(tx);
+        return body(tx, command);
+      });
+    } catch (error) {
+      if ((error as { code?: string; constraint?: string })?.code === '23505' &&
+          (error as { constraint?: string }).constraint === 'personal_label_live_name') throw new LibraryConflictError();
+      throw error;
+    }
   }
 
   async function renameLabel(actor: Actor, labelId: string, input: unknown, key: string) {

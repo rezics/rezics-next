@@ -488,7 +488,11 @@ artifacts, measurements and promotion are pending integration evidence on its re
 
 [Supported envelope and mounted methods](../library-import-bangumi.md) cover private preview, identifier matching,
 explicit target review, confirmed native state application, conflict preservation, original-command retries,
-bounded partial outcomes, cancellation and owner deletion. Other fields remain private loss-aware evidence.
+bounded partial outcomes, cancellation and owner deletion. [Retained tag adoption](../library-import-bangumi-labels.md)
+adds separate owner review/confirmation and native private create/assign commands with original receipts, explicit
+unchanged/invalid/stale/capacity/partial outcomes and bounded same-row review cleanup. Other fields remain private
+loss-aware evidence. Scheduled source expiry, complete terminal erasure execution and native64/512/4096 whole-caller
+growth measurement remain continuation work. The complete Web324 interface consumes generated delivery.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
 remains an integration responsibility, and source delivery does not assert its result.
 

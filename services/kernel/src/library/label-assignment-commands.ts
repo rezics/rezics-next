@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -124,6 +125,7 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
+    admission?: LabelCommandAdmission,
   ) {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
@@ -132,15 +134,16 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed },
+      input: { labelId, ...parsed, ...(admission ? { review: admission.input } : {}) },
       requestKey: key,
     };
     const execute = async (
       tx: Client,
       command: { transactionId: string; time: AuthoritativeTime },
-      prepared: { subjectId?: string; error?: unknown },
-    ): Promise<CommandResult<ReturnType<typeof minimal> | { deleted: true; revision: number }>> => {
+      prepared: { subjectId?: string; error?: unknown; validate?: (tx: Client) => Promise<void> },
+    ): Promise<CommandResult<(ReturnType<typeof minimal> & { unchanged?: boolean }) | { deleted: true; revision: number }>> => {
       if (prepared.error !== undefined) throw prepared.error;
+      await prepared.validate?.(tx);
       const route = sameAccountRoute(account.accountId, labelId);
       const tuple = {
         route,
@@ -159,9 +162,9 @@ export function createLabelAssignmentCommands(deps: {
           case 'migration_required':
             throw new ProblemError('index_not_ready');
           case 'existing':
-            return noEffect(minimal(result.assignment));
+            return noEffect({ ...minimal(result.assignment), ...(admission ? { unchanged: true } : {}) });
           case 'applied':
-            return { value: minimal(result.assignment), events: events(account, labelId) };
+            return { value: { ...minimal(result.assignment), ...(admission ? { unchanged: false } : {}) }, events: events(account, labelId) };
         }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
@@ -206,7 +209,7 @@ export function createLabelAssignmentCommands(deps: {
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
             if (!resolved) throw new LibraryNotFoundError();
-            return { subjectId: resolved.subjectId };
+            return { subjectId: resolved.subjectId, ...(admission ? { validate: await admission.prepare(attempt.time) } : {}) };
           } catch (error) {
             return { error };
           }
@@ -216,9 +219,9 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string) {
-    return (await mutate(actor, labelId, value, key, 'assign')) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal>
+  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, admission?: LabelCommandAdmission) {
+    return (await mutate(actor, labelId, value, key, 'assign', admission)) as import('../command/command.ts').CommandOutcome<
+      ReturnType<typeof minimal> & { unchanged?: boolean }
     >;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {

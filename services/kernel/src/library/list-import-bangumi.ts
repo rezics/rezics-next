@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { createBangumiLabelReview } from './list-import-bangumi-labels.ts';
+import type { BangumiLabelState } from './list-import-bangumi-label-model.ts';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
@@ -25,7 +27,7 @@ import {
 } from './list-import-bangumi-model.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
-type StoredRow = BangumiRow & { choice: BangumiChoice | null };
+type StoredRow = BangumiRow & { choice: BangumiChoice | null; labels: BangumiLabelState | null };
 export function createBangumiImport(deps: Dependencies) {
   const { pool, access } = deps;
   const runner = createLibraryCommandRunner(deps);
@@ -77,7 +79,7 @@ export function createBangumiImport(deps: Dependencies) {
   async function row(tx: CommandTransaction, a: AccountActor, id: string, ordinal: number): Promise<StoredRow> {
     const r = (
       await tx.query<StoredRow>(
-        `SELECT ordinal,evidence,review,choice,outcome FROM library.bangumi_upload_row
+        `SELECT ordinal,evidence,review,choice,outcome,labels FROM library.bangumi_upload_row
       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
         [...args(a, id), ordinal],
       )
@@ -238,7 +240,7 @@ export function createBangumiImport(deps: Dependencies) {
       if ((await header(tx, a, id, true)).cancelled || (await row(tx, a, id, ordinal)).choice)
         throw new ProblemError('conflict');
       await tx.query(
-        `UPDATE library.bangumi_upload_row SET review=$5::jsonb,outcome=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+        `UPDATE library.bangumi_upload_row SET review=$5::jsonb,outcome=NULL,labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
         [...args(a, id), ordinal, JSON.stringify(review)],
       );
       return { ordinal, review };
@@ -349,6 +351,7 @@ export function createBangumiImport(deps: Dependencies) {
           'UPDATE library.bangumi_upload SET cancelled=true WHERE route=$1 AND account_id=$2 AND upload_id=$3',
           args(a, id),
         );
+        await tx.query('UPDATE library.bangumi_upload_row SET labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3', args(a, id));
         return { uploadId: id, cancelled: true };
       })
     ).value;
@@ -365,5 +368,5 @@ export function createBangumiImport(deps: Dependencies) {
       })
     ).value;
   }
-  return { preview, page, review, apply, cancel, remove };
+  return { preview, page, review, apply, cancel, remove, ...createBangumiLabelReview(deps, { read, change, header, row }) };
 }
