@@ -394,7 +394,7 @@ immediately denies delivery. Installed Bangumi and unexpired MAL source rows pre
 this is neither a full account export nor an automatic restore. The separate [archive review and merge](library-archive-merge.md)
 consumer accepts a completed file, keeps unsupported sections as private evidence and requires current explicit
 mapping before selected entry, label or assignment effects. Reviewed V2 annotation and journal-date adoption is
-specified in [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
+specified in [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md). Archive confirmation names each ordinal and its native `reviewRevision`; a replaced or mixed review is refused before effects, and accepted retries retain original keys and operands.
 
 ## Indexed filtering and disclosure
 
