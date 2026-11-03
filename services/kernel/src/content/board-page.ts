@@ -146,7 +146,9 @@ async function readMedia(
   if (ids.length === 0) return new Map();
   const mediaDependencies = {
     pool: dependencies.pool,
-    access: dependencies.access,
+    get access() {
+      return dependencies.access;
+    },
     ...(dependencies.realmParticipation ? { realmParticipation: dependencies.realmParticipation } : {}),
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   };
