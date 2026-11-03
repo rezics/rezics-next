@@ -81,7 +81,8 @@ export const DiscoveryPageSchema = t.Object(
 
 export type DiscoveryHttpPage = Static<typeof DiscoveryPageSchema>;
 
-const hitCheck = Compile(DiscoveryPageSchema.properties.hits.items);
+const hitSchema = DiscoveryPageSchema.properties.hits.items;
+const hitCheck = Compile(hitSchema);
 const pageCheck = Compile(DiscoveryPageSchema);
 const unavailable = (): never => {
   throw new SearchUnavailableError('Discovery response is incomplete or malformed');
@@ -90,7 +91,7 @@ const unavailable = (): never => {
 /** Validate the native owner reply without coercion or removal of unrecognized fields. */
 export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryHit {
   if (!hitCheck.Check(value)) unavailable();
-  const { key, summary } = value;
+  const { key, summary } = value as Static<typeof hitSchema>;
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject' && (key.owner !== 'semantic' || key.kind !== summary.value.type)) unavailable();
   if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
@@ -99,15 +100,16 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryHit
 /** Run before cursor signing as well as at the wire boundary. Empty pages still carry metadata. */
 export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPage {
   if (!pageCheck.Check(value)) unavailable();
+  const page = value as DiscoveryHttpPage;
   const identities = new Set<string>();
-  for (const hit of value.hits) {
+  for (const hit of page.hits) {
     admitDiscoveryHit(hit);
     const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
     if (identities.has(identity)) unavailable();
     identities.add(identity);
   }
   const kinds = new Set<string>();
-  for (const kind of value.kinds.values) {
+  for (const kind of page.kinds.values) {
     if (kinds.has(kind.id) || (kind.count && kind.count.kind !== kind.id)) unavailable();
     if (kind.count && 'value' in kind.count && !Number.isSafeInteger(kind.count.value)) unavailable();
     kinds.add(kind.id);
