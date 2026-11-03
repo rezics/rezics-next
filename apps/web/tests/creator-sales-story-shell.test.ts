@@ -28,10 +28,8 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
 
   expect(story).toContain("title: 'Pages/Commerce/Creator Sales'");
   expect(story).toContain("import { AppShell } from '../shell/shell'");
-  expect(story).toContain('import { PageStory, PatternStory, pageReady } from \'./page\'');
-  expect(story).toMatch(
-    /<PatternStory visitor="Signed In" path="\/creator\/sales">\s*<AppShell>\s*<CreatorSalesPage/,
-  );
+  expect(story).toContain("import { PageStory, PatternStory, pageReady } from './page'");
+  expect(story).toMatch(/<PatternStory visitor="Signed In" path="\/creator\/sales">\s*<AppShell>\s*<CreatorSalesPage/);
   expect(shell).toMatch(/<SidebarInset\s+id="main-content"/);
   expect(sidebar).toMatch(/function SidebarInset\b[\s\S]*?return\s*\(\s*<main\b/);
   expect(story).not.toMatch(/<main\b/);
@@ -45,7 +43,16 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
   for (const [name, state] of Object.entries(composedStates)) {
     expect(scenarios[name]).toContain(`render('${state}')`);
   }
-  for (const name of ['History', 'SecondPage', 'Empty', 'Denied', 'Preparing', 'Incomplete', 'UnknownUnit', 'LongTitle']) {
+  for (const name of [
+    'History',
+    'SecondPage',
+    'Empty',
+    'Denied',
+    'Preparing',
+    'Incomplete',
+    'UnknownUnit',
+    'LongTitle',
+  ]) {
     expect(scenarios[name]).toContain("findByRole('main')");
   }
   expect(scenarios.History).toContain("getByRole('heading', { level: 1, name: m.creator_sales_heading() })");
