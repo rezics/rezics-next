@@ -5,6 +5,7 @@ import { IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from '../src/credentials.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { RUN_TABLES, type RunStore, type SourceProjection } from '../src/run-store.ts';
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
+import type { ImportProgressSink } from '../src/import-progress.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 import type { CliDriver, Command, Execution, Options, Source } from '../../../specs/imports-cli-driver.ts';
 
@@ -348,11 +349,17 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       return options.fetch(request);
     };
 
+    const progressBoundaries = boundaries as typeof boundaries & {
+      progressSink?: ImportProgressSink;
+      progressTty?: boolean;
+    };
     const pending = runImportCli(argv, {
       ...(boundaries.stdin === undefined ? {} : { stdin: boundaries.stdin }),
       ...(boundaries.entries === undefined ? {} : { entries: boundaries.entries as never }),
       ...(boundaries.signal === undefined ? {} : { signal: boundaries.signal }),
       ...(boundaries.testOrigin === undefined ? {} : { testOrigin: boundaries.testOrigin }),
+      ...(progressBoundaries.progressSink ? { progressSink: progressBoundaries.progressSink } : {}),
+      ...(progressBoundaries.progressTty === undefined ? {} : { progressTty: progressBoundaries.progressTty }),
       fetch: fetch as typeof globalThis.fetch,
       clock: options.clock,
       instrumentDatabase(database) {

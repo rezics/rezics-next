@@ -16,9 +16,17 @@ import {
 import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
-import type { SourceRegistration } from './import-contract.ts';
+import type { ImportProgressObserver, SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
+import {
+  createWritableProgressSink,
+  ImportProgressReporter,
+  type ImportProgressMode,
+  type ImportProgressOutcome,
+  type ImportProgressPhase,
+  type ImportProgressSink,
+} from './import-progress.ts';
 import {
   createAccountTokenProvider,
   CredentialInputError,
@@ -71,6 +79,8 @@ export type ImportCliOptions = {
   testOrigin?: string;
   instrumentDatabase?: (database: Database) => Database;
   observer?: ImportCliObserver;
+  progressSink?: ImportProgressSink;
+  progressTty?: boolean;
   /** Observe construction while retaining the real coordinator and its durable stores. */
   createImporter?: typeof createImporter;
 };
@@ -93,6 +103,7 @@ type Config = {
   auth: string;
   sourceAlias?: string;
   disappearanceThreshold?: number;
+  progressMode?: ImportProgressMode;
 };
 
 class InputFailure extends Error {}
@@ -101,8 +112,8 @@ function usage(): string {
   return [
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
-    '       [--source-alias <name>] [--disappearance-threshold <0..1>]',
-    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --help',
+    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
+    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --help',
   ].join('\n');
 }
 
@@ -128,6 +139,7 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--auth',
     '--source-alias',
     '--disappearance-threshold',
+    '--progress',
   ]);
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
@@ -174,6 +186,11 @@ function parse(argv: readonly string[]): Config | 'help' {
     client,
     auth,
   };
+  const progressMode = values.get('--progress');
+  if (progressMode !== undefined) {
+    if (progressMode !== 'human' && progressMode !== 'jsonl') throw new InputFailure();
+    result.progressMode = progressMode;
+  }
   const sourceAlias = values.get('--source-alias');
   if (sourceAlias !== undefined) result.sourceAlias = sourceAlias;
   const threshold = values.get('--disappearance-threshold');
@@ -345,6 +362,7 @@ async function* ownedChunks(
   kind: 'dump',
   observer: ImportCliObserver | undefined,
   localFile = false,
+  progress?: ImportProgressReporter,
 ): AsyncGenerator<Uint8Array> {
   observer?.onInputPass?.(kind);
   const iterator = input[Symbol.asyncIterator]();
@@ -366,6 +384,7 @@ async function* ownedChunks(
         const owned = new Uint8Array(size);
         owned.set(chunk.subarray(offset, offset + size));
         observer?.onInputChunk?.(kind, size, owned.buffer.byteLength);
+        progress?.add('inputBytes', size);
         yield owned;
       }
     }
@@ -467,6 +486,7 @@ async function* observedEntries(
   input: AsyncIterable<RawVndbEntry>,
   signal: AbortSignal,
   observer: ImportCliObserver | undefined,
+  progress?: ImportProgressReporter,
 ): AsyncGenerator<RawVndbEntry> {
   observer?.onInputPass?.('vndb-entries');
   const iterator = input[Symbol.asyncIterator]();
@@ -492,6 +512,7 @@ async function* observedEntries(
             const chunk = item.value;
             if (!(chunk instanceof Uint8Array)) throw new InputFailure();
             observer?.onInputChunk?.('vndb-entries', chunk.byteLength, chunk.buffer.byteLength);
+            progress?.add('inputBytes', chunk.byteLength);
             yield chunk;
           }
         } finally {
@@ -551,7 +572,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return { code: 2, stdout: '', stderr: diagnostic('Invalid importer arguments.'), openHandles: 0 };
   }
 
-  const signal = options.signal ?? new AbortController().signal;
+  const externalSignal = options.signal ?? new AbortController().signal;
+  const progressAbort = new AbortController();
+  const signal = AbortSignal.any([externalSignal, progressAbort.signal]);
   const credentialLifetime = new AbortController();
   const handles = { value: 0 };
   let dumpHandle: FileHandle | undefined;
@@ -619,6 +642,34 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     now: () => clock.now(),
     sleep: (ms) => clock.sleep(ms),
   });
+  const progress = config.progressMode
+    ? new ImportProgressReporter({
+        source: config.source,
+        mode: config.progressMode,
+        tty: options.progressTty ?? false,
+        sink: options.progressSink ?? createWritableProgressSink(process.stderr),
+        signal,
+        onFailure: () => progressAbort.abort(new DOMException('Progress output failed', 'AbortError')),
+      })
+    : undefined;
+  const progressCounters = {
+    new: 'newRecords',
+    changed: 'changedRecords',
+    unchanged: 'unchangedRecords',
+    vanished: 'vanishedRecords',
+  } as const;
+  const progressHooks: ImportProgressObserver | undefined = progress
+    ? {
+        onPhase: (phase) => progress.setPhase(phase),
+        onRun: (run, resumed) => progress.setRun(run, resumed),
+        onStaged: (count) => progress.add('stagedRecords', count),
+        onSourceCompleted: () => progress.setSourceComplete(),
+        onAcknowledgedEffects: (count) => progress.add('acknowledgedEffects', count),
+        onClassified: (kind) => progress.add(progressCounters[kind]),
+        onSkipped: (count) => progress.add('skippedRecords', count),
+        onMedia: (outcome) => progress.add(outcome === 'deferred' ? 'deferredMedia' : 'rejectedMedia'),
+      }
+    : undefined;
   const inFlight = new Set<Promise<unknown>>();
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
     const pending = Promise.resolve().then(operation);
@@ -675,6 +726,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
 
   let output: ImportCliResult = { code: 1, stdout: '', stderr: diagnostic('Import failed safely.'), openHandles: 0 };
   try {
+    await progress?.setPhase('acquiring');
     options.observer?.onDatabaseOpen?.(config.state);
     const importerOptions: ImporterOptions = {
       path: config.state,
@@ -727,9 +779,11 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       const materialization = new VndbMaterialization(importer, registration);
       options.observer?.onVndbStore?.({ importer, store: materialization.tables });
       const acquisition = materialization.begin();
+      progress?.setSourceRun(acquisition);
+      await progress?.setPhase('materializing');
       const entries =
         options.entries !== undefined
-          ? observedEntries(options.entries, signal, options.observer)
+          ? observedEntries(options.entries, signal, options.observer, progress)
           : readArchive(
               ownedChunks(
                 dumpHandle
@@ -739,6 +793,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
                 'dump',
                 options.observer,
                 dumpHandle !== undefined,
+                progress,
               ),
               {
                 maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
@@ -801,12 +856,16 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           ? {}
           : { disappearanceThreshold: config.disappearanceThreshold }),
         signal,
+        ...(progressHooks ? { progress: progressHooks } : {}),
       };
       const run = emptyCatalogue
         ? await importer.runRecords(registration, (async function* () {})(), runOptions)
         : await materialization.commit(acquisition, {
             ...runOptions,
-            onPageRecords: (count) => options.observer?.onPageRecords?.(count),
+            onPageRecords: (count) => {
+              options.observer?.onPageRecords?.(count);
+              progress?.add('materializedRecords', count);
+            },
           });
       output = resultFor(run, lastHttpStatus, signal);
     } else {
@@ -816,6 +875,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         'dump',
         options.observer,
         dumpHandle !== undefined,
+        progress,
       );
       const nativeInput = config.source === 'openlibrary' ? openLibraryMetadata(input, signal) : input;
       const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));
@@ -832,6 +892,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             ? {}
             : { disappearanceThreshold: config.disappearanceThreshold }),
           signal,
+          ...(progressHooks ? { progress: progressHooks } : {}),
         });
         output = resultFor(run, lastHttpStatus, signal);
       } finally {
@@ -872,7 +933,38 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     }
     output.openHandles = handles.value;
   }
+  if (progress) {
+    const terminal = progressTerminal(output, signal);
+    try {
+      await progress.finish(terminal.phase, terminal.outcome);
+    } catch {
+      // The reporter exposes only a sanitized output-failure state to the CLI.
+    }
+    if (progress.outputFailed) {
+      output = {
+        code: 1,
+        stdout: '',
+        stderr: diagnostic('Progress output failed; import outcome is safely retained.'),
+        openHandles: output.openHandles,
+      };
+    } else if (progress.outputIncomplete) {
+      output.stderr += diagnostic('Progress output was cancelled before its terminal frame flushed.');
+    }
+  }
   return output;
+}
+
+function progressTerminal(
+  output: ImportCliResult,
+  signal: AbortSignal,
+): { phase: ImportProgressPhase; outcome: ImportProgressOutcome } {
+  if (signal.aborted || output.code === 130) return { phase: 'interrupted', outcome: 'interrupted' };
+  if (output.code === 0) return { phase: 'committed', outcome: 'committed' };
+  if (output.code === 2) return { phase: 'invalid-input', outcome: 'invalid-input' };
+  if (output.code === 3) return { phase: 'mass-disappearance', outcome: 'mass-disappearance' };
+  if (output.code === 4) return { phase: 'denied', outcome: 'denied' };
+  if (output.code === 5) return { phase: 'busy', outcome: 'busy' };
+  return { phase: 'failed', outcome: 'failed' };
 }
 
 function resultFor(
@@ -929,11 +1021,16 @@ function resultFor(
 
 if (import.meta.main) {
   const controller = new AbortController();
-  const interrupt = () => controller.abort(new DOMException('Interrupted', 'AbortError'));
-  process.once('SIGINT', interrupt);
+  const interrupt = () => {
+    if (!controller.signal.aborted) controller.abort(new DOMException('Interrupted', 'AbortError'));
+  };
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', interrupt);
   void runImportCli(process.argv.slice(2), {
     stdin: process.stdin as AsyncIterable<Uint8Array>,
     signal: controller.signal,
+    progressSink: createWritableProgressSink(process.stderr),
+    progressTty: process.stderr.isTTY === true,
   })
     .then(
       (result) => {
@@ -946,5 +1043,8 @@ if (import.meta.main) {
         process.exitCode = 1;
       },
     )
-    .finally(() => process.off('SIGINT', interrupt));
+    .finally(() => {
+      process.off('SIGINT', interrupt);
+      process.off('SIGTERM', interrupt);
+    });
 }

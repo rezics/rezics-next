@@ -101,3 +101,34 @@ export type RunResultCollection = Readonly<{
   collect?: boolean;
   sink?: RunResultSink;
 }>;
+
+export type ImportProgressPhase =
+  | 'acquiring'
+  | 'materializing'
+  | 'staging'
+  | 'resuming'
+  | 'reconciling'
+  | 'deferred-media'
+  | 'finalizing'
+  | 'committed'
+  | 'invalid-input'
+  | 'mass-disappearance'
+  | 'busy'
+  | 'interrupted'
+  | 'denied'
+  | 'failed';
+
+export type ImportProgressKind = 'new' | 'changed' | 'unchanged' | 'vanished';
+export type ImportMediaProgress = 'deferred' | 'rejected';
+
+/** In-memory hooks at real source, run-store and acknowledgement transitions. */
+export type ImportProgressObserver = Readonly<{
+  onPhase?(phase: ImportProgressPhase): void | Promise<void>;
+  onRun?(runId: string, resumed: boolean): void;
+  onStaged?(count: number): void;
+  onSourceCompleted?(): void;
+  onAcknowledgedEffects?(count: number): void;
+  onClassified?(kind: ImportProgressKind): void;
+  onSkipped?(count: number): void;
+  onMedia?(outcome: ImportMediaProgress): void;
+}>;

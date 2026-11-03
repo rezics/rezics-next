@@ -55,6 +55,32 @@ For a configured source alias, keep its original input kind and add
 registration, fences and single-owner admission. Inspection never resumes automatically and cannot bypass a writer
 or unresolved authority failure.
 
+## Live import progress
+
+Progress is opt-in with `--progress human` or `--progress jsonl`. Both modes use stderr, leaving the existing final
+summary on stdout. Human output updates one bounded line on a TTY and writes newline records to a pipe. JSONL writes
+one version 1 event per line. Snapshots are coalesced at a fixed 250 ms cadence; phase and terminal changes flush
+immediately. A slow sink holds at most one in-flight frame and one current counter snapshot.
+
+Events identify the source kind, invocation UUID, invocation-local sequence and the actual durable importer run ID
+when it exists. VNDB also reports its separate table-acquisition run as `sourceRun`. `resumed` marks work recovered
+from the same state file; `acknowledgedEffects` counts only successful effects acknowledged during this invocation.
+The counters distinguish input bytes, VNDB records materialized, RunStore records staged, acknowledged effects,
+record classifications, skipped records, and deferred or rejected media outcomes. A deferred media outcome is not
+reported as a total import failure by itself. `sourceComplete` means the input was fully decoded and sealed; it does
+not mean the current catalogue was read. `selectedCatalogue` is always `not-read`: local commit does not prove
+candidate acceptance, public selection or readback.
+
+Phases are `acquiring`, `materializing`, `staging`, `resuming`, `reconciling`, `deferred-media` and `finalizing`;
+terminal phases identify committed, invalid, mass-disappearance, busy, interrupted, denied or failed outcomes.
+Progress contains no account credentials, request bodies, raw record keys, provider text, URLs or private error
+bodies. A broken sink stops this invocation through the existing cancellation path and reports a sanitized output
+failure. SIGINT and SIGTERM preserve the durable journal and original pending request. Rerun the ordinary import
+command with the same state file and complete source input to recover it; progress does not add an acknowledge,
+abandon or force-release operation.
+
+Decision: human and JSONL progress both use stderr so the existing final stdout summary stays compatible.
+
 The [connected design status](../../docs/research/design-status-imports.md) follows the operator from terminal
 acquisition, status and recovery through the private SQLite baseline, source ownership and immutable request/ACK
 journal. Ordinary account Auth (`POST /signin/key` → `POST /token`) authorizes public tuple/bootstrap and proposal

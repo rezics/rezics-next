@@ -15,6 +15,8 @@ import type {
   ImportTransport,
   ImportSourceRecord,
   ImportSourceRecordMetadataCommand,
+  ImportProgressObserver,
+  ImportProgressKind,
   RunResultSink,
   RunStatus,
   SourceRegistration,
@@ -67,6 +69,7 @@ export type ImportRunOptions = {
   /** Explicit fixture/diagnostic bound; production defaults to no collected keys. */
   collectionLimit?: number;
   sink?: RunResultSink;
+  progress?: ImportProgressObserver;
 };
 export type ImporterOptions = {
   path: string | Database;
@@ -135,11 +138,13 @@ export class Importer {
     );
   }
 
-  runDump(
+  async runDump(
     registration: SourceRegistration,
     bytes: AsyncIterable<Uint8Array>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
+    const acquiring = options.progress?.onPhase?.('acquiring');
+    if (acquiring !== undefined) await acquiring;
     return this.runRecords(
       registration,
       readDump(registration.sourceKind, bytes, {
@@ -413,14 +418,19 @@ export class Importer {
     this.options.observer?.onAcknowledged?.(recordKey);
   }
 
-  private acknowledge(owner: Owner, request: BatchWriteRequest, result: BatchWriteResult): void {
+  private acknowledge(owner: Owner, request: BatchWriteRequest, result: BatchWriteResult): number {
     // The complete response is validated before the first local acknowledgement.
     this.validateResult(request, result);
+    let acknowledgedEffects = 0;
     for (const entry of result.results) {
-      if (success(entry)) this.session.bindings.acknowledge(owner, entry.key, { results: [entry] });
+      if (success(entry)) {
+        this.session.bindings.acknowledge(owner, entry.key, { results: [entry] });
+        acknowledgedEffects++;
+      }
       else if (entry.status === 404 && request.commands.find((c) => c.key === entry.key)?.op !== 'create')
         this.session.bindings.takenDown(owner, { status: 404 });
     }
+    return acknowledgedEffects;
   }
 
   private current(owner: Owner): Candidate[] {
@@ -464,6 +474,7 @@ export class Importer {
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       bindings.acknowledgeMetadata(owner, pending.key, result);
+      if (result.effect !== 'noEffect') this.options.progress?.onAcknowledgedEffects?.(1);
     };
     // Never consume a new descriptor in place of a response-lost immutable intent.
     if (journal && !journal.result) {
@@ -511,7 +522,8 @@ export class Importer {
     }
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
     const result = await this.send(request, signal, write);
-    this.acknowledge(owner, request, result);
+    const acknowledgedEffects = this.acknowledge(owner, request, result);
+    this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
     return bound?.state === 'bound' ? bound.subject : null;
   }
@@ -537,10 +549,12 @@ export class Importer {
     });
     const result = await this.send(request, signal, write);
     // Returned identities must be durable before RunStore can resolve a record.
-    this.atomic(() => {
-      this.acknowledge(owner, request, result);
+    const acknowledgedEffects = this.atomic(() => {
+      const count = this.acknowledge(owner, request, result);
       this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
+      return count;
     });
+    this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
     if (this.session.store.key(run.source, pending.recordKey, run).acknowledged) this.acknowledged(pending.recordKey);
     return result.results.every(success);
   }
@@ -657,6 +671,7 @@ export class Importer {
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
+            this.options.progress?.onMedia?.(resolution.status);
           }
         }
       }
@@ -681,6 +696,7 @@ export class Importer {
         ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
+      this.options.progress?.onAcknowledgedEffects?.(1);
       statisticWritten = true;
     }
     // Removal addresses only this exact binding and remains permitted behind a facts fence.
@@ -704,6 +720,7 @@ export class Importer {
         ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
+      this.options.progress?.onAcknowledgedEffects?.(1);
       statisticWritten = true;
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
@@ -866,7 +883,11 @@ export class Importer {
       deferPending: false,
     });
     if (resolution.status !== 'available') {
-      if (resolution.status === 'pending') return { outcome: 'pending', kind: deferred.kind };
+      if (resolution.status === 'pending') {
+        this.options.progress?.onMedia?.('deferred');
+        return { outcome: 'pending', kind: deferred.kind };
+      }
+      this.options.progress?.onMedia?.('rejected');
       const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (rejected.resolved) this.acknowledged(row.recordKey);
       return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
@@ -930,7 +951,8 @@ export class Importer {
           this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
       });
       const result = await this.send(request, signal, write);
-      this.acknowledge(owner, request, result);
+      const acknowledgedEffects = this.acknowledge(owner, request, result);
+      this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
       if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
     }
     const result = this.session.store.resolveDeferredCover(run, row.recordKey);
@@ -1012,6 +1034,7 @@ export class Importer {
     if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) throw new TypeError('Invalid key collection limit');
     const observe = (kind: Kind, key: string) => {
       result.counts[kind]++;
+      options.progress?.onClassified?.(kind);
       if (limit) {
         if (Object.values(result.counts).reduce((a, b) => a + b, 0) > limit)
           throw new Interrupted('Key collection bound exceeded');
@@ -1042,6 +1065,9 @@ export class Importer {
       let resumed = !!run;
       let skipped = 0;
       if (run) {
+        options.progress?.onRun?.(run.id, true);
+        const resuming = options.progress?.onPhase?.('resuming');
+        if (resuming !== undefined) await resuming;
         // Capture sealed accounting before finalization can mark or otherwise retire the run.
         skipped = store.skipped(run);
         result.skipped = skipped;
@@ -1057,9 +1083,15 @@ export class Importer {
           if (store.abandon(run) !== 'abandoned') throw new Error('Cannot discard uncertain import');
           run = null;
           resumed = false;
-        } else if (final !== 'incomplete') {
-          while (final === 'more') final = store.finalize(run, 100);
-          return finish('committed', 'Resumed source finalization');
+        } else {
+          options.progress?.onSkipped?.(skipped);
+          if (final !== 'incomplete') {
+            options.progress?.onSourceCompleted?.();
+            const finalizing = options.progress?.onPhase?.('finalizing');
+            if (finalizing !== undefined) await finalizing;
+            while (final === 'more') final = store.finalize(run, 100);
+            return finish('committed', 'Resumed source finalization');
+          }
         }
       }
       if (!run) {
@@ -1071,24 +1103,39 @@ export class Importer {
         );
         if (next === 'busy') return finish('busy', 'Source has active durable work');
         run = next;
+        options.progress?.onRun?.(run.id, false);
         try {
           // Staged rows need no durability before the seal, so a page of them shares one commit. The
           // result equals staging one by one: the rows before a failure and its invalid mark persist.
           const buffered: Staged<SourceProjection>[] = [];
+          let stagingStarted = false;
+          const enterStaging = () => {
+            if (stagingStarted) return;
+            stagingStarted = true;
+            return options.progress?.onPhase?.('staging');
+          };
           const flush = () => {
-            const page = buffered.splice(0);
-            let failure: unknown;
-            this.atomic(() => {
-              for (const staged of page) {
-                try {
-                  store.stage(next, staged);
-                } catch (error) {
-                  failure = error;
-                  return;
+            if (buffered.length === 0) return;
+            const commit = () => {
+              const page = buffered.splice(0);
+              let failure: unknown;
+              let stagedCount = 0;
+              this.atomic(() => {
+                for (const staged of page) {
+                  try {
+                    store.stage(next, staged);
+                    stagedCount++;
+                  } catch (error) {
+                    failure = error;
+                    return;
+                  }
                 }
-              }
-            });
-            if (failure !== undefined) throw failure;
+              });
+              options.progress?.onStaged?.(stagedCount);
+              if (failure !== undefined) throw failure;
+            };
+            const phase = enterStaging();
+            return phase !== undefined ? Promise.resolve(phase).then(commit) : commit();
           };
           for await (const record of records) {
             if (signal.aborted) throw new Interrupted('Import was interrupted');
@@ -1100,6 +1147,7 @@ export class Importer {
             if ('outcome' in conversion && conversion.outcome === 'ignored') {
               if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
               skipped++;
+              options.progress?.onSkipped?.(1);
             }
             buffered.push({
               row: {
@@ -1120,9 +1168,15 @@ export class Importer {
                     : {}),
               },
             });
-            if (buffered.length >= 100) flush();
+            if (buffered.length >= 100) {
+              const pending = flush();
+              if (pending !== undefined) await pending;
+            }
           }
-          flush();
+          const phase = enterStaging();
+          if (phase !== undefined) await phase;
+          const pending = flush();
+          if (pending !== undefined) await pending;
         } catch (error) {
           store.seal(run, { complete: false, reason: 'malformed' });
           return finish(
@@ -1131,11 +1185,14 @@ export class Importer {
           );
         }
         const seal = store.seal(run, { complete: true, skipped });
+        options.progress?.onSourceCompleted?.();
         if (seal.status !== 'ready')
           return finish(seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump', seal.diagnostic);
         result.skipped = skipped;
       }
       result.skipped = skipped;
+      const reconciling = options.progress?.onPhase?.('reconciling');
+      if (reconciling !== undefined) await reconciling;
       if (resumed && !(await this.drain(run, signal, 'resumed')))
         return finish('bulk-failed', 'Durable operations remain unresolved');
       let failed = false;
@@ -1235,8 +1292,12 @@ export class Importer {
       }
       // Inspect durable leftovers without retrying a failed record in the same run.
       store.pagePending(run, { limit: 100 });
+      const deferredMedia = options.progress?.onPhase?.('deferred-media');
+      if (deferredMedia !== undefined) await deferredMedia;
       if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
       if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
+      const finalizing = options.progress?.onPhase?.('finalizing');
+      if (finalizing !== undefined) await finalizing;
       let final = store.finalize(run, 100);
       while (final === 'more') final = store.finalize(run, 100);
       return finish(
