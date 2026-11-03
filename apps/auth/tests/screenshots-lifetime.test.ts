@@ -6,6 +6,7 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 import {
   runCapture,
   freePort,
+  captureMatrix,
   captureDependencies,
   type CaptureDependencies,
   type SiteChild,
@@ -173,6 +174,7 @@ function fixture(
     url: string;
     ready: string[];
   }[] = [];
+  const manifests: Array<{ path: string; manifest: { version: number; sourceRevision: string; captures: any[] } }> = [];
   let activePages = 0;
   let activeContexts = 0;
   let maxPages = 0;
@@ -198,6 +200,7 @@ function fixture(
           let viewport: unknown;
           let theme: unknown;
           let url = '';
+          const listeners = new Map<string, Array<(...args: any[]) => void>>();
           const ready: string[] = [];
           const locator = (selector: string) => ({
             first() {
@@ -226,7 +229,16 @@ function fixture(
             async goto(value: string) {
               url = value;
               await stage('goto');
+              if (!captures.length) {
+                for (const listener of listeners.get('console') ?? [])
+                  listener({ type: () => 'error', text: () => 'auth_session=auth-screenshot-session token=screenshot-token' });
+                for (const listener of listeners.get('pageerror') ?? []) listener(new Error('login failed: reader@example.test'));
+              }
               return { status: () => 200 };
+            },
+            on(event: string, listener: (...args: any[]) => void) {
+              listeners.set(event, [...(listeners.get(event) ?? []), listener]);
+              return this;
             },
             locator,
             getByRole: locator,
@@ -256,6 +268,10 @@ function fixture(
   const deps: CaptureDependencies = {
     mkdir: async () => {
       events.push('mkdir');
+    },
+    sourceRevision: () => 'c'.repeat(40),
+    writeManifest: async (path, manifest) => {
+      manifests.push({ path, manifest });
     },
     startFake: () => ({
       url: new URL('http://127.0.0.1:9000'),
@@ -304,6 +320,7 @@ function fixture(
     contextOptions,
     cookies,
     captures,
+    manifests,
     outputCancelled,
     begin,
     detached,
@@ -311,29 +328,37 @@ function fixture(
   };
 }
 
-test('original ten-state/eight-locale/two-theme matrix, phone names, routes, cookies and readiness survive', async () => {
+test('full capture matrix, output identity, manifest, cookies and readiness use bounded handles', async () => {
   const f = fixture();
   const result = f.begin();
   await settle(result, f.timers);
   expect(result.error).toBeUndefined();
-  const states = [
-    'login',
-    'login-error',
-    'signup',
-    'consent',
-    'recovery-request',
-    'recovery-password',
-    'security',
-    'account-delete',
-    'organization-new',
-    'step-up',
-  ];
   const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
-  const expected = locales.flatMap((locale) => [
-    ...['light', 'dark'].flatMap((theme) => states.map((state) => `${state}.${locale}.${theme}.png`)),
-    `login.${locale}.phone.png`,
-  ]);
-  expect(f.captures.map((capture) => basename(capture.path))).toEqual(expected);
+  const matrix = captureMatrix();
+  expect(f.captures.map((capture) => basename(capture.path))).toEqual(matrix.map((target) => target.imagePath));
+  expect(matrix).toHaveLength(320);
+  expect(f.manifests).toHaveLength(1);
+  const { path: manifestPath, manifest } = f.manifests[0]!;
+  expect(manifestPath).toBe('/capture-output/manifest.json');
+  expect(manifest.version).toBe(1);
+  expect(manifest.sourceRevision).toBe('c'.repeat(40));
+  expect(manifest.captures.map((capture) => capture.imagePath)).toEqual(matrix.map((target) => target.imagePath));
+  expect(manifest.captures[0]).toMatchObject({
+    state: 'login',
+    route: '/login',
+    persona: 'fresh reader session',
+    locale: 'en',
+    theme: 'light',
+    viewport: { name: 'desktop1280', width: 1280, height: 900 },
+    errors: [
+      { source: 'console', message: 'auth_session=[redacted] token=[redacted]' },
+      { source: 'pageerror', message: 'login failed: [redacted]' },
+    ],
+  });
+  const manifestJson = JSON.stringify(manifest);
+  expect(manifestJson).not.toContain('auth-screenshot-session');
+  expect(manifestJson).not.toContain('screenshot-token');
+  expect(manifestJson).not.toContain('reader@example.test');
   expect(f.contextOptions).toEqual(
     locales.map((locale) => ({
       viewport: { width: 1280, height: 900 },
@@ -346,29 +371,17 @@ test('original ten-state/eight-locale/two-theme matrix, phone names, routes, coo
   expect(f.cookies).toEqual(
     locales.map(() => [{ name: 'auth_session', value: 'auth-screenshot-session', url: 'http://127.0.0.1:4200' }]),
   );
-  const routes = [
-    '/login',
-    '/login',
-    '/signup',
-    '/consent?client_id=screenshot-client&scope=openid+offline_access',
-    '/recovery',
-    '/recovery#account_id=screenshot-account&token=screenshot-token',
-    '/security',
-    '/account/delete',
-    '/organizations/new',
-    '/step-up?return_to=%2Fsecurity',
-  ];
   for (const [index, capture] of f.captures.entries()) {
-    const cell = index % 21;
-    expect(capture.url).toBe('http://127.0.0.1:4200' + (cell === 20 ? '/login' : routes[cell % 10]));
-    expect(capture.viewport).toEqual(cell === 20 ? { width: 390, height: 844 } : { width: 1280, height: 900 });
-    expect(capture.theme).toEqual({ colorScheme: cell < 10 || cell === 20 ? 'light' : 'dark' });
+    const target = matrix[index]!;
+    expect(capture.url).toBe('http://127.0.0.1:4200' + target.route);
+    expect(capture.viewport).toEqual({ width: target.viewport.width, height: target.viewport.height });
+    expect(capture.theme).toEqual({ colorScheme: target.theme });
     expect(capture.fullPage).toBe(true);
     expect(capture.animations).toBe('disabled');
     expect(capture.ready).toEqual(['hydration', 'fonts', 'hydration', 'fonts']);
   }
   expect(f.maximum()).toEqual({ pages: 1, contexts: 1 });
-  expect(f.events.filter((event) => event.startsWith('page.close:'))).toHaveLength(168);
+  expect(f.events.filter((event) => event.startsWith('page.close:'))).toHaveLength(320);
   expect(f.events.filter((event) => event.startsWith('context.close:'))).toHaveLength(8);
   expect(f.events.filter((event) => event === 'fake.stop')).toHaveLength(1);
   f.detached();
@@ -383,7 +396,7 @@ for (const fail of ['context', 'cookies', 'goto', 'hydration', 'fonts'] as const
     expect((result.error as AggregateError).errors[0]).toBe(f.operationError);
     expect(f.events.filter((event) => event.startsWith('context.close:'))).toHaveLength(fail === 'cookies' ? 2 : 1);
     expect(f.events.filter((event) => event.startsWith('page.close:'))).toHaveLength(
-      fail === 'cookies' || fail === 'context' ? 21 : 1,
+      fail === 'cookies' || fail === 'context' ? 40 : 1,
     );
     expect(f.events).toContain('browser.close');
     expect(f.events).toContain('fake.stop');

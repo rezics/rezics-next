@@ -1,4 +1,5 @@
-import { mkdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
@@ -30,6 +31,10 @@ const states = [
 ] as const;
 const desktop = { width: 1280, height: 900 };
 const phone = { width: 390, height: 844 };
+const viewports = [
+  { name: 'desktop1280', ...desktop },
+  { name: 'phone390', ...phone },
+] as const;
 const authSession = 'auth-screenshot-session';
 const startupTimeout = 150_000;
 const cleanupFailed = Symbol('Auth cleanup failed');
@@ -42,7 +47,22 @@ function requireClean(owner: CaptureLifetime): void {
 }
 
 type Theme = (typeof themes)[number];
-type Viewport = { width: number; height: number };
+type Locale = (typeof locales)[number];
+type Viewport = (typeof viewports)[number];
+
+export type CaptureTarget = {
+  state: (typeof states)[number];
+  route: string;
+  persona: 'fresh reader session';
+  locale: Locale;
+  theme: Theme;
+  viewport: Viewport;
+  imagePath: string;
+};
+
+export type CaptureError = { source: 'console' | 'pageerror'; message: string };
+export type CaptureRecord = CaptureTarget & { route: string; errors: CaptureError[] };
+export type CaptureManifest = { version: 1; sourceRevision: string; captures: CaptureRecord[] };
 
 function usage(): string {
   return 'Usage: bun run screenshots [--out <directory>]';
@@ -72,6 +92,8 @@ export type SiteChild = CaptureChild & {
 
 export type CaptureDependencies = {
   mkdir: (path: string) => Promise<unknown>;
+  sourceRevision: () => string | Promise<string>;
+  writeManifest: (path: string, manifest: CaptureManifest) => Promise<unknown>;
   startFake: () => { url: URL; stop: (force: boolean) => unknown };
   freePort: (owner: CaptureLifetime) => Promise<number>;
   spawn: (authOrigin: string, port: number) => SiteChild | Promise<SiteChild>;
@@ -293,31 +315,82 @@ function pathFor(state: (typeof states)[number]): string {
   return '/step-up?return_to=%2Fsecurity';
 }
 
+function imagePathFor(state: (typeof states)[number], locale: Locale, theme: Theme, viewport: Viewport): string {
+  if (viewport.name === 'desktop1280') return `${state}.${locale}.${theme}.png`;
+  if (state === 'login' && theme === 'light') return `login.${locale}.phone.png`;
+  return `${state}.${locale}.${theme}.phone.png`;
+}
+
+export function captureMatrix(): CaptureTarget[] {
+  return locales.flatMap((locale) =>
+    themes.flatMap((theme) =>
+      viewports.flatMap((viewport) =>
+        states.map((state) => ({
+          state,
+          route: pathFor(state),
+          persona: 'fresh reader session' as const,
+          locale,
+          theme,
+          viewport,
+          imagePath: imagePathFor(state, locale, theme, viewport),
+        })),
+      ),
+    ),
+  );
+}
+
+function manifestRoute(route: string): string {
+  return new URL(route, 'http://auth.local').pathname;
+}
+
+export function redactCaptureError(message: string): string {
+  const knownSecrets = [authSession, 'reader@example.test', 'incorrect-password', 'screenshot-token'];
+  return knownSecrets
+    .reduce((safe, secret) => safe.replaceAll(secret, '[redacted]'), message)
+    .replace(/https?:\/\/[^\s/@:]+:[^\s/@]+@/gi, (credentials) => credentials.replace(/\/\/.*@/, '//[redacted]@'))
+    .replace(
+      /([?&#](?:access_token|refresh_token|token|password|client_secret|session|authorization|code|state)=)[^&#\s]*/gi,
+      '$1[redacted]',
+    )
+    .replace(
+      /(["']?(?:auth_session|authorization|cookie|set-cookie|password|passcode|token|access_token|refresh_token|client_secret|session|secret|credential|code|state)["']?\s*[:=]\s*["']?)[^"',;\s}&]+["']?/gi,
+      '$1[redacted]',
+    );
+}
+
 async function capture(
   owner: CaptureLifetime,
   context: BrowserContext,
   origin: string,
-  state: (typeof states)[number],
-  theme: Theme,
-  viewport: Viewport,
+  target: CaptureTarget,
   destination: string,
-): Promise<void> {
+): Promise<CaptureRecord> {
   const owned = await owner.own(
     'browser page',
     () => context.newPage(),
     (page) => page.close(),
   );
   const page = owned.value;
+  const errors: CaptureError[] = [];
   try {
+    const { state, theme, viewport } = target;
     await owner.step('page defaults', () => page.setDefaultTimeout(30_000));
-    await owner.step('page viewport', () => page.setViewportSize(viewport));
+    await owner.step('page viewport', () =>
+      page.setViewportSize({ width: viewport.width, height: viewport.height }),
+    );
     await owner.step('page media', () => page.emulateMedia({ colorScheme: theme }));
-    const path = pathFor(state);
+    page.on('console', (message) => {
+      if (message.type() === 'error')
+        errors.push({ source: 'console', message: redactCaptureError(message.text()) });
+    });
+    page.on('pageerror', (error) =>
+      errors.push({ source: 'pageerror', message: redactCaptureError(error.message) }),
+    );
     const response = await owner.step('page navigation', () =>
-      page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }),
+      page.goto(`${origin}${target.route}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }),
     );
     if (response?.status() !== 200)
-      throw new Error(`Auth page ${path} returned ${response?.status() ?? 'no response'}.`);
+      throw new Error(`Auth page ${target.route} returned ${response?.status() ?? 'no response'}.`);
     await waitForCaptureReady(owner, page);
     await prepareState(owner, page, state);
     await owner.step('page screenshot', () =>
@@ -330,10 +403,25 @@ async function capture(
     await owned.close();
   }
   requireClean(owner);
+  return {
+    ...target,
+    route: manifestRoute(target.route),
+    errors,
+  };
 }
 
 export const captureDependencies: CaptureDependencies = {
   mkdir: (output) => mkdir(output, { recursive: true }),
+  sourceRevision: () => {
+    const revision = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 10_000,
+    }).trim();
+    if (!/^[a-f0-9]{40}$/i.test(revision)) throw new Error('Could not determine the Auth capture source revision.');
+    return revision;
+  },
+  writeManifest: (path, manifest) => writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8'),
   startFake: startFakeAuth,
   freePort,
   spawn: (authOrigin, port) =>
@@ -368,33 +456,26 @@ export async function runCapture(
   const detach = captureSignals(owner, source);
   let primary: { error: unknown } | undefined;
   try {
+    const sourceRevision = await owner.step('source revision', () => deps.sourceRevision());
     await owner.step('output directory', () => deps.mkdir(output));
     const fake = await owner.own('fake Auth', deps.startFake, (fake) => fake.stop(true));
     const site = await startSite(owner, deps, fake.value.url.origin);
     const browser = await owner.own('browser', deps.launch, (browser) => browser.close());
+    const targets = captureMatrix();
+    const captures: CaptureRecord[] = [];
     for (const locale of locales) {
       const context = await createContext(owner, browser.value, site.origin, locale);
       try {
-        for (const theme of themes) {
-          for (const state of states) {
-            const filename = `${state}.${locale}.${theme}.png`;
-            await capture(owner, context.value, site.origin, state, theme, desktop, join(output, filename));
-          }
-        }
-        await capture(
-          owner,
-          context.value,
-          site.origin,
-          'login',
-          'light',
-          phone,
-          join(output, `login.${locale}.phone.png`),
-        );
+        for (const target of targets.filter((candidate) => candidate.locale === locale))
+          captures.push(await capture(owner, context.value, site.origin, target, join(output, target.imagePath)));
       } finally {
         await context.close();
       }
       requireClean(owner);
     }
+    await owner.step('capture manifest', () =>
+      deps.writeManifest(join(output, 'manifest.json'), { version: 1, sourceRevision, captures }),
+    );
   } catch (error) {
     if (error !== cleanupFailed) primary = { error };
   } finally {

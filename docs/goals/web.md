@@ -480,7 +480,8 @@ Run focused interface and integration suites through the owning app/package chec
 to their corresponding running pages. Review screenshots and Storybook evidence in all launch locales, both themes
 and phone/desktop layouts. Include keyboard access, loading, empty, preparing, unavailable and hidden-resource
 states. [Verification](../development/verification.md) owns commands and review cadence; automated assertions do not
-establish visual quality. A full web check is required only when the task contract names it.
+establish visual quality. Auth capture filenames retain existing desktop names and the light-login phone name; other
+phone captures use `<state>.<locale>.<theme>.phone.png`. A full web check is required only when the task contract names it.
 
 ## External conditions
 

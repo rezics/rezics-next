@@ -103,7 +103,6 @@ export const ConsentReduced = {
   },
 };
 export const Denied = {
-  tags: ['!dev'],
   render: () => (
     <AuthStory>
       <SecurityPage identitySource={identitySource} initial={initial} inventorySource={deniedInventory} />

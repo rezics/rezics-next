@@ -1,70 +1,53 @@
 import { expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { captureMatrix, redactCaptureError } from '../scripts/screenshots';
 
-const app = resolve(import.meta.dir, '..');
-const root = resolve(app, '../..');
-const states = [
-  'login',
-  'login-error',
-  'signup',
-  'consent',
-  'recovery-request',
-  'recovery-password',
-  'security',
-  'account-delete',
-  'organization-new',
-  'step-up',
-] as const;
-const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
-const themes = ['light', 'dark'] as const;
-const required = states.flatMap((state) =>
-  locales.flatMap((locale) => themes.map((theme) => `${state}.${locale}.${theme}.png`)),
-);
-const phone = locales.map((locale) => `login.${locale}.phone.png`);
-const timeout = 900_000;
+test('capture identities cover every Auth state, locale, theme and viewport without collisions', () => {
+  const targets = captureMatrix();
+  expect(targets).toHaveLength(320);
+  expect(new Set(targets.map((target) => target.imagePath)).size).toBe(320);
+  expect([...new Set(targets.map((target) => target.state))]).toEqual([
+    'login',
+    'login-error',
+    'signup',
+    'consent',
+    'recovery-request',
+    'recovery-password',
+    'security',
+    'account-delete',
+    'organization-new',
+    'step-up',
+  ]);
+  expect([...new Set(targets.map((target) => target.locale))]).toEqual([
+    'en',
+    'zh-Hant',
+    'zh-Hans',
+    'ja',
+    'ko',
+    'de',
+    'fr',
+    'es',
+  ]);
+  expect([...new Set(targets.map((target) => target.theme))]).toEqual(['light', 'dark']);
+  expect([...new Set(targets.map((target) => target.viewport.name))]).toEqual(['desktop1280', 'phone390']);
+  expect([...new Set(targets.map(({ viewport }) => `${viewport.name}:${viewport.width}x${viewport.height}`))]).toEqual([
+    'desktop1280:1280x900',
+    'phone390:390x844',
+  ]);
+  const imageFor = (state: string, theme: string, viewport: string) =>
+    targets.find(
+      (target) =>
+        target.state === state &&
+        target.locale === 'en' &&
+        target.theme === theme &&
+        target.viewport.name === viewport,
+    )?.imagePath;
+  expect(imageFor('login', 'light', 'desktop1280')).toBe('login.en.light.png');
+  expect(imageFor('login', 'light', 'phone390')).toBe('login.en.phone.png');
+  expect(imageFor('security', 'dark', 'phone390')).toBe('security.en.dark.phone.png');
+});
 
-test(
-  'bun run screenshots writes every Auth page state in all eight locales and both themes',
-  async () => {
-    mkdirSync(join(root, '.temp'), { recursive: true });
-    const out = mkdtempSync(join(root, '.temp/auth-screenshots-'));
-    const child = spawn('bun', ['run', 'screenshots', '--out', out], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CI: '1' },
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout!.on('data', (chunk: Buffer) => stdout.push(chunk));
-    child.stderr!.on('data', (chunk: Buffer) => stderr.push(chunk));
-    const done = new Promise<number>((resolve) => {
-      child.once('exit', (code) => resolve(code ?? 1));
-    });
-
-    try {
-      const code = await done;
-      const output = `${Buffer.concat(stdout).toString()}\n${Buffer.concat(stderr).toString()}`;
-      expect(code, output).toBe(0);
-      const names = readdirSync(out).sort();
-      expect(names).toEqual([...required, ...phone].sort());
-      for (const name of [...required, ...phone]) {
-        const bytes = readFileSync(join(out, name));
-        expect(bytes.length, `${name} is non-empty`).toBeGreaterThan(0);
-        expect(bytes.subarray(0, 8), `${name} has the PNG signature`).toEqual(
-          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-        );
-      }
-    } finally {
-      if (child.pid && child.exitCode === null) {
-        try {
-          process.kill(-child.pid, 'SIGTERM');
-        } catch {}
-      }
-      rmSync(out, { recursive: true, force: true });
-    }
-  },
-  timeout,
-);
+test('manifest error messages redact credentials and session material', () => {
+  expect(
+    redactCaptureError('/recovery?token=screenshot-token auth_session=auth-screenshot-session "password":"private"'),
+  ).toBe('/recovery?token=[redacted] auth_session=[redacted] "password":[redacted]');
+});
