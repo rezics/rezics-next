@@ -11,6 +11,7 @@ import {
   type RealmClaimApprovalInput,
   type RealmClaimApprovalResult,
   type RealmClaimReviewRead,
+  type RealmClaimReviewInput,
 } from './realm-claim-review';
 
 export type RealmClaimReviewEnv = Partial<SessionEnv>;
@@ -31,7 +32,7 @@ export async function readRealmClaimReview(
   client: KernelClient,
   request: Request,
   env: RealmClaimReviewEnv,
-  input: { realmId: string; cursor?: string },
+  input: RealmClaimReviewInput,
 ): Promise<RealmClaimReviewRead> {
   input = validateRealmClaimReviewRead(input);
   try {
@@ -39,7 +40,11 @@ export async function readRealmClaimReview(
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'signed-out' };
     const result = await client.realms({ realmId: input.realmId }).claimRequests.get({
-      query: { limit: 20, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
+      query: {
+        limit: 20,
+        ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
+        ...(input.inspectRequestId !== undefined ? { inspectRequestId: input.inspectRequestId } : {}),
+      },
       headers: { authorization },
     });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { kind: 'closed' };
@@ -49,7 +54,9 @@ export async function readRealmClaimReview(
     const cursorError = cursorFailure(result.status, result.error?.value);
     if (cursorError) return cursorError;
     if (result.status !== 200 || result.error || !result.data) return { kind: 'unavailable' };
-    const page = realmClaimReviewPage(result.data, input.realmId);
+    const page = realmClaimReviewPage(result.data, input.realmId, true);
+    if (page?.selectedRequest && page.selectedRequest.requestId !== input.inspectRequestId)
+      return { kind: 'unavailable' };
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch (error) {
     return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };

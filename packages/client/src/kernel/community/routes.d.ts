@@ -7807,6 +7807,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         query: {
                             limit?: number;
                             cursor?: string;
+                            inspectRequestId?: string;
                         };
                         headers: unknown;
                         response: {
@@ -7819,8 +7820,39 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     orphanedAt: string;
                                     claimEligibleAt: string;
                                     requestedAt: string;
+                                    claimant: { label: string; href: string | null };
+                                    approvalAdvice: {
+                                        method: "POST";
+                                        destination: string;
+                                        requiredAction: "realm:approve_claim";
+                                        requiredHeader: "Idempotency-Key";
+                                    };
                                 }[];
                                 next: string | null;
+                                selectedRequest: {
+                                    requestId: string;
+                                    claimantAccountId: string;
+                                    state: "pending";
+                                    orphanedAt: string;
+                                    claimEligibleAt: string;
+                                    requestedAt: string;
+                                    currentEpisode: true;
+                                    claimant: { label: string; href: string | null };
+                                    approvalAdvice: {
+                                        method: "POST";
+                                        destination: string;
+                                        requiredAction: "realm:approve_claim";
+                                        requiredHeader: "Idempotency-Key";
+                                    };
+                                } | {
+                                    requestId: string;
+                                    state: "approved";
+                                    orphanedAt: string;
+                                    requestedAt: string;
+                                    approvedAt: string;
+                                    currentEpisode: false;
+                                } | null;
+                                realmPresentation: { state: "available"; name: string; description: string } | { state: "unavailable" };
                             };
                             400: Response | {
                                 type: unknown;

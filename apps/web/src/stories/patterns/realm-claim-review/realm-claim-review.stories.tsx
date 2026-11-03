@@ -42,6 +42,7 @@ export const UncertainRetry: Story = {
   play: async (context) => {
     await confirmReview(context);
     const view = within(context.canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.realm_review_inspect_original() }));
     await userEvent.click(await view.findByRole('button', { name: m.realm_review_retry() }));
     await expect(await view.findByText(m.realm_review_success())).toBeVisible();
     await expect(view.queryByRole('button', { name: m.realm_review_confirm() })).toBeNull();

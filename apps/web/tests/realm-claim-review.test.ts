@@ -24,11 +24,23 @@ const row: RealmClaimReviewRequest = {
   orphanedAt: '2026-09-01T10:00:00.000Z',
   claimEligibleAt: '2026-10-01T10:00:00.000Z',
   requestedAt: '2026-10-31T10:00:00.000Z',
+  claimant: { label: 'River Chen', href: '/@river' },
+  approvalAdvice: {
+    method: 'POST',
+    destination:
+      '/v1/realms/01a1a000-0000-7000-8000-000000000011/claimRequests/01a1a000-0000-7000-8000-000000000099:approve',
+    requiredAction: 'realm:approve_claim',
+    requiredHeader: 'Idempotency-Key',
+  },
 };
 const { realmId, requestId } = row;
 const idempotencyKey = '01a1a000-0000-7000-8000-000000000090';
 const input = { realmId, requestId, idempotencyKey };
-const pending: RealmClaimReviewRead = { kind: 'ready', page: { claimRequests: [row], next: null } };
+const selected = (({ realmId: _realm, ...row }) => ({ ...row, currentEpisode: true as const }))(row);
+const pending: RealmClaimReviewRead = {
+  kind: 'ready',
+  page: { claimRequests: [row], next: null, selectedRequest: selected, realmPresentation: { state: 'unavailable' } },
+};
 const empty: RealmClaimReviewRead = { kind: 'ready', page: { claimRequests: [], next: null } };
 const claim = {
   realmId,
@@ -122,6 +134,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await control.restart();
     await control.retryPage();
     expect(reads).toHaveLength(uncertainReads);
+    await control.inspectOriginal();
     await control.retry();
     expect(intents).toEqual([input, input]);
     expect(control.getSnapshot()).toMatchObject({ outcome: 'approved', receipt: claim });
@@ -145,6 +158,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     await control.prepare(requestId);
     await control.confirm();
     current = { kind: 'denied' };
+    await control.inspectOriginal();
     await control.retry();
     expect(posts).toBe(1);
     expect(control.getSnapshot()).toMatchObject({
@@ -157,7 +171,12 @@ describe('Platform Realm claim review and genuine native approval journey', () =
   test('changed episodes and native race conflicts require refresh and deliberate current-source review', async () => {
     let current: RealmClaimReviewRead = {
       kind: 'ready',
-      page: { claimRequests: [{ ...row, orphanedAt: '2026-08-01T10:00:00.000Z' }], next: null },
+      page: {
+        claimRequests: [{ ...row, orphanedAt: '2026-08-01T10:00:00.000Z' }],
+        next: null,
+        selectedRequest: { ...selected, orphanedAt: '2026-08-01T10:00:00.000Z' },
+        realmPresentation: { state: 'unavailable' },
+      },
     };
     let posts = 0;
     const control = createRealmClaimReview(realmId, pending, {
@@ -279,7 +298,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     );
     await retrying.prepare(requestId);
     await retrying.confirm();
-    const retryResult = retrying.retry();
+    const retryResult = retrying.inspectOriginal();
     current = false;
     retryLifetime.current();
     retryRead.resolve(empty);
@@ -395,8 +414,13 @@ describe('installed generated Realm claim review reader', () => {
   test('preserves the bounded page, opaque cursor and current bearer credential', async () => {
     const cursor = 'original.signed+/cursor?realm=exact&signature=%2F';
     const pages = [
-      { claimRequests: [row], next: cursor },
-      { claimRequests: [], next: 'signed-sparse-continuation' },
+      { claimRequests: [row], next: cursor, selectedRequest: null, realmPresentation: { state: 'unavailable' } },
+      {
+        claimRequests: [],
+        next: 'signed-sparse-continuation',
+        selectedRequest: null,
+        realmPresentation: { state: 'unavailable' },
+      },
     ];
     const calls: Request[] = [];
     const client = createKernelClient(origin, {

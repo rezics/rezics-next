@@ -7,11 +7,12 @@ import {
   validateRealmClaimApproval,
   validateRealmClaimReviewRead,
   type RealmClaimApprovalInput,
+  type RealmClaimReviewInput,
 } from './realm-claim-review';
 import { approveRealmClaimReview, readRealmClaimReview, type RealmClaimReviewEnv } from './realm-claim-review-native';
 
 export const readRealmClaimReviewPage = createServerFn({ method: 'GET' })
-  .validator((input: { realmId: string; cursor?: string }) => validateRealmClaimReviewRead(input))
+  .validator((input: RealmClaimReviewInput) => validateRealmClaimReviewRead(input))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return readRealmClaimReview(kernelClient(), getRequest(), env as RealmClaimReviewEnv, data);

@@ -356,12 +356,14 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await mount(uncertain);
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
-    expect(window.document.activeElement).toBe(button(m.realm_review_retry()));
+    expect(window.document.activeElement).toBe(button(m.realm_review_inspect_original()));
     expect(host.textContent).toContain(m.realm_review_uncertain());
     noIdentity();
     await act(async () => {
       await tick();
     });
+    expect(uncertain.approvals).toHaveLength(1);
+    await click(m.realm_review_inspect_original());
     expect(uncertain.approvals).toHaveLength(1);
     await click(m.realm_review_retry());
     expect(uncertain.approvals).toEqual([uncertain.approvals[0]!, uncertain.approvals[0]!]);
@@ -404,9 +406,9 @@ test('Realm claim review prioritizes the human request and preserves visible app
     await click(m.realm_review_review());
     await click(m.realm_review_confirm());
     expect(host.textContent).toContain(m.realm_review_refresh_after_approval());
-    expect(window.document.activeElement?.textContent).toContain(m.realm_review_refresh_after_approval());
-    noIdentity();
-    await click(m.realm_review_refresh());
+    expect(window.document.activeElement).toBe(host.querySelector('article[role="status"] > div'));
+    identity(host.querySelector('article[role="status"]')!);
+    await click(m.realm_review_retry_page());
     expect(host.textContent).toContain(m.realm_review_success());
     identity(host.querySelector('article[role="status"]')!);
     expect(fetches).not.toHaveBeenCalled();

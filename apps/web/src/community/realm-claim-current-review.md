@@ -2,41 +2,47 @@
 
 ## Installed operations
 
-The approver queue uses the generated `KernelClient.realms({ realmId }).claimRequests.get` operation. Its installed
-page contains `realmId`, `requestId`, `claimantAccountId`, `state: 'pending'`, `orphanedAt`, `claimEligibleAt`,
-`requestedAt` and `next`. Web requests a page of 20 and keeps the opaque continuation unchanged. Native queue admission
-and disclosure remain bound to current Global `realm:approve_claim`; the browser's dates and visible Realm role do not
-authorize approval.
+The approver uses generated `KernelClient.realms({ realmId }).claimRequests.get` with `limit: 20` and an
+unchanged opaque `cursor`. The installed producer also accepts `inspectRequestId` on this same operation. Its
+`selectedRequest` is a reviewer-qualified exact observation, independent of the pending page and its continuation.
+The generated community route declaration reflects the delivered route schema. No requester-owned status endpoint
+is used for approval review.
 
-Requester status uses generated `claimRequests.mine.get` for the current receipt or
-`claimRequests({ requestId }).get` for the exact receipt. Both are requester-owned reads. `mine` may return
-`claimRequest: null` for legitimate absence; exact missing remains denied. A receipt's `currentEpisode` distinguishes
-its original orphan episode from today's Realm state. An approved old receipt remains an historical outcome after
-re-orphaning and never creates a new pending request.
+Rows contain the original request/account identifiers, `orphanedAt`, `claimEligibleAt`, `requestedAt`, native
+`claimant: { label, href }` and `approvalAdvice`. The latter names the installed POST destination, Global
+`realm:approve_claim` and `Idempotency-Key`. Web validates that advice against the existing generated approval method;
+it never follows an arbitrary command destination. Neither dates, Realm roles nor transport success authorize a grant.
 
-The existing generated `.$approve.post` remains the only Web approval command. It takes the confirmed Realm and request
-with the original idempotency key; its receipt identifies the claimant account and records the original orphan and
-approval times. The native command rechecks current Global authority. A role, member row, ordinary Realm read or elapsed
-browser time does not grant that authority.
+`realmPresentation` is either admitted name/description or `unavailable`. Missing context does not conceal an otherwise
+admitted queue. Concealed or erased claimant identities use the producer's safe label with no profile link; Web never
+looks up individual accounts. Identity history, eligibility, succession and producer growth remain Content/Accounts
+responsibilities. Source examples live in `services/kernel/src/community/realm-claim-review.ts` and native assertions
+in `services/kernel/test/community/realm-claim-review.test.ts`; Web fixtures are consumer compositions, not native proof.
 
-## Bounded unavailable seam
+Decision: legacy queue source factories remain display-only without advice; real transport responses require every
+installed current-review field, and only an exact pending observation can create an approval intent.
 
-The installed generated review page does not include a display-safe claimant identity, optional Realm title or
-destination, reviewer-qualified exact selected-request observation, or current native action advice. The generated
-exact status read is for the claimant and cannot be reused for approver inspection. Web retains the current bounded
-ID/date queue and its existing approval controller; it does not fabricate these missing fields, look up each claimant,
-or treat ordinary Realm context as private disclosure. Current identity, context, reviewer inspection, advice and
-successor eligibility remain unavailable until Content publishes their exact typed operations and response examples.
+## One page and one selection
 
-The generated list reports `invalid_cursor` and `stale_cursor` as native cursor failures. A same-input retry preserves
-the signed cursor; either typed cursor failure can restart from the first page. The queue never refills or searches
-historical episodes.
+One explicit continuation reads one raw page, including empty-plus-next. Retry preserves its exact cursor; typed
+`invalid_cursor` and `stale_cursor` stay distinct and permit explicit first-page restart. There is no refill or search.
+Prepare performs a separate `inspectRequestId` read without the queue cursor. It binds request, claimant and original
+episode before confirmation, retains the current queue page and never treats a row in the returned page as inspection.
+The immutable intent retains its native observation, source and original command key. Approval still uses only the
+existing generated `.$approve.post`; the command performs current native authorization and succession checks.
 
-## Remaining outcome
+## Uncertain outcomes and lifetime
 
-Current-claimant recognition, optional admitted context, reviewer-qualified exact inspection and installed advice are
-not yet complete. The selected exact review must bind to the original request and orphan episode before the existing
-native approval can be presented. Unknown approval recovery still needs a read-only exact inspection followed by a
-separate deliberate recovery action, while preserving the original intent, actor credentials and key through caller
-retirement. The eight-locale current review, interaction stories, and 1/10/20 consumer growth composition also remain
-open. Native eligibility, identity and succession remain Content/Accounts evidence.
+An unavailable approval reply preserves the original intent and key. Inspect original request is read-only and cannot
+replace or erase that intent, produce a receipt, generate a key or replay the command. A separate recovery button is
+available only after an admitted inspection. It sends the original command/key, even if the selected pending row has
+left the queue. An approved observation remains distinct from a committed command receipt. A validated native receipt
+remains visible while the first-page readback is pending or unavailable; current refusal conceals private facts.
+
+The existing caller lifetime binds the Realm, actor/session generation and original CSRF token. Departure Stay retains
+the intent; Leave retires callers synchronously, conceals private facts and fences late effects without cancelling
+native work or replaying it. No intent transfers to another session. See `realm-claim-callers.md`.
+
+Requester status remains a separately authorized generated `mine.get` or exact requester receipt read. Legitimate mine
+absence, denied exact missing, pending/approved and historical `currentEpisode` retain their existing meanings. An old
+approved receipt after re-orphaning never requests ownership in the new episode or implies a current grant.

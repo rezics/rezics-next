@@ -77,10 +77,24 @@ const row: RealmClaimReviewRequest = {
   orphanedAt: '2026-09-01T10:00:00.000Z',
   claimEligibleAt: '2026-10-01T10:00:00.000Z',
   requestedAt: '2026-10-31T10:00:00.000Z',
+  claimant: { label: 'River Chen', href: '/@river' },
+  approvalAdvice: {
+    method: 'POST',
+    destination: `/v1/realms/${realmId}/claimRequests/${requestId}:approve`,
+    requiredAction: 'realm:approve_claim',
+    requiredHeader: 'Idempotency-Key',
+  },
 };
 const reviewPage = (rows: RealmClaimReviewRequest[] = [row], next: string | null = null): RealmClaimReviewRead => ({
   kind: 'ready',
-  page: { claimRequests: rows, next },
+  page: {
+    claimRequests: rows,
+    next,
+    selectedRequest: rows[0]
+      ? (({ realmId: _realm, ...row }) => ({ ...row, currentEpisode: true as const }))(rows[0])
+      : null,
+    realmPresentation: { state: 'unavailable' },
+  },
 });
 const approvalReceipt = {
   realmId,
@@ -452,9 +466,11 @@ test('uncertain review retry preserves the original command after its row leaves
   await settle(original, { kind: 'unavailable' });
   expect(host.textContent).toContain(m.realm_review_uncertain());
 
-  await click(m.realm_review_retry());
-  expect(reviewReads[1]!.input).toEqual({ realmId });
+  await click(m.realm_review_inspect_original());
+  expect(reviewReads[1]!.input).toEqual({ realmId, inspectRequestId: requestId });
   await settle(reviewReads[1]!, reviewPage([], null));
+  expect(approvals).toHaveLength(1);
+  await click(m.realm_review_retry());
   expect(approvals).toHaveLength(2);
   expect(approvals[1]!.input).toEqual(original.input);
   expect(approvals[1]!.headers).toEqual(original.headers);
@@ -469,7 +485,7 @@ test('a retired uncertain retry read cannot launch the original approval', async
   await settle(reviewReads[0]!, reviewPage());
   await click(m.realm_review_confirm());
   await settle(approvals[0]!, { kind: 'unavailable' });
-  await click(m.realm_review_retry());
+  await click(m.realm_review_inspect_original());
   expect(reviewReads).toHaveLength(2);
 
   await act(async () => {
@@ -630,8 +646,11 @@ for (const kind of ['request', 'review'] as const) {
     siblingDirty = true;
     await depart();
     await click(m.thread_authoring_stay());
-    await click(kind === 'request' ? m.realm_claim_retry() : m.realm_review_retry());
-    if (kind === 'review') await settle(reviewReads[2]!, reviewPage([]));
+    await click(kind === 'request' ? m.realm_claim_retry() : m.realm_review_inspect_original());
+    if (kind === 'review') {
+      await settle(reviewReads[2]!, reviewPage([]));
+      await click(m.realm_review_retry());
+    }
     const retry = kind === 'request' ? requests[1]! : approvals[1]!;
     expect(retry.input).toEqual(original.input);
     expect(kind === 'request' ? requests.length : approvals.length).toBe(2);

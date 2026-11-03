@@ -15,11 +15,29 @@ export const reviewRequest: RealmClaimReviewRequest = {
   orphanedAt: '2026-09-01T10:00:00.000Z',
   claimEligibleAt: '2026-10-01T10:00:00.000Z',
   requestedAt: '2026-10-31T10:00:00.000Z',
+  claimant: { label: 'River Chen', href: '/@river' },
+  approvalAdvice: {
+    method: 'POST',
+    destination:
+      '/v1/realms/01a1a000-0000-7000-8000-000000000011/claimRequests/01a1a000-0000-7000-8000-000000000099:approve',
+    requiredAction: 'realm:approve_claim',
+    requiredHeader: 'Idempotency-Key',
+  },
 };
 export type ReviewScenario = 'pending' | 'empty' | 'sparse' | 'denied' | 'conflict' | 'uncertain' | 'success';
 export const pendingReview: RealmClaimReviewRead = {
   kind: 'ready',
-  page: { claimRequests: [reviewRequest], next: null },
+  page: {
+    claimRequests: [reviewRequest],
+    next: null,
+    selectedRequest: {
+      ...(({ realmId: _realm, ...row }) => row)(reviewRequest),
+      claimant: reviewRequest.claimant!,
+      approvalAdvice: reviewRequest.approvalAdvice!,
+      currentEpisode: true,
+    },
+    realmPresentation: { state: 'unavailable' },
+  },
 };
 
 export function reviewExample(scenario: ReviewScenario): {
@@ -37,12 +55,38 @@ export function reviewExample(scenario: ReviewScenario): {
   return {
     initial,
     adapter: {
-      read: async (input) =>
-        applied
+      read: async (input) => {
+        const { realmId: _realmId, ...selected } = reviewRequest;
+        if (input.inspectRequestId)
+          return {
+            kind: 'ready',
+            page: {
+              claimRequests: applied ? [] : [reviewRequest],
+              next: null,
+              realmPresentation: { state: 'unavailable' },
+              selectedRequest: applied
+                ? {
+                    requestId: reviewRequest.requestId,
+                    state: 'approved',
+                    orphanedAt: reviewRequest.orphanedAt,
+                    requestedAt: reviewRequest.requestedAt,
+                    approvedAt: '2026-10-31T10:05:00.000Z',
+                    currentEpisode: false,
+                  }
+                : {
+                    ...selected,
+                    claimant: reviewRequest.claimant!,
+                    approvalAdvice: reviewRequest.approvalAdvice!,
+                    currentEpisode: true,
+                  },
+            },
+          };
+        return applied
           ? { kind: 'ready', page: { claimRequests: [], next: null } }
           : scenario === 'sparse' && input.cursor
             ? pendingReview
-            : initial,
+            : initial;
+      },
       approve: async (input) => {
         if (scenario === 'denied') return { kind: 'denied' };
         if (scenario === 'conflict') return { kind: 'conflict' };

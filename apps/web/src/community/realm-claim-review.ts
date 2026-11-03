@@ -1,20 +1,22 @@
 import type { KernelClient } from '@rezics/client';
 import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
-/** Consumer declaration only. The native queue producer owns selection and current admission. */
-export type RealmClaimReviewPage = {
-  claimRequests: {
-    realmId: string;
-    requestId: string;
-    claimantAccountId: string;
-    state: 'pending';
-    orphanedAt: string;
-    claimEligibleAt: string;
-    requestedAt: string;
-  }[];
-  next: string | null;
+type ReviewMethod = ReturnType<KernelClient['realms']>['claimRequests']['get'];
+export type NativeRealmClaimReviewPage = NonNullable<Awaited<ReturnType<ReviewMethod>>['data']>;
+export type RealmClaimReviewInspection = NonNullable<NativeRealmClaimReviewPage['selectedRequest']>;
+type NativeRequest = NativeRealmClaimReviewPage['claimRequests'][number];
+/** Old source factories may still supply the bounded queue. Missing advice never enables a command. */
+export type RealmClaimReviewRequest = Omit<NativeRequest, 'claimant' | 'approvalAdvice'> &
+  Partial<Pick<NativeRequest, 'claimant' | 'approvalAdvice'>>;
+export type RealmClaimReviewPage = Omit<
+  NativeRealmClaimReviewPage,
+  'claimRequests' | 'selectedRequest' | 'realmPresentation'
+> & {
+  claimRequests: RealmClaimReviewRequest[];
+  selectedRequest?: NativeRealmClaimReviewPage['selectedRequest'];
+  realmPresentation?: NativeRealmClaimReviewPage['realmPresentation'];
 };
-export type RealmClaimReviewRequest = RealmClaimReviewPage['claimRequests'][number];
+export type RealmClaimReviewInput = { realmId: string; cursor?: string; inspectRequestId?: string };
 type ApprovalMethod = ReturnType<ReturnType<KernelClient['realms']>['claimRequests']>['$approve']['post'];
 export type RealmClaimApprovalReceipt = NonNullable<Awaited<ReturnType<ApprovalMethod>>['data']>['claim'];
 type RealmClaimReviewReadValue =
@@ -34,14 +36,18 @@ export type RealmClaimApprovalResult =
   | { kind: 'approved'; claim: RealmClaimApprovalReceipt }
   | { kind: 'conflict' | 'denied' | 'signed-out' | 'closed' | 'unavailable' };
 export type RealmClaimReviewAdapter = {
-  read: (input: { realmId: string; cursor?: string }) => Promise<RealmClaimReviewRead>;
+  read: (input: RealmClaimReviewInput) => Promise<RealmClaimReviewRead>;
   approve: (input: RealmClaimApprovalInput) => Promise<RealmClaimApprovalResult>;
 };
 export type RealmClaimReviewState = {
   read: RealmClaimReviewRead;
   cursor: string | undefined;
-  intent: (RealmClaimApprovalInput & { source: RealmClaimReviewRequest }) | null;
+  intent:
+    | (RealmClaimApprovalInput & { source: RealmClaimReviewRequest; observation: RealmClaimReviewInspection })
+    | null;
   receipt: RealmClaimApprovalReceipt | null;
+  inspection: RealmClaimReviewInspection | null;
+  recoveryReady: boolean;
   outcome: 'idle' | 'confirming' | 'sending' | 'uncertain' | 'conflict' | 'refused' | 'approved';
   busy: boolean;
 };
@@ -53,14 +59,19 @@ const closed = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 const date = (value: unknown): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value));
 
-export function validateRealmClaimReviewRead(input: { realmId: string; cursor?: string }) {
+export function validateRealmClaimReviewRead(input: RealmClaimReviewInput) {
   if (
     typeof input?.realmId !== 'string' ||
     !uuid.test(input.realmId) ||
-    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 4096))
+    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 4096)) ||
+    (input.inspectRequestId !== undefined && !uuid.test(input.inspectRequestId))
   )
     throw new Error('Invalid Realm claim review read');
-  return { realmId: input.realmId.toLowerCase(), ...(input.cursor ? { cursor: input.cursor } : {}) };
+  return {
+    realmId: input.realmId.toLowerCase(),
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+    ...(input.inspectRequestId !== undefined ? { inspectRequestId: input.inspectRequestId.toLowerCase() } : {}),
+  };
 }
 export function validateRealmClaimApproval(input: RealmClaimApprovalInput): RealmClaimApprovalInput {
   if (!uuid.test(input?.requestId) || !uuid.test(input?.idempotencyKey))
@@ -68,42 +79,100 @@ export function validateRealmClaimApproval(input: RealmClaimApprovalInput): Real
   return { ...validateRealmClaimReviewRead(input), requestId: input.requestId, idempotencyKey: input.idempotencyKey };
 }
 
-/** Reject undeclared disclosure and overfilled pages instead of forwarding or refilling them. */
-export function realmClaimReviewPage(value: unknown, realmId: string): RealmClaimReviewPage | null {
+const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+function claimant(value: unknown): boolean {
+  return (
+    record(value) &&
+    closed(value, ['label', 'href']) &&
+    text(value.label, 4096) &&
+    (value.href === null || (text(value.href, 4096) && /^\/@[^/\\?#]+$/.test(value.href)))
+  );
+}
+function advice(value: unknown, realmId: string, requestId: string): boolean {
+  return (
+    record(value) &&
+    closed(value, ['method', 'destination', 'requiredAction', 'requiredHeader']) &&
+    value.method === 'POST' &&
+    value.destination === `/v1/realms/${realmId}/claimRequests/${requestId}:approve` &&
+    value.requiredAction === 'realm:approve_claim' &&
+    value.requiredHeader === 'Idempotency-Key'
+  );
+}
+const requestFields = [
+  'realmId',
+  'requestId',
+  'claimantAccountId',
+  'state',
+  'orphanedAt',
+  'claimEligibleAt',
+  'requestedAt',
+];
+function pending(value: unknown, realmId: string, native: boolean): value is RealmClaimReviewRequest {
+  if (!record(value)) return false;
+  const enriched = Object.hasOwn(value, 'claimant') || Object.hasOwn(value, 'approvalAdvice');
+  return (
+    closed(value, [...requestFields, ...(enriched || native ? ['claimant', 'approvalAdvice'] : [])]) &&
+    value.realmId === realmId &&
+    typeof value.requestId === 'string' &&
+    uuid.test(value.requestId) &&
+    typeof value.claimantAccountId === 'string' &&
+    uuid.test(value.claimantAccountId) &&
+    value.state === 'pending' &&
+    date(value.orphanedAt) &&
+    date(value.claimEligibleAt) &&
+    date(value.requestedAt) &&
+    ((!enriched && !native) || (claimant(value.claimant) && advice(value.approvalAdvice, realmId, value.requestId)))
+  );
+}
+function inspection(value: unknown, realmId: string): boolean {
+  if (value === null) return true;
+  if (!record(value)) return false;
+  if (value.state === 'approved')
+    return (
+      closed(value, ['requestId', 'state', 'orphanedAt', 'requestedAt', 'approvedAt', 'currentEpisode']) &&
+      typeof value.requestId === 'string' &&
+      uuid.test(value.requestId) &&
+      date(value.orphanedAt) &&
+      date(value.requestedAt) &&
+      date(value.approvedAt) &&
+      value.currentEpisode === false
+    );
+  const { currentEpisode, ...row } = value;
+  return currentEpisode === true && pending({ realmId, ...row }, realmId, true);
+}
+/** Fail closed at the native boundary; old queue factories remain display-only. */
+export function realmClaimReviewPage(value: unknown, realmId: string, native = false): RealmClaimReviewPage | null {
+  if (!record(value)) return null;
+  const enriched = Object.hasOwn(value, 'selectedRequest') || Object.hasOwn(value, 'realmPresentation');
   if (
-    !record(value) ||
-    !closed(value, ['claimRequests', 'next']) ||
+    !closed(value, [
+      'claimRequests',
+      'next',
+      ...(enriched || native ? ['selectedRequest', 'realmPresentation'] : []),
+    ]) ||
     !Array.isArray(value.claimRequests) ||
     value.claimRequests.length > 20 ||
-    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
+    !(value.next === null || (text(value.next, 4096) && value.next.length > 0))
   )
     return null;
   const seen = new Set<string>();
   for (const row of value.claimRequests) {
+    if (!pending(row, realmId, native || enriched) || seen.has(row.requestId)) return null;
+    seen.add(row.requestId);
+  }
+  if (enriched || native) {
+    if (!inspection(value.selectedRequest, realmId) || !record(value.realmPresentation)) return null;
+    const context = value.realmPresentation;
     if (
-      !record(row) ||
-      !closed(row, [
-        'realmId',
-        'requestId',
-        'claimantAccountId',
-        'state',
-        'orphanedAt',
-        'claimEligibleAt',
-        'requestedAt',
-      ]) ||
-      row.realmId !== realmId ||
-      typeof row.requestId !== 'string' ||
-      !uuid.test(row.requestId) ||
-      typeof row.claimantAccountId !== 'string' ||
-      !uuid.test(row.claimantAccountId) ||
-      row.state !== 'pending' ||
-      !date(row.orphanedAt) ||
-      !date(row.claimEligibleAt) ||
-      !date(row.requestedAt) ||
-      seen.has(row.requestId)
+      !(context.state === 'unavailable' && closed(context, ['state'])) &&
+      !(
+        context.state === 'available' &&
+        closed(context, ['state', 'name', 'description']) &&
+        text(context.name, 1024) &&
+        text(context.description, 4096)
+      )
     )
       return null;
-    seen.add(row.requestId);
   }
   return value as RealmClaimReviewPage;
 }
@@ -129,7 +198,7 @@ export function realmClaimApprovalReceipt(
 }
 
 const sameSource = (a: RealmClaimReviewRequest, b: RealmClaimReviewRequest) =>
-  (Object.keys(a) as (keyof RealmClaimReviewRequest)[]).every((key) => a[key] === b[key]);
+  requestFields.every((key) => a[key as keyof RealmClaimReviewRequest] === b[key as keyof RealmClaimReviewRequest]);
 
 /** A single visible native page and one deliberate intent. No role or clock supplies authority. */
 export function createRealmClaimReview(
@@ -149,10 +218,11 @@ export function createRealmClaimReview(
     cursor: undefined,
     intent: null,
     receipt: null,
+    inspection: null,
+    recoveryReady: false,
     outcome: 'idle',
     busy: false,
   };
-  const initialState = state;
   const listeners = new Set<() => void>();
   let operationGeneration = 0;
   let disconnected = false;
@@ -161,6 +231,8 @@ export function createRealmClaimReview(
     cursor: undefined,
     intent: null,
     receipt: null,
+    inspection: null,
+    recoveryReady: false,
     outcome: 'refused',
     busy: false,
   };
@@ -176,17 +248,25 @@ export function createRealmClaimReview(
   function owns(ticket: Ticket): boolean {
     return !disconnected && operationGeneration === ticket.operation && (!lifetime || lifetime.owns(ticket.caller));
   }
-  async function load(cursor: string | undefined, ticket: Ticket): Promise<RealmClaimReviewRead | null> {
+  async function load(
+    cursor: string | undefined,
+    ticket: Ticket,
+    inspectRequestId?: string,
+  ): Promise<RealmClaimReviewRead | null> {
     if (!owns(ticket)) return null;
     try {
-      const read = await adapter.read({ realmId, ...(cursor !== undefined ? { cursor } : {}) });
+      const read = await adapter.read({
+        realmId,
+        ...(cursor !== undefined ? { cursor } : {}),
+        ...(inspectRequestId ? { inspectRequestId } : {}),
+      });
       return owns(ticket) ? safe(read) : null;
     } catch {
       return owns(ticket) ? { kind: 'unavailable' } : null;
     }
   }
   async function readPage(cursor: string | undefined) {
-    if (state.busy) return;
+    if (state.busy || state.outcome === 'uncertain' || state.outcome === 'sending') return;
     const ticket = begin();
     if (!ticket) return;
     update({ busy: true, read: { kind: 'unavailable' } });
@@ -203,8 +283,8 @@ export function createRealmClaimReview(
     await readPage(state.cursor);
   }
   async function send(ticket: Ticket, intent = state.intent) {
-    if (!owns(ticket) || !intent || state.busy || state.read.kind !== 'ready') return;
-    update({ busy: true, outcome: 'sending', read: { kind: 'unavailable' } });
+    if (!owns(ticket) || !intent || state.busy) return;
+    update({ busy: true, outcome: 'sending', read: { kind: 'unavailable' }, recoveryReady: false, inspection: null });
     let result: RealmClaimApprovalResult;
     try {
       if (!owns(ticket)) return;
@@ -245,7 +325,7 @@ export function createRealmClaimReview(
   }
   return {
     getSnapshot: () => {
-      if (lifetime && !lifetime.current()) return hiddenState;
+      if (disconnected || (lifetime && !lifetime.current())) return hiddenState;
       return state;
     },
     subscribe(listener: () => void) {
@@ -281,14 +361,22 @@ export function createRealmClaimReview(
       if (!ticket) return;
       const source = state.read.page.claimRequests.find((row) => row.requestId === requestId);
       if (!source) return;
+      const stateBeforeSelection = state.read;
       update({ busy: true, read: { kind: 'unavailable' } });
-      const read = await load(state.cursor, ticket);
+      const read = await load(undefined, ticket, requestId);
       if (!read || !owns(ticket)) return;
-      const current = read.kind === 'ready' ? read.page.claimRequests.find((row) => row.requestId === requestId) : null;
+      const selected = read.kind === 'ready' ? read.page.selectedRequest : null;
+      const current = selected?.state === 'pending' && selected.currentEpisode ? { realmId, ...selected } : null;
       if (current && sameSource(source, current)) {
-        const frozenSource = Object.freeze({ ...current });
+        // Bind the exact admitted observation, not a matching row in the queue page.
+        const { currentEpisode: _episode, ...request } = current;
+        const frozenSource = Object.freeze({
+          ...request,
+          claimant: Object.freeze({ ...request.claimant }),
+          approvalAdvice: Object.freeze({ ...request.approvalAdvice }),
+        });
         update({
-          read,
+          read: stateBeforeSelection,
           busy: false,
           outcome: 'confirming',
           intent: Object.freeze({
@@ -296,9 +384,19 @@ export function createRealmClaimReview(
             requestId,
             idempotencyKey: key(),
             source: frozenSource,
+            observation: Object.freeze({
+              ...selected!,
+              claimant: frozenSource.claimant,
+              approvalAdvice: frozenSource.approvalAdvice,
+            }),
           }),
         });
-      } else update({ read, busy: false, outcome: read.kind === 'ready' ? 'conflict' : 'refused' });
+      } else
+        update({
+          read: read.kind === 'ready' ? stateBeforeSelection : read,
+          busy: false,
+          outcome: read.kind === 'ready' ? 'conflict' : 'refused',
+        });
     },
     cancel() {
       if (lifetime && !lifetime.current()) return;
@@ -309,26 +407,42 @@ export function createRealmClaimReview(
       const ticket = begin();
       if (ticket) await send(ticket);
     },
-    async retry() {
+    async inspectOriginal() {
       if (state.busy || state.outcome !== 'uncertain' || !state.intent) return;
       const ticket = begin();
       if (!ticket) return;
-      update({ busy: true, read: { kind: 'unavailable' } });
-      const read = await load(state.cursor, ticket);
+      const original = state.intent;
+      update({ busy: true, recoveryReady: false, inspection: null, read: { kind: 'unavailable' } });
+      const read = await load(undefined, ticket, original.requestId);
       if (!read || !owns(ticket)) return;
-      update({ read, busy: false });
-      // Replay may recover an applied result even if its request has left the pending queue.
-      if (read.kind === 'ready') await send(ticket, state.intent);
+      const selected = read.kind === 'ready' ? read.page.selectedRequest : null;
+      const matches =
+        !!selected &&
+        selected.requestId === original.requestId &&
+        selected.orphanedAt === original.source.orphanedAt &&
+        selected.requestedAt === original.source.requestedAt &&
+        (selected.state === 'approved' || sameSource(original.source, { realmId, ...selected }));
+      update({
+        read: read.kind === 'ready' ? { kind: 'unavailable' } : read,
+        busy: false,
+        inspection: matches ? selected! : null,
+        recoveryReady: read.kind === 'ready',
+      });
+    },
+    async retry() {
+      if (state.busy || state.outcome !== 'uncertain' || !state.intent || !state.recoveryReady) return;
+      const ticket = begin();
+      if (ticket) await send(ticket, state.intent);
     },
     reviewCurrent() {
       if (lifetime && !lifetime.current()) return;
       if (!state.busy && state.read.kind === 'ready' && ['approved', 'conflict', 'refused'].includes(state.outcome))
-        update({ intent: null, receipt: null, outcome: 'idle' });
+        update({ intent: null, receipt: null, inspection: null, recoveryReady: false, outcome: 'idle' });
     },
     disconnect() {
       disconnected = true;
       operationGeneration++;
-      if (!lifetime) state = { ...initialState, busy: false };
+      state = hiddenState;
       listeners.forEach((listener) => listener());
     },
     reconnect() {
