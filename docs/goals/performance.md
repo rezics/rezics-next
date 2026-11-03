@@ -10,10 +10,13 @@ Contributors can demonstrate those bounds using a shared native growth harness r
 - Each read, write, authorization, validation, projection and cleanup path has a derivation identifying its anchors,
   examined work and admitted expansion, linked to a native growth check.
 - The shared harness measures statements, examined rows, buffers and other relevant engine work at three seeded
-  scales, growing unrelated data and history independently of the selected neighborhood.
+  scales, growing unrelated data and history independently of the selected neighborhood, including Auth workflow and
+  request history at 256, 1024 and 4096 records.
 - Kernel command execution, keyset reads, receipts, outbox/relays, Access/Auth, semantic/content, search, library,
-  commerce, imports, lifecycle jobs and control-plane operations meet their stated bounds.
-- Large jobs make bounded resumable progress; denied, empty, deep-page and cleanup paths obey the same principle.
+  commerce, imports, lifecycle jobs including Auth workflow-history retention, and control-plane operations meet their
+  stated bounds.
+- Large jobs make bounded resumable progress; denied, empty, deep-page and cleanup paths obey the same principle,
+  including Auth zero-eligible and post-drain repeated-empty retention batches.
 - Filter/source/order plans have derived budgets in honest work units, including preparation, rereads, discarded
   candidates and native disclosure. Returned page size is never the only cost evidence.
 - Every violated derivation or growth assertion is corrected with its owner and verified through native acceptance.
