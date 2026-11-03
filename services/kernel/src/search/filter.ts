@@ -1,12 +1,13 @@
-import type { FilterDocument, FilterRange } from '@rezics/filter';
+import { calendarRangeBounds, FilterError, type FilterDocument, type FilterRange } from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
+import { SearchUnavailableError } from './opensearch.ts';
 
 type FilterClause =
   | { terms: { type: string[]; _name: string } }
   | { terms: { statements: string[]; _name?: string } }
   | { term: Record<string, string> }
   | { terms: Record<string, string[]> }
-  | { range: Record<string, { gte?: number; lte?: number }> }
+  | { range: Record<string, { gte?: number | string; lte?: number | string }> }
   | { nested: { path: 'facts'; query: FilterClause; score_mode: 'none'; _name?: string } }
   | { bool: { filter?: FilterClause[]; must_not?: FilterClause[] } }
   | { bool: { should: FilterClause[]; minimum_should_match: 1; _name?: string } };
@@ -15,7 +16,16 @@ type FilterLeaf = FactClause & { name: string; negated: boolean };
 
 export function compileFilter(
   filter: FilterDocument,
-  { prefix, relationOverflow = false }: { prefix: string; relationOverflow?: boolean },
+  {
+    prefix,
+    relationOverflow = false,
+    calendarFormat,
+  }: {
+    prefix: string;
+    relationOverflow?: boolean;
+    /** Only a prepared physical generation with the calendar mapping may supply this capability. */
+    calendarFormat?: 1;
+  },
 ): { query: FilterClause; leaves: FilterLeaf[] } {
   const leaves: FilterLeaf[] = [];
 
@@ -80,7 +90,15 @@ export function compileFilter(
 
     const clauses: FilterClause[] = [{ term: { 'facts.property': property } }];
     if ('values' in condition) clauses.push({ terms: { 'facts.value': condition.values } });
-    else {
+    else if (condition.range.type === 'time') {
+      const bounds = calendarRangeBounds(condition.range);
+      if (!bounds) throw new FilterError('invalid_request', '/statement/range', 'invalid_format');
+      // Existing callers remain closed until their preparation/publication lifecycle binds this format.
+      if (calendarFormat !== 1)
+        throw new SearchUnavailableError('Precise calendar filtering requires a prepared physical generation');
+      if (bounds.lower !== undefined) clauses.push({ range: { 'facts.time_upper': { gte: bounds.lower } } });
+      if (bounds.upper !== undefined) clauses.push({ range: { 'facts.time_lower': { lte: bounds.upper } } });
+    } else {
       const { unit, ...bounds } = condition.range;
       if (unit !== undefined) clauses.push({ term: { 'facts.unit': unit } });
       clauses.push({ range: { [unit === undefined ? 'facts.year' : 'facts.amount']: bounds } });

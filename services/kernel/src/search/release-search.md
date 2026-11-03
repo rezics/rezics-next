@@ -30,14 +30,32 @@ The comparison keys bias safe-integer astronomical years into fixed-width string
 Lexical ordering preserves chronological ordering without a fabricated timestamp or multiplication overflow.
 These keys are derived interval edges, not native time values or display labels.
 
+## Typed range primitives
+
+Decision: precise calendar ranges use `range: { type: 'time', gte?: string, lte?: string }`; numeric ranges
+retain their existing year/quantity meaning. The universal parser and active-release admission accept the typed
+extension, including saved and Boolean filters. Current statement matching uses inclusive interval overlap and
+retains same-statement qualifiers. Its current Boolean leaf identity includes the range kind and full endpoints.
+
+`documentActions` has an explicit calendar-format projection that retains native month/day, deduplicates exact
+dates, and derives `time_lower`/`time_upper` keys. Its default remains the historical year-only projection for
+existing physical writers. `calendarIndexDefinition` derives an inert successor mapping without changing frozen
+definitions or allocating/upgrading a generation. Its compatibility predicate checks metadata and all date-key
+fields; mapping compatibility alone establishes neither complete population nor publication readiness.
+
+The generic compiler emits same-nested-fact interval comparisons only with an explicit calendar-format capability.
+Existing runtime callers supply no such capability and refuse precise candidate compilation with typed Search
+unavailability. This prevents an old year-only index from establishing false negatives, including under NOT.
+The universal condition editor preserves imported typed endpoints as text, with its existing localized bound
+labels, rather than coercing them into numeric years. These primitives do not enable the release journey.
+
 ## Remaining integration
 
-This foundation does not enable precise range admission yet. Existing numeric time ranges still mean years.
-The physical index still stores the historical year projection. It cannot certify the precision-sensitive
-journey. The next implementation must install the typed time-range extension, matching generic candidate
-projection/compiler/current verification, a new mapping generation and readiness/continuation checks together.
-Do not rewrite immutable index definitions or templates, silently use an old generation, or broaden a precise
-request into a year range. Generation replacement must use the existing worker preparation/publication lifecycle.
+Install calendar preparation, publication, mixed/universal producer codecs and actual-physical-generation
+readiness/continuation binding together before supplying the compiler capability. The physical index still uses
+the historical year projection. Never rewrite immutable mappings/templates, silently admit an old generation,
+or broaden precise ranges into years. Replacement uses the existing resumable worker lifecycle. Regenerate public
+declarations when those integration interfaces change.
 
 The work grouping, bounded child/group continuations, active-release operand controls, mounted release page,
 eight-locale states and native all-pool growth measurements remain part of the same journey's continuation.

@@ -27,6 +27,8 @@ Statement ::= { property: Curie, in: string[], qualifiers?: Qualifier[] }
 
 Qualifier ::= { property: Curie, in: string[] }
 Range ::= { gte?: number, lte?: number, unit?: string }
+        | { type: 'time', gte?: CalendarEndpoint, lte?: CalendarEndpoint }
+CalendarEndpoint ::= YYYY | YYYY-MM | YYYY-MM-DD
 ```
 
 Objects are closed: extra fields are errors. Arrays contain their own indexed values; inherited properties are not
@@ -34,6 +36,16 @@ used. CURIEs use a lowercase namespace and an ASCII local name. Strings must be 
 and at most 256 UTF-8 bytes (128 bytes for CURIEs). A range needs at least one bound, and its lower bound cannot be
 greater than its upper bound. A statement has exactly one of `in` or `range`. Qualifiers are part of that statement,
 so they cannot introduce a separate filter condition.
+
+Decision: precise calendar ranges use `range: { type: 'time', gte?: string, lte?: string }`; numeric ranges
+retain their existing year/quantity meaning. A typed calendar range admits only a released time facet and
+has no unit. Endpoints follow the Gregorian calendar, including signed extended astronomical years. A
+partial endpoint represents its whole year or month. The lower edge of `gte` and upper edge of `lte` form
+an inclusive interval, matched by overlap with the recorded date's interval. Either endpoint may be absent;
+both absent, impossible dates, reversed intervals and timestamps are rejected. Unknown dates cannot
+witness a positive match. Parsing preserves each endpoint's authored precision, including through saved
+filter expansion and Boolean nodes. Engine consumers must establish a prepared calendar-capable physical
+generation before compiling these ranges; the historical year-only mapping cannot answer them.
 
 Saved filter IDs use the form `namespace/name`, with lowercase letters, digits and single hyphens in each part, and
 are at most 96 characters. Parsing retains saved filters as leaves; admission expands them using the supplied release.
