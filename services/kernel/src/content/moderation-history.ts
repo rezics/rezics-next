@@ -60,12 +60,7 @@ function cursorRing(routeKey: Uint8Array): KeyRing {
   };
 }
 
-async function snapshot<T>(
-  pool: Pool,
-  route: number,
-  deadline: number,
-  read: (client: AccessClient) => Promise<T>,
-) {
+async function snapshot<T>(pool: Pool, route: number, deadline: number, read: (client: AccessClient) => Promise<T>) {
   return within(deadline, () =>
     withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
@@ -102,7 +97,12 @@ export async function listModerationHistory(
   if (route === null) throw missing();
   const limit = query.limit ?? 20;
   const targetKind = query.targetKind ?? 'all';
-  if (!Number.isInteger(limit) || limit < 1 || limit > MODERATION_HISTORY_MAX_LIMIT || !['all', 'board', 'thread', 'post'].includes(targetKind))
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MODERATION_HISTORY_MAX_LIMIT ||
+    !['all', 'board', 'thread', 'post'].includes(targetKind)
+  )
     throw new ProblemError('invalid_request');
 
   const boardCheck = await accessCheck(
@@ -113,8 +113,7 @@ export async function listModerationHistory(
     { pool: deps.pool, deadline: context.deadline },
   );
   const checkBoard = async (client: AccessClient) =>
-    (await boardCheck(client)) &&
-    (await currentTarget.run(client, { route, kind: 'board', id: boardId })).length === 1;
+    (await boardCheck(client)) && (await currentTarget.run(client, { route, kind: 'board', id: boardId })).length === 1;
   const initial = await snapshot(deps.pool, route, context.deadline, checkBoard);
   if (!initial.value) throw missing();
 
@@ -175,7 +174,9 @@ export async function listModerationHistory(
     const current = await snapshot(deps.pool, targetRoute, context.deadline, async (client) => {
       if (!(await targetCheck(client))) return false;
       const [target] = await currentTarget.run(client, {
-        route: targetRoute, kind: candidate.target_kind, id: candidate.target_id,
+        route: targetRoute,
+        kind: candidate.target_kind,
+        id: candidate.target_id,
       });
       return target?.available === true && target.board_id === boardId;
     });

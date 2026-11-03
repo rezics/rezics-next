@@ -6,12 +6,17 @@ import { checkGrowth, assertGrowthAccessPaths } from '../support/growth.ts';
 import { createGrowthAppealBoundariesFixture } from './support/growth-appeal-boundaries-fixture.ts';
 
 let f: Awaited<ReturnType<typeof createGrowthAppealBoundariesFixture>>;
-beforeAll(async () => { f = await createGrowthAppealBoundariesFixture(); }, 180_000);
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await createGrowthAppealBoundariesFixture();
+}, 180_000);
+afterAll(async () => {
+  await f?.close();
+});
 const reason = { reason: 'Retained board policy statement' };
 const authority = ['moderation:takedown'];
 const path = (board: string) => `/v1/boards/${board}:takeDown`;
-const history = (board: string, selection = 'all') => `/v1/boards/${board}/moderation-history?limit=1&targetKind=${selection}`;
+const history = (board: string, selection = 'all') =>
+  `/v1/boards/${board}/moderation-history?limit=1&targetKind=${selection}`;
 async function act(board: string, key: string = randomUUID()) {
   const result = await f.call('POST', path(board), { bearer: f.people.decider.bearer, key, body: reason });
   expect(result.response.status).toBe(200);
@@ -35,9 +40,14 @@ async function source(board: string, key: string) {
   expect(row.board_id).toBe(board);
   expect(row.data).toMatchObject({ targetKind: 'board', targetId: board, securityRevision: row.security_revision });
   const event: CloudEvent = {
-    specversion: '1.0', id: row.event_id, source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
-    type: row.type, time: new Date(row.decided_at).toISOString(), datacontenttype: 'application/json',
-    sequence: String(row.position).padStart(19, '0'), data: row.data,
+    specversion: '1.0',
+    id: row.event_id,
+    source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+    type: row.type,
+    time: new Date(row.decided_at).toISOString(),
+    datacontenttype: 'application/json',
+    sequence: String(row.position).padStart(19, '0'),
+    data: row.data,
   };
   return { row, event, exact: `/v1/moderation-decisions/${row.decision_id}` };
 }
@@ -54,7 +64,13 @@ test('native board action, authorized replay, durable projection and private ins
   const detail = await read(exact);
   expect(detail.response.status).toBe(200);
   expect(detail.response.headers.get('cache-control')).toBe('private, no-store');
-  expect(detail.body).toMatchObject({ targetKind: 'board', targetId: board, statement: reason.reason, appealDeadline: null, appeal: null });
+  expect(detail.body).toMatchObject({
+    targetKind: 'board',
+    targetId: board,
+    statement: reason.reason,
+    appealDeadline: null,
+    appeal: null,
+  });
   expect(detail.body).not.toHaveProperty('deciderAccountId');
   const page = await read(history(board, 'board'));
   expect(page.response.status).toBe(200);
@@ -63,19 +79,37 @@ test('native board action, authorized replay, durable projection and private ins
   expect((await f.call('GET', exact)).response.status).toBe(404);
   expect((await read(exact, f.people.reporter.bearer)).response.status).toBe(404);
   expect((await read(`/v1/boards/${board}`, f.people.reporter.bearer)).response.status).toBe(404);
-  expect((await f.db.admin.query('SELECT 1 FROM content.notice WHERE decision_id=$1', [row.decision_id])).rowCount).toBe(0);
-  expect((await f.db.admin.query('SELECT 1 FROM content.moderation_decision_board WHERE route=$1 AND board_id=$2', [routeOf(board), board])).rowCount).toBe(1);
+  expect(
+    (await f.db.admin.query('SELECT 1 FROM content.notice WHERE decision_id=$1', [row.decision_id])).rowCount,
+  ).toBe(0);
+  expect(
+    (
+      await f.db.admin.query('SELECT 1 FROM content.moderation_decision_board WHERE route=$1 AND board_id=$2', [
+        routeOf(board),
+        board,
+      ])
+    ).rowCount,
+  ).toBe(1);
   // Simulate the retained native erasure disposition; delayed expiry cleanup must not disclose the old bytes.
-  await f.db.admin.query('UPDATE content.moderation_decision SET decider_account_id=NULL WHERE route=$1 AND decision_id=$2', [routeOf(board), row.decision_id]);
+  await f.db.admin.query(
+    'UPDATE content.moderation_decision SET decider_account_id=NULL WHERE route=$1 AND decision_id=$2',
+    [routeOf(board), row.decision_id],
+  );
   expect((await read(exact)).body?.statement).toBe(reason.reason);
-  await f.db.admin.query("UPDATE content.moderation_decision SET decided_at=now()-interval '184 days' WHERE route=$1 AND decision_id=$2", [routeOf(board), row.decision_id]);
+  await f.db.admin.query(
+    "UPDATE content.moderation_decision SET decided_at=now()-interval '184 days' WHERE route=$1 AND decision_id=$2",
+    [routeOf(board), row.decision_id],
+  );
   expect((await read(exact)).body?.statement).toBe('');
   expect((await read(history(board))).body?.entries[0].statement).toBe('');
   await f.revokeTargetModeration(board, f.people.reviewer.accountId);
   expect((await read(exact)).response.status).toBe(404);
   expect((await read(history(board))).response.status).toBe(404);
   await f.revokeTargetModeration(board, f.people.decider.accountId);
-  expect((await f.call('POST', path(board), { bearer: f.people.decider.bearer, key: first.key, body: reason })).response.status).toBe(403);
+  expect(
+    (await f.call('POST', path(board), { bearer: f.people.decider.bearer, key: first.key, body: reason })).response
+      .status,
+  ).toBe(403);
 }, 180_000);
 
 test('native board journey keeps physical work fixed across retained history at 256/1024/4096', async () => {
@@ -88,7 +122,8 @@ test('native board journey keeps physical work fixed across retained history at 
   const route = routeOf(board)!;
   // Real thread/post targets share the board, but grant no moderation authority to this reviewer.
   const samples = await checkGrowth(f.db, {
-    name: 'native board decision and sparse scoped history', scales: [256, 1024, 4096],
+    name: 'native board decision and sparse scoped history',
+    scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(db, scale, previous) {
       const ids = Array.from({ length: scale - previous }, () => newId(denied.threadRoute));
@@ -103,7 +138,8 @@ test('native board journey keeps physical work fixed across retained history at 
       await db.admin.query(
         `INSERT INTO content.moderation_decision_board(route,board_id,decision_id,target_kind,target_id,decided_at)
          SELECT $1,$2,decision_id,target_kind,target_id,decided_at FROM content.moderation_decision
-         WHERE route=$3 AND decision_id=ANY($4::uuid[])`, [route, board, denied.threadRoute, ids],
+         WHERE route=$3 AND decision_id=ANY($4::uuid[])`,
+        [route, board, denied.threadRoute, ids],
       );
     },
     async operation(_db, scale, repetition) {
@@ -124,5 +160,8 @@ test('native board journey keeps physical work fixed across retained history at 
       expect((await read(`${history(board, 'board')}&cursor=${cursor}`)).response.status).toBe(400);
     },
   });
-  assertGrowthAccessPaths('native retained history', samples.samples, ['content.moderation_decision', 'content.moderation_decision_board']);
+  assertGrowthAccessPaths('native retained history', samples.samples, [
+    'content.moderation_decision',
+    'content.moderation_decision_board',
+  ]);
 }, 300_000);
