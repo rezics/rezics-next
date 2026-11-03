@@ -10,13 +10,19 @@ INSERT INTO rating.population_vote
 SELECT incoming.route, incoming.question_id, incoming.population_id, incoming.target_id, incoming.voter_id,
        incoming.counting_key, incoming.units, incoming.at, incoming.revision
 FROM incoming
-WHERE incoming.allow_missing
+WHERE NOT EXISTS (
+  SELECT 1 FROM rating.population_vote_removal AS removal
+  WHERE removal.route = incoming.route AND removal.question_id = incoming.question_id
+    AND removal.population_id = incoming.population_id AND removal.target_id = incoming.target_id
+    AND removal.voter_id = incoming.voter_id AND removal.revision >= incoming.revision
+)
+AND (incoming.allow_missing
    OR EXISTS (
      SELECT 1 FROM rating.population_vote AS current_vote
      WHERE current_vote.route = incoming.route AND current_vote.question_id = incoming.question_id
        AND current_vote.population_id = incoming.population_id AND current_vote.target_id = incoming.target_id
        AND current_vote.voter_id = incoming.voter_id
-   )
+   ))
 ON CONFLICT (route, question_id, population_id, target_id, voter_id) DO UPDATE
 SET counting_key = EXCLUDED.counting_key,
     units = EXCLUDED.units,

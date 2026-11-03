@@ -24,6 +24,7 @@ import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 import { advanceRatingSource, ratingSourcePosition, type RatingSourcePosition } from './realm-rank-delivery.ts';
+import { convergeRatingErasureFigures } from './realm-rank-convergence.ts';
 
 const VOTE_CHANGED = 'com.rezics.rating.vote.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
@@ -50,7 +51,7 @@ export type RatingChange = RatingChangeFields &
         rekeyAt: string | Date;
         rekeyAllowMissing: boolean;
       }
-    | { remove: true; units?: never; rekey?: never; rekeyAt?: never }
+    | { remove: true; erasure?: boolean; units?: never; rekey?: never; rekeyAt?: never }
   );
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
@@ -296,7 +297,12 @@ async function applyPartition(
         let wroteVote = false;
         if (change.remove) {
           wroteVote = returnedRows(
-            await deletePopulationVote.run(tx, { ...parameters, voter_id: change.voterId, revision: change.revision }),
+            await deletePopulationVote.run(tx, {
+              ...parameters,
+              voter_id: change.voterId,
+              revision: change.revision,
+              erasure: change.erasure === true,
+            }),
           );
         } else {
           wroteVote = returnedRows(
@@ -520,7 +526,9 @@ export async function applyRatingSegmentPageEvent(
       at: vote.changedAt ?? event.time,
       appliedAt: event.time,
       source: ratingSourcePosition(event, data.voterId, vote.revision),
-      ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
+      ...(data.direction === 'removing'
+        ? { remove: true as const, erasure: 'erasurePageId' in data && data.erasurePageId !== undefined }
+        : { units: vote.units }),
     };
   };
   const changes: RatingChange[] =
@@ -536,8 +544,10 @@ export async function applyRatingSegmentPageEvent(
           }),
         );
   await applyRatingChanges(pool, changes);
-  if ('erasurePageId' in data && data.erasurePageId !== undefined)
+  if ('erasurePageId' in data && data.erasurePageId !== undefined) {
+    await convergeRatingErasureFigures(pool, changes);
     await acknowledgeRatingErasurePage(pool, data.voterId, data.erasurePageId);
+  }
 }
 
 /** Sum at most sixteen shards. A missing question returns null; a question without votes returns zero components. */

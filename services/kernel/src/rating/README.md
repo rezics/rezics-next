@@ -260,7 +260,7 @@ Global is rejected as a Realm selection. The remaining question publication and 
 the continuation brief; the Global source and public figure transport retain their existing contracts.
 
 The result is `{ candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
-revision, asOf }`, with the standard question's display units. Only threshold-ready, actively scored figures in
+revision, asOf, updating }`, with the standard question's display units. Only threshold-ready, actively scored figures in
 the selected population's current prior generation qualify. No unscored tail, suppressed counts, histogram,
 total, scanned count, raw position or readiness estimate is returned. Zero mean and score remain valid values.
 Equal scores use subject UUID descending. A full consumed batch may return a continuation followed by an empty
@@ -269,11 +269,31 @@ terminal page. Disclosure filtering can shorten or empty a page; the reader neve
 `rating.realm_rank` is a private, subject-home ordered projection of the existing standard-question publication.
 The publication transaction maintains it through `public_figure_realm_rank`; migration installs the trigger and
 backfills eligible retained figures under a write barrier. No external consumer, new queue or asynchronous copy
-lies between figure commit and rank visibility. Votes, eligibility and membership jobs, identity repair and erasure
-already reach that publication path and therefore update or remove the rank row in the same transaction. Rank
+lies between figure commit and rank visibility. Committed vote, eligibility, membership, identity-repair and erasure
+effects reach that publication path and update or remove the rank row in the same transaction. This is separate
+from production Semantic repair admission: its held mapping/obligation producer remains unavailable as documented
+under Identity repair. Rank
 freshness is exactly the existing figure freshness bound, rather than a new synchronous vote guarantee. A pending
 publication retains the last eligible published snapshot. Epoch changes exclude old-generation rows immediately;
 the existing durable republish pages admit new-generation rows as they converge. An inactive prior admits none.
+`updating` reflects the selected population's native pending jobs or that figure's pending publication; `asOf`
+stays at the published snapshot's applied time. These observations do not claim to expose an uncommitted repair
+or every worker backlog. Empty/suppressed figures supply neither ordering keys nor a continuation position.
+
+Decision: native erasure pages retain revision-only destination fences and stay outstanding until their exact
+standard-question figure/rank publications commit; ordinary membership removals retain existing semantics.
+The fence stores only the exact contribution key and highest removed revision, without units, counting keys or
+vote timestamps. It shares the component command's serializable transaction. Old vote and re-key delivery,
+including allow-missing re-key delivery, cannot recreate a physically erased contribution at that revision or
+earlier. An erasure delivered before its vote still commits the fence. Identity removals already retain explicit
+null contribution rows with ordered revisions, so late original-position events cannot restore an alias score.
+
+Erasure uses its existing page witness and aggregate effect as the retry authority. After components and native
+population-total deliveries commit, the effect drains only that page's exact standard-question figure keys and
+checks that their pending marks have cleared before acknowledging the native page. Interrupted publication or
+acknowledgment retains the witness; replay recovers it even if component work is already applied. The existing
+terminal status therefore includes figure/rank convergence for newly applied erasure pages. This does not retrofit
+already acknowledged erasures or recover deliveries removed before installation of the revision fence.
 
 Decision: retain native source epoch/position frontiers for membership, eligibility and vote/segment delivery;
 finish a population transition only after its committed pages have reached the shared aggregate consumer.
@@ -311,7 +331,8 @@ Operation Cost:
   descending `(score, subject_id)` seek; native Realm and subject authority/identity probes.
 - Bound: `limit` is 1–100. One candidate query reads at most `limit` rows and releases at most that many figures.
   At most `limit` current subject checks and two Realm checks run. Both prior reads and generation reads are
-  point operations. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
+  point operations. Each consumed rank row adds one exact figure-key probe for its pending mark, and each prior
+  observation adds one population pending-jobs probe. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
   history replay or population expansion. B-tree descent grows logarithmically; authority retains its existing
   bounded native cost. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
 - Membership/eligibility delivery adds one indexed frontier upsert per source event and per changed target key,
@@ -322,10 +343,19 @@ Operation Cost:
   grow with their unrelated history. These are declared bounds, not measured physical growth proof.
 - `test/rating/realm-rank-membership.test.ts` covers existing votes joining, leaving, rejoining, prior/threshold and
   rank-generation changes, terminal pending, unchanged Global, immediate denial and replayed native old pages/votes.
-- Focused outcome: `test/rating/realm-rank.test.ts` exercises native votes/default workers, threshold crossing,
+- Erasure touches: one exact revision-fence upsert per removed contribution, bounded by the existing 100-vote,
+  101-population page. Figure work groups exact subject keys by home/population in batches of at most 100; each
+  figure sums at most 16 components through the existing prior capture and publication transaction. A final exact
+  pending-key probe gates acknowledgment. Total work is linear in affected keys; B-tree probes grow logarithmically.
+  No unrelated figure backlog is scanned. Existing prior-epoch checks and delivery recovery retain their native costs.
+- Focused outcomes: `test/rating/realm-rank.test.ts` exercises native votes/default workers, threshold crossing,
   signed continuation restart, current candidate withholding, clear and membership withdrawal, unauthorized
-  access and unchanged Global figures. These authored cases are distinct from measured runtime proof; broad
-  acceptance, physical growth measurements, repair and erasure outcomes remain integration work.
+  access and unchanged Global figures. `test/rating/realm-rank-repair.test.ts` connects native repair receipts to
+  both rank homes, reorders/replays effects and withholds old source positions using the documented producer seam.
+  `test/rating/erasure-status.test.ts` uses native Auth account deletion, interrupted component/acknowledgment
+  delivery and late vote/re-key replay to check threshold removal before terminal status. Source implementation
+  and these focused outcomes are separate from integrated native/main proof and physical growth measurements.
+  Production held Semantic repair composition and its end-to-end lifecycle proof remain continuation work.
 
 ## Reviews
 
