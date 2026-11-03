@@ -8311,7 +8311,7 @@ CREATE TRIGGER identity_scope_seal_immutable BEFORE DELETE OR UPDATE ON library.
 -- Name: list_import_mal index_parsed_rows; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER index_parsed_rows AFTER INSERT OR UPDATE OF document ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.index_list_import_mal_rows();
+CREATE TRIGGER index_parsed_rows AFTER INSERT OR UPDATE OF document ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.index_mal_import_rows();
 
 
 --
