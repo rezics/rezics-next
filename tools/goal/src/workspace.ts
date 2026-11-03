@@ -101,7 +101,7 @@ export class WorkspaceController {
   constructor(
     readonly settings: Pick<
       Settings,
-      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules'
+      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules' | 'policy'
     >,
     readonly store: WorkerStore,
   ) {
