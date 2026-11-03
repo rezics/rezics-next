@@ -1192,3 +1192,33 @@ listing. Invalid/expired tokens use `invalid_cursor`; a changed available source
 | Operation                 | Touches                                                                                                                                                                             | Bound                                                                                                                                                                                                  | Growth check                                                                                                                                                     |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | List pending Realm claims | Two ordinary exact Global Access evaluations; initial/final native Realm/head and partition point reads; one pending episode index seek and at most 20 exact request revalidations. | At most `min(limit,20)` examined candidates and final full-key reads; fixed snapshots/statements plus bounded Access; logarithmic index seeks independent of unrelated Realms and historical episodes. | Focused `test/community/realm-claim-review.test.ts` asserts the candidate cap and exact pending index shape. Native growth execution is deferred to integration. |
+
+
+## Report target adapters
+
+`communityReportTargetFacts(client, {kind: 'space' | 'realm', id})` returns an internal current-head
+fingerprint or null using only the native route. `communityReportReadCheck(deps, target, context)`
+prepares the ordinary Space/Realm read action with `spaceReadEligibility` or `realmReadEligibility`.
+Content owns report evidence, receipts and disposition; these adapters grant no moderation action.
+Decision: exact report inspection authority and ordinary current target readership are both required;
+Global catalogue queue membership does not disclose protected Realm or removed-host facts.
+
+### Cost: report target facts
+
+- Touches: one Space identity and exact head, or one Realm identity/exact head and its same-route
+  Space identity/exact head. The owning statements are `report-target-space.sql` and `report-target-realm.sql`.
+- Bound: one statement; two or four unique table keys and fixed materialization/join/projection work;
+  less than 1 KiB of witness data. No body, history, grant or membership range is selected.
+- Growth check: native creation, replay and concealment are exercised by Content's
+  `test/content/report-community-http.test.ts`; strict three-scale plan verification is deferred.
+
+### Cost: report read eligibility preparation
+
+- Touches: the installed Access preparation plus existing Space current-head eligibility or
+  Realm binding eligibility, later verified on the caller's released source snapshot.
+- Bound: Space adds two unique keys/seven finite plan rows at prepare and verify. Realm preparation
+  adds its two-key/seven-row binding; verification adds three keys/nine rows for Realm read, two
+  keys/seven rows for binding, and at most two current-ban keys/six rows. Add ordinary Access
+  actor/principal/grant work separately, as derived by `eligibility-access-work.ts`.
+- Growth check: Content's native report outcome suite uses real Access; independent grant,
+  membership-history and report-population measurements remain continuation work.

@@ -405,6 +405,99 @@ Notification costs are bounded independently of inbox or thread size:
 - Retention deletes bounded batches on recipient routes. The Content erasure participant removes notices, watch
   edges and the one seen marker in bounded batches; neither cleanup requires one transaction over an inbox or thread.
 
+## Native community reports
+
+`ReportTarget` and the existing `createReport`, `readReport`, `listTargetReports`,
+`listSelectedTargetReports` and `listCatalogueReports` also accept `space` and `realm`.
+`POST /v1/reports` retains its existing reason/evidence, proof, rate, receipt and error contracts.
+`GET /v1/spaces/{spaceId}/reports` and `GET /v1/realms/{realmId}/reports` use the current
+workbench report page DTO and selection/cursor contract. Catalogue selection accepts both kinds,
+with a kind-leading index so filtering never walks other resource families. All three catalogue
+kinds share the existing Global queue, projection effect and fixed 50-candidate budget.
+
+Decision: a community queue candidate requires both exact current `moderation:read_reports`
+authority and ordinary native target readership; Global queue authority never supplies either.
+Realm disclosure uses the current Realm/Space binding, head, lifecycle and protected-reader ban
+checks. A standalone Space uses its native current head and lifecycle eligibility. Preparation and
+final disclosure use released snapshots, including a second native read after command authority
+preparation, before receipt lookup. Missing and concealed targets produce the same 404.
+
+A submitted report stores its exact native head/lifecycle witness with the original target and
+submitted evidence. This witness is immutable and internal: it never becomes target readership.
+A reporter can retain their submitted record and dismissed outcome after loss of target access;
+only current `targetAvailability` changes. Reporter-link minimization continues through the
+registered reporter locator and existing account-erasure participant. Projection replay is safe
+between the independently committed target and catalogue homes. No new relay or cleanup job is
+introduced; both existing registered effects accept the new event union.
+
+`dismissReport` uses current exact `moderation:takedown` authority and native readership before
+every receipt lookup. Disposition records review without removing a Space/Realm or granting a
+ban. Resource removal remains the existing Community lifecycle command with its separate role,
+head and lifecycle-version contract. Media reporting, native action orchestration, retained case
+decision history and current target labels/viewer actions remain continuation work. Web owns the
+existing workbench/form and reader; Content must still review that consumer on phone/desktop and
+exercise recovery with Web after the complete journey lands. HTTP delivery alone does not close
+that experience gap.
+
+### Cost: community target witness
+
+- Touches: `communityReportTargetFacts` uses one current-head statement: Space identity and its
+  exact revision (two unique keys), or Realm identity, exact revision, active host and host revision
+  (four unique keys). No metadata body, revisions range, descendant or membership enumeration.
+- Bound: one statement, at most two/four physical table tuples plus the fixed materialized identity
+  and projection nodes; each witness is below 1 KiB (UUIDs, enums and 19-digit lifecycle versions).
+  Missing heads still pay every attempted point seek; a denial never refunds examined work.
+- Growth check: the focused native outcome suite exercises empty, denied and replay branches;
+  independent 256/1024/4096 physical-prefix measurements remain in the continuation and are deferred.
+
+### Cost: community report creation
+
+- Touches: existing command admission, receipt, insert and event work, plus an initial witness
+  snapshot; native read eligibility before and after report authority preparation; target witness
+  validation in the existing authority callback and anonymous proof callback when invoked.
+- Bound: let F be the witness bound above and A(action) the installed Access preparation/formula
+  work for that exact action/actor. Each native read uses A(kind:read), one snapshot (BEGIN,
+  partition point, COMMIT), and F. Its Space eligibility adds one two-key preparation statement
+  and one two-key verification statement (seven finite plan rows each). Realm eligibility adds a
+  two-key binding preparation (seven plan rows), three-key Realm/head/host verification (nine),
+  two-key binding verification (seven) and at most two current-ban keys (six plan rows). These
+  terms come from `community/eligibility-access-work.ts`; they are added to, never substituted for,
+  Access actor/grant work. Creation has at most three native reads (including anonymous initial
+  disclosure), one initial witness snapshot per disclosure and two authority witness probes.
+  Submitted evidence stays at 4096 characters; the stored witness has a 16 KiB schema ceiling.
+- Growth check: native outcome coverage is `test/content/report-community-http.test.ts`; full
+  actor/grant, authority callback and participating-pool growth ceilings require Performance review
+  and the continuation's independently seeded scales before any cost acceptance claim.
+
+### Cost: community report inspection and retained outcome
+
+- Touches: exact report reference/private-record reads and the existing self-account checks, or
+  current per-target report authority with native read eligibility. Target and catalogue pages
+  select L+1 references, hydrate at most L, recheck each candidate and recheck page authority.
+- Bound: point reads add the native read terms above without target history. Pages keep L<=100
+  per target and L<=50 for catalogue, with no refill. Native target inspection occurs at most four
+  times per selected candidate and twice for page scope; source reads and eligibility never scan
+  unrelated reports. A kind-selected catalogue page uses `(route,target_kind,created_at,report_id)`;
+  all-kind pages keep the existing time-leading index. Retained reporter output contains only the
+  submitted record, outcome and availability, with the existing 4096-character evidence bound.
+  Board history retains its existing 12+12H statement and 5+B+9H row derivation, B<=101; this slice
+  does not reuse those ceilings for new target history or claim new history support.
+- Growth check: native receipts, dismissal/replay, private outcome retention and protected Realm
+  concealment are covered by `test/content/report-community-http.test.ts`; independent candidate,
+  report and retained-outcome growth and strict physical plans remain deferred.
+
+### Cost: community report dismissal
+
+- Touches: one source reference; native read preparation; existing exact target authority and
+  current witness validation; existing report-home receipt/resolution/event and recipient notice.
+- Bound: one native eligibility preparation/verification and F in addition to existing
+  `dismissReport` Access, report and notice terms. The command never writes a container or another
+  partition. A same-key replay repeats current authority and eligibility before returning its
+  retained receipt. A distinct dismissal on a resolved report keeps the existing conflict.
+- Growth check: focused native dismissal/revoked-replay coverage is in
+  `test/content/report-community-http.test.ts`; cross-home notice and history-scale budgets await
+  the continuation's Performance-reviewed three-scale suite.
+
 ## Board moderation decision history
 
 `GET /v1/boards/{id}/moderation-history` returns `{ entries, nextCursor }`, newest first, with `limit` 1–100

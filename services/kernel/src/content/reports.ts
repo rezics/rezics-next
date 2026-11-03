@@ -428,7 +428,7 @@ export async function createReport(
       report_id: home.id,
       target_kind: target.kind,
       target_id: target.id,
-      target_witness: observed!.fingerprint,
+      target_witness: target.kind === 'space' || target.kind === 'realm' ? observed!.fingerprint : null,
       revision_id: semantic.revisionId,
       reason: semantic.reason,
       evidence: semantic.evidence,
