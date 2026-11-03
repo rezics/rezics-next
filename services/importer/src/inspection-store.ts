@@ -435,7 +435,8 @@ function phaseFor(status: string): 'acquiring' | 'validated/sealed' | 'finalizin
   if (status === 'staging') return 'acquiring';
   if (status === 'ready') return 'validated/sealed';
   if (status === 'finalizing') return 'finalizing';
-  if (['complete', 'invalid-input', 'mass-disappearance', 'abandoned'].includes(status)) return 'terminal';
+  if (['complete', 'invalid-input', 'mass-disappearance', 'abandoned', 'retiring', 'retired'].includes(status))
+    return 'terminal';
   return 'unknown';
 }
 
@@ -459,6 +460,10 @@ function resumeGuidance(
     return 'This generation did not advance the baseline; ordinary resume requires a complete valid input.';
   if (status === 'complete')
     return 'This generation is the retained completed baseline; a later import still uses ordinary ownership and current authority checks.';
+  if (status === 'retiring')
+    return 'Retirement of this generation is in progress. Re-run the same retention apply to finish the exact selected plan; this generation cannot be reopened.';
+  if (status === 'retired')
+    return 'This generation was deliberately retired. Per-run envelopes, commands and diagnostics are gone. The current baseline, acknowledgements, bindings and payloads remain; ordinary import continues under current credentials.';
   return 'The stored status is not recognized by this inspector; resume behavior is not inferred and the existing importer remains responsible for admission.';
 }
 
