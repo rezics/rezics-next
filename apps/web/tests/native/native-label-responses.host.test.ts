@@ -37,7 +37,9 @@ function rowForLabel(
   scenario: keyof NativeLabelResponsesFixture['responses'],
   labelId: string,
 ): { id: string; labelId: string; subjectId: string; revision: number; label: { name: string } } | undefined {
-  const body = json<{ assignments: { id: string; labelId: string; subjectId: string; revision: number; label: { name: string } }[] }>(scenario);
+  const body = json<{
+    assignments: { id: string; labelId: string; subjectId: string; revision: number; label: { name: string } }[];
+  }>(scenario);
   return body.assignments.find((item) => item.labelId === labelId);
 }
 
@@ -79,17 +81,24 @@ test('exports a closed native response map bound to source, runtime and original
       path: observed.path,
       persona: observed.persona,
     });
-    expect(Object.keys(observed.responseHeaders).every((name) =>
-      (NATIVE_LABEL_RESPONSE_HEADERS as readonly string[]).includes(name),
-    )).toBe(true);
+    expect(
+      Object.keys(observed.responseHeaders).every((name) =>
+        (NATIVE_LABEL_RESPONSE_HEADERS as readonly string[]).includes(name),
+      ),
+    ).toBe(true);
   }
 
   expect(fixture.supportingResponses.exposurePersonalLibrary.status).toBe(200);
   expect(fixture.supportingResponses.exposureReadingProgress.status).toBe(200);
   expect(fixture.auth).toEqual({ signedInPersonas: ['alice', 'bob'], suspendedPersona: 'suspended' });
-  expect(fixture.commandSequence.every((item) =>
-    !/authorization|cookie|csrf|signature|bearer|token/i.test(`${item.step} ${item.path} ${item.requestBodyText ?? ''}`),
-  )).toBe(true);
+  expect(
+    fixture.commandSequence.every(
+      (item) =>
+        !/authorization|cookie|csrf|signature|bearer|token/i.test(
+          `${item.step} ${item.path} ${item.requestBodyText ?? ''}`,
+        ),
+    ),
+  ).toBe(true);
 });
 
 test('retains exact owner catalogue and subject assignment pages, mutations and ordinary Undo inputs', () => {
@@ -139,18 +148,24 @@ test('retains exact owner catalogue and subject assignment pages, mutations and 
   expect(catalogueRows.find(({ name }) => name === fixture.seed.names.long)).toMatchObject(createLong);
   for (const scenario of ['owner.catalogue.prefix.first', 'owner.catalogue.prefix.final'] as const) {
     const actual = response(scenario);
-    expect(new URL(actual.path, fixture.sourceBuild.build.kernelOrigin).searchParams.get('q')).toBe(fixture.seed.prefix);
+    expect(new URL(actual.path, fixture.sourceBuild.build.kernelOrigin).searchParams.get('q')).toBe(
+      fixture.seed.prefix,
+    );
   }
   const catalogueCursor = firstCatalogue.next!;
-  expect(new URL(response('owner.catalogue.prefix.final').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get('cursor')).toBe(
-    catalogueCursor,
-  );
+  expect(
+    new URL(response('owner.catalogue.prefix.final').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get(
+      'cursor',
+    ),
+  ).toBe(catalogueCursor);
 
   const emptyPrefix = json<{ labels: unknown[]; next: string | null }>('owner.catalogue.empty-prefix');
   expect(emptyPrefix).toEqual({ labels: [], next: null });
-  expect(new URL(response('owner.catalogue.empty-prefix').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get('q')).toBe(
-    `${fixture.seed.prefix} no-match`,
-  );
+  expect(
+    new URL(response('owner.catalogue.empty-prefix').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get(
+      'q',
+    ),
+  ).toBe(`${fixture.seed.prefix} no-match`);
 
   const assignedIds = [
     json<{ assignment: { id: string } }>('owner.assignment.assign.alpha').assignment.id,
@@ -173,18 +188,35 @@ test('retains exact owner catalogue and subject assignment pages, mutations and 
   expect(finalAssignments.assignments).toHaveLength(1);
   expect(finalAssignments.next).toBeNull();
   const assignmentCursor = firstAssignments.next!;
-  expect(new URL(response('owner.assignments.subject.final').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get('cursor')).toBe(
-    assignmentCursor,
-  );
+  expect(
+    new URL(response('owner.assignments.subject.final').path, fixture.sourceBuild.build.kernelOrigin).searchParams.get(
+      'cursor',
+    ),
+  ).toBe(assignmentCursor);
   const assignmentRows = [
-    ...(firstAssignments.assignments as { id: string; labelId: string; subjectId: string; revision: number; label: { name: string } }[]),
-    ...(finalAssignments.assignments as { id: string; labelId: string; subjectId: string; revision: number; label: { name: string } }[]),
+    ...(firstAssignments.assignments as {
+      id: string;
+      labelId: string;
+      subjectId: string;
+      revision: number;
+      label: { name: string };
+    }[]),
+    ...(finalAssignments.assignments as {
+      id: string;
+      labelId: string;
+      subjectId: string;
+      revision: number;
+      label: { name: string };
+    }[]),
   ];
   expect(assignmentRows.map(({ id }) => id).sort()).toEqual(assignedIds);
-  expect(assignmentRows.every((assignment) =>
-    Object.keys(assignment).sort().join(',') === 'id,label,labelId,revision,subjectId' &&
-    Object.keys(assignment.label).sort().join(',') === 'name',
-  )).toBe(true);
+  expect(
+    assignmentRows.every(
+      (assignment) =>
+        Object.keys(assignment).sort().join(',') === 'id,label,labelId,revision,subjectId' &&
+        Object.keys(assignment.label).sort().join(',') === 'name',
+    ),
+  ).toBe(true);
   expect(assignmentRows.map(({ label }) => label.name).sort()).toEqual(
     [fixture.seed.names.alpha, fixture.seed.names.renamedBeta, fixture.seed.names.long].sort(),
   );
@@ -211,31 +243,46 @@ test('retains exact owner catalogue and subject assignment pages, mutations and 
   const hiddenAssignments = json<{ assignments: { id: string; labelId: string; label: { name: string } }[] }>(
     'owner.assignments.after-parent-delete',
   );
-  expect(hiddenAssignments.assignments.some(({ id, labelId, label }) =>
-    id === betaAssignmentId || labelId === rename.id || label.name === fixture.seed.names.renamedBeta,
-  )).toBe(false);
+  expect(
+    hiddenAssignments.assignments.some(
+      ({ id, labelId, label }) =>
+        id === betaAssignmentId || labelId === rename.id || label.name === fixture.seed.names.renamedBeta,
+    ),
+  ).toBe(false);
   const hiddenCatalogue = json<{ labels: { id: string; name: string }[] }>('owner.catalogue.after-parent-delete');
-  expect(hiddenCatalogue.labels.some(({ id, name }) => id === rename.id || name === fixture.seed.names.renamedBeta)).toBe(false);
+  expect(
+    hiddenCatalogue.labels.some(({ id, name }) => id === rename.id || name === fixture.seed.names.renamedBeta),
+  ).toBe(false);
   const restoredAssignments = json<{ assignments: { id: string; labelId: string; label: { name: string } }[] }>(
     'owner.assignments.after-parent-restore',
   );
-  expect(restoredAssignments.assignments.some(({ id, labelId, label }) =>
-    id === betaAssignmentId && labelId === rename.id && label.name === fixture.seed.names.renamedBeta,
-  )).toBe(true);
-  expect(json<{ labels: { id: string; name: string }[] }>('owner.catalogue.after-parent-restore').labels.some(
-    ({ id, name }) => id === rename.id && name === fixture.seed.names.renamedBeta,
-  )).toBe(true);
+  expect(
+    restoredAssignments.assignments.some(
+      ({ id, labelId, label }) =>
+        id === betaAssignmentId && labelId === rename.id && label.name === fixture.seed.names.renamedBeta,
+    ),
+  ).toBe(true);
+  expect(
+    json<{ labels: { id: string; name: string }[] }>('owner.catalogue.after-parent-restore').labels.some(
+      ({ id, name }) => id === rename.id && name === fixture.seed.names.renamedBeta,
+    ),
+  ).toBe(true);
 
   const alphaRow = rowForLabel('owner.assignments.after-parent-restore', createAlpha.id);
   expect(alphaRow).toBeDefined();
-  const unassignInput = JSON.parse(command('owner.assignment.unassign.alpha').requestBodyText!) as Record<string, unknown>;
+  const unassignInput = JSON.parse(command('owner.assignment.unassign.alpha').requestBodyText!) as Record<
+    string,
+    unknown
+  >;
   expect(unassignInput).toEqual({
     subjectId: alphaRow!.subjectId,
     assignmentId: alphaRow!.id,
     revision: alphaRow!.revision,
   });
   expect(JSON.parse(response('owner.assignment.unassign.alpha').bodyText)).toEqual({ deleted: true });
-  const assignmentUndoRevision = Number(response('owner.assignment.unassign.alpha').responseHeaders['library-label-assignment-revision']);
+  const assignmentUndoRevision = Number(
+    response('owner.assignment.unassign.alpha').responseHeaders['library-label-assignment-revision'],
+  );
   expect(Number.isInteger(assignmentUndoRevision)).toBe(true);
   const restoreAssignmentCommand = command('owner.assignment.restore.alpha');
   expect(restoreAssignmentCommand.path).toBe(`/v1/libraryLabels/${createAlpha.id}:restoreAssignment`);
@@ -276,14 +323,19 @@ test('captures actual foreign, anonymous and suspended responses without private
   ] as const;
   for (const scenario of foreignScenarios) {
     const captured = response(scenario);
-    expect(captured.persona).toBe(scenario.startsWith('bob.') ? 'bob' : scenario.startsWith('anonymous.') ? 'anonymous' : 'suspended');
+    expect(captured.persona).toBe(
+      scenario.startsWith('bob.') ? 'bob' : scenario.startsWith('anonymous.') ? 'anonymous' : 'suspended',
+    );
     expect(privateNames.every((name) => !captured.bodyText.includes(name))).toBe(true);
   }
 
   expect(response('bob.catalogue.prefix').status).toBe(200);
   expect(json<{ labels: unknown[]; next: string | null }>('bob.catalogue.prefix')).toEqual({ labels: [], next: null });
   expect(response('bob.assignments.subject').status).toBe(200);
-  expect(json<{ assignments: unknown[]; next: string | null }>('bob.assignments.subject')).toEqual({ assignments: [], next: null });
+  expect(json<{ assignments: unknown[]; next: string | null }>('bob.assignments.subject')).toEqual({
+    assignments: [],
+    next: null,
+  });
   expect(response('anonymous.catalogue.prefix').status).toBe(401);
   expect(response('anonymous.assignments.subject').status).toBe(401);
   expect(response('suspended.catalogue.prefix').status).toBe(401);

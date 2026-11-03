@@ -18,43 +18,265 @@ export type NativeLabelMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 /** Exact route/state/persona map consumed by the existing Labels and Subject controls reviewer. */
 export const NATIVE_LABEL_RESPONSE_MANIFEST = [
-  { scenario: 'owner.label.create.alpha', routeState: 'create one of several independent labels', method: 'POST', route: '/v1/libraryLabels', persona: 'alice' },
-  { scenario: 'owner.label.create.beta', routeState: 'create a label that is renamed and deleted/restored', method: 'POST', route: '/v1/libraryLabels', persona: 'alice' },
-  { scenario: 'owner.label.create.long', routeState: 'create a legal 100-scalar name', method: 'POST', route: '/v1/libraryLabels', persona: 'alice' },
-  { scenario: 'owner.label.rename.beta', routeState: 'rename an existing label using its observed revision', method: 'PATCH', route: '/v1/libraryLabels/{id}', persona: 'alice' },
-  { scenario: 'owner.catalogue.prefix.first', routeState: 'literal prefix catalogue page with a continuation', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=2', persona: 'alice' },
-  { scenario: 'owner.catalogue.prefix.final', routeState: 'literal prefix catalogue final page from its returned cursor', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&cursor={returnedCursor}&limit=2', persona: 'alice' },
-  { scenario: 'owner.catalogue.empty-prefix', routeState: 'owner prefix with an actual empty result', method: 'GET', route: '/v1/libraryLabels?q={unmatchedPrefix}&limit=2', persona: 'alice' },
-  { scenario: 'owner.catalogue.before-clear', routeState: 'renamed catalogue before label facts clear', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=32', persona: 'alice' },
-  { scenario: 'owner.catalogue.after-parent-delete', routeState: 'catalogue while one parent label is deleted', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=32', persona: 'alice' },
-  { scenario: 'owner.catalogue.after-parent-restore', routeState: 'catalogue after ordinary exact parent restore', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=32', persona: 'alice' },
-  { scenario: 'owner.assignment.assign.alpha', routeState: 'assign first independent label', method: 'POST', route: '/v1/libraryLabels/{id}:assign', persona: 'alice' },
-  { scenario: 'owner.assignment.assign.beta', routeState: 'assign second independent label', method: 'POST', route: '/v1/libraryLabels/{id}:assign', persona: 'alice' },
-  { scenario: 'owner.assignment.assign.long', routeState: 'assign long-name label', method: 'POST', route: '/v1/libraryLabels/{id}:assign', persona: 'alice' },
-  { scenario: 'owner.assignments.subject.first', routeState: 'FULL subject assignment page with a continuation', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=2', persona: 'alice' },
-  { scenario: 'owner.assignments.subject.final', routeState: 'FULL subject assignment final page from its returned cursor', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&cursor={returnedCursor}&limit=2', persona: 'alice' },
-  { scenario: 'owner.label.delete-parent', routeState: 'delete an assigned parent label and retain its actual undo revision', method: 'DELETE', route: '/v1/libraryLabels/{id}?revision={observedRevision}', persona: 'alice' },
-  { scenario: 'owner.assignments.after-parent-delete', routeState: 'effective subject assignments while parent is deleted', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'alice' },
-  { scenario: 'owner.label.restore-parent', routeState: 'ordinary exact parent restore using the delete response header', method: 'POST', route: '/v1/libraryLabels/{id}:restore', persona: 'alice' },
-  { scenario: 'owner.assignments.after-parent-restore', routeState: 'effective assignments after ordinary parent restore', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'alice' },
-  { scenario: 'owner.assignment.unassign.alpha', routeState: 'unassign from an observed FULL membership row', method: 'POST', route: '/v1/libraryLabels/{id}:unassign', persona: 'alice' },
-  { scenario: 'owner.assignment.restore.alpha', routeState: 'ordinary exact assignment restore using the unassign response header', method: 'POST', route: '/v1/libraryLabels/{id}:restoreAssignment', persona: 'alice' },
-  { scenario: 'owner.assignments.after-assignment-restore', routeState: 'effective assignments after ordinary exact assignment restore', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'alice' },
-  { scenario: 'owner.assignments.before-clear', routeState: 'actual assignment rows used to clear label facts', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'alice' },
-  { scenario: 'bob.catalogue.prefix', routeState: 'another owner catalogue disclosure', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=20', persona: 'bob' },
-  { scenario: 'bob.assignments.subject', routeState: 'another owner subject assignment disclosure', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'bob' },
-  { scenario: 'anonymous.catalogue.prefix', routeState: 'anonymous catalogue disclosure', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=20', persona: 'anonymous' },
-  { scenario: 'anonymous.assignments.subject', routeState: 'anonymous subject assignment disclosure', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'anonymous' },
-  { scenario: 'suspended.catalogue.prefix', routeState: 'genuine suspended account catalogue response', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=20', persona: 'suspended' },
-  { scenario: 'suspended.assignments.subject', routeState: 'genuine suspended account assignment response', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'suspended' },
-  { scenario: 'owner.assignment.clear.alpha', routeState: 'clear first assignment fact', method: 'POST', route: '/v1/libraryLabels/{id}:unassign', persona: 'alice' },
-  { scenario: 'owner.assignment.clear.beta', routeState: 'clear second assignment fact', method: 'POST', route: '/v1/libraryLabels/{id}:unassign', persona: 'alice' },
-  { scenario: 'owner.assignment.clear.long', routeState: 'clear long-name assignment fact', method: 'POST', route: '/v1/libraryLabels/{id}:unassign', persona: 'alice' },
-  { scenario: 'owner.assignments.empty-after-clear', routeState: 'actual empty subject assignment result after clearing labels', method: 'GET', route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32', persona: 'alice' },
-  { scenario: 'owner.label.delete.alpha-after-clear', routeState: 'delete first label after its assignment is cleared', method: 'DELETE', route: '/v1/libraryLabels/{id}?revision={observedRevision}', persona: 'alice' },
-  { scenario: 'owner.label.delete.beta-after-clear', routeState: 'delete second label after its assignment is cleared', method: 'DELETE', route: '/v1/libraryLabels/{id}?revision={observedRevision}', persona: 'alice' },
-  { scenario: 'owner.label.delete.long-after-clear', routeState: 'delete long-name label after its assignment is cleared', method: 'DELETE', route: '/v1/libraryLabels/{id}?revision={observedRevision}', persona: 'alice' },
-  { scenario: 'owner.catalogue.empty-after-clear', routeState: 'actual empty owner catalogue result after clearing labels', method: 'GET', route: '/v1/libraryLabels?q={literalPrefix}&limit=2', persona: 'alice' },
+  {
+    scenario: 'owner.label.create.alpha',
+    routeState: 'create one of several independent labels',
+    method: 'POST',
+    route: '/v1/libraryLabels',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.create.beta',
+    routeState: 'create a label that is renamed and deleted/restored',
+    method: 'POST',
+    route: '/v1/libraryLabels',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.create.long',
+    routeState: 'create a legal 100-scalar name',
+    method: 'POST',
+    route: '/v1/libraryLabels',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.rename.beta',
+    routeState: 'rename an existing label using its observed revision',
+    method: 'PATCH',
+    route: '/v1/libraryLabels/{id}',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.prefix.first',
+    routeState: 'literal prefix catalogue page with a continuation',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=2',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.prefix.final',
+    routeState: 'literal prefix catalogue final page from its returned cursor',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&cursor={returnedCursor}&limit=2',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.empty-prefix',
+    routeState: 'owner prefix with an actual empty result',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={unmatchedPrefix}&limit=2',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.before-clear',
+    routeState: 'renamed catalogue before label facts clear',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.after-parent-delete',
+    routeState: 'catalogue while one parent label is deleted',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.after-parent-restore',
+    routeState: 'catalogue after ordinary exact parent restore',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.assign.alpha',
+    routeState: 'assign first independent label',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:assign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.assign.beta',
+    routeState: 'assign second independent label',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:assign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.assign.long',
+    routeState: 'assign long-name label',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:assign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.subject.first',
+    routeState: 'FULL subject assignment page with a continuation',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=2',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.subject.final',
+    routeState: 'FULL subject assignment final page from its returned cursor',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&cursor={returnedCursor}&limit=2',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.delete-parent',
+    routeState: 'delete an assigned parent label and retain its actual undo revision',
+    method: 'DELETE',
+    route: '/v1/libraryLabels/{id}?revision={observedRevision}',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.after-parent-delete',
+    routeState: 'effective subject assignments while parent is deleted',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.restore-parent',
+    routeState: 'ordinary exact parent restore using the delete response header',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:restore',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.after-parent-restore',
+    routeState: 'effective assignments after ordinary parent restore',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.unassign.alpha',
+    routeState: 'unassign from an observed FULL membership row',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:unassign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.restore.alpha',
+    routeState: 'ordinary exact assignment restore using the unassign response header',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:restoreAssignment',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.after-assignment-restore',
+    routeState: 'effective assignments after ordinary exact assignment restore',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.before-clear',
+    routeState: 'actual assignment rows used to clear label facts',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'bob.catalogue.prefix',
+    routeState: 'another owner catalogue disclosure',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=20',
+    persona: 'bob',
+  },
+  {
+    scenario: 'bob.assignments.subject',
+    routeState: 'another owner subject assignment disclosure',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'bob',
+  },
+  {
+    scenario: 'anonymous.catalogue.prefix',
+    routeState: 'anonymous catalogue disclosure',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=20',
+    persona: 'anonymous',
+  },
+  {
+    scenario: 'anonymous.assignments.subject',
+    routeState: 'anonymous subject assignment disclosure',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'anonymous',
+  },
+  {
+    scenario: 'suspended.catalogue.prefix',
+    routeState: 'genuine suspended account catalogue response',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=20',
+    persona: 'suspended',
+  },
+  {
+    scenario: 'suspended.assignments.subject',
+    routeState: 'genuine suspended account assignment response',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'suspended',
+  },
+  {
+    scenario: 'owner.assignment.clear.alpha',
+    routeState: 'clear first assignment fact',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:unassign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.clear.beta',
+    routeState: 'clear second assignment fact',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:unassign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignment.clear.long',
+    routeState: 'clear long-name assignment fact',
+    method: 'POST',
+    route: '/v1/libraryLabels/{id}:unassign',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.assignments.empty-after-clear',
+    routeState: 'actual empty subject assignment result after clearing labels',
+    method: 'GET',
+    route: '/v1/libraryLabelAssignments?subjectId={subjectId}&view=FULL&limit=32',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.delete.alpha-after-clear',
+    routeState: 'delete first label after its assignment is cleared',
+    method: 'DELETE',
+    route: '/v1/libraryLabels/{id}?revision={observedRevision}',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.delete.beta-after-clear',
+    routeState: 'delete second label after its assignment is cleared',
+    method: 'DELETE',
+    route: '/v1/libraryLabels/{id}?revision={observedRevision}',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.label.delete.long-after-clear',
+    routeState: 'delete long-name label after its assignment is cleared',
+    method: 'DELETE',
+    route: '/v1/libraryLabels/{id}?revision={observedRevision}',
+    persona: 'alice',
+  },
+  {
+    scenario: 'owner.catalogue.empty-after-clear',
+    routeState: 'actual empty owner catalogue result after clearing labels',
+    method: 'GET',
+    route: '/v1/libraryLabels?q={literalPrefix}&limit=2',
+    persona: 'alice',
+  },
 ] as const;
 
 export type NativeLabelResponseScenario = (typeof NATIVE_LABEL_RESPONSE_MANIFEST)[number]['scenario'];
@@ -200,7 +422,11 @@ function nextCursor(bodyText: string, step: string): string {
   return body.next;
 }
 
-function requiredHeader(response: { responseHeaders: Partial<Record<NativeLabelResponseHeader, string>> }, name: NativeLabelResponseHeader, step: string): string {
+function requiredHeader(
+  response: { responseHeaders: Partial<Record<NativeLabelResponseHeader, string>> },
+  name: NativeLabelResponseHeader,
+  step: string,
+): string {
   const value = response.responseHeaders[name];
   if (value === undefined) throw new Error(`${step} omitted its actual ${name} response header`);
   return value;
@@ -394,7 +620,8 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
     const betaName = `${prefix} Beta`;
     const renamedBetaName = `${prefix} Beta renamed`;
     const longName = `${prefix} ${'長'.repeat(100 - Array.from(`${prefix} `).length)}`;
-    if (Array.from(longName).length !== 100) throw new Error('Native Label long-name fixture is not 100 Unicode scalars');
+    if (Array.from(longName).length !== 100)
+      throw new Error('Native Label long-name fixture is not 100 Unicode scalars');
     const seed = {
       subjectProducer: 'createLibraryLabelsSubject' as const,
       subjectId: subject.id,
@@ -408,9 +635,21 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
     const createdAlpha = await createLabel('owner.label.create.alpha', alphaName);
     const createdBeta = await createLabel('owner.label.create.beta', betaName);
     const createdLong = await createLabel('owner.label.create.long', longName);
-    const alpha = responseValue<{ label: { id: string; revision: number } }>(createdAlpha, 201, 'Create alpha label').label;
-    const beta = responseValue<{ label: { id: string; revision: number } }>(createdBeta, 201, 'Create beta label').label;
-    const long = responseValue<{ label: { id: string; revision: number } }>(createdLong, 201, 'Create long label').label;
+    const alpha = responseValue<{ label: { id: string; revision: number } }>(
+      createdAlpha,
+      201,
+      'Create alpha label',
+    ).label;
+    const beta = responseValue<{ label: { id: string; revision: number } }>(
+      createdBeta,
+      201,
+      'Create beta label',
+    ).label;
+    const long = responseValue<{ label: { id: string; revision: number } }>(
+      createdLong,
+      201,
+      'Create long label',
+    ).label;
 
     const renameBeta = await captureLabel(
       'owner.label.rename.beta',
@@ -418,24 +657,16 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
       'alice',
       requestInit('PATCH', { name: renamedBetaName, revision: beta.revision }, commandKey()),
     );
-    const renamed = responseValue<{ label: { id: string; revision: number } }>(renameBeta, 200, 'Rename beta label').label;
+    const renamed = responseValue<{ label: { id: string; revision: number } }>(
+      renameBeta,
+      200,
+      'Rename beta label',
+    ).label;
 
-    const prefixFirst = await captureLabel(
-      'owner.catalogue.prefix.first',
-      literalPrefixPath(prefix, 2),
-      'alice',
-    );
+    const prefixFirst = await captureLabel('owner.catalogue.prefix.first', literalPrefixPath(prefix, 2), 'alice');
     const cursor = nextCursor(prefixFirst.bodyText, 'Owner catalogue first page');
-    await captureLabel(
-      'owner.catalogue.prefix.final',
-      literalPrefixCursorPath(prefix, cursor, 2),
-      'alice',
-    );
-    await captureLabel(
-      'owner.catalogue.empty-prefix',
-      literalPrefixPath(`${prefix} no-match`, 2),
-      'alice',
-    );
+    await captureLabel('owner.catalogue.prefix.final', literalPrefixCursorPath(prefix, cursor, 2), 'alice');
+    await captureLabel('owner.catalogue.empty-prefix', literalPrefixPath(`${prefix} no-match`, 2), 'alice');
 
     const assign = async (scenario: NativeLabelResponseScenario, labelId: string) =>
       captureLabel(
@@ -470,16 +701,8 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
       requestInit('DELETE', undefined, commandKey()),
     );
     responseValue(deleteParent, 200, 'Delete assigned parent label');
-    await captureLabel(
-      'owner.assignments.after-parent-delete',
-      subjectAssignmentsPath(subject.id, 32),
-      'alice',
-    );
-    await captureLabel(
-      'owner.catalogue.after-parent-delete',
-      literalPrefixPath(prefix, 32),
-      'alice',
-    );
+    await captureLabel('owner.assignments.after-parent-delete', subjectAssignmentsPath(subject.id, 32), 'alice');
+    await captureLabel('owner.catalogue.after-parent-delete', literalPrefixPath(prefix, 32), 'alice');
     const deletedLabelRevision = Number(requiredHeader(deleteParent, 'library-label-revision', 'Delete parent label'));
     const restoreParent = await captureLabel(
       'owner.label.restore-parent',
@@ -497,14 +720,14 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
       subjectAssignmentsPath(subject.id, 32),
       'alice',
     );
-    await captureLabel(
-      'owner.catalogue.after-parent-restore',
-      literalPrefixPath(prefix, 32),
-      'alice',
-    );
+    await captureLabel('owner.catalogue.after-parent-restore', literalPrefixPath(prefix, 32), 'alice');
 
     const assignmentRows = (response: NativeLabelResponseRecord) =>
-      (JSON.parse(response.bodyText) as { assignments: { id: string; labelId: string; subjectId: string; revision: number }[] }).assignments;
+      (
+        JSON.parse(response.bodyText) as {
+          assignments: { id: string; labelId: string; subjectId: string; revision: number }[];
+        }
+      ).assignments;
     const alphaAssignment = assignmentRows(afterParentRestore).find((assignment) => assignment.labelId === alpha.id);
     if (!alphaAssignment) throw new Error('The actual FULL assignment response omitted the alpha label membership');
     const unassignAlpha = await captureLabel(
@@ -540,11 +763,7 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
       ),
     );
     responseValue(restoreAssignment, 200, 'Restore alpha assignment');
-    await captureLabel(
-      'owner.assignments.after-assignment-restore',
-      subjectAssignmentsPath(subject.id, 32),
-      'alice',
-    );
+    await captureLabel('owner.assignments.after-assignment-restore', subjectAssignmentsPath(subject.id, 32), 'alice');
 
     const privacyReads: [NativeLabelResponseScenario, string, NativeLabelPersona][] = [
       ['bob.catalogue.prefix', literalPrefixPath(prefix, 20), 'bob'],
@@ -556,14 +775,12 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
     ];
     for (const [scenario, path, persona] of privacyReads) await captureLabel(scenario, path, persona);
 
-    const beforeClear = await captureLabel(
-      'owner.catalogue.before-clear',
-      literalPrefixPath(prefix, 32),
-      'alice',
-    );
-    const currentLabels = (JSON.parse(beforeClear.bodyText) as {
-      labels: { id: string; name: string; revision: number }[];
-    }).labels;
+    const beforeClear = await captureLabel('owner.catalogue.before-clear', literalPrefixPath(prefix, 32), 'alice');
+    const currentLabels = (
+      JSON.parse(beforeClear.bodyText) as {
+        labels: { id: string; name: string; revision: number }[];
+      }
+    ).labels;
     const afterUndo = await captureLabel(
       'owner.assignments.before-clear',
       subjectAssignmentsPath(subject.id, 32),
@@ -634,7 +851,10 @@ export async function createNativeLabelResponsesFixture(): Promise<NativeLabelRe
     );
 
     const missing = NATIVE_LABEL_RESPONSE_MANIFEST.filter((item) => responses[item.scenario] === undefined);
-    if (missing.length > 0) throw new Error(`Native Label response manifest is incomplete: ${missing.map(({ scenario }) => scenario).join(', ')}`);
+    if (missing.length > 0)
+      throw new Error(
+        `Native Label response manifest is incomplete: ${missing.map(({ scenario }) => scenario).join(', ')}`,
+      );
     if (assignmentsEmpty.status !== 200 || catalogueEmpty.status !== 200)
       throw new Error('Native Label empty outcomes were not returned by the installed API');
 
