@@ -64,7 +64,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
       kind: 'collection', key: key(dynamic.id), revision: output.collection.revision,
       title: 'Public selected output', description: 'Ordinary public description',
       presentationKind: null, coverMediaId: null, membershipKind: 'dynamic',
-      output: { route: routeOf(dynamic.id), collectionId: dynamic.id, generation: output.publication.generation },
+      output: { route: routeOf(dynamic.id)!, collectionId: dynamic.id, generation: output.publication.generation },
     },
   });
   expect(JSON.stringify(first)).not.toContain(privateMatch);
