@@ -33,10 +33,10 @@ not permission to replace the join with a fixture assertion.
 
 The subsequent single SQL statement has these complete equality prefixes:
 
-| Operation | Equality prefix / ordered suffix | Live rows returned or changed per seek |
-| --- | --- | --- |
-| Ready generation and expiry refresh | `facet_generation` PK `(partition_no,definition,generation)`; `state='ready'`, `expires_at>now` | at most one UPDATE; zero rows means unavailable |
-| Canonical values | `facet_value` PK `(partition_no,definition,generation,value)`; first three equal, `value>after`, ascending C collation | at most `s_i+1 <= 21` values |
+| Operation                           | Equality prefix / ordered suffix                                                                                       | Live rows returned or changed per seek          |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Ready generation and expiry refresh | `facet_generation` PK `(partition_no,definition,generation)`; `state='ready'`, `expires_at>now`                        | at most one UPDATE; zero rows means unavailable |
+| Canonical values                    | `facet_value` PK `(partition_no,definition,generation,value)`; first three equal, `value>after`, ascending C collation | at most `s_i+1 <= 21` values                    |
 
 The UPDATE CTE and lateral value seek share a statement snapshot. A valid empty range returns one outer row with
 a null item, distinct from a missing/expired generation. Expiry refresh occurs on **every seek**, including

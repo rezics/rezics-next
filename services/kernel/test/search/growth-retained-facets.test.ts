@@ -62,7 +62,9 @@ test('a real reduction after START with paused indexing charges the retained rej
     // Hiding one contributor invalidates all 64 retained author rows without a fake Source.
     await Promise.race([
       barrier.reached,
-      pending.then(() => { throw new Error('Native request finished before its candidate response barrier'); }),
+      pending.then(() => {
+        throw new Error('Native request finished before its candidate response barrier');
+      }),
     ]);
     const hidden = await world.hide();
     expect(hidden.status).toBe(200);

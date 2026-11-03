@@ -109,11 +109,9 @@ export async function retainedFacetGrowthFixture(count: number) {
       recording = true;
       try {
         const database = await databases.values().next().value!;
-        const run = await capture(
-          database,
-          () => owner.request('anonymous', 'POST', '/v1/subjects:facets', body),
-          { includeBackends: true },
-        );
+        const run = await capture(database, () => owner.request('anonymous', 'POST', '/v1/subjects:facets', body), {
+          includeBackends: true,
+        });
         const cost = costOf(run.capture);
         // Preserve inclusive native plans, controls and concurrent background work. Auth and engine
         // telemetry have no instrumentation seam here and are explicitly unmeasured, never zero.
