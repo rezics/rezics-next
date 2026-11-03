@@ -246,7 +246,8 @@ export const RATING_EVENTS = {
   'com.rezics.rating.source_statistic.changed.v1': Type.Object(
     {
       subjectId: Type.String({ pattern: UUID }),
-      source: Type.Literal('vndb'),
+      source: Type.Union([Type.Literal('vndb'), Type.Literal('bangumi')]),
+      observationDigest: Type.Optional(Type.String({ pattern: '^[0-9a-f]{64}$' })),
       sourceRecordId: Type.String({ minLength: 1, maxLength: 1024 }),
     },
     { additionalProperties: false },

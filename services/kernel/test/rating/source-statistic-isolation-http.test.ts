@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { sourceObservation } from '../../src/rating/source-provider.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -19,6 +20,7 @@ type SourceStatistic = {
   asOf: string;
   licence: string;
   attribution: string;
+  observation?: { kind: 'unversioned'; digest: string };
 };
 
 function envelope(value: Omit<SourceStatistic, 'source'>): SourceStatistic {
@@ -225,7 +227,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     scale: { min: 13, max: 4096 },
     mean: 4095.75,
     count: 2_147_483_647,
-    asOf: '2026-10-01',
+    asOf: '2026-10-29',
     licence: 'VNDB data licence, revision 2',
     attribution: 'VNDB import team, revised snapshot 2026-10-01.',
   };
@@ -264,13 +266,16 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([firstEnvelope]);
 
   const refreshKey = randomUUID();
-  // The documented source contract replaces the slot; a stale asOf is still accepted as current source data.
+  // Older observations conflict; rebinding the current provider requires exact CAS provenance.
+  await readProblem(await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
+    actor: fixture.actors.importer, body: { ...refreshedValue, asOf: '2026-10-01' }, key: randomUUID(),
+  }), 409);
   const refresh = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
-    body: refreshedValue,
+    body: { ...refreshedValue, expectedObservation: sourceObservation(subjectId, 'vndb', firstValue).digest },
     key: refreshKey,
   });
-  const refreshedEnvelope = envelope(refreshedValue);
+  const refreshedEnvelope: SourceStatistic = { ...envelope(refreshedValue), observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshedValue).digest } };
   expectedImportedEnvelope = refreshedEnvelope;
   expect(await readJson(refresh)).toEqual(refreshedEnvelope);
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([refreshedEnvelope]);
