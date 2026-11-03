@@ -103,6 +103,9 @@ test('native two-slot Realm summaries keep fixed indexed work on independent pop
       const rows = report.samples.map(({ cost }) => cost.relations[relation]?.rows);
       expect(rows.every((value) => typeof value === 'number')).toBe(true);
       expect(new Set(rows).size).toBe(1);
+      const pages = report.samples.at(-1)?.relationSizes[relation]?.relpages;
+      if (typeof pages !== 'number') throw new Error(`Missing grown page count for ${relation}`);
+      expect(pages).toBeGreaterThan(8);
     }
     assertGrowthAccessPaths(`Native Realm image summary ${axis}`, report.samples, relations);
     // Runner-owned structured profiles retain statements, rows, buffer hits/reads and refusals.
