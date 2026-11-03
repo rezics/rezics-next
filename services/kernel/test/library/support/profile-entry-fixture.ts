@@ -9,6 +9,7 @@ import {
   libraryLabels,
   libraryProfile,
   legacyProfile,
+  unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
@@ -81,10 +82,12 @@ export async function compileLibraryOutcomeRelease(): Promise<Release> {
 }
 
 /** Real compiler output, including a child whose structural bases are not primary types. */
-export async function compileEntryRelease(version: 'original' | 'replacement'): Promise<Release> {
+export async function compileEntryRelease(version: 'original' | 'replacement', gameUnits?: readonly string[]): Promise<Release> {
   const profiles = Object.fromEntries(
     Object.entries(entryStates).map(([vertical, state]) => {
       const profile = libraryProfile(`fixture.${vertical}`, vertical === 'record' ? 'track' : 'minute');
+      if (vertical === 'game' && gameUnits)
+        profile.progress.allowed[0].units = gameUnits.map((unit) => unitData(unit));
       profile.entryStateSet.states.push({ id: version === 'replacement' ? `${state}_again` : state, role: 'active' });
       return [vertical, profile];
     }),
@@ -123,7 +126,13 @@ export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryF
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
 export async function createProfileEntryFixture(
-  options: { clock?: KernelClock; pool?: Pool; singleConnection?: boolean; projectLinks?: boolean } = {},
+  options: {
+    clock?: KernelClock;
+    pool?: Pool;
+    singleConnection?: boolean;
+    projectLinks?: boolean;
+    gameUnits?: readonly string[];
+  } = {},
 ) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -403,8 +412,8 @@ export async function createProfileEntryFixture(
         client.release();
       }
     }
-    const original = await compileEntryRelease('original');
-    const replacement = await compileEntryRelease('replacement');
+    const original = await compileEntryRelease('original', options.gameUnits);
+    const replacement = await compileEntryRelease('replacement', options.gameUnits);
     const originalDigest = await publish(original);
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);

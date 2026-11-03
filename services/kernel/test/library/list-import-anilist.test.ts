@@ -160,6 +160,35 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await apply([chosen], path2)).outcomes[0].status).toBe('applied');
   const unsupported = await review(1, { subjectId, fields: ['score'] }, path2);
   expect((await apply([unsupported], path2)).outcomes[0].status).toBe('unsupported');
+  const mangaId = mediaId + 1000000;
+  const mangaUpload = await f.send(importer.bearer, 'POST', base + ':preview', {
+    upload: JSON.stringify([{ mediaId: mangaId, media: { id: mangaId, type: 'MANGA' }, progress: 0, progressVolumes: 2 }]),
+  });
+  expect(mangaUpload.status).toBe(200);
+  const mangaPath = base + '/' + (await mangaUpload.json()).id;
+  const mangaReviewResponse = await f.send(importer.bearer, 'POST', mangaPath + ':review', {
+    ordinal: 0,
+    subjectId,
+    fields: [],
+    progress: {
+      occurrence: { kind: 'start', primaryUnit: 'chapter' },
+      measures: [
+        { field: 'progress', action: 'adopt' },
+        { field: 'progressVolumes', action: 'adopt' },
+      ],
+    },
+  });
+  expect(mangaReviewResponse.status).toBe(200);
+  const mangaReview = (await mangaReviewResponse.json()).review;
+  const mangaApplied = await f.send(importer.bearer, 'POST', mangaPath + ':apply', {
+    confirmations: [{ ordinal: 0, reviewId: mangaReview.id }],
+  });
+  expect(mangaApplied.status).toBe(200);
+  expect((await mangaApplied.json()).outcomes[0].progress).toMatchObject({
+    occurrence: null,
+    complete: true,
+    measures: [{ status: 'unsupported', unit: 'chapter' }, { status: 'unsupported', unit: 'volume' }],
+  });
   const conflicts = await f.send(importer.bearer, 'POST', base + ':preview', {
     upload: JSON.stringify([
       { mediaId, media: { idMal: mediaId }, status: 'PLANNING' },
