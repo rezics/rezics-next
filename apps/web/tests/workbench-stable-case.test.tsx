@@ -85,7 +85,7 @@ test('selected report references keep the native ID and return to the captured w
   expect(href).toContain('queue=reports');
   expect(href).toContain('realm=realm-1');
   expect(workbenchCaseQueueHref(search!)).toBe(
-    '/moderation/workbench?queue=reports&board=board%2Fone&targetKind=post&order=oldest&cursor=cursor+one&realm=realm-1',
+    '/moderation/workbench?queue=reports&board=board%2Fone&targetKind=post&order=oldest&realm=realm-1&cursor=cursor+one',
   );
   expect(workbenchCaseInput(search!).boardId).toBe(boardId);
 });
