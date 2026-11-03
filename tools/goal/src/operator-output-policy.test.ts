@@ -317,7 +317,11 @@ test('result-returning Git helpers reject UTF-8 overflow and retain complete out
 test('evidence never publishes an oversized tracked or untracked patch as complete', () => {
   const f = repository();
   try {
-    const task = { worktree: f.main, base: git(f.main, 'rev-parse', 'HEAD'), brief: { markdown: 'contract' } } as Task;
+    const task = {
+      worktree: f.main,
+      base: git(f.main, 'rev-parse', 'HEAD'),
+      brief: { markdown: 'contract', acceptance: { command: ['bun', 'test'] } },
+    } as Task;
     const attempt = { evidencePath: join(f.path, 'evidence'), approaches: [], result: '' } as unknown as Attempt;
     const policy = readControlPolicy({ evidence: { gitBufferBytes: 256 } }).evidence;
     writeFileSync(join(f.main, 'base'), 'é'.repeat(1000));
@@ -366,7 +370,7 @@ test('negative probe command bounds preserve injected runners and mandatory full
           ['bun', 'test', '--timeout', '9', 'second'],
         ],
       );
-      expect(calls.filter((command) => command[1] === 'test').map((command) => command.at(-1))).toEqual(
+      expect(calls.filter((command) => command[3] === '9').map((command) => command.at(-1))).toEqual(
         limit === 1 ? ['base'] : ['base', 'second'],
       );
       expect(result.negativeOnly ?? false).toBe(limit === 2);

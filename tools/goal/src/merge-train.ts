@@ -876,9 +876,10 @@ function pathsChangedByTaskButUnchangedOnDev(
   candidate: string,
   taskTip: string,
   taskPaths: readonly string[],
+  policy = defaultPolicy.merge,
 ): string[] {
   const compare = (left: string, right: string, path: string): boolean => {
-    const result = spawnSync('git', ['diff', '--quiet', left, right, '--', path], { cwd });
+    const result = mergeGit(cwd, ['diff', '--quiet', left, right, '--', path], policy);
     if (result.status === null || result.status > 1)
       throw new Error(result.stderr?.toString().trim() || result.error?.message || `Cannot compare ${path}`);
     return result.status === 1;
@@ -906,8 +907,8 @@ function refuseFrozenAcceptanceChange(result: GateOutcome, paths: readonly strin
   appendFileSync(logPath, `Frozen acceptance files changed: ${canonical.join(', ')}\n`);
 }
 
-function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean {
-  const result = spawnSync('git', ['diff', '--quiet', base, candidate, '--'], { cwd });
+function treeDiffIsEmpty(cwd: string, base: string, candidate: string, policy = defaultPolicy.merge): boolean {
+  const result = mergeGit(cwd, ['diff', '--quiet', base, candidate, '--'], policy);
   if (result.status === null || result.status > 1)
     throw new Error(result.stderr?.toString().trim() || result.error?.message || 'Cannot compare landing trees');
   return result.status === 0;
@@ -985,24 +986,33 @@ function frozenFilesModifiedAtCommit(
   cwd: string,
   commit: string,
   frozen: readonly { path: string; hash: string }[],
+  policy = defaultPolicy.merge,
 ): string[] {
   const verified = spawnSync('git', ['rev-parse', '--verify', `${commit}^{commit}`], {
     cwd,
     encoding: 'utf8',
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
   });
+  const overflow = gitOutputError(verified, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (verified.error || verified.status !== 0)
     throw new Error(verified.stderr?.trim() || verified.error?.message || `Cannot read target commit ${commit}`);
 
   return frozen
     .filter((file) => {
-      const exists = spawnSync('git', ['cat-file', '-e', `${commit}:${file.path}`], { cwd });
+      const exists = mergeGit(cwd, ['cat-file', '-e', `${commit}:${file.path}`], policy);
       if (exists.error) throw new Error(exists.error.message);
       // A missing frozen path is a worker-only addition for legacy diagnostics, not a target edit.
       if (exists.status !== 0) return false;
       const blob = spawnSync('git', ['cat-file', 'blob', `${commit}:${file.path}`], {
         cwd,
         encoding: 'buffer',
+        timeout: policy.commandTimeoutMs,
+        maxBuffer: policy.gitBufferBytes,
       });
+      const overflow = gitOutputError(blob, policy.gitBufferBytes);
+      if (overflow) throw overflow;
       if (blob.error || blob.status !== 0)
         throw new Error(
           blob.stderr?.toString().trim() || blob.error?.message || `Cannot read frozen path ${file.path}`,
@@ -1845,7 +1855,9 @@ export class MergeTrain {
           const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
           const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
           if (changedFrozenAtSource.length) {
-            const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart));
+            const changedFrozenOnTarget = new Set(
+              frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart, this.options.policy?.merge),
+            );
             refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
             // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
             // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
@@ -2021,13 +2033,20 @@ export class MergeTrain {
 
           const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
           const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
-          if (treeDiffIsEmpty(trainTree, previous, candidate)) {
+          if (treeDiffIsEmpty(trainTree, previous, candidate, this.options.policy?.merge)) {
             refuseNoEffect(result, taskPaths, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
           }
-          const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, previous, candidate, tip, taskPaths);
+          const noEffect = pathsChangedByTaskButUnchangedOnDev(
+            trainTree,
+            previous,
+            candidate,
+            tip,
+            taskPaths,
+            this.options.policy?.merge,
+          );
           if (noEffect.length) {
             refuseNoEffect(result, noEffect, logPath);
             localOutcomes.set(entry.id, result);
@@ -2792,7 +2811,9 @@ export class MergeTrain {
             : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
         if (changedFrozenAtSource.length) {
-          const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart));
+          const changedFrozenOnTarget = new Set(
+            frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart, this.options.policy?.merge),
+          );
           refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
           // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
           // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
@@ -3072,11 +3093,18 @@ export class MergeTrain {
         const taskPaths = workspace
           ? taskChangedPaths(sharedStore!.task(request.taskId), tip, this.options.policy?.merge)
           : changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
-        if (treeDiffIsEmpty(trainTree, base, candidate)) {
+        if (treeDiffIsEmpty(trainTree, base, candidate, this.options.policy?.merge)) {
           refuseNoEffect(result, taskPaths, logPath);
           return finish();
         }
-        const noEffect = pathsChangedByTaskButUnchangedOnDev(trainTree, base, candidate, tip, taskPaths);
+        const noEffect = pathsChangedByTaskButUnchangedOnDev(
+          trainTree,
+          base,
+          candidate,
+          tip,
+          taskPaths,
+          this.options.policy?.merge,
+        );
         if (noEffect.length) {
           refuseNoEffect(result, noEffect, logPath);
           return finish();
@@ -5694,7 +5722,7 @@ export class MergeTrain {
                   }
                 }
                 let after = this.git(tree, 'rev-parse', 'HEAD');
-                if (after !== before && treeDiffIsEmpty(tree, before, after)) {
+                if (after !== before && treeDiffIsEmpty(tree, before, after, this.options.policy?.merge)) {
                   // A patch already represented on main needs a disposition, not an empty implementation merge.
                   this.git(tree, 'reset', '--hard', before);
                   after = before;
@@ -5709,6 +5737,7 @@ export class MergeTrain {
                     after,
                     earlier.disposition.acceptedCommit,
                     earlier.outcome.changedFiles,
+                    this.options.policy?.merge,
                   );
                   if (erased.length) {
                     files = erased;
@@ -5738,7 +5767,9 @@ export class MergeTrain {
                   },
                   disposition: {
                     ...member,
-                    disposition: treeDiffIsEmpty(tree, before, after) ? 'already-represented' : 'released',
+                    disposition: treeDiffIsEmpty(tree, before, after, this.options.policy?.merge)
+                      ? 'already-represented'
+                      : 'released',
                     logPath: node.logPath,
                   },
                 });
@@ -5815,7 +5846,7 @@ export class MergeTrain {
                 needsProducer &&
                 replacementInputs.failures.some(
                   (failure) =>
-                    treeDiffIsEmpty(tree, failure.candidate, candidate) ||
+                    treeDiffIsEmpty(tree, failure.candidate, candidate, this.options.policy?.merge) ||
                     replacementInputs.input.changedInputs.some(
                       (input) =>
                         spawnSync('git', ['diff', '--quiet', failure.candidate, candidate, '--', input.path], {
@@ -5873,6 +5904,7 @@ export class MergeTrain {
                     repaired,
                     member.disposition.acceptedCommit,
                     member.outcome.changedFiles,
+                    this.options.policy?.merge,
                   );
                   if (erased.length)
                     throw new Error(`Typing repair erased accepted contribution: ${erased.join(', ')}`);
