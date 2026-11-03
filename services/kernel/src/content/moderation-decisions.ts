@@ -116,7 +116,8 @@ export async function readModerationDecision(
       action: 'takedown' as const,
       statement: decision.statement,
       decidedAt: decidedAt.toISOString(),
-      appealDeadline: decision.target_kind === 'board' ? null : new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
+      appealDeadline:
+        decision.target_kind === 'board' ? null : new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
       appeal:
         decision.appeal_id === null
           ? null

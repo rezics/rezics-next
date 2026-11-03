@@ -314,14 +314,16 @@ describe('moderation decisions through HTTP and committed effects', () => {
       expect(sparse.body).toEqual({ entries: [], nextCursor: null });
       expect(JSON.stringify(sparse.body)).not.toContain(hidden.decision_id);
       expect(JSON.stringify(sparse.body)).not.toContain(hidden.target_id);
-      await db.admin.query("UPDATE content.post SET availability='erased' WHERE route=$1 AND post_id=$2", [routeOf(newer.id), newer.id]);
+      await db.admin.query("UPDATE content.post SET availability='erased' WHERE route=$1 AND post_id=$2", [
+        routeOf(newer.id),
+        newer.id,
+      ]);
       const erased = await call('GET', path, undefined, undefined, fixture.principal);
       expect(erased.body.entries).toEqual([]);
       expect(typeof erased.body.nextCursor).toBe('string');
       const erasedExact = '/v1/moderation-decisions/' + indexed[0].decision_id;
       expect((await call('GET', erasedExact, undefined, undefined, fixture.principal)).response.status).toBe(404);
       expect((await call('GET', erasedExact)).response.status).toBe(200);
-
     } finally {
       await db.admin.query(
         "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'",
