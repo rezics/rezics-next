@@ -7,6 +7,18 @@ import { createTypes, type InitialSubject } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
 import { episodeMembershipAdmission, screenSeriesId } from './screen-episode-membership';
 import { creationStatement, editableScalar, type StatementInput } from './statement-editor';
+import { catalogueEntries } from './catalogue-entry';
+import {
+  profileFields,
+  profileLibraryControls,
+  profileSourceRecords,
+  type MusicReaderVisit,
+  type ProfileBound,
+  type ProfileGroup,
+  type ProfileLibrary,
+  type ProfileReaderState,
+  type ProfileSourceRecord,
+} from './music-reader';
 
 export const screenTypes = ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode'] as const;
 export function isScreenType(type: string): boolean {
@@ -157,3 +169,137 @@ export function screenName(release: Release, property: string, locale: string) {
   const label = pickText(release.properties[property]?.labels ?? {}, locale);
   return label.text ? label : { text: property, lang: null };
 }
+
+export type ScreenReaderVisit = {
+  state: ProfileReaderState;
+  type: string;
+  grain: { text: string; lang: string | null };
+  library: ProfileLibrary;
+  unpublished: { tracks: false; episodes: true };
+  groups: ProfileGroup[];
+  sources: ProfileSourceRecord[];
+  bounds: ProfileBound[];
+  correction?: { id: string; href: string };
+};
+
+const screenIdentity = new Set([
+  'schema:name',
+  'schema:description',
+  'schema:alternateName',
+  'schema:sameAs',
+  'rezics:representativeEdition',
+]);
+
+function screenReaderGroups(release: Release, type: string): Record<string, string[]> {
+  const groups = screenGroups(release, type);
+  return {
+    dates: groups.dates,
+    amounts: groups.amounts,
+    credits: groups.credits,
+    parts: groups.parts.filter((id) => !screenIdentity.has(id)),
+    classification: groups.classification,
+    text: groups.text.filter((id) => !screenIdentity.has(id)),
+    authored: groups.authored,
+  };
+}
+
+/** Ordinary Movie/TVSeries reader visit. Episode lists stay unpublished unless that exact subject is opened. */
+export function screenReaderVisit(input: {
+  locale: string;
+  type?: string;
+  release?: Release;
+  public?: SubjectRead | null;
+  reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
+  bounds?: readonly ProfileBound[];
+  loading?: boolean;
+}): ScreenReaderVisit {
+  const type = input.public?.subject.type ?? input.type ?? 'schema:Movie';
+  const bounds = [...(input.bounds ?? [])];
+  const emptyLibrary: ProfileLibrary = { admitted: false, states: [], copies: false, progress: false };
+  const unpublished = { tracks: false as const, episodes: true as const };
+  if (input.loading) {
+    return {
+      state: 'loading',
+      type,
+      grain: { text: type, lang: null },
+      library: emptyLibrary,
+      unpublished,
+      groups: [],
+      sources: [],
+      bounds,
+    };
+  }
+  if (input.reason) {
+    return {
+      state: input.reason,
+      type,
+      grain: { text: type, lang: null },
+      library: emptyLibrary,
+      unpublished,
+      groups: [],
+      sources: [],
+      bounds,
+    };
+  }
+  const release = input.release;
+  if (!release || !isScreenType(type) || !release.types[type]) {
+    return {
+      state: 'unavailable',
+      type,
+      grain: { text: type, lang: null },
+      library: emptyLibrary,
+      unpublished,
+      groups: [],
+      sources: input.public ? profileSourceRecords(input.public.subject) : [],
+      bounds,
+    };
+  }
+  const publicRead = input.public;
+  if (publicRead && !isScreenType(publicRead.subject.type)) {
+    return {
+      state: 'invalid',
+      type,
+      grain: pickText(release.types[type]?.labels ?? {}, input.locale),
+      library: emptyLibrary,
+      unpublished,
+      groups: [],
+      sources: profileSourceRecords(publicRead.subject),
+      bounds,
+    };
+  }
+  const grain = pickText(release.types[type]?.labels ?? {}, input.locale);
+  const library = profileLibraryControls(release, type);
+  if (!publicRead) {
+    return {
+      state: 'empty',
+      type,
+      grain,
+      library,
+      unpublished,
+      groups: [],
+      sources: [],
+      bounds,
+    };
+  }
+  const groups = Object.entries(screenReaderGroups(release, publicRead.subject.type)).flatMap(([id, properties]) => {
+    const fields = profileFields(release, publicRead, properties, input.locale);
+    return fields.length ? [{ id, fields }] : [];
+  });
+  const title = pickText(publicRead.subject.labels, input.locale).text;
+  return {
+    state: groups.length || profileSourceRecords(publicRead.subject).length ? 'ready' : 'empty',
+    type: publicRead.subject.type,
+    grain,
+    library,
+    unpublished,
+    groups,
+    sources: profileSourceRecords(publicRead.subject),
+    bounds,
+    correction: {
+      id: publicRead.subject.id,
+      href: catalogueEntries.screen({ id: publicRead.subject.id, label: title, locale: input.locale }).href,
+    },
+  };
+}
+
+export type { MusicReaderVisit };

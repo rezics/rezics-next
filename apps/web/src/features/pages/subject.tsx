@@ -10,7 +10,10 @@ import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
+import { ScreenProfileOverview } from '../catalogue/screen-profile-reader';
 import { isScreenType } from '../catalogue/screen-profile';
+import { composedSubjectRead } from '../catalogue/music-reader';
+import { MusicAlbumOverview } from '../catalogue/music-reader-view';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
@@ -46,7 +49,7 @@ import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout'
 import { CompositionRender, type PageDocument } from './render';
 import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
-import type { ViewTab } from './views';
+import { boundedProfileRelations, type ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
 import { SubjectCommunityContext } from './subject-community-view';
 import { subjectUrlForView } from '../../subject/subject-href';
@@ -715,6 +718,22 @@ export function SubjectPage({
             )}
             {!overview && bar}
             {overview && !header && afterHeader}
+            {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
+              <MusicAlbumOverview
+                locale={locale}
+                public={composedSubjectRead(read)}
+                bounds={boundedProfileRelations(page)}
+                link={ContextLink}
+              />
+            ) : null}
+            {overview && read && !page.account && isScreenType(read.subject.type) ? (
+              <ScreenProfileOverview
+                locale={locale}
+                public={composedSubjectRead(read)}
+                bounds={boundedProfileRelations(page)}
+                link={ContextLink}
+              />
+            ) : null}
             <SubjectCommunityContext.Provider value={page.community}>
               <CompositionRender
                 document={page.document}

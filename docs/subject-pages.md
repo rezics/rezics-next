@@ -30,6 +30,27 @@ the shelf chooser's 20 Type slots); a subject frame needs one descriptor. Each d
 1,024-Type/4 MiB Release bounds and at most 64 property points. Whole-release consumers and historical pinned
 readers keep their existing contracts, as do subject access, session/no-store handling, rendering and links.
 
+## Imported music and live-action profiles
+
+An ordinary imported `schema:MusicAlbum`, `schema:Movie` or `schema:TVSeries` overview groups admitted scalar facts,
+qualified credits and related work with human field labels from the current immutable release. Source records stay
+source provenance, distinct from editorial acceptance. Relation pages that return a following `next` token are the
+loaded page only; they never imply a complete tracklist or episode list.
+
+Type3 maps to MusicAlbum with no work/release/track split. Individual tracks and recordings stay unpublished. MusicAlbum
+has no Library profile, so Library states, copies and progress stay unpublished. Type6 maps pinned movie platforms to
+Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
+existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`
+subject uses that grain's released fields and Library pin; Bangumi episode family bootstrap stays unpublished on the
+series page.
+
+Correction uses the existing album and screen editors: an explicit proposal, native candidate review, and a current
+reread of the same subject. Empty, loading, denied, stale and unavailable readings keep useful copy and a bounded retry;
+retry never creates. A contributor list previews the credits view.
+
+Decision: MusicAlbum keeps no Library profile; type3 tracks and type6 episode families stay unpublished until those
+immutable native profiles and source bindings are published.
+
 ## Create a catalogue subject
 
 `/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's

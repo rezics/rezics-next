@@ -13,6 +13,7 @@ import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
 import { relationPreviewCount } from './subject-relations-preview';
 import type { SubjectCommunity } from './subject-community';
+import type { ProfileBound } from '../catalogue/music-reader';
 import { m } from '../../paraglide/messages.js';
 
 /** A finite reading vocabulary, independent of the number of properties, kinds or populations. */
@@ -50,6 +51,7 @@ const LIST_VIEWS: Readonly<Record<string, View>> = {
   'schema:productionCompany': 'works',
   'wdt:P178': 'works',
   'schema:genre': 'works',
+  'schema:contributor': 'credits',
   'wdt:P725': 'characters',
   'schema:character': 'appearances',
 };
@@ -57,6 +59,51 @@ const LIST_VIEWS: Readonly<Record<string, View>> = {
 /** The view a list property previews, when it previews one. */
 export function listView(property: unknown): View | undefined {
   return typeof property === 'string' && Object.hasOwn(LIST_VIEWS, property) ? LIST_VIEWS[property] : undefined;
+}
+
+/** Loaded relation pages on this composed read. A following page never implies a complete list. */
+export function boundedProfileRelations(page: {
+  subject: string | null;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
+  account?: { id: string; handle: string } | undefined;
+  document: unknown;
+  reads: Record<string, Read>;
+}): ProfileBound[] {
+  const document = page.document as CompositionDocument;
+  const plan = planReads(platformRegistry, document, {
+    subject: page.subject,
+    account: page.account ?? null,
+    ...(page.context ? { context: page.context } : {}),
+    ...(page.continuation ? { continuation: page.continuation } : {}),
+  });
+  const bounds: ProfileBound[] = [];
+  const seen = new Set<string>();
+  for (const node of walk(document.content)) {
+    const property = typeof node.props.property === 'string' ? node.props.property : undefined;
+    if (!property || seen.has(property)) continue;
+    const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
+    const planned = key === undefined ? undefined : plan.reads[key];
+    const result = key === undefined ? undefined : page.reads[key];
+    if (!planned || !result || result.status !== 200 || !isRecord(result.body)) continue;
+    const body = result.body;
+    const rows =
+      planned.kind === 'links' && Array.isArray(body.links)
+        ? body.links
+        : planned.kind === 'relations' && Array.isArray(body.relations)
+          ? body.relations
+          : undefined;
+    if (!rows) continue;
+    seen.add(property);
+    const next = typeof body.next === 'string' ? body.next : undefined;
+    bounds.push({
+      property,
+      loaded: rows.length,
+      ...(next ? { next } : {}),
+      complete: body.next === null,
+    });
+  }
+  return bounds;
 }
 
 /** The view a data component previews. Components that preview no view return nothing. */
