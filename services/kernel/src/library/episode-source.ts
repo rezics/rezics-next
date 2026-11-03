@@ -33,7 +33,9 @@ export async function readEpisodeSource(
   const type = active.release.types[before.acceptingType];
   const relation = active.release.properties['schema:isPartOf'];
   // Missing released structure is explicit, rather than guessed from source numbers.
-  if (!type || !relation?.relation || !type.properties.includes('schema:isPartOf'))
+  if (!type || relation?.relation?.group !== 'membership' || relation.datatype !== 'wikibase-item' ||
+      !type.properties.includes('schema:isPartOf') || !relation.targets?.some((target) =>
+        target === parent.acceptingType || active.release.types[parent.acceptingType]?.bases.includes(target)))
     return null;
   if (before.acceptingType !== 'schema:Episode' && !type.bases.includes('schema:Episode')) return null;
   const authorize = async (id: string) => {
@@ -62,11 +64,12 @@ export async function readEpisodeSource(
   ]);
   if (!sameLibraryProfileAnchor(before, after) || !sameLibraryProfileAnchor(parent, finalParent) ||
       finalRelease?.digest !== active.digest) throw new ProblemError('semantic_not_ready');
-  const members = value.subject.statements['schema:isPartOf'] ?? [];
-  const ordinal = value.subject.statements['schema:episodeNumber']?.find((s) => s.value.type === 'value')?.value;
+  const members = (value.subject.statements['schema:isPartOf'] ?? []).filter((s) => s.rank !== 'deprecated');
+  const ordinal = value.subject.statements['schema:episodeNumber']?.find((s) => s.rank !== 'deprecated' && s.value.type === 'value')?.value;
   return {
     id: episodeId,
-    membership: members.some((s) => s.rank !== 'deprecated' && s.value.type === 'value' && s.value.content === parentId)
+    membership: members.length === 1 && value.subject.resolution['schema:isPartOf'] === undefined &&
+      members.some((s) => s.value.type === 'value' && s.value.content === parentId)
       ? 'member' : 'detached',
     ordinal: ordinal?.type === 'value' && (typeof ordinal.content === 'string' || typeof ordinal.content === 'number')
       ? String(ordinal.content) : null,

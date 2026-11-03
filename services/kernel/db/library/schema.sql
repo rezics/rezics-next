@@ -3170,6 +3170,18 @@ CREATE TABLE library.progress_head (
 
 
 --
+-- Name: progress_episode; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_episode (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    episode_subject_id uuid NOT NULL,
+    added_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: progress_session; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3193,6 +3205,8 @@ CREATE TABLE library.progress_session (
     transaction_id uuid NOT NULL,
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
+    episode_completed_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT progress_session_episode_completed_count_check CHECK (((episode_completed_count >= 0) AND (episode_completed_count <= 20000))),
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -4582,6 +4596,10 @@ ALTER TABLE library.progress_session
 --
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
+
+ALTER TABLE ONLY library.progress_episode
+    ADD CONSTRAINT progress_episode_pkey PRIMARY KEY (route, session_id, episode_subject_id);
+
 
 ALTER TABLE ONLY library.progress_session
     ADD CONSTRAINT progress_session_pkey PRIMARY KEY (route, session_id);
@@ -6832,6 +6850,10 @@ ALTER TABLE ONLY library.progress_change
 --
 -- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
+
+ALTER TABLE ONLY library.progress_episode
+    ADD CONSTRAINT progress_episode_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
+
 
 ALTER TABLE ONLY library.progress_unit
     ADD CONSTRAINT progress_unit_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
