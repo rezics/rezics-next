@@ -8,8 +8,8 @@ import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { BoardId, ThreadId } from './model.ts';
-import { readBoard, readThread } from './reads.ts';
-import type { BoardView, ThreadView } from './model.ts';
+import { readBoard, readThread, type ThreadView } from './reads.ts';
+import type { BoardView } from './model.ts';
 import targets from './appeal-review-page-targets.sql';
 
 export type AppealReviewAnchor = Readonly<{ partition: number; epoch: number; position: bigint }>;
@@ -55,13 +55,7 @@ export async function observeAppealReviewTargetContexts(
   return { verify: () => readAppealReviewTargetContexts(deps, selected, context) };
 }
 
-type TargetLocation = Readonly<{
-  kind: string;
-  target_id: string;
-  board_id: string | null;
-  thread_id: string | null;
-  present: boolean;
-}>;
+type TargetLocation = Awaited<ReturnType<typeof targets.run>>[number];
 
 /** One current, read-only source snapshot. It never promotes a context read to write authority. */
 export async function appealReviewSnapshot<T>(
