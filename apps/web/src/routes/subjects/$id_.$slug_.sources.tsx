@@ -22,10 +22,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
   staleTime: 0,
   gcTime: 0,
   shouldReload: true,
-  validateSearch: (search: Record<string, unknown>) => ({
-    realm: validatePageRealm(search.realm),
-    ...sourceObservationSelection(search),
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const selection = sourceObservationSelection(search);
+    return {
+      realm: validatePageRealm(search.realm),
+      ...(selection ? { provider: selection.source, digest: selection.digest } : {}),
+    };
+  },
   loaderDeps: ({ search }) => ({ realm: search.realm }),
   loader: async ({ params, location, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });

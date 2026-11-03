@@ -1341,6 +1341,9 @@ accepts a guessed digest from an input field. The route retains its current Real
 Subject identity. The URL carries provider and digest only; provider alias, record, payload and signed history cursor
 remain in the mounted reader.
 
+Sources search validation preserves the URL's `provider` key through repeated router validation; conversion to the
+reader's `source` operand happens only when mounting the observation panel.
+
 Decision: provider observation inspection keeps the existing `source_statistic:write` admission; a displayed record
 link grants no read or write permission.
 
