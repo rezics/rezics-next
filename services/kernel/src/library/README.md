@@ -3121,3 +3121,5 @@ meaning. Canonical IDs are exposed only by the bounded owner reader under curren
 checks both. The focused mounted journey is `test/library/episode-progress.test.ts`.
 
 Canonical episode owner admission follows generic session scope, current-account and terminal fences; catalogue disclosure independently uses native Subject Access, without installing an account ACL.
+
+Decision: canonical facts follow native occurrence lifecycle: reopening preserves them; retirement conceals both owner read modes and refuses fresh mutations, while admitted exact receipts remain replayable.

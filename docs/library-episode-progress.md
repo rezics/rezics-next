@@ -41,6 +41,10 @@ session-updated event. The scalar amount, cursor, manual unit set/count, session
 intact. Generic `:record`, its `clear`, `:complete` and `:abandon` keep their meanings and preserve canonical facts.
 Canonical commands do not append IDs to the generic progress-change history or published log snapshots.
 
+Native occurrence reopening preserves canonical facts. Retirement conceals both owner read modes and refuses
+fresh canonical mutations, including clear; an admitted exact command receipt still replays its original revision.
+Retired facts remain private audit data until terminal account erasure, following the existing session lifecycle.
+
 `GET /v1/progressSessions/{sessionId}/episodes?ids={comma-separated-uuids}` inspects a current catalogue page of
 at most 20 distinct IDs, in supplied order. Each result has exactly `episodeSubjectId`, `completed`, `membership`
 and `ordinal`. Visible admitted Episodes return their exact UUID, a boolean completion, `member` or `detached`,
@@ -102,5 +106,6 @@ Kernel client exposes both mounted methods through `progressSessions`.
 [`episode-progress.test.ts`](../services/kernel/test/library/episode-progress.test.ts) exercises mounted production
 Access and persisted Subjects: episodes 1 and 3 with 2 unmarked, equal-numbered special, separate reread, scalar
 independence, wrong parent/type, owner isolation, CAS, exact retry, clear, cursor invalidation, membership withdrawal,
-concealment and correction after profile removal. Its intent checks reject old tokens and ambiguous batches.
+concealment, correction after profile removal, reopening and retirement. Its intent checks reject old tokens and
+ambiguous batches.
 Controller-owned integration acceptance remains separate from these focused scenarios.

@@ -156,6 +156,18 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   await send('GET', `${path}/episodes?cursor=${encodeURIComponent(page.next)}`, undefined, 409);
   expect((await send('GET', `${path}/episodes`)).episodes).toEqual([]);
   expect((await send('GET', path)).progressSession).toMatchObject({ amount: '9', completedUnitCount: 0, revision: 5 });
+  const retainedKey = entryKey(),
+    retained = { revision: 5, add: [one.id] };
+  await send('POST', `${path}:recordEpisodes`, retained, 200, retainedKey);
+  await send('POST', `${path}:complete`, { revision: 6 });
+  await send('POST', `${path}:reopen`, { revision: 7 });
+  expect((await inspect(first.id, [one.id])).episodes[0]).toMatchObject({ completed: true });
+  await send('POST', `${path}:retire`, { revision: 8 });
+  await send('GET', `${path}/episodes`, undefined, 404);
+  await send('GET', `${path}/episodes?ids=${one.id}`, undefined, 404);
+  await send('POST', `${path}:recordEpisodes`, { revision: 9, add: [two.id] }, 404);
+  await send('POST', `${path}:recordEpisodes`, { revision: 9, clear: true }, 404);
+  expect(await send('POST', `${path}:recordEpisodes`, retained, 200, retainedKey)).toEqual({ revision: 6 });
 });
 
 test('catalogue withdrawal and concealment retain facts while correction and exact replay remain available', async () => {
