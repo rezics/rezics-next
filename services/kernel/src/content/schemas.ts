@@ -296,7 +296,7 @@ export const ThreadInputSchema = t.Object(
     title: t.String({ minLength: 1, maxLength: 1024 }),
     body: document,
     ...references,
-    visibility: t.Union([t.Literal('published'), t.Literal('draft')]),
+    visibility: t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')]),
     mediaIds: t.Optional(media),
     voteCitation: t.Optional(voteCitation),
   },
@@ -304,7 +304,7 @@ export const ThreadInputSchema = t.Object(
 );
 export const PostInputSchema = t.Object(
   {
-    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
+    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft'), t.Literal('protected')])),
     body: document,
     licence,
     parentId: t.Optional(nullableId),

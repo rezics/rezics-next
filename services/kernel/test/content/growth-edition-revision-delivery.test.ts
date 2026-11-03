@@ -1,4 +1,4 @@
-import { expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { serializeDocument } from '@rezics/document';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
@@ -7,6 +7,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth, type GrowthReport } from '../support/growth.ts';
 import {
   deliveryAxes,
+  closeGrowthEditionRevisionDeliveryHarness,
   finalGuardBoundary,
   growthEditionRevisionDeliveryFixture,
   permissionExecutions,
@@ -15,6 +16,7 @@ import {
 import type { SqlExecution } from './support/sql-observer.ts';
 
 setDefaultTimeout(600_000);
+afterAll(closeGrowthEditionRevisionDeliveryHarness);
 const scales = [256, 1024, 4096] as const;
 type Fixture = Awaited<ReturnType<typeof growthEditionRevisionDeliveryFixture>>;
 const path = (selected: Selection) => `/v1/contentEditions/${selected.editionId}/revision`;
@@ -236,6 +238,45 @@ async function raceRefusal(
     await observer.close();
   }
 }
+
+test('Edition reads a protected exact source while protected thread and ancestors keep independent grants', async () => {
+  const f = await growthEditionRevisionDeliveryFixture();
+  try {
+    const selected = await f.selection({ protected: true });
+    await f.pinned(selected);
+    await f.noPostGrant(selected);
+    const ordinary = await f.wire(f.buyer, `/v1/posts/${selected.post.id}`);
+    expect(ordinary.status).toBe(404);
+    expect(await ordinary.text()).not.toContain('Pinned canonical edition bytes');
+
+    const observation = f.observe();
+    try {
+      await delivered(f, selected);
+      assertGuards(f, selected, observation.records);
+    } finally {
+      await observation.close();
+    }
+
+    for (const [action, id] of [
+      ['thread:read', selected.threadId],
+      ...selected.ancestors.map((ancestor) => ['post:read', ancestor] as const),
+    ] as const) {
+      await f.grant(id, f.buyer, [action], true);
+      await refused(f, selected);
+      await f.grant(id, f.buyer, [action]);
+      await delivered(f, selected);
+
+      await raceRefusal(f, selected, f.buyer.accountId, action, id, () =>
+        f.grant(id, f.buyer, [action], true, true),
+      );
+      await refused(f, selected);
+      await f.grant(id, f.buyer, [action]);
+      await delivered(f, selected);
+    }
+  } finally {
+    await f.close();
+  }
+});
 
 test('Edition byte disclosure repeats the buyer grant and protected parent checks after preparation', async () => {
   const f = await growthEditionRevisionDeliveryFixture();

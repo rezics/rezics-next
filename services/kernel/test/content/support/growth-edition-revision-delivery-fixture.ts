@@ -36,64 +36,105 @@ export const deliveryAxes: readonly DeliveryAxis[] = [
   'publisher-grants',
 ];
 
-/** All selected identities, bindings, grants, receipts and publication are native commands.
- * Auth's registered host and its consent/restoration queries use the same capture state.
- */
-export async function growthEditionRevisionDeliveryFixture() {
+type NativeRuntime = Awaited<ReturnType<typeof nativeFixture>>;
+type SharedHarness = {
+  db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+  native: NativeRuntime;
+  app: ReturnType<typeof testKernel>;
+  mutationApp: ReturnType<typeof testKernel>;
+  publisherAccountId: string;
+  person(label: string): Promise<Person>;
+  signIn(accountId: string): Promise<Person>;
+  close(): Promise<void>;
+};
+let sharedHarness: Promise<SharedHarness> | undefined;
+
+async function createSharedHarness(): Promise<SharedHarness> {
   const db = await openGrowthDatabase();
-  let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;
-  let observer: ReturnType<typeof observeSql> | undefined;
-  let closing: Promise<void> | undefined;
-  const close = () =>
-    (closing ??= (async () => {
-      try {
-        await observer?.close();
-      } finally {
-        try {
-          await auth?.close();
-        } finally {
-          await db.close();
-        }
-      }
-    })());
+  let native: NativeRuntime | undefined;
   try {
-    auth = await nativeFixture(db.pool, () => db.openPool({ max: 4 }));
-    const native = auth;
+    native = await nativeFixture(db.pool, () => db.openPool({ max: 4 }));
     const consent = createCurrentConsentReader({ database: native.authPool });
     const authConfig = {
       ...native.host.service.verifier,
-      fetch: (url: string | URL, init?: RequestInit) => native.host.service.handler(new Request(url, init)),
+      fetch: (url: string | URL, init?: RequestInit) => native!.host.service.handler(new Request(url, init)),
     };
     const readConsent = ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
       consent.readCurrentConsent({ actorAccountId, clientId });
     mountContentEditionConsent(db.pool, readConsent);
     const writeRate = createWriteRateLimiter({ secret: 'edition-delivery-native-write-rate-secret-32-bytes' });
     const app = testKernel({ pool: db.pool, auth: authConfig, writeRate });
-    // Mutations racing disclosure use a different checkout and observer, with ordinary Access.
     const mutationPool = db.openPool({ max: 2 });
     mountContentEditionConsent(mutationPool, readConsent);
     const mutationApp = testKernel({ pool: mutationPool, auth: authConfig, writeRate });
     const scopes = [...actionCatalogue(app).keys()].filter((action) => action !== 'media:complete').sort();
     const clientId = `edition_growth_${randomUUID()}`;
     await registerTestClient(native.host.service, { clientId, firstParty: true, scopes });
-    async function person(label: string): Promise<Person> {
-      const registered = await native.person(`edition_${label}_${randomUUID().replaceAll('-', '')}`);
-      const signed = await native.request('/signin', {
-        account_id: registered.accountId,
+
+    async function signIn(accountId: string): Promise<Person> {
+      const signed = await native!.request('/signin', {
+        account_id: accountId,
         password,
         client_id: clientId,
         scope: scopes,
       });
       expect(signed.status).toBe(200);
-      const issued = await native.request('/token', {}, cookies(signed));
+      const issued = await native!.request('/token', {}, cookies(signed));
       expect(issued.status).toBe(200);
-      return { accountId: registered.accountId, bearer: (await issued.json()).access_token as string };
+      return { accountId, bearer: (await issued.json()).access_token as string };
     }
+    async function person(label: string): Promise<Person> {
+      const registered = await native!.person(`edition_${label}_${randomUUID().replaceAll('-', '')}`);
+      return signIn(registered.accountId);
+    }
+
     const publisher = await person('publisher');
-    const buyer = await person('recipient');
-    const outsider = await person('nonmember');
     await bootstrapGovernance(db.pool, publisher.accountId);
     await bootstrapRelease(db.pool, bundledRelease);
+    return {
+      db,
+      native,
+      app,
+      mutationApp,
+      publisherAccountId: publisher.accountId,
+      person,
+      signIn,
+      async close() {
+        try {
+          await native!.close();
+        } finally {
+          await db.close();
+        }
+      },
+    };
+  } catch (error) {
+    try {
+      await native?.close();
+    } finally {
+      await db.close();
+    }
+    throw error;
+  }
+}
+
+export async function closeGrowthEditionRevisionDeliveryHarness(): Promise<void> {
+  const current = sharedHarness;
+  sharedHarness = undefined;
+  if (current) await (await current).close();
+}
+
+/** All selected identities, bindings, grants, receipts and publication are native commands.
+ * Auth's registered host and its consent/restoration queries use the same capture state.
+ */
+export async function growthEditionRevisionDeliveryFixture() {
+  const shared = await (sharedHarness ??= createSharedHarness());
+  const { db, native, app, mutationApp } = shared;
+  let observer: ReturnType<typeof observeSql> | undefined;
+  const close = async () => observer?.close();
+  try {
+    const publisher = await shared.signIn(shared.publisherAccountId);
+    const buyer = await shared.person('recipient');
+    const outsider = await shared.person('nonmember');
 
     function wire(
       person: Person | null,
@@ -201,7 +242,8 @@ export async function growthEditionRevisionDeliveryFixture() {
     const body = fromPlainText('Pinned canonical edition bytes across native delivery growth.');
     const bytes = Buffer.from(serializeDocument(body));
     const digest = createHash('sha256').update(bytes).digest('hex');
-    async function selection(): Promise<Selection> {
+    async function selection(options: { protected?: boolean } = {}): Promise<Selection> {
+      const visibility = options.protected ? 'protected' : 'published';
       const thread = (
         await value<{ thread: { id: string; firstPost: Post } }>(
           wire(publisher, '/v1/threads', 'POST', {
@@ -210,7 +252,7 @@ export async function growthEditionRevisionDeliveryFixture() {
             licence: 'CC0-1.0',
             subjectIds: [subjectId],
             boardId,
-            visibility: 'published',
+            visibility,
           }),
           201,
         )
@@ -221,6 +263,7 @@ export async function growthEditionRevisionDeliveryFixture() {
             parentId: thread.firstPost.id,
             body: fromPlainText('Independent parent'),
             licence: 'CC0-1.0',
+            visibility,
           }),
           201,
         )
@@ -232,6 +275,7 @@ export async function growthEditionRevisionDeliveryFixture() {
             body,
             licence: 'CC0-1.0',
             subjectIds: [subjectId],
+            visibility,
           }),
           201,
         )
@@ -247,6 +291,11 @@ export async function growthEditionRevisionDeliveryFixture() {
       await value(wire(publisher, `/v1/contentEditions/${draft.editionId}:publish`, 'POST', {}, '1'), 200);
       await grant(draft.editionId, buyer, ['edition:read']);
       await grant(draft.editionId, outsider, ['edition:read']);
+      if (options.protected) {
+        await grant(thread.id, buyer, ['thread:read']);
+        await grant(thread.firstPost.id, buyer, ['post:read']);
+        await grant(parent.id, buyer, ['post:read']);
+      }
       expect(post.sha256).toBe(digest);
       return {
         threadId: thread.id,

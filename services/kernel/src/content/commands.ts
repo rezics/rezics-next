@@ -719,7 +719,7 @@ export async function createThread(
         if (
           typeof body.title !== 'string' ||
           body.title.trim().length === 0 ||
-          (body.visibility !== 'published' && body.visibility !== 'draft') ||
+          (body.visibility !== 'published' && body.visibility !== 'draft' && body.visibility !== 'protected') ||
           (threadKind !== 'discussion' && threadKind !== 'review')
         )
           throw new InvalidDocumentError();
@@ -853,7 +853,12 @@ export async function createPost(
     { ...options(dependencies, actor, r, CREATE_POST, body, context), authorization },
     async (tx, command) => {
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
-      if (body.visibility !== undefined && body.visibility !== 'published' && body.visibility !== 'draft')
+      if (
+        body.visibility !== undefined &&
+        body.visibility !== 'published' &&
+        body.visibility !== 'draft' &&
+        body.visibility !== 'protected'
+      )
         throw new InvalidDocumentError();
       const visibility = body.visibility ?? 'published';
       const root = container.current.thread;

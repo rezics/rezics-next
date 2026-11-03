@@ -551,6 +551,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'thread.create',
+          description: 'Create a published, draft, or protected thread and opening post.',
           'x-authority-resource-types': ['content.board'],
           'x-exposure': 'public',
           'x-action': 'thread:create',
@@ -673,6 +674,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'post.create',
+          description: 'Create a published, draft, or protected post within an existing thread.',
           'x-authority-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'post:create',
