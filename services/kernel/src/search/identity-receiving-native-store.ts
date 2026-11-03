@@ -76,7 +76,12 @@ import releaseProofSql from './identity-receiving-native-release-proof.sql';
 import drainSql from './identity-receiving-native-drain.sql';
 import drainGateSql from './identity-receiving-native-drain-gate.sql';
 
-export const searchNativeReceivingStatements = Object.freeze({
+/** Indexed SQL text for SearchNativeReceivingSql. Declaration emit cannot name reylo error fields. */
+export type SearchNativeReceivingStatements = {
+  readonly [K in SearchNativeReceivingSql]: { readonly sql: string };
+};
+
+export const searchNativeReceivingStatements: SearchNativeReceivingStatements = Object.freeze({
   owner: ownerSql,
   plan: planSql,
   prepare: prepareSql,
