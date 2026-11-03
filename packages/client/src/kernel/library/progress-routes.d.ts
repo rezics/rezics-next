@@ -5824,6 +5824,236 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
     v1: {
         progressSessions: {
             ":sessionId": {
+                journal: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            sessionId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                journal: {
+                                    sessionId: string;
+                                    revision: number;
+                                    startDate: {
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | null;
+                                    finishDate: {
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | null;
+                                    reflection: string | null;
+                                };
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
+                journal: {
+                    patch: {
+                        body: {
+                            revision: number;
+                            startDate?: {
+                                year: number;
+                                month?: number;
+                                day?: number;
+                            } | null;
+                            finishDate?: {
+                                year: number;
+                                month?: number;
+                                day?: number;
+                            } | null;
+                            reflection?: string | null;
+                        };
+                        params: {
+                            sessionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                journal: {
+                                    sessionId: string;
+                                    revision: number;
+                                    changed: boolean;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            413: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
                 $record: {
                     post: {
                         body: {
@@ -7605,48 +7835,5 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
     };
-}> & ProgressSessionJournalRoute;
-type ProgressSessionJournalRoute = {
-    "~Routes": {
-        v1: {
-            progressSessions: {
-                ":sessionId": {
-                    journal: {
-                        get: {
-                            body: unknown;
-                            params: { sessionId: string };
-                            query: unknown;
-                            headers: unknown;
-                            response: {
-                                200: { journal: import("./progress-model.ts").ProgressSessionJournal };
-                                401: unknown;
-                                404: unknown;
-                                409: unknown;
-                                503: unknown;
-                            };
-                            error: never;
-                        };
-                        patch: {
-                            body: import("./progress-model.ts").ProgressSessionJournalPatch;
-                            params: { sessionId: string };
-                            query: unknown;
-                            headers: { "idempotency-key": string };
-                            response: {
-                                200: { journal: import("./progress-model.ts").ProgressSessionJournalWrite };
-                                400: unknown;
-                                401: unknown;
-                                403: unknown;
-                                404: unknown;
-                                409: unknown;
-                                413: unknown;
-                                503: unknown;
-                            };
-                            error: never;
-                        };
-                    };
-                };
-            };
-        };
-    };
-};
+}>;
 export {};

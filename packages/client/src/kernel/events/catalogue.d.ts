@@ -1415,6 +1415,9 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.bangumi.changed.v1': Type.TObject<{
         operation: Type.TString;
     }>;
+    readonly 'com.rezics.library.export.requested.v1': Type.TObject<{
+        exportId: Type.TString;
+    }>;
     readonly 'com.rezics.library.bulk.confirmed.v1': Type.TObject<{
         operationId: Type.TString;
     }>;
