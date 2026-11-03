@@ -41,10 +41,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "An admitted universal Search response returns current labels, aliases, native subject links, and independently capped permitted credit or appearance contexts with truthful continuation; every thresholded context, label, and link obeys the same-statement spoiler policy."
-    - "Finite retained preparation derives the complete touched-pool bound before dispatch, including distinct voice appearance keys, and first, next, and final pages remain useful and deterministic through dense rejections and current mutations."
-    - "The installed character/person journey retires stale output on request, principal, locale, or release replacement; invalid, preparing, unavailable, and restart states remain repairable in all eight locales."
-    - "When native execution is permitted, the installed route is measured at 1x/4x/16x and every touched pool is checked against its pre-dispatch whole-page bound; deferred execution remains unmeasured."
+    - 'An admitted universal Search response returns current labels, aliases, native subject links, and independently capped permitted credit or appearance contexts with truthful continuation; every thresholded context, label, and link obeys the same-statement spoiler policy.'
+    - 'Finite retained preparation derives the complete touched-pool bound before dispatch, including distinct voice appearance keys, and first, next, and final pages remain useful and deterministic through dense rejections and current mutations.'
+    - 'The installed character/person journey retires stale output on request, principal, locale, or release replacement; invalid, preparing, unavailable, and restart states remain repairable in all eight locales.'
+    - 'When native execution is permitted, the installed route is measured at 1x/4x/16x and every touched pool is checked against its pre-dispatch whole-page bound; deferred execution remains unmeasured.'
 workerOwned: true
 estimate:
   lines: 900

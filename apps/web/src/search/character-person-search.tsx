@@ -37,11 +37,7 @@ const readCharacterPerson = createServerFn({ method: 'GET' })
     );
   });
 
-export function characterPersonQueryOptions(
-  locale: string,
-  search: CharacterPersonSearch,
-  principal: string,
-) {
+export function characterPersonQueryOptions(locale: string, search: CharacterPersonSearch, principal: string) {
   const request = characterPersonRequest(search);
   return queryOptions({
     queryKey: ['character-person-search', locale, principal, request],
@@ -83,13 +79,7 @@ function searchForm(search: CharacterPersonSearch): CharacterPersonFormState {
   };
 }
 
-function CharacterPersonForm({
-  form,
-  locale,
-}: {
-  form: CharacterPersonFormState;
-  locale: string;
-}) {
+function CharacterPersonForm({ form, locale }: { form: CharacterPersonFormState; locale: string }) {
   const options = messageOptions(locale);
   return (
     <form action={searchPath(locale)} method="get" className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">

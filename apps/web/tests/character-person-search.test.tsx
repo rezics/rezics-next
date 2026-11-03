@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { characterPersonHref, characterPersonRequest, parseCharacterPersonSearch } from '../src/search/character-person';
+import {
+  characterPersonHref,
+  characterPersonRequest,
+  parseCharacterPersonSearch,
+} from '../src/search/character-person';
 
 const work = '018f0000-0000-7000-8000-00a000000001';
 const secondWork = '018f0000-0000-7000-8000-00a000000002';

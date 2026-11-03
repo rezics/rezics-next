@@ -44,10 +44,7 @@ function localeLanguages(locale: string): string[] {
 }
 
 /** Keep malformed URL values in the form so the user can repair the request in place. */
-export function parseCharacterPersonSearch(
-  raw: Record<string, unknown>,
-  locale: string,
-): ParsedCharacterPersonSearch {
+export function parseCharacterPersonSearch(raw: Record<string, unknown>, locale: string): ParsedCharacterPersonSearch {
   const rawMode = stringValue(raw.mode) ?? 'characters';
   const rawName = stringValue(raw.name) ?? '';
   const rawRole = stringValue(raw.role) ?? '';
@@ -58,7 +55,12 @@ export function parseCharacterPersonSearch(
     .map((item) => (typeof item === 'string' ? item.trim() : item))
     .filter((item) => item !== '');
   const rawLanguages = values(raw.language).flatMap((item) =>
-    typeof item === 'string' ? item.split(',').map((tag) => tag.trim()).filter(Boolean) : [item],
+    typeof item === 'string'
+      ? item
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [item],
   );
   const rawCursor = stringValue(raw.cursor);
   const form: CharacterPersonForm = {
@@ -122,9 +124,7 @@ export function parseCharacterPersonSearch(
 
 /** Build one admitted universal Search request; inverse evidence stays on the native statement. */
 export function characterPersonRequest(search: CharacterPersonSearch): DiscoveryRequest {
-  const conditions: unknown[] = [
-    { type: { in: [search.mode === 'people' ? 'schema:Person' : 'schema:Character'] } },
-  ];
+  const conditions: unknown[] = [{ type: { in: [search.mode === 'people' ? 'schema:Person' : 'schema:Character'] } }];
   if (search.works.length) {
     const qualifiers = search.role ? [{ property: 'wdt:P3831', in: [search.role] }] : undefined;
     conditions.push({
@@ -150,11 +150,7 @@ export function characterPersonRequest(search: CharacterPersonSearch): Discovery
   };
 }
 
-export function characterPersonHref(
-  locale: string,
-  search: CharacterPersonSearch,
-  cursor?: string,
-): string {
+export function characterPersonHref(locale: string, search: CharacterPersonSearch, cursor?: string): string {
   const params = new URLSearchParams();
   params.set('mode', search.mode);
   if (search.name) params.set('name', search.name);
