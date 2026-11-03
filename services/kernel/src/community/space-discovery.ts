@@ -10,6 +10,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import { spaceDiscoveryDependencyReadiness, type SpaceDiscoveryDependencyReadiness } from './space-discovery-dependencies.ts';
 
 const spaceTypes = [
   'created',
@@ -23,6 +24,7 @@ const spaceTypes = [
 const realmTypes = ['created', 'updated', 'removed', 'restored', 'board-scheme'].map(
   (name) => `com.rezics.community.realm.${name}.v1`,
 );
+const realmGateType = 'com.rezics.community.realm-discovery.changed.v1';
 const mediaTypes = ['available', 'rejected', 'erased', 'collected', 'taken-down'].map(
   (name) => `com.rezics.content.media.${name}.v1`,
 );
@@ -32,6 +34,7 @@ const exposureTypes = ['com.rezics.access.exposure.opened.v1', 'com.rezics.acces
 export const SPACE_DISCOVERY_NATIVE_EVENTS = [
   ...spaceTypes,
   ...realmTypes,
+  realmGateType,
   ...mediaTypes,
   ...contextTypes,
   fenceType,
@@ -102,7 +105,7 @@ export async function spaceDiscoveryInvalidation(
           .readUInt16BE(0)
       : undefined;
     target = { kind: 'space', id: sameHome(data.spaceId ?? data.id, nativeRoute) };
-  } else if (realmTypes.includes(event.type)) {
+  } else if (realmTypes.includes(event.type) || event.type === realmGateType) {
     const realmId = sameHome(data.realmId ?? data.id);
     const space = await withConnection(
       pool,
@@ -212,6 +215,8 @@ export type SpaceDiscoveryDependencies = Readonly<{
   clock?: () => Date;
 }>;
 export interface SpaceDiscoverySource {
+  /** Dependency capability is separate from census and current hydration. */
+  dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
   read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
   /** Internal generation census of retained native candidates, including ineligible identities. */
   count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
@@ -246,6 +251,7 @@ export function spaceDiscoverySource(
 ): SpaceDiscoverySource {
   const deadline = () => context?.deadline ?? Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
   return {
+    dependencies: () => spaceDiscoveryDependencyReadiness(deps.pool),
     async read(partition, ids) {
       partitionKey(partition);
       const requested = keys(ids, partition);

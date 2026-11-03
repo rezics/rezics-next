@@ -93,7 +93,8 @@ Realm creation, revision/board-scheme edits and removal/restoration; native medi
 Context lifecycle changes, source-tuple fences and API exposure changes. Realm title/description/avatar selection
 and public/protected changes already produce `realm.updated.v1`. A Space has no native visibility or avatar
 field: the carried Realm is independently guarded enrichment of that Space identity. Popular/Trending Realm
-discussion activity and its source-contribution fences are unrelated and are not consumed here.
+discussion activity changes no Space metadata; its native source-gate wake is consumed because an unsettled
+carried-Realm source gate suppresses the Space during current hydration.
 
 The closed `com.rezics.community.space-discovery.invalidated.v1` payload names a Space or a dependency scope,
 the original log `(partition, epoch, position, eventId, type, resourceId)`, and any native revision/lifecycle/security version.
@@ -115,10 +116,9 @@ authority while delivery lags. This producer does not establish index convergenc
 **Space-source seam.** The population/bootstrap producer below uses current native positions alongside these existing native events
 and the retained origin tuple, without importing its reader here. Direct targets are canonical Space IDs. Shared
 `context`, `media`, `source-fence` and `exposure` targets are durable invalidation obligations, not expanded Space
-lists or an assertion that no Spaces depend on them. Completing their propagation still requires a bounded,
-durable dependency-to-Space frontier and Search consumer integration; it must use native dependency keys, survive
-duplicate/reordered changes, and never scan all partitions or census the population per mutation. Until that
-frontier and Search consumer integration are connected, Space discovery remains unenabled.
+lists or an assertion that no Spaces depend on them. The bounded native inverse and durable drain below propagate
+connected dependencies. Search registration and consumer integration remain Search's responsibility; Space discovery
+remains unenabled until that adapter and every required native dependency capability connect.
 
 Cost: the original mutation adds no reads or writes. A direct Space effect adds no source checkout; a Realm effect
 adds one exact retained `(route, realm_id)` point read, released before its delivery command. Each delivered
@@ -182,12 +182,56 @@ indexed seeks; there is no all-partition scan, ranking read, historical text sca
 Bootstrap and current hydration are delivered here alongside the native invalidation relay above. Decision: retain
 both producer interfaces and their existing names; direct invalidations identify exactly the Space keys accepted by
 this source. Consumers reread those keys at current native positions, never apply invalidation bodies as projections.
-Ongoing index convergence remains explicitly incomplete: dependency scope obligations still require the bounded,
-durable dependency-to-Space frontier described above, and Search owns their consumer and registered generations.
-The Realm discussion source gate is checked on every owner round; its `realm-discovery.changed` events are not
-consumed by the existing Space invalidation relay. Connecting that gate's wakes is also part of the dependent
-lifecycle increment. No claim is made that an existing index converges after every gate change. Search must use
-current hydration and must not expose this private census as kind-count evidence.
+Search owns the consumer and registered generations. The Realm discussion source gate is checked on every owner
+round and its `realm-discovery.changed` events now produce direct Space wakes through the same retained host binding.
+Search must use current hydration and must not expose this private census as kind-count evidence.
+
+### Shared dependency frontiers
+
+`space-discovery-dependencies.ts` initializes the native inverse; `space-discovery-frontier.ts` exports
+`openSpaceDiscoveryFrontier` and `drainSpaceDiscoveryFrontier`. The production default worker registers their
+invalidation effect, bounded continuation workflow and minute recovery schedule in `work.ts`. No Search writes,
+registration, source reader or hydration implementation are added here.
+`spaceDiscoverySource().dependencies()` exposes explicit preparation/capability state for registration;
+`readSpaceDiscoveryFrontier` reports native acknowledgement and exact decimal progress independently of relay delivery.
+
+Decision: index native carried-Realm Context and selected avatar keys plus the existing Search route exposure
+groups `search` and `search_advanced`; retain source-fence obligations as unavailable until a native Space tuple
+producer connects, since Realm icons explicitly prohibit imported provenance.
+
+Deferred native Space/Realm writer triggers update only that retained Space's inverse keys in the same transaction
+as its native change. Removed and protected identities retain dependencies. Context selection and optional avatar
+selection use the exact current Realm head; standalone Spaces have neither dependency. The inverse holds identities
+only. Its `(dependency, ordinal)` covering index supports an exact dependency seek, independent of partition count;
+its owner index bounds replacement to this Space's at most four keys. It never filters by anonymous eligibility.
+
+Migration initialization captures one indexed native endpoint per partition under writer locks. Each initialization
+command examines at most 50 raw Space keys in that partition, locking each current owner before registering it.
+New identities and changed heads maintain themselves on either side of the cut. The pending-install index supplies
+one next locator; no shared-scope mutation or drain enumerates partitions. A scope remains preparing until this
+captured inventory finishes, including when its currently eligible population is empty.
+
+An obligation retains its original native tuple, decimal positions, payload, inverse cut, cursor, examined count and
+state. A drain examines at most 50 indexed dependency keys through the captured cut, releasing its checkout before
+each exact Space command. Each examined retained identity gets one canonical direct invalidation; its retained
+obligation/Space deduplication and event commit together in the Space home. Only after all wakes commit does a
+compare-and-set advance the cursor or settle the obligation. Concurrent or restarted drains cannot double count
+progress or duplicate wakes after command receipts expire. There is no cross-partition or cross-epoch scalar clock.
+
+Dependency removal may delete an unexamined inverse key; the native change's own direct wake rehydrates that Space.
+Insertions behind a captured cursor, including late commits and changes during initialization, are covered by their
+own committed native change events. New inverse keys beyond the cut are likewise covered by that live relay. Old,
+duplicate and reordered wakes always invoke the existing current anonymous hydration, including remove/restore cycles.
+
+One scope costs one durable obligation, bounded inverse pages and at most one retained exact wake per examined
+dependency. A workflow runs at most 20 pages (1,000 examined keys), then enqueues a locator-only continuation.
+Initialization costs 4,096 endpoint seeks once, then one bounded owner pass; ongoing native changes replace at most
+four dependency keys. Failed command steps use the shared eight-attempt retry policy; the minute indexed recovery
+schedule retries unfinished initialization/frontiers after exhausted attempts or restarts. Unavailable source-fence
+obligations are retained without acknowledgement. Frontiers, inverse keys and wake deduplication have no expiry;
+they must not be pruned using the shorter command-receipt lifetime. Native runtime costs, Search convergence and main
+promotion remain distinct integration verification obligations. Focused cases live in
+`test/community/space-discovery-dependencies.test.ts`.
 
 ## Space commands and reads
 

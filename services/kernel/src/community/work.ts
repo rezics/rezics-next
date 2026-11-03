@@ -1,5 +1,16 @@
 import { registerDiscoveryWork } from './discovery-register.ts';
 import { createSpaceDiscoveryEffect } from './space-discovery.ts';
+import {
+  initializeSpaceDiscoveryDependencies,
+  nextSpaceDiscoveryDependencyInstall,
+} from './space-discovery-dependencies.ts';
+import {
+  drainSpaceDiscoveryFrontier,
+  openSpaceDiscoveryFrontier,
+  pendingSpaceDiscoveryFrontiers,
+  type SpaceDiscoveryFrontier,
+} from './space-discovery-frontier.ts';
+import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
 import { PARTITIONS } from '../route/route.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
@@ -92,6 +103,7 @@ export const communityWorkModule: WorkModule = {
   name: 'community',
   async register(context) {
     context.addEffects([createRevisionLocatorEffect(context.pool), createSpaceDiscoveryEffect(context.pool)]);
+    await registerSpaceDiscoveryDependencies(context);
     registerCommunityWork(context);
     // Use the existing maintenance queue and native command segments. DBOS
     // retains partition locators/continuation only; source progress stays native.
@@ -144,3 +156,64 @@ export const communityWorkModule: WorkModule = {
     context.addEffects([createPartyLocatorEffect(context.pool), createCommunityAccountErasureEffect(context)]);
   },
 };
+
+/** A workflow performs at most twenty native pages. Continuations and periodic
+ * recovery carry locators only; the durable owner frontier decides completion.
+ */
+async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise<void> {
+  const drain = DBOS.registerStep(
+    (key: SpaceDiscoveryFrontier) => drainSpaceDiscoveryFrontier(context.pool, key),
+    { name: 'community.space-dependencies.drain', ...COMMAND_STEP_RETRIES },
+  );
+  const enqueueFrontier = async (key: SpaceDiscoveryFrontier) => {
+    await context.client.enqueue({
+      workflowName: 'community.space-dependencies.continue', queueName: 'maintenance',
+      workflowID: `space-dependencies:${createHash('sha256').update(`${DBOS.workflowID}:${key.obligation}`).digest('hex')}`,
+      workflowIDReusePolicy: 'return-existing',
+    }, key);
+  };
+  const enqueue = DBOS.registerStep(enqueueFrontier,
+    { name: 'community.space-dependencies.enqueue', ...COMMAND_STEP_RETRIES });
+  DBOS.registerWorkflow(async (key: SpaceDiscoveryFrontier) => {
+    for (let page = 0; page < 20; page++) {
+      if (await drain(key) !== 'draining') return;
+    }
+    await enqueue(key);
+  }, { name: 'community.space-dependencies.continue' });
+  context.addEffects([{
+    name: 'community_space_dependency_frontiers', types: [SPACE_DISCOVERY_INVALIDATED],
+    async run(event) {
+      const key = await openSpaceDiscoveryFrontier(context.pool, event);
+      if (key) await enqueueFrontier(key);
+    },
+  }]);
+  const initialize = DBOS.registerStep(async () => {
+    const partition = await nextSpaceDiscoveryDependencyInstall(context.pool);
+    if (partition === null) return false;
+    await initializeSpaceDiscoveryDependencies(context.pool, partition);
+    return true;
+  }, { name: 'community.space-dependencies.initialize', ...COMMAND_STEP_RETRIES });
+  const recover = DBOS.registerStep(() => pendingSpaceDiscoveryFrontiers(context.pool),
+    { name: 'community.space-dependencies.recover', ...COMMAND_STEP_RETRIES });
+  const continueInitialization = DBOS.registerStep(async () => {
+    await context.client.enqueue({
+      workflowName: 'community.space-dependencies.upkeep', queueName: 'maintenance',
+      workflowID: `space-dependencies:init:${createHash('sha256').update(DBOS.workflowID!).digest('hex')}`,
+      workflowIDReusePolicy: 'return-existing',
+    });
+  }, { name: 'community.space-dependencies.initialize-next', ...COMMAND_STEP_RETRIES });
+  DBOS.registerWorkflow(async () => {
+    for (let page = 0; page < 20; page++) {
+      if (!(await initialize())) {
+        for (const key of await recover()) await enqueue(key);
+        return;
+      }
+    }
+    await continueInitialization();
+  }, { name: 'community.space-dependencies.upkeep' });
+  await context.client.applySchedules([{
+    scheduleName: 'community.space-dependencies.every-minute',
+    workflowName: 'community.space-dependencies.upkeep', schedule: '* * * * *',
+    queueName: 'maintenance', cronTimezone: 'UTC', automaticBackfill: false,
+  }]);
+}
