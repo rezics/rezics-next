@@ -180,7 +180,7 @@ export function aniListImportRoutes(
           ),
           ...failures,
         },
-        detail: { ...detail('metadata.review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, headers }) =>
         command(() =>
@@ -245,7 +245,7 @@ export function aniListImportRoutes(
           ),
           ...failures,
         },
-        detail: { ...detail('metadata.apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, request }) =>
         command(() =>
