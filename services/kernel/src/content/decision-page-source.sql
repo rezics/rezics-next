@@ -5,6 +5,8 @@ SELECT d.decision_id, d.target_kind, d.target_id, d.action,
        d.decided_at::text, a.appeal_id, a.outcome, a.resolver_statement, a.resolved_at::text,
        CASE WHEN d.target_kind = 'thread' THEN t.author_account_id
             WHEN d.target_kind = 'post' THEN p.author_account_id END AS author_account_id,
+       CASE WHEN d.target_kind = 'thread' THEN t.thread_id
+            WHEN d.target_kind = 'post' THEN p.thread_id END AS thread_id,
        CASE WHEN d.target_kind = 'board' THEN true
             WHEN d.target_kind = 'thread' THEN t.availability = 'available'
             ELSE p.availability = 'available' AND parent.availability = 'available' END AS available,

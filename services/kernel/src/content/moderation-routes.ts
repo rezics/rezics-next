@@ -6,7 +6,8 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
-import { ModerationDecisionSchema, readModerationDecision } from './moderation-decisions.ts';
+import { DecisionPageSchema, readDecisionPage } from './decision-page.ts';
+import type { ContentReadDependencies } from './reads.ts';
 import {
   listModerationHistory,
   ModerationHistoryPageSchema,
@@ -87,7 +88,10 @@ async function command<T>(work: () => Promise<T>): Promise<T> {
 /** Transport only: exact point commands own authorization before receipt replay;
  * author-scope initiation commits an operation for the native outbox relay.
  */
-export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: ModerationDependencies & ContentRuntime) {
+export function moderationRoutes(
+  app: ReturnType<typeof reportRoutes>,
+  deps: ModerationDependencies & ContentRuntime & Pick<ContentReadDependencies, 'tokens'>,
+) {
   const operations: AuthorErasureDependencies = {
     pool: deps.pool,
     get access() {
@@ -143,7 +147,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
       {
         params,
         response: {
-          200: withHeaders(ModerationDecisionSchema, { ...sessionHeader, 'cache-control': t.String() }),
+          200: withHeaders(DecisionPageSchema, { ...sessionHeader, 'cache-control': t.String() }),
           ...readFailures,
         },
         detail: {
@@ -153,10 +157,10 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ params: { id }, actor, admission, job, session, set }) => {
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () => {
-          const result = await readModerationDecision(deps, id, { actor, deadline: job.deadline });
+          const result = await readDecisionPage(deps, id, request, { actor, deadline: job.deadline });
           if (!result || !result.value) throw new ProblemError('not_found');
           session.record(result.anchor);
           return result.value;
