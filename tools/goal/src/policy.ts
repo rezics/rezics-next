@@ -18,9 +18,14 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
         const label = `${path}.${key}`;
         const candidate = input[key] === undefined ? fallback : input[key];
         if (label === 'policy.backlog.continuationReview') {
-          if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
-            Object.entries(candidate).some(([goal, enabled]) =>
-              !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(goal) || typeof enabled !== 'boolean'))
+          if (
+            !candidate ||
+            typeof candidate !== 'object' ||
+            Array.isArray(candidate) ||
+            Object.entries(candidate).some(
+              ([goal, enabled]) => !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(goal) || typeof enabled !== 'boolean',
+            )
+          )
             throw new Error(`invalid ${label}`);
           return [key, { ...candidate }];
         }

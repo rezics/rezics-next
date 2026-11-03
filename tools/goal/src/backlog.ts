@@ -466,19 +466,36 @@ async function dispatchReady(
       continuation = readBriefContinuation(markdown);
       // Worker remainders create new work; manager-authored retries retain their exact-owner validation.
       if (basename(claimed).startsWith('continuation-')) {
-        const source = continuation?.taskId ?? (
-          runtime.db.query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
-            .all(pick.goal) as { id: string }[]
-        ).find((row) => basename(claimed).startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
-        const overlap = continuationOverlap(runtime.db, runtime.stateDirectory, pick.goal, markdown,
-          source, [claimed], runtime.policy?.brief);
-        const reason = overlap ?? (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
+        const source =
+          continuation?.taskId ??
+          (
+            runtime.db
+              .query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
+              .all(pick.goal) as { id: string }[]
+          ).find((row) => basename(claimed).startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
+        const overlap = continuationOverlap(
+          runtime.db,
+          runtime.stateDirectory,
+          pick.goal,
+          markdown,
+          source,
+          [claimed],
+          runtime.policy?.brief,
+        );
+        const reason =
+          overlap ??
+          (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
           !continuationReleased(runtime.stateDirectory, pick.goal, basename(claimed), markdown)
-          ? 'Goal continuation review is enabled; release or retire this proposal' : undefined);
+            ? 'Goal continuation review is enabled; release or retire this proposal'
+            : undefined);
         if (reason) {
           const proposed = proposeContinuation(claimed, runtime.stateDirectory, pick.goal, reason);
-          runtime.inbox.deliver({ managerId: pick.goal, goalId: pick.goal, kind: 'instruction',
-            summary: `Continuation proposed at ${proposed}: ${reason}` });
+          runtime.inbox.deliver({
+            managerId: pick.goal,
+            goalId: pick.goal,
+            kind: 'instruction',
+            summary: `Continuation proposed at ${proposed}: ${reason}`,
+          });
           continue;
         }
       }

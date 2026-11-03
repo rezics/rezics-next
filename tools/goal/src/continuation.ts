@@ -39,12 +39,15 @@ export type ContinuationHarvest = {
 function scope(markdown: string): { paths: string[]; title: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   const raw = match ? Bun.YAML.parse(match[1]!) : {};
-  const front = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const front = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const body = match ? markdown.slice(match[0].length) : markdown;
   const title = front?.title ?? /^#+\s+(.+)$/m.exec(body)?.[1] ?? body.trim().split('\n')[0] ?? '';
   return {
     paths: Array.isArray(front?.paths) ? front.paths.filter((path: unknown) => typeof path === 'string') : [],
-    title: String(title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(),
+    title: String(title)
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim(),
   };
 }
 
@@ -52,7 +55,8 @@ function markdownFiles(directory: string): string[] {
   try {
     return readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-      .map((entry) => join(directory, entry.name)).sort();
+      .map((entry) => join(directory, entry.name))
+      .sort();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
@@ -61,18 +65,24 @@ function markdownFiles(directory: string): string[] {
 
 /** The source task is already a dependency; only other unfinished work conflicts with its remainder. */
 export function continuationOverlap(
-  db: Database, stateDirectory: string, goal: string, markdown: string,
-  sourceTask: string | undefined, ignoredFiles: string[] = [],
+  db: Database,
+  stateDirectory: string,
+  goal: string,
+  markdown: string,
+  sourceTask: string | undefined,
+  ignoredFiles: string[] = [],
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
 ): string | undefined {
   const candidate = scope(markdown);
   const overlaps = (other: ReturnType<typeof scope>) =>
     (candidate.title && candidate.title === other.title) ||
     candidate.paths.some((path) => other.paths.some((pattern) => pathsOverlap(path, pattern, policy)));
-  const rows = db.query(`SELECT id, body FROM worker_tasks
+  const rows = db
+    .query(`SELECT id, body FROM worker_tasks
     WHERE json_extract(body, '$.brief.goal') = ?
       AND json_extract(body, '$.state') IN ('ready', 'running', 'held', 'landing', 'stopped')
-    ORDER BY sequence`).all(goal) as { id: string; body: string }[];
+    ORDER BY sequence`)
+    .all(goal) as { id: string; body: string }[];
   for (const row of rows) {
     if (row.id === sourceTask) continue;
     const brief = (JSON.parse(row.body) as Task).brief;
@@ -96,13 +106,17 @@ export function continuationOverlap(
 
 /** Explicit per-Goal values override the default derived from the Goal's durable brief history. */
 export function continuationReview(
-  stateDirectory: string, goal: string, policy: ControlPolicy = defaultPolicy, additional = 0,
+  stateDirectory: string,
+  goal: string,
+  policy: ControlPolicy = defaultPolicy,
+  additional = 0,
 ): boolean {
   const configured = policy.backlog.continuationReview[goal];
   if (configured !== undefined) return configured;
   const root = backlogDirectory(stateDirectory, goal);
-  const files = ['', 'proposed', 'dispatched', 'continued', 'failed', 'retired', '.dispatching']
-    .flatMap((directory) => markdownFiles(join(root, directory)));
+  const files = ['', 'proposed', 'dispatched', 'continued', 'failed', 'retired', '.dispatching'].flatMap((directory) =>
+    markdownFiles(join(root, directory)),
+  );
   const continuations = files.filter((file) => /(?:^|-)continuation-/.test(basename(file))).length;
   return continuations + additional > files.length - continuations;
 }
@@ -111,10 +125,14 @@ export function continuationReview(
 export function continuationReleased(stateDirectory: string, goal: string, name: string, markdown: string): boolean {
   const root = backlogDirectory(stateDirectory, goal);
   const reason = join(root, 'proposed', `${name}.reason`);
-  return Boolean(lstatSync(reason, { throwIfNoEntry: false })) &&
-    readFileSync(reason, 'utf8').includes(`<!-- continuation-review:${createHash('sha256').update(markdown).digest('hex')} -->`) &&
+  return (
+    Boolean(lstatSync(reason, { throwIfNoEntry: false })) &&
+    readFileSync(reason, 'utf8').includes(
+      `<!-- continuation-review:${createHash('sha256').update(markdown).digest('hex')} -->`,
+    ) &&
     !lstatSync(join(root, 'proposed', name), { throwIfNoEntry: false }) &&
-    !lstatSync(join(root, 'retired', name), { throwIfNoEntry: false });
+    !lstatSync(join(root, 'retired', name), { throwIfNoEntry: false })
+  );
 }
 
 export function proposeContinuation(file: string, stateDirectory: string, goal: string, reason: string): string {
@@ -310,10 +328,15 @@ export function harvestContinuations(
   // eight copies, and the copies' own retries fanned one outcome out to 28 workers. The first queued remainder stands.
   const queuedBy = store
     .events(task.id)
-    .find((event) => ['continuation-queued', 'continuation-proposed'].includes(event.kind) && event.attempt < ref.attempt)?.attempt;
+    .find(
+      (event) => ['continuation-queued', 'continuation-proposed'].includes(event.kind) && event.attempt < ref.attempt,
+    )?.attempt;
   const target = backlogDirectory(settings.stateDirectory, task.brief.goal);
-  const lease = acquireDirectoryLeaseWaiting(join(settings.stateDirectory, 'leases', 'backlog'),
-    (settings.policy ?? defaultPolicy).leases.dispatchWaitMs, settings.policy?.leases);
+  const lease = acquireDirectoryLeaseWaiting(
+    join(settings.stateDirectory, 'leases', 'backlog'),
+    (settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+    settings.policy?.leases,
+  );
   try {
     for (const name of names) {
       const path = join(source, name);
@@ -348,11 +371,27 @@ export function harvestContinuations(
       const basenames = continuationBacklogNames(task.id, ref.attempt, name);
       const readyCandidates = basenames.map((basename) => join(target, basename));
       const proposedCandidates = basenames.map((basename) => join(target, 'proposed', basename));
-      const overlap = continuationOverlap(store.db, settings.stateDirectory, task.brief.goal, markdown,
-        task.id, [...readyCandidates, ...proposedCandidates], settings.policy?.brief);
-      const proposalReason = overlap ?? (continuationReview(settings.stateDirectory, task.brief.goal, settings.policy,
-        [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, markdown) === 'match') ? 0 : 1)
-        ? 'Goal continuation review is enabled; release or retire this proposal' : undefined);
+      const overlap = continuationOverlap(
+        store.db,
+        settings.stateDirectory,
+        task.brief.goal,
+        markdown,
+        task.id,
+        [...readyCandidates, ...proposedCandidates],
+        settings.policy?.brief,
+      );
+      const proposalReason =
+        overlap ??
+        (continuationReview(
+          settings.stateDirectory,
+          task.brief.goal,
+          settings.policy,
+          [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, markdown) === 'match')
+            ? 0
+            : 1,
+        )
+          ? 'Goal continuation review is enabled; release or retire this proposal'
+          : undefined);
       const directory = proposalReason ? join(target, 'proposed') : target;
       const candidates = basenames.map((basename) => join(directory, basename));
       let destination = candidates.find((candidate) => publicationState(candidate, markdown) === 'match');
@@ -379,7 +418,9 @@ export function harvestContinuations(
         result.proposed.push({ file: destination, reason: proposalReason });
         store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
         new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
-          managerId: task.brief.manager, goalId: task.brief.goal, kind: 'instruction',
+          managerId: task.brief.manager,
+          goalId: task.brief.goal,
+          kind: 'instruction',
           summary: `Continuation proposed at ${destination}: ${proposalReason}`,
         });
         continue;
