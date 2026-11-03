@@ -29,15 +29,7 @@ function labelOf(item: WorkbenchDirectoryItem): string {
   return item.title?.trim() || m.moderation_target_unavailable();
 }
 
-function CaseRow({
-  item,
-  search,
-  identity,
-}: {
-  item: WorkbenchCase;
-  search: WorkbenchSearch;
-  identity: string;
-}) {
+function CaseRow({ item, search, identity }: { item: WorkbenchCase; search: WorkbenchSearch; identity: string }) {
   const scope = workbenchQueueScope(search);
   if (!scope) return null;
   const href = localizeHref(workbenchCaseHref(scope, item.kind));

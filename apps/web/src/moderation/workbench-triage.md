@@ -12,19 +12,19 @@ non-link scan body other owners can mount beside their own links or history chro
 target kind, reason, resolution, time and a two-line optional evidence or statement. Open details use a two-column
 definition list from `xl` (1280px) and a single column below that.
 
-| Field | Report | Appeal | Missing value |
-| --- | --- | --- | --- |
-| Case type | Report | Appeal | — |
-| Target type | board / thread / post / Subject | same | — |
-| Target ID | native | native | — |
-| Created | UTC readable time plus timezone name | same | Time unavailable |
-| Exact native time | `createdAt` string in details | same | omitted when unreadable |
-| Reason | localized `spam` / `illegal` / `inappropriate` / `off_topic` / `other`, else the supplied text | omitted | Reason unavailable |
-| Resolution | Actioned, Dismissed, or Pending review when `outcome` is null | omitted; never relabelled as a report outcome | Resolution outcome unavailable |
-| Report / appeal ID | report ID | appeal ID | — |
-| Decision ID | omitted | native decision reference | Decision reference unavailable |
-| Evidence | submitted text | omitted | No submitted evidence |
-| Appeal statement | omitted | submitted text | No appeal statement |
+| Field              | Report                                                                                         | Appeal                                        | Missing value                  |
+| ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------ |
+| Case type          | Report                                                                                         | Appeal                                        | —                              |
+| Target type        | board / thread / post / Subject                                                                | same                                          | —                              |
+| Target ID          | native                                                                                         | native                                        | —                              |
+| Created            | UTC readable time plus timezone name                                                           | same                                          | Time unavailable               |
+| Exact native time  | `createdAt` string in details                                                                  | same                                          | omitted when unreadable        |
+| Reason             | localized `spam` / `illegal` / `inappropriate` / `off_topic` / `other`, else the supplied text | omitted                                       | Reason unavailable             |
+| Resolution         | Actioned, Dismissed, or Pending review when `outcome` is null                                  | omitted; never relabelled as a report outcome | Resolution outcome unavailable |
+| Report / appeal ID | report ID                                                                                      | appeal ID                                     | —                              |
+| Decision ID        | omitted                                                                                        | native decision reference                     | Decision reference unavailable |
+| Evidence           | submitted text                                                                                 | omitted                                       | No submitted evidence          |
+| Appeal statement   | omitted                                                                                        | submitted text                                | No appeal statement            |
 
 Evidence and statements render as safe text (`whitespace-pre-wrap`, overflow wrap). They never enter public metadata,
 `href`, `title` or query strings. Native case order and the page bound stay with the queue reader.

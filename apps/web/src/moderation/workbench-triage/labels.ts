@@ -51,19 +51,17 @@ export function workbenchTriageReason(reason: string | null): { value: string; p
   }
 }
 
-export function workbenchTriageOutcome(
-  outcome: WorkbenchCase['outcome'] | string,
-): { value: string; presence: WorkbenchTriagePresence } {
+export function workbenchTriageOutcome(outcome: WorkbenchCase['outcome'] | string): {
+  value: string;
+  presence: WorkbenchTriagePresence;
+} {
   if (outcome === 'actioned') return { value: m.moderation_actioned(), presence: 'present' };
   if (outcome === 'dismissed') return { value: m.moderation_dismissed(), presence: 'present' };
   if (outcome === null) return { value: m.reporter_status_pending(), presence: 'absent' };
   return { value: m.moderation_workbench_triage_outcome_unavailable(), presence: 'unavailable' };
 }
 
-export function workbenchTriageTime(
-  createdAt: string,
-  locale: string,
-): { iso: string; readable: string } | null {
+export function workbenchTriageTime(createdAt: string, locale: string): { iso: string; readable: string } | null {
   if (!createdAt.trim() || !Number.isFinite(Date.parse(createdAt))) return null;
   const date = new Date(createdAt);
   if (!Number.isFinite(date.getTime())) return null;
@@ -150,8 +148,7 @@ export function workbenchTriageDetailFields(item: WorkbenchCase, locale: string)
     field('target-id', m.moderation_case_details_target_id(), item.target.id, 'present', 'code'),
     created,
   ];
-  if (time)
-    fields.push(field('exact-time', m.moderation_workbench_triage_exact_time(), time.iso, 'present', 'code'));
+  if (time) fields.push(field('exact-time', m.moderation_workbench_triage_exact_time(), time.iso, 'present', 'code'));
   if (item.kind === 'report') {
     const reason = workbenchTriageReason(item.reason);
     const outcome = workbenchTriageOutcome(item.outcome);

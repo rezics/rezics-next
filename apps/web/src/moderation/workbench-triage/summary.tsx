@@ -1,18 +1,11 @@
 import type { WorkbenchCase } from '../workbench-queue/read';
 import { getLocale } from '../../paraglide/runtime.js';
-import {
-  workbenchTriageSummaryFields,
-  type WorkbenchTriageField,
-} from './labels';
+import { workbenchTriageSummaryFields, type WorkbenchTriageField } from './labels';
 
 function SummaryValue({ field }: { field: WorkbenchTriageField }) {
   if (field.kind === 'time' && field.iso && field.presence === 'present') {
     return (
-      <time
-        dateTime={field.iso}
-        dir="ltr"
-        className="inline-block max-w-full tabular-nums [overflow-wrap:anywhere]"
-      >
+      <time dateTime={field.iso} dir="ltr" className="inline-block max-w-full tabular-nums [overflow-wrap:anywhere]">
         {field.value}
       </time>
     );
@@ -30,20 +23,12 @@ function SummaryValue({ field }: { field: WorkbenchTriageField }) {
 }
 
 /** Compact scan summary. Owners keep their own link and history chrome around this. */
-export function WorkbenchTriageSummary({
-  item,
-  locale = getLocale(),
-}: {
-  item: WorkbenchCase;
-  locale?: string;
-}) {
+export function WorkbenchTriageSummary({ item, locale = getLocale() }: { item: WorkbenchCase; locale?: string }) {
   const fields = workbenchTriageSummaryFields(item, locale);
   const type = fields.find((field) => field.key === 'type');
   const targetKind = fields.find((field) => field.key === 'target-kind');
   const outcome = fields.find((field) => field.key === 'outcome');
-  const rest = fields.filter(
-    (field) => field.key !== 'type' && field.key !== 'target-kind' && field.key !== 'outcome',
-  );
+  const rest = fields.filter((field) => field.key !== 'type' && field.key !== 'target-kind' && field.key !== 'outcome');
   return (
     <div className="mt-2 min-w-0 space-y-1 text-sm">
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">

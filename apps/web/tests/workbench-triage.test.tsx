@@ -27,12 +27,8 @@ const { createRoot } = await import('react-dom/client');
 const { m } = await import('../src/paraglide/messages.js');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
-const {
-  WorkbenchTriageCase,
-  workbenchTriageDetailFields,
-  workbenchTriageOutcome,
-  workbenchTriageTime,
-} = await import('../src/moderation/workbench-triage');
+const { WorkbenchTriageCase, workbenchTriageDetailFields, workbenchTriageOutcome, workbenchTriageTime } =
+  await import('../src/moderation/workbench-triage');
 
 const reportId = '0192f3a0-6c1e-7b2a-9d4e-000000000401';
 const appealId = '0192f3a0-6c1e-7b2a-9d4e-000000000501';
@@ -155,24 +151,26 @@ test('inspecting details returns focus, and a new read identity retires the pane
 
 test('empty and denied pages drop prior cases; invalid time and absent evidence stay honest', async () => {
   const { host, root } = await mount(
-    <WorkbenchView
-      page={{ ...ready, search, generation: 'gen-1', cases: [pending] }}
-      onSearch={() => {}}
-    />,
+    <WorkbenchView page={{ ...ready, search, generation: 'gen-1', cases: [pending] }} onSearch={() => {}} />,
   );
   expect(host.textContent).toContain(evidence);
   await act(async () => {
     root.render(
-      <WorkbenchView page={{ ...ready, state: 'denied', search, generation: 'gen-2', cases: [] }} onSearch={() => {}} />,
+      <WorkbenchView
+        page={{ ...ready, state: 'denied', search, generation: 'gen-2', cases: [] }}
+        onSearch={() => {}}
+      />,
     );
   });
   expect(host.textContent).toContain(m.moderation_workbench_denied());
   expect(host.textContent).not.toContain(evidence);
   expect(workbenchTriageTime('not-a-time', 'en')).toBeNull();
-  expect(workbenchTriageDetailFields({ ...pending, createdAt: 'not-a-time', evidence: null }, 'en').map((field) => [
-    field.key,
-    field.presence,
-  ])).toContainEqual(['created', 'unavailable']);
+  expect(
+    workbenchTriageDetailFields({ ...pending, createdAt: 'not-a-time', evidence: null }, 'en').map((field) => [
+      field.key,
+      field.presence,
+    ]),
+  ).toContainEqual(['created', 'unavailable']);
   expect(
     workbenchTriageDetailFields({ ...pending, evidence: null }, 'en').some(
       (field) => field.key === 'evidence' && field.presence === 'absent',

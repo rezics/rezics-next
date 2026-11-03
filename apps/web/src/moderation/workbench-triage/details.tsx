@@ -3,10 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { WorkbenchCase } from '../workbench-queue/read';
-import {
-  workbenchTriageDetailFields,
-  type WorkbenchTriageField,
-} from './labels';
+import { workbenchTriageDetailFields, type WorkbenchTriageField } from './labels';
 import { WorkbenchTriageSummary } from './summary';
 
 const control =
