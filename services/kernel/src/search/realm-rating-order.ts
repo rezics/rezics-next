@@ -139,7 +139,9 @@ function validateContext(value: RealmRatingContext, populationId: string): Realm
     value.searchGeneration < 1 ||
     typeof value.priorActive !== 'boolean' ||
     typeof value.priorUpdating !== 'boolean' ||
-    (!value.priorActive && value.priorUpdating)
+    (!value.priorActive && value.priorUpdating) ||
+    value.priorActive !== (value.priorEpoch !== null) ||
+    value.generation !== value.searchGeneration
   )
     throw notReady();
   return structuredClone(value);
@@ -233,7 +235,7 @@ function compare(left: SearchFrontier, right: SearchFrontier): number {
   if (left.ratingPhase === 'scored' && a[0] !== b[0]) return (b[0] as number) - (a[0] as number);
   if (left.ratingPhase === 'scored')
     return Buffer.compare(Buffer.from(b.at(-1) as string), Buffer.from(a.at(-1) as string));
-  const offset = left.ratingPhase === 'scored' ? 1 : 0;
+  const offset = 0;
   for (let index = offset; index < a.length; index++) {
     if (a[index] === b[index]) continue;
     if (a[index] === null) return 1;
@@ -370,14 +372,16 @@ export async function readRealmRatingOrder(options: {
         }
         positions.clear();
         let previous: SearchFrontier | undefined = request.after ? request : undefined;
-        const ids = new Set<string>();
+        const ids = new Map<string, RatingPhase>();
         for (const hit of hits) {
           normalizeRealmRatingHit(hit, context);
           const current = { after: hit.sort, ratingPhase: hit.ratingPhase };
-          if ((previous && compare(previous, current) >= 0) || ids.has(hit.id)) throw notReady();
+          const priorPhase = ids.get(hit.id);
+          const duplicatePhase = priorPhase === 'scored' && hit.ratingPhase === 'unscored' && hit.suppressed === true;
+          if ((previous && compare(previous, current) >= 0) || (priorPhase !== undefined && !duplicatePhase)) throw notReady();
           if (positions.has(hit.partition) && positions.get(hit.partition) !== hit.position) throw notReady();
           positions.set(hit.partition, hit.position);
-          ids.add(hit.id);
+          ids.set(hit.id, hit.ratingPhase);
           previous = current;
         }
         return { hits };

@@ -31,6 +31,10 @@ test('Derived native protected Realm rank page cost at 256/1024/4096 rows, inclu
             expect(plan).not.toContain('"Node Type":"Sort"');
           }
           expect(plans[1]).toContain('Index Cond');
+          expect(plans[0]).toContain('question_identity');
+          expect(plans[0]).toContain('prior_generation');
+          expect(plans[1]).toContain('question_identity');
+          expect(plans[1]).toContain('prior_generation');
           expect(plans[1]).toContain('ROW(score, subject_id) < ROW');
         },
         prepare: async () => {
@@ -96,7 +100,10 @@ test('Derived native protected Realm rank page cost at 256/1024/4096 rows, inclu
         for (const statements of sample.statementRepetitions) {
           const rank = statements.filter(({ statement }) => /FROM rating\.realm_rank\s/.test(statement));
           expect(rank.reduce((total, { count }) => total + count, 0)).toBe(6);
+          expect(rank.some(({ statement }) => statement.includes('question_identity=$6'))).toBe(true);
           expect(rank.some(({ statement }) => statement.includes('(score,subject_id) <'))).toBe(true);
+          const selectedQuestion = statements.filter(({ statement }) => /FROM rating\.question q/.test(statement));
+          expect(selectedQuestion.reduce((total, { count }) => total + count, 0)).toBe(12);
           expect(statements.some(({ statement }) => statement.includes('access.resource_grant'))).toBe(true);
           expect(statements.some(({ statement }) => statement.includes('semantic.redirect'))).toBe(true);
         }

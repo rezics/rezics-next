@@ -476,7 +476,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       const generation = publication.rows[0];
       if (!generation || !/^[0-9]+$/.test(generation.last_value)) throw new Error('Rank publication generation is unavailable');
       return {
-        question,
+        question: ratingQuestionView(question),
         questionIdentity,
         questionRevision: question.revision,
         priorGeneration: prior.generation,
