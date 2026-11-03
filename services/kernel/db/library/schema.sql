@@ -7061,7 +7061,6 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.co
 CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
-
 --
 -- Name: collection follow_count_new_collection; Type: TRIGGER; Schema: library; Owner: -
 --
@@ -7803,6 +7802,8 @@ ALTER TABLE ONLY library.collection_source_output
 ALTER TABLE ONLY library.copy_archive_row
     ADD CONSTRAINT copy_archive_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.copy_archive_upload(route, account_id, upload_id);
 
+
+--
 -- Name: entry_source_observation entry_source_observation_parent_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
