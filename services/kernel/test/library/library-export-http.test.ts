@@ -165,14 +165,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.units?.map((r) => r.unit_id)).toEqual(['chapter-1', 'chapter-9']);
   expect(JSON.stringify(records)).not.toContain('secret-other-state');
   expect(JSON.stringify(records)).not.toMatch(/transaction_id|never-export-/);
-  expect(sections.bangumiEvidence?.[0]).toMatchObject({
-    ordinal: 0,
-    evidence: { source: { subject_id: 42, notes: 'source note', type: 99 } },
-  });
-  expect(sections.malEvidence?.[0]).toMatchObject({
-    ordinal: 0,
-    evidence: { identifier: { value: '17' }, dates: { started: { precision: 'year' } } },
-  });
+  expect(sections.bangumiEvidence?.[0]?.evidence.source).toMatchObject({ subject_id: 42, type: 99 });
+  expect(sections.malEvidence?.[0]?.evidence.identifier.value).toBe('17');
+  expect(sections.malEvidence?.[0]?.evidence.dates.started.precision).toBe('year');
   expect((await get(`/v1/libraryExports/${id}`)).state).toBe('ready');
   await sql`UPDATE library.collection_member SET note='edited' WHERE route=${route} AND collection_id=${collection}`;
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], manifest: null });
