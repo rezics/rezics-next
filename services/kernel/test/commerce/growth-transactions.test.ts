@@ -236,7 +236,9 @@ test('settlement and royalty read only named keys with equal statements and retu
     expect(captured.planStatements).toHaveLength(captured.plans.length);
     expect(captured.planBackends).toHaveLength(captured.plans.length);
     expect(
-      captured.planStatements!.every((owner) => owner !== undefined && owner >= 0 && owner < captured.statements.length),
+      captured.planStatements!.every(
+        (owner) => owner !== undefined && owner >= 0 && owner < captured.statements.length,
+      ),
     ).toBe(true);
     expect(captured.planBackends!.every((backend) => Number.isSafeInteger(backend))).toBe(true);
     expect(captured.statementErrors).toHaveLength(captured.statements.length);
@@ -264,7 +266,8 @@ test('settlement and royalty read only named keys with equal statements and retu
           captured.backgroundResponseBytes.reduce((sum, bytes) => sum + bytes, 0),
         );
     }
-    if (observation.outcome.kind === 'failed') throw new Error(`${observation.outcome.name}: ${observation.outcome.message}`);
+    if (observation.outcome.kind === 'failed')
+      throw new Error(`${observation.outcome.name}: ${observation.outcome.message}`);
     return { value: observation.outcome.value, observation };
   }
   for (const length of [1, 64, 255]) {
@@ -385,9 +388,8 @@ test('settlement and royalty read only named keys with equal statements and retu
       () => fixture.commands.applyCheckoutSnapshot(snapshot, `growth:replay:${length}`),
     );
     expect(replay.value).toMatchObject({ changed: false });
-    await record(
-      { attemptId: `growth:royalty:${length}`, phase: 'royalty', scale: length, repetition: 1 },
-      () => payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`),
+    await record({ attemptId: `growth:royalty:${length}`, phase: 'royalty', scale: length, repetition: 1 }, () =>
+      payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`),
     );
     const redelivery = await record(
       { attemptId: `growth:redelivery:${length}`, phase: 'royalty', scale: length, repetition: 2 },
@@ -413,9 +415,7 @@ test('settlement and royalty read only named keys with equal statements and retu
   expect(measurements[1]).toEqual(measurements[0]);
   expect(measurements[2]).toEqual(measurements[0]);
 
-  expect(
-    observations.map(({ frame }) => [frame.attemptId, frame.phase, frame.scale, frame.repetition]),
-  ).toEqual(
+  expect(observations.map(({ frame }) => [frame.attemptId, frame.phase, frame.scale, frame.repetition])).toEqual(
     [1, 64, 255].flatMap((scale) => [
       [`growth:settle:${scale}`, 'settlement', scale, 0],
       [`growth:royalty:${scale}`, 'royalty', scale, 0],
@@ -440,11 +440,17 @@ test('settlement and royalty read only named keys with equal statements and retu
       return { scale: frame.scale, value: cost.rows - probeRows };
     });
     expect(
-      classify(series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.statements })), 'constant').outcome,
+      classify(
+        series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.statements })),
+        'constant',
+      ).outcome,
     ).toBe('compatible');
     expect(classify(broadRows, 'constant').outcome).toBe('compatible');
     expect(
-      classify(series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.blocks })), 'logarithmic').outcome,
+      classify(
+        series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.blocks })),
+        'logarithmic',
+      ).outcome,
     ).toBe('compatible');
   }
 });

@@ -8,11 +8,7 @@ import {
   type GrowthDatabase,
   type StatementAttribution,
 } from '../../support/growth.ts';
-import {
-  statementAttributions,
-  statementOccurrences,
-  type StatementOccurrences,
-} from '../../support/growth-report.ts';
+import { statementAttributions, statementOccurrences, type StatementOccurrences } from '../../support/growth-report.ts';
 
 export type TransactionGrowthPhase = 'settlement' | 'royalty';
 
