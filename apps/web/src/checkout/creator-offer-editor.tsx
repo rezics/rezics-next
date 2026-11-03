@@ -3,6 +3,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { CreatorOfferDraftNavigation, CreatorOfferDraftState } from './creator-offer-draft-navigation';
@@ -123,7 +124,7 @@ export function CreatorPriceFields({
     <>
       <Field>
         <FieldLabel htmlFor={id}>{m.creator_currency()}</FieldLabel>
-        <select
+        <NativeSelect
           id={id}
           name="currency"
           required
@@ -131,15 +132,15 @@ export function CreatorPriceFields({
           disabled={disabled}
           onChange={(event) => onChange({ currency: event.target.value, text: '' })}
           aria-describedby={`${id}-help`}
-          className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="w-full [&_select]:min-h-11"
         >
-          <option value="">{m.creator_select_currency()}</option>
+          <NativeSelectOption value="">{m.creator_select_currency()}</NativeSelectOption>
           {rules.map((row) => (
-            <option key={row.currency} value={row.currency}>
+            <NativeSelectOption key={row.currency} value={row.currency}>
               {row.currency.toUpperCase()}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
         <p id={`${id}-help`} className="text-sm text-muted-foreground">
           {m.creator_currency_change()}
         </p>

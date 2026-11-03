@@ -231,8 +231,22 @@ test('Creator edition replacement cannot reuse another edition pending creation 
     await withEditor(async (page) => {
       await page.render();
       await page.fill();
+      const currency = page.field('currency');
+      expect(currency.getAttribute('data-slot')).toBe('native-select');
+      expect(currency.required).toBe(true);
+      expect([...currency.querySelectorAll('option')].map((option) => option.getAttribute('value'))).toEqual([
+        '',
+        'usd',
+        'eur',
+      ]);
+      await page.change('currency', 'eur');
+      expect(page.field('price').value).toBe('');
+      expect(page.field('currency').value).toBe('eur');
+      await page.change('price', '12.99');
       await page.submit(true);
       expect(page.calls).toHaveLength(1);
+      expect(page.calls[0]!.data.currency).toBe('eur');
+      expect(page.field('currency').disabled).toBe(true);
       const original = page.calls[0]!.data;
       await page.render(second);
       if (second.editor.kind !== 'ready') throw new Error('Ready fixture');
@@ -246,6 +260,7 @@ test('Creator edition replacement cannot reuse another edition pending creation 
       expect(page.host.textContent).not.toContain(id(5));
       expect(page.field('title').value).toBe('');
       expect(page.field('currency').value).toBe('');
+      expect(page.field('currency').disabled).toBe(false);
       expect(page.field('price').value).toBe('');
       expect(page.field('taxCode').value).toBe('');
       expect(page.saved()).toBeNull();
