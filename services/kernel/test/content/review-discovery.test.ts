@@ -8,7 +8,8 @@ import { restorePost } from '../../src/content/restore-post.ts';
 import { createReviewDiscoveryDispatchEffect, createReviewDiscoveryEffect, processReviewDiscoveryPage, readReviewDiscoveryProgress } from '../../src/content/review-discovery-lifecycle.ts';
 import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from '../../src/content/review-discovery-changes.ts';
 import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/content/review-discovery-events.ts';
-import { erasePost } from '../../src/content/moderation.ts';
+import { observeSql } from './support/sql-observer.ts';
+import { erasePost, takedown } from '../../src/content/moderation.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
 import { routeOf, newId, partitionOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -230,14 +231,19 @@ test('durable cross-partition gate pages retain disappearance, fixed catch-up cu
   await dispatch.run(opened);
   await dispatch.run(opened);
   expect(queued).toEqual([ref, ref]);
+  const observer = observeSql(fixture.pool);
   const first = await processReviewDiscoveryPage(fixture.pool, ref);
+  const advance = observer.records.find(({ statement }) => statement.includes('UPDATE content.review_discovery_work SET scope_no'))!.statement;
   expect(first).toMatchObject({ complete: false, examined: 100, delivered: 100 });
   expect((await readReviewDiscoveryProgress(fixture.pool, ref)).continuation).not.toBeNull();
   const partition = partitionOf(routeOf(ids[0]!)!);
   const cut = await readReviewDiscoveryChanges(fixture.pool, partition, 0n, 7);
   expect(cut.through).toBe(100n);
   expect(cut.next).not.toBeNull();
-  expect(await processReviewDiscoveryPage(fixture.pool, ref)).toMatchObject({ complete: true, examined: 3, delivered: 3 });
+  observer.armFault({ match: { statement: advance }, boundary: 'before', error: new Error('lost source cursor') });
+  await expect(processReviewDiscoveryPage(fixture.pool, ref)).rejects.toThrow('lost source cursor');
+  expect(await processReviewDiscoveryPage(fixture.pool, ref)).toMatchObject({ complete: true, examined: 3, delivered: 0 });
+  await observer.close();
   let page = cut;
   const caught: string[] = [];
   for (;;) {
@@ -256,4 +262,33 @@ test('durable cross-partition gate pages retain disappearance, fixed catch-up cu
   await effect.run(event);
   expect(await processReviewDiscoveryPage(fixture.pool, ref)).toMatchObject({ complete: true, examined: 0, delivered: 0 });
   expect((await readReviewDiscoveryChanges(fixture.pool, partition, current)).after).toBe(current);
+});
+
+
+test('opening publication and native takedown refresh the discovered review identity', async () => {
+  const author = (await fixture.context()).actor;
+  const subject = newId(0x6b38);
+  await fixture.reader.query(`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+    VALUES($1,$2,'schema:Book',$2,'visible',1)`, [routeOf(subject), subject]);
+  const board = (await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")).rows[0]!;
+  await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
+  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const draft = await createThread(deps, author, { kind: 'review', title: 'Draft', body: fromPlainText('Draft body'),
+    licence: 'MIT', subjectIds: [subject], boardId: board.board_id, visibility: 'draft' }, request());
+  const partition = draft.partition;
+  const source = createReviewDiscoverySource({ ...deps, tokens }, () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }));
+  await invalidate(draft, 'com.rezics.content.thread.created.v1');
+  const before = await readReviewDiscoveryChanges(fixture.pool, partition);
+  expect((await refreshReviewDiscoveryChanges(source, before)).reviews.some((review) => review.id === draft.value.threadId)).toBe(false);
+  const published = await revisePost(deps, author, { threadId: draft.value.threadId, itemId: draft.value.itemId,
+    title: 'Published title', body: fromPlainText('Published body'), visibility: 'published' }, request());
+  await invalidate(published, 'com.rezics.content.post.published.v1');
+  const current = await readReviewDiscoveryChanges(fixture.pool, partition, before.after);
+  expect((await refreshReviewDiscoveryChanges(source, current)).reviews).toMatchObject([{ id: draft.value.threadId,
+    title: 'Published title', excerpt: 'Published body' }]);
+  await fixture.grant(author.accountId, 'moderation:takedown', { route: routeOf(draft.value.itemId)!, id: draft.value.itemId });
+  const taken = await takedown(deps, author, { target: { kind: 'post', id: draft.value.itemId }, reason: 'Native takedown' }, request());
+  await invalidate(taken, 'com.rezics.content.moderation.takedown.v1');
+  const removed = await readReviewDiscoveryChanges(fixture.pool, partition, current.after);
+  expect((await refreshReviewDiscoveryChanges(source, removed)).removed).toEqual([draft.value.threadId]);
 });

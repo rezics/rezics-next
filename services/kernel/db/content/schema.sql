@@ -647,6 +647,33 @@ CREATE FUNCTION content.operation_scopes_valid(scopes text[]) RETURNS boolean
 $_$;
 
 
+--
+-- Name: record_review_discovery_dependencies(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.record_review_discovery_dependencies() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.kind = 'review' THEN
+    INSERT INTO content.review_discovery_dependency(route,thread_id,gate_kind,gate_key)
+    SELECT NEW.route, NEW.thread_id, keys.kind, keys.id
+    FROM content.board b
+    LEFT JOIN community.realm r ON r.route = get_byte(uuid_send(b.realm_id),10)*256 + get_byte(uuid_send(b.realm_id),11)
+      AND r.realm_id=b.realm_id
+    CROSS JOIN LATERAL (VALUES ('thread',NEW.thread_id),('post',NEW.first_post_id),
+      ('board',NEW.board_id),('subject',NEW.review_subject_id),('account',NEW.author_account_id),
+      ('realm',b.realm_id),('space',r.space_id),('context',r.context_id),
+      ('context','00000000-0000-8000-8000-000000000000'::uuid)) AS keys(kind,id)
+    WHERE b.route = get_byte(uuid_send(NEW.board_id),10)*256 + get_byte(uuid_send(NEW.board_id),11)
+      AND b.board_id=NEW.board_id AND keys.id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1778,6 +1805,76 @@ CREATE TABLE content.report_target (
 
 
 --
+-- Name: review_discovery_change; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_discovery_change (
+    route integer NOT NULL,
+    thread_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    "position" bigint NOT NULL,
+    origin jsonb NOT NULL,
+    origin_id uuid NOT NULL,
+    CONSTRAINT review_discovery_change_check CHECK ((partition_no = (route / 16))),
+    CONSTRAINT review_discovery_change_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT review_discovery_change_check2 CHECK (((origin ->> 'id'::text) = (origin_id)::text)),
+    CONSTRAINT review_discovery_change_position_check CHECK (("position" > 0)),
+    CONSTRAINT review_discovery_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: review_discovery_dependency; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_discovery_dependency (
+    route integer NOT NULL,
+    thread_id uuid NOT NULL,
+    gate_kind text NOT NULL,
+    gate_key uuid NOT NULL,
+    CONSTRAINT review_discovery_dependency_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT review_discovery_dependency_gate_kind_check CHECK ((gate_kind = ANY (ARRAY['thread'::text, 'post'::text, 'board'::text, 'subject'::text, 'account'::text, 'realm'::text, 'space'::text, 'context'::text]))),
+    CONSTRAINT review_discovery_dependency_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: review_discovery_frontier; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_discovery_frontier (
+    route integer NOT NULL,
+    "position" bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT review_discovery_frontier_position_check CHECK (("position" >= 0)),
+    CONSTRAINT review_discovery_frontier_route_check CHECK ((((route >= 0) AND (route <= 65535)) AND ((route % 16) = 0)))
+);
+
+
+--
+-- Name: review_discovery_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_discovery_work (
+    route integer NOT NULL,
+    id uuid NOT NULL,
+    origin jsonb NOT NULL,
+    scopes jsonb NOT NULL,
+    scope_no integer DEFAULT 0 NOT NULL,
+    after_route integer DEFAULT '-1'::integer NOT NULL,
+    after_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    source_subject uuid,
+    after_subject uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT review_discovery_work_after_route_check CHECK (((after_route >= '-1'::integer) AND (after_route <= 65535))),
+    CONSTRAINT review_discovery_work_route_check CHECK ((((route >= 0) AND (route <= 65535)) AND ((route % 16) = 0))),
+    CONSTRAINT review_discovery_work_scope_no_check CHECK (((scope_no >= 0) AND (scope_no <= 8))),
+    CONSTRAINT review_discovery_work_scopes_check CHECK (((jsonb_typeof(scopes) = 'array'::text) AND ((jsonb_array_length(scopes) >= 1) AND (jsonb_array_length(scopes) <= 8)))),
+    CONSTRAINT review_discovery_work_version_check CHECK ((version > 0))
+);
+
+
+--
 -- Name: revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2374,6 +2471,46 @@ ALTER TABLE ONLY content.report_target
 
 
 --
+-- Name: review_discovery_change review_discovery_change_partition_no_position_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_discovery_change
+    ADD CONSTRAINT review_discovery_change_partition_no_position_key UNIQUE (partition_no, "position");
+
+
+--
+-- Name: review_discovery_change review_discovery_change_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_discovery_change
+    ADD CONSTRAINT review_discovery_change_pkey PRIMARY KEY (route, thread_id, origin_id);
+
+
+--
+-- Name: review_discovery_dependency review_discovery_dependency_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_discovery_dependency
+    ADD CONSTRAINT review_discovery_dependency_pkey PRIMARY KEY (route, thread_id, gate_kind, gate_key);
+
+
+--
+-- Name: review_discovery_frontier review_discovery_frontier_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_discovery_frontier
+    ADD CONSTRAINT review_discovery_frontier_pkey PRIMARY KEY (route);
+
+
+--
+-- Name: review_discovery_work review_discovery_work_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_discovery_work
+    ADD CONSTRAINT review_discovery_work_pkey PRIMARY KEY (route, id);
+
+
+--
 -- Name: revision revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2697,6 +2834,27 @@ CREATE INDEX report_target_page_idx ON content.report_target USING btree (route,
 
 
 --
+-- Name: review_discovery_dependency_all; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX review_discovery_dependency_all ON content.review_discovery_dependency USING btree (route, thread_id) WHERE (gate_kind = 'thread'::text);
+
+
+--
+-- Name: review_discovery_dependency_gate; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX review_discovery_dependency_gate ON content.review_discovery_dependency USING btree (gate_kind, gate_key, route, thread_id);
+
+
+--
+-- Name: review_discovery_dependency_resource; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX review_discovery_dependency_resource ON content.review_discovery_dependency USING btree (gate_key, route, thread_id);
+
+
+--
 -- Name: revision_post_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2848,6 +3006,13 @@ CREATE TRIGGER reaction_total_identity BEFORE UPDATE ON content.reaction_total F
 --
 
 CREATE TRIGGER report_immutable BEFORE DELETE OR UPDATE ON content.report FOR EACH ROW EXECUTE FUNCTION content.guard_report();
+
+
+--
+-- Name: thread review_discovery_dependencies; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER review_discovery_dependencies AFTER INSERT OR UPDATE OF board_id, review_subject_id, first_post_id, author_account_id ON content.thread FOR EACH ROW EXECUTE FUNCTION content.record_review_discovery_dependencies();
 
 
 --
