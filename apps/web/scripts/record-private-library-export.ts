@@ -39,41 +39,91 @@ try {
   admin = new Pool({ connectionString: url });
   await bootstrapRelease(pool, bundledRelease);
   const route = 0x2200;
-  const owner = newId(route), subject = newId(route), upload = newId(route);
-  const scopes = ['library_entry:list', 'library_entry:read', 'copy:list', 'progress_session:list', 'progress_session:read', 'collection:read'];
+  const owner = newId(route),
+    subject = newId(route),
+    upload = newId(route);
+  const scopes = [
+    'library_entry:list',
+    'library_entry:read',
+    'copy:list',
+    'progress_session:list',
+    'progress_session:read',
+    'collection:read',
+  ];
   const fixture = await createRealAccess(admin, { owner }, scopes);
   const clock = new Date();
   work = await createWorkClient(url);
   const app = createKernel({
-    pool, workClient: work, receiptKeys: testReceiptKeys(), routeKey: new Uint8Array(32).fill(93),
+    pool,
+    workClient: work,
+    receiptKeys: testReceiptKeys(),
+    routeKey: new Uint8Array(32).fill(93),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
-    access: fixture.access, writeRate: fixture.writeRate, ratePeer: () => '127.0.0.1', clock: () => clock,
+    access: fixture.access,
+    writeRate: fixture.writeRate,
+    ratePeer: () => '127.0.0.1',
+    clock: () => clock,
   });
   const sql = (text: string, values: unknown[]) => admin!.query(text, values);
-  await sql(`INSERT INTO access.exposure_opening("group",valid,transaction_id)
-    SELECT g,tstzrange('2020-01-01',NULL,'[)'),$1 FROM unnest($2::text[]) g`, [owner, ['personal_library', 'reading_progress', 'collections']]);
-  await sql(`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES($1,$2,'schema:Book',$3)`, [route, subject, owner]);
+  await sql(
+    `INSERT INTO access.exposure_opening("group",valid,transaction_id)
+    SELECT g,tstzrange('2020-01-01',NULL,'[)'),$1 FROM unnest($2::text[]) g`,
+    [owner, ['personal_library', 'reading_progress', 'collections']],
+  );
+  await sql(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id) VALUES($1,$2,'schema:Book',$3)`,
+    [route, subject, owner],
+  );
   for (const units of [null, 0]) {
-    await sql(`INSERT INTO library.progress_session(route,account_id,session_id,subject_id,mode,unit,
+    await sql(
+      `INSERT INTO library.progress_session(route,account_id,session_id,subject_id,mode,unit,
       completed_unit_count,state,revision,started_at,transaction_id,journal_revision,journal_start_year,
       journal_reflection,journal_assessment_meaning_revision,journal_assessment_units)
       VALUES($1,$2,$3,$4,'completed_units','chapter',0,'active',1,$5,$2,1,2004,'',1,$6)`,
-      [route, owner, newId(route), subject, clock.toISOString(), units]);
+      [route, owner, newId(route), subject, clock.toISOString(), units],
+    );
   }
-  const vndb = parseVndb('<vndb-export version="1.0"><vns><vn id="v1"><vote>0</vote><started>2004-02-00</started><label>Unfamiliar</label></vn></vns></vndb-export>');
-  const anilist = parseAniList(JSON.stringify([{ mediaId: 1, score: 0, notes: null, status: 'FUTURE_STATUS', startedAt: { year: 2004, month: null, day: 0 } }]), 'POINT_10_DECIMAL');
-  await sql(`INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows,state)
-    VALUES($1,$2,$3,$4,'recording only',$5,'cancelled')`, [route, owner, upload, new Date(+clock + 86400000).toISOString(), JSON.stringify(vndb)]);
-  await sql(`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload)
-    VALUES($1,$2,$3,-1,$4)`, [route, owner, upload, JSON.stringify({ scoreFormat: anilist.scoreFormat, cancelled: true, count: anilist.rows.length })]);
+  const vndb = parseVndb(
+    '<vndb-export version="1.0"><vns><vn id="v1"><vote>0</vote><started>2004-02-00</started><label>Unfamiliar</label></vn></vns></vndb-export>',
+  );
+  const anilist = parseAniList(
+    JSON.stringify([
+      { mediaId: 1, score: 0, notes: null, status: 'FUTURE_STATUS', startedAt: { year: 2004, month: null, day: 0 } },
+    ]),
+    'POINT_10_DECIMAL',
+  );
+  await sql(
+    `INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows,state)
+    VALUES($1,$2,$3,$4,'recording only',$5,'cancelled')`,
+    [route, owner, upload, new Date(+clock + 86400000).toISOString(), JSON.stringify(vndb)],
+  );
+  await sql(
+    `INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload)
+    VALUES($1,$2,$3,-1,$4)`,
+    [
+      route,
+      owner,
+      upload,
+      JSON.stringify({ scoreFormat: anilist.scoreFormat, cancelled: true, count: anilist.rows.length }),
+    ],
+  );
   for (const [ordinal, source] of anilist.rows.entries())
-    await sql(`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload)
-      VALUES($1,$2,$3,$4,$5)`, [route, owner, upload, ordinal, JSON.stringify({ source })]);
+    await sql(
+      `INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload)
+      VALUES($1,$2,$3,$4,$5)`,
+      [route, owner, upload, ordinal, JSON.stringify({ source })],
+    );
 
   async function request(method: string, path: string) {
-    const response = await app.handle(new Request(`http://kernel.test/v1/${path}`, {
-      method, headers: { authorization: `Bearer ${fixture.bearer('owner')}`, 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
-    }));
+    const response = await app.handle(
+      new Request(`http://kernel.test/v1/${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${fixture.bearer('owner')}`,
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+      }),
+    );
     if (response.status !== 200) throw new Error(`${response.status}: ${await response.text()}`);
     return response.json();
   }
@@ -81,7 +131,11 @@ try {
   for (const version of [1, 4]) {
     const created = await request('POST', 'libraryExports');
     // Retained-format fixtures use the producer's stored-capture path, as in its native compatibility scenarios.
-    if (version !== 4) await sql('UPDATE library.library_export SET format_version=$1 WHERE route=$2 AND account_id=$3 AND export_id=$4', [version, route, owner, created.exportId]);
+    if (version !== 4)
+      await sql(
+        'UPDATE library.library_export SET format_version=$1 WHERE route=$2 AND account_id=$3 AND export_id=$4',
+        [version, route, owner, created.exportId],
+      );
     const status = await request('GET', `libraryExports/${created.exportId}`);
     const pages = [];
     let cursor = status.first;
@@ -90,7 +144,11 @@ try {
       pages.push(page);
       cursor = page.next;
     }
-    captures.push({ status, pages, artifact: JSON.stringify({ manifest: pages.at(-1).manifest, records: pages.flatMap(page => page.records) }) });
+    captures.push({
+      status,
+      pages,
+      artifact: JSON.stringify({ manifest: pages.at(-1).manifest, records: pages.flatMap((page) => page.records) }),
+    });
     await request('DELETE', `libraryExports/${status.exportId}`);
   }
   await Bun.write(resolve(root, 'apps/web/src/library/private-export/recorded.json'), JSON.stringify(captures));

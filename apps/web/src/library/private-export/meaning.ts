@@ -17,8 +17,10 @@ export function exportSectionLabel(section: string): string {
   if (section === 'journals') return m.library_export_section_journals();
   if (section === 'bangumiUploads' || section === 'bangumiEvidence') return m.library_export_section_bangumi();
   if (section === 'malImports' || section === 'malEvidence') return m.library_export_section_mal();
-  if (section === 'vndbUploads' || section === 'vndbEvidence') return m.library_export_section_vndb();
-  if (section === 'anilistUploads' || section === 'anilistEvidence') return m.library_export_section_anilist();
+  if (section === 'vndbUploads') return m.library_export_section_vndb();
+  if (section === 'vndbEvidence') return m.library_export_section_vndb_evidence();
+  if (section === 'anilistUploads') return m.library_export_section_anilist();
+  if (section === 'anilistEvidence') return m.library_export_section_anilist_evidence();
   return m.library_export_section_other({ section });
 }
 

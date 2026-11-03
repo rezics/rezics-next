@@ -3,6 +3,7 @@ import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { createExportJourney, type ExportJourney, type ExportJourneySnapshot } from './controller';
+import type { ExportFileDelivery } from './contract';
 import { ExportAction } from './controls';
 import { ExportCoverage } from './coverage';
 import { ExportDeparture } from './departure';
@@ -21,21 +22,24 @@ function noticeText(notice: ExportJourneySnapshot['notice']): string | null {
   return exportFailureLabel(notice.kind, 'detail' in notice ? notice.detail : undefined);
 }
 
-export function PrivateLibraryExportPage({ visit }: { visit?: ExportVisit | null }) {
+type ExportRuntime = { now?: () => number; deliver?: ExportFileDelivery };
+
+export function PrivateLibraryExportPage({ visit, ...runtime }: { visit?: ExportVisit | null } & ExportRuntime) {
   const observed = useExportVisit();
   const current = visit === undefined ? observed : visit;
   useOperation('library_entry.list');
   if (!current) return <ExportSignedOut />;
-  return <ExportSession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  return <ExportSession key={`${current.subject}:${current.csrfToken}`} visit={current} {...runtime} />;
 }
 
-function ExportSession({ visit }: { visit: ExportVisit }) {
+function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRuntime) {
   const port = useLibraryExportPort();
   const statusRef = useRef<HTMLParagraphElement>(null);
   const publish = useRef<(snapshot: ExportJourneySnapshot) => void>(() => {});
   const journey = useRef<ExportJourney | null>(null);
   if (!journey.current) {
     journey.current = createExportJourney({
+      ...runtime,
       port,
       visit,
       onChange(current) {

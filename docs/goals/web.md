@@ -335,8 +335,11 @@ version 4, appending `vndbUploads`, `vndbEvidence`, `anilistUploads`, and `anili
 All 21 section totals and the original coverage must match before creating a file. V3/V4 journal assessments preserve
 `meaningRevision: 1` and `units` from 0 through 20 or `null`. Stored versions 1, 2 and 3 retain their original sections,
 record shapes, manifest fields, byte accounting and opaque cursor epochs; missing legacy assessments remain absent.
-Native V4 capture/page recordings are not installed in this base; connected producer stories and recorded-byte
-comparisons remain continuation work. Version 3 assessments and version 4 provider evidence remain unsupported by archive recovery, and
+Connected producer stories and focused tests use installed V1/V4 HTTP captures with unchanged signed cursors,
+empty continuations, provider records and final artifact bytes. Decision: replay recordings at their captured clock
+without changing their expiry or bytes; live visits retain the live clock. Provider upload and evidence totals have
+distinct labels in all locales. Recording retained V2 status on the base producer raises `TypeError: Invalid cursor`;
+Web keeps retained epochs opaque and retains the existing V2/V3 compatibility cases. Version 3 assessments and version 4 provider evidence remain unsupported by archive recovery, and
 downloading them grants no vote, journal, label or progress action. Bind only the installed `libraryExports` surface;
 do not add a second export engine or copy missing fields from other private reads. The
 [Web consumer guide](../../apps/web/src/library/private-export/README.md) and
