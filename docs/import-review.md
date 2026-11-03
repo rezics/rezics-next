@@ -2,6 +2,8 @@
 
 The authenticated `/imports/review` page prepares and reads provider suggestions in an explicitly selected
 Context. This is derived discovery; acceptance and selection remain separate native editorial operations.
+Bangumi music and live-action subjects now enter that queue as MusicAlbum, Movie or TVSeries records with
+ordinary source provenance; screenshot review of those pages remains Web-owned.
 
 ## Cross-media dump seed
 

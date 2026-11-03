@@ -60,19 +60,19 @@ visual review of `pages-subject-sources--selected-facts` and `pages-subject-sour
 bun run --cwd services/kernel check test/imports/source-record-metadata.test.ts
 ```
 
-Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. A recognized Bangumi
-input outside launch scope remains a present source member and increments `skipped` once during acquisition; it creates
-no subject, proposal, or media effect. The sealed run stores this bounded count so recovery reports it without reading
-replacement input. CLI summaries always include `skipped=N`, including zero.
+Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. An identity-only Bangumi
+type 3/6 projection, or an unknown live-action platform, remains a present source member and increments `skipped` once
+during acquisition; it creates no subject, proposal, or media effect. Named type 3/6 records convert. The sealed run
+stores this bounded count so recovery reports it without reading replacement input. CLI summaries always include
+`skipped=N`, including zero.
 
 The connected [Bangumi scope-transition journey](../kernel/test/imports/cli-bangumi-scope-transition.test.ts)
-uses five metadata-only native envelopes and the ordinary account-key CLI: an existing Book becomes ignored
-music, then ignored live action, then returns as a revised Book under the same native key. Complete membership
+uses five metadata-only native envelopes and the ordinary account-key CLI: an existing Book becomes a music
+subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@3` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
-five-record launch checks. Its one frozen native child passed with 1,094 assertions at
-`fbdb5fa5425f4ed8918a23e794015e80485b7d35`.
+`bangumi@5` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
 

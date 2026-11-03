@@ -175,7 +175,7 @@ current native editorial heads. Changed unrelated decisions are refused.
 The consumer checks current originals, fences, scheme/identity/correspondence,
 selected accepted unretracted candidates and public graph before supplying the
 source Concept. Retained adoption after retraction supplies no authority.
-Missing/hidden/unavailable bindings omit keywords. Pure `bangumi@4` projects
+Missing/hidden/unavailable bindings omit keywords. Pure `bangumi@5` projects
 bounded public metadata tags and never substitutes canonical meaning, ordinary
 tags, private labels, word counts or light-novel inference.
 

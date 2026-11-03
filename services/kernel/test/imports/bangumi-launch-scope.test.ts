@@ -96,17 +96,17 @@ function writesSince(offset: number) {
   return runtime.captures.slice(offset).filter((c) => c.request.method === 'POST');
 }
 
-test('mixed complete JSON-lines import creates only three native subjects and no skipped output', async () => {
+test('mixed complete JSON-lines import creates every admitted native subject', async () => {
   expect(initial.outcome).toBe('complete');
   membership();
   await receipts(initial);
   const native = await Promise.all(types.map(async (id) => (binding(id) ? subject(id) : null)));
-  expect(native.filter(Boolean)).toHaveLength(3);
-  expect(types.filter((id) => binding(id) !== null)).toEqual([1, 2, 4]);
-  expect(commands(initial).some((c) => ['3', '6'].includes(c.source.external_id))).toBe(false);
+  expect(native.filter(Boolean)).toHaveLength(5);
+  expect(types.filter((id) => binding(id) !== null)).toEqual([1, 2, 4, 3, 6]);
+  expect(commands(initial).some((c) => ['3', '6'].includes(c.source.external_id))).toBe(true);
   const media = runtime.captures.filter((c) => new URL(c.request.url).pathname === '/v1/media:importFromUrl');
-  expect(media).toHaveLength(3);
-  expect(media.map((c) => JSON.parse(c.body).containerId).sort()).toEqual([1, 2, 4].map(binding).sort());
+  expect(media).toHaveLength(5);
+  expect(media.map((c) => JSON.parse(c.body).containerId).sort()).toEqual([1, 2, 3, 4, 6].map(binding).sort());
   for (const capture of runtime.captures) expect(capture.body).not.toContain(marker);
 }, 600_000);
 
@@ -115,7 +115,9 @@ test('supported native public types and proposals preserve real identity and abs
   for (const [id, type] of [
     [1, 'schema:Book'],
     [2, 'schema:TVSeries'],
+    [3, 'schema:MusicAlbum'],
     [4, 'schema:VideoGame'],
+    [6, 'schema:TVSeries'],
   ] as const) {
     const view = await subject(id);
     expect(view.type).toBe(type);
@@ -141,7 +143,7 @@ test('supported native public types and proposals preserve real identity and abs
 
 test('reopen unchanged and change book preserve identity and all five members without disappearance', async () => {
   const ids = types.map(binding);
-  const before = await Promise.all([1, 2, 4].map(subject));
+  const before = await Promise.all([1, 2, 3, 4, 6].map(subject));
   const previous = await titles(1);
   await runtime.restart();
   const offset = runtime.captures.length;
@@ -149,7 +151,7 @@ test('reopen unchanged and change book preserve identity and all five members wi
   expect(repeated.outcome).toBe('complete');
   expect(repeated.vanished).toEqual([]);
   expect(writesSince(offset)).toEqual([]);
-  expect(await Promise.all([1, 2, 4].map(subject))).toEqual(before);
+  expect(await Promise.all([1, 2, 3, 4, 6].map(subject))).toEqual(before);
   membership();
   const changed = await runtime.run(dump(records(true)));
   expect(changed.outcome).toBe('complete');
@@ -166,14 +168,14 @@ test('reopen unchanged and change book preserve identity and all five members wi
   expect(added.every((row) => row.source.record_revision === 'unversioned')).toBe(true);
   expect(added.every((row) => row.source.digest !== previous[0]!.source.digest)).toBe(true);
   expect(await subject(2)).toEqual(before[1]!);
-  expect(await subject(4)).toEqual(before[2]!);
-  expect(binding(3)).toBeNull();
-  expect(binding(6)).toBeNull();
+  expect(await subject(3)).toEqual(before[2]!);
+  expect(await subject(4)).toEqual(before[3]!);
+  expect(await subject(6)).toEqual(before[4]!);
 }, 600_000);
 
 test('unsupported and malformed types reject complete acquisition before native effects', async () => {
   const baseline = runtime.importer.session.store.source('bangumi');
-  const views = await Promise.all([1, 2, 4].map(subject));
+  const views = await Promise.all([1, 2, 3, 4, 6].map(subject));
   for (const type of [0, 5, 7, '1', null, 1.5, undefined]) {
     const offset = runtime.captures.length;
     // Valid input precedes the invalid row: sealing must precede all effects.
@@ -184,7 +186,7 @@ test('unsupported and malformed types reject complete acquisition before native 
     expect(writesSince(offset)).toEqual([]);
     expect(binding(99)).toBeNull();
     expect(runtime.importer.session.store.source('bangumi')).toEqual(baseline);
-    expect(await Promise.all([1, 2, 4].map(subject))).toEqual(views);
+    expect(await Promise.all([1, 2, 3, 4, 6].map(subject))).toEqual(views);
   }
 }, 600_000);
 
@@ -210,5 +212,5 @@ test('existing native importer seam returns genuine skipped count on unchanged c
   expect(result.vanished).toEqual([]);
   expect(writesSince(offset)).toEqual([]);
   membership();
-  expect(result).toHaveProperty('skipped', 2);
+  expect(result).toHaveProperty('skipped', 0);
 }, 600_000);
