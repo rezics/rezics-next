@@ -225,6 +225,7 @@ Semantic owns whole definitions/compiler/schema/configuration/release delivery a
 Commerce owns whole kind/cover/FULL projection and editor mutation/rule slices. Content owns native image authority.
 Web owns one actual Collection browse/editor, the independent renderer, screenshots and visual review. No path-only
 serialization or duplicate writers replace those whole producers.
+Decision: routed Collection filter states enter `/collections/$id` through PageStory (`library-collection-filters.stories.tsx#ActualCombined`) with explicit `f.`/`l.`/`r.` search; long property labels stay a pattern overlay because the Collection reader takes property labels from the definitions release. CombinedFilters remains pattern coverage.
 Decision: the owner browse-route editor join is `library-collection-editor.stories.tsx#OwnerEdit` (PageStory in AppShell) so existing Pattern IDs stay; Details and Reordering remain pattern coverage. A source/type document or scoped test proves
 neither full native/API/UI delivery nor integrated root/main behavior.
 

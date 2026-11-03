@@ -18,11 +18,13 @@ suggestion lookup are rendered. The overlay introduces no member reads, writes, 
 Preparing, unsupported, unavailable and empty results retain their existing distinct feedback. Opening and editing
 filters leave the current member projection and order intact; applying starts the existing filtered members read.
 
-The canonical `Patterns/Library/Collection filters` stories render the actual public Collection composition with its
-existing illustrative data. The combined state carries long property labels, a populated concept and range, and
-the current query. Inspect those same IDs with `phone390`/`desktop1280`, locale and theme globals. The focused
-`collection-filter-dialog.test.tsx` regression mounts the default Collection page and its real controls. Native,
-browser geometry and original acceptance execution are deferred to integration; typing does not establish them.
+`ActualCombined` enters the generated Collection route through PageStory with the product reader, filter dialog and
+common renderer. Pattern stories remain supporting apply/clear and no-match/preparing/unavailable interactions on
+the same illustrative Collection fixture. Combined long property labels stay a pattern overlay because the Collection
+reader takes property labels from the definitions release; Concept IDs, property IDs and the long range bound travel
+in explicit `f.`/`l.`/`r.` route search. Inspect those same IDs with `phone390`/`desktop1280`, locale and theme
+globals. The focused `collection-filter-route-story.test.ts` regression pins the routed composition; keyboard, 44px
+and original screenshots remain unmeasured until admitted. Native query semantics stay with Commerce.
 
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
 properties and applied params, without introducing another filter store or claiming unsupported backend scopes.

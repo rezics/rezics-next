@@ -7,8 +7,13 @@ import { CollectionPage } from '../library/collection-page';
 import { collectionPageQuery } from '../library/collection-queries';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PatternStory } from './page';
-import { collectionFilterStoryId } from '../kernel/fake/collection-filters';
+import { PageStory, PatternStory, pageReady } from './page';
+import {
+  collectionFilterRoutePath,
+  collectionFilterSearch,
+  collectionFilterStoryId,
+  longFilterPropertySuffix,
+} from '../kernel/fake/collection-filters';
 
 const meta = {
   title: 'Patterns/Library/Collection filters',
@@ -16,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The public Collection composition and its supplied bounded facets. Review these same states with phone390/desktop1280 viewport, locale and theme globals. The combined state uses long presentation labels and a long upper bound; data remains the existing illustrative Collection fixture, not native scope evidence.',
+          'ActualCombined enters the generated Collection route through PageStory, using the product reader, filter dialog and common renderer. Pattern stories keep supporting apply/clear and no-match/preparing/unavailable interactions. Combined long property labels are a pattern overlay; Concept IDs, property IDs and the long range bound travel in explicit route search. Illustrative Collection fixture, not native scope evidence. Review phone390/desktop1280, locale and theme globals. Visual, keyboard and 44px observation remain unmeasured until admitted.',
       },
     },
   },
@@ -25,27 +30,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const id = collectionFilterStoryId;
-const path = `/collections/${id}`;
-const harem = '00000000-0000-4000-8000-000000000123';
-
-const states = {
-  reference: {},
-  concept: { 'f.schema:keywords': harem, 'l.schema:keywords': 'Harem' },
-  range: { 'r.schema:wordCount': '1000001,' },
-  combined: {
-    'f.schema:keywords': harem,
-    'l.schema:keywords': 'Harem',
-    'r.schema:wordCount': '1000001,999999999999999',
-  },
-  noMatch: {
-    'f.schema:keywords': '00000000-0000-4000-8000-000000000999',
-    'l.schema:keywords': 'Harem',
-  },
-  preparing: {
-    'f.schema:keywords': '00000000-0000-4000-8000-000000000998',
-    'l.schema:keywords': 'Preparing',
-  },
-} satisfies Record<string, Record<string, string>>;
+const states = collectionFilterSearch;
 
 function FilterRegion({ search }: { search: Record<string, string> }) {
   const client = useQueryClient();
@@ -61,16 +46,14 @@ function FilterRegion({ search }: { search: Record<string, string> }) {
           filterProperties: data.filterProperties.map((property) => ({
             ...property,
             label: `${property.label} — ${
-              property.datatype === 'quantity'
-                ? 'the complete work, including every published volume'
-                : 'catalogue concepts associated with the complete work'
+              property.datatype === 'quantity' ? longFilterPropertySuffix.quantity : longFilterPropertySuffix.concept
             }`,
           })),
         }
       : data;
   return (
     <section className="min-w-0 space-y-4 p-4 text-foreground">
-      <code className="block break-all text-xs">{`${path}?${new URLSearchParams(search)}`}</code>
+      <code className="block break-all text-xs">{collectionFilterRoutePath(search)}</code>
       <CollectionPage
         page={page}
         queryKey={options.queryKey}
@@ -88,7 +71,7 @@ function FilterRegion({ search }: { search: Record<string, string> }) {
 
 function render(search: Record<string, string>) {
   return (
-    <PatternStory path={`${path}?${new URLSearchParams(search)}`}>
+    <PatternStory path={collectionFilterRoutePath(search)}>
       <Suspense fallback={null}>
         <FilterRegion search={search} />
       </Suspense>
@@ -149,6 +132,24 @@ export const CombinedFilters: Story = {
   name: 'Concept and word range applied',
   play: ({ canvasElement }) => selectedState(canvasElement, 'combined'),
   render: () => render(states.combined),
+};
+
+export const ActualCombined: Story = {
+  name: 'Routed concept and word range',
+  parameters: { layout: 'fullscreen' },
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const canvas = within(within(canvasElement).getByRole('main'));
+    await canvas.findByRole('heading', { level: 1, name: 'A filtered reading list' });
+    await canvas.findByRole('link', { name: 'Snow Country' });
+    await expect(canvas.queryByRole('link', { name: 'A harem novel at the boundary' })).toBeNull();
+    await selectedState(canvasElement, 'combined');
+    const fields = within(await within(document.body).findByRole('dialog', { name: m.collection_filters() }));
+    await expect(await fields.findByDisplayValue('999999999999999')).toBeVisible();
+    await expect(fields.getByRole('button', { name: m.collection_filter_apply() })).toBeVisible();
+    await expect(fields.getByRole('link', { name: m.collection_filter_clear() })).toBeVisible();
+  },
+  render: () => <PageStory visitor="Signed Out" path={collectionFilterRoutePath(states.combined)} />,
 };
 
 export const NoMatches: Story = {
