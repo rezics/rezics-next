@@ -204,7 +204,7 @@ export function aniListImportRoutes(
           ),
           ...failures,
         },
-        detail: detail('reviewLabels'),
+        detail: detail('review_labels'),
       },
       ({ actor, params, body, headers }) => {
         const { ordinal, ...input } = body;
@@ -235,7 +235,7 @@ export function aniListImportRoutes(
           ),
           ...failures,
         },
-        detail: detail('applyLabels'),
+        detail: detail('apply_labels'),
       },
       ({ actor, params, body, request }) =>
         command(() => imports().applyLabels(actor, params.importId, body.confirmations, request.signal)),
