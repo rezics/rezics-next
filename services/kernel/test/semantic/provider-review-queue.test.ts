@@ -170,7 +170,10 @@ test('contributor proposals remain visible to reviewers after native accept and 
   expect(accepted.acceptance.decision).toBe('accept');
   expect(rejected.acceptance.decision).toBe('reject');
 
-  const acceptedPage = status(await f.call('GET', `${reviewEndpoint}&status=accepted_unselected`, undefined, 'editor'), 200);
+  const acceptedPage = status(
+    await f.call('GET', `${reviewEndpoint}&status=accepted_unselected`, undefined, 'editor'),
+    200,
+  );
   expect(acceptedPage.candidates).toHaveLength(1);
   expect(acceptedPage.candidates[0]).toMatchObject({
     candidate: { id: proposals[0]!.candidate, decision: 'accepted', rank: null },
