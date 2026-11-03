@@ -74,10 +74,10 @@ export async function publicationNoticesFixture() {
       )).rows as { recipient_id: string; kind: string }[];
     },
     async inbox(actor: Persona, post: Post) {
-      const inbox = await call<{ items: { kind: string; target: { postId?: string } }[] }>(
+      const inbox = await call<{ items: { kind: string; postId?: string }[] }>(
         actor, 'GET', `/v1/accounts/${actor.id}/notifications?limit=50`,
       );
-      return inbox.items.filter((item) => item.target.postId === post.id);
+      return inbox.items.filter((item) => item.postId === post.id);
     },
     async deliver(replay = false) {
       await host.deliver(replay ? `${consumer}-replay-${crypto.randomUUID()}` : consumer, [...setup.contentPartitions]);
