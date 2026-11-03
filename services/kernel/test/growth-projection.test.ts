@@ -139,7 +139,15 @@ test('Released projection batch stays within its bound as checkpoint and outbox 
       });
     },
     operation: async (growthDb, _scale, repetition) => {
+      const expectCheckpoint = async (partitionNo: number, name: string, position: number) => {
+        const { rows } = await growthDb.admin.query(
+          `SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no = $1 AND consumer = $2`,
+          [partitionNo, name],
+        );
+        expect(rows).toEqual([{ epoch: 1, position: String(position) }]);
+      };
       const applyPage = async (envelopes: readonly { events: readonly unknown[] }[]) => {
+        expect(growthDb.pool.totalCount - growthDb.pool.idleCount).toBe(0);
         expect(envelopes).toHaveLength(batchSize);
         expect(envelopes.every((envelope) => envelope.events.length === 1)).toBe(true);
       };
@@ -157,6 +165,7 @@ test('Released projection batch stays within its bound as checkpoint and outbox 
         envelopes: batchSize,
         position: BigInt(checkpointPosition + batchSize),
       });
+      await expectCheckpoint(partition, successConsumer, checkpointPosition + batchSize);
 
       const emptyConsumer = consumer('empty', repetition);
       await createCheckpoint(growthDb, emptyPartition, emptyConsumer, 1, emptyPosition);
@@ -171,6 +180,7 @@ test('Released projection batch stays within its bound as checkpoint and outbox 
       });
       expect(empty).toEqual({ status: 'read', envelopes: 0, position: BigInt(emptyPosition) });
       expect(emptyApplied).toBe(false);
+      await expectCheckpoint(emptyPartition, emptyConsumer, emptyPosition);
 
       const busyConsumer = consumer('busy', repetition);
       await createCheckpoint(growthDb, partition, busyConsumer, 1, checkpointPosition);
@@ -192,6 +202,7 @@ test('Released projection batch stays within its bound as checkpoint and outbox 
         });
         expect(busy).toEqual({ status: 'busy' });
         expect(busyApplied).toBe(false);
+        await expectCheckpoint(partition, busyConsumer, checkpointPosition);
       } finally {
         await locker.query('ROLLBACK');
         locker.release();
@@ -212,6 +223,7 @@ test('Released projection batch stays within its bound as checkpoint and outbox 
         },
       });
       expect(lost).toEqual({ status: 'busy' });
+      await expectCheckpoint(partition, lostConsumer, checkpointPosition + batchSize);
     },
   });
 }, 120_000);

@@ -258,8 +258,18 @@ test("Full batch log reads only the batch's outbox rows at every partition histo
     );
 
     const result = await capture(database, () =>
-      readBatch(database.pool, { consumer: batchLogConsumer, partition: anchorPartition, apply: async () => {} }),
+      readBatch(database.pool, {
+        consumer: batchLogConsumer,
+        partition: anchorPartition,
+        apply: async (envelopes) => {
+          expect(envelopes.map(({ position }) => position)).toEqual(
+            Array.from({ length: 64 }, (_, offset) => BigInt(checkpoint + offset + 1)),
+          );
+          expect(envelopes.every(({ events }) => events.length === 1)).toBe(true);
+        },
+      }),
     );
+    expect(result.value).toEqual({ status: 'read', envelopes: 64, position: BigInt(checkpoint + 64) });
     const scans = inspectOutboxPlans(result.capture.plans);
     expect(scans.length).toBeGreaterThan(0);
     for (const { node, ancestors } of scans) {
