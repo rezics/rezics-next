@@ -34,7 +34,7 @@ export function usePortableWriting(source: WritingSource, admitted: boolean) {
         link.href = url;
         link.download = filename;
         link.hidden = true;
-        window.document.body.append(link);
+        window.document.body.appendChild(link);
         try { link.click(); } finally { link.remove(); }
       },
       copy: async (text) => { await navigator.clipboard.writeText(text); },
