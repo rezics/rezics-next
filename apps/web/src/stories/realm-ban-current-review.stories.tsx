@@ -2,25 +2,52 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { RealmBansControl } from '../community/realm-bans-control';
-import type { BanReadState } from '../community/realm-bans';
+import type { BanReadState, InstalledRealmBanPage } from '../community/realm-bans';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
 import { communityCurrentClaimStory } from './community-current-claim';
 
 const realmId = '01a17a3b-70ea-712a-9ff7-81fc6a9381b6';
+const accountId = '01a17a3b-70ea-712a-9ff7-81fc6a9381b7';
+const moderatorId = '01a17a3b-70ea-712a-9ff7-81fc6a9381b8';
+const identity = (id: string, handle: string): InstalledRealmBanPage['items'][number]['account'] => ({
+  state: 'available',
+  accountId: id,
+  displayName: handle,
+  handle,
+  label: handle,
+  destination: `/@${handle}`,
+});
+const episode = (id: string, erased = false): InstalledRealmBanPage['items'][number] => ({
+  accountId: id,
+  actor: erased ? null : moderatorId,
+  reason: 'Exact selected episode',
+  at: '2026-11-02T14:05:00Z',
+  account: erased ? { state: 'concealed', accountId: id, label: 'Account', destination: null } : identity(id, 'river'),
+  moderator: erased ? null : identity(moderatorId, 'moderator'),
+  unban: { state: 'permitted', realmId, accountId: id, observedAt: '2026-11-02T14:05:00Z', membershipRestored: false },
+  removal: { state: 'unavailable' },
+});
 const page: BanReadState = {
   state: 'ready',
   page: {
-    items: [
-      {
-        accountId: '01a17a3b-70ea-712a-9ff7-81fc6a9381b7',
-        actor: null,
-        reason:
-          'Repeated disruption after several direct requests to stop. This operational record remains visible after the moderator account is erased.',
-        at: '2026-11-02T14:05:00Z',
-      },
-    ],
+    items: [episode(accountId), episode('01a17a3b-70ea-712a-9ff7-81fc6a9381b9', true)],
     next: null,
+    context: { state: 'available', spaceId: realmId, spaceTitle: 'Quiet Novel Club', realmTitle: 'Reading Realm' },
+    viewer: {
+      accountId: moderatorId,
+      clientId: 'web',
+      requestedBy: null,
+      authnEpoch: 1,
+      unban: {
+        state: 'permitted',
+        operationId: 'realm.unban',
+        action: 'realm:ban',
+        resource: { route: 1, id: realmId },
+        reauthorizes: true,
+      },
+    },
+    selected: { state: 'not-requested' },
   },
 };
 
@@ -32,7 +59,8 @@ const meta = {
     layout: 'fullscreen',
     docs: {
       description: {
-        story: 'Illustrative installed ban-list shape with an erased moderator; no profile or per-row read is used.',
+        story:
+          'Composed current bans disclose supported identities and destinations while retaining concealed and erased rows. Native advice is an observation; commands reauthorize.',
       },
     },
   },
@@ -93,7 +121,7 @@ export const DeniedInspection: Story = {
   },
 };
 
-/** Injected observation seam; these fixtures do not publish a native client contract. */
+/** Composed observations use the installed client shape; transport verification remains separate. */
 export const CurrentSelectedEpisode: Story = {
   render: () => (
     <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
@@ -107,12 +135,7 @@ export const CurrentSelectedEpisode: Story = {
           inspect={async (input) => ({
             state: 'current',
             input,
-            ban: {
-              accountId: input.accountId,
-              actor: null,
-              reason: 'Exact selected episode',
-              at: '2026-11-02T14:05:00Z',
-            },
+            ban: episode(input.accountId),
           })}
         />
       </AppShell>

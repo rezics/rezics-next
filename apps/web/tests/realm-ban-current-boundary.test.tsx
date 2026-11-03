@@ -130,7 +130,7 @@ afterAll(async () => {
   window.close();
 });
 
-test('actual installed adapters stay at one page request for 1/10/20 rows and outside-page unavailable inspection', async () => {
+test('legacy pages retain unavailable exact observations through the installed adapter for 1/10/20 rows', async () => {
   let previousBytes = 0;
   for (const count of [1, 10, 20]) {
     page = {
@@ -152,9 +152,9 @@ test('actual installed adapters stay at one page request for 1/10/20 rows and ou
     expect(host.textContent).toContain(m.realm_bans_inspect_unavailable());
     expect(host.textContent).toContain(id(999));
     await click(m.realm_bans_inspect_retry());
-    expect(requests.length).toBe(1);
+    expect(requests.length).toBe(3);
     await click(m.realm_bans_next());
-    expect(new URL(requests[1]!.url).searchParams.get('cursor')).toBe('opaque-next');
+    expect(new URL(requests[3]!.url).searchParams.get('cursor')).toBe('opaque-next');
     expect(host.textContent).not.toContain(id(999));
     expect(host.querySelectorAll('li').length).toBe(count);
     await select();
@@ -172,7 +172,7 @@ test('sparse continuation survives unavailable inspection; source replacement fe
   await mount();
   await select();
   await click(m.realm_bans_next());
-  expect(new URL(requests[1]!.url).searchParams.get('cursor')).toBe('sparse-next');
+  expect(new URL(requests[2]!.url).searchParams.get('cursor')).toBe('sparse-next');
   await close();
   let finish!: (value: { state: 'unavailable' }) => void;
   let inspections = 0;

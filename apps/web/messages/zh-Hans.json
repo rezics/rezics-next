@@ -2932,6 +2932,7 @@
   "realm_bans_details_at": "封禁时间",
   "realm_bans_details_moderator": "版主账号",
   "realm_bans_moderator_erased": "版主账号已删除。",
+  "realm_bans_native_advice": "可以解除此封禁。确认时将重新检查权限。",
   "realm_bans_inspect_heading": "检查当前封禁",
   "realm_bans_inspect_account": "准确的账户 ID",
   "realm_bans_inspect_action": "检查账户",

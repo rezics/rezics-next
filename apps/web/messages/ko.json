@@ -2932,6 +2932,7 @@
   "realm_bans_details_at": "차단 일시",
   "realm_bans_details_moderator": "모더레이터 계정",
   "realm_bans_moderator_erased": "모더레이터 계정이 삭제되었습니다.",
+  "realm_bans_native_advice": "이 차단을 해제할 수 있습니다. 확인 시 권한을 다시 검사합니다.",
   "realm_bans_inspect_heading": "현재 차단 확인",
   "realm_bans_inspect_account": "정확한 계정 ID",
   "realm_bans_inspect_action": "계정 확인",

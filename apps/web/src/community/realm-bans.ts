@@ -7,7 +7,15 @@ import { prepareSession, viewerCredential } from '../session/request';
 
 type NativeRealm = ReturnType<KernelClient['realms']>;
 type NativeBanTarget = ReturnType<NativeRealm['bans']>;
-export type RealmBanPage = NonNullable<Awaited<ReturnType<NativeRealm['bans']['get']>>['data']>;
+export type InstalledRealmBanPage = NonNullable<Awaited<ReturnType<NativeRealm['bans']['get']>>['data']>;
+export type RealmBanQuery = NonNullable<NonNullable<Parameters<NativeRealm['bans']['get']>[0]>['query']>;
+type InstalledBan = InstalledRealmBanPage['items'][number];
+// Standalone pre-composition fixtures retain their original four-field observations.
+export type RealmBanRow = Pick<InstalledBan, 'accountId' | 'reason' | 'actor' | 'at'> &
+  Partial<Omit<InstalledBan, 'accountId' | 'reason' | 'actor' | 'at'>>;
+export type RealmBanPage = Pick<InstalledRealmBanPage, 'next'> &
+  Partial<Omit<InstalledRealmBanPage, 'items' | 'next'>> & { items: RealmBanRow[] };
+export type RealmBanReadInput = { realmId: string } & Pick<RealmBanQuery, 'cursor' | 'selectedAccountId'>;
 export type RealmBanReceipt = NonNullable<Awaited<ReturnType<NativeBanTarget['put']>>['data']>['ban'];
 export type BanReadState =
   | { state: 'ready'; page: RealmBanPage }
@@ -30,14 +38,20 @@ export type BanWriteResult =
 export const REALM_BANS_PAGE_LIMIT = 20;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function validateBanRead(input: { realmId: string; cursor?: string }) {
+export function validateBanRead(input: RealmBanReadInput) {
   if (
     typeof input?.realmId !== 'string' ||
     !uuid.test(input.realmId) ||
-    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 4096))
+    (input.cursor !== undefined && (typeof input.cursor !== 'string' || !input.cursor || input.cursor.length > 4096)) ||
+    (input.selectedAccountId !== undefined &&
+      (typeof input.selectedAccountId !== 'string' || !uuid.test(input.selectedAccountId)))
   )
     throw new Error('Invalid Realm bans request');
-  return { realmId: input.realmId.toLowerCase(), ...(input.cursor ? { cursor: input.cursor } : {}) };
+  return {
+    realmId: input.realmId.toLowerCase(),
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+    ...(input.selectedAccountId ? { selectedAccountId: input.selectedAccountId.toLowerCase() } : {}),
+  };
 }
 
 export function validBanWrite(input: BanWriteInput): boolean {
@@ -71,7 +85,7 @@ export async function loadRealmBans(
   client: KernelClient,
   request: Request,
   env: Partial<SessionEnv>,
-  input: { realmId: string; cursor?: string },
+  input: RealmBanReadInput,
 ): Promise<BanReadState> {
   try {
     input = validateBanRead(input);
@@ -80,7 +94,11 @@ export async function loadRealmBans(
     if (stale || !authorization) return { state: 'signed-out' };
     const result = await client.realms({ realmId: input.realmId }).bans.get({
       headers: { authorization },
-      query: { limit: REALM_BANS_PAGE_LIMIT, ...(input.cursor ? { cursor: input.cursor } : {}) },
+      query: {
+        limit: REALM_BANS_PAGE_LIMIT,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...(input.selectedAccountId ? { selectedAccountId: input.selectedAccountId } : {}),
+      } satisfies RealmBanQuery,
     });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if (result.status === 401) return { state: 'signed-out' };

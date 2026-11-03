@@ -2926,6 +2926,7 @@
   "realm_bans_details_at": "Banned at",
   "realm_bans_details_moderator": "Moderator account",
   "realm_bans_moderator_erased": "Moderator account was erased.",
+  "realm_bans_native_advice": "This ban can be lifted. Permission is checked again when you confirm.",
   "realm_bans_inspect_heading": "Inspect current ban",
   "realm_bans_inspect_account": "Exact account ID",
   "realm_bans_inspect_action": "Inspect account",

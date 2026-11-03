@@ -77,87 +77,76 @@ lookup remains one exact handle read, and a fresh ban uses its existing final ex
 point command. There is no polling, history/directory scan, additional role read, per-row identity read or new
 background work.
 
-## Current ban identity fallback and inspection boundary
+## Installed current ban review
 
-The installed `KernelClient.realms({ realmId }).bans.get` response contains current rows with
-`accountId`, `reason`, `actor` and `at`, plus the native `next` cursor. It does not publish target
-or moderator profile disclosure, current action advice, an episode-bound selected-account read, or
-unban readback. The Web list keeps native account-key order and the 20-row limit; it renders the
-native account IDs as fallbacks, the actual reason and effective time, and the actor account ID when
-present. Native `actor: null` means the moderator account was erased, so the operational row stays
-visible and is never labelled as an anonymous moderator. The existing command writer remains the
-authority and reauthorizes every mutation.
+The installed `KernelClient.realms({ realmId }).bans.get` admits the composed response and original
+`selectedAccountId` query through the shared client owner's normal integration. Web derives its response,
+query, identities, episode advice and selection types from that installed route. The native owner remains
+[Current ban review page](../../../../services/kernel/src/community/README.md#current-ban-review-page) and
+[the mounted schemas](../../../../services/kernel/src/community/ban-review-page-schemas.ts).
+Web does not import the native schema or modify generated delivery.
 
-Decision: until Content installs the composed identity fields, use the native target and actor account IDs as fallbacks; render native `actor: null` as an erased moderator identity, never as anonymous.
+The default Panel binds exact inspection to its existing `readRealmBans` server function, original native
+HTTP adapter and QueryClient lifetime. An explicit selection reads one Realm/account with the captured list
+frontier and limit 20. Retry retains that immutable input; it does not move the visible page, scan/refill the
+list or infer exact absence from exhaustion. Native denial, unavailable inspection and admitted operational
+absence have distinct explanations. An absent observation is neither a command receipt nor evidence that
+Accounts completed membership removal. A missing exact observation stays unavailable.
 
-The composed current-ban reader remains unbound: the installed generated declaration still accepts only
-`limit` and `cursor` and returns the four original row fields. Content's native owner describes the expanded
-selection and identity composition, but source declarations do not install that contract in Web.
+Every operational row remains visible. Disclosed target/moderator labels and handles use only the native
+identity projection. Links admit only its canonical `/@handle` destination. Concealed identities use the
+localized Account label and operational key without a link; a null native actor means an erased moderator.
+The actual reason/time, jointly disclosed Realm/Space context and episode-bound native unban advice appear
+with the row. Advice describes an observation; the original command still reauthorizes, including protected
+role refusal. A removal observation cannot establish workflow completion.
 
-Decision: expose exact account selection through the unbound `unavailableRealmBanCurrent` default until the generated composition is installed; retain selection for explicit retry without reading or moving the list frontier.
+Decision: retain four-field standalone observations with safe account-key fallbacks; the default Panel uses installed composition and only its admitted exact selection can establish operational absence.
 
-`RealmBanCurrentControl` accepts one account ID separately from authoring handle lookup. Its default source
-returns unavailable without network work and never claims absence, identity disclosure or mutation advice.
-Retry uses the same Realm/account; editing or clearing retires the previous selection. It shares caller
-admission and the Stay/Leave boundary with the existing writer. Page replacement unmounts selection;
-caller/source replacement fences queued and late inspection results. Inspection never changes a draft ban,
-an uncertain command or its definitive receipt. All eight locales provide the unavailable explanation.
+`RealmBanCurrentControl` keeps its unavailable default for standalone callers without an adapter. Default
+Panel inspection binds caller, Realm, exact account and frontier and copies the current episode, including
+nested identities/advice, before confirmation. Editing, clearing or explicitly retrying selection retires the
+confirmation. Page/source/caller replacement fences queued and late observations. List confirmation also
+copies the reviewed episode. Cancel restores focus to the unban trigger. Stay preserves review; Leave retires
+it through the existing departure boundary. Inspection does not change a draft, uncertain command or receipt.
 
-The inspection seam accepts an admitted current observation or operational absence, bound to the captured
-Realm, exact account and opaque list frontier. It freezes the original selected read input for explicit retry,
-rejects mismatched observations as unavailable, and copies the current episode's native record fields before
-rendering its actual reason, time and moderator fallback. Absence has its own explanation and never renders
-the writer's lifted-ban receipt. These injected observations do not install the missing generated contract.
-The default remains unavailable until generated delivery can bind the admitted native selection. An unavailable inspection retains selection for explicit retry; it
-does not certify absence. A definitive unban receipt stays independent from readback, and neither
-current absence nor accepted removal claims restored membership or completed Accounts work.
+The original writer retains immutable uncertain intent and original credentials, excludes duplicate sends,
+and reauthorizes every command natively. Explicit new intent creates a new key; uncertain retries preserve
+the original key. Successful commands refresh the ordinary list. Native accepted removal remains pending
+until Accounts establishes completion, including after unban or reban.
 
 Decision: retain the latest accepted ban and unban command receipts separately within the visit (at most two), replacing only the same action's prior receipt; label earlier receipts as historical without current-state assurances.
 
 Each retained receipt keeps its original immutable command and idempotency key and a copied native result.
 Starting another command, an uncertain retry, exact absence or a replacement current episode does not erase
-the opposite action's receipt. A non-null ban removal workflow stays unconfirmed after unban or reban.
-Explicit new intent creates a new key; uncertain retries preserve their own key. Revoked admission and visit
-retirement remove both private receipts. This bounded display is not native command history or workflow readback.
+the opposite action's receipt. Revoked admission and visit retirement remove both private receipts. This
+bounded display is not native command history or workflow readback.
 
-## Current-ban consumer cost
+## Current-ban consumer cost and verification
 
-- Touches: one native composed ban page per explicit list/retry, at most one installed selected-current inspection, existing target resolution only for a deliberate new ban, and separately charged original command/readback. Identity and authority arrive from the native composition, with no per-row network fanout.
-- Bound: consumer page20, one exact selection, one immutable pending command and one opaque frontier. Derive native reason/identity/context/cursor and media byte caps from installed contracts. Validation/rendering is O(N+admitted bytes) with no retained pages/history, hidden refill or global lookup.
-- Growth check: at 1/10/20 rows exercise actual consumer adapters and record requests, selected reads, projected bytes and retained state across retry, unban/reban and retirement. Content/Accounts retain native 256/1024/4096 current-interval/history/identity/authority and registered completion evidence; Web counts cannot certify it.
+- Touches: one native composed page per explicit list/retry, one exact selection per explicit inspection/retry,
+  existing handle resolution and final revalidation only for a deliberate ban, and separate original commands.
+  Identity/authority arrive from composition, with no per-row network fanout.
+- Bound: page20, one exact selected episode, one immutable uncertain command, two accepted receipts and one
+  opaque frontier; no retained pages/history, polling, hidden refill or global lookup. Rendering/copying is
+  O(page size plus admitted bytes), using the installed response's native bounds.
+- Growth: `tests/realm-ban-current-installed.test.tsx` exercises 1/10/20 composed rows through the actual
+  default Panel/Control, original server validators/handlers, generated native HTTP client and QueryClient.
+  It covers identities/destinations, explicit exact retry with the same frontier, unavailable/denied/current/
+  absent selection, duplicate exclusion, uncertain unban retry, deliberate reban with a new episode/key,
+  independent receipts, pending removal and retirement. Browser/server plumbing and HTTP responses are
+  authored fixtures, not native authority or physical growth evidence.
 
-`tests/realm-ban-lifetime.test.tsx` authors the actual default Panel/Control/session-cache composition with the
-original server handlers and generated native HTTP client. Deferred native responses and an independently
-deferred original server-function response cover replacement, queued sends, current recovery, bounded20,
-sparse cursor restart, native denials, exact uncertain retry and duplicate exclusion. The acceptance is
-**UNRUN** in this implementation placement. Existing acceptance/native/bound/growth/browser/Storybook/root
-and stack verification are also deferred to integration; Web workspace typing is the permitted local check.
-Typing cannot establish those outcomes or whole-feature completion.
+`tests/realm-ban-current-boundary.test.tsx` retains four-field unavailable-fallback and sparse continuation/
+replacement coverage. `tests/realm-ban-current-selection.test.tsx` retains the injected observation seam's
+unchanged writer/confirmation assertions. `tests/realm-ban-lifetime.test.tsx` retains original admission,
+replacement, queued sends, current recovery, bounded20, cursor restart, native denial and immutable retry
+assertions. No unchanged writer assertion is removed.
 
-`tests/realm-ban-current-boundary.test.tsx` exercises 1/10/20 original native-shaped rows through the actual
-generated HTTP client, adapter, default Panel/Control and QueryClient. It checks one page request, bounded
-serialized fixture bytes and retained rows, zero inspection/identity/permission requests through the unavailable
-seam, stable continuation, explicit inspection retry, sparse continuation and retirement. The server-function
-transport is bridged to the original adapter; these authored responses prove no native authority. Composed
-identity/episode/unban/reban growth, positive readback and rendered review remain continuation work.
+Original frozen acceptance, native preparation/authority/all-pool growth, controller verification and rendered
+browser/Storybook integration remain deferred to the controller after integration. Content/Accounts retain
+native 256/1024/4096 current-interval/history/identity/authority and registered completion evidence. Consumer
+fixtures, installed typing and the older source-only deliveries establish none of those outcomes.
 
-Existing affected stories remain unchanged:
-
-- `pages-community-realm-bans--management-journey`
-- `patterns-community-realm-bans--current`, `--ban-and-unban`, `--removal-pending`, `--unban-confirmation`,
-  `--next-page`, `--empty`, `--loading`, `--unavailable`, `--forbidden`, `--closed`, `--invalid-cursor`,
-  `--role-removal-required`, `--revoked`, `--ambiguous-retry`, `--saving`
-
-Decision: publish the mounted composed ban contract through the normal native declaration generator before binding Web; derive every composed field from that generated delivery.
-
-Decision: keep exact observation rendering behind the injected inspection seam while generated composition is unavailable; never send an undeclared selected query or infer absence from list exhaustion.
-
-Decision: an admitted injected current episode may enter the existing unban writer through explicit confirmation; keep installed inspection unavailable until the generated route admits exact selection.
-
-The selected episode's confirmation retains its copied account, reason, moderator and effective time even when
-the source object changes. Editing, clearing or explicitly inspecting again retires that confirmation, including
-when the next observation is absent or unavailable. Cancel restores keyboard focus to its unban trigger. Confirm
-uses the original writer's admission, duplicate exclusion, immutable uncertain retry and independent receipts;
-the observation is neither an authorization token nor a conditional native command. A successful command still
-reauthorizes natively and refreshes the ordinary list. The inspection seam alone supplies no installed identity,
-advice or exact-read contract.
+The current-review stories show composed disclosed/concealed identities, erased moderators, exact current/
+absent/unavailable/denied states and selected-episode unban confirmation. Their responses are illustrative;
+the installed adapter journey and native producer evidence remain separate.

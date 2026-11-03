@@ -24,10 +24,16 @@ import {
   type RealmBanTarget,
   type ResolveBanTarget,
 } from './realm-ban-target';
-import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
+import type { BanReadState, BanWriteInput, BanWriteResult, RealmBanRow } from './realm-bans';
 import { RealmBanLifetime } from './realm-ban-lifetime';
 import { RealmBanCurrentControl } from './realm-ban-current-control';
-import { unavailableRealmBanCurrent, type InspectRealmBanCurrent } from './realm-ban-current';
+import {
+  copyRealmBanEpisode,
+  realmBanEpisodeAdvice,
+  unavailableRealmBanCurrent,
+  type InspectRealmBanCurrent,
+} from './realm-ban-current';
+import { RealmBanEpisodeView, RealmBanNativeAdvice } from './realm-ban-current-view';
 import { useCommunityManagementAdmission } from './community-management';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import type { SelectedRealmMember } from './members/selected-account';
@@ -338,6 +344,7 @@ function RealmBansVisit({
     setSelectedReviewReason('');
   }, [setSelected, setBanConfirm, setSelectedReview, setSelectedReviewReason]);
   const [reason, setReason, reasonNow] = useBanDraftField('');
+  const [confirmedEpisode, setConfirmedEpisode] = useState<Readonly<RealmBanRow> | null>(null);
   const [confirm, setConfirm, confirmNow] = useBanDraftField<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
   // Bounded command receipts are independent of the selected episode and readback.
@@ -1178,6 +1185,11 @@ function RealmBansVisit({
               ) : null}
             </section>
           ) : null}
+          {view.page.context?.state === 'available' ? (
+            <p className="text-sm">
+              <bdi>{view.page.context.spaceTitle}</bdi> / <bdi>{view.page.context.realmTitle}</bdi>
+            </p>
+          ) : null}
           <RealmBanCurrentControl
             key={renderGeneration}
             realmId={realmId}
@@ -1223,34 +1235,17 @@ function RealmBansVisit({
                   headingLevel={4}
                   className="wrap-anywhere [&_h4]:line-clamp-none [&_h4]:whitespace-normal"
                   metadata={
-                    <dl className="min-w-0 flex-1 space-y-3">
-                      <div>
-                        <dt className="font-medium">{m.realm_bans_details_account()}</dt>
-                        <dd className="wrap-anywhere">
-                          <bdi>{ban.accountId}</bdi>
-                        </dd>
-                      </div>
-                      <BanModeratorIdentity actor={ban.actor} />
-                      <div>
-                        <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
-                        <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium">{m.realm_bans_details_at()}</dt>
-                        <dd>
-                          <time dateTime={ban.at} dir="ltr" className="wrap-anywhere">
-                            {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
-                          </time>
-                        </dd>
-                      </div>
-                    </dl>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <RealmBanEpisodeView ban={ban} />
+                      <RealmBanNativeAdvice ban={ban} realmId={realmId} />
+                    </div>
                   }
                   actions={
                     <Button
                       type="button"
                       variant="outline"
                       className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
-                      disabled={disabled}
+                      disabled={disabled || (!!ban.unban && !realmBanEpisodeAdvice(ban, realmId))}
                       onClick={(event) => {
                         if (
                           gate.current() &&
@@ -1260,6 +1255,7 @@ function RealmBansVisit({
                         ) {
                           intent.current++;
                           makeReview('unban', ban.accountId, event.currentTarget);
+                          setConfirmedEpisode(copyRealmBanEpisode(ban));
                           setConfirm(ban.accountId);
                         }
                       }}
@@ -1282,14 +1278,9 @@ function RealmBansVisit({
                         >
                           {m.realm_bans_unban_confirm()}
                         </ContentItemHeading>
-                        <dl className="min-w-0">
-                          <div>
-                            <dt className="font-medium">{m.realm_bans_details_account()}</dt>
-                            <dd className="wrap-anywhere">
-                              <bdi>{ban.accountId}</bdi>
-                            </dd>
-                          </div>
-                        </dl>
+                        {confirmedEpisode?.accountId === ban.accountId ? (
+                          <RealmBanEpisodeView ban={confirmedEpisode} />
+                        ) : null}
                         <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"

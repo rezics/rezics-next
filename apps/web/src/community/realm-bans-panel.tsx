@@ -7,6 +7,7 @@ import { CommunityManagementContext } from './community-management';
 import { RealmBansControl } from './realm-bans-control';
 import { RealmBanLifetime, realmBanSessionSource } from './realm-ban-lifetime';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
+import { observeRealmBanCurrent, type InspectRealmBanCurrent } from './realm-ban-current';
 import type { ResolveBanTarget } from './realm-ban-target';
 import { SelectedRealmMemberContext } from './members/selected-account';
 
@@ -69,6 +70,18 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
         const next = await readRealmBans({ data: { realmId, ...(cursor ? { cursor } : {}) } });
         return lifetime.owns(ticket) ? next : { state: 'signed-out' };
       },
+      inspect: (async (input) => {
+        if (!lifetime.current() || input.realmId !== realmId) return { state: 'signed-out' };
+        const ticket = lifetime.ticket();
+        const next = await readRealmBans({
+          data: {
+            realmId,
+            selectedAccountId: input.accountId,
+            ...(input.cursor ? { cursor: input.cursor } : {}),
+          },
+        });
+        return lifetime.owns(ticket) ? observeRealmBanCurrent(input, next) : { state: 'signed-out' };
+      }) satisfies InspectRealmBanCurrent,
       write: async (input: BanWriteInput): Promise<BanWriteResult> => {
         if (!lifetime.current() || !csrfToken || input.realmId !== realmId) return { ok: false, reason: 'signed-out' };
         const ticket = lifetime.ticket();

@@ -2932,6 +2932,7 @@
   "realm_bans_details_at": "Fecha del bloqueo",
   "realm_bans_details_moderator": "Cuenta del moderador",
   "realm_bans_moderator_erased": "La cuenta del moderador se eliminó.",
+  "realm_bans_native_advice": "Se puede levantar este bloqueo. El permiso se comprueba de nuevo al confirmar.",
   "realm_bans_inspect_heading": "Consultar bloqueo actual",
   "realm_bans_inspect_account": "ID exacto de la cuenta",
   "realm_bans_inspect_action": "Consultar cuenta",

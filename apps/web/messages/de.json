@@ -2932,6 +2932,7 @@
   "realm_bans_details_at": "Gesperrt am",
   "realm_bans_details_moderator": "Moderationskonto",
   "realm_bans_moderator_erased": "Das Moderationskonto wurde gelöscht.",
+  "realm_bans_native_advice": "Diese Sperre kann aufgehoben werden. Die Berechtigung wird bei der Bestätigung erneut geprüft.",
   "realm_bans_inspect_heading": "Aktuelle Sperre prüfen",
   "realm_bans_inspect_account": "Genaue Konto-ID",
   "realm_bans_inspect_action": "Konto prüfen",

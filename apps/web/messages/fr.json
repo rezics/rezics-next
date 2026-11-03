@@ -2932,6 +2932,7 @@
   "realm_bans_details_at": "Date du bannissement",
   "realm_bans_details_moderator": "Compte du modérateur",
   "realm_bans_moderator_erased": "Le compte du modérateur a été effacé.",
+  "realm_bans_native_advice": "Ce bannissement peut être levé. Votre autorisation sera vérifiée à nouveau lors de la confirmation.",
   "realm_bans_inspect_heading": "Consulter le bannissement actuel",
   "realm_bans_inspect_account": "Identifiant exact du compte",
   "realm_bans_inspect_action": "Consulter le compte",
