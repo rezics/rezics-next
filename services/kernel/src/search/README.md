@@ -805,6 +805,12 @@ update does not rewrite existing terms.
 
 ## Cost
 
+- Retained count-free facet pages touch prepared generation/value keys, current contributor/target Source and
+  shared privacy observations. [The composed derivation](cost-retained-facets.md) separates ready pages from
+  preparation and identifies the population-dependent eligible-value refill; LIMIT does not bound the whole call.
+  [Dedicated native coverage](../../test/search/growth-retained-facets.test.ts) isolates the missing guard;
+  complete three-scale composed growth acceptance remains pending.
+
 This inventory describes existing native components and their partial implementation bounds, not admission of a
 complete list plan. Old refill/drop behavior, sampled facets and counts described as current below do not satisfy
 [Filtered lists](../../../../docs/filtered-lists.md). Production list admission must bind the actual internal cost
