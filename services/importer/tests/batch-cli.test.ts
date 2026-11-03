@@ -90,7 +90,10 @@ function importFetch(options: { loseOpenLibrary?: boolean; requests?: string[]; 
     }
     if (url.pathname !== '/v1/subjects:batchWrite') return new Response('', { status: 404 });
     const body = (await request.json()) as BatchWriteRequest;
-    if (options.loseOpenLibrary && body.commands.some((command) => command.source.source === 'openlibrary')) {
+    if (
+      options.loseOpenLibrary &&
+      body.commands.some((command) => command.source.source === 'openlibrary' || command.source.source === 'catalogue-ol')
+    ) {
       throw new DOMException('Lost Open Library write response', 'AbortError');
     }
     const result: BatchWriteResult = {
