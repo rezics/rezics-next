@@ -1420,8 +1420,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         throw new ConsumerFailure('dependency_unavailable');
       admitHitPayload(body, { sort: 'relevance', size, generation, ...(after === undefined ? {} : { after }) }, prefix);
-      if (typeof body.pit_id !== 'string' || !body.pit_id.length)
-        throw new ConsumerFailure('observation_lost');
+      if (typeof body.pit_id !== 'string' || !body.pit_id.length) throw new ConsumerFailure('observation_lost');
       if (body.hits.hits.some((hit) => !record(hit) || hit._index !== q.consumer.physicalTarget))
         throw new ConsumerFailure('incarnation_changed');
       const raw = body.hits.hits.map((hit) => ({
@@ -1429,8 +1428,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         index: hit._index as string,
         partition: (hit._source as { partition: number }).partition,
         securityRevision: (hit._source as { security_revision: number }).security_revision,
-        matched: Array.isArray(hit.matched_queries) ? [...hit.matched_queries] as string[] : [],
-        sort: [...hit.sort as (string | number | null)[]],
+        matched: Array.isArray(hit.matched_queries) ? ([...hit.matched_queries] as string[]) : [],
+        sort: [...(hit.sort as (string | number | null)[])],
       }));
       m.cost.engineIteratorSteps += iteratorSteps(body);
       return { queried: q, raw, exhausted: raw.length < size, total: undefined };

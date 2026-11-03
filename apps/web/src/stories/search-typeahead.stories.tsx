@@ -74,7 +74,10 @@ const meta = {
             { status: 503, headers: { 'cache-control': 'private, no-store', 'retry-after': '0' } },
           );
         if (parameters.scopedOutcome === 'withdrawn' && scopedAttempt++ === 0)
-          return Response.json({ code: 'forbidden' }, { status: 403, headers: { 'cache-control': 'private, no-store' } });
+          return Response.json(
+            { code: 'forbidden' },
+            { status: 403, headers: { 'cache-control': 'private, no-store' } },
+          );
         return Response.json(scopedPage, { headers: { 'cache-control': 'private, no-store' } });
       }
       if (parameters.suggestionFailure)

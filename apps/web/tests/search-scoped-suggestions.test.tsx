@@ -9,7 +9,12 @@ const filter = JSON.stringify({
     { or: [{ type: { in: ['schema:Book'] } }, { not: { statement: { property: 'schema:genre', in: ['private'] } } }] },
   ],
 });
-const scope = { kind: 'Realm' as const, id: realm, name: 'display-only name', searchAction: `/en/search?filter=${encodeURIComponent(filter)}` };
+const scope = {
+  kind: 'Realm' as const,
+  id: realm,
+  name: 'display-only name',
+  searchAction: `/en/search?filter=${encodeURIComponent(filter)}`,
+};
 const result: SuggestionResult = {
   subjects: [
     {
@@ -57,14 +62,18 @@ test('missing or unsupported native scope refuses before any Global request', as
     return Response.json(result);
   }) as typeof fetch;
   const signal = new AbortController().signal;
-  await expect(loadScopedHeaderSuggestions('The', 'en', signal, undefined, [['filter', filter]])).rejects.toMatchObject({
-    problem: { status: 503, code: 'scoped_suggestions_unavailable' },
-  });
+  await expect(loadScopedHeaderSuggestions('The', 'en', signal, undefined, [['filter', filter]])).rejects.toMatchObject(
+    {
+      problem: { status: 503, code: 'scoped_suggestions_unavailable' },
+    },
+  );
   await expect(
     loadScopedHeaderSuggestions('The', 'en', signal, { ...scope, kind: 'Zone' }, [['filter', filter]]),
   ).rejects.toMatchObject({ problem: { status: 503, code: 'scoped_suggestions_unavailable' } });
   await expect(
-    loadScopedHeaderSuggestions('The', 'en', signal, scope, [['filter', JSON.stringify({ type: { in: ['schema:Book'] } })]]),
+    loadScopedHeaderSuggestions('The', 'en', signal, scope, [
+      ['filter', JSON.stringify({ type: { in: ['schema:Book'] } })],
+    ]),
   ).rejects.toMatchObject({ problem: { status: 503, code: 'scoped_suggestions_unavailable' } });
   expect(requests).toBe(0);
 });
@@ -75,7 +84,10 @@ test('ordinary Global suggestions keep their original prefix request semantics',
     requested = new URL(input instanceof Request ? input.url : String(input), 'https://rezics.test');
     return Response.json(result);
   }) as typeof fetch;
-  const fields: [string, string][] = [['filter', filter], ['language', 'ja']];
+  const fields: [string, string][] = [
+    ['filter', filter],
+    ['language', 'ja'],
+  ];
   await loadGlobalHeaderSuggestions('The', 'en', new AbortController().signal, undefined, fields);
   expect(requested?.searchParams.has('filter')).toBe(false);
   expect(requested?.searchParams.getAll('language')).toEqual(['ja']);

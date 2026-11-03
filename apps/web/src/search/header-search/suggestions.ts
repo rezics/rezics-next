@@ -44,10 +44,7 @@ function suggestionUrl(
   return params;
 }
 
-async function requestSuggestions(
-  signal: AbortSignal,
-  params: URLSearchParams,
-): Promise<SuggestionResult> {
+async function requestSuggestions(signal: AbortSignal, params: URLSearchParams): Promise<SuggestionResult> {
   const response = await fetch(`/api/search/suggestions?${params}`, {
     signal,
     credentials: 'same-origin',

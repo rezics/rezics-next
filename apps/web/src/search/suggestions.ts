@@ -20,7 +20,9 @@ export function validateSuggestQuery(query: SuggestQuery): SuggestQuery {
     query.languages.length < 1 ||
     query.languages.length > 8 ||
     new Set(query.languages).size !== query.languages.length ||
-    query.languages.some((language) => language.length > 35 || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language)) ||
+    query.languages.some(
+      (language) => language.length > 35 || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
+    ) ||
     (query.filter !== undefined && typeof query.filter !== 'string')
   )
     throw problem(400, 'invalid_request', 'Invalid suggestion parameters');
@@ -116,8 +118,7 @@ export async function suggestionResponse(
     headers.set('cache-control', 'private, no-store');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   };
-  if (request.method !== 'GET')
-    return privateNoStore(new Response(null, { status: 405, headers: { allow: 'GET' } }));
+  if (request.method !== 'GET') return privateNoStore(new Response(null, { status: 405, headers: { allow: 'GET' } }));
   try {
     const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
       import('../session/request.ts'),

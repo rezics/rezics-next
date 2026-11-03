@@ -36,11 +36,7 @@ import {
   reduceHeaderSearchState,
   type HeaderSearchState,
 } from './state';
-import {
-  loadGlobalHeaderSuggestions,
-  loadScopedHeaderSuggestions,
-  type HeaderSuggestionLoader,
-} from './suggestions';
+import { loadGlobalHeaderSuggestions, loadScopedHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
 import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
 import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
@@ -580,11 +576,10 @@ function HeaderSearchController({
   currentSession.current = sessionKey;
   const sessionMatches = sessionKey !== null && sessionKey === observedSession;
   const loader = requestScope ? loadScopedSuggestions : loadSuggestions;
-  const suggestionFieldsKey = JSON.stringify(headerSearchFields(fields, requestScope, headerSearchAction(locale, requestScope)));
-  const suggestionFields = useMemo(
-    () => JSON.parse(suggestionFieldsKey) as [string, string][],
-    [suggestionFieldsKey],
+  const suggestionFieldsKey = JSON.stringify(
+    headerSearchFields(fields, requestScope, headerSearchAction(locale, requestScope)),
   );
+  const suggestionFields = useMemo(() => JSON.parse(suggestionFieldsKey) as [string, string][], [suggestionFieldsKey]);
   const owner: HeaderSuggestionOwner = {
     sessionKey,
     locale,
