@@ -35,7 +35,7 @@ test('typed label consolidation calls preserve review evidence and retry the sel
     targetLabelId,
     status: 'active' as const,
     expiresAt,
-    items: [{ item: 0, selected, status: 'pending' as const }],
+    items: [{ item: 9, selected, status: 'pending' as const }],
   };
   const replies: unknown[] = [
     reviewed,
@@ -68,9 +68,10 @@ test('typed label consolidation calls preserve review evidence and retry the sel
     selection: review.data.selection,
     sourceLabel: review.data.sourceLabel,
     targetLabel: review.data.targetLabel,
-    items: review.data.items.filter(
-      (item): item is Extract<(typeof review.data.items)[number], { outcome: 'movable' }> =>
-        item.outcome === 'movable' && item.source !== null,
+    items: review.data.items.flatMap((item) =>
+      item.outcome === 'movable' && item.source !== null
+        ? [{ ...item, outcome: item.outcome, source: item.source }]
+        : [],
     ),
   };
   const confirmation = await client.libraryLabels({ id: sourceLabelId }).$confirmConsolidation.post(evidence, options);
@@ -87,10 +88,19 @@ test('typed label consolidation calls preserve review evidence and retry the sel
   await client
     .libraryLabels({ id: sourceLabelId })
     .$cancelConsolidation.post({ confirmationId: confirmation.data.confirmationId }, options);
-  await client
+  const finalResult = await client
     .libraryLabels({ id: sourceLabelId })
     .consolidations({ confirmationId: confirmation.data.confirmationId })
     .get();
+
+  const invalidCalls = async () => {
+    const withoutEvidence = { targetLabelId, items: [selected] };
+    // @ts-expect-error confirmation requires the evidence returned by review
+    await client.libraryLabels({ id: sourceLabelId }).$confirmConsolidation.post(withoutEvidence, options);
+    // @ts-expect-error retry requires the selected result item's ordinal
+    await client.libraryLabels({ id: sourceLabelId }).$retryConsolidation.post({ confirmationId }, options);
+  };
+  expect(typeof invalidCalls).toBe('function');
 
   expect(requests.map(({ method, path }) => [method, path])).toEqual([
     ['POST', `/v1/libraryLabels/${sourceLabelId}:reviewConsolidation`],
@@ -101,5 +111,6 @@ test('typed label consolidation calls preserve review evidence and retry the sel
     ['GET', `/v1/libraryLabels/${sourceLabelId}/consolidations/${confirmationId}`],
   ]);
   expect(requests[1]!.body).toEqual(reviewEvidence);
-  expect(requests[3]!.body).toEqual({ confirmationId, item: 0 });
+  expect(requests[3]!.body).toEqual({ confirmationId, item: 9 });
+  expect(finalResult.data).toEqual(result);
 });

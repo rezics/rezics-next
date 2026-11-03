@@ -6241,7 +6241,24 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                                     revision: number;
                                     name: string;
                                 };
-                                items: import("./label-consolidation.ts").LabelConsolidationReviewItem[];
+                                items: {
+                                    selected: {
+                                        subjectId: string;
+                                        assignmentId: string;
+                                        revision: number;
+                                    };
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                        effective: boolean;
+                                    } | null;
+                                    target: {
+                                        id: string;
+                                        revision: number;
+                                        effective: boolean;
+                                    } | null;
+                                    outcome: "already_on_target" | "capacity_limited" | "changed" | "inaccessible" | "missing" | "movable";
+                                }[];
                                 next: string | null;
                             };
                             400: Response | {
