@@ -111,6 +111,10 @@ function RelationEditorLive({
   handoffReader,
   handoffReaderLive,
   onCreditTargetHandoffConsumed,
+  propertyIds,
+  excludedProperties,
+  initialProperty,
+  resolveTarget,
 }: {
   id: string;
   locale: string;
@@ -129,6 +133,14 @@ function RelationEditorLive({
   handoffReader?: string;
   handoffReaderLive?: () => boolean;
   onCreditTargetHandoffConsumed?: (token: string) => void;
+  /** Restricts this embedded editor to a profile-owned relation workspace. */
+  propertyIds?: readonly string[] | undefined;
+  excludedProperties?: readonly string[] | undefined;
+  /** Preselects one admitted field after the current subject read arrives. */
+  initialProperty?: string | undefined;
+  resolveTarget?: (
+    id: string,
+  ) => Promise<{ ok: true; type: string } | { ok: false; reason: CandidateFailure['reason'] }>;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
   composition?: {
     statement: RelationDraft;
@@ -147,8 +159,10 @@ function RelationEditorLive({
   const options = { locale: locale as never };
   const formId = useId();
   const [read, setRead] = useState(initial);
-  const [draft, setDraft] = useState<RelationDraft>(() => structuredClone(composition?.statement ?? blankDraft('')));
-  const initialProposal = useRef(JSON.stringify([composition?.statement ?? blankDraft(''), '']));
+  const [draft, setDraft] = useState<RelationDraft>(() =>
+    structuredClone(composition?.statement ?? blankDraft(initialProperty ?? '')),
+  );
+  const initialProposal = useRef(JSON.stringify([composition?.statement ?? blankDraft(initialProperty ?? ''), '']));
   const [slot, setSlot] = useState<RelationSlot | undefined>(composition?.slot);
   const [candidate, setCandidate] = useState<Candidate>();
   const [rank, setRank] = useState<'normal' | 'preferred'>('normal');
@@ -210,6 +224,9 @@ function RelationEditorLive({
     | undefined
   >(undefined);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
+  const [targetChecking, setTargetChecking] = useState(false);
+  const [targetFailure, setTargetFailure] = useState<CandidateFailure['reason']>();
+  const targetCheck = useRef(0);
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
   const [ownConsent, setOwnConsent] = useState(false);
@@ -274,13 +291,18 @@ function RelationEditorLive({
     for (const item of items) picked.current[item.id] = item;
   };
   const current = read?.ok ? read : undefined;
-  const field = current?.fields.find((field) => field.id === draft.property.id);
+  const fields = current?.fields.filter(
+    (item) =>
+      (propertyIds === undefined || propertyIds.includes(item.id)) &&
+      !(excludedProperties ?? []).includes(item.id),
+  );
+  const field = fields?.find((item) => item.id === draft.property.id);
   useEffect(() => {
     const handoff = creditTargetHandoff;
     const identity = handoff?.identity;
     if (!handoff || !identity || restoredHandoff.current === handoff.token) return;
     if (!visible || !current?.descriptor || !mount.active()) return;
-    const admittedField = current.fields.find((item) => item.id === handoff.propertyId);
+    const admittedField = fields?.find((item) => item.id === handoff.propertyId);
     const sameTargets =
       !!admittedField &&
       JSON.stringify([...admittedField.targets].sort()) === JSON.stringify([...handoff.targets].sort());
@@ -375,7 +397,7 @@ function RelationEditorLive({
   const publicRead = result?.public ?? current?.public;
   const concealed = failure?.reason === 'denied' && !current;
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
-  const nativeFrozen = busy || !!confirmation || uncertain || failure?.reason === 'stale';
+  const nativeFrozen = busy || targetChecking || !!confirmation || uncertain || failure?.reason === 'stale';
   const nativeFrozenNow = useRef(nativeFrozen);
   nativeFrozenNow.current = nativeFrozen;
   const frozen = nativeFrozen || !!draftDecision;
@@ -532,7 +554,7 @@ function RelationEditorLive({
   }, [busy, read, failure, visible, mount]);
 
   function open(event: MouseEvent<HTMLButtonElement>) {
-    if (!lifetime.active() || running.current || uncertain) return;
+    if (!lifetime.active() || running.current || targetChecking || uncertain) return;
     openingIntent.current =
       !composition && event.detail === 0 && event.currentTarget === document.activeElement
         ? { opener: event.currentTarget, active: lifetime.active, generation: readGeneration.current + 1 }
@@ -737,6 +759,9 @@ function RelationEditorLive({
     onCreditTargetHandoffConsumed?.(handoff.token);
   }
   function applyEdit(next: RelationDraft) {
+    targetCheck.current++;
+    setTargetChecking(false);
+    setTargetFailure(undefined);
     if (draftDecisionRef.current) {
       draftDecisionRef.current = undefined;
       setDraftDecision(undefined);
@@ -889,7 +914,7 @@ function RelationEditorLive({
     session = nativeSession.current,
     event?: MouseEvent<HTMLButtonElement>,
   ) {
-    if (!lifetime.active() || running.current || uncertain) return;
+    if (!lifetime.active() || running.current || targetChecking || uncertain) return;
     running.current = true;
     setBusy(true);
     setSlot(address);
@@ -909,9 +934,45 @@ function RelationEditorLive({
     const destination = reading.current;
     void load(destination?.slot ?? slot, destination?.cursor, destination?.session ?? nativeSession.current, event);
   }
+  async function prepareProposal() {
+    if (!editable() || !field) return;
+    const value = draft.value.type === 'value' && typeof draft.value.content === 'string' ? draft.value.content : '';
+    if (!resolveTarget || !value) {
+      setConfirmation('propose');
+      return;
+    }
+    const generation = ++targetCheck.current;
+    const revision = draftRevision.current;
+    const admittedField = field;
+    setTargetChecking(true);
+    setTargetFailure(undefined);
+    try {
+      const resolved = await resolveTarget(value);
+      if (
+        !mount.active() ||
+        !visible ||
+        targetCheck.current !== generation ||
+        draftRevision.current !== revision
+      )
+        return;
+      if (!resolved.ok) {
+        setTargetFailure(resolved.reason);
+        return;
+      }
+      if (!admittedField.targets.includes(resolved.type)) {
+        setTargetFailure('invalid');
+        return;
+      }
+      setConfirmation('propose');
+    } catch {
+      if (mount.active() && targetCheck.current === generation) setTargetFailure('unavailable');
+    } finally {
+      if (mount.active() && targetCheck.current === generation) setTargetChecking(false);
+    }
+  }
   async function confirm() {
     if (!lifetime.active()) return;
-    if (running.current || !confirmation || !field) return;
+    if (running.current || targetChecking || !confirmation || !field) return;
     const address = confirmation === 'propose' ? draftSlot() : slot;
     if (!address || (!request.current && !candidate && confirmation !== 'propose')) return;
     const reused = !!request.current;
@@ -993,6 +1054,14 @@ function RelationEditorLive({
       invalid: m.candidate_invalid({}, options),
       unavailable: m.candidate_unavailable({}, options),
     }[failure.reason];
+  const targetFailureText =
+    targetFailure &&
+    {
+      denied: m.candidate_denied({}, options),
+      stale: m.relation_stale({}, options),
+      invalid: m.candidate_invalid({}, options),
+      unavailable: m.candidate_unavailable({}, options),
+    }[targetFailure];
   const action =
     confirmation === 'propose'
       ? m.relation_propose({}, options)
@@ -1141,7 +1210,7 @@ function RelationEditorLive({
         current &&
         !concealed && (
           <>
-            {!current.fields.length ? (
+            {!fields?.length ? (
               <p
                 ref={openingBoundary}
                 tabIndex={-1}
@@ -1183,7 +1252,7 @@ function RelationEditorLive({
                             requestDraftDecision(
                               {
                                 kind: 'replace-property',
-                                propertyName: current.fields.find((item) => item.id === property)?.label ?? property,
+                                propertyName: fields?.find((item) => item.id === property)?.label ?? property,
                                 replacement,
                               },
                               event.currentTarget,
@@ -1195,7 +1264,7 @@ function RelationEditorLive({
                         }}
                       >
                         <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
-                        {current.fields.map((item) => (
+                        {(fields ?? []).map((item) => (
                           <NativeSelectOption key={item.id} value={item.id}>
                             {item.label}
                           </NativeSelectOption>
@@ -1252,7 +1321,11 @@ function RelationEditorLive({
                           <FieldTitle>{m.relation_target({}, options)}</FieldTitle>
                           <EntityPicker
                             label={m.relation_target({}, options)}
-                            search={search}
+                            search={async (text, signal) =>
+                              (await search(text, signal)).filter((item) =>
+                                item.types.some((type) => field.targets.includes(type)),
+                              )
+                            }
                             src={coverSrc}
                             disabled={frozen}
                             {...(composition ? { disabled: true } : {})}
@@ -1266,6 +1339,8 @@ function RelationEditorLive({
                               });
                             }}
                           />
+                          {targetChecking && <p role="status">{m.candidate_loading({}, options)}</p>}
+                          {targetFailureText && <p role="alert">{targetFailureText}</p>}
                           {createdCreditIdentity && draft.value.type === 'somevalue' && (
                             <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
                               <p>
@@ -1486,7 +1561,7 @@ function RelationEditorLive({
                               (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
                               proposed
                             }
-                            onClick={() => editable() && setConfirmation('propose')}
+                            onClick={() => void prepareProposal()}
                           >
                             {m.relation_propose({}, options)}
                           </Button>
@@ -1766,7 +1841,7 @@ function RelationEditorLive({
           <div className="flex flex-wrap gap-2">
             <Button
               className="min-h-11"
-              disabled={busy || (!!failure && failure.reason !== 'unavailable')}
+              disabled={busy || targetChecking || (!!failure && failure.reason !== 'unavailable')}
               onClick={confirm}
             >
               {action}
@@ -1784,13 +1859,13 @@ function RelationEditorLive({
       )}
       {(current || reading.current) && !uncertain && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy} onClick={reload}>
+          <Button variant="outline" disabled={busy || targetChecking} onClick={reload}>
             {failure && reading.current ? m.statement_consent_retry_page({}, options) : m.candidate_reload({}, options)}
           </Button>
           {reading.current?.slot && (
             <Button
               variant="outline"
-              disabled={busy}
+              disabled={busy || targetChecking}
               onClick={(event) => load(slot, undefined, nativeSession.current, event)}
             >
               {m.statement_consent_restart({}, options)}

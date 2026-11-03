@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
@@ -99,9 +99,12 @@ export function GameStatementFields({
   editAllowed,
   id,
   feedback,
+  valueControl,
 }: {
   id?: string;
   feedback?: StatementFeedback | undefined;
+  /** A profile-specific picker can own the main value while this editor keeps qualifiers and evidence. */
+  valueControl?: ReactNode | undefined;
   statement: StatementInput;
   context: StatementFieldsRead;
   locale: string;
@@ -143,13 +146,13 @@ export function GameStatementFields({
       current={context}
       locale={locale}
       change={change}
-      valueControl={control(statement, (value) => change({ ...statement, value }))}
+      valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
     />
   );
 }
 /** Confirm only whole unsent facts; keep their editors mounted so item summaries survive Cancel. */
-function GameInitialFactRemove({
+export function GameInitialFactRemove({
   row,
   disabled,
   locale,
@@ -277,6 +280,7 @@ export function GameInitialFacts({
   disabled,
   change,
   editAllowed,
+  omitProperties = [],
 }: {
   type: string;
   release: Release;
@@ -286,6 +290,7 @@ export function GameInitialFacts({
   disabled: boolean;
   change: (rows: { key: string; statement: StatementInput }[]) => void;
   editAllowed?: (() => boolean) | undefined;
+  omitProperties?: readonly string[] | undefined;
 }) {
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
@@ -312,10 +317,12 @@ export function GameInitialFacts({
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <InitialFieldChoice
-        groups={Object.entries(groups).map(([group, properties]) => ({
-          label: gameGroupLabel(group, locale),
-          properties,
-        }))}
+        groups={Object.entries(groups)
+          .map(([group, properties]) => ({
+            label: gameGroupLabel(group, locale),
+            properties: properties.filter((property) => !omitProperties.includes(property)),
+          }))
+          .filter((group) => group.properties.length > 0)}
         release={release}
         occupied={statements.map((row) => row.statement.property.id)}
         locale={locale}

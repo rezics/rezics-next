@@ -142,22 +142,31 @@ The subject's existing **Contribute** menu offers **Add-on and expansion editor*
 released `game.addon` profile. A game work, distribution, file or language/platform combination is a different
 object. Neither the editor nor a base-work link changes Library behavior.
 
-Creation configures the existing game initial-facts and terms controls with the active emitted profile.
-Only explicitly added facts enter native subject POST. **Use this base work** adds the emitted `wdt:P8646` assertion
-only after the contributor chooses it; it never copies base credits, languages, platforms or progress. Targets use
-the existing picker and exact native IDs. Date precision, language strings, qualifiers and grouped citations retain
-native schemas. Item-valued qualifier keys use the same native picker as game credits; later corrections use the
-existing relation editor. Initial facts are selected at creation; the exact returned UUID is reread before offering
-the reader and correction links.
+Decision: a `work` query is preview context only; creation and correction require a separate exact readable subject
+choice admitted by the current `game.addon` release, and only native results establish selected membership.
+
+Creation configures the existing game initial-facts and terms controls with the active emitted profile. Only
+explicitly added facts enter native subject POST. The exact work from a `work` query is shown as a suggestion and is
+never staged automatically. A base-work picker resolves the chosen subject through the current public reader and
+checks target admission against the current immutable release before staging `wdt:P8646`; an unavailable, concealed,
+stale or unadmitted target leaves the existing draft editable. Contributors can revise or remove the unsent choice,
+then add admitted qualifiers and grouped citations with the shared statement fields. This does not copy base credits,
+languages, platforms, availability, progression or licence. Date precision, language strings, qualifiers and grouped
+citations retain native schemas. Item-valued qualifier keys use the same native picker as game credits. Initial facts
+are selected at creation; the exact returned UUID is reread before offering the reader and correction links.
 Concealed or unavailable readback keeps that UUID and offers a read retry without another creation.
 
-Correction reuses the multi-field workspace, classification controls, authored and terms destinations, exact-slot
-relation editor and native candidate review. Platform claims use field-wide classification review; credits retain
-emitted character-key slots. Unchanged values are excluded, each field reports its own result, and a proposal or
-acceptance alone never establishes current selection. No platform compatibility is inferred. Current denial,
-unavailability and metadata changes retain drafts; uncertain writes retain their sealed body and key. Ordinary
-forms send citations as statement references, never ingestion Source metadata. Existing BFF, native disclosure,
-rights and source-or-consent rules remain authoritative; unavailable terms production stays unavailable.
+Correction shows the selected current base-work assertions separately from the route suggestion and gives `wdt:P8646`
+its own filtered view of the existing relation editor. Values, qualifiers, rank, grouped evidence, exact-slot review,
+acceptance and adoption use the ordinary native candidate lifecycle. The suggested work cannot choose a target,
+replace a selected holder or imply adoption. A proposal or acceptance alone never establishes current selection; the
+same add-on is reread after selection. Correction also reuses the multi-field workspace, classification controls,
+authored and terms destinations, other relation fields and native candidate review. Platform claims use field-wide
+classification review; credits retain emitted character-key slots. Unchanged values are excluded, each field reports
+its own result, and no platform compatibility is inferred. Current denial, unavailability and metadata changes retain
+drafts; uncertain writes retain their sealed body and key. Ordinary forms send citations as statement references,
+never ingestion Source metadata. Existing BFF, native disclosure, rights and source-or-consent rules remain
+authoritative; unavailable terms production stays unavailable.
 
 ## Browser flow: work parts
 

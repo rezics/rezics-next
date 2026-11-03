@@ -1,17 +1,16 @@
 import { useEffect, useId, useState } from 'react';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { ContentItemFrame } from '@rezics/ui/content-item';
-import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import { createTypes, type CreateResult } from './create-subject';
 import { GameInitialFacts } from './game-profile-fields';
+import { AddonBaseWorkspace, type AddonBaseDraft } from './addon-base-workspace';
 import type { StatementInput } from './statement-editor';
 import {
   addonBase,
   addonInitialDraft,
-  addonFields,
   addonType,
   type AddonRead,
   type AddonTransport,
@@ -38,6 +37,8 @@ export function AddonProfileCreate({
   const [release, setRelease] = useState(read.release);
   useEffect(() => setRelease(read.release), [read.release]);
   const [facts, setFacts] = useState<InitialFact[]>([]);
+  const [baseDraft, setBaseDraft] = useState<AddonBaseDraft>();
+  const [baseChecking, setBaseChecking] = useState(false);
   const factsId = useId();
   return (
     <CreateSubjectForm
@@ -45,7 +46,7 @@ export function AddonProfileCreate({
       session={session}
       transport={{
         definitions: async (refresh) => {
-          const current = refresh ? await transport.load({ work: read.work?.subject.id }) : read;
+          const current = refresh ? await transport.load({ work: read.workId }) : read;
           if (!current.ok) return { ok: false };
           if (refresh) setRelease(current.release);
           return { ok: true, types: createTypes(current.release, locale).filter((entry) => entry.id === addonType) };
@@ -59,7 +60,13 @@ export function AddonProfileCreate({
         title: m.addon_title({}, o),
         scope: 'addon',
         type: addonType,
-        href: `/${locale}/catalogue/addon${read.work ? `?work=${encodeURIComponent(read.work.subject.id)}` : ''}`,
+        href: `/${locale}/catalogue/addon${read.workId ? `?work=${encodeURIComponent(read.workId)}` : ''}`,
+        metadata: {
+          ready: true,
+          pending: baseChecking,
+          failure: <p>{m.addon_base_check_failed({}, o)}</p>,
+          types: createTypes(release, locale).filter((entry) => entry.id === addonType),
+        },
         hideHeading: true,
         labelLanguage: (type) => pageText(release.types[type]?.labels, locale).lang,
         descriptionLanguage: (type) => pageText(release.types[type]?.descriptions, locale).lang,
@@ -68,9 +75,9 @@ export function AddonProfileCreate({
           addonInitialDraft(
             release,
             initial,
-            facts.map((row) => row.statement),
+            [...facts.map((row) => row.statement), ...(baseDraft ? [baseDraft.statement] : [])],
           ),
-        fields: (_type, disabled) => (
+        fields: (_type, disabled, canEdit) => (
           <ContentItemFrame
             as="div"
             id={factsId}
@@ -80,37 +87,17 @@ export function AddonProfileCreate({
             tabIndex={-1}
             className="min-w-0 max-w-full space-y-5 py-3 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:py-4"
           >
-            {read.work &&
-              !facts.some(
-                (row) =>
-                  row.statement.property.id === addonBase &&
-                  row.statement.value.type === 'value' &&
-                  row.statement.value.content === read.work!.subject.id,
-              ) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-1"
-                  disabled={disabled || !addonFields(release).includes(addonBase)}
-                  onClick={() =>
-                    setFacts((rows) => [
-                      ...rows,
-                      {
-                        key: crypto.randomUUID(),
-                        statement: {
-                          property: { id: addonBase },
-                          value: { type: 'value', content: read.work!.subject.id },
-                          qualifiers: [],
-                          references: [],
-                          rank: 'normal',
-                        },
-                      },
-                    ])
-                  }
-                >
-                  {m.addon_use_base({}, o)}
-                </Button>
-              )}
+            <AddonBaseWorkspace
+              read={{ ...read, release }}
+              locale={locale}
+              search={search}
+              load={transport.load}
+              disabled={disabled || !canEdit()}
+              draft={baseDraft}
+              change={setBaseDraft}
+              releaseChanged={setRelease}
+              checkingChanged={setBaseChecking}
+            />
             <GameInitialFacts
               type={addonType}
               release={release}
@@ -119,6 +106,8 @@ export function AddonProfileCreate({
               statements={facts}
               disabled={disabled}
               change={setFacts}
+              editAllowed={canEdit}
+              omitProperties={[addonBase]}
             />
           </ContentItemFrame>
         ),

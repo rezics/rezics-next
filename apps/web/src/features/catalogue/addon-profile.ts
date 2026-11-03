@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { checkSubjectInput, type Violation } from '@rezics/definitions/validate';
 import type { SessionEnv } from '../../session/client';
@@ -23,8 +23,11 @@ export type AddonRead =
   | {
       ok: true;
       release: Release;
-      public: Extract<EditorRead, { ok: true }>['public'] | null;
-      work: Extract<EditorRead, { ok: true }>['public'] | null;
+      public: SubjectRead | null;
+      /** A readable, admitted page-context suggestion. It is never an assertion. */
+      work: SubjectRead | null;
+      workId?: string | undefined;
+      workIssue?: 'denied' | 'invalid' | 'stale' | 'unavailable' | undefined;
     };
 export type AddonTransport = {
   load: (address: AddonAddress) => Promise<AddonRead>;
@@ -53,15 +56,11 @@ export async function readAddonProfile(client: KernelClient, address: AddonAddre
       address.id ? client.subjects({ id: address.id }).get() : undefined,
       address.work ? client.subjects({ id: address.work }).get() : undefined,
     ]);
-    for (const [result, id] of [
-      [subject, address.id],
-      [work, address.work],
-    ] as const) {
-      if (!id) continue;
-      if (result?.status === 403 || result?.status === 404) return { ok: false, reason: 'denied' };
-      if (result?.status === 308 || (result?.data && result.data.subject.id !== id))
+    if (address.id) {
+      if (subject?.status === 403 || subject?.status === 404) return { ok: false, reason: 'denied' };
+      if (subject?.status === 308 || (subject?.data && subject.data.subject.id !== address.id))
         return { ok: false, reason: 'stale' };
-      if (result?.status !== 200 || !result.data) return { ok: false, reason: 'unavailable' };
+      if (subject?.status !== 200 || !subject.data) return { ok: false, reason: 'unavailable' };
     }
     if (active.status !== 200 || !active.data) return { ok: false, reason: 'unavailable' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
@@ -69,12 +68,25 @@ export async function readAddonProfile(client: KernelClient, address: AddonAddre
       return { ok: false, reason: 'unavailable' };
     const release = bundle.data.release as Release;
     if (!release.types?.[addonType] || !release.properties) return { ok: false, reason: 'unavailable' };
-    if (
-      (subject?.data && subject.data.subject.type !== addonType) ||
-      (work?.data && !addonTarget(release, addonBase, work.data.subject.type))
-    )
-      return { ok: false, reason: 'invalid' };
-    return { ok: true, release, public: subject?.data ?? null, work: work?.data ?? null };
+    if (subject?.data && subject.data.subject.type !== addonType) return { ok: false, reason: 'invalid' };
+    let workIssue: Extract<AddonRead, { ok: true }>['workIssue'];
+    let suggestedWork: SubjectRead | null = null;
+    if (address.work) {
+      if (work?.status === 403 || work?.status === 404) workIssue = 'denied';
+      else if (work?.status === 308 || (work?.data && work.data.subject.id !== address.work)) workIssue = 'stale';
+      else if (work?.status !== 200 || !work.data) workIssue = 'unavailable';
+      else {
+        suggestedWork = work.data;
+        if (!addonTarget(release, addonBase, work.data.subject.type)) workIssue = 'invalid';
+      }
+    }
+    return {
+      ok: true,
+      release,
+      public: subject?.data ?? null,
+      work: suggestedWork,
+      ...(address.work ? { workId: address.work, workIssue } : {}),
+    };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }
