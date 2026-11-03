@@ -7,7 +7,10 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readCurrentClassificationAssociation, type CurrentClassificationAssociation } from '../semantic/classification-association.ts';
+import {
+  readCurrentClassificationAssociation,
+  type CurrentClassificationAssociation,
+} from '../semantic/classification-association.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
@@ -172,11 +175,7 @@ function compactSummary(summary: SubjectSummary): { id: string; type: string; la
   };
 }
 
-function binding(
-  owner: AccountActor,
-  actorState: ActorState | null,
-  selected: Key | null,
-): CursorBinding {
+function binding(owner: AccountActor, actorState: ActorState | null, selected: Key | null): CursorBinding {
   return {
     operation: 'rating.own-classification-ballots-page',
     parameters: {
@@ -333,15 +332,16 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             selectedShown: continuation.selectedShown,
             hasMore: false,
           };
-        const selectedRows = selected && !continuation.selectedShown
-          ? ((await selectSelected.run(client, {
-              route: actorRoute,
-              actor_id: owner.accountId,
-              subject_id: selected.subjectId,
-              association_id: selected.associationId,
-              generation: state.generation,
-            })) as Slot[])
-          : [];
+        const selectedRows =
+          selected && !continuation.selectedShown
+            ? ((await selectSelected.run(client, {
+                route: actorRoute,
+                actor_id: owner.accountId,
+                subject_id: selected.subjectId,
+                association_id: selected.associationId,
+                generation: state.generation,
+              })) as Slot[])
+            : [];
         const selectedSlot = selectedRows[0] ?? null;
         const rawRows = (await selectRaw.run(client, {
           route: actorRoute,
@@ -350,7 +350,8 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           after_subject: continuation.after?.subjectId ?? first,
           after_association: continuation.after?.associationId ?? first,
           selected_subject: selected && (continuation.selectedShown || selectedSlot) ? selected.subjectId : null,
-          selected_association: selected && (continuation.selectedShown || selectedSlot) ? selected.associationId : null,
+          selected_association:
+            selected && (continuation.selectedShown || selectedSlot) ? selected.associationId : null,
         })) as Slot[];
         const rawPage = rawRows.slice(0, CLASSIFICATION_BALLOT_OWN_PAGE_SIZE);
         return {
@@ -396,15 +397,20 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const association = initialAssociations.get(key)!;
         if (slot.bindingHash.toString('hex') !== association.bindingHash) return false;
         for (const current of [setAssociations.get(key), aggregateAssociations.get(key)])
-          if (current && current.bindingHash !== association.bindingHash) throw new AccessUnavailableError('contention');
+          if (current && current.bindingHash !== association.bindingHash)
+            throw new AccessUnavailableError('contention');
         return true;
       });
       const summaries = readSubjectSummaryObservation(
         { pool: deps.pool, routeKey: deps.routeKey, access: deps.access, actor: owner, deadline },
-        [...new Set(readable.flatMap((slot) => {
-          const association = initialAssociations.get(keyOf(slot))!;
-          return [slot.subjectId, association.targetId];
-        }))],
+        [
+          ...new Set(
+            readable.flatMap((slot) => {
+              const association = initialAssociations.get(keyOf(slot))!;
+              return [slot.subjectId, association.targetId];
+            }),
+          ),
+        ],
       );
       const summaryObservation = await summaries;
       const summaryById = summaryObservation.summaries;
@@ -427,12 +433,13 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           }),
         deadline,
       )) as Array<{ subjectId: string; associationId: string; bindingHash: Buffer | null; revision: string | null }>;
-      const contributionByKey = new Map(
-        contributionRows.map((row) => [keyOf(row), row as Contribution & Key]),
-      );
+      const contributionByKey = new Map(contributionRows.map((row) => [keyOf(row), row as Contribution & Key]));
 
       const aggregateInputs = readable
-        .filter((slot) => aggregateAssociations.get(keyOf(slot))?.bindingHash === initialAssociations.get(keyOf(slot))?.bindingHash)
+        .filter(
+          (slot) =>
+            aggregateAssociations.get(keyOf(slot))?.bindingHash === initialAssociations.get(keyOf(slot))?.bindingHash,
+        )
         .map((slot) => ({
           subjectId: slot.subjectId,
           associationId: slot.associationId,
@@ -474,7 +481,9 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           route: actorRoute,
           actor_id: owner.accountId,
           generation: state.generation,
-          keys: JSON.stringify(seedSlots.map(({ subjectId, associationId }) => ({ subject_id: subjectId, association_id: associationId }))),
+          keys: JSON.stringify(
+            seedSlots.map(({ subjectId, associationId }) => ({ subject_id: subjectId, association_id: associationId })),
+          ),
         })) as Slot[];
       });
       const currentSlots = currentSlotMap(finalSlots);
@@ -484,7 +493,8 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const slot = currentSlots.get(key);
         if (!slot) continue;
         const association = initialAssociations.get(key) ?? null;
-        const current = association && slot.bindingHash.toString('hex') === association.bindingHash ? association : null;
+        const current =
+          association && slot.bindingHash.toString('hex') === association.bindingHash ? association : null;
         const canClear = owner.scopes.includes(CLASSIFICATION_BALLOT_SET);
         const canSet = current !== null && setAssociations.get(key)?.bindingHash === current.bindingHash;
         const path = actionPath(selectedSlot, slot.revision);
@@ -558,15 +568,25 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             current.qualifiers as Parameters<typeof classificationQualifiersDigest>[0],
           ),
         };
-        if (![associationIdentity.bindingHash, associationIdentity.statementDigest, associationIdentity.qualifiersDigest].every((value) => digestPattern.test(value)))
+        if (
+          ![
+            associationIdentity.bindingHash,
+            associationIdentity.statementDigest,
+            associationIdentity.qualifiersDigest,
+          ].every((value) => digestPattern.test(value))
+        )
           throw new Error('Invalid current classification association digest');
         const aggregateAllowed = aggregateAssociations.get(key)?.bindingHash === current.bindingHash;
         const aggregateRow = aggregateByKey.get(key);
         const aggregate: ReturnType<typeof classificationAggregateView> | null = aggregateAllowed
           ? classificationAggregateView(
               slot.associationId,
-              aggregateRow && aggregateRow.supportCount !== null && aggregateRow.opposeCount !== null &&
-                  aggregateRow.falsePositiveCount !== null && aggregateRow.generation !== null && aggregateRow.asOf !== null
+              aggregateRow &&
+                aggregateRow.supportCount !== null &&
+                aggregateRow.opposeCount !== null &&
+                aggregateRow.falsePositiveCount !== null &&
+                aggregateRow.generation !== null &&
+                aggregateRow.asOf !== null
                 ? {
                     supportCount: aggregateRow.supportCount,
                     opposeCount: aggregateRow.opposeCount,
@@ -591,19 +611,20 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       }
 
       const last = rawSlots.at(-1);
-      const next = pageResult.hasMore && last
-        ? encodeCursor(
-            deps.tokens,
-            scope,
-            {
-              epoch: 1,
-              after: selected
-                ? [last.subjectId, last.associationId, pageResult.selectedShown ? '1' : '0']
-                : [last.subjectId, last.associationId],
-            },
-            now(),
-          )
-        : null;
+      const next =
+        pageResult.hasMore && last
+          ? encodeCursor(
+              deps.tokens,
+              scope,
+              {
+                epoch: 1,
+                after: selected
+                  ? [last.subjectId, last.associationId, pageResult.selectedShown ? '1' : '0']
+                  : [last.subjectId, last.associationId],
+              },
+              now(),
+            )
+          : null;
       const response: ClassificationBallotOwnPage = {
         viewer: { accountId: owner.accountId },
         inventory: {

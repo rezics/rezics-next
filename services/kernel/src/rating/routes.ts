@@ -230,11 +230,9 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         query: ClassificationBallotOwnPageQuerySchema,
         response: { 200: ClassificationBallotOwnPageSchema, ...aggregateFailures },
-        detail: classificationDetail(
-          'classification_ballot.own_page',
-          CLASSIFICATION_BALLOT_READ_OWN,
-          { personal: true },
-        ),
+        detail: classificationDetail('classification_ballot.own_page', CLASSIFICATION_BALLOT_READ_OWN, {
+          personal: true,
+        }),
       },
       async ({ actor, query, admission, job, set }) => {
         requireClassificationAccount(actor, CLASSIFICATION_BALLOT_READ_OWN);

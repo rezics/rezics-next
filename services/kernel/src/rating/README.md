@@ -1480,35 +1480,51 @@ Populated response:
 {
   "viewer": { "accountId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702001" },
   "inventory": { "kind": "current-retained", "complete": false, "generation": "1", "cleanup": "settled" },
-  "items": [{
-    "state": "available",
-    "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
-    "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
-    "subject": { "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101", "type": "schema:Book", "label": "Example book", "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101" },
-    "target": { "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103", "type": "skos:Concept", "label": "Mystery", "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702103" },
-    "association": {
+  "items": [
+    {
+      "state": "available",
       "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
       "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
-      "slotId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702104",
-      "property": "schema:keywords",
-      "targetId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103",
-      "contextId": "00000000-0000-8000-8000-000000000000",
-      "origin": "global",
-      "release": "example-release-digest",
-      "revision": 3,
-      "bindingHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "statementDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "qualifiersDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    },
-    "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "pending" },
-    "aggregate": { "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "state": "suppressed", "pending": "unknown" },
-    "actions": {
-      "state": "editable",
-      "readback": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment",
-      "set": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1",
-      "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1"
+      "subject": {
+        "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
+        "type": "schema:Book",
+        "label": "Example book",
+        "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101"
+      },
+      "target": {
+        "id": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103",
+        "type": "skos:Concept",
+        "label": "Mystery",
+        "href": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702103"
+      },
+      "association": {
+        "subjectId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702101",
+        "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
+        "slotId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702104",
+        "property": "schema:keywords",
+        "targetId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702103",
+        "contextId": "00000000-0000-8000-8000-000000000000",
+        "origin": "global",
+        "release": "example-release-digest",
+        "revision": 3,
+        "bindingHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "statementDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "qualifiersDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "pending" },
+      "aggregate": {
+        "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
+        "state": "suppressed",
+        "pending": "unknown"
+      },
+      "actions": {
+        "state": "editable",
+        "readback": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment",
+        "set": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1",
+        "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1"
+      }
     }
-  }],
+  ],
   "traversal": "complete",
   "next": null
 }
@@ -1528,7 +1544,12 @@ slot is minimal:
   "association": null,
   "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "unknown" },
   "aggregate": null,
-  "actions": { "state": "withdraw-only", "readback": null, "set": null, "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1" }
+  "actions": {
+    "state": "withdraw-only",
+    "readback": null,
+    "set": null,
+    "clear": "/v1/subjects/019a1b2c-3d4e-7f00-8a00-5ab1ec702101/classification-associations/019a1b2c-3d4e-7f00-8a00-5ab1ec702102/assessment?expectedRevision=1"
+  }
 }
 ```
 

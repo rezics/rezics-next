@@ -57,12 +57,7 @@ const OwnSchema = t.Object(
 
 const ActionsSchema = t.Object(
   {
-    state: t.Union([
-      t.Literal('editable'),
-      t.Literal('read-only'),
-      t.Literal('withdraw-only'),
-      t.Literal('withheld'),
-    ]),
+    state: t.Union([t.Literal('editable'), t.Literal('read-only'), t.Literal('withdraw-only'), t.Literal('withheld')]),
     readback: path,
     set: path,
     clear: path,

@@ -75,7 +75,12 @@ async function createSubject(body: Record<string, unknown>): Promise<TestSubject
   return response.subject as TestSubject;
 }
 
-async function setBallot(subjectId: string, associationId: string, assessment: 'support' | 'oppose', falsePositive: boolean) {
+async function setBallot(
+  subjectId: string,
+  associationId: string,
+  assessment: 'support' | 'oppose',
+  falsePositive: boolean,
+) {
   return responseJson(
     await request('owner', 'PUT', `/v1/subjects/${subjectId}/classification-associations/${associationId}/assessment`, {
       assessment,
@@ -124,7 +129,12 @@ test('the page keeps owner selection private, distinguishes stale writes, and co
         },
         own: { assessment: 'support', falsePositive: true, revision: '1', pending: 'pending' },
         aggregate: { state: 'suppressed' },
-        actions: { state: 'editable', readback: expect.any(String), clear: expect.any(String), set: expect.any(String) },
+        actions: {
+          state: 'editable',
+          readback: expect.any(String),
+          clear: expect.any(String),
+          set: expect.any(String),
+        },
       },
     ],
     traversal: 'complete',
@@ -137,12 +147,18 @@ test('the page keeps owner selection private, distinguishes stale writes, and co
   const staleSet = page.items[0].actions.set as string;
   const changeKey = randomUUID();
   expect(
-    (await responseJson(await request('owner', 'PUT', staleSet, { assessment: 'oppose', falsePositive: false }, changeKey)))
-      .revision,
+    (
+      await responseJson(
+        await request('owner', 'PUT', staleSet, { assessment: 'oppose', falsePositive: false }, changeKey),
+      )
+    ).revision,
   ).toBe('2');
   expect(
-    (await responseJson(await request('owner', 'PUT', staleSet, { assessment: 'oppose', falsePositive: false }, changeKey)))
-      .revision,
+    (
+      await responseJson(
+        await request('owner', 'PUT', staleSet, { assessment: 'oppose', falsePositive: false }, changeKey),
+      )
+    ).revision,
   ).toBe('2');
   expect((await request('owner', 'PUT', staleSet, { assessment: 'support', falsePositive: false })).status).toBe(409);
   const current = await responseJson(await request('owner', 'GET', '/v1/me/classification-assessments'));
@@ -215,7 +231,11 @@ test('the page continues from raw keys and promotes an exact selected slot once'
   expect(first.items).toHaveLength(20);
   expect(first.traversal).toBe('more');
   const second = await responseJson(
-    await request('owner', 'GET', `/v1/me/classification-assessments?cursor=${encodeURIComponent(first.next as string)}`),
+    await request(
+      'owner',
+      'GET',
+      `/v1/me/classification-assessments?cursor=${encodeURIComponent(first.next as string)}`,
+    ),
   );
   expect(second.items).toHaveLength(1);
   expect(second.traversal).toBe('complete');
