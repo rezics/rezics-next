@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readRealm } from '../community/realm.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
@@ -21,72 +20,30 @@ import {
 import { evaluateScopeSubjects, ScopeWork, zeroScopeWork } from './scope-execution.ts';
 import type { RelationFacetMatch } from './source.ts';
 
-/** Content-owned native observation. Every dependency, including private grants/ban,
- * opening revision, placement and original/terminal subject disclosure, fences revision.
- * It is a locator for fresh owner checks, never a permission or a membership verdict.
- */
-export type RealmSubjectObservation = Readonly<{ realm: string; revision: string }>;
-export type RealmSubjectResolution =
-  | Readonly<{ state: 'ready'; observation: RealmSubjectObservation }>
-  | Readonly<{ state: 'concealed' | 'unavailable' }>;
-export type RealmSubjectMembership = 'discussed' | 'not_published' | 'withheld' | 'unknown';
+import {
+  createRealmSubjectSource,
+  type RealmSubjectObservation,
+  type RealmSubjectMembership,
+  type RealmSubjectSource,
+  type RealmSubjectDisclosure,
+  type RealmSubjectMaintenance,
+} from '../content/realm-subject-source.ts';
+export type {
+  RealmSubjectObservation,
+  RealmSubjectResolution,
+  RealmSubjectMembership,
+  RealmSubjectSource,
+  RealmSubjectDisclosure,
+  RealmSubjectMaintenance,
+} from '../content/realm-subject-source.ts';
 
-/** Sole Content port for the subjects-discussed relation, NOT Home Space publication.
- * Implementations authorize current Realm read/ban during resolve AND current, even
- * for public Realms. Prefix is complete native enumeration of linked discussion AND
- * review subjects, not a known-candidate batch or raw subject_thread table read.
- * Match applies current thread/opening/board/place/subject disclosure, including
- * protected-board grants. Only complete native negative coverage is not_published.
- * Every method settles actual work into the supplied caller root, before disclosure.
+/** Native composition belongs to Content. Supplying only structural census or exact
+ * candidate disclosure cannot establish live population readiness.
  */
-export interface RealmSubjectSource {
-  resolve(id: string, reader: LeafOptions, work: ScopeWork): Promise<RealmSubjectResolution>;
-  current(
-    observation: RealmSubjectObservation,
-    reader: LeafOptions,
-    work: ScopeWork,
-  ): Promise<'current' | 'changed' | 'concealed' | 'unavailable'>;
-  prefix(
-    observation: RealmSubjectObservation,
-    after: string | null,
-    limit: number,
-    reader: LeafOptions,
-    work: ScopeWork,
-  ): Promise<
-    Readonly<{
-      subjects: readonly string[];
-      after: string | null;
-      exhausted: boolean;
-    }>
-  >;
-  match(
-    observation: RealmSubjectObservation,
-    subjects: readonly string[],
-    reader: LeafOptions,
-    work: ScopeWork,
-  ): Promise<readonly RealmSubjectMembership[]>;
-}
-
-/** Native producer is undelivered. Still resolve ordinary resource authority before
- * refusing enumeration. No metadata, publication, mock batch or empty population fallback.
- */
-export function unavailableRealmSubjectSource(pool: Pool): RealmSubjectSource {
-  const unavailable = async (): Promise<never> => {
-    throw new ProblemError('dependency_unavailable');
-  };
-  return {
-    async resolve(id, reader, work) {
-      if (reader.work) return { state: 'unavailable' };
-      // Fixed conservative admission reservation, independent of subject population.
-      work.consume({ ...zeroScopeWork(), statements: 128, nativePoints: 128, nativeRows: 8192, bytes: 1024 * 1024 });
-      const realm = await readRealm({ pool, access: reader.access }, reader.actor, id, reader);
-      return { state: realm ? 'unavailable' : 'concealed' };
-    },
-    current: unavailable,
-    prefix: unavailable,
-    match: unavailable,
-  };
-}
+export type RealmSubjectCapabilities = Readonly<{
+  disclosure: RealmSubjectDisclosure;
+  maintenance: RealmSubjectMaintenance;
+}>;
 
 const prepared: unique symbol = Symbol('Realm population scope');
 export type PreparedRealmScope = Readonly<{
@@ -115,9 +72,10 @@ export function createRealmScopeSource(input: {
   pool: Pool;
   reader?: LeafOptions;
   source?: RealmSubjectSource;
+  capabilities?: RealmSubjectCapabilities;
   release: (digest?: string) => Promise<Readonly<{ digest: string; release: FilterRelease }> | null>;
 }) {
-  const source = input.source ?? unavailableRealmSubjectSource(input.pool);
+  const source = input.source ?? createRealmSubjectSource({ pool: input.pool, ...input.capabilities });
   const states = new WeakMap<PreparedRealmScope, State>();
   function reader(): LeafOptions {
     if (!input.reader || Date.now() >= input.reader.deadline) notReady();
@@ -162,7 +120,9 @@ export function createRealmScopeSource(input: {
         unavailable ||= result.state === 'unavailable';
         if (result.state === 'ready') {
           if (result.observation.realm !== leaf.id || !result.observation.revision) notReady();
-          observations.set(leaf.id, immutable(structuredClone(result.observation)));
+          // Content retains native dependencies in a WeakMap keyed by this exact handle.
+          // Freeze the locator in place; cloning it would retire a current observation.
+          observations.set(leaf.id, Object.freeze(result.observation));
         }
       }
       if (concealed) throw new ProblemError('not_found');
@@ -188,7 +148,7 @@ export function createRealmScopeSource(input: {
       limit: number,
       allowance: WorkAllowance,
     ) {
-      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid Realm prefix limit');
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 32) throw new RangeError('Invalid Realm prefix limit');
       const value = state(scope);
       const observation = value.observations.get(realm);
       if (!observation) throw new TypeError('Realm absent from scope');
@@ -214,8 +174,16 @@ export function createRealmScopeSource(input: {
       const withheld = new Set<number>();
       for (const leaf of value.plan.leaves) {
         if (leaf.kind === 'realm') {
-          const matches = await source.match(value.observations.get(leaf.id)!, subjects, reader(), work);
-          if (matches.length !== subjects.length) notReady();
+          // Search admits up to 100 candidates; Content accepts at most 32 per call.
+          // Every batch uses the same root and the same native observation. There is
+          // no allowance transfer or refill, and current() below fences all batches.
+          const matches: RealmSubjectMembership[] = [];
+          for (let offset = 0; offset < subjects.length; offset += 32) {
+            const batch = subjects.slice(offset, offset + 32);
+            const values = await source.match(value.observations.get(leaf.id)!, batch, reader(), work);
+            if (values.length !== batch.length) notReady();
+            matches.push(...values);
+          }
           columns.push(
             matches.map((match, index) => {
               if (match === 'discussed') return true;

@@ -22,8 +22,10 @@ export function registerSearchScopeRuntime(service: SearchService, runtime: Scop
 /**
  * Reuse the constructor's runtime and the caller's actual reader context. Runtime ownership
  * permits admission, not native readiness; the Source owns capability checks during preparation.
- * The same runtime carries the optional Content RealmSubjectSource; absent native enumeration
- * remains unavailable through the Realm scope seam, never an empty population.
+ * The same runtime carries Content's RealmSubjectSource or its disclosure/maintenance
+ * composition. realm.prepare, realm.sourcePrefix and realm.evaluate use that installed
+ * source with these exact reader options. Absent live maintenance remains unavailable;
+ * population_ready is preparation input, never a useful canonical Search page.
  */
 export function createSearchScopeForService(
   service: SearchService,

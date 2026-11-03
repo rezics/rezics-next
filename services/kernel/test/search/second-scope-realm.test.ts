@@ -7,8 +7,9 @@ import {
   type RealmSubjectSource,
   type RealmSubjectMembership,
 } from '../../src/search/realm-scope.ts';
-import { scopeAllowance } from '../../src/search/scope-execution.ts';
+import { scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
+import { createRealmSubjectSource, type RealmSubjectDisclosure } from '../../src/content/realm-subject-source.ts';
 
 const realm = '018f0000-0000-7000-8000-00a000000001';
 const other = '018f0000-0000-7000-8000-00a000000002';
@@ -24,23 +25,26 @@ function fixture() {
   let meaning = 1;
   let memberships: readonly RealmSubjectMembership[] = ['discussed'];
   const resolved: string[] = [];
+  const handles = new WeakSet<object>();
+  const batches: number[] = [];
   let prefixes = 0;
   const source: RealmSubjectSource = {
     async resolve(id) {
       resolved.push(id);
-      return resolution === 'ready'
-        ? { state: 'ready', observation: { realm: id, revision: '1' } }
-        : { state: resolution };
+      const observation = Object.freeze({ realm: id, revision: '1' });
+      handles.add(observation);
+      return resolution === 'ready' ? { state: 'ready', observation } : { state: resolution };
     },
-    async current() {
-      return authority;
+    async current(observation) {
+      return handles.has(observation) ? authority : 'changed';
     },
     async prefix() {
       prefixes++;
       return { subjects: [other], after: other, exhausted: true };
     },
-    async match() {
-      return memberships;
+    async match(_observation, subjects) {
+      batches.push(subjects.length);
+      return subjects.map((_, index) => memberships[index % memberships.length]!);
     },
   };
   const scope = createRealmScopeSource({
@@ -54,6 +58,7 @@ function fixture() {
   return {
     scope,
     resolved,
+    batches,
     prefixes: () => prefixes,
     authority: (value: typeof authority) => {
       authority = value;
@@ -103,7 +108,9 @@ test('all Realm resources resolve under NOT and a true catalogue OR before any p
   }
   const f = fixture();
   f.resolution('unavailable');
-  await expect(f.scope.prepare(leaf, allowance())).rejects.toMatchObject({ code: 'semantic_not_ready' });
+  await expect(f.scope.prepare(leaf, allowance())).rejects.toMatchObject({
+    code: 'semantic_not_ready',
+  });
   expect(f.prefixes()).toBe(0);
 });
 
@@ -129,4 +136,61 @@ test('native discussed, absent and withheld evidence differ; changed authority o
   f.authority('current');
   f.meaning();
   await expect(f.scope.evaluate(scope, [other], allowance())).rejects.toMatchObject({ code: 'semantic_not_ready' });
+});
+
+test('Content observation handles survive preparation; opaque raw prefixes retain the native cap', async () => {
+  const f = fixture();
+  const { scope } = await f.scope.prepare(leaf, allowance());
+  expect(scope.readiness).toBe('population_ready');
+  const subjects = Array.from({ length: 100 }, () => other);
+  expect((await f.scope.evaluate(scope, subjects, allowance())).values).toEqual(subjects.map(() => true));
+  expect(f.batches).toEqual([32, 32, 32, 4]);
+  await expect(f.scope.sourcePrefix(scope, realm, null, 33, allowance())).rejects.toBeInstanceOf(RangeError);
+  expect(f.prefixes()).toBe(0);
+  expect((await f.scope.sourcePrefix(scope, realm, null, 32, allowance())).subjects).toEqual([other]);
+});
+
+test('unknown and withheld membership cannot establish a tautological Realm OR', async () => {
+  const f = fixture();
+  const { scope } = await f.scope.prepare({ or: [leaf, { not: leaf }] }, allowance());
+  for (const membership of ['unknown', 'withheld'] as const) {
+    f.memberships([membership]);
+    expect((await f.scope.evaluate(scope, [other], allowance())).values).toEqual(['not_proven']);
+  }
+});
+
+test('the Content factory without live composition stays unavailable, including under OR', async () => {
+  const reader = { deadline: Date.now() + 60_000 } as LeafOptions;
+  const pool = {} as Pool;
+  const resolved: string[] = [];
+  const unexpected = async (): Promise<never> => {
+    throw new Error('Unready native population read');
+  };
+  const disclosure: RealmSubjectDisclosure = {
+    bounds: {
+      resolve: zeroScopeWork(),
+      current: zeroScopeWork(),
+      candidate: zeroScopeWork(),
+      subject: zeroScopeWork(),
+    },
+    async resolve(id) {
+      resolved.push(id);
+      return { state: 'ready', dependency: id };
+    },
+    current: unexpected,
+    candidate: unexpected,
+    subject: unexpected,
+  };
+  for (const source of [undefined, createRealmSubjectSource({ pool, disclosure })]) {
+    const scope = createRealmScopeSource({
+      pool,
+      reader,
+      ...(source ? { source } : {}),
+      release: async () => ({ digest: '1', release }),
+    });
+    await expect(scope.prepare({ or: [leaf, { realm: { id: other } }] }, allowance())).rejects.toMatchObject({
+      code: 'semantic_not_ready',
+    });
+  }
+  expect(resolved).toEqual([realm, other]);
 });

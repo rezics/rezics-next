@@ -45,7 +45,8 @@ import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rati
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
 import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
-import type { RealmSubjectSource } from './realm-scope.ts';
+import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
+import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, scopeAllowance } from './scope-execution.ts';
 import type { ScopeBasis } from './scope-source.ts';
@@ -312,6 +313,7 @@ export function createSearchService({
   ratings,
   realmSubjects,
   realmRatings,
+  realmSubjectCapabilities,
   cursors,
   clock = systemClock,
   facetSample = 10_000,
@@ -328,6 +330,7 @@ export function createSearchService({
   ratings?: PublicRatingSource;
   realmSubjects?: RealmSubjectSource;
   realmRatings?: RealmRatingSource;
+  realmSubjectCapabilities?: RealmSubjectCapabilities;
   cursors: KeyRing;
   clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
@@ -1192,6 +1195,7 @@ export function createSearchService({
     release,
     clock,
     ...(realmSubjects ? { realmSubjects } : {}),
+    ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
   });
   return service;
 }

@@ -87,19 +87,30 @@ resource references remain rejected, without recursion. No query-time account se
   leaf requires current Realm read and ban checks, including under NOT. Ban is not a public-index predicate or
   public privacy-head fanout. A known-candidate batch alone is not a Realm-to-subject enumeration anchor.
 
-  The installed `search/realm-scope.ts:RealmSubjectSource` is the single native Content owner port:
-  `resolve` and `current` check Realm read/ban and bind every disclosure dependency; `prefix` enumerates
-  the complete linked discussion/review subject population; `match` distinguishes discussed, complete
-  not-published, withheld and unknown. All operations share the caller's independent work ledger.
-  Search's service-bound Scope exposes `realm.prepare`, `realm.sourcePrefix` and `realm.evaluate`;
-  catalogue leaves use the existing native current matcher and the same three-valued Boolean planner.
+  Content's `content/realm-subject-source.ts:createRealmSubjectSource` owns the native port and
+  `RealmSubjectSource`, `RealmSubjectDisclosure` and `RealmSubjectMaintenance` types. Search consumes those
+  exports directly. `resolve` and `current` check Realm read/ban and bind every disclosure dependency;
+  `prefix` enumerates the complete linked discussion/review subject population; `match` distinguishes
+  discussed, complete not-published, withheld and unknown. All operations share the caller's work ledger.
+  Native observations are opaque factory handles: Search retains their object identity, including during
+  revalidation, rather than cloning their visible Realm/revision locator.
+
+  The request caller uses `createSearchScopeForService(service, actualLeafOptions)` and its
+  `realm.prepare`, `realm.sourcePrefix` and `realm.evaluate` methods. `createSearchService` accepts the
+  Content source as `realmSubjects`, or both native capabilities as `realmSubjectCapabilities`; the installed
+  Scope constructs the same Content factory when no source is supplied. Neither field is a request operand.
+  Decision: retain Search's 100-candidate evaluation API by splitting into native batches of at most 32 on
+  one unchanged caller root; raw preparation prefixes accept only 1–32 and retain Content's opaque frontier.
+  Catalogue leaves use the existing native current matcher and the shared three-valued Boolean planner.
   The closed operand is admitted only by the request discovery parser; saved/dynamic filters reject it.
   Realm scope applies to Subject candidates only. Mixed-kind public index compilation still rejects it.
-  Content has not delivered this native enumeration/disclosure producer. The installed default seam checks
-  ordinary Realm metadata authority and then returns unavailable; it supplies no population or negative.
-  A ready port observation means population readiness only: canonical retained name-order preparation,
-  text refinement and useful first/next/final Search page integration remain undelivered. No Home Space
-  publication membership, raw `subject_thread` read or known-candidate batch substitutes for that dependency.
+
+  Content's structural census is installed, but its actual current-disclosure/live-maintenance composition
+  remains unavailable. Without both capabilities, the factory returns typed unavailability and supplies no
+  population or negative. Existing Search tests exercise the port and this refusal, not native outcomes.
+  A `population_ready` observation is preparation input only: retained canonical name-order preparation,
+  validated text refinement and useful first/next/final Search pages still require integration. No raw prefix,
+  Home Space publication membership, `subject_thread` scan or known-candidate batch substitutes for it.
 
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under
