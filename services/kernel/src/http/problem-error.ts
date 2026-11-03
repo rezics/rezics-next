@@ -63,6 +63,11 @@ export const PROBLEMS = {
     title: 'Library Entry Restore Expired',
     retryable: false,
   },
+  library_entry_annotation_correction_limit: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Limit',
+    retryable: false,
+  },
   library_entry_state_restore_stale: {
     status: 409,
     title: 'Library Entry State Restore Stale',
