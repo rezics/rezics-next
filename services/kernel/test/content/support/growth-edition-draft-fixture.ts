@@ -95,6 +95,7 @@ export async function editionDraftFixture() {
       ).subject.id;
     }
     const scheme = await subject('skos:ConceptScheme', 'Draft growth topics');
+    const noiseSubject = await subject('skos:ConceptScheme', 'Unrelated history anchor');
     const target = await subject('skos:Concept', 'Pinned draft subject', {
       'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme } }],
     });
@@ -176,11 +177,11 @@ export async function editionDraftFixture() {
         ])
       ).rows[0]!,
       edition: await row('content.edition', 'edition_id', template.editionId),
-      subject: await row('semantic.subject', 'subject_id', scheme),
+      subject: await row('semantic.subject', 'subject_id', noiseSubject),
       semanticRevision: (
         await db.admin.query(
           'SELECT * FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 1',
-          [routeOf(scheme), scheme],
+          [routeOf(noiseSubject), noiseSubject],
         )
       ).rows[0]!,
       // Parent creation grants came from the native governance HTTP command in native-system.
@@ -238,10 +239,10 @@ export async function editionDraftFixture() {
       },
       'subject/grant history': {
         name: `edition-draft-unrelated-subject-history-${randomUUID()}`,
-        hotPartition: partitionOf(routeOf(scheme)!),
+        hotPartition: partitionOf(routeOf(noiseSubject)!),
         hotShare: 1,
         rows({ ordinal }) {
-          const subjectId = newId(routeOf(scheme)!);
+          const subjectId = newId(routeOf(noiseSubject)!);
           const transaction = randomUUID();
           const start = new Date(Date.UTC(2000, 0, 1) + ordinal * 1000).toISOString();
           const end = new Date(Date.UTC(2000, 0, 1) + (ordinal + 1) * 1000).toISOString();
@@ -349,8 +350,8 @@ export async function editionDraftFixture() {
           [
             route,
             source.id,
-            routeOf(scheme),
-            scheme,
+            routeOf(noiseSubject),
+            noiseSubject,
             templates.grant.route,
             templates.grant.resource_id,
             templates.grant.subject_id,
