@@ -62,6 +62,12 @@ Native execution remains subject to controller launch deferral and admission. Au
 not observed passes: only an executed runner's per-series JSON contains three-scale observations, reached
 assertions and physical costs. No live provider, browser, root/full-workspace acceptance or promotion is claimed.
 
+Both commands were submitted against clean revision `76cb96249156a07a4f03eac2b8b9821206ba101d`.
+The focused check's physical run `mvzyh3m3-c28ceb6c` exited with
+`error: script "check" exited with code 70`: the shared host reported `absolute preparation deadline exceeded`
+in `source-artifact-publication`, before launching the suite. No fixture assertion or three-scale observation
+was reached. Compiler placement `mvzyevrk-ac8095a6` remains pending; no compiler pass is recorded.
+
 Sources inspected: the Goal's Done-when/Acceptance; the owning Content admission/storage Cost; the existing
 `reports-http`, `report-anonymous-proof-http`, `growth-report-effect` and native reaction registration fixtures;
 the shared growth capture/classifier/access-path interfaces; native report, Siteverify, command-home, shared
