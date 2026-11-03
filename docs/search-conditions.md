@@ -204,6 +204,23 @@ evidence producers remain an integration dependency. Until those native producer
 evidence, owner-scoped Search stays explicitly not-ready; Search never manufactures ready evidence or falls back
 to a broader catalogue query.
 
+Realm Scope exposes a bounded refinement step over Content's population port. Each step reads at most one
+32-row native prefix, evaluates the entire current catalogue/Realm predicate with the caller's remaining work,
+and returns preparation input only. Sparse input advances its native frontier; unknown or withheld evidence
+refuses both the window and its successor. The factory retains the exact Content observation handles and
+revalidates every resource even for empty output. These handles and refinement frontiers are factory-local;
+they cannot be serialized into authority or used as public Search cursors.
+
+Decision: finite Realm refinement uses one covering AND child and every covering OR child; unanchored complements
+remain unavailable until a complete catalogue population source is connected.
+
+The retained canonical writer and public page consumer must still be connected. They must atomically retain
+refined identities with their native successor, deduplicate across windows, acquire actual indexed canonical-name
+tuples after complete text/catalogue refinement, and reobserve all dependencies at final consumption. Refinement
+input is not `ready`. Content's live disclosure adapter remains an integration dependency; native discussion,
+review, protected grant, ban, withdrawal and hidden-reference outcomes and the 1x/4x/16x connected-source growth
+measurements remain unmeasured until that adapter and the retained consumer are installed.
+
 ## Whole-query disclosure and Accounts discovery
 
 Current authority protects the full query: membership, NOT, exclusion, order, zero-hit populations, counts,
