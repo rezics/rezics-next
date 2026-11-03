@@ -58,6 +58,7 @@ test('saved member pages compose across source depth and retained-label growth',
           const page = settled.response.status === 200 ? ((await settled.response.json()) as Page) : null;
           return { preparations: settled.preparations, status: settled.response.status, page };
         });
+        assertIndexedNegativeWitness(await f.explainUnidentifiedWitness());
         expect(measured.value.status).toBe(200);
         expect(measured.value.page).not.toBeNull();
         settlements.set(scale, {
@@ -96,7 +97,6 @@ test('saved member pages compose across source depth and retained-label growth',
             f.ownerAccountId,
             f.targetSubjectId,
           );
-          assertIndexedNegativeWitness(await f.explainUnidentifiedWitness());
         },
         async warmup(_database, scale) {
           await prepareScale(scale);
