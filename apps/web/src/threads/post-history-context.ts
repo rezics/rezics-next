@@ -75,8 +75,7 @@ export function historyContextMatches(
   )
     return false;
   const revisions = new Map(response.revisions.map((revision) => [revision.revisionId, revision]));
-  for (const revision of response.revisions)
-    if (revision.threadId !== page.conversation.id || revision.boardId !== page.board.id) return false;
+  for (const revision of response.revisions) if (revision.threadId !== page.conversation.id) return false;
   const exact = new Set<string>();
   for (const item of page.navigation.exact) {
     if (item.postId !== postId || !revisions.has(item.revisionId) || exact.has(item.revisionId)) return false;
