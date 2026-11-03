@@ -6,7 +6,6 @@ import {
   startConceptBrowse,
   type ConceptBrowseBinding,
   type ConceptBrowseFrontier,
-  type ConceptBrowseLocator,
   type ConceptBrowseSource,
   type ConceptBrowseState,
   type ConceptBrowseStore,
@@ -32,10 +31,15 @@ function retention() {
     retired = false,
     reads = 0;
   const locator = () => ({ id: 'retained-plan', revision: String(revision) });
-  const valid = (ref: ConceptBrowseLocator) =>
-    !retired && ref.id === 'retained-plan' && ref.revision === String(revision);
+  let definition = '';
+  const valid = (state: ConceptBrowseState) =>
+    !retired &&
+    state.retained.id === 'retained-plan' &&
+    state.retained.revision === String(revision) &&
+    JSON.stringify([state.selection, state.binding]) === definition;
   const store: ConceptBrowseStore = {
-    async create(selected) {
+    async create(selected, observed) {
+      definition = JSON.stringify([selected, observed]);
       members.add(selected.concept);
       frontier.set(selected.concept, null);
       revision++;
