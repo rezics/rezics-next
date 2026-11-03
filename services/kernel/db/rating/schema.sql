@@ -461,6 +461,26 @@ CREATE TABLE rating.realm_rank (
 
 
 --
+-- Name: realm_rank_delivery; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.realm_rank_delivery (
+    route integer NOT NULL,
+    consumer text NOT NULL,
+    key uuid[] NOT NULL,
+    epoch bigint NOT NULL,
+    "position" bigint NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT realm_rank_delivery_consumer_check CHECK ((consumer = ANY (ARRAY['membership'::text, 'eligibility'::text, 'aggregate'::text]))),
+    CONSTRAINT realm_rank_delivery_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT realm_rank_delivery_key_check CHECK (((cardinality(key) >= 1) AND (cardinality(key) <= 4) AND (array_position(key, NULL::uuid) IS NULL))),
+    CONSTRAINT realm_rank_delivery_position_check CHECK (("position" > 0)),
+    CONSTRAINT realm_rank_delivery_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT realm_rank_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: realm_rank_generation; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -730,6 +750,14 @@ ALTER TABLE ONLY rating.public_figure
 
 ALTER TABLE ONLY rating.question
     ADD CONSTRAINT question_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: realm_rank_delivery realm_rank_delivery_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.realm_rank_delivery
+    ADD CONSTRAINT realm_rank_delivery_pkey PRIMARY KEY (route, consumer, key);
 
 
 --
