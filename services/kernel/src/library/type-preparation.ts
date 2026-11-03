@@ -362,10 +362,12 @@ export function createNativeTypePreparationPorts(
           key,
           digest: digest.toString('hex'),
         };
-        const at = authoritativeTimeValue(command.time).replace(
-          /\.(\d{3})Z$/,
-          (_match, milliseconds: string) => `.${milliseconds}000Z`,
+        // Commands may supply PostgreSQL text; canonicalize without losing microseconds.
+        const timestamp = await tx.query<{ at: string }>(
+          `SELECT to_char($1::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at`,
+          [authoritativeTimeValue(command.time)],
         );
+        const at = timestamp.rows[0]!.at;
         const header: PreparationHeaderCommitment = {
           version: 1,
           route,

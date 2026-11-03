@@ -446,3 +446,12 @@ explicit target review, confirmed native state application, conflict preservatio
 bounded partial outcomes, cancellation and owner deletion. Other fields remain private loss-aware evidence.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
 remains an integration responsibility, and source delivery does not assert its result.
+
+## Personal MyAnimeList export slice
+
+Mounted source: [MAL contract and Web transport examples](../library-import-mal.md). The implementation binds
+current authority, admitted external identifiers, released state roles, native entry revisions and original command
+receipts. Private evidence retains fields without native admission, including simultaneous chapter/volume values.
+`services/kernel/test/library/list-import-mal.test.ts` covers parser losses and HTTP preview/review/apply,
+unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
+Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.

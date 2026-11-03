@@ -60,7 +60,11 @@ export const OWNED_PHASES = [
   'members_preparation_result',
   'members_preparation',
   'members_preparation_owner',
+<<<<<<< HEAD
   'bangumi_upload',
+=======
+  'list_import_mal',
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -90,7 +94,11 @@ type Kind =
   | 'sessions'
   | 'collections'
   | 'collectionLocal'
+<<<<<<< HEAD
   | 'bangumi_upload';
+=======
+  | 'list_import_mal';
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -160,6 +168,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId, after_id: after };
+<<<<<<< HEAD
       if (kind === 'bangumi_upload') {
         const rows = await tx.query(
           `WITH keys AS MATERIALIZED (SELECT upload_id,ordinal
@@ -187,6 +196,13 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
             },
           ],
         };
+=======
+      if (kind === 'list_import_mal') {
+        const removed = await tx.query(`DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+          AND id IN (SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2 ORDER BY id LIMIT 100)`,
+          [route,accountId]);
+        return noEffect({ kind, removed: removed.rowCount ?? 0, parent: null, retain: false, blocked: false });
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
       }
       if (kind === 'native_source_capture') {
         const capture = await nativeCapture.run(tx, { ...args, after_id: after });

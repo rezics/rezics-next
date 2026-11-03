@@ -466,3 +466,12 @@ provider IDs, accepts explicit unmatched targets and reviews conflicts before na
 released state roles supply the only mapping; scores, measures, notes, source privacy, dates and unknown fields
 remain private evidence with reasons. Native commands retain account fences, revision guards and receipt retry.
 Upload deletion and indexed Library account erasure own retained evidence; no upload publishes a review or vote.
+
+## Personal MAL list portability
+
+[Personal MyAnimeList XML import](library-import-mal.md) owns the mounted authenticated preview, review,
+apply, cancel and evidence-delete methods under `/v1/libraryImports/mal`. Status uses explicit native entry
+admission against the current released role; scores, simultaneous progress measures, private notes, precision
+dates, privacy and unsupported fields remain visible private source evidence. Identifier matching uses existing
+external claims, with explicit unmatched resolution and guarded conflict replacement. Uploads and reviews belong
+to Library account erasure. This source does not provide live synchronization, catalogue creation or public reviews.

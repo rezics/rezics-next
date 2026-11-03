@@ -37,7 +37,11 @@ import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
 import { resolveSubject } from './subject-anchor.ts';
+<<<<<<< HEAD
 import { assertPreProfileLibraryRead, readLibraryProfileSourceObservation } from './profile-source.ts';
+=======
+import { assertPreProfileLibraryRead, readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
@@ -57,6 +61,10 @@ type Dependencies = {
   shelfTypeDigest?: ShelfTypeDigest;
   typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
+export type ReviewedEntrySource = { release: string; epoch: string; acceptingType: string;
+  importFence?: { id: string; row: number; version: string };
+  binding?: { subject: string; route: number; source: string; externalId: string } };
+
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
@@ -290,6 +298,7 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
+<<<<<<< HEAD
   async function putEntry(
     actor: Actor,
     subjectId: string,
@@ -297,6 +306,9 @@ export function createEntryCommands(config: Dependencies) {
     requestKey: string,
     reviewGuard?: import('./list-import-bangumi-model.ts').BangumiGuard,
   ) {
+=======
+  async function putEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string, reviewedSource?: ReviewedEntrySource) {
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -307,7 +319,10 @@ export function createEntryCommands(config: Dependencies) {
     );
     // Preserve the existing normalized receipt input. A missing current source must
     // reach owner authorization and receipt lookup before fresh admission fails.
-    const resolved = existing
+    // Reviewed imports bind a canonical operand; receipt retries must never follow a new alias.
+    const resolved = reviewedSource
+      ? { subjectId, requestedSubjectId: null }
+      : existing
       ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
       : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
           subjectId,
@@ -316,6 +331,7 @@ export function createEntryCommands(config: Dependencies) {
 
     // Absence retains the exact pre-incarnation receipt input.
     const requestInput = {
+      ...(reviewedSource ? { reviewedSource } : {}),
       subjectId: resolved.subjectId,
       requestedSubjectId: resolved.requestedSubjectId,
       state: parsed.state,
@@ -336,10 +352,27 @@ export function createEntryCommands(config: Dependencies) {
           async prepare(attempt) {
             try {
               const observation = await readLibraryProfileSourceObservation(
+<<<<<<< HEAD
                 { pool, access, actor: owner, at: attempt.time, deadline },
                 subjectId,
               );
               const source = observation?.source;
+=======
+                { pool, access, actor: owner, at: attempt.time, deadline }, subjectId);
+              const source = observation?.source;
+              if (reviewedSource) {
+                if (!observation || source?.kind !== 'supported' || source.subjectId !== subjectId ||
+                  source.pin.releaseDigest !== reviewedSource.release || observation.anchor.identityEpoch.toString() !== reviewedSource.epoch ||
+                  observation.anchor.acceptingType !== reviewedSource.acceptingType) throw new LibraryConflictError();
+                if (reviewedSource.binding) {
+                  const b = reviewedSource.binding;
+                  const claim = await pool.query<{ subject_id: string }>(
+                    'SELECT subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
+                    [b.route,b.source,b.externalId]);
+                  if (claim.rows[0]?.subject_id !== b.subject) throw new LibraryConflictError();
+                }
+              }
+>>>>>>> f7f0ab5dc6 (Squash worker branch changes)
               if (!source) throw new LibraryNotFoundError();
               if (
                 reviewGuard &&
@@ -389,6 +422,17 @@ export function createEntryCommands(config: Dependencies) {
               (parsed.incarnationId !== undefined && current.incarnationId !== parsed.incarnationId)
             )
               throw new LibraryConflictError();
+          }
+          if (reviewedSource?.importFence) {
+            const fence = reviewedSource.importFence;
+            // Serialize fresh admission with cancellation/deletion on the same owner home.
+            // Original receipt replay has already returned before this fresh-command fence.
+            const admitted = await tx.query(`SELECT id FROM library.list_import_mal
+              WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp()
+                AND NOT (document->>'canceled')::boolean
+                AND document->'intents'->$4::text->'review'->>'version'=$5 FOR SHARE`,
+              [route,owner.accountId,fence.id,String(fence.row),fence.version]);
+            if (!admitted.rows.length) throw new LibraryConflictError();
           }
           if ('error' in prepared) throw prepared.error;
           const source = prepared.source;

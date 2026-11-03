@@ -5,6 +5,9 @@ import locatePublicationCandidate from './moderation-read-live-candidate.sql';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+
+registerCommandHistoryKind('subject.batch_create', 3021);
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
@@ -169,7 +172,12 @@ export async function batchCommand(
     },
     async (tx, { transactionId }) => {
       try {
-        const resolve = (value: BulkValue) => noEffect<Value>({ status: 200, value });
+        const resolve = async (value: BulkValue) => {
+          if (command.op === 'create') await declareCommandHistory(tx, kind, {
+            response: { artifactType: 'command-receipt/v1', accounts: [] }, events: [],
+          });
+          return noEffect<Value>({ status: 200, value });
+        };
         const source = command.source;
         if (command.op === 'create') {
           const claim = await readClaim.run(tx, {
@@ -197,6 +205,10 @@ export async function batchCommand(
             external_id: source.external_id,
             subject_id: target.id,
             transaction_id: transactionId,
+          });
+          await declareCommandHistory(tx, kind, {
+            response: { artifactType: 'command-receipt/v1', accounts: [] },
+            events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
           });
           return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
         }

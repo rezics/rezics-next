@@ -2798,6 +2798,21 @@ CREATE TABLE library.label_assignment (
 
 
 --
+-- Name: list_import_mal; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.list_import_mal (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    id uuid NOT NULL,
+    document jsonb NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT list_import_mal_document_check CHECK ((octet_length((document)::text) <= 12582912)),
+    CONSTRAINT list_import_mal_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: members_preparation; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4502,6 +4517,14 @@ ALTER TABLE ONLY library.label_assignment
 
 
 --
+-- Name: list_import_mal list_import_mal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal
+    ADD CONSTRAINT list_import_mal_pkey PRIMARY KEY (route, account_id, id);
+
+
+--
 -- Name: members_preparation_owner members_preparation_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5612,6 +5635,13 @@ CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment U
 --
 
 CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: list_import_mal_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX list_import_mal_expiry ON library.list_import_mal USING btree (expires_at);
 
 
 --
