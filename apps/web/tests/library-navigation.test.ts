@@ -13,6 +13,16 @@ import type { LibraryPin, LibraryPinsRead } from '../src/library/pins-read';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import collectionRecording from '../src/kernel/recorded/library-collection.json';
+import { libraryNavigation } from '../src/library/navigation';
+
+test('My ratings has one signed-in Library navigation contribution in every locale', () => {
+  const entries = libraryNavigation.filter((entry) => entry.id === 'library.own-ratings');
+  expect(entries).toHaveLength(1);
+  const entry = entries[0]!;
+  expect(entry).toMatchObject({ href: '/library/ratings', group: 'personal', match: 'exact', signedIn: true, operation: 'rating.own_votes_page' });
+  if (typeof entry.label !== 'function') throw new Error('My ratings label must follow the current locale');
+  for (const locale of locales) expect(entry.label({ locale, pathname: '/library/ratings' })).toBeTruthy();
+});
 
 function expectSelectorName(navigation: string, visibleTitle: string): string[] {
   const button = navigation.match(/<button\b[^>]*>[\s\S]*?<\/button>/)?.[0];

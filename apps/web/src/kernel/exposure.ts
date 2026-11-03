@@ -36,6 +36,7 @@ export const operationGroups = {
   'follow.delete': 'personal_library',
   'follow.get': 'personal_library',
   'follow.put': 'personal_library',
+  'rating.own_votes_page': 'personal_library',
   'library_entry.list': 'personal_library',
   'library_continue.list': 'personal_library',
   'library_entry.delete': 'personal_library',
