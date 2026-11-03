@@ -175,6 +175,8 @@ function counts(): TestCounts {
 
 function parseSummaryLine(line: string, result: TestCounts): void {
   const clean = line.replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '');
+  const phase = clean.match(/DIAGNOSTIC_STAGE:([a-z-]+)/u);
+  if (phase) result.diagnostic = `stage:${phase[1]}`;
   const diagnostic = clean.match(/DIAGNOSTIC_RENDER_BUDGET:([a-z-]+):(\d+)/u);
   if (diagnostic) result.diagnostic = `${diagnostic[1]}:${diagnostic[2]}`;
   for (const [key, pattern] of [

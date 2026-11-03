@@ -448,6 +448,10 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
   await withDom(async ({ host, render, flush, window }) => {
     const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
     let stage = 'mount';
+    const setStage = (next: string) => {
+      stage = next;
+      console.error(`DIAGNOSTIC_STAGE:${stage}`);
+    };
     let commits = 0;
     const onRender = () => {
       commits++;
@@ -470,6 +474,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       }
       return { ok: true };
     };
+    setStage(stage);
     await render(
       createElement(
         Profiler,
@@ -486,10 +491,10 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       ),
     );
     expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(20);
-    stage = 'select-loaded';
+    setStage('select-loaded');
     await clickButton(host, m.moderation_bulk_select_loaded(), flush);
     expect(host.textContent).toContain(m.moderation_bulk_selected({ count: 20 }));
-    stage = 'clear';
+    setStage('clear');
     await clickButton(host, m.moderation_bulk_clear(), flush);
 
     const select = async (number: number) => {
@@ -500,23 +505,23 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       const checkbox = host.querySelector(`[id="${label!.htmlFor}"]`) as unknown as HTMLElement;
       await act(async () => checkbox.click());
     };
-    stage = 'select-one';
+    setStage('select-one');
     await select(1);
-    stage = 'select-two';
+    setStage('select-two');
     await select(2);
-    stage = 'select-three';
+    setStage('select-three');
     await select(3);
-    stage = 'review';
+    setStage('review');
     await clickButton(host, m.moderation_bulk_review(), flush);
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
     expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
     expect(window.document.activeElement).toBe(reviewGroup);
-    stage = 'cancel';
+    setStage('cancel');
     await clickButton(host, m.moderation_bulk_cancel(), flush);
     expect(window.document.activeElement).toBe(buttonByText(host, m.moderation_bulk_review()));
     expect(calls).toHaveLength(0);
 
-    stage = 'confirm';
+    setStage('confirm');
     await clickButton(host, m.moderation_bulk_review(), flush);
     await clickButton(host, m.moderation_bulk_confirm({ count: 3 }), flush);
     expect(host.textContent).toContain(m.moderation_bulk_dismissed());
@@ -527,7 +532,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(calls[1]!.reportId).toBe(rows[1]!.id);
     expect(refreshes).toBe(0);
 
-    stage = 'exact-retry';
+    setStage('exact-retry');
     await clickButton(host, m.moderation_bulk_retry(), flush);
     expect(calls).toHaveLength(3);
     expect(calls[2]).toEqual(calls[1]);
