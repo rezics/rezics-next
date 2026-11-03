@@ -13,8 +13,8 @@ function sameDestination(current: Location, next: Location) {
   );
 }
 
-/** Protect only an edited independent Publication owned by the current catalogue editor. */
-export function usePublicationEditorNavigation(needsDecision: () => boolean) {
+/** Protect an edited catalogue companion owned by the current editor, including Publication, release and file. */
+export function useCatalogueEditorNavigation(needsDecision: () => boolean) {
   const lifetime = useEditorLifetime();
   const latest = useRef(needsDecision);
   latest.current = needsDecision;
@@ -35,4 +35,9 @@ export function usePublicationEditorNavigation(needsDecision: () => boolean) {
     return () => blocker.proceed?.();
   }, [blocker.status, blocker.proceed]);
   return blocker;
+}
+
+/** Protect only an edited independent Publication owned by the current catalogue editor. */
+export function usePublicationEditorNavigation(needsDecision: () => boolean) {
+  return useCatalogueEditorNavigation(needsDecision);
 }

@@ -148,6 +148,42 @@ export const catalogueEntries = {
     label: m.producer_history_title({}, options(locale)),
     href: `${subject({ id, label, locale })}/producer`,
   }),
+  releaseFidelity: ({
+    id,
+    type,
+    label = '',
+    locale,
+  }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
+    | CatalogueEntry
+    | undefined => {
+    if (!id || !['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'].includes(type ?? '')) return;
+    return {
+      group: 'edit',
+      label: m.release_fidelity_title({}, options(locale)),
+      href: `${subject({ id, label, locale })}/release`,
+    };
+  },
+  catalogueFile: ({
+    id,
+    type,
+    label = '',
+    locale,
+  }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
+    | CatalogueEntry
+    | undefined => {
+    if (
+      !id ||
+      !['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'].includes(
+        type ?? '',
+      )
+    )
+      return;
+    return {
+      group: 'edit',
+      label: m.catalogue_file_title({}, options(locale)),
+      href: `${subject({ id, label, locale })}/file`,
+    };
+  },
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

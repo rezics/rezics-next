@@ -21,6 +21,8 @@ import { AlbumProfileEntry } from './album-profile-entry';
 import { SubjectFactsEntry } from './subject-facts-entry';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { SubjectChangesLink } from './subject-changes-link';
+import { ReleaseFidelityEntry } from './release-fidelity/entry';
+import { CatalogueFileProfileEntry } from './catalogue-file-profile/entry';
 import {
   catalogueEntries,
   contributionHref,
@@ -50,6 +52,19 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
     }
     if (isValidElement<Parameters<typeof GameProfileEntry>[0]>(node) && node.type === GameProfileEntry) {
       const entry = catalogueEntries.gameProfile(node.props);
+      if (entry) entries.push(entry);
+      return;
+    }
+    if (isValidElement<Parameters<typeof ReleaseFidelityEntry>[0]>(node) && node.type === ReleaseFidelityEntry) {
+      const entry = catalogueEntries.releaseFidelity(node.props);
+      if (entry) entries.push(entry);
+      return;
+    }
+    if (
+      isValidElement<Parameters<typeof CatalogueFileProfileEntry>[0]>(node) &&
+      node.type === CatalogueFileProfileEntry
+    ) {
+      const entry = catalogueEntries.catalogueFile(node.props);
       if (entry) entries.push(entry);
       return;
     }

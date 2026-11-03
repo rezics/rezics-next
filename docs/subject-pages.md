@@ -230,6 +230,70 @@ Unsupported choices require explicit change or removal, and a separate review st
 requirements reload successfully. A missing profile keeps the draft inspectable until a supported profile returns.
 The private editor is noindex and does not infer ownership or media permissions.
 
+## Inspect an exact release and correct admitted metadata
+
+`/{locale}/subjects/{id}/{slug}/release` is a private companion of an existing edition or release. The compact
+subject frame's Contribute menu offers it for `bf:Instance`, `rezics:AnimeRelease` and `wd:Q20631656`. Subtypes
+admitted by the current descriptor remain reachable at the same URL. The shared composition View enum and generic
+`$view` route stay unchanged.
+
+The page distinguishes the canonical work (`schema:exampleOfWork`) from this concrete edition: language, platform,
+region, format, publisher, developer and identifiers stay on the release. A missing work link, a concealed related
+work and an unreadable work identity are separate states. Work, edition, alternative release and provider file stay
+distinct objects.
+
+Release date uses the released time property. Exact day, partial year/month, explicit TBA (`somevalue`), explicit
+no-value and an absent statement remain distinct. TBA is never a missing date, Unix epoch or year zero. Status and
+region appear only when the current descriptor admits those properties; otherwise the page names them unavailable.
+Historical accepting meaning is the statement's pinned `rezics.release` digest, shown separately from the current
+editor admission. An explicit correction review is required after configuration changes.
+
+Directed release-to-release streams appear only for admitted item properties whose targets are released edition
+types or descendants. Work-targeted CreativeWork relations stay on the existing relation editor. Unknown source
+codes stay visible as provenance. Native edition creation, source mapping and adoption remain with Imports.
+Missing producer capability is named unavailable; Web does not fork native commands.
+
+Correction reuses Subject facts and the relation editor for the exact selected assertion, then returns to this
+release. Native-return links keep the work, existing publisher target selection, candidate reader and Changes.
+
+## Inspect catalogue file metadata and its release group
+
+`/{locale}/subjects/{id}/{slug}/file` is the companion for an admitted catalogue file or release group. The frame
+offers it for `schema:MediaObject`, `rezics:CatalogueFile`, `rezics:ReleaseGroup`, `wd:Q82753` and `wd:Q55327` when
+those exact type IDs are current. Until Semantic publishes file/group types in the active release, the page names
+the profile unreleased. Hashes, size, codec, language and quality are catalogue statements. They never prove the
+viewer possesses, matched or consumed the file. A file is not an AnimeRelease. Group credits render independently
+from creator credits. File association does not create progress completion. Web does not upload, scan, hash-match,
+synchronize AniDB, download or store a private MyList.
+
+Related episode, release, file and group links keep their admitted direction and kinds. A concealed episode stays
+concealed. Editing uses the exact selected assertion with revision recovery and return to the file. Native subjects,
+links and candidates remain the implementation.
+
+## Release and file visit cost
+
+One selected release or file/group visit uses C = 4 installed components: descriptor, subject, one association page
+and at most one explicitly selected detail. Calls per visit are at most C. Web projection and retained response state
+are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
+Correction uses a fixed addressed native command/readback sequence.
+
+| Component   | L_i (rows)                                      | B_i (bytes)                         | Source |
+| ----------- | ----------------------------------------------- | ----------------------------------- | ------ |
+| descriptor  | 1,024 types                                     | 4 MiB                               | `RELEASE_LIMITS.types` / `RELEASE_LIMITS.bytes` in [definitions portable](../packages/definitions/src/portable.ts) |
+| subject     | 64 properties per type                          | unavailable                         | `RELEASE_LIMITS.propertiesPerType`; subject-read bytes have no delivered cap |
+| association | 20 (native default; producer admits at most 100) | unavailable                         | Kernel relations/links `limit` default 20, max 100 |
+| detail      | 1 selected subject                              | unavailable                         | one `GET /v1/subjects/{id}` |
+
+An absent byte cap is an unavailable receiving seam. The loader never preloads one detail per listed file, never
+fans out per association row, and never substitutes elapsed time for this bound. Tests
+`apps/web/tests/release-fidelity-profile.test.tsx` and `apps/web/tests/catalogue-file-group-profile.test.tsx` run
+populations 32, 256 and 2,048 through the same loader at initial and deep keysets, with sparse concealed endpoints
+and a selection replacement. Total work across k deliberate page visits is O(k times the per-visit sum).
+
+This journey adds no engine query, command, projection or worker path. Existing native engines remain producer-owned.
+
+Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` / `$id_.$slug_.file.tsx` route pattern.
+
 ## Provider queue decisions
 
 `/{locale}/imports/review` uses the provider queue's current prepared rows. Its selection toolbar acts on at most

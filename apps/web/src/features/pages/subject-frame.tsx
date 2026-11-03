@@ -20,6 +20,8 @@ import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { OrganizationHistorySlot } from './subject-slots';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
+import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
+import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
 import { candidateContext } from '../../subject/candidates';
 import type { KernelClient } from '@rezics/client';
 import {
@@ -343,6 +345,8 @@ export function SubjectFrame({
                 <AlbumProfileEntry id={frame.id} label={title} locale={locale} />
               )}
               <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+              <ReleaseFidelityEntry id={frame.id} type={frame.type} label={title} locale={locale} />
+              <CatalogueFileProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               {view === 'contents' && (
                 <WorkPartsEntry
                   id={frame.id}
