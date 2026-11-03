@@ -222,7 +222,7 @@ function CollectionContentLifetime({
       key={JSON.stringify([mode, authority])}
       page={page}
       input={input}
-      returnTo={search.returnTo}
+      {...(search.returnTo === undefined ? {} : { returnTo: search.returnTo })}
       layout={search.layout ?? 'list'}
       mode={mode}
       viewerId={viewerId}
