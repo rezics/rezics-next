@@ -8,7 +8,7 @@ import {
 } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../test/focus.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
@@ -56,7 +56,9 @@ function createDemo(initial: DocumentSnapshot, label: string, lang: string) {
           label={label}
           lang={lang}
         />
-        <p role="status">{valid ? 'Valid snapshot' : 'Invalid snapshot'}</p>
+        <p role="status" aria-label="Snapshot validity">
+          {valid ? 'Valid snapshot' : 'Invalid snapshot'}
+        </p>
         <output aria-label="Serialized document" className="block max-h-48 overflow-auto font-mono text-xs">
           {serializeDocument(value)}
         </output>
@@ -67,11 +69,11 @@ function createDemo(initial: DocumentSnapshot, label: string, lang: string) {
   return { Demo, initial, latest, label };
 }
 
-async function visibleSnapshot(canvas: ReturnType<typeof within>, snapshot: DocumentSnapshot) {
+async function visibleSnapshot(snapshot: DocumentSnapshot) {
   expect(checkDocument(snapshot)).toBe(true);
   const serialized = serializeDocument(snapshot);
-  expect(canvas.getByRole('status', { name: 'Valid snapshot' })).toBeVisible();
-  expect(canvas.getByRole('status', { name: 'Serialized document' })).toHaveTextContent(serialized);
+  expect(screen.getByRole('status', { name: 'Snapshot validity' })).toHaveTextContent('Valid snapshot');
+  await waitFor(() => expect(screen.getByLabelText('Serialized document')).toHaveTextContent(serialized));
   return serialized;
 }
 
@@ -143,7 +145,7 @@ export const CjkDominantText: Story = {
     const snapshot = cjkText.latest.current;
     expect(snapshot.profile).toBe('text');
     expect(snapshot.doc.content?.every((block) => block.type === 'paragraph')).toBe(true);
-    await visibleSnapshot(canvas, snapshot);
+    await visibleSnapshot(snapshot);
   },
 };
 
@@ -166,7 +168,7 @@ export const CjkDominantBlocks: Story = {
     expect(collectText(snapshot.doc)).toContain('《三體》筆記');
     expect(collectText(snapshot.doc)).toContain('不要回答');
     expect(collectText(snapshot.doc)).toContain('Ken Liu');
-    await visibleSnapshot(canvas, snapshot);
+    await visibleSnapshot(snapshot);
   },
 };
 
@@ -181,7 +183,7 @@ export const LatinDominant: Story = {
     expect(textbox).toHaveTextContent('The Three-Body Problem');
     expect(textbox).toHaveTextContent('《三體》');
     expect(latin.latest.current.profile).toBe('text');
-    await visibleSnapshot(canvas, latin.latest.current);
+    await visibleSnapshot(latin.latest.current);
   },
 };
 
@@ -208,6 +210,6 @@ export const ReplaceMixedSelection: Story = {
     expect(textbox).toHaveTextContent('黑暗森林法則');
     expect(textbox).toHaveTextContent('不是比喻，是生存法則。');
     expect(textbox).toHaveAttribute('lang', 'zh-Hant');
-    await visibleSnapshot(canvas, replace.latest.current);
+    await visibleSnapshot(replace.latest.current);
   },
 };
