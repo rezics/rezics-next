@@ -2142,6 +2142,31 @@ existing mandatory path.
   rejects large sequential scans, and reads both explicit selections with available and unavailable rows. Connected
   outcome tests cover cursor refusal, current denial and exact self-removal.
 
+### Cost: native command envelope used above
+
+- Touches: `runCommand` → `boundedRead`/`mintTime`, `resourceAuthorization.prepare`, the process-local command
+  gate, `read-receipt.sql`, the owning body, `guardHistoryAccounts`, `fence.sql` or `no-effect-fence.sql`, and
+  `recordCommandHistory`/`record.sql`. The watch authority anchor's validation callback performs zero SQL;
+  shared Access preparation and its actual permission formula remain charged. No resource Access runs while the
+  command checkout is held. The native process gate performs no SQL and admits at most 64 waiting requests.
+- Bound: per successful attempt, excluding the separately charged domain body and shared Access, data statements
+  are `3 + 2*A + (1+E)`: one time mint, one receipt lookup, one commit fence, two seal statements for each distinct
+  history account A≤64, and one history insert per receipt/event artifact (E≤1). History seal statements seek/upsert
+  exactly A keys and read exactly A phase points; the history inserts write at most `(1+E)*A` locator rows. The
+  mutating fence reads/updates one partition and writes one event, one write-basis row and one receipt; no-effect
+  instead reads one partition and writes one receipt. Receipt lookup seeks only the native retained key-version
+  candidates R, not a principal's historical receipts (the version codec is one byte, R≤256). The owning body adds
+  one subscription point plus at most one mutation, maintaining its fixed indexes. A matched receipt skips the
+  body, history guards, commit fence and locator writes, but retains time mint, shared authorization and lookup.
+  The current native executor emits BEGIN twice, three SET LOCAL controls and COMMIT for a successful write,
+  in addition to the time mint's BEGIN/SET LOCAL/COMMIT; replay omits the final SET LOCAL. Charge failed attempts'
+  controls/ROLLBACK and all their dispatched reads too. Native contention retries multiply the per-attempt work
+  by their actual count under the original request deadline; this journey introduces no new retries or deadline.
+  Memory adds O(A+R) to the shared Access dependency budget D.
+- Growth check: the native journey includes first-time same-state commands, exact receipt retries and removal of
+  unavailable entries for both selections; statement/control and physical costs include this real executor rather
+  than an injected command port or a fitted allowance.
+
 ### Cost: board-opening page
 
 - Touches: `readOpening` runs one partition point and one exact envelope/thread/post/revision query. Its native
