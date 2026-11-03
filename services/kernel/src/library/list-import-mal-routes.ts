@@ -104,7 +104,11 @@ export function malImportRoutes(
 ) {
   const service = () => {
     const access = deps.access(),
-      votes = createVoteCommands({ pool: deps.pool, access, ...(deps.clock === undefined ? {} : { clock: deps.clock }) });
+      votes = createVoteCommands({
+        pool: deps.pool,
+        access,
+        ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+      });
     return createMalImport({
       ...deps,
       access,

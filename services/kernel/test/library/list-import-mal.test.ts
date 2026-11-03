@@ -420,13 +420,15 @@ test('MAL score review records explicit native units, preserves corrections and 
   );
   const clearVersion = await reviewScore(1, clear);
   expect(
-    (await json(
-      'POST',
-      `${base}/${id}/apply`,
-      { confirm: true, rows: [{ row: 1, version: clearVersion, fields: ['score'] }] },
-      randomUUID(),
-      actor.bearer,
-    )).outcomes[0],
+    (
+      await json(
+        'POST',
+        `${base}/${id}/apply`,
+        { confirm: true, rows: [{ row: 1, version: clearVersion, fields: ['score'] }] },
+        randomUUID(),
+        actor.bearer,
+      )
+    ).outcomes[0],
   ).toMatchObject({
     status: 'skipped',
     score: { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear' },
@@ -434,13 +436,15 @@ test('MAL score review records explicit native units, preserves corrections and 
 
   const omitted = await reviewScore(2);
   expect(
-    (await json(
-      'POST',
-      `${base}/${id}/apply`,
-      { confirm: true, rows: [{ row: 2, version: omitted, fields: ['score'] }] },
-      randomUUID(),
-      actor.bearer,
-    )).outcomes[0],
+    (
+      await json(
+        'POST',
+        `${base}/${id}/apply`,
+        { confirm: true, rows: [{ row: 2, version: omitted, fields: ['score'] }] },
+        randomUUID(),
+        actor.bearer,
+      )
+    ).outcomes[0],
   ).toMatchObject({ status: 'unsupported', score: { status: 'unsupported', reason: 'score-action-not-reviewed' } });
 
   const unsupported = await reviewScore(3, adopt(13)),

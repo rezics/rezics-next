@@ -17,14 +17,14 @@ Decision: MAL scores are opt-in. The owner chooses native units explicitly, an e
 replacement is explicitly selected, and native clear is a separate action. Source values are never presented as an
 exact conversion.
 
-| Source                                                                                 | Native proposal or visible retention                                                                           |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Watching/Reading, Completed, On-Hold, Dropped, Plan to Watch/Read (or codes 1/2/3/4/6) | Unique released role active/completed/paused/dropped/planned, explicitly confirmed as `status`                 |
+| Source                                                                                 | Native proposal or visible retention                                                                                                        |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Watching/Reading, Completed, On-Hold, Dropped, Plan to Watch/Read (or codes 1/2/3/4/6) | Unique released role active/completed/paused/dropped/planned, explicitly confirmed as `status`                                              |
 | Score                                                                                  | Original integer 1–10 scale; zero means no rating. Review can record owner-selected units; conditional native vote admission is unavailable |
-| Episodes, chapters and volumes                                                         | Independent original measures, including simultaneous manga counts; retained, no invented subjects or sessions |
-| Comments, tags, repeat totals                                                          | Private note, original tags and count; retained, no public review, inferred label or dated repeat session      |
-| Start/finish dates                                                                     | Year/month/day precision, all-zero unknown, invalid calendar dates marked invalid; no invented first day       |
-| Privacy, source timestamps, other fields and export metadata                           | Retained privately; never a command clock or publication decision                                              |
+| Episodes, chapters and volumes                                                         | Independent original measures, including simultaneous manga counts; retained, no invented subjects or sessions                              |
+| Comments, tags, repeat totals                                                          | Private note, original tags and count; retained, no public review, inferred label or dated repeat session                                   |
+| Start/finish dates                                                                     | Year/month/day precision, all-zero unknown, invalid calendar dates marked invalid; no invented first day                                    |
+| Privacy, source timestamps, other fields and export metadata                           | Retained privately; never a command clock or publication decision                                                                           |
 
 Each field distinguishes missing, empty/unknown, invalid, zero and a value as applicable. `fields` preserves every
 row leaf, `retained` explains fields without admission, and the original XML retains metadata and attributes.

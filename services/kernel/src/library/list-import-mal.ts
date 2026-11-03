@@ -694,9 +694,7 @@ export function createMalImport(deps: Dependencies) {
       const review = doc.reviews[row.index];
       const observed = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
       const { profile, profileBinding: _profileBinding, ...observation } = observed;
-      const scoreReviewState = review?.score
-        ? await scoreReviewCurrent(actor, row, review, observed)
-        : null;
+      const scoreReviewState = review?.score ? await scoreReviewCurrent(actor, row, review, observed) : null;
       rows.push({
         ...row,
         ...observation,
@@ -1189,14 +1187,15 @@ export function createMalImport(deps: Dependencies) {
       if (!row || !review || review.version !== selected.version || doc.canceled) throw stale();
       const existing = doc.intents[selected.row];
       if (existing && hash(existing.fields) !== hash(selected.fields)) throw new ProblemError('idempotency_conflict');
-      const scoreState = selected.fields.includes('score') && review.score
-        ? await scoreReviewCurrent(
-            actor,
-            row,
-            review,
-            await observe(actor, row, review.binding ? null : review.target, deadline),
-          )
-        : null;
+      const scoreState =
+        selected.fields.includes('score') && review.score
+          ? await scoreReviewCurrent(
+              actor,
+              row,
+              review,
+              await observe(actor, row, review.binding ? null : review.target, deadline),
+            )
+          : null;
       if (
         existing?.outcome &&
         !selected.fields.includes('tags') &&
