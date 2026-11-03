@@ -342,7 +342,7 @@ export async function readFacetDiscovery(
           snapshot.generation.toString(),
           facet.after,
           provider.source,
-          consumerBinding(reads[index]!, input.scopeBinding),
+          consumerBinding(reads[index]!),
           facetCursorReleaseBinding(input.release, input.scopeBinding),
         ],
       },
