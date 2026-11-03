@@ -106,10 +106,7 @@ export async function readPublicAccountByAgent(
   const native = pointer ? undefined : (await accountAgentsForSubjects(client, [subjectId])).get(subjectId);
   // Only an exact, unmerged native graph link admits an unverified agent. A
   // missing catalogue verification never permits inferring its account identity.
-  if (
-    !pointer &&
-    (!native || native.verified || native.subject !== subjectId || native.agent_id !== subjectId)
-  )
+  if (!pointer && (!native || native.verified || native.subject !== subjectId || native.agent_id !== subjectId))
     return [];
   const accountId = pointer?.accountId ?? native!.account;
   const accountRoute = routeOf(accountId);
@@ -127,9 +124,7 @@ export async function readPublicAccountByAgent(
     return [];
   const identity = await publicIdentityForAccount(client, row);
   // Native resolution also requires the current visible graph subject.
-  return pointer || identity.some((value) => 'subject' in value && value.subject?.id === subjectId)
-    ? identity
-    : [];
+  return pointer || identity.some((value) => 'subject' in value && value.subject?.id === subjectId) ? identity : [];
 }
 
 async function publicIdentityForAccount(

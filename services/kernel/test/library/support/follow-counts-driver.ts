@@ -164,9 +164,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           target = { targetType: 'subject', targetId: subject.id };
         } else {
           targetAccountId =
-            kind === 'person'
-              ? manager.accountId
-              : (await world.native.accountHost.managed(kind, manager)).accountId;
+            kind === 'person' ? manager.accountId : (await world.native.accountHost.managed(kind, manager)).accountId;
           // Consume the real account-agent effect and public identity, not a guessed id
           // or a fabricated catalogue verification (software agents cannot be verified).
           await world.native.resume();

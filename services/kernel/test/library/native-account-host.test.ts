@@ -51,9 +51,7 @@ test('native human, operator and organization authority resolves distinct graph 
       state: 'pending',
       completedAt: null,
     });
-    expect((await driver.request(fixture.manager.credential, path)).status).toBe(
-      kind === 'person' ? 401 : 404,
-    );
+    expect((await driver.request(fixture.manager.credential, path)).status).toBe(kind === 'person' ? 401 : 404);
   }
 }, 240000);
 

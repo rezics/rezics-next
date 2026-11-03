@@ -38,12 +38,10 @@ export async function createLibraryAccountHost(input: {
       client_id: 'web',
       scope: scopes,
     });
-    if (signed.status !== 200)
-      throw new Error(`Library Auth sign-in failed: ${signed.status} ${await signed.text()}`);
+    if (signed.status !== 200) throw new Error(`Library Auth sign-in failed: ${signed.status} ${await signed.text()}`);
     const headers = cookies(signed);
     const issued = await fixture.request('/token', {}, headers);
-    if (issued.status !== 200)
-      throw new Error(`Library Auth token failed: ${issued.status} ${await issued.text()}`);
+    if (issued.status !== 200) throw new Error(`Library Auth token failed: ${issued.status} ${await issued.text()}`);
     const { access_token: credential } = (await issued.json()) as {
       access_token: string;
     };
@@ -87,9 +85,7 @@ export async function createLibraryAccountHost(input: {
       const context = { pool: input.pool, deadline: Date.now() + 10000 };
       if (kind === 'organization') {
         const operation = { kind, handle: key, authorization: 'request' };
-        const approval = await fixture
-          .approval()
-          .approve(signed.credential, { operationKey: key, operation }, context);
+        const approval = await fixture.approval().approve(signed.credential, { operationKey: key, operation }, context);
         const created = await fixture.host.workflows.createOrganization({
           key,
           handle: key,
