@@ -523,7 +523,8 @@ function CharacterClassificationLive({
     !!left && !!right && factHolder(left) === factHolder(right);
   const confirming =
     !!draft &&
-    sameHolder(confirmation?.draft, draft) &&
+    !!confirmation &&
+    sameHolder(confirmation.draft, draft) &&
     confirmation.active() &&
     active() &&
     !busy &&
