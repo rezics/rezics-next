@@ -12,7 +12,7 @@ import { libraryEntryStateWrite } from './entries-read';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 import { restorePersonalLibraryEntry, validateLibraryRestoreInput } from './entries-read';
 import { applySubjectLabelMutation, searchSubjectLabels, type SubjectLabelMutationInput } from './subject-labels.ts';
-import { subjectLabelInputLimit } from './subject-label-input';
+import { subjectLabelInputLimit } from './subject-label-input.ts';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const incarnationIdPattern = idempotencyKeyPattern;

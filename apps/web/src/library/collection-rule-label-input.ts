@@ -1,4 +1,4 @@
-import { subjectLabelInputIssue, type SubjectLabelInputIssue } from './subject-label-input';
+import { subjectLabelInputIssue, type SubjectLabelInputIssue } from './subject-label-input.ts';
 import { normalizeLibraryLabelName } from './subject-label-name';
 
 export type RuleLabelPrefix = { ok: true; query: string } | { ok: false; issue: SubjectLabelInputIssue };

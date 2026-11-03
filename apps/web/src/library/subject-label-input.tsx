@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
-import type { SubjectLabelInputIssue } from './subject-label-input';
+import type { SubjectLabelInputIssue } from './subject-label-input.ts';
 
 const issues: Record<SubjectLabelInputIssue, () => string> = {
   empty: m.library_subject_label_input_empty,
