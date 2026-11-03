@@ -8,12 +8,7 @@ import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
-import {
-  createVoteCommands,
-  STANDARD_QUESTION_ID,
-  type RatingQuestion,
-  type Vote,
-} from '../rating/votes.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID, type RatingQuestion, type Vote } from '../rating/votes.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
@@ -146,14 +141,24 @@ function nativeVoteView(vote: Vote | null): NativeVoteObservation {
 }
 
 function sourceScoreReason(source: SourceValue): { reason: string; exactUnits: number | null } {
-  if (source.kind === 'missing') return { reason: 'No source score was supplied; absence never clears a native vote.', exactUnits: null };
-  if (source.kind === 'unknown') return { reason: 'The source score is unknown; no native vote is proposed.', exactUnits: null };
+  if (source.kind === 'missing')
+    return { reason: 'No source score was supplied; absence never clears a native vote.', exactUnits: null };
+  if (source.kind === 'unknown')
+    return { reason: 'The source score is unknown; no native vote is proposed.', exactUnits: null };
   if (source.kind === 'invalid')
     return {
-      reason: source.raw === '0' ? 'Zero is invalid on VNDB’s 1–10 source scale.' : 'The source score is invalid on VNDB’s 1–10 scale.',
+      reason:
+        source.raw === '0'
+          ? 'Zero is invalid on VNDB’s 1–10 source scale.'
+          : 'The source score is invalid on VNDB’s 1–10 scale.',
       exactUnits: null,
     };
-  if (typeof source.value !== 'number' || source.scale?.min !== 1 || source.scale.max !== 10 || source.scale.step !== 0.1)
+  if (
+    typeof source.value !== 'number' ||
+    source.scale?.min !== 1 ||
+    source.scale.max !== 10 ||
+    source.scale.step !== 0.1
+  )
     return { reason: 'The retained source value does not match the supported VNDB score scale.', exactUnits: null };
   const doubled = source.value * 2;
   return Number.isInteger(doubled)
@@ -477,15 +482,16 @@ export function createVndbImport(config: Config) {
         decision = upload.decisions[row.ordinal];
       const targetId = decision?.targetId ?? (matching.candidates.length === 1 ? matching.candidates[0] : undefined);
       const target = targetId ? await current(actor, targetId) : null;
-      const nativeScore = row.kind === 'vn'
-        ? await nativeScorePreview(actor, row.fields.score, target?.targetId, question)
-        : {
-            question: null,
-            currentVote: { state: 'unavailable' as const },
-            sourceReason: 'Retained releases, reviews, and length votes are never Subject enjoyment votes.',
-            exactUnits: null,
-            admission: { status: 'unavailable' as const, reason: 'source-not-vn-score' as const },
-          };
+      const nativeScore =
+        row.kind === 'vn'
+          ? await nativeScorePreview(actor, row.fields.score, target?.targetId, question)
+          : {
+              question: null,
+              currentVote: { state: 'unavailable' as const },
+              sourceReason: 'Retained releases, reviews, and length votes are never Subject enjoyment votes.',
+              exactUnits: null,
+              admission: { status: 'unavailable' as const, reason: 'source-not-vn-score' as const },
+            };
       rows.push({
         ...row,
         match: matching,
@@ -528,12 +534,7 @@ export function createVndbImport(config: Config) {
   }: ScoreDecision): NativeScoreReviewResult {
     return { reviewId, status, targetId, action, units, question, currentVote, consent, sourceReason, nativeAdmission };
   }
-  async function reviewScore(
-    actor: Actor,
-    id: string,
-    choice: Extract<VndbChoice, { action: 'score' }>,
-    key: string,
-  ) {
+  async function reviewScore(actor: Actor, id: string, choice: Extract<VndbChoice, { action: 'score' }>, key: string) {
     const upload = await load(actor, id),
       row = upload.rows[choice.ordinal];
     if (!row || row.kind !== 'vn') throw new ProblemError('invalid_request');
@@ -545,7 +546,9 @@ export function createVndbImport(config: Config) {
     if (!preview.question || preview.question.meaning === null || preview.currentVote.state === 'unavailable')
       return mutation(actor, 'review-score', key, { id, choice }, async () => ({
         status: 'unavailable' as const,
-        reason: preview.question ? ('native-current-vote-unavailable' as const) : ('native-question-unavailable' as const),
+        reason: preview.question
+          ? ('native-current-vote-unavailable' as const)
+          : ('native-question-unavailable' as const),
       }));
     if (
       preview.question.id !== STANDARD_QUESTION_ID ||
@@ -613,21 +616,22 @@ export function createVndbImport(config: Config) {
         before.matchDigest === matchDigest &&
         before.guard?.source === target.source;
       const parentReviewId = compatible && before ? before.reviewId : randomUUID();
-      const plan: Decision = compatible && before
-        ? { ...before }
-        : {
-            reviewId: parentReviewId,
-            status: 'reviewed',
-            stateAction: null,
-            targetId: target.targetId,
-            state: null,
-            baseline: null,
-            replace: false,
-            commandKey: `vndb:${id}:${parentReviewId}`,
-            guard: { uploadId: id, ordinal: choice.ordinal, reviewId: parentReviewId, source: target.source },
-            matchDigest,
-            metadata: [],
-          };
+      const plan: Decision =
+        compatible && before
+          ? { ...before }
+          : {
+              reviewId: parentReviewId,
+              status: 'reviewed',
+              stateAction: null,
+              targetId: target.targetId,
+              state: null,
+              baseline: null,
+              replace: false,
+              commandKey: `vndb:${id}:${parentReviewId}`,
+              guard: { uploadId: id, ordinal: choice.ordinal, reviewId: parentReviewId, source: target.source },
+              matchDigest,
+              metadata: [],
+            };
       plan.score = scoreDecision;
       await save(tx, account, id, choice.ordinal, plan);
       return publicScoreDecision(scoreDecision);
@@ -1089,8 +1093,11 @@ export function createVndbImport(config: Config) {
       !selected.length ||
       selected.length > VNDB_LIMITS.page ||
       new Set(selected.map((item) => item.ordinal)).size !== selected.length ||
-      selected.some((item) => (!item.reviewId && !item.scoreReviewId) || (item.reviewId && item.reviewId === item.scoreReviewId)) ||
-      selected.reduce((total, item) => total + Number(!!item.reviewId) + Number(!!item.scoreReviewId), 0) > VNDB_LIMITS.page
+      selected.some(
+        (item) => (!item.reviewId && !item.scoreReviewId) || (item.reviewId && item.reviewId === item.scoreReviewId),
+      ) ||
+      selected.reduce((total, item) => total + Number(!!item.reviewId) + Number(!!item.scoreReviewId), 0) >
+        VNDB_LIMITS.page
     )
       throw new ProblemError('invalid_request');
     let stopped: 'deadline' | 'cancelled' | null = null;
@@ -1106,7 +1113,9 @@ export function createVndbImport(config: Config) {
       }
       const decision = upload.decisions[item.ordinal];
       if (item.reviewId)
-        outcomes.push(await applyEntry(actor, id, { ordinal: item.ordinal, reviewId: item.reviewId }, decision, record));
+        outcomes.push(
+          await applyEntry(actor, id, { ordinal: item.ordinal, reviewId: item.reviewId }, decision, record),
+        );
       if (!item.scoreReviewId) continue;
       if (signal?.aborted || Date.now() >= deadline) {
         stopped = signal?.aborted ? 'cancelled' : 'deadline';

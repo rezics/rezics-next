@@ -10,7 +10,16 @@ const nullableText = nullable(t.String());
 const count = t.Integer({ minimum: 0 });
 const disposition = strings('applied', 'skipped', 'stale', 'unsupported', 'failed');
 const reviewStatus = strings('reviewed', 'applying', 'applied', 'skipped', 'stale', 'unsupported', 'failed');
-const scoreStatus = strings('reviewed', 'applying', 'applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable');
+const scoreStatus = strings(
+  'reviewed',
+  'applying',
+  'applied',
+  'skipped',
+  'stale',
+  'unsupported',
+  'failed',
+  'unavailable',
+);
 const baseline = t.Union([
   t.Null(),
   object({ state: t.String(), revision: t.Integer({ minimum: 1 }), incarnationId: nullableText }),
@@ -37,7 +46,12 @@ const nativeVoteObservation = t.Union([
   object({ state: t.Literal('unavailable') }),
   object({ state: t.Literal('absent') }),
   object({ state: t.Literal('cleared'), revision: t.Integer({ minimum: 1 }), at: t.String() }),
-  object({ state: t.Literal('set'), units: t.Integer({ minimum: 0 }), revision: t.Integer({ minimum: 1 }), at: t.String() }),
+  object({
+    state: t.Literal('set'),
+    units: t.Integer({ minimum: 0 }),
+    revision: t.Integer({ minimum: 1 }),
+    at: t.String(),
+  }),
 ]);
 const scoreDecision = object({
   reviewId: uuid,
@@ -125,12 +139,19 @@ export const vndbPageSchema = object({
 });
 export const vndbApplySchema = object({
   uploadId: uuid,
-  outcomes: t.Array(t.Union([
-    object({ ordinal: count, reviewId: uuid, status: disposition }),
-    object({ ordinal: count, scoreReviewId: uuid, status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable') }),
-  ]), {
-    maxItems: VNDB_LIMITS.page,
-  }),
+  outcomes: t.Array(
+    t.Union([
+      object({ ordinal: count, reviewId: uuid, status: disposition }),
+      object({
+        ordinal: count,
+        scoreReviewId: uuid,
+        status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable'),
+      }),
+    ]),
+    {
+      maxItems: VNDB_LIMITS.page,
+    },
+  ),
   stopped: nullable(strings('deadline', 'cancelled')),
 });
 export const vndbSourceSchema = object({ xml: t.String({ maxLength: VNDB_LIMITS.bytes }) });

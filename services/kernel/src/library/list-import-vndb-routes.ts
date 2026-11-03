@@ -47,10 +47,7 @@ const scoreSelection = t.Union([
   t.Object({ kind: t.Literal('clear') }, closed),
 ]);
 const reviewChoice = t.Union([
-  t.Object(
-    { ordinal, action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) },
-    closed,
-  ),
+  t.Object({ ordinal, action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) }, closed),
   t.Object(
     {
       ordinal,
@@ -256,10 +253,10 @@ export function vndbImportRoutes(
         params,
         body: t.Object(
           {
-            rows: t.Array(
-              t.Object({ ordinal, reviewId: t.Optional(uuid), scoreReviewId: t.Optional(uuid) }, closed),
-              { minItems: 1, maxItems: VNDB_LIMITS.page },
-            ),
+            rows: t.Array(t.Object({ ordinal, reviewId: t.Optional(uuid), scoreReviewId: t.Optional(uuid) }, closed), {
+              minItems: 1,
+              maxItems: VNDB_LIMITS.page,
+            }),
           },
           closed,
         ),
