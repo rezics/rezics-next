@@ -67,109 +67,105 @@ async function publicSubjectIds(label: string) {
     .map((subject) => subject.id);
 }
 
-test(
-  'signed-in generic creation uses the native subject POST, exact uncertain retry, and retained-ID read retry',
-  async () => {
-    const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/new' });
-    expect(journey.url).toBe(`${stack.web}/en/catalogue/new`);
-    expect((await journey.response()).status()).toBe(200);
-    expect((await journey.requestHeaders()).every((headers) => !headers.has('authorization'))).toBe(true);
+test('signed-in generic creation uses the native subject POST, exact uncertain retry, and retained-ID read retry', async () => {
+  const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/new' });
+  expect(journey.url).toBe(`${stack.web}/en/catalogue/new`);
+  expect((await journey.response()).status()).toBe(200);
+  expect((await journey.requestHeaders()).every((headers) => !headers.has('authorization'))).toBe(true);
 
-    const page = journey.context.pages().at(-1)!;
-    page.setDefaultTimeout(30_000);
-    const browserHeaders: Promise<Headers>[] = [];
-    const browserFunctionBodies: string[] = [];
-    const browserFunctionResponses: Promise<string>[] = [];
-    page.on('request', (request) => {
-      browserHeaders.push(request.allHeaders().then((headers) => new Headers(headers)));
-      if (new URL(request.url()).pathname.startsWith('/_serverFn/'))
-        browserFunctionBodies.push(request.postData() ?? '');
-    });
-    page.on('response', (response) => {
-      if (new URL(response.url()).pathname.startsWith('/_serverFn/'))
-        browserFunctionResponses.push(response.text().catch(() => ''));
-    });
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(30_000);
+  const browserHeaders: Promise<Headers>[] = [];
+  const browserFunctionBodies: string[] = [];
+  const browserFunctionResponses: Promise<string>[] = [];
+  page.on('request', (request) => {
+    browserHeaders.push(request.allHeaders().then((headers) => new Headers(headers)));
+    if (new URL(request.url()).pathname.startsWith('/_serverFn/')) browserFunctionBodies.push(request.postData() ?? '');
+  });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname.startsWith('/_serverFn/'))
+      browserFunctionResponses.push(response.text().catch(() => ''));
+  });
 
-    await page.locator('form').waitFor({ state: 'visible' });
-    expect(await page.locator('html').getAttribute('lang')).toBe('en');
-    await chooseBook(page);
-    const first = await fillTerms(page, crypto.randomUUID());
+  await page.locator('form').waitFor({ state: 'visible' });
+  expect(await page.locator('html').getAttribute('lang')).toBe('en');
+  await chooseBook(page);
+  const first = await fillTerms(page, crypto.randomUUID());
 
-    let droppedResponse: { status: number; body: string } | undefined;
-    const dropFirstCreateResponse = async (route: import('playwright').Route) => {
-      if (!droppedResponse && route.request().method() === 'POST') {
-        const response = await route.fetch();
-        droppedResponse = { status: response.status(), body: await response.text() };
-        await route.abort('failed');
-        return;
-      }
-      await route.continue();
-    };
-    await page.route('**/_serverFn/**', dropFirstCreateResponse);
-    const submit = page.locator('form button[type="submit"]');
-    await submit.click();
-    await page.getByRole('alert').waitFor({ state: 'visible' });
-    expect(await submit.innerText()).toMatch(/retry/i);
-    await submit.click();
-    await page.waitForURL((url) => url.pathname.includes('/subjects/'));
-    await page.unroute('**/_serverFn/**', dropFirstCreateResponse);
+  let droppedResponse: { status: number; body: string } | undefined;
+  const dropFirstCreateResponse = async (route: import('playwright').Route) => {
+    if (!droppedResponse && route.request().method() === 'POST') {
+      const response = await route.fetch();
+      droppedResponse = { status: response.status(), body: await response.text() };
+      await route.abort('failed');
+      return;
+    }
+    await route.continue();
+  };
+  await page.route('**/_serverFn/**', dropFirstCreateResponse);
+  const submit = page.locator('form button[type="submit"]');
+  await submit.click();
+  await page.getByRole('alert').waitFor({ state: 'visible' });
+  expect(await submit.innerText()).toMatch(/retry/i);
+  await submit.click();
+  await page.waitForURL((url) => url.pathname.includes('/subjects/'));
+  await page.unroute('**/_serverFn/**', dropFirstCreateResponse);
 
-    expect(droppedResponse?.status).toBe(200);
-    expect(droppedResponse?.body).not.toContain('Bearer ');
-    const firstPosts = await subjectPosts(first.en.label);
-    expect(firstPosts).toHaveLength(2);
-    expect(firstPosts.map((request) => request.responseStatus)).toEqual([201, 201]);
-    expect(firstPosts[0]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(firstPosts[1]?.idempotencyKey).toBe(firstPosts[0]?.idempotencyKey);
-    expect(firstPosts[1]?.body).toBe(firstPosts[0]?.body);
-    expect(firstPosts[0]?.authorization?.startsWith('Bearer ')).toBe(true);
-    expect(JSON.parse(firstPosts[0]!.body!)).toEqual({
-      type: 'schema:Book',
-      labels: { en: first.en.label, 'zh-Hans': first.zh.label },
-      descriptions: { en: first.en.description, 'zh-Hans': first.zh.description },
-      aliases: { en: [first.en.alias], 'zh-Hans': [first.zh.alias] },
-    });
-    const firstPath = new URL(page.url()).pathname;
-    const firstId = firstPath.match(/^\/en\/subjects\/([^/]+)/)?.[1];
-    expect(firstId).toBeTruthy();
-    expect(await publicSubjectIds(first.en.label)).toEqual([firstId]);
+  expect(droppedResponse?.status).toBe(200);
+  expect(droppedResponse?.body).not.toContain('Bearer ');
+  const firstPosts = await subjectPosts(first.en.label);
+  expect(firstPosts).toHaveLength(2);
+  expect(firstPosts.map((request) => request.responseStatus)).toEqual([201, 201]);
+  expect(firstPosts[0]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(firstPosts[1]?.idempotencyKey).toBe(firstPosts[0]?.idempotencyKey);
+  expect(firstPosts[1]?.body).toBe(firstPosts[0]?.body);
+  expect(firstPosts[0]?.authorization?.startsWith('Bearer ')).toBe(true);
+  expect(JSON.parse(firstPosts[0]!.body!)).toEqual({
+    type: 'schema:Book',
+    labels: { en: first.en.label, 'zh-Hans': first.zh.label },
+    descriptions: { en: first.en.description, 'zh-Hans': first.zh.description },
+    aliases: { en: [first.en.alias], 'zh-Hans': [first.zh.alias] },
+  });
+  const firstPath = new URL(page.url()).pathname;
+  const firstId = firstPath.match(/^\/en\/subjects\/([^/]+)/)?.[1];
+  expect(firstId).toBeTruthy();
+  expect(await publicSubjectIds(first.en.label)).toEqual([firstId]);
 
-    await page.goto(`${stack.web}/en/catalogue/new`, { waitUntil: 'domcontentloaded' });
-    await page.locator('form').waitFor({ state: 'visible' });
-    await chooseBook(page);
-    const second = await fillTerms(page, crypto.randomUUID());
-    await stack.injectKernelFailureOnce({
-      method: 'GET',
-      path: '/v1/subjects/*',
-      status: 503,
-      body: '{"title":"Reader temporarily unavailable","status":503}',
-    });
-    await page.locator('form button[type="submit"]').click();
+  await page.goto(`${stack.web}/en/catalogue/new`, { waitUntil: 'domcontentloaded' });
+  await page.locator('form').waitFor({ state: 'visible' });
+  await chooseBook(page);
+  const second = await fillTerms(page, crypto.randomUUID());
+  await stack.injectKernelFailureOnce({
+    method: 'GET',
+    path: '/v1/subjects/*',
+    status: 503,
+    body: '{"title":"Reader temporarily unavailable","status":503}',
+  });
+  await page.locator('form button[type="submit"]').click();
 
-    const outcome = page.locator('section[role="status"]');
-    await outcome.waitFor({ state: 'visible' });
-    expect(await outcome.innerText()).toMatch(/created/i);
-    const secondPosts = await subjectPosts(second.en.label);
-    expect(secondPosts).toHaveLength(1);
-    expect(secondPosts[0]?.responseStatus).toBe(201);
-    const failedRead = stack
-      .kernelRequests()
-      .findLast(
-        (request) => request.method === 'GET' && request.failure?.status === 503 && request.url.startsWith('/v1/subjects/'),
-      );
-    expect(failedRead).toBeDefined();
-    const secondId = failedRead!.url.slice('/v1/subjects/'.length);
+  const outcome = page.locator('section[role="status"]');
+  await outcome.waitFor({ state: 'visible' });
+  expect(await outcome.innerText()).toMatch(/created/i);
+  const secondPosts = await subjectPosts(second.en.label);
+  expect(secondPosts).toHaveLength(1);
+  expect(secondPosts[0]?.responseStatus).toBe(201);
+  const failedRead = stack
+    .kernelRequests()
+    .findLast(
+      (request) =>
+        request.method === 'GET' && request.failure?.status === 503 && request.url.startsWith('/v1/subjects/'),
+    );
+  expect(failedRead).toBeDefined();
+  const secondId = failedRead!.url.slice('/v1/subjects/'.length);
 
-    await outcome.getByRole('button', { name: /retry/i }).click();
-    await page.waitForURL((url) => url.pathname.includes(`/subjects/${secondId}`));
-    expect((await subjectPosts(second.en.label))).toHaveLength(1);
-    expect(await publicSubjectIds(second.en.label)).toEqual([secondId]);
+  await outcome.getByRole('button', { name: /retry/i }).click();
+  await page.waitForURL((url) => url.pathname.includes(`/subjects/${secondId}`));
+  expect(await subjectPosts(second.en.label)).toHaveLength(1);
+  expect(await publicSubjectIds(second.en.label)).toEqual([secondId]);
 
-    const allBrowserHeaders = await Promise.all(browserHeaders);
-    const allFunctionResponses = await Promise.all(browserFunctionResponses);
-    expect(allBrowserHeaders.every((headers) => !headers.has('authorization'))).toBe(true);
-    expect(browserFunctionBodies.every((body) => !body.includes('Bearer '))).toBe(true);
-    expect(allFunctionResponses.every((body) => !body.includes('Bearer '))).toBe(true);
-  },
-  900_000,
-);
+  const allBrowserHeaders = await Promise.all(browserHeaders);
+  const allFunctionResponses = await Promise.all(browserFunctionResponses);
+  expect(allBrowserHeaders.every((headers) => !headers.has('authorization'))).toBe(true);
+  expect(browserFunctionBodies.every((body) => !body.includes('Bearer '))).toBe(true);
+  expect(allFunctionResponses.every((body) => !body.includes('Bearer '))).toBe(true);
+}, 900_000);
