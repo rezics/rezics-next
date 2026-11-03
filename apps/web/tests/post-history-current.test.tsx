@@ -85,3 +85,22 @@ test('concealed authors and targets differ from absent and failed context; failu
     await view.dispose();
   }
 });
+
+test('a bounded summary omission withholds presentation while an empty recorded target list is absent', async () => {
+  for (const subjectIds of [[], selected.subjectIds]) {
+    const envelope = currentHistoryEnvelope();
+    envelope.revisions[0]!.subjectIds = subjectIds;
+    envelope.page.subjects.items = [];
+    const view = await mount(envelope);
+    try {
+      await view.open();
+      await view.inspect();
+      expect(view.host.textContent).toContain(
+        subjectIds.length ? m.post_history_target_concealed() : m.post_history_targets_absent(),
+      );
+      if (subjectIds.length) expect(view.host.textContent).not.toContain(m.post_history_targets_absent());
+    } finally {
+      await view.dispose();
+    }
+  }
+});

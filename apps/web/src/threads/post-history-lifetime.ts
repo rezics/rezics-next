@@ -217,10 +217,9 @@ export class PostHistoryLifetime {
               native: {
                 score: native.scores.get(revision.revisionId),
                 reviewState: context.reviewScores.state,
-                subjects: revision.subjectIds.flatMap((id) => {
-                  const subject = subjects.get(id);
-                  return subject ? [subject] : [];
-                }),
+                subjects: revision.subjectIds.map(
+                  (id) => subjects.get(id) ?? { id, state: 'concealed' as const, summary: null },
+                ),
                 subjectState: context.subjects.state,
                 comparison: native.comparisons.get(revision.revisionId),
               },
