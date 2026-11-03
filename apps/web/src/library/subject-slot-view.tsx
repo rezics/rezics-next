@@ -44,7 +44,7 @@ import type {
   SubjectLibrarySlotData,
 } from './subject-slot';
 import { normalizeLibraryLabelName } from './subject-label-name';
-import { subjectLabelInputIssue } from './subject-label-input';
+import { subjectLabelInputIssue } from './subject-label-input.ts';
 import { SubjectLabelInput } from './subject-label-input.tsx';
 import type {
   LibraryLabelSummary,
