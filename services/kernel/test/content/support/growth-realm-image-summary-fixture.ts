@@ -155,7 +155,7 @@ export async function realmImageSummaryFixture() {
 
     const read = (
       input: { realmId: string; avatarMediaId: string | null; bannerMediaId: string | null } = selected,
-      actor = reader,
+      actor: Actor = reader,
       pool = db.pool,
     ) => readRealmPresentationImages({ ...deps, pool }, input, { actor, deadline: Date.now() + 30_000 });
     const facts = await db.admin.query<{
