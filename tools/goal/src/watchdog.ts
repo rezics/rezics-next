@@ -8,11 +8,21 @@ import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import { capacityWaiters, checkWaitMs } from './launch.ts';
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 // Each check is a state the control plane should never stay in. A violation that persists means work has silently
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to
 // three hours, and stabilize stopped reaching dev for over two hours, before anyone looked.
+
+/** How long a violation may last before the supermanager is told, and how often it is told again. */
+const NO_WORKER_MS = 10 * 60_000;
+const STABILIZE_BEHIND_MS = 30 * 60_000;
+const ALERT_EVERY_MS = 2 * 3_600_000;
+const FAILURE_WINDOW_MS = 30 * 60_000;
+const HOST_PROBE_EVERY_MS = 5 * 60_000;
+const HOST_PROBE_TIMEOUT_MS = 20_000;
+const HOST_PROBE_DIAGNOSTIC_LIMIT = 4 * 1024;
+const DEFAULT_ATTEMPT_LIMIT_MS = 2 * 60 * 60_000;
+const RECENT_COMMANDS = 10;
 
 type CheckHost = { name: string; address: string; identity: string };
 export type CheckHostProbeResult = { status: number | null; stderr: string };
@@ -67,23 +77,13 @@ export function sshProbe(
   host: CheckHost,
   complete: (result: CheckHostProbeResult) => void,
   start = spawn,
-  timeoutMs?: number,
-  policy: ControlPolicy = defaultPolicy,
+  timeoutMs = HOST_PROBE_TIMEOUT_MS,
 ): void {
   let child: ReturnType<typeof spawn>;
   try {
     child = start(
       'ssh',
-      [
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        `ConnectTimeout=${policy.watchdog.hostProbeConnectTimeoutSeconds}`,
-        '-i',
-        host.identity,
-        host.address,
-        'true',
-      ],
+      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-i', host.identity, host.address, 'true'],
       { detached: true, stdio: ['ignore', 'ignore', 'pipe'] },
     );
   } catch (error) {
@@ -112,13 +112,13 @@ export function sshProbe(
     const text = chunk.toString();
     const newline = text.search(/[\r\n]/);
     const piece = newline < 0 ? text : text.slice(0, newline);
-    const remaining = policy.watchdog.hostProbeDiagnosticCharacters - stderr.length;
+    const remaining = HOST_PROBE_DIAGNOSTIC_LIMIT - stderr.length;
     if (remaining <= 0) {
       hasFirstLine = true;
       return;
     }
     stderr += piece.length > remaining ? piece.slice(0, remaining) : piece;
-    hasFirstLine = newline >= 0 || stderr.length >= policy.watchdog.hostProbeDiagnosticCharacters;
+    hasFirstLine = newline >= 0 || stderr.length >= HOST_PROBE_DIAGNOSTIC_LIMIT;
   });
   child.once('error', (error) => {
     if (settled) return;
@@ -137,7 +137,7 @@ export function sshProbe(
     } catch {
       /* This probe's child may already have exited. */
     }
-  }, timeoutMs ?? policy.watchdog.hostProbeTimeoutMs);
+  }, timeoutMs);
   timer.unref();
   child.unref();
 }
@@ -178,9 +178,8 @@ function failureIncidents(
   store: Pick<WorkerStore, 'attemptsEndedBetween'>,
   tasks: ReturnType<WorkerStore['tasks']>,
   now: number,
-  policy: ControlPolicy,
 ): { key: string; summary: string }[] {
-  const start = new Date(now - policy.watchdog.failureWindowMs).toISOString();
+  const start = new Date(now - FAILURE_WINDOW_MS).toISOString();
   const end = new Date(now).toISOString();
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const grouped = new Map<
@@ -201,7 +200,7 @@ function failureIncidents(
       attempt: attempt.attempt,
       goal: taskById.get(attempt.taskId)?.brief.goal ?? attempt.taskId,
       error: exampleError
-        .slice(0, policy.watchdog.failureExampleCharacters)
+        .slice(0, 200)
         .replace(/[\r\n\t]/g, ' ')
         .trim(),
     });
@@ -210,28 +209,26 @@ function failureIncidents(
   const found: { key: string; summary: string }[] = [];
   for (const [key, group] of grouped) {
     const taskIds = [...new Set(group.attempts.map((attempt) => attempt.taskId))].sort();
-    if (group.attempts.length < policy.watchdog.failureAttempts || taskIds.length < policy.watchdog.failureTasks)
-      continue;
+    if (group.attempts.length < 3 || taskIds.length < 2) continue;
     const goals = [...new Set(group.attempts.map((attempt) => attempt.goal))].sort();
     const example = group.attempts[0]!;
     found.push({
       key: `failure-signature:${key}`,
       summary:
-        `Incident: ${group.name}: ${group.attempts.length} attempts of ${taskIds.length} tasks in ${policy.watchdog.failureWindowMs / 60_000} min ` +
+        `Incident: ${group.name}: ${group.attempts.length} attempts of ${taskIds.length} tasks in 30 min ` +
         `(${goals.join(', ')}), e.g. ${example.taskId} attempt ${example.attempt}: ${example.error}`,
     });
   }
   return found;
 }
 
-function recentCommands(attempt: Attempt, policy: ControlPolicy): string[] {
+function recentCommands(attempt: Attempt): string[] {
   return agentCommands(
-    readLogTail(attempt.logPath, policy.watchdog.commandLogTailBytes),
+    readLogTail(attempt.logPath),
     attempt.profile?.cli ? agentAdapter(attempt.profile.cli) : undefined,
-  ).slice(-policy.watchdog.recentCommands);
+  ).slice(-RECENT_COMMANDS);
 }
 
-// Milliseconds per minute and minutes per hour are display conversions, not watchdog thresholds.
 function elapsedText(ms: number): string {
   const minutes = Math.max(0, Math.floor(ms / 60_000));
   const hours = Math.floor(minutes / 60);
@@ -245,10 +242,10 @@ function inspectsProcesses(command: string): boolean {
   return /(?:^|[;&|\n])\s*(?:\S*\/)?(?:ps|pgrep)(?:\s|$)/.test(script);
 }
 
-function commitCount(task: Task, policy: ControlPolicy): number {
+function commitCount(task: Task): number {
   const result = spawnSync('git', ['-C', task.worktree, 'rev-list', '--count', `${task.base}..HEAD`], {
     encoding: 'utf8',
-    timeout: policy.watchdog.commitCountTimeoutMs,
+    timeout: 5_000,
   });
   const count = Number(result.stdout?.trim());
   return result.status === 0 && Number.isSafeInteger(count) && count >= 0 ? count : 0;
@@ -259,7 +256,6 @@ function longAttemptIncidents(
   tasks: Task[],
   now: number,
   limitFor: (task: Task) => number,
-  policy: ControlPolicy,
 ): { key: string; managerId: string; kind: ManagerEventKind; summary: string; command?: string; commits?: number }[] {
   const found: {
     key: string;
@@ -280,13 +276,13 @@ function longAttemptIncidents(
     if (!attempt || !['running', 'waiting'].includes(attempt.state)) continue;
     const elapsed = now - Date.parse(attempt.startedAt);
     if (!Number.isFinite(elapsed)) continue;
-    const commands = recentCommands(attempt, policy);
+    const commands = recentCommands(attempt);
     const command = commands.at(-1) ?? '(none recorded)';
-    const commits = commitCount(task, policy);
+    const commits = commitCount(task);
     const waitsForCheck = commands.some((command) => /(?:^|[\s/])worker-check\.ts\b/.test(command));
     const longRunning = elapsed >= Math.max(1, limitFor(task));
     const processCommands = commands.filter(inspectsProcesses);
-    const polling = !waitsForCheck && processCommands.length >= policy.watchdog.processPollingCommands;
+    const polling = !waitsForCheck && processCommands.length >= 2;
     if (longRunning || polling) {
       const common = `task ${task.id} attempt ${attempt.attempt} has run ${elapsedText(elapsed)}, with ${commits} commits and ${elapsedText(checkWaitMs(attempt.logPath))} spent waiting for check slots`;
       if (longRunning)
@@ -336,28 +332,22 @@ function writeProbeResult(path: string, result: CheckHostProbeResult, sweepAt: s
 }
 
 /**
- * Check hosts whose configured consecutive probe failures have persisted and have not succeeded since: the watchdog's host outage state. Retries of
+ * Check hosts whose last two probes failed and have not succeeded since: the watchdog's host outage state. Retries of
  * check-host transport failures wait while this is not empty. Without a hosts file or saved state nothing is out.
  */
-export function checkHostsInOutage(stateDirectory: string, policy: ControlPolicy = defaultPolicy): string[] {
+export function checkHostsInOutage(stateDirectory: string): string[] {
   try {
     const saved = JSON.parse(readFileSync(join(stateDirectory, 'watchdog.json'), 'utf8')) as Partial<State>;
     const listed = new Set(checkHosts(stateDirectory).map((host) => host.name));
     return Object.entries(saved.hostProbeFailures ?? {})
-      .filter(([name, failures]) => listed.has(name) && failures >= policy.watchdog.hostProbeFailures)
+      .filter(([name, failures]) => listed.has(name) && failures >= 2)
       .map(([name]) => name);
   } catch {
     return [];
   }
 }
 
-function probeCheckHosts(
-  state: State,
-  stateDirectory: string,
-  now: number,
-  probe: CheckHostProbe,
-  policy: ControlPolicy,
-): string[] {
+function probeCheckHosts(state: State, stateDirectory: string, now: number, probe: CheckHostProbe): string[] {
   const hosts = checkHosts(stateDirectory);
   const directory = join(stateDirectory, 'host-probes');
   if (!hosts.length) {
@@ -366,7 +356,7 @@ function probeCheckHosts(
     return [];
   }
   const last = state.lastHostProbeAt ? Date.parse(state.lastHostProbeAt) : Number.NaN;
-  if (Number.isFinite(last) && now - last < policy.watchdog.hostProbeEveryMs) return [];
+  if (Number.isFinite(last) && now - last < HOST_PROBE_EVERY_MS) return [];
   const failures = (state.hostProbeFailures ??= {});
   const incidents: string[] = [];
   const retainedPaths = new Set(hosts.map((host) => probeFile(stateDirectory, host)));
@@ -381,8 +371,8 @@ function probeCheckHosts(
       continue;
     }
     const previous = failures[host.name] ?? 0;
-    failures[host.name] = Math.min(previous + 1, policy.watchdog.hostProbeFailures);
-    if (previous < policy.watchdog.hostProbeFailures && failures[host.name] === policy.watchdog.hostProbeFailures) {
+    failures[host.name] = Math.min(previous + 1, 2);
+    if (previous < 2 && failures[host.name] === 2) {
       const message = (result.stderr || 'SSH probe failed').replaceAll(host.identity, '[identity]').trim();
       incidents.push(`Incident: check host ${host.name.replace(/[\r\n]/g, ' ')} refuses SSH: ${message}`);
     }
@@ -446,7 +436,6 @@ export function retryWait(
   dependencyState: (id: string) => string | undefined,
   now: number,
   stateDirectory?: string,
-  policy: ControlPolicy = defaultPolicy,
 ):
   | { reason: 'dependencies'; waitingFor: string[] }
   | { reason: 'backoff'; until: string }
@@ -458,7 +447,7 @@ export function retryWait(
   if (waitingFor.length) return { reason: 'dependencies', waitingFor };
   const until = intent.options?.notBefore;
   if (until && Date.parse(until) > now) return { reason: 'backoff', until };
-  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsInOutage(stateDirectory, policy) : [];
+  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsInOutage(stateDirectory) : [];
   return hosts.length ? { reason: 'check-hosts', hosts } : null;
 }
 
@@ -469,7 +458,6 @@ export function violations(
   now: number,
   tasks = store.activeTasks?.() ?? store.tasks?.() ?? [],
   stateDirectory?: string,
-  policy: ControlPolicy = defaultPolicy,
 ): { key: string; summary: string }[] {
   const found: { key: string; summary: string }[] = [];
   const pending = new Map(
@@ -486,13 +474,13 @@ export function violations(
     if (attempt.state !== 'exited' || !attempt.endedAt) continue;
     if (attempt.driver && sameProcess(attempt.driver)) continue;
     const idle = now - Date.parse(attempt.endedAt);
-    if (idle < policy.watchdog.noWorkerMs) continue;
+    if (idle < NO_WORKER_MS) continue;
     const retry = pending.get(`${task.id}:${attempt.attempt}`);
     const intent = retry !== undefined;
     if (task.state === 'ready' && !intent) continue;
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
     // A retry held for dependencies, a backoff or a host outage is waiting by design, not missing its starter.
-    if (retry && retryWait(retry, task, dependencyState, now, stateDirectory, policy)) continue;
+    if (retry && retryWait(retry, task, dependencyState, now, stateDirectory)) continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
@@ -513,9 +501,8 @@ export function watch(
   stateDirectory: string,
   deliver: (summary: string, managerId?: string, kind?: ManagerEventKind) => void,
   now = Date.now(),
-  probe?: CheckHostProbe,
-  limitFor?: (task: Task) => number,
-  policy: ControlPolicy = defaultPolicy,
+  probe: CheckHostProbe = sshProbe,
+  limitFor: (task: Task) => number = () => DEFAULT_ATTEMPT_LIMIT_MS,
 ): number {
   // A manager event summary must be one line. A worker command holding a newline once made delivery throw before the
   // alert state was saved, so every alert went out again on each sweep.
@@ -532,31 +519,19 @@ export function watch(
     /* Alert again rather than never. */
   }
   const tasks = store.activeTasks?.() ?? store.tasks?.() ?? [];
-  const longAttempts = longAttemptIncidents(
-    store,
-    tasks,
-    now,
-    limitFor ?? (() => policy.watchdog.attemptLimitMs),
-    policy,
-  );
+  const longAttempts = longAttemptIncidents(store, tasks, now, limitFor);
   const found = [
-    ...violations(store, now, tasks, stateDirectory, policy),
-    ...failureIncidents(store, tasks, now, policy),
+    ...violations(store, now, tasks, stateDirectory),
+    ...failureIncidents(store, tasks, now),
     ...longAttempts,
   ];
-  const hostIncidents = probeCheckHosts(
-    state,
-    stateDirectory,
-    now,
-    probe ?? ((host, complete) => sshProbe(host, complete, spawn, undefined, policy)),
-    policy,
-  );
+  const hostIncidents = probeCheckHosts(state, stateDirectory, now, probe);
   const stabilize = head(checkout, branches.stabilize);
   const dev = head(checkout, branches.integration);
   if (stabilize && dev && !isAncestor(checkout, stabilize, dev)) {
     state.stabilizeBehindSince ??= new Date(now).toISOString();
     const behind = now - Date.parse(state.stabilizeBehindSince);
-    if (behind >= policy.watchdog.stabilizeBehindMs)
+    if (behind >= STABILIZE_BEHIND_MS)
       found.push({
         key: `stabilize-behind:${state.stabilizeBehindSince}`,
         summary:
@@ -577,15 +552,13 @@ export function watch(
       // and woke its manager 15 times for one attempt (2026-10-29).
       const unchanged = previous !== undefined && previous.commits === attemptAlert.commits;
       const lastReportAt = previous ? Date.parse(previous.at) : Number.NaN;
-      if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < policy.watchdog.longAttemptReportMs)
-        continue;
+      if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < 60 * 60_000) continue;
       reports[violation.key] = {
         at: new Date(now).toISOString(),
         command: attemptAlert.command ?? '(none recorded)',
         commits: attemptAlert.commits ?? 0,
       };
-    } else if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < policy.watchdog.alertEveryMs)
-      continue;
+    } else if (attemptAlert ? state.alerts[violation.key] !== undefined : now - last < ALERT_EVERY_MS) continue;
     deliver(
       attemptAlert
         ? violation.summary

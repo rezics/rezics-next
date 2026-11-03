@@ -1,5 +1,3 @@
-import { gitOutputError } from './merge.ts';
-import { defaultPolicy } from './policy.ts';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
@@ -118,15 +116,8 @@ export function newOwnerConflictHandoff(
 }
 
 /** Explicit per-command rerere configuration keeps all owned worktrees on one common-dir cache. */
-export function ownerConflictGitConfig(cwd: string, policy = defaultPolicy.merge): string[] {
-  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], {
-    cwd,
-    encoding: 'utf8',
-    timeout: policy.commandTimeoutMs,
-    maxBuffer: policy.gitBufferBytes,
-  });
-  const overflow = gitOutputError(common, policy.gitBufferBytes);
-  if (overflow) throw overflow;
+export function ownerConflictGitConfig(cwd: string): string[] {
+  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd, encoding: 'utf8' });
   if (common.status !== 0)
     throw new Error(common.stderr?.trim() || common.error?.message || 'Cannot locate Git common directory');
   const rrCache = resolve(cwd, common.stdout.trim(), 'rr-cache');
@@ -154,9 +145,9 @@ function inheritedGitConfigOffset(env: NodeJS.ProcessEnv, added: number): number
 }
 
 /** Git settings for commands started by a resumed worker, scoped to that process tree. */
-export function ownerConflictEnvironment(cwd: string, policy = defaultPolicy.merge): Record<string, string> {
+export function ownerConflictEnvironment(cwd: string): Record<string, string> {
   const offset = inheritedGitConfigOffset(process.env, OWNER_CONFLICT_APPENDED_CONFIG_PAIRS);
-  const config = ownerConflictGitConfig(cwd, policy);
+  const config = ownerConflictGitConfig(cwd);
   const pairs: [string, string][] = [];
   for (let index = 0; index < config.length; index += 2) {
     if (config[index] !== '-c') continue;
@@ -179,22 +170,11 @@ export function ownerConflictEnvironment(cwd: string, policy = defaultPolicy.mer
 export type OwnerConflictGitResult = { status: number | null; stdout: string; stderr: string; error?: Error };
 
 export function ownerConflictGit(cwd: string, ...args: string[]): OwnerConflictGitResult {
-  return policyOwnerConflictGit(cwd, args);
-}
-
-export function policyOwnerConflictGit(
-  cwd: string,
-  args: string[],
-  policy = defaultPolicy.merge,
-): OwnerConflictGitResult {
-  const result = spawnSync('git', [...ownerConflictGitConfig(cwd, policy), ...args], {
+  const result = spawnSync('git', [...ownerConflictGitConfig(cwd), ...args], {
     cwd,
     encoding: 'utf8',
-    maxBuffer: policy.gitBufferBytes,
-    timeout: policy.commandTimeoutMs,
+    maxBuffer: 32 * 1024 * 1024,
   });
-  const overflow = gitOutputError(result, policy.gitBufferBytes);
-  if (overflow) return { status: null, stdout: '', stderr: '', error: overflow };
   return {
     status: result.status,
     stdout: result.stdout ?? '',

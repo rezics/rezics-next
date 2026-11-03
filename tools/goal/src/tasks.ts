@@ -10,8 +10,7 @@ import {
   type ProofProducer,
   nativeCheckId,
 } from './verification.ts';
-import { gitOutputError, remoteCheckEnvironment } from './merge.ts';
-import { defaultPolicy } from './policy.ts';
+import { remoteCheckEnvironment } from './merge.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -225,23 +224,16 @@ function reportFrozenFormatError(error: string | undefined): void {
   if (error) console.error(`Frozen acceptance formatter failed:\n${error}`);
 }
 
-export function git(cwd: string, args: string[], policy = defaultPolicy.merge): string {
-  const result = spawnSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: policy.gitBufferBytes,
-    timeout: policy.commandTimeoutMs,
-  });
-  const overflow = gitOutputError(result, policy.gitBufferBytes);
-  if (overflow) throw overflow;
+export function git(cwd: string, args: string[]): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
     throw new Error(`git ${args[0]}: ${detail}`);
   }
   return result.stdout.trimEnd();
 }
-function installWorktreeDependencies(worktree: string, settings: Settings): void {
-  installShared(worktree, undefined, undefined, settings.policy);
+function installWorktreeDependencies(worktree: string): void {
+  installShared(worktree);
 }
 export type RetryOptions = {
   brief?: string;
@@ -292,7 +284,7 @@ export class WorkerTasks {
   constructor(
     readonly settings: Settings,
     readonly store: WorkerStore,
-    readonly reader: PoolReader = (pool) => readPool(pool, Date.now(), settings.policy?.provider),
+    readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch,
     readonly proofProducer: ProofProducer = productionProofProducer(
       store,
@@ -301,7 +293,7 @@ export class WorkerTasks {
     ),
   ) {
     this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
-      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory, undefined, settings.policy?.inbox).deliver({
+      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
         managerId: settings.integration.supermanager,
         kind: 'instruction',
         summary,
@@ -319,19 +311,15 @@ export class WorkerTasks {
   private branchHead(branch: string, createFromMain: boolean): string {
     const reference = `refs/heads/${branch}`;
     try {
-      return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference], this.settings.policy?.merge);
+      return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
     } catch {
       if (!createFromMain) throw new Error(`stabilize branch ${branch} does not exist`);
-      const main = git(
-        this.settings.mainCheckout,
-        ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`],
-        this.settings.policy?.merge,
-      );
+      const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
       try {
-        git(this.settings.mainCheckout, ['branch', '--', branch, main], this.settings.policy?.merge);
+        git(this.settings.mainCheckout, ['branch', '--', branch, main]);
       } catch (error) {
         try {
-          return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference], this.settings.policy?.merge);
+          return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]);
         } catch {
           throw error;
         }
@@ -384,16 +372,11 @@ export class WorkerTasks {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
     if (task.workspace) return;
-    const gitPath = (name: string) =>
-      resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge));
+    const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]));
     // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
     // task's lease, so a lock a minute old belongs to nobody.
     const lock = gitPath('index.lock');
-    if (
-      existsSync(lock) &&
-      Date.now() - statSync(lock).mtimeMs > (this.settings.policy ?? defaultPolicy).worker.worktreeLockAgeMs
-    )
-      rmSync(lock, { force: true });
+    if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > 60_000) rmSync(lock, { force: true });
     for (const [state, operation] of [
       ['rebase-merge', 'rebase'],
       ['rebase-apply', 'rebase'],
@@ -401,7 +384,7 @@ export class WorkerTasks {
     ] as const) {
       if (!existsSync(gitPath(state))) continue;
       try {
-        git(task.worktree, [operation, '--abort'], this.settings.policy?.merge);
+        git(task.worktree, [operation, '--abort']);
       } catch (error) {
         if (operation !== 'rebase') throw error;
       }
@@ -411,36 +394,26 @@ export class WorkerTasks {
     // A setup that failed mid-rebase leaves HEAD detached at the commit it rebased onto. With no commit there that a
     // branch lacks, the branch checkout is the attempt's state.
     if (
-      !git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge) &&
-      !git(task.worktree, ['rev-list', 'HEAD', '--not', '--branches'], this.settings.policy?.merge)
+      !git(task.worktree, ['branch', '--show-current']) &&
+      !git(task.worktree, ['rev-list', 'HEAD', '--not', '--branches'])
     )
-      git(task.worktree, ['checkout', '-f', task.branch], this.settings.policy?.merge);
-    const branch = git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge);
+      git(task.worktree, ['checkout', '-f', task.branch]);
+    const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch)
       throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
-    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)) return;
-    git(task.worktree, ['add', '-A'], this.settings.policy?.merge);
-    git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`], this.settings.policy?.merge);
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return;
+    git(task.worktree, ['add', '-A']);
+    git(task.worktree, ['commit', '-m', `wip: leftovers from attempt ${attempt}`]);
   }
   /** A worker's acceptance runs on its worktree, so what lands is that worktree: commit what the worker left out. */
   commitFinishedWork(task: Task, attempt: number): boolean {
     if (task.brief.kind === 'verification') return false;
     if (task.workspace) return false;
     for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
-      if (
-        existsSync(
-          resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], this.settings.policy?.merge)),
-        )
-      )
-        return false;
-    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge))
-      return false;
-    git(task.worktree, ['add', '-A'], this.settings.policy?.merge);
-    git(
-      task.worktree,
-      ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`],
-      this.settings.policy?.merge,
-    );
+      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) return false;
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return false;
+    git(task.worktree, ['add', '-A']);
+    git(task.worktree, ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`]);
     return true;
   }
   private validateBrief(
@@ -449,11 +422,7 @@ export class WorkerTasks {
     actor?: AuthenticatedManager | null,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
-    const brief = parseBrief(
-      markdown,
-      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
-      this.settings.policy?.brief,
-    );
+    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
     if (brief.goal === 'control-plane') {
       const outside = brief.paths.filter((path) => !path.startsWith('tools/goal/'));
       if (outside.length)
@@ -513,11 +482,7 @@ export class WorkerTasks {
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
     // The lease covers worktree creation, dependency install and frozen-file formatting, about a minute under load.
     // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
-    const lease = acquireDirectoryLeaseWaiting(
-      join(this.settings.stateDirectory, 'leases', 'dispatch'),
-      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
       const module = webModule(submittedBrief, this.settings);
       if (module) {
@@ -536,13 +501,13 @@ export class WorkerTasks {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
           if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
         });
-        if (firstUse) installWorktreeDependencies(workspace.worktree, this.settings);
+        if (firstUse) installWorktreeDependencies(workspace.worktree);
         this.prepareSharedFrozen(this.store.task(id));
         return this.store.task(id);
       }
       const brief = submittedBrief;
       const base = brief.proof?.sourceCommit ?? this.taskBaseHead(brief);
-      const files = parseFrozenFiles(brief.markdown, brief.paths, this.settings.policy?.brief);
+      const files = parseFrozenFiles(brief.markdown, brief.paths);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       const frozen = prepareInitialDispatch({
@@ -550,19 +515,11 @@ export class WorkerTasks {
         briefText: brief.markdown,
         branch,
         worktree,
-        createWorktree: () =>
-          git(
-            this.settings.mainCheckout,
-            ['worktree', 'add', '-b', branch, worktree, base],
-            this.settings.policy?.merge,
-          ),
-        ...(brief.kind !== 'verification'
-          ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
-          : {}),
+        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
+        ...(brief.kind !== 'verification' ? { installDependencies: () => installWorktreeDependencies(worktree) } : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
-        removeWorktree: () =>
-          git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge),
-        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch], this.settings.policy?.merge),
+        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
+        deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
       });
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
@@ -578,7 +535,7 @@ export class WorkerTasks {
     }
   }
   private prepareSharedFrozen(task: Task): void {
-    const files = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
+    const files = parseFrozenFiles(task.brief.markdown, task.brief.paths);
     const prior = frozenFiles(task);
     if (
       files.length === prior.length &&
@@ -593,7 +550,7 @@ export class WorkerTasks {
   }
   /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
   protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
-    const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
+    const ownership = readRiskOwnership(this.settings.riskAreasFile);
     return Object.entries(ownership.areas)
       .filter(([area]) => !brief.riskAreas.includes(area))
       .flatMap(([, patterns]) => patterns);
@@ -728,10 +685,7 @@ export class WorkerTasks {
     options: { expectedAttempt: number; brief: string },
     actor?: AuthenticatedManager | null,
   ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
-    const lease = acquireDirectoryLease(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     let briefPath: string | undefined;
     try {
       return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
@@ -785,12 +739,8 @@ export class WorkerTasks {
           throw new Error('amendment outside a shared module requires a new isolated task');
         if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
           throw new Error('prelaunch amendment preserves ordinary priority only');
-        const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
-        const nextFrozen = parseFrozenFiles(
-          submitted.brief.markdown,
-          submitted.brief.paths,
-          this.settings.policy?.brief,
-        );
+        const previousFrozen = parseFrozenFiles(task.brief.markdown, task.brief.paths);
+        const nextFrozen = parseFrozenFiles(submitted.brief.markdown, submitted.brief.paths);
         if (
           previousFrozen.length !== nextFrozen.length ||
           previousFrozen.some((file) => !nextFrozen.some((next) => next.path === file.path && next.hash === file.hash))
@@ -850,10 +800,7 @@ export class WorkerTasks {
     status: 'released';
     checks: string[];
   } {
-    const lease = acquireDirectoryLease(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
       if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
@@ -876,10 +823,7 @@ export class WorkerTasks {
     options: ProofStartOptions,
     actor?: AuthenticatedManager | null,
   ): ProofStartRegistration {
-    const lease = acquireDirectoryLease(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     let briefPath: string | undefined;
     try {
       const task = this.store.task(taskId);
@@ -912,7 +856,7 @@ export class WorkerTasks {
         this.settings.integration.operationsManager,
         this.settings.integrationBranch,
       );
-      const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
       if (missing.length)
         throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
       if (submitted) {
@@ -961,11 +905,7 @@ export class WorkerTasks {
     const next =
       briefFile === undefined
         ? current
-        : parseBrief(
-            readFileSync(briefFile, 'utf8'),
-            readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
-            this.settings.policy?.brief,
-          );
+        : parseBrief(readFileSync(briefFile, 'utf8'), readRiskOwnership(this.settings.riskAreasFile));
     return devProductBrief(current) && devProductBrief(next);
   }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
@@ -975,10 +915,7 @@ export class WorkerTasks {
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
     const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
-    const lease = acquireDirectoryLease(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
     } finally {
@@ -993,10 +930,7 @@ export class WorkerTasks {
     briefFile: string,
     actor: AuthenticatedManager,
   ): void {
-    const lease = acquireDirectoryLease(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
       if (task.currentAttempt !== expectedAttempt)
@@ -1062,7 +996,7 @@ export class WorkerTasks {
         this.settings.integration.operationsManager,
         this.settings.integrationBranch,
       );
-      const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
+      const missing = preflightProof(this.settings.mainCheckout, nextBrief);
       if (missing.length)
         throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
     }
@@ -1264,10 +1198,7 @@ export class WorkerTasks {
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
       // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
-      const lease = acquireDirectoryLease(
-        join(this.settings.stateDirectory, 'leases', taskId),
-        this.settings.policy?.leases,
-      );
+      const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
       try {
         // Another process may have started it while this one waited for capacity.
         if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
@@ -1296,14 +1227,12 @@ export class WorkerTasks {
     this.ensureWorktree(task);
     this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.taskBaseHead(task.brief);
-    const commits = Number(
-      git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge),
-    );
-    const branch = git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge);
+    const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
+    const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch)
       throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
-      const common = git(task.worktree, ['merge-base', task.base, integration], this.settings.policy?.merge);
+      const common = git(task.worktree, ['merge-base', task.base, integration]);
       const branchName = `${this.taskBaseBranch(task.brief)} branch`;
       if (common !== task.base)
         throw new HeldTaskConflictError(`held task base is not an ancestor of the current ${branchName}`);
@@ -1319,24 +1248,18 @@ export class WorkerTasks {
           `${logPath}.rebase`,
           this.settings.derivedFiles,
           task.brief.paths,
-          this.settings.policy?.brief,
-          this.settings.policy?.merge,
         );
       } catch (error) {
-        const conflicts = git(
-          task.worktree,
-          ['diff', '--name-only', '--diff-filter=U', '-z'],
-          this.settings.policy?.merge,
-        )
+        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
           .split('\0')
           .filter(Boolean);
         if (!conflicts.length) throw error;
-        git(task.worktree, ['rebase', '--abort'], this.settings.policy?.merge);
+        git(task.worktree, ['rebase', '--abort']);
         const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts }, true);
         if (!worker) throw new Error('released task was unexpectedly held again');
         return worker;
       }
-    } else git(task.worktree, ['reset', '--hard', integration], this.settings.policy?.merge);
+    } else git(task.worktree, ['reset', '--hard', integration]);
     if (task.currentAttempt) {
       task = this.store.updateHeldRetryTask(
         { taskId, attempt: task.currentAttempt },
@@ -1357,20 +1280,16 @@ export class WorkerTasks {
   /** Recreate a finished task's removed checkout while holding its task lease. */
   private ensureWorktree(task: Task): void {
     if (existsSync(task.worktree)) return;
-    const lease = acquireDirectoryLeaseWaiting(
-      join(this.settings.stateDirectory, 'leases', 'dispatch'),
-      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
     try {
       mkdirSync(dirname(task.worktree), { recursive: true });
       try {
-        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], this.settings.policy?.merge);
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       } catch {
-        git(this.settings.mainCheckout, ['worktree', 'prune'], this.settings.policy?.merge);
-        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch], this.settings.policy?.merge);
+        git(this.settings.mainCheckout, ['worktree', 'prune']);
+        git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       }
-      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, this.settings);
+      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree);
     } finally {
       lease.release();
     }
@@ -1403,28 +1322,23 @@ export class WorkerTasks {
   /** Prepare an authorized unreserved capture without rewriting retained empty-report branches. */
   private prepareProofWorktree(task: Task, ref: Attempt): Task {
     const captured = task.brief.proof!.sourceCommit;
-    const tip = git(task.worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge);
-    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge))
+    const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']))
       throw new Error('Proof source is read-only; worktree differs from captured commit');
     if (tip !== captured) {
       this.store.assertProofPreparation(ref);
       if (
-        git(task.worktree, ['merge-base', task.base, tip], this.settings.policy?.merge) !== task.base ||
-        git(task.worktree, ['diff', '--name-only', task.base, tip], this.settings.policy?.merge)
+        git(task.worktree, ['merge-base', task.base, tip]) !== task.base ||
+        git(task.worktree, ['diff', '--name-only', task.base, tip])
       )
         throw new Error(
           'Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture',
         );
       const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
-      if (!existsSync(worktree))
-        git(
-          this.settings.mainCheckout,
-          ['worktree', 'add', '--detach', worktree, captured],
-          this.settings.policy?.merge,
-        );
+      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured]);
       if (
-        git(worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge) !== captured ||
-        git(worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)
+        git(worktree, ['rev-parse', 'HEAD']) !== captured ||
+        git(worktree, ['status', '--porcelain', '--untracked-files=all'])
       )
         throw new Error('Proof captured source preparation differs from its registered commit');
       this.store.event(ref, 'proof-source-prepared', {
@@ -1460,7 +1374,7 @@ export class WorkerTasks {
       throw new ProofUnavailableError(
         'Proof pending/unavailable: captured ordinary scripts/worker-check.ts is missing',
       );
-    const missing = preflightProof(this.settings.mainCheckout, task.brief, this.settings.policy?.proof);
+    const missing = preflightProof(this.settings.mainCheckout, task.brief);
     if (missing.length)
       throw new ProofUnavailableError(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
   }
@@ -1498,13 +1412,7 @@ export class WorkerTasks {
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
     try {
-      lease = leased
-        ? undefined
-        : acquireDirectoryLeaseWaiting(
-            join(this.settings.stateDirectory, 'leases', taskId),
-            undefined,
-            this.settings.policy?.leases,
-          );
+      lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
@@ -1620,7 +1528,7 @@ export class WorkerTasks {
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
-      const table = readRouting(this.settings.routingFile, this.settings.policy?.routing);
+      const table = readRouting(this.settings.routingFile);
       const pinned = nextBrief.model !== undefined;
       // A retry keeps its engine while the routing table still offers it for the class; an engine the table dropped
       // (a failing or disallowed pool) is routed afresh, so table changes reach retries at once.
@@ -1641,7 +1549,7 @@ export class WorkerTasks {
         .attempts()
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
-      const routing = readRouting(this.settings.routingFile, this.settings.policy?.routing);
+      const routing = readRouting(this.settings.routingFile);
       let fallbacks =
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
@@ -1680,7 +1588,6 @@ export class WorkerTasks {
         readings,
         {
           history,
-          policy: this.settings.policy?.provider,
           ...(old && !switched ? { preferred: old.pool } : {}),
           ...(options.excludePools ? { exclude: options.excludePools } : {}),
         },
@@ -1690,12 +1597,10 @@ export class WorkerTasks {
           ? undefined
           : (candidate, now) => {
               const reading = readings.find((value) => value.pool === candidate.name);
-              return reading
-                ? pace(reading, candidate, now, schedule, this.settings.policy?.pacing)?.urgency
-                : undefined;
+              return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
             },
       );
-      const oldSession = old ? attemptSession(old, this.settings.policy?.records) : null;
+      const oldSession = old ? attemptSession(old) : null;
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
@@ -1756,9 +1661,9 @@ export class WorkerTasks {
       for (const previous of this.store
         .attempts(taskId)
         .filter((a) => a.attempt < next.attempt && !a.supersededFinalized)) {
-        await terminateProcessGroup(previous.process, this.settings.terminationGraceMs, this.settings.policy?.process);
+        await terminateProcessGroup(previous.process, this.settings.terminationGraceMs);
         for (const process of previous.auxiliaryProcesses)
-          await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
+          await terminateProcessGroup(process, this.settings.terminationGraceMs);
       }
       this.store.assertCurrent(next);
       this.store.finalizeSuperseded(
@@ -1795,12 +1700,12 @@ export class WorkerTasks {
           setupStep = 'preflighting original proof';
           requireOriginalProofProfile(profile);
           if (task.brief.criticalPath) throw new Error('proof requires ordinary Codex routing');
-          const missing = preflightProof(task.worktree, task.brief, this.settings.policy?.proof);
+          const missing = preflightProof(task.worktree, task.brief);
           if (missing.length)
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
           task = this.prepareProofWorktree(task, next);
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree, this.settings);
+          installWorktreeDependencies(task.worktree);
           if (
             existsSync(join(task.worktree, 'package.json')) &&
             !existsSync(join(task.worktree, 'node_modules/.bin/bun'))
@@ -1833,11 +1738,9 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
-              this.settings.policy,
             ),
             this.settings.codex,
             resumeSession,
-            this.settings.policy,
           );
         }
         if (task.workspace) {
@@ -1869,9 +1772,9 @@ export class WorkerTasks {
                 throw new Error(
                   `Cannot refresh dependencies in ${task.worktree}: workspace custody held by task ${peer.id}`,
                 );
-              if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge))
+              if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']))
                 throw new Error(`Cannot refresh dependencies in ${task.worktree}: unresolved workspace paths`);
-              installWorktreeDependencies(task.worktree, this.settings);
+              installWorktreeDependencies(task.worktree);
             }
             const context = captureLaunchContext(this.store, next, boundary, origin);
             const prompt = workerPrompt(
@@ -1882,24 +1785,14 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
-              this.settings.policy,
             );
             retryPrepared = true;
-            return await this.launcher(
-              this.store,
-              task,
-              next,
-              pool,
-              prompt,
-              this.settings.codex,
-              resumeSession,
-              this.settings.policy,
-            );
+            return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
         setupStep = 'committing frozen acceptance files';
-        const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths, this.settings.policy?.brief);
+        const frozenBlocks = parseFrozenFiles(task.brief.markdown, task.brief.paths);
         const priorFiles = frozenFiles(task);
         const frozen = commitFrozenFiles(
           task.worktree,
@@ -1914,15 +1807,13 @@ export class WorkerTasks {
         reportFrozenFormatError(frozen.formatterError);
         setupStep = `rebasing onto current ${this.taskBaseBranch(task.brief)}`;
         const integration = this.taskBaseHead(task.brief);
-        const tip = git(task.worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge);
+        const tip = git(task.worktree, ['rev-parse', 'HEAD']);
         const workerCommit = previousConflict?.workerCommit ?? tip;
         const rebaseLog = `${next.logPath}.rebase`;
         mkdirSync(dirname(rebaseLog), { recursive: true });
         let files: string[] = [];
         if (task.base !== integration) {
-          const commits = Number(
-            git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`], this.settings.policy?.merge),
-          );
+          const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
           if (commits > 0) {
             try {
               // Integration derived files such as bun.lock are regenerated by rebaseOnto before the retry starts.
@@ -1933,43 +1824,31 @@ export class WorkerTasks {
                 rebaseLog,
                 this.settings.derivedFiles,
                 task.brief.paths,
-                this.settings.policy?.brief,
-                this.settings.policy?.merge,
               );
             } catch (error) {
-              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
-                .split('\0')
-                .filter(Boolean);
+              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
               if (!files.length) throw error;
             }
-          } else git(task.worktree, ['reset', '--hard', integration], this.settings.policy?.merge);
+          } else git(task.worktree, ['reset', '--hard', integration]);
         }
         task = this.store.updateTask(next, (current) => {
           current.base = integration;
         });
         if (options.escalation === 'rebase-conflict') {
-          const controllerHead = git(
-            task.worktree,
-            ['rev-parse', `${task.branch}^{commit}`],
-            this.settings.policy?.merge,
-          );
+          const controllerHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
           this.store.event(next, 'worker-source-baseline', { workerCommit, controllerHead });
         }
         // Name conflicted files only while a rebase is really in progress here; otherwise the prompt sent the worker to
         // continue a rebase that did not exist (the retry's own rebase onto its base had applied cleanly).
         const rebasing = ['rebase-merge', 'rebase-apply'].some((name) =>
-          existsSync(
-            resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge)),
-          ),
+          existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]))),
         );
         if (!files.length)
-          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
-            .split('\0')
-            .filter(Boolean);
+          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         if (!files.length && !rebasing) {
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree, this.settings);
+          installWorktreeDependencies(task.worktree);
         }
         const context = captureLaunchContext(this.store, next, boundary, origin);
         const prompt = workerPrompt(
@@ -1980,19 +1859,9 @@ export class WorkerTasks {
           this.settings.mainCheckout,
           context,
           this.settings.stateDirectory,
-          this.settings.policy,
         );
         retryPrepared = true;
-        return await this.launcher(
-          this.store,
-          task,
-          next,
-          pool,
-          prompt,
-          this.settings.codex,
-          resumeSession,
-          this.settings.policy,
-        );
+        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
       } catch (error) {
         const failed = this.store.updateAttempt(next, (a) => {
           a.state = 'exited';
@@ -2006,10 +1875,7 @@ export class WorkerTasks {
           makeRecord(
             this.store.task(taskId),
             failed,
-            readMeasurement(failed, {
-              policy: this.settings.policy ?? defaultPolicy,
-              configDirectory: pool.configDirectory,
-            }),
+            readMeasurement(failed, { configDirectory: pool.configDirectory }),
             'stopped',
           ),
         );
@@ -2023,22 +1889,14 @@ export class WorkerTasks {
         } else if (!retryPrepared) {
           const detail = String(error)
             .replace(/[\r\n]+/g, ' ')
-            .slice(0, (this.settings.policy ?? defaultPolicy).worker.retrySetupCharacters);
+            .slice(0, 800);
           const event = {
             managerId: this.store.task(taskId).brief.manager,
             taskId,
             kind: 'environment' as const,
-            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(
-              0,
-              (this.settings.policy ?? defaultPolicy).worker.summaryCharacters,
-            ),
+            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000),
           };
-          new SqliteManagerInbox(
-            this.store.db,
-            this.settings.integration.inboxDirectory,
-            undefined,
-            this.settings.policy?.inbox,
-          ).deliver(event);
+          new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory).deliver(event);
         }
         throw error;
       }
@@ -2048,11 +1906,7 @@ export class WorkerTasks {
     }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
-    const lease = acquireDirectoryLeaseWaiting(
-      join(this.settings.stateDirectory, 'leases', taskId),
-      undefined,
-      this.settings.policy?.leases,
-    );
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
       let task = this.store.task(taskId);
@@ -2067,11 +1921,7 @@ export class WorkerTasks {
       }
       const settleLogPath = this.store.attempt(ref).logPath;
       // A worker's exit may wake its follower while cancellation is still reaping descendants.
-      settlementLease = acquireDirectoryLeaseWaiting(
-        `${settleLogPath}.settle`,
-        undefined,
-        this.settings.policy?.leases,
-      );
+      settlementLease = acquireDirectoryLeaseWaiting(`${settleLogPath}.settle`);
       task = this.store.task(taskId);
       if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
         throw new StaleAttemptError(ref, task.currentAttempt);
@@ -2088,8 +1938,7 @@ export class WorkerTasks {
               .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
               .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
           );
-          for (const process of owned.values())
-            await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
+          for (const process of owned.values()) await terminateProcessGroup(process, this.settings.terminationGraceMs);
           this.store.finishTermination(ref);
         } catch (error) {
           this.store.finishTermination(ref, String(error));
@@ -2124,12 +1973,7 @@ export class WorkerTasks {
       held.push(task.id);
       heldByManager.set(task.brief.manager, held);
     }
-    const inbox = new SqliteManagerInbox(
-      this.store.db,
-      this.settings.integration.inboxDirectory,
-      undefined,
-      this.settings.policy?.inbox,
-    );
+    const inbox = new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory);
     for (const [managerId, heldTasks] of heldByManager) {
       const event = {
         managerId,
@@ -2151,16 +1995,12 @@ export class WorkerTasks {
     const head = this.branchHead(this.settings.stabilizeBranch, false);
     if (!task.base) throw new Error('task has no recorded base commit');
     try {
-      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head], this.settings.policy?.merge);
+      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', task.base, head]);
     } catch {
       throw new Error('recorded base commit is not an ancestor of the stabilize head');
     }
     const markdown = withStabilizeTarget(task.brief.markdown);
-    const brief = parseBrief(
-      markdown,
-      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
-      this.settings.policy?.brief,
-    );
+    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
     const ref = { taskId, attempt: task.currentAttempt };
     const apply = (current: Task) => {
       writeFileSync(current.briefPath, markdown);

@@ -1,4 +1,3 @@
-import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { JSON5 } from 'bun';
@@ -22,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
 const REPOSITORY_ROOT = resolve(import.meta.dir, '../../..');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OUTPUT_LIMIT = 32 * 1024;
+const PROCESS_TIMEOUT_MS = 30_000;
 
 type ContractOption = {
   flag: string;
@@ -126,18 +127,13 @@ function commandExists(file: string): boolean {
   }
 }
 
-function run(
-  command: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv = process.env,
-  policy = defaultPolicy.nativeCommands,
-): RunResult {
+function run(command: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): RunResult {
   const result = spawnSync(command[0]!, command.slice(1), {
     cwd,
     env,
     encoding: 'utf8',
-    timeout: policy.commandTimeoutMs,
-    maxBuffer: policy.commandBufferBytes,
+    timeout: PROCESS_TIMEOUT_MS,
+    maxBuffer: OUTPUT_LIMIT,
   });
   return {
     command,
@@ -149,12 +145,12 @@ function run(
   };
 }
 
-function displayResult(result: RunResult, policy = defaultPolicy.nativeCommands): Record<string, unknown> {
+function displayResult(result: RunResult): Record<string, unknown> {
   return {
     cwd: result.cwd,
     exitCode: result.status,
-    stdout: result.stdout.slice(0, policy.commandBufferBytes),
-    stderr: result.stderr.slice(0, policy.commandBufferBytes),
+    stdout: result.stdout.slice(0, OUTPUT_LIMIT),
+    stderr: result.stderr.slice(0, OUTPUT_LIMIT),
     ...(result.error ? { error: result.error } : {}),
   };
 }
@@ -182,14 +178,13 @@ function runtimeCheck(
   executable: string,
   contract: CheckCompatibilityContract,
   artifact?: BunArtifact,
-  policy = defaultPolicy.nativeCommands,
 ): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
   const versionArgs = contract.workerCheck.bun.versionArgv;
   const revisionArgs = contract.workerCheck.bun.revisionArgv;
   const versionCommand = [executable, ...versionArgs];
   const revisionCommand = [executable, ...revisionArgs];
-  const version = run(versionCommand, scriptsRoot, process.env, policy);
+  const version = run(versionCommand, scriptsRoot);
   const actualVersion = version.stdout.trim();
   const pinShapeOk =
     expectedPin.startsWith(contract.workerCheck.bun.versionPrefix) &&
@@ -212,10 +207,10 @@ function runtimeCheck(
         : version.status !== 0 || version.error
           ? `Could not execute the pinned Bun version probe at ${executable}.`
           : `Pinned Bun reports ${JSON.stringify(actualVersion)} but ${contract.workerCheck.bun.manifestField} requires ${JSON.stringify(expectedVersion)}.`,
-    { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version, policy) },
+    { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version) },
   );
 
-  const revision = run(revisionCommand, scriptsRoot, process.env, policy);
+  const revision = run(revisionCommand, scriptsRoot);
   const actualRevision = revision.stdout.trim();
   const revisionOk =
     revision.status === 0 &&
@@ -230,7 +225,7 @@ function runtimeCheck(
     revisionOk
       ? `Pinned Bun revision probe returned ${actualRevision}.`
       : `Bun.revision must be ${artifact?.runtimeRevision ?? 'nonempty'}; received ${JSON.stringify(actualRevision)} from ${executable}.`,
-    { expected: artifact?.runtimeRevision ?? null, actual: actualRevision || null, ...displayResult(revision, policy) },
+    { expected: artifact?.runtimeRevision ?? null, actual: actualRevision || null, ...displayResult(revision) },
   );
   return checks;
 }
@@ -241,10 +236,9 @@ export function checkPinnedBunRuntime(
   expectedPin: string,
   executable: string,
   contract = CHECK_COMPATIBILITY_CONTRACT,
-  policy = defaultPolicy.nativeCommands,
 ): CompatibilityCheck[] {
   if (!isAbsolute(executable)) executable = resolve(scriptsRoot, executable);
-  return runtimeCheck(resolve(scriptsRoot), expectedPin, executable, contract, undefined, policy);
+  return runtimeCheck(resolve(scriptsRoot), expectedPin, executable, contract);
 }
 
 function validateWorkerRecord(
@@ -334,7 +328,6 @@ function writeChildCode(gatePath?: string, exitCode = 0, runtimeProofPath?: stri
       [
         `const fs = await import('node:fs');`,
         `const gate = ${JSON.stringify(gatePath)};`,
-        // A fixture release handshake, not a production polling interval.
         `while (!fs.existsSync(gate)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);`,
         `process.exit(${exitCode});`,
       ].join('\n')
@@ -351,9 +344,8 @@ function commandResultCheck(
   ok: boolean,
   detail: string,
   evidence: Record<string, unknown> = {},
-  policy = defaultPolicy.nativeCommands,
 ): void {
-  pushCheck(checks, field, command, ok, detail, { ...displayResult(result, policy), ...evidence });
+  pushCheck(checks, field, command, ok, detail, { ...displayResult(result), ...evidence });
 }
 
 function addRecordChecks(
@@ -406,7 +398,6 @@ function startWorkerCheck(
   contract: CheckCompatibilityContract,
   waitForRelease: boolean,
   pinnedRuntime = false,
-  policy = defaultPolicy.nativeCommands,
 ): { id?: string; childArgv: string[]; recordArgv: string[]; gatePath?: string } {
   const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
   if (gatePath) rmSync(gatePath, { force: true });
@@ -435,7 +426,7 @@ function startWorkerCheck(
   delete env.GOAL_TASK_ID;
   delete env.GOAL_ATTEMPT;
   delete env.GOAL_CHECK_REGISTRY;
-  const result = run(command, scratchRoot, env, policy);
+  const result = run(command, scratchRoot, env);
   const ids = [...result.stdout.matchAll(/^check: id ([0-9a-f-]{36})$/gm)].map((match) => match[1]!);
   const id = ids[0];
   const validId = ids.length === 1 && UUID.test(id ?? '');
@@ -449,7 +440,6 @@ function startWorkerCheck(
       ? 'The actual worker-check start form returned a UUID.'
       : `Expected a successful start command to print a UUID; received exit ${String(result.status)}.`,
     { id: id ?? null, idIsUuid: validId },
-    policy,
   );
   return {
     ...(validId ? { id } : {}),
@@ -465,7 +455,6 @@ function checkWorkerCheckLifecycle(
   scratchRoot: string,
   contract: CheckCompatibilityContract,
   pinnedRuntime = false,
-  policy = defaultPolicy.nativeCommands,
 ): void {
   const workerScript = resolve(scriptsRoot, contract.workerCheck.script);
   if (!commandExists(workerScript)) {
@@ -486,7 +475,7 @@ function checkWorkerCheckLifecycle(
     'Required worker-check script exists.',
   );
 
-  const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime, policy);
+  const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime);
   if (!pending.id) {
     if (pending.gatePath) writeFileSync(pending.gatePath, 'release after malformed start output\n');
     return;
@@ -515,7 +504,7 @@ function checkWorkerCheckLifecycle(
   writeFileSync(gatePath, 'continue\n');
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? pending.id! : part));
   const waitCommand = [process.execPath, workerScript, ...waitArgs];
-  const pendingWait = run(waitCommand, scratchRoot, process.env, policy);
+  const pendingWait = run(waitCommand, scratchRoot, process.env);
   const pendingRecord = readWorkerRecord(scratchRoot, pending.id, contract);
   const pendingLog = pendingWait.stdout
     .split(/\r?\n/)
@@ -535,7 +524,6 @@ function checkWorkerCheckLifecycle(
       ? 'The foreground wait form completed the still-running check successfully.'
       : 'The foreground wait form did not report the successful result and log path.',
     { id: pending.id },
-    policy,
   );
   addRecordChecks(
     checks,
@@ -550,11 +538,11 @@ function checkWorkerCheckLifecycle(
     false,
   );
 
-  const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false, pinnedRuntime, policy);
+  const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false, pinnedRuntime);
   if (!failure.id) return;
   const failureWaitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? failure.id! : part));
   const failureWaitCommand = [process.execPath, workerScript, ...failureWaitArgs];
-  const failureWait = run(failureWaitCommand, scratchRoot, process.env, policy);
+  const failureWait = run(failureWaitCommand, scratchRoot, process.env);
   const failureRecord = readWorkerRecord(scratchRoot, failure.id, contract);
   const failureLog = failureWait.stdout
     .split(/\r?\n/)
@@ -574,7 +562,6 @@ function checkWorkerCheckLifecycle(
       ? 'The foreground wait form preserved a failing child exit status.'
       : 'The foreground wait form did not report the failing result and log path.',
     { id: failure.id },
-    policy,
   );
   addRecordChecks(
     checks,
@@ -678,12 +665,7 @@ function parsePackageManager(
   }
 }
 
-function checkBunPin(
-  checks: CompatibilityCheck[],
-  scriptsRoot: string,
-  contract: CheckCompatibilityContract,
-  policy = defaultPolicy.nativeCommands,
-): boolean {
+function checkBunPin(checks: CompatibilityCheck[], scriptsRoot: string, contract: CheckCompatibilityContract): boolean {
   const firstCheck = checks.length;
   const pin = parsePackageManager(scriptsRoot, checks, contract);
   const artifact = pin === undefined ? undefined : contract.workerCheck.bun.artifacts[pin];
@@ -846,7 +828,7 @@ function checkBunPin(
       `Could not establish installed package/lockfile custody: ${String(error)}.`,
     );
   }
-  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact, policy)) checks.push(check);
+  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact)) checks.push(check);
   pushCheck(
     checks,
     'workerCheck.bun.lookup',
@@ -859,12 +841,9 @@ function checkBunPin(
 }
 
 /** Verify the complete package pin, installed artifact custody and exact executable runtime identity, without remote work. */
-export function checkPinnedBunInstallation(
-  scriptsRoot: string,
-  policy = defaultPolicy.nativeCommands,
-): CompatibilityCheck[] {
+export function checkPinnedBunInstallation(scriptsRoot: string): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
-  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT, policy);
+  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT);
   return checks;
 }
 
@@ -879,7 +858,6 @@ function checkRemoteOptions(
   scriptsRoot: string,
   scratchRoot: string,
   contract: CheckCompatibilityContract,
-  policy = defaultPolicy.nativeCommands,
 ): void {
   const remoteScript = resolve(scriptsRoot, contract.remoteCheck.script);
   if (!commandExists(remoteScript)) {
@@ -916,7 +894,7 @@ function checkRemoteOptions(
     ];
     const command = [process.execPath, remoteScript, ...args];
     const env = { ...process.env, KERNEL_CHECK_REMOTE: hostsPath, REMOTE_CHECK_PRIORITY: 'landing' };
-    const result = run(command, scratchRoot, env, policy);
+    const result = run(command, scratchRoot, env);
     const parseReachedHosts = result.status !== 0 && !result.error && result.stderr.includes('lists no hosts');
     const notAdmitted = !existsSync(marker);
     const ok = parseReachedHosts && notAdmitted;
@@ -930,7 +908,6 @@ function checkRemoteOptions(
         ? `${option.flag} parsed successfully; the empty-host fixture stopped before check-host admission.`
         : `${option.flag} did not reach the empty-host boundary without admitting a command.`,
       { environment: contract.remoteCheck.requiredEnvironment, parseReachedHosts, commandWasNotAdmitted: notAdmitted },
-      policy,
     );
     rmSync(marker, { force: true });
   }
@@ -955,10 +932,7 @@ function report(
 }
 
 /** Check a scripts checkout using real worker-check and remote-check child processes. */
-export function checkScriptCompatibility(
-  scriptsRoot: string,
-  policy = defaultPolicy.nativeCommands,
-): CompatibilityReport {
+export function checkScriptCompatibility(scriptsRoot: string): CompatibilityReport {
   const root = resolve(scriptsRoot);
   const checks: CompatibilityCheck[] = [];
   if (!existsSync(root) || !statSync(root).isDirectory()) {
@@ -971,15 +945,15 @@ export function checkScriptCompatibility(
   const scratchRoot = mkdtempSync(join(temporaryBase, 'check-compatibility-'));
   try {
     // Keep production Git-based ledger discovery inside the isolated checkout, rather than the caller's main tree.
-    const isolation = run(['git', 'init', '--quiet', scratchRoot], scratchRoot, undefined, policy);
+    const isolation = run(['git', 'init', '--quiet', scratchRoot], scratchRoot);
     if (isolation.status !== 0) throw new Error(`Could not isolate compatibility checkout: ${isolation.stderr}`);
-    const pinnedRuntime = checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT, policy);
+    const pinnedRuntime = checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT);
     if (pinnedRuntime) {
       writeFileSync(join(scratchRoot, 'package.json'), readFileSync(join(root, 'package.json')));
       symlinkSync(join(root, 'node_modules'), join(scratchRoot, 'node_modules'), 'dir');
     }
-    checkWorkerCheckLifecycle(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, pinnedRuntime, policy);
-    checkRemoteOptions(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, policy);
+    checkWorkerCheckLifecycle(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, pinnedRuntime);
+    checkRemoteOptions(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT);
   } catch (error) {
     pushCheck(
       checks,

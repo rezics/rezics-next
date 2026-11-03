@@ -18,7 +18,6 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { CHECK_HOST_NAME_PATTERN } from './check-placement.ts';
 import { processIdentity, sameProcess, validateRunnerIdentity, type RunnerIdentity } from './check-custody.ts';
 import { parseArtifactManifest } from './check-artifacts.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
@@ -74,7 +73,7 @@ function fail(message: string): never {
   throw new Error(`check-output-tree: ${message}`);
 }
 function binding(value: OutputTreeBinding): void {
-  if (!new RegExp(CHECK_HOST_NAME_PATTERN).test(value.host) || !RUN.test(value.run) || !HASH.test(value.sourceSha256))
+  if (!['a', 'b'].includes(value.host) || !RUN.test(value.run) || !HASH.test(value.sourceSha256))
     fail('invalid physical source binding');
 }
 function keys(value: unknown, names: string): asserts value is Record<string, unknown> {

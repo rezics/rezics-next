@@ -1,4 +1,3 @@
-import { defaultPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { isAbsolute, win32 } from 'node:path';
 import { matchesPath } from './briefs.ts';
@@ -20,11 +19,7 @@ export function frozenFile(path: string, content: string | Uint8Array): FrozenFi
 }
 
 /** Read exact contents from fenced acceptance files embedded in a brief. */
-export function parseFrozenFiles(
-  markdown: string,
-  declaredPaths: readonly string[],
-  policy = defaultPolicy.brief,
-): FrozenFile[] {
+export function parseFrozenFiles(markdown: string, declaredPaths: readonly string[]): FrozenFile[] {
   const files: FrozenFile[] = [];
   const names = new Set<string>();
   const lines = markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
@@ -48,8 +43,7 @@ export function parseFrozenFiles(
       /[*?]/.test(path)
     )
       throw new Error(`invalid frozen file path: ${path}`);
-    if (!matchesPath(path, declaredPaths, policy))
-      throw new Error(`frozen file path is outside declared paths: ${path}`);
+    if (!matchesPath(path, declaredPaths)) throw new Error(`frozen file path is outside declared paths: ${path}`);
     if (names.has(path)) throw new Error(`duplicate frozen file path: ${path}`);
     const fence = opening[2]!;
     const closing = new RegExp(`^\\s*${fence[0]}{${fence.length},}\\s*(?:\\r?\\n|\\r|$)`);

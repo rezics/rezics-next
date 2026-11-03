@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from 'bun:test';
-import { readControlPolicy } from './policy.ts';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -109,11 +108,6 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
   expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');
   expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
-  const result = { passed: false, timedOut: false, output: 'error: first assertion\nerror: second assertion' };
-  expect(classifyRun(result, readControlPolicy({ verifier: { findingAssertions: 1 } }).verifier)).toBe(
-    'infrastructure',
-  );
-  expect(classifyRun(result)).toBe('fail');
 
   expect(
     placeInWorkspace(
@@ -342,7 +336,7 @@ test('infrastructure failure reruns only that command and never reverts a landin
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
 });
 
-test.each([undefined, 1])('runs every check within verifier concurrency %s', async (concurrency) => {
+test('runs at most VERIFY_CONCURRENCY checks at once and still runs every check', async () => {
   const root = repo();
   const base = git(root, 'rev-parse', 'dev-verified');
   const tasks: Task[] = [];
@@ -353,7 +347,6 @@ test.each([undefined, 1])('runs every check within verifier concurrency %s', asy
   }
   git(root, 'branch', '-f', 'dev', head);
   const ctx = setup(root, tasks);
-  if (concurrency !== undefined) ctx.settings.policy = readControlPolicy({ verifier: { concurrency } });
   const commands: string[] = [];
   let running = 0,
     highest = 0;
@@ -368,35 +361,7 @@ test.each([undefined, 1])('runs every check within verifier concurrency %s', asy
       return { passed: true, output: '', timedOut: false };
     },
   });
-  expect(highest).toBe(concurrency ?? VERIFY_CONCURRENCY);
+  expect(highest).toBe(VERIFY_CONCURRENCY);
   for (let index = 0; index < 8; index++) expect(commands).toContain(`acceptance task-${index}`);
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-});
-
-test('one existing-failure probe leaves unsampled prefixes unproven without reverting a landing', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const tasks: Task[] = [];
-  let head = base;
-  for (let index = 0; index < 4; index++) {
-    head = commit(root, `services/kernel/probe-${index}.ts`, `export const value = ${index};\n`, `prefix ${index}`);
-    tasks.push(landedTask(base, head, `probe-${index}`));
-  }
-  git(root, 'branch', '-f', 'dev', head);
-  const ctx = setup(root, tasks);
-  ctx.settings.policy = readControlPolicy({ verifier: { existingProbes: 1 } });
-  const probed: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command, cwd) => {
-      if (command[0] !== 'affected-check') return { passed: true, output: '', timedOut: false };
-      probed.push(git(cwd, 'rev-parse', 'HEAD'));
-      return { passed: false, output: 'error: retained assertion', timedOut: false };
-    },
-  });
-  expect(probed.sort()).toEqual([base, head, tasks[0]!.integratedCommit!].sort());
-  expect(ctx.store.devVerifierFindings().some((finding) => finding.status === 'unknown')).toBe(true);
-  expect(ctx.updates).toEqual([]);
-  expect(git(root, 'rev-parse', 'dev')).toBe(head);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
 });

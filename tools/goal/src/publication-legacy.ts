@@ -9,8 +9,8 @@ import { authenticatedManager } from './priority-authority.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { PublicationActor, PublicationControllerOptions } from './publication.ts';
 
-import { defaultPolicy } from './policy.ts';
-import { publicationInventoryFresh } from './publication-policy.ts';
+const MAX_BYTES = 1_048_576;
+const MAX_RECORDS = 256;
 type ObjectValue = Record<string, unknown>;
 type Surface = 'publisher' | 'capture' | 'preview';
 type Evidence = { path: string; hash: string; raw: string };
@@ -132,7 +132,7 @@ function sessionRetained(db: Database, owner: string, session: string): boolean 
       (Array.isArray(state.history) && state.history.some((item) => object(item) && item.threadId === session)))
   );
 }
-function privateEvidence(root: string, path: string, policy = defaultPolicy.publicationLegacy): Evidence {
+function privateEvidence(root: string, path: string): Evidence {
   if (!path || isAbsolute(path) || path.split(/[\\/]/).includes('..'))
     throw new Error('legacy evidence requires a private state-relative path');
   const absolute = resolve(root, path);
@@ -141,11 +141,11 @@ function privateEvidence(root: string, path: string, policy = defaultPolicy.publ
     return subpath !== '..' && !subpath.startsWith(`..${sep}`) && !isAbsolute(subpath);
   };
   const stat = lstatSync(absolute);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > policy.evidenceBytes || !inside(realpathSync(absolute)))
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_BYTES || !inside(realpathSync(absolute)))
     throw new Error('legacy evidence must be a bounded regular file inside the private state directory');
   const bytes = readFileSync(absolute);
   const raw = bytes.toString('utf8');
-  if (bytes.length > policy.evidenceBytes || !Buffer.from(raw, 'utf8').equals(bytes))
+  if (bytes.length > MAX_BYTES || !Buffer.from(raw, 'utf8').equals(bytes))
     throw new Error('legacy evidence must contain bounded lossless UTF-8 bytes');
   return { path, hash: hash(bytes), raw };
 }
@@ -156,24 +156,14 @@ function documentPath(main: string, state: string, path: string): string {
     throw new Error('owner document must be inside the configured private state directory');
   return candidate;
 }
-function string(value: unknown, label: string, policy = defaultPolicy.publicationLegacy): string {
-  if (typeof value !== 'string' || !value.length || value.length > policy.fieldCharacters)
-    throw new Error(`invalid ${label}`);
+function string(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.length || value.length > 512) throw new Error(`invalid ${label}`);
   return value;
 }
 
 /** Append-only preparation journal. Receiving truth never certifies host absence or grants an invocation. */
 export class PublicationLegacyReconciliation {
   private readonly now: () => number;
-  private get policy() {
-    return this.options.policy ?? defaultPolicy;
-  }
-  private readEvidence(root: string, path: string): Evidence {
-    return privateEvidence(root, path, this.policy.publicationLegacy);
-  }
-  private field(value: unknown, label: string): string {
-    return string(value, label, this.policy.publicationLegacy);
-  }
   constructor(
     private readonly options: PublicationControllerOptions,
     private readonly specialIdentity: (path: string, body: ObjectValue) => ProcessIdentity | null,
@@ -190,10 +180,7 @@ export class PublicationLegacyReconciliation {
       throw new Error('legacy preparation requires the current configured operations provider session');
   }
   private lease() {
-    return acquireDirectoryLease(
-      join(this.options.stateDirectory, 'publication', 'custody.lease'),
-      this.options.policy?.leases,
-    );
+    return acquireDirectoryLease(join(this.options.stateDirectory, 'publication', 'custody.lease'));
   }
   private provenance(messageId: number, actor: PublicationActor): Provenance {
     this.authenticate(actor);
@@ -220,24 +207,21 @@ export class PublicationLegacyReconciliation {
       !sessionRetained(this.db, row.sender, event.senderSessionId)
     )
       throw new Error('legacy owner inbox decision has no independently authenticated sender session provenance');
-    if (
-      !Number.isFinite(row.created_at) ||
-      row.created_at > this.now() + this.policy.publication.observationClockSkewMs
-    )
+    if (!Number.isFinite(row.created_at) || row.created_at > this.now() + 30_000)
       throw new Error('legacy inbox provenance has an invalid observation time');
     const refs: unknown = JSON.parse(row.document_refs ?? 'null');
     if (
       !Array.isArray(refs) ||
       refs.length === 0 ||
-      refs.length > this.policy.publicationLegacy.documentReferences ||
+      refs.length > 16 ||
       JSON.stringify(event.documentRefs) !== JSON.stringify(refs)
     )
       throw new Error('legacy inbox document provenance is missing or inconsistent');
     const documents = refs.map((ref) => {
       if (!object(ref)) throw new Error('malformed legacy document reference');
-      const file = this.readEvidence(
+      const file = privateEvidence(
         this.options.stateDirectory,
-        documentPath(this.options.mainCheckout, this.options.stateDirectory, this.field(ref.path, 'document path')),
+        documentPath(this.options.mainCheckout, this.options.stateDirectory, string(ref.path, 'document path')),
       );
       if (!file.path.startsWith(`${row.sender}/`))
         throw new Error('legacy owner document is outside its owning-manager namespace');
@@ -253,20 +237,18 @@ export class PublicationLegacyReconciliation {
         !Array.isArray(doc.legacyKnownCustody)
       )
         continue;
-      if (doc.legacyKnownCustody.length > this.policy.publicationLegacy.records)
-        throw new Error('too many retained source references');
+      if (doc.legacyKnownCustody.length > MAX_RECORDS) throw new Error('too many retained source references');
       for (const record of doc.legacyKnownCustody) {
         if (!object(record) || record.file === undefined) continue;
         const path = documentPath(
           this.options.mainCheckout,
           this.options.stateDirectory,
-          this.field(record.file, 'original source reference'),
+          string(record.file, 'original source reference'),
         );
         if (relatedEvidence.some((item) => item.path === path)) continue;
-        if (relatedEvidence.length >= this.policy.publicationLegacy.records)
-          throw new Error('too many retained source references');
+        if (relatedEvidence.length >= MAX_RECORDS) throw new Error('too many retained source references');
         try {
-          relatedEvidence.push(this.readEvidence(this.options.stateDirectory, path));
+          relatedEvidence.push(privateEvidence(this.options.stateDirectory, path));
         } catch (error) {
           if (!['ENOENT', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
           relatedEvidence.push({
@@ -381,7 +363,7 @@ export class PublicationLegacyReconciliation {
           doc.controller !== this.options.operationsManager ||
           !Array.isArray(doc.records) ||
           !doc.records.length ||
-          doc.records.length > this.policy.publicationLegacy.records
+          doc.records.length > MAX_RECORDS
         )
           throw new Error('legacy disposition requires bounded original records');
         for (const value of doc.records) {
@@ -391,16 +373,16 @@ export class PublicationLegacyReconciliation {
             Object.keys(value).some((key) => !['key', 'surface', 'evidencePath', 'sha256'].includes(key))
           )
             throw new Error('invalid legacy disposition record schema');
-          const source = this.readEvidence(
+          const source = privateEvidence(
             this.options.stateDirectory,
-            this.field(value.evidencePath, 'original evidence path'),
+            string(value.evidencePath, 'original evidence path'),
           );
           if (source.hash !== value.sha256) throw new Error('legacy original evidence hash mismatch');
           result.push(
             this.entry(
               p.owner,
               value.surface as Surface,
-              this.field(value.key, 'original key'),
+              string(value.key, 'original key'),
               source,
               '',
               parse(source.raw),
@@ -415,7 +397,7 @@ export class PublicationLegacyReconciliation {
           !object(doc.previewCompanion) ||
           !object(doc.legacyPublisher) ||
           !Array.isArray(doc.legacyKnownCustody) ||
-          doc.legacyKnownCustody.length > this.policy.publicationLegacy.records
+          doc.legacyKnownCustody.length > MAX_RECORDS
         )
           throw new Error('unsupported retained unavailable legacy disposition');
         const agreement = this.db
@@ -445,8 +427,7 @@ export class PublicationLegacyReconciliation {
         for (const history of ['startupHistory', 'refreshHistory'] as const) {
           const values = doc.previewCompanion[history];
           if (values === undefined) continue;
-          if (!Array.isArray(values) || values.length > this.policy.publicationLegacy.records)
-            throw new Error('invalid preview history');
+          if (!Array.isArray(values) || values.length > MAX_RECORDS) throw new Error('invalid preview history');
           values.forEach((item, i) => {
             if (!object(item)) throw new Error('invalid preview history record');
             result.push(
@@ -468,8 +449,7 @@ export class PublicationLegacyReconciliation {
         });
       }
     }
-    if (result.length > this.policy.publicationLegacy.records)
-      throw new Error('too many legacy records in one receiving request');
+    if (result.length > MAX_RECORDS) throw new Error('too many legacy records in one receiving request');
     return result;
   }
   receive(messageId: number, actor: PublicationActor): ObjectValue {
@@ -722,8 +702,9 @@ export class PublicationLegacyReconciliation {
           typeof doc.observedAt !== 'string'
         )
           throw new Error('native inventory host/boot/controller/retained-set provenance mismatch');
-        if (!publicationInventoryFresh(Date.parse(doc.observedAt), this.now(), this.policy.publication))
-          throw new Error('native inventory exceeds its configured freshness or clock-skew bound');
+        const age = this.now() - Date.parse(doc.observedAt);
+        if (!Number.isFinite(age) || age < -30_000 || age > 300_000)
+          throw new Error('native inventory must be no more than five minutes old');
         const previous = this.db
           .query('SELECT digest FROM publication_legacy_inventory_inputs WHERE message_id=?')
           .get(inventory.messageId) as { digest: string } | null;
@@ -816,7 +797,7 @@ export class PublicationLegacyReconciliation {
         doc.controller !== actor.id ||
         !Array.isArray(doc.resolutions) ||
         !doc.resolutions.length ||
-        doc.resolutions.length > this.policy.publicationLegacy.records
+        doc.resolutions.length > MAX_RECORDS
       )
         throw new Error('invalid authenticated legacy resolution schema');
       const settled: Array<{ id: string; proof: ObjectValue }> = [];
@@ -833,7 +814,7 @@ export class PublicationLegacyReconciliation {
           )
         )
           throw new Error('invalid legacy resolution fields; arbitrary identity pointers are unsupported');
-        const requestedId = this.field(value.id, 'legacy custody id');
+        const requestedId = string(value.id, 'legacy custody id');
         if (seen.has(requestedId)) throw new Error('duplicate legacy resolution identity in one request');
         seen.add(requestedId);
         const row = this.rows().find((item) => item.id === value.id);
@@ -907,7 +888,7 @@ export class PublicationLegacyReconciliation {
         const native = this.db
           .query(`SELECT process_identity, process_members, process_visibility, receipt, source_commit
           FROM publication_invocations WHERE id=?`)
-          .get(this.field(value.nativeInvocationId, 'native invocation id')) as {
+          .get(string(value.nativeInvocationId, 'native invocation id')) as {
           process_identity: string | null;
           process_members: string;
           process_visibility: string;

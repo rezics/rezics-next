@@ -22,7 +22,7 @@ export function checkLiveConfiguration(options: SettingsOptions = {}): { localFi
     throw diagnose(localFile, error);
   }
   try {
-    readRouting(settings.routingFile, settings.policy?.routing);
+    readRouting(settings.routingFile);
   } catch (error) {
     throw diagnose(settings.routingFile, error);
   }

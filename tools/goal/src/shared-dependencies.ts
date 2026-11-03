@@ -1,4 +1,3 @@
-import { defaultPolicy } from './policy.ts';
 import { createHash, randomUUID, type Hash } from 'node:crypto';
 import {
   cpSync,
@@ -22,6 +21,7 @@ import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
 import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
+const hour = 60 * 60 * 1000;
 function manifestPaths(root: string): string[] {
   const packageFile = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     workspaces?: string[] | { packages?: string[] };
@@ -86,7 +86,7 @@ export class DependencyInstallError extends Error {
   }
 }
 
-function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits>, policy = defaultPolicy): void {
+function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits>): void {
   const args = ['install', '--frozen-lockfile', ...(shared ? ['--backend=copyfile'] : [])];
   const step = `bun ${args.join(' ')}`;
   try {
@@ -96,7 +96,6 @@ function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits
       cwd: root,
       step,
       purpose: 'preparation',
-      policy,
       ...(limits ? { limits } : {}),
     });
   } catch (error) {
@@ -312,11 +311,11 @@ function removeWorkspaceSkeletons(worktree: string): void {
     rmSync(join(worktree, dir, 'node_modules'), { recursive: true, force: true });
 }
 
-export function installPrivate(worktree: string, limits?: Partial<ProcessLimits>, policy = defaultPolicy): void {
+export function installPrivate(worktree: string, limits?: Partial<ProcessLimits>): void {
   const nodeModules = join(worktree, 'node_modules');
   rmSync(nodeModules, { recursive: true, force: true });
   removeWorkspaceSkeletons(worktree);
-  runInstall(worktree, false, limits, policy);
+  runInstall(worktree, false, limits);
   localWorkspaceLinks(worktree);
   ignoreNodeModules(worktree);
   requireUsableInstallation(worktree, 'validating installed dependency identity');
@@ -363,7 +362,6 @@ export function installShared(
   worktree: string,
   storeRoot = join(dirname(worktree), '..', 'dependency-stores'),
   processLimits?: Partial<ProcessLimits>,
-  policy = defaultPolicy,
 ): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
   const patches = patchInputs(worktree);
@@ -372,29 +370,25 @@ export function installShared(
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
-    installPrivate(worktree, processLimits, policy);
+    installPrivate(worktree, processLimits);
     return;
   }
   if (prior && basename(dirname(dirname(prior))) !== key) {
-    installPrivate(worktree, processLimits, policy);
+    installPrivate(worktree, processLimits);
     return;
   }
   const store = join(storeRoot, key);
   mkdirSync(storeRoot, { recursive: true });
-  const lease = acquireDirectoryLeaseWaiting(
-    join(storeRoot, '.leases', key),
-    policy.dependencies.storeLeaseWaitMs,
-    policy.leases,
-  );
+  const lease = acquireDirectoryLeaseWaiting(join(storeRoot, '.leases', key), 15 * 60_000);
   try {
     // Any published location belongs to its existing users, even when its skeleton is incomplete.
     if (lstatSyncSafe(store) && !existsSync(join(store, 'node_modules', '.bun'))) {
-      installPrivate(worktree, processLimits, policy);
+      installPrivate(worktree, processLimits);
       return;
     }
     if (!lstatSyncSafe(store)) {
       if (prior) {
-        installPrivate(worktree, processLimits, policy);
+        installPrivate(worktree, processLimits);
         return;
       }
       const temp = join(storeRoot, `.building-${key}-${randomUUID()}`);
@@ -410,10 +404,10 @@ export function installShared(
           mkdirSync(dirname(dest), { recursive: true });
           writeFileSync(dest, patch.contents);
         }
-        runInstall(temp, true, processLimits, policy);
+        runInstall(temp, true, processLimits);
         if (!existsSync(join(temp, 'node_modules', '.bun'))) {
           removeBuild(temp);
-          installPrivate(worktree, processLimits, policy);
+          installPrivate(worktree, processLimits);
           return;
         }
         localWorkspaceLinks(temp);
@@ -428,7 +422,7 @@ export function installShared(
     }
     // An incomplete old store is never repaired in place while peers may be using its sealed packages.
     if (!dependencyStoreMatches(store, key)) {
-      installPrivate(worktree, processLimits, policy);
+      installPrivate(worktree, processLimits);
       return;
     }
     if (!dependencyInstallationMatches(worktree)) {
@@ -457,7 +451,7 @@ function readlinkStore(worktree: string): string | null {
     return null;
   }
 }
-export function pruneStores(storeRoot: string, worktreeRoot: string, now = Date.now(), policy = defaultPolicy): void {
+export function pruneStores(storeRoot: string, worktreeRoot: string, now = Date.now()): void {
   if (!existsSync(storeRoot)) return;
   const stores = readdirSync(storeRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && /^[a-f0-9]{64}$/.test(entry.name))
@@ -474,12 +468,12 @@ export function pruneStores(storeRoot: string, worktreeRoot: string, now = Date.
       } catch {}
     }
   const ordered = stores.sort((a, b) => lstatSync(b).mtimeMs - lstatSync(a).mtimeMs);
-  const keep = new Set(ordered.slice(0, policy.dependencies.retainedStores));
+  const keep = new Set(ordered.slice(0, 3));
   for (const store of stores)
     if (
       !used.has(join(store, 'node_modules', '.bun')) &&
       !keep.has(store) &&
-      now - lstatSync(store).mtimeMs >= policy.dependencies.storeRetentionMs
+      now - lstatSync(store).mtimeMs >= 24 * hour
     )
       rmSync(store, { recursive: true, force: true });
 }
