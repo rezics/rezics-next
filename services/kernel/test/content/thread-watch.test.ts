@@ -50,8 +50,24 @@ test('later replies reach current watchers once, and unwatch or a durable prefer
   await f.call(reader, 'PUT', pathFor(watched.id));
   const reply = await f.post(watched.id);
   const event = await publishedEvent(reply.id);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT created_at < $2::timestamptz AS before_publish FROM content.thread_watch WHERE thread_id=$1 AND watcher_account_id=$3',
+        [watched.id, event.time, reader],
+      )
+    ).rows,
+  ).toEqual([{ before_publish: true }]);
   await effect.run(event);
   await effect.run(event);
+  expect(
+    (
+      await f.db.admin.query(
+        `SELECT sent FROM content.notice_finalization WHERE route=$1 AND recipient_id=$2 AND kind='thread_watch' AND source_id=$3`,
+        [routeOf(reader), reader, reply.id],
+      )
+    ).rows,
+  ).toEqual([{ sent: true }]);
   expect((await f.notices(reply.id)).filter((notice) => notice.kind === 'thread_watch')).toMatchObject([
     { recipient_id: reader, kind: 'thread_watch', post_id: reply.id },
   ]);
