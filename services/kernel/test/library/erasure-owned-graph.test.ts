@@ -120,7 +120,28 @@ test('default native worker removes private sessions/history, labels, archives, 
     await f.json(as, 'POST', '/v1/publishedLogs', 201, { sessionId: session.id, note: 'private progress snapshot' })
   ).publishedLog;
   const owner = [routeOf(as.accountId), as.accountId];
+  const mal = await f.json(as, 'POST', '/v1/libraryImports/mal:preview', 200, {
+    xml: '<myanimelist><anime><series_animedb_id>1</series_animedb_id><series_title>Private retained tags</series_title><my_tags>erase this evidence</my_tags></anime></myanimelist>',
+  });
+  expect(
+    (
+      await f.request(as, 'POST', `/v1/libraryImports/mal/${mal.id}/review`, {
+        row: 0,
+        target: subjectId,
+        skip: false,
+        replace: false,
+        labels: [{ value: 0, target: { name: 'Adopted before erasure' } }],
+      })
+    ).status,
+  ).toBe(200);
+  const reviewKey = (await f.json(as, 'GET', `/v1/libraryImports/mal/${mal.id}`, 200)).rows[0].review.version;
+  const adoption = await f.json(as, 'POST', `/v1/libraryImports/mal/${mal.id}/apply`, 200, {
+    confirm: true,
+    rows: [{ row: 0, version: reviewKey, fields: ['tags'] }],
+  });
+  expect(adoption.outcomes[0].labels[0].status).toBe('accepted');
   for (const table of [
+    'list_import_mal',
     'entry_deleted',
     'personal_label',
     'collection_pins',
@@ -147,6 +168,7 @@ test('default native worker removes private sessions/history, labels, archives, 
   const results = await terminal(as.accountId);
   expect(results.reduce((sum, result) => sum + result.owned.removed, 0)).toBeGreaterThan(10);
   for (const table of [
+    'list_import_mal',
     'entry_deleted',
     'personal_label',
     'collection_pins',

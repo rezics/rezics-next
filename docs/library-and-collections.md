@@ -518,6 +518,10 @@ Upload deletion and indexed Library account erasure own retained evidence; no up
 
 ## Personal MAL list portability
 
+[Reviewed MAL tag adoption](library-import-mal-labels.md) extends the same retained upload/review/apply methods
+with explicit existing/new private label selections. Source evidence remains independent; native label commands
+never infer Entry, progress, consumption dates or publication. Web retains the existing MAL import interface.
+
 [Personal MyAnimeList XML import](library-import-mal.md) owns the mounted authenticated preview, review,
 apply, cancel and evidence-delete methods under `/v1/libraryImports/mal`. Status uses explicit native entry
 admission against the current released role; scores, simultaneous progress measures, private notes, precision
