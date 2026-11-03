@@ -64,16 +64,14 @@ The focused tests cover all fixed source combinations with 0/10/20 rows, explici
 source explanation, retained row actions and focus during refresh. Existing Home lifetime tests retain
 ownership of native request and session retirement.
 
-Home's native `FeedItem` projection is `homeFeedItemPresentation(item, locale)`. It retains the installed title,
-canonical destination, cover/avatar, language, preview, source and occurrence attributes, Continue progress, and
-the separate resume link. Collection, review and Space rows use this same adapter: a Collection keeps
-`/collections/{id}` with its supplied title and description; a review keeps the thread destination and optional
-disclosed reviewed-Subject context rather than becoming its target Subject; a Space keeps `/spaces/{address}`
-when that address is readable and shows a Realm title only as carrier text. The adapter is not a native summary
-union, performs no reads, does not rank or apply public/private predicates, and omits missing author, excerpt,
-image and rating. Following Collections and review threads are consumed when Content discloses them. Public
-discovery Collection, review and Space kinds remain Search's pending registration. Space feed rows use the named
-`HomeSpaceFeedItem` seam until Content/Community deliver that branch.
+Home's native `FeedItem` projection is `homeFeedItemPresentation(item, locale)`, typed from the generated Kernel
+client. It retains the supplied title, canonical destination, cover/avatar, language, preview, source and occurrence
+attributes, Continue progress, and separate resume link. Discovery Collections use the Commerce owner identity and
+open `/collections/{id}`; reviews keep their Content thread identity and admitted reviewed-Subject context; Spaces
+keep the current address and show a supplied Realm title only as carrier text. Collection curator and cover data,
+and review ratings, stay absent until their bounded public owner summaries supply them. The adapter performs no
+reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
+Collections and Content thread/post summaries keep their existing native identities and actions.
 
 An embedded owner list can use the same body without claiming a native mixed-feed branch:
 

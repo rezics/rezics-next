@@ -71,7 +71,8 @@ export const feedCandidateBound = (discovery: number, following: number, continu
   following +
   (continued ? FEED_CONTINUE_CANDIDATES : 0);
 
-const canonical = (item: FeedItem) => `${item.key.owner}:${item.key.id}`;
+const canonical = (item: FeedItem) =>
+  `${item.key.owner === 'library' && item.key.kind === 'collection' ? 'commerce' : item.key.owner}:${item.key.id}`;
 const sourceState = (error: unknown): FeedSourceState => {
   if (classifyUnavailability(error) === 'deadline') throw new ProblemError('deadline_exceeded');
   if (error instanceof AuthenticationError || error instanceof PlatformClosedError) throw error;
@@ -522,13 +523,30 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         feedItems.splice(0, feedItems.length, ...projected.items);
         reactionsAsOf = projected.reactionsAsOf;
       } catch (error) {
-        // A feed row must not escape with a zero or guessed viewer slot when either
-        // native reaction reader fails. Retain the lane frontier for retry as a whole.
-        sources.following = sourceState(error);
-        lanes.following = [];
-        next.following = position.following;
+        // Rows with reaction targets must not escape with a guessed viewer slot. Rewind
+        // each affected native lane so its action cards can be retried with their source.
+        const hasFollowingTargets = feedItems.some(
+          (item) => item.source === 'following' && item.key.owner === 'content',
+        );
+        const hasDiscoveryReviews = feedItems.some(
+          (item) => item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review',
+        );
+        if (hasFollowingTargets) {
+          sources.following = sourceState(error);
+          lanes.following = [];
+          next.following = position.following;
+        }
+        if (hasDiscoveryReviews) {
+          sources.discovery = sourceState(error);
+          lanes.discovery = [];
+          next.discovery = position.discovery;
+        }
         for (let index = feedItems.length - 1; index >= 0; index--)
-          if (feedItems[index]!.source === 'following') feedItems.splice(index, 1);
+          if (
+            (hasFollowingTargets && feedItems[index]!.source === 'following') ||
+            (hasDiscoveryReviews && feedItems[index]!.source === 'discovery')
+          )
+            feedItems.splice(index, 1);
         reactionsAsOf = undefined;
       }
       // Repeat the original selected Space authority after all native hydration,

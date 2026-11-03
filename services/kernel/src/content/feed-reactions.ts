@@ -6,9 +6,9 @@ import type { ContentReadDependencies, ReactionCountFreshness } from './reads.ts
 
 type FeedReactionReadTarget = Readonly<{ id: string; reactionTarget: FeedReactionTarget }>;
 type ContentFeedShape = Readonly<{
-  key: Readonly<{ owner: 'content'; kind: 'thread' | 'post'; id: string; route: number }>;
-  summary: Readonly<{ id: string; threadId?: string }> & Record<string, unknown>;
-  destination: Readonly<{ kind: 'thread' | 'post'; id: string; threadId?: string; postId?: string }>;
+  key: Readonly<{ owner: 'content'; kind: 'thread' | 'post' | 'review' | 'space'; id: string; route: number }>;
+  summary: Readonly<{ id: string; threadId?: string; kind?: string }> & Record<string, unknown>;
+  destination: Readonly<{ kind: 'thread' | 'post' | 'space'; id: string; threadId?: string; postId?: string }>;
 }>;
 
 export type FeedReactionProjection = Readonly<{
@@ -22,6 +22,15 @@ function targetFor(item: FeedItem): FeedReactionTarget | null {
   const { key, summary, destination } = content;
   if (feedRoute(key.id) !== key.route || summary.id !== key.id || destination.id !== key.id)
     throw new TypeError('Ambiguous feed reaction target');
+  if (key.kind === 'space') {
+    if (destination.kind !== 'space') throw new TypeError('Ambiguous feed reaction target');
+    return null;
+  }
+  if (key.kind === 'review') {
+    if (destination.kind !== 'thread' || summary.kind !== 'review')
+      throw new TypeError('Ambiguous feed reaction target');
+    return { targetKind: 'thread', targetId: key.id };
+  }
   if (key.kind === 'thread') {
     if (destination.kind !== 'thread') throw new TypeError('Ambiguous feed reaction target');
     return { targetKind: 'thread', targetId: key.id };
