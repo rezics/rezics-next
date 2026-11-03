@@ -5,7 +5,7 @@ current Global `realm:approve_claim`. Its authority and bounds remain in
 [Pending Realm claim review](../../services/kernel/src/community/README.md#pending-realm-claim-review).
 This document does not change that contract or register another gate.
 
-The retained source is `c968558f1f20e21ca88ac8e7b26754a3fd642d7a`. Inspection found
+The bound base source is `520e1bdc0ec1a1e5b0649413aa849457394c8ec0`. Inspection found
 the selected native prerequisite absent: `account-erasure.ts:236–237` dispatches
 the registered membership phase to `eraseAccountMembershipsPage`; that function
 closes/purges memberships and unlinks their locators without calling
@@ -26,8 +26,21 @@ It writes no ownership decision, grant result, committed event or locator in SQL
 The proposed owning seam is the existing membership-erasure producer: invoke
 `eraseAccountRealmOwnership` with production Access before closing/unlinking each
 retained owner locator, retaining pending succession work for retry. That product
-change is outside this slice's authorization. The test stops at this prerequisite;
-no fallback scenario or SQL-generated orphan is accepted.
+change is outside this slice's authorization. The native orphan assertion remains
+the first prerequisite; no fallback scenario or SQL-generated orphan is accepted.
+
+Decision: use the native fixture's trusted command clock to bracket the original
+eligibility deadline without rewriting the orphan source or its episode identity.
+After registered erasure supplies that source, the authored scenario requests
+through the actual POST route, verifies same-episode pending deduplication with a
+fresh key, and lists through the actual GET route with ordinary native Global
+grants. It asserts the exact operational DTO, the full one-candidate page's empty
+successor, viewer/limit cursor binding, claimant denial, and revoked review
+authority with an independently allowed control. These semantic assertions are
+separate from future growth observation; no Access implementation is replaced.
+The final source comparison retains the original head, lifecycle state, orphan
+instant and 720-hour deadline. This does not measure a three-scale bound or cover
+concurrent source/authority changes between snapshots.
 
 The remaining listing series belongs in the same focused test and private fixture:
 independent unrelated Realms, pending requests and retained episodes at
@@ -42,5 +55,9 @@ Eventual acceptance command:
 `bun run --cwd services/kernel check test/community/growth-realm-claim-review.test.ts`.
 Native/browser/acceptance launch remains deferred to controller admission. No test
 assertion or three-scale observation has been executed in this attempt; authored
-coverage and compiler results are not measured passes. The continuation describes
-the remaining listing outcome after the native producer is supplied.
+coverage and compiler results are not measured passes. The continuation at
+`.temp/continuation/realm-claim-review-growth.md` describes the remaining listing
+outcome after the native producer is supplied. At admitted execution, bind the
+then-current committed source revision and private fixture to the command above,
+and record reached assertions and native rows, buffers and statements at all
+three scales. No measured revision or growth observation is claimed here.
