@@ -101,6 +101,8 @@ export function CollectionMetadataEditor({
 }
 
 const dragType = 'application/x-rezics-collection-member';
+/** 44px below 768px and on a coarse pointer; dense 36px only on fine-pointer desktop. */
+const actionTargetClass = 'size-11 md:pointer-fine:size-9';
 
 /** Shared read-only ListRows for dynamic results, which have no curated member ids or notes. */
 export function CollectionSubjectList({
@@ -166,7 +168,7 @@ export function CollectionSubjectList({
                       aria-label={actionsLabel}
                       title={actionsLabel}
                       size="icon-lg"
-                      className="size-11 sm:size-9"
+                      className={actionTargetClass}
                       variant="ghost"
                     >
                       <EllipsisIcon aria-hidden="true" />
@@ -432,7 +434,7 @@ export function CollectionMemberList({
                       aria-description={editing && onBoundaryMove ? m.library_collection_boundary_help() : undefined}
                       title={actionLabel(m.library_collection_actions())}
                       size="icon-lg"
-                      className="size-11 sm:size-9"
+                      className={actionTargetClass}
                       variant="ghost"
                     >
                       <EllipsisIcon aria-hidden="true" />
@@ -473,7 +475,7 @@ export function CollectionMemberList({
                     type="button"
                     variant="ghost"
                     size="icon-lg"
-                    className="size-11 sm:size-9"
+                    className={actionTargetClass}
                     aria-label={actionLabel(m.library_member_move_up())}
                     title={actionLabel(m.library_member_move_up())}
                     disabled={busy || moveUpAfter === undefined}
@@ -485,7 +487,7 @@ export function CollectionMemberList({
                     type="button"
                     variant="ghost"
                     size="icon-lg"
-                    className="size-11 sm:size-9"
+                    className={actionTargetClass}
                     aria-label={actionLabel(m.library_member_move_down())}
                     title={actionLabel(m.library_member_move_down())}
                     disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
@@ -497,7 +499,7 @@ export function CollectionMemberList({
                     type="button"
                     variant="ghost"
                     size="icon-lg"
-                    className="ms-2 size-11 sm:size-9"
+                    className={`ms-2 ${actionTargetClass}`}
                     aria-label={actionLabel(m.library_member_remove())}
                     title={actionLabel(m.library_member_remove())}
                     disabled={busy}

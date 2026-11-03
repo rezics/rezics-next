@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { act, type ReactNode } from 'react';
+import { compile } from 'tailwindcss';
 import { CollectionMemberList, CollectionSubjectList } from '../src/library/collection-editor';
 import type { CollectionListPresentations } from '../src/library/collection-presentation';
 import { subjectOf, type CollectionMember } from '../src/library/reads';
@@ -9,6 +10,29 @@ import recorded from '../src/kernel/recorded/library-collection-members.json';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { subjectHref } from '../src/subject/subject-href';
+
+const app = join(import.meta.dir, '..');
+const root = join(app, '../..');
+
+async function editorActionStyles() {
+  const files = ['apps/web/src/library/collection-editor.tsx', 'packages/ui/src/shadcn/button.tsx'];
+  const [sources, theme, preflight] = await Promise.all([
+    Promise.all(files.map((path) => Bun.file(join(root, path)).text())),
+    Bun.file(Bun.resolveSync('tailwindcss/theme.css', app)).text(),
+    Bun.file(Bun.resolveSync('tailwindcss/preflight.css', app)).text(),
+  ]);
+  const compiler = await compile(`${theme}\n${preflight}\n@tailwind utilities;`);
+  return compiler.build(sources.flatMap((source) => source.match(/[^\s"'`{}]+/g) ?? []));
+}
+
+function assertActionTarget(window: { getComputedStyle(element: Element): CSSStyleDeclaration }, element: HTMLElement) {
+  expect(element.className).toContain('size-11');
+  expect(element.className).toContain('md:pointer-fine:size-9');
+  expect(element.className).not.toContain('sm:size-9');
+  const style = window.getComputedStyle(element);
+  expect(Number.parseFloat(style.width)).toBeGreaterThanOrEqual(44);
+  expect(Number.parseFloat(style.height)).toBeGreaterThanOrEqual(44);
+}
 
 // UNRUN: composed assertions for integration; typing is not interaction, browser or native proof.
 test('Shared Collection items preserve exact occurrence editing and independent controls', async () => {
@@ -54,6 +78,9 @@ test('Shared Collection items preserve exact occurrence editing and independent 
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
+  const sheet = window.document.createElement('style');
+  sheet.textContent = await editorActionStyles();
+  window.document.head.append(sheet);
   const root = createRoot(host as unknown as HTMLElement);
   const show = (node: ReactNode) => act(async () => root.render(node));
   const previousLocale = getLocale();
@@ -131,6 +158,18 @@ test('Shared Collection items preserve exact occurrence editing and independent 
       expect(control.closest('a')).toBeNull();
       expect(control.closest('[data-slot="list-row-control"]')).not.toBeNull();
     }
+    window.happyDOM.setWindowSize({ width: 700, height: 900 });
+    const named = (row: HTMLElement, action: string, position: number) =>
+      row.querySelector<HTMLButtonElement>(
+        `button[aria-label="${action}: ${m.library_member_occurrence({ title, position })}"]`,
+      )!;
+    expect(named(rows[0]!, m.library_member_move_up(), 1).disabled).toBe(true);
+    expect(named(rows[3]!, m.library_member_move_down(), 4).disabled).toBe(true);
+    for (const action of rows[1]!.querySelectorAll<HTMLElement>(
+      '[data-content-item-slot="actions"] [data-slot="button"]',
+    )) {
+      assertActionTarget(window, action);
+    }
     await act(async () => user.click(selection));
     await act(async () => user.click(rows[1]!.querySelector('summary')!));
     await act(async () => user.type(note, '!'));
@@ -195,6 +234,8 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(subjects[0]!.querySelector('[data-slot="cover"]')?.getAttribute('data-ratio')).toBe('5:7');
     expect(subjects[1]!.querySelector('h3')?.textContent).toBe(m.library_subject_unavailable());
     expect(subjects[1]!.querySelector('a, button')).toBeNull();
+    window.happyDOM.setWindowSize({ width: 700, height: 900 });
+    assertActionTarget(window, subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!);
   } finally {
     await act(async () => root.unmount());
     setLocale(previousLocale, { reload: false });
