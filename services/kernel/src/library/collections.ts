@@ -590,13 +590,7 @@ export function createCollectionCommands(config: {
           if (rule) {
             rules.set(
               attempt.time,
-              await prepareCollectionRuleWrite(
-                config,
-                owner,
-                rule,
-                attempt,
-                deadlineFor(WORK_STEP_DEADLINE_MS),
-              ),
+              await prepareCollectionRuleWrite(config, owner, rule, attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
             );
           }
         } catch (error) {
