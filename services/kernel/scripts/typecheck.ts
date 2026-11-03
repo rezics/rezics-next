@@ -67,9 +67,16 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
   return await child.exited;
 }
 
-async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema?: string): Promise<number> {
-  const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-  if (tsc !== 0) return tsc;
+async function typecheck(
+  env: NodeJS.ProcessEnv,
+  emitClient: boolean,
+  emitSchema?: string,
+  emitClientOnly = false,
+): Promise<number> {
+  if (!emitClientOnly) {
+    const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+    if (tsc !== 0) return tsc;
+  }
   const constructed = await command(['bun', 'run', 'construct'], env);
   if (constructed !== 0) return constructed;
   // Migration work can refresh its own snapshot using this same compiler database.
@@ -95,6 +102,8 @@ export async function runKernelTypecheck(
 ): Promise<number> {
   env = compilerEnvironment(env, args);
   const emitClient = args.includes('--emit-client');
+  const emitClientOnly = args.includes('--emit-client-only');
+  const generateClient = emitClient || emitClientOnly;
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
@@ -102,11 +111,11 @@ export async function runKernelTypecheck(
     const compilerEnv =
       env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
     return emitSchema === undefined
-      ? runCommands(compilerEnv, emitClient)
-      : runCommands(compilerEnv, emitClient, emitSchema);
+      ? runCommands(compilerEnv, generateClient, undefined, emitClientOnly)
+      : runCommands(compilerEnv, generateClient, emitSchema, emitClientOnly);
   };
   const config = compilerConfigArgs(env, repository, [directory]);
-  const returns = returnedPaths(env, emitClient, emitSchema);
+  const returns = returnedPaths(env, generateClient, emitSchema);
   const placed = await placeCompilerRun(
     {
       label: 'kernel typecheck',
@@ -115,11 +124,11 @@ export async function runKernelTypecheck(
       command: [
         'bun',
         'scripts/typecheck.ts',
-        ...(emitClient ? ['--emit-client'] : []),
+        ...(emitClientOnly ? ['--emit-client-only'] : emitClient ? ['--emit-client'] : []),
         ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
         ...config,
       ],
-      keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
+      keepsFiles: generateClient || emitSchema !== undefined || returns === undefined,
       ...(returns === undefined ? {} : { returns }),
     },
     directory,
@@ -133,7 +142,7 @@ export async function runKernelTypecheck(
     new Date(),
   );
   const run = () => (env.DATABASE_URL ? compile(env) : withDatabase(compile));
-  return emitClient
+  return generateClient
     ? (dependencies.outputTree ?? withKernelClientOutput)(repository, run, { returns: returns ?? [] })
     : run();
 }
