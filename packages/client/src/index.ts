@@ -3,6 +3,7 @@ import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
+import type { LabelConsolidationClientRoutes } from './kernel/library/label-consolidation-client.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 
@@ -19,6 +20,10 @@ type SharedRoutes<Mounted, Original> = Original extends { body: unknown; respons
 
 // Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
 type SubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
+type ClientV1Routes = Omit<Routes, 'subjects' | 'libraryLabels'> & {
+  subjects: SubjectRoutes;
+  libraryLabels: Routes['libraryLabels'] & LabelConsolidationClientRoutes;
+};
 
 // Eden derives the wire client from `~Routes`; the remaining Elysia generics
 // describe server composition and are not part of the client's type surface.
@@ -30,7 +35,7 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects'> & { subjects: SubjectRoutes }
+      ? ClientV1Routes
       : KernelType['~Routes'][Prefix];
   }
 >;
