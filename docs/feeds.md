@@ -308,6 +308,12 @@ The controller's `derivedFiles` rules generate the declaration closure and OpenA
 with `bun run --cwd services/kernel derived`; declaration emission can also share the Kernel compiler database
 through `bun run --cwd services/kernel typecheck --emit-client`.
 
+Decision: public feed types alias the mounted response so the Kernel generator remains their transport authority.
+
+Home experience acceptance requires its existing card owner to consume the installed response and review populated,
+concealed-parent, signed-out, retry and account-switch states. Transport compilation and native HTTP assertions
+alone do not close that acceptance gap. Home cards and the shared FeedActionBar own presentation and request retirement.
+
 An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
 Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
 requests. `GET /v1/feedItems?stream=following&limit=20&kind=thread` can return:
