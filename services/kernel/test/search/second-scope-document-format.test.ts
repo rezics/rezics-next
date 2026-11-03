@@ -136,7 +136,7 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
   ).toThrow();
   expect(() => parseDiscoveryDocumentKey(registry, 'discovery-v1:space:not-a-native-id')).toThrow();
 
-  const [spaceAction] = secondScopeDiscoveryDocumentActions(registry, contentObservation, [spaceKey]);
+  const [spaceAction] = secondScopeDiscoveryDocumentActions(registry, contentObservation, [spaceKey, reviewKey]);
   if (!spaceAction || spaceAction.op !== 'index') throw new Error('Expected a Space document');
   const privateField = { ...spaceAction.document, realmVotes: [{ voter: nativeId, score: 5 }] };
   expect(() => validateDiscoveryDocumentFormat(registry, privateField)).toThrow();
