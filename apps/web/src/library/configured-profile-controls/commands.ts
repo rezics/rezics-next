@@ -56,7 +56,8 @@ export async function dispatchGuardedCommand<Input, Result>(
       data: command.operands,
       headers: { 'X-CSRF-Token': command.credential },
     });
-    command.response = acknowledged(result) ? result : undefined;
+    if (acknowledged(result)) command.response = result;
+    else delete command.response;
     return current() ? result : undefined;
   } finally {
     command.running = false;

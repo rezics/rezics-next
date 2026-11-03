@@ -34,7 +34,7 @@ export function configuredCopyOrigin(options: {
               id: options.subjectId,
               type: options.subjectType,
               types: [options.subjectType],
-              label: { text: options.subjectLabel },
+              label: options.subjectLabel,
               cover: null,
             },
             profile: options.profile,
@@ -132,7 +132,7 @@ export function ConfiguredCopyPanel({
           <CopyForm
             key={editing?.id ?? editorKey}
             originating={originating}
-            copy={editing ?? undefined}
+            {...(editing ? { copy: editing } : {})}
             profile={profile}
             sendKind={sendKind}
             inline

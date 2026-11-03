@@ -14,9 +14,18 @@ import {
   progressWriteOutcome,
   type GuardedCommand,
   type GuardedOutcome,
+  type GuardedSender,
 } from './commands';
 import type { VisitProgress } from './visit';
-import type { ProgressChange, ProgressRecordInput, ProgressSessionPage } from '../progress-reads';
+import type {
+  ProgressChange,
+  ProgressFailure,
+  ProgressRecorded,
+  ProgressRecordInput,
+  ProgressSessionPage,
+  ProgressStartInput,
+  ProgressStarted,
+} from '../progress-reads';
 import { progressFailureMessage, progressView } from '../progress-label';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 
@@ -24,6 +33,10 @@ const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
 const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+type StartResult = ProgressStarted | ProgressFailure;
+type RecordResult = ProgressRecorded | ProgressFailure;
+const startSender = startProgressSession as GuardedSender<ProgressStartInput, StartResult>;
+const recordSender = recordProgressSession as GuardedSender<ProgressRecordInput, RecordResult>;
 
 export function ConfiguredProgressPanel({
   subjectId,
@@ -57,12 +70,8 @@ export function ConfiguredProgressPanel({
     page: null,
     error: false,
   });
-  const startIntent = useRef<GuardedCommand<Parameters<typeof startProgressSession>[0]['data'], Awaited<ReturnType<typeof startProgressSession>>> | null>(
-    null,
-  );
-  const recordIntent = useRef<GuardedCommand<ProgressRecordInput, Awaited<ReturnType<typeof recordProgressSession>>> | null>(
-    null,
-  );
+  const startIntent = useRef<GuardedCommand<ProgressStartInput, StartResult> | null>(null);
+  const recordIntent = useRef<GuardedCommand<ProgressRecordInput, RecordResult> | null>(null);
   const rules = progress.meaning === 'unsupported' ? undefined : progress.rules;
   const issue = progressDecimalIssue(draft, rules ?? {}, true);
   const unitLabel =
@@ -112,7 +121,7 @@ export function ConfiguredProgressPanel({
       if (progress.meaning === 'absent' && !('session' in progress)) {
         const start =
           startIntent.current ??
-          createGuardedCommand(startProgressSession, credential, {
+          createGuardedCommand(startSender, credential, {
             subjectId,
             mode: progress.measure.mode,
             unit: progress.measure.unit.id,
@@ -128,7 +137,7 @@ export function ConfiguredProgressPanel({
         }
         const record =
           recordIntent.current ??
-          createGuardedCommand(recordProgressSession, credential, {
+          createGuardedCommand(recordSender, credential, {
             sessionId: started.id,
             revision: 0,
             amount: draft.trim(),
@@ -143,7 +152,7 @@ export function ConfiguredProgressPanel({
       if (!('session' in progress)) return;
       const record =
         recordIntent.current ??
-        createGuardedCommand(recordProgressSession, credential, {
+        createGuardedCommand(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
           amount: draft.trim(),
@@ -165,7 +174,7 @@ export function ConfiguredProgressPanel({
     try {
       const record =
         recordIntent.current ??
-        createGuardedCommand(recordProgressSession, credential, {
+        createGuardedCommand(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
           clear: true,
@@ -188,13 +197,15 @@ export function ConfiguredProgressPanel({
 
   async function retry() {
     if (!current()) return;
-    const command = recordIntent.current ?? startIntent.current;
-    if (!command) return;
     setPending(true);
     try {
-      const result = await dispatchGuardedCommand(command, current);
+      const result = recordIntent.current
+        ? await dispatchGuardedCommand(recordIntent.current, current)
+        : startIntent.current
+          ? await dispatchGuardedCommand(startIntent.current, current)
+          : undefined;
       if (!result || !current()) return;
-      const next = 'ok' in result ? progressWriteOutcome(result) : { state: 'unavailable' as const };
+      const next = progressWriteOutcome(result);
       setOutcome(next);
       if (next.state === 'acknowledged') {
         recordIntent.current = null;

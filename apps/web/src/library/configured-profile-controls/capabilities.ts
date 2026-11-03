@@ -58,7 +58,7 @@ export function readConfiguredProfileCapabilities(
 ): ConfiguredProfileCapabilities {
   const identity = mangaLibraryIdentity(type);
   const descriptor = libraryDescriptor(release, type);
-  if (descriptor.state === 'unavailable') return { state: 'unavailable' };
+  if (descriptor.state === 'unavailable' || !release) return { state: 'unavailable' };
   if (descriptor.state === 'unsupported') return { state: 'unsupported', identity };
   const copies = copyProfileState(release, type, locale);
   if (copies.state !== 'ready')
@@ -66,10 +66,10 @@ export function readConfiguredProfileCapabilities(
       state: 'ready',
       identity,
       admittedFields: admittedFieldCount(descriptor.choices),
-      states: libraryStateOptions(release!, type, locale),
+      states: libraryStateOptions(release, type, locale),
       copies: { kinds: [] },
       measure: singleManualProgress(descriptor.choices),
-      measureRules: measureRules(release!, type, singleManualProgress(descriptor.choices)),
+      measureRules: measureRules(release, type, singleManualProgress(descriptor.choices)),
     };
   const measure = singleManualProgress(descriptor.choices);
   return {

@@ -244,11 +244,12 @@ export function ConfiguredProfileControls({
     copyListAdmitted &&
     progressListAdmitted &&
     isMangaLibrarySubject(subject.type);
-  const isCurrent = (operation?: (typeof operations)[number]) =>
-    lifetime.current.active &&
-    session.state === 'signed-in' &&
-    !!session.subject &&
-    admission.allowed(operation ?? 'copy.list');
+  const isCurrent = (operation?: GatedOperation) => {
+    if (!lifetime.current.active || session.state !== 'signed-in' || !session.subject) return false;
+    const gate = operation ?? 'copy.list';
+    if (!(operations as readonly string[]).includes(gate)) return false;
+    return admission.allowed(gate as (typeof operations)[number]);
+  };
   const query = configuredLibraryVisitQuery(
     subject.id,
     subject.type,
