@@ -62,7 +62,7 @@ export function parseSearchResourceScope(filter?: string): ResourceScopeParse {
   if (
     !isTopLevelConjunct(document, candidate.leaf) ||
     !hasOnlyKeys(candidate.leaf, [candidate.kind]) ||
-    candidate.kind !== 'realm' && candidate.kind !== 'collection'
+    (candidate.kind !== 'realm' && candidate.kind !== 'collection')
   )
     return invalid(filter);
   if (

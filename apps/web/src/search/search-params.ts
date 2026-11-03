@@ -146,7 +146,9 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
   const filterInputs = filterInputsFromSearch(search);
   const filterValue = search.filter;
   const resourceScope =
-    typeof filterValue === 'string' ? parseSearchResourceScope(filterValue) : { scope: undefined, invalidInput: undefined };
+    typeof filterValue === 'string'
+      ? parseSearchResourceScope(filterValue)
+      : { scope: undefined, invalidInput: undefined };
   const invalidFilter =
     filterValue !== undefined && typeof filterValue !== 'string'
       ? { key: 'filter', value: printableSearchValue(filterValue) }
@@ -157,7 +159,11 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
     facets: facetValuesFromSearch(search),
     ranges: filterInputs.ranges,
     ...(filterInputs.condition ? { condition: filterInputs.condition } : {}),
-    ...(filterInputs.invalidInput ? { invalidInput: filterInputs.invalidInput } : invalidFilter ? { invalidInput: invalidFilter } : {}),
+    ...(filterInputs.invalidInput
+      ? { invalidInput: filterInputs.invalidInput }
+      : invalidFilter
+        ? { invalidInput: invalidFilter }
+        : {}),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
     sort: search.sort === 'rating' ? 'rating' : undefined,
     ...(typeof search.filter === 'string' ? { filter: search.filter } : {}),
@@ -202,8 +208,7 @@ export function searchFormFields(search: Record<string, unknown>): [string, stri
     : typeof search.filter === 'string'
       ? parseSearchResourceScope(search.filter).scope
       : undefined;
-  const filter =
-    typeof search.filter === 'string' ? searchFilterWithScope(search.filter, scope) : search.filter;
+  const filter = typeof search.filter === 'string' ? searchFilterWithScope(search.filter, scope) : search.filter;
   if (filter !== undefined && filter !== '') append('filter', filter);
   else if (Array.isArray(search.filter)) append('filter', search.filter);
   append('condition', search.condition);

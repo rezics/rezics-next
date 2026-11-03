@@ -97,10 +97,7 @@ export function headerSearchFields(
   if (currentFilters.length > 1) return [...other, ...currentFilters, ...actionFilters];
   const filter = currentFilters[0]?.[1] ?? actionFilters[0]?.[1];
   const scopedFilter = resource ? searchFilterWithScope(filter, resource) : filter;
-  return [
-    ...other,
-    ...(scopedFilter ? [['filter', scopedFilter] as [string, string]] : []),
-  ];
+  return [...other, ...(scopedFilter ? [['filter', scopedFilter] as [string, string]] : [])];
 }
 
 function sameHeaderSuggestionOwner(a: HeaderSuggestionOwner | null, b: HeaderSuggestionOwner): boolean {

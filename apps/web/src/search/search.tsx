@@ -180,7 +180,8 @@ function validateSearchInput(input: unknown): SearchParams {
   if (
     isSearchResourceScope(input.resourceScope) &&
     filterScope.scope &&
-    (input.resourceScope.kind !== filterScope.scope.kind || input.resourceScope.id.toLowerCase() !== filterScope.scope.id)
+    (input.resourceScope.kind !== filterScope.scope.kind ||
+      input.resourceScope.id.toLowerCase() !== filterScope.scope.id)
   )
     throw new Error('Search resource scope does not match its filter');
   const resourceScope = isSearchResourceScope(input.resourceScope) ? input.resourceScope : filterScope.scope;
@@ -650,16 +651,12 @@ export function SearchPage({
     ? removeSearchResourceScope(navigationState.filter)
     : navigationState.filter;
   if (filterWithoutScope)
-    add(
-      'filter',
-      m.search_existing_filter({}, options),
-      {
-        ...navigationState,
-        filter: navigationState.resourceScope
-          ? searchFilterWithScope(undefined, navigationState.resourceScope)
-          : undefined,
-      },
-    );
+    add('filter', m.search_existing_filter({}, options), {
+      ...navigationState,
+      filter: navigationState.resourceScope
+        ? searchFilterWithScope(undefined, navigationState.resourceScope)
+        : undefined,
+    });
   const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);

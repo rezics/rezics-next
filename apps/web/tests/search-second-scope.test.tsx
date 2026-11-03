@@ -8,7 +8,13 @@ import {
   type SearchResourceScope,
 } from '../src/search/advanced-scope';
 import { headerSearchFields } from '../src/search/header-search/header-search';
-import { discoverySearchHref, correctSearchInput, removeSearchInput, searchFormFields, searchLoaderDeps } from '../src/search/search-params';
+import {
+  discoverySearchHref,
+  correctSearchInput,
+  removeSearchInput,
+  searchFormFields,
+  searchLoaderDeps,
+} from '../src/search/search-params';
 import { searchSortHref } from '../src/search/sort';
 
 const realmId = '5a522c45-d94f-4d36-8b2a-3af80d988cff';
@@ -21,7 +27,11 @@ describe('native Search resource scope', () => {
     const first = searchLoaderDeps({ q: 'maps', filter: invalid, cursor: 'opaque-next' });
     expect(first.invalidInput).toEqual({ key: 'filter', value: invalid });
 
-    const corrected = correctSearchInput({ q: 'maps', filter: invalid, cursor: 'opaque-next' }, 'filter', JSON.stringify({ realm: { id: realmId } }));
+    const corrected = correctSearchInput(
+      { q: 'maps', filter: invalid, cursor: 'opaque-next' },
+      'filter',
+      JSON.stringify({ realm: { id: realmId } }),
+    );
     const admitted = searchLoaderDeps(corrected);
     expect(admitted.invalidInput).toBeUndefined();
     expect(admitted.resourceScope).toEqual({ kind: 'realm', id: realmId });
@@ -50,15 +60,25 @@ describe('native Search resource scope', () => {
     expect(url.pathname).toBe('/en/search');
     expect(url.searchParams.get('filter')).toBe(filter);
     expect(url.searchParams.get('cursor')).toBe('eyJjdXJzb3IiOiJvcGFxdWUifQ');
-    expect(new URL(searchSortHref('en', state, 'rating'), 'https://rezics.invalid').searchParams.get('filter')).toBe(filter);
+    expect(new URL(searchSortHref('en', state, 'rating'), 'https://rezics.invalid').searchParams.get('filter')).toBe(
+      filter,
+    );
 
     const action = searchResourceScopeAction('en', scope);
     const headerFields = headerSearchFields(
-      [['q', 'maps'], ['cursor', 'opaque'], ['language', 'ja'], ['filter', filter]],
+      [
+        ['q', 'maps'],
+        ['cursor', 'opaque'],
+        ['language', 'ja'],
+        ['filter', filter],
+      ],
       { kind: 'Realm', id: realmId, name: 'Display only', searchAction: action },
       action,
     );
-    expect(headerFields).toEqual([['language', 'ja'], ['filter', filter]]);
+    expect(headerFields).toEqual([
+      ['language', 'ja'],
+      ['filter', filter],
+    ]);
   });
 
   test('the scoped request applies to collections too, and removal preserves sibling filters and starts fresh', () => {
@@ -77,7 +97,17 @@ describe('native Search resource scope', () => {
     expect(next.cursor).toBeUndefined();
     expect(new URL(discoverySearchHref('en', next), 'https://rezics.invalid').searchParams.has('cursor')).toBe(false);
 
-    const globalHeader = headerSearchFields([['language', 'ja'], ['filter', filter]], undefined, '/en/search');
-    expect(globalHeader).toEqual([['language', 'ja'], ['filter', baseFilter]]);
+    const globalHeader = headerSearchFields(
+      [
+        ['language', 'ja'],
+        ['filter', filter],
+      ],
+      undefined,
+      '/en/search',
+    );
+    expect(globalHeader).toEqual([
+      ['language', 'ja'],
+      ['filter', baseFilter],
+    ]);
   });
 });

@@ -1,40 +1,37 @@
 ---
 {
-  "goal": "search",
-  "manager": "search",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/routes/search.tsx",
-    "apps/web/src/search/search.tsx",
-    "apps/web/src/search/search-params.ts",
-    "apps/web/src/search/search-request.ts",
-    "apps/web/src/search/search-queries.ts",
-    "apps/web/src/search/use-search-query.ts",
-    "apps/web/src/search/search-session-owner.ts",
-    "apps/web/src/search/header-search/header-search.tsx",
-    "apps/web/src/search/header-search/shell-search.tsx",
-    "apps/web/src/search/advanced-scope.ts",
-    "apps/web/tests/search-second-scope.test.tsx",
-    "apps/web/src/search/README.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "Realm and Collection scope use the installed session-bound reader and survive ordinary GET submission, browser history, header submission and refinement without silently broadening to Global; removing scope starts an explicit fresh traversal.",
-      "Invalid resource input remains correctable, native preparing/refused states remain visible, and changing principal, scope or effective condition retires old hits and opaque continuations.",
-      "Installed ConditionEditor, Refinement, SearchSort and DiscoveryResults native capabilities render through one Search page wiring owner."
-    ]
-  },
-  "estimate": {
-    "lines": 650,
-    "files": 12
-  }
+  'goal': 'search',
+  'manager': 'search',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/routes/search.tsx',
+      'apps/web/src/search/search.tsx',
+      'apps/web/src/search/search-params.ts',
+      'apps/web/src/search/search-request.ts',
+      'apps/web/src/search/search-queries.ts',
+      'apps/web/src/search/use-search-query.ts',
+      'apps/web/src/search/search-session-owner.ts',
+      'apps/web/src/search/header-search/header-search.tsx',
+      'apps/web/src/search/header-search/shell-search.tsx',
+      'apps/web/src/search/advanced-scope.ts',
+      'apps/web/tests/search-second-scope.test.tsx',
+      'apps/web/src/search/README.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'Realm and Collection scope use the installed session-bound reader and survive ordinary GET submission, browser history, header submission and refinement without silently broadening to Global; removing scope starts an explicit fresh traversal.',
+          'Invalid resource input remains correctable, native preparing/refused states remain visible, and changing principal, scope or effective condition retires old hits and opaque continuations.',
+          'Installed ConditionEditor, Refinement, SearchSort and DiscoveryResults native capabilities render through one Search page wiring owner.',
+        ],
+    },
+  'estimate': { 'lines': 650, 'files': 12 },
 }
 ---
 
