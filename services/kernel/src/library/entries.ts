@@ -594,6 +594,8 @@ export function createEntryCommands(config: Dependencies) {
             entry = changed;
           }
 
+          const incarnation = entry.incarnationId;
+          if (!incarnation) throw new Error('Library entry mutation did not retain its incarnation');
           if (
             !previous ||
             previous.state !== entry.state ||
@@ -603,7 +605,7 @@ export function createEntryCommands(config: Dependencies) {
               route,
               accountId: owner.accountId,
               subjectId: entry.subjectId,
-              incarnationId: entry.incarnationId,
+              incarnationId: incarnation,
               priorRevision: previous?.revision ?? null,
               revision: entry.revision,
               beforeState: previous?.state ?? null,
@@ -715,7 +717,7 @@ export function createEntryCommands(config: Dependencies) {
       const changes = rows.slice(0, limit);
       const hasMore = rows.length > limit;
       const last = changes.at(-1);
-      const coverage = changes.length
+      const coverage: 'complete' | 'partial' | 'unknown' = changes.length
         ? changes[0]!.coverageComplete
           ? ('complete' as const)
           : ('partial' as const)

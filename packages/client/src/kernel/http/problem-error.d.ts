@@ -225,6 +225,21 @@ export declare const PROBLEMS: {
         readonly title: 'Library Entry Restore Expired';
         readonly retryable: false;
     };
+    readonly library_entry_state_restore_stale: {
+        readonly status: 409;
+        readonly title: 'Library Entry State Restore Stale';
+        readonly retryable: false;
+    };
+    readonly library_entry_state_restore_unavailable: {
+        readonly status: 409;
+        readonly title: 'Library Entry State Restore Unavailable';
+        readonly retryable: false;
+    };
+    readonly library_entry_state_restore_unchanged: {
+        readonly status: 409;
+        readonly title: 'Library Entry State Restore Unchanged';
+        readonly retryable: false;
+    };
     readonly collection_restore_occupied: {
         readonly status: 409;
         readonly title: 'Collection Restore Occupied';

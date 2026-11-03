@@ -63,6 +63,21 @@ export const PROBLEMS = {
     title: 'Library Entry Restore Expired',
     retryable: false,
   },
+  library_entry_state_restore_stale: {
+    status: 409,
+    title: 'Library Entry State Restore Stale',
+    retryable: false,
+  },
+  library_entry_state_restore_unavailable: {
+    status: 409,
+    title: 'Library Entry State Restore Unavailable',
+    retryable: false,
+  },
+  library_entry_state_restore_unchanged: {
+    status: 409,
+    title: 'Library Entry State Restore Unchanged',
+    retryable: false,
+  },
   collection_restore_occupied: { status: 409, title: 'Collection Restore Occupied', retryable: false },
   collection_restore_stale: { status: 409, title: 'Stale Collection Restore', retryable: false },
   collection_restore_expired: { status: 409, title: 'Collection Restore Expired', retryable: false },
