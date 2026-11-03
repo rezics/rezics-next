@@ -26,9 +26,7 @@ export type AppealAppellantIdentity =
 export type AppealTargetContext =
   | {
       state: 'available';
-      destination:
-        | { kind: 'board'; id: string }
-        | { kind: 'thread'; id: string; boardId: string };
+      destination: { kind: 'board'; id: string } | { kind: 'thread'; id: string; boardId: string };
     }
   | { state: 'concealed' }
   | { state: 'unavailable' };

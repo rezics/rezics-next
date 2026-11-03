@@ -93,7 +93,11 @@ test('concealed and unavailable context preserve exact resolution outcomes and s
     ...appeal,
     appellantIdentity: { state: 'unavailable' },
     targetContext: { state: 'unavailable' },
-    resolution: { outcome: 'reversed', statement: 'The decision was reversed.', resolvedAt: '2026-01-03T00:00:00.000Z' },
+    resolution: {
+      outcome: 'reversed',
+      statement: 'The decision was reversed.',
+      resolvedAt: '2026-01-03T00:00:00.000Z',
+    },
   });
   expect(reversed).toContain(m.moderation_appeal_appellant_unavailable());
   expect(reversed).toContain(m.moderation_target_unavailable());
@@ -103,7 +107,11 @@ test('concealed and unavailable context preserve exact resolution outcomes and s
 });
 
 test('a current resolved observation does not settle a pending or uncertain original command', () => {
-  const observed = { outcome: 'upheld' as const, statement: 'Observed independently.', resolvedAt: '2026-01-02T00:00:00.000Z' };
+  const observed = {
+    outcome: 'upheld' as const,
+    statement: 'Observed independently.',
+    resolvedAt: '2026-01-02T00:00:00.000Z',
+  };
   expect(appealResolutionObservation('pending', null, observed)).toBeUndefined();
   expect(appealResolutionObservation('uncertain', null, observed)).toBeUndefined();
   expect(appealResolutionObservation('draft', null, observed)).toEqual({
@@ -111,6 +119,10 @@ test('a current resolved observation does not settle a pending or uncertain orig
     statement: 'Observed independently.',
   });
   expect(
-    appealResolutionObservation('uncertain', { state: 'resolved', outcome: 'reverse', statement: 'Receipt.' }, observed),
+    appealResolutionObservation(
+      'uncertain',
+      { state: 'resolved', outcome: 'reverse', statement: 'Receipt.' },
+      observed,
+    ),
   ).toEqual({ outcome: 'reversed', statement: 'Receipt.' });
 });
