@@ -114,7 +114,12 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <CandidateReaderBoundary>{node}</CandidateReaderBoundary>
+          <CandidateReaderBoundary
+            address="recipe-retirement"
+            observed={{ state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+          >
+            {node}
+          </CandidateReaderBoundary>
         </QueryClientProvider>,
       ),
     );

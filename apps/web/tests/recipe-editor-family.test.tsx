@@ -92,13 +92,23 @@ test('Recipe creation and current correction share complete frames with independ
     await click(scope, m.correction_add());
     return [...scope.querySelectorAll<HTMLElement>('section[id*="-row-"]')].find((node) => !before.has(node))!;
   };
+  const choosePart = async (scope: HTMLElement, property: string) => {
+    const label = [...scope.querySelectorAll('label')].find(
+      (node) => node.textContent?.trim() === m.correction_add_part(),
+    )!;
+    const select = window.document.getElementById(label.htmlFor)! as unknown as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!.call(select, property);
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+  };
   const cite = async (scope: HTMLElement, url: string) => {
     await click(scope, m.correction_add_reference());
     const group = [...scope.querySelectorAll('fieldset')].filter((node) =>
       node.querySelector('legend')?.textContent?.includes(m.correction_references()),
     ).at(-1)!;
-    await act(async () => user.selectOptions(within(group).getByRole('combobox', { name: m.correction_add_part() }), 'schema:url'));
-    await click(within(group).getByRole('button', { name: m.correction_add() }));
+    await choosePart(group, 'schema:url');
+    await click(group, m.correction_add());
     await replace(within(group).getByRole('textbox', { name: m.correction_url() }), url);
   };
   const url = (scope: HTMLElement) => within(scope).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
@@ -830,10 +840,8 @@ test('Recipe creation and current correction share complete frames with independ
     const firstGroup = [...nestedRow.querySelectorAll('fieldset')].find((node) =>
       node.querySelector('legend')?.textContent?.includes(`${m.correction_references()} 1`),
     )!;
-    await act(async () =>
-      user.selectOptions(within(firstGroup).getByRole('combobox', { name: m.correction_add_part() }), 'schema:inLanguage'),
-    );
-    await click(within(firstGroup).getByRole('button', { name: m.correction_add() }));
+    await choosePart(firstGroup, 'schema:inLanguage');
+    await click(firstGroup, m.correction_add());
     await replace(within(firstGroup).getByRole('textbox', { name: m.correction_value() }), 'en');
     await reviewRecipe(host);
     await click(host, m.recipe_title());
