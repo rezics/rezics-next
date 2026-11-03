@@ -66,9 +66,9 @@ export function outputTreeProfile(profile: string): typeof KERNEL_CLIENT_OUTPUT 
 export function hasOutputTreeReturn(paths: readonly string[]): boolean {
   return paths.includes(KERNEL_CLIENT_OUTPUT.transport);
 }
-/** The named transport declaration also owns/excludes precisely its generated destination. */
+/** Retain declarations as compiler inputs; exclude only transport and restoration staging. */
 export function outputTreeInputExclusions(paths: readonly string[]): string[] {
-  return [...paths, ...(hasOutputTreeReturn(paths) ? [KERNEL_CLIENT_OUTPUT.root, STAGING] : [])];
+  return [...paths, ...(hasOutputTreeReturn(paths) ? [STAGING] : [])];
 }
 function fail(message: string): never {
   throw new Error(`check-output-tree: ${message}`);
