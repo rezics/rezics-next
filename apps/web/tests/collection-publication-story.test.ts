@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { answerFakeRoute } from '../src/kernel/fake-modules';
 import { publicationStoryIds } from '../src/kernel/fake/collection-publication';
-import { selectedPublicationRoute } from '../src/library/collection-publication';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -60,7 +59,10 @@ test('publication story kernel answers recorded dynamic membership and only refu
   const read = async (id: string, members = false) =>
     answerFakeRoute('story', new Request(`${origin}/v1/collections/${id}${members ? '/members' : ''}`));
   const write = async (id: string) =>
-    answerFakeRoute('story', new Request(`${origin}${selectedPublicationRoute(id)}`, { method: 'POST' }));
+    answerFakeRoute(
+      'story',
+      new Request(`${origin}/v1/collections/${encodeURIComponent(id)}:publishSelected`, { method: 'POST' }),
+    );
 
   for (const id of Object.values(publicationStoryIds)) {
     const collection = await read(id);
