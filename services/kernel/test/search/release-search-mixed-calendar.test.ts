@@ -43,7 +43,13 @@ const snapshot = { partition, position: 1n, subjects: [subject] };
 const key = { owner: 'semantic' as const, kind, id, route };
 
 test('mixed calendar successor preserves precise facts and leaves old mapping and codec intact', () => {
-  const [oldMixed] = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, [key], undefined, 'mixed-public-v1');
+  const [oldMixed] = discoveryDocumentActions(
+    registry,
+    { owner: 'semantic', snapshot },
+    [key],
+    undefined,
+    'mixed-public-v1',
+  );
   const [calendar] = discoveryDocumentActions(
     registry,
     { owner: 'semantic', snapshot },
