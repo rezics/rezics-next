@@ -149,8 +149,6 @@ export async function loadThreadPage(
   const posts: PostPage = {
     posts: [thread.firstPost, ...readingPage.replies.items],
     next: readingPage.replies.next,
-    rankRefreshedAt: null,
-    status: 200,
   };
   const readContext = () =>
     thread.boardId
