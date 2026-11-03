@@ -1196,9 +1196,9 @@ export async function readBoardPageActionEvidence(
   const actionSet = new Set([...boardActions, ...realmActions, ...threadActions]);
   const typeActions = new Map<string, ReadonlySet<string>>([
     ['content.board', boardActions],
-    ...(baseline.realmId === null ? [] : [['community.realm', realmActions] as const]),
     ['content.thread', threadActions],
   ]);
+  if (baseline.realmId !== null) typeActions.set('community.realm', realmActions);
   let decisions: ReadDecisions;
   try {
     decisions = await prepareReadDecisions(dependencies.access, {
@@ -1250,7 +1250,7 @@ export async function readBoardPageActionEvidence(
       eligibility: async (_client, requested) =>
         Object.fromEntries(requested.map((id) => [id, board.availability === 'available'])),
     });
-    const reply = unique.length
+    const reply: Readonly<Record<string, { allowed: boolean; explicit: boolean }>> = unique.length
       ? await decisions.decide(client, {
           action: 'post:create',
           resourceType: 'content.thread',
@@ -1259,7 +1259,7 @@ export async function readBoardPageActionEvidence(
             Object.fromEntries(requested.map((id) => [id, current.get(id) === true])),
         })
       : {};
-    const react = unique.length
+    const react: Readonly<Record<string, { allowed: boolean; explicit: boolean }>> = unique.length
       ? await decisions.decide(client, {
           action: 'reaction:set',
           resourceType: 'content.thread',

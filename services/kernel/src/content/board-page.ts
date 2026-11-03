@@ -49,7 +49,7 @@ export type BoardOpeningCard = Readonly<{
   interaction: Readonly<{
     target: Readonly<{ kind: 'thread'; id: string }>;
     counts:
-      | Readonly<{ state: 'as-of'; values: Readonly<Record<string, number>>; source: ReactionCountFreshness }>
+      | Readonly<{ state: 'as-of'; values: Readonly<Partial<Record<string, number>>>; source: ReactionCountFreshness }>
       | Readonly<{ state: 'unavailable' }>;
     viewer:
       | Readonly<{ state: 'current'; reaction: string | null }>
@@ -208,7 +208,7 @@ function assertSamePage(
       current.pinnedThreads,
     ) ||
     !isDeepStrictEqual(first.entries, current.entries) ||
-    first.nextCursor === null !== (current.nextCursor === null) ||
+    (first.nextCursor === null) !== (current.nextCursor === null) ||
     first.rankRefreshedAt !== current.rankRefreshedAt
   )
     throw new BoardOpeningChangedError();
