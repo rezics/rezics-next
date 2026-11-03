@@ -103,12 +103,7 @@ export async function createGrowthReportNativeRelayFixture() {
       const { principal } = principalCommandIdentity(reporter);
       return anchorRoute(
         base.system.routeKey,
-        JSON.stringify([
-          principal.kind,
-          principal.id,
-          'content.report.create',
-          normalizeCommandKey(principal, key),
-        ]),
+        JSON.stringify([principal.kind, principal.id, 'content.report.create', normalizeCommandKey(principal, key)]),
       );
     }
 
@@ -136,7 +131,11 @@ export async function createGrowthReportNativeRelayFixture() {
       throw new Error('Could not find a distinct native report source partition');
     }
 
-    async function submit(kernel: ReportKernel, plan: ReportPlan, evidence = `Private report evidence ${randomUUID()}`) {
+    async function submit(
+      kernel: ReportKernel,
+      plan: ReportPlan,
+      evidence = `Private report evidence ${randomUUID()}`,
+    ) {
       const response = await kernel.handle(
         new Request('https://content.test/v1/reports', {
           method: 'POST',
@@ -164,7 +163,12 @@ export async function createGrowthReportNativeRelayFixture() {
       return { status: response.status, text, value, evidence };
     }
 
-    async function captureSource(pool: Pool, plan: ReportPlan, reportId: string, evidence: string): Promise<ReportSource> {
+    async function captureSource(
+      pool: Pool,
+      plan: ReportPlan,
+      reportId: string,
+      evidence: string,
+    ): Promise<ReportSource> {
       const partition = partitionOf(plan.route);
       const checkpoint = (
         await pool.query<{ epoch: number | null; position: string }>(

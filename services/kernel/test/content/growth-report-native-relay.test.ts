@@ -4,7 +4,13 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import readReport from '../../src/content/read-report.sql';
 import upsertReportTarget from '../../src/content/upsert-report-target.sql';
 import readLog from '../../src/events/read-log.sql';
-import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthReport,
+} from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
 import {
   createGrowthReportNativeRelayFixture,
@@ -162,7 +168,11 @@ async function verifyProjected(sources: readonly ReportSource[]): Promise<void> 
       [routeOf(plan.target.postId), plan.target.postId, routeOf(reportId), reportId],
     );
     expect(targetRows.rows).toHaveLength(1);
-    expect(targetRows.rows[0]).toMatchObject({ target_kind: 'post', target_id: plan.target.postId, report_id: reportId });
+    expect(targetRows.rows[0]).toMatchObject({
+      target_kind: 'post',
+      target_id: plan.target.postId,
+      report_id: reportId,
+    });
     expect(targetRows.rows[0]!.created_at).toBe(sourceRow.rows[0]!.created_at);
 
     const queue = await db.admin.query<{ workflow_id: string; state: string }>(
@@ -227,7 +237,7 @@ async function runSubmissionGrowth(): Promise<void> {
         );
         runOffset += plans.length;
         await seedAxis(database.admin, 'source', plans, scale, unrelatedSourceRoute);
-  await relay!.drainToHead();
+        await relay!.drainToHead();
       },
       async warmup(_database, _scale, repetition) {
         const input = inputs.get(repetition);
@@ -246,7 +256,10 @@ async function runSubmissionGrowth(): Promise<void> {
         expect(Object.keys(submitted.value ?? {}).sort()).toEqual(['reportId']);
         const reportId = String(submitted.value!.reportId);
         reportIds.set(repetition, reportId);
-        operationSql.push({ operation: 'submission', statements: observer.records.slice(offset).map(({ statement }) => statement) });
+        operationSql.push({
+          operation: 'submission',
+          statements: observer.records.slice(offset).map(({ statement }) => statement),
+        });
       },
     });
   } finally {
@@ -416,7 +429,10 @@ async function runDeniedAndEmptyGrowth(): Promise<void> {
         const denied = await fixture.submit(kernel, plan, `Denied private evidence ${repetition}`);
         expect(denied.status).toBe(403);
         await relay!.scanEmpty(partition);
-        operationSql.push({ operation: 'denied request plus empty relay batch', statements: observer.records.slice(offset).map(({ statement }) => statement) });
+        operationSql.push({
+          operation: 'denied request plus empty relay batch',
+          statements: observer.records.slice(offset).map(({ statement }) => statement),
+        });
       },
     });
   } finally {
@@ -425,10 +441,10 @@ async function runDeniedAndEmptyGrowth(): Promise<void> {
   recordGrowth('Denied native report submission and empty registered relay', report);
   assertGrowthAccessPaths(report.name, report.samples, ['core.outbox', 'core.consumer_checkpoint']);
   for (const run of operationSql) expect(run.statements).toContain(readLog.sql);
-  const reportRows = await db.admin.query(
-    'SELECT 1 FROM content.report WHERE route=$1 AND reporter_account_id=$2',
-    [plan.route, fixture.reporter.accountId],
-  );
+  const reportRows = await db.admin.query('SELECT 1 FROM content.report WHERE route=$1 AND reporter_account_id=$2', [
+    plan.route,
+    fixture.reporter.accountId,
+  ]);
   expect(reportRows.rows).toHaveLength(0);
 }
 
