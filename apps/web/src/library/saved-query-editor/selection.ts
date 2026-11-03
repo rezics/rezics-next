@@ -44,9 +44,7 @@ export function localPath(value: string | undefined): string | null {
 
 export function readSavedQuerySearch(search: string | URLSearchParams): SavedQueryInput {
   const params =
-    typeof search === 'string'
-      ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
-      : search;
+    typeof search === 'string' ? new URLSearchParams(search.startsWith('?') ? search.slice(1) : search) : search;
   const filter = take(params, 'filter');
   const type = take(params, 'type');
   const state = take(params, 'state');
