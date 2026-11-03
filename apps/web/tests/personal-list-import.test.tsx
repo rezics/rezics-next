@@ -96,9 +96,9 @@ function pageValue(rows: VndbRow[]) {
 test('binds generated libraryImports.vndb and keeps the visit discoverable', () => {
   expect(nativeVndbImport(createKernelClient('http://example.invalid'))).toBeDefined();
   expect(nativeVndbImport({} as never)).toBeUndefined();
-  expect(libraryNavigation.some((entry) => entry.id === 'library.import-vndb' && entry.href === '/library/import-vndb')).toBe(
-    true,
-  );
+  expect(
+    libraryNavigation.some((entry) => entry.id === 'library.import-vndb' && entry.href === '/library/import-vndb'),
+  ).toBe(true);
 });
 
 test('sends XML to native admission without a browser size guard or local preview effects', async () => {
