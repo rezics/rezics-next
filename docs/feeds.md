@@ -429,11 +429,18 @@ Posts and their immediate parents use distinct `(threadId, postId)` keys; parent
 160 characters and 640 UTF-8 bytes. It does not emit an ancestor list. These output limits do not bound
 the native post reader's internal ancestry, revision or authority work.
 
-Repeated selected post/parent and author keys share native lookups within each composition pass. Conflicting
+Repeated keys are deduplicated separately in each selected-post, immediate-parent and author batch; a post selected
+in both Content batches can be read twice in a pass. Conflicting
 initial observations are rejected before reads; a final observer returning a different thread, post or physical
 home fails the source as unavailable. Unavailable/erased post payloads supply no public author projection.
 An erased immediate parent contributes only its admitted ID and removed state. A taken-down ancestor may
 withhold the selected child under the ordinary native reader; context hydration does not bypass ancestry.
+
+Without initial observations, each of the two composition passes can read 20 selected threads, 20 posts and
+20 immediate parents. Supplied initial thread/post observations skip their initial Content lookup, but not
+the final disclosure or either owner pass. Each `readPost` observes the selected post and at most 32 ancestors,
+including the terminal root, under its own initial/final source and Access checks. These limits do not establish
+bounded grant-history work or replace measurement of nested rows, statements and bytes.
 
 Decision: Home displays recorded rating units without normalizing a nonstandard question to ten, and keeps
 spoiler-marked parent text behind an explicit reveal that retires with the page, target or account.

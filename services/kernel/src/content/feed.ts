@@ -81,6 +81,18 @@ export const feedCandidateBound = (discovery: number, following: number, continu
 
 const canonical = (item: FeedItem) =>
   `${item.key.owner === 'library' && item.key.kind === 'collection' ? 'commerce' : item.key.owner}:${item.key.id}`;
+const isDiscoveryReview = (
+  item: FeedItem,
+): item is Extract<FeedItem, { source: 'discovery'; key: { owner: 'content'; kind: 'review' } }> =>
+  item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review';
+const isFollowingThread = (
+  item: FeedItem,
+): item is Extract<FeedItem, { source: 'following'; key: { owner: 'content'; kind: 'thread' } }> =>
+  item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'thread';
+const isFollowingPost = (
+  item: FeedItem,
+): item is Extract<FeedItem, { source: 'following'; key: { owner: 'content'; kind: 'post' } }> =>
+  item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post';
 const sourceState = (error: unknown): FeedSourceState => {
   if (classifyUnavailability(error) === 'deadline') throw new ProblemError('deadline_exceeded');
   if (error instanceof AuthenticationError || error instanceof PlatformClosedError) throw error;
@@ -544,7 +556,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       next.turn = turn;
       const contextReferences: Array<FeedContentContextReference & { source: 'discovery' | 'following' }> = [];
       for (const item of feedItems) {
-        if (item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review') {
+        if (isDiscoveryReview(item)) {
           const source = contextSources.get(item.id);
           contextReferences.push({
             key: item.id,
@@ -552,23 +564,23 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
             threadId: item.key.id,
             ...(source ? { initialThread: source.thread } : {}),
           });
-        } else if (item.source === 'following' && item.key.owner === 'content') {
+        } else if (isFollowingThread(item)) {
           const source = contextSources.get(item.id);
-          if (item.key.kind === 'thread')
-            contextReferences.push({
-              key: item.id,
-              source: item.source,
-              threadId: item.key.id,
-              ...(source ? { initialThread: source.thread } : {}),
-            });
-          else
-            contextReferences.push({
-              key: item.id,
-              source: item.source,
-              threadId: item.summary.threadId,
-              postId: item.key.id,
-              ...(source ? { initialThread: source.thread, ...(source.post ? { initialPost: source.post } : {}) } : {}),
-            });
+          contextReferences.push({
+            key: item.id,
+            source: item.source,
+            threadId: item.key.id,
+            ...(source ? { initialThread: source.thread } : {}),
+          });
+        } else if (isFollowingPost(item)) {
+          const source = contextSources.get(item.id);
+          contextReferences.push({
+            key: item.id,
+            source: item.source,
+            threadId: item.summary.threadId,
+            postId: item.key.id,
+            ...(source ? { initialThread: source.thread, ...(source.post ? { initialPost: source.post } : {}) } : {}),
+          });
         }
       }
       if (contextReferences.length) {
@@ -596,7 +608,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
             }
             const excerpt = feedExcerpt(thread.firstPost);
             const reviewContext = context.reviewContext;
-            if (item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review') {
+            if (isDiscoveryReview(item)) {
               const summary = { ...item.summary };
               summary.title = thread.title;
               if (excerpt) summary.excerpt = excerpt;
@@ -617,7 +629,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               else delete summary.reviewContext;
               item.summary = summary;
               item.destination = { ...item.destination, title: thread.title };
-            } else if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'thread') {
+            } else if (isFollowingThread(item)) {
               const summary = { ...item.summary };
               summary.id = thread.id;
               summary.kind = thread.kind;
@@ -631,7 +643,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               else delete summary.reviewContext;
               item.summary = summary;
               item.destination = { ...item.destination, title: thread.title };
-            } else if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post') {
+            } else if (isFollowingPost(item)) {
               const post = context.post;
               if (!post || post.availability !== 'available') {
                 concealed.add(reference.key);
@@ -663,7 +675,6 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
             sources[source] = sourceState(error);
             lanes[source] = [];
             next[source] = position[source];
-            if (source === 'continue') next.resume = position.resume;
           }
           for (let index = feedItems.length - 1; index >= 0; index--)
             if (affected.has(feedItems[index]!.source as 'discovery' | 'following')) feedItems.splice(index, 1);
