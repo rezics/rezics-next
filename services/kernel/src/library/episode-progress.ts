@@ -23,7 +23,7 @@ import {
   sameAccountRoute,
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
-import { readEpisodeSource, type EpisodeSourceDependencies } from './episode-source.ts';
+import { readEpisodeSources, type EpisodeSourceDependencies } from './episode-source.ts';
 import { compatibleProgressUnits, nativeProgressUnit, resolveLibraryProfilePin } from './profile.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
 import * as store from './progress-store.ts';
@@ -162,10 +162,9 @@ export function createEpisodeProgressCommands(config: Dependencies) {
             if (!original || !current || !compatibleProgressUnits(original, current))
               throw new ProblemError('unsupported_library_profile');
             if (source?.subjectId !== fact.session.subjectId) throw new LibraryNotFoundError();
-            for (const id of intent.add) {
-              const episode = await readEpisodeSource(deps, fact.session.subjectId, id);
-              if (!episode || episode.membership !== 'member') throw new LibraryNotFoundError();
-            }
+            const episodes = await readEpisodeSources(deps, fact.session.subjectId, intent.add);
+            if (episodes.some((episode) => !episode || episode.membership !== 'member'))
+              throw new LibraryNotFoundError();
             return { pin: fact.pin };
           } catch (error) {
             return { error };
@@ -281,8 +280,9 @@ export function createEpisodeProgressCommands(config: Dependencies) {
         const present = new Set(before.rows.map((row) => row.id));
         const deps: EpisodeSourceDependencies = { pool, access, actor: owner, at, deadline, routeKey };
         const episodes: EpisodeCompletion[] = [];
-        for (const id of raw) {
-          const source = await readEpisodeSource(deps, before.fact.session.subjectId, id);
+        const sources = await readEpisodeSources(deps, before.fact.session.subjectId, raw);
+        for (const [index, id] of raw.entries()) {
+          const source = sources[index];
           episodes.push(
             source
               ? {
@@ -298,9 +298,14 @@ export function createEpisodeProgressCommands(config: Dependencies) {
         const finalTime = await withConnection(pool, (client) => mintReadTime(client, clock));
         try {
           const finalDeps = { ...deps, at: finalTime };
-          for (const shown of episodes) {
-            if (shown.episodeSubjectId === null) continue;
-            const source = await readEpisodeSource(finalDeps, before.fact.session.subjectId, shown.episodeSubjectId);
+          const disclosed = episodes.filter((shown) => shown.episodeSubjectId !== null);
+          const currentSources = await readEpisodeSources(
+            finalDeps,
+            before.fact.session.subjectId,
+            disclosed.map((shown) => shown.episodeSubjectId!),
+          );
+          for (const [index, shown] of disclosed.entries()) {
+            const source = currentSources[index];
             if (!source || source.membership !== shown.membership || source.ordinal !== shown.ordinal)
               throw new ProblemError('semantic_not_ready');
           }

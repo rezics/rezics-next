@@ -32,26 +32,31 @@ export async function readEpisodeSource(
   parentId: string,
   episodeId: string,
 ): Promise<EpisodeSource | null> {
+  return (await readEpisodeSources(deps, parentId, [episodeId]))[0] ?? null;
+}
+
+/** Share parent/release observations across one bounded caller page. Subject detail
+ * already owns canonical redirect, current selection and statement disclosure fences. */
+export async function readEpisodeSources(
+  deps: EpisodeSourceDependencies,
+  parentId: string,
+  episodeIds: readonly string[],
+): Promise<(EpisodeSource | null)[]> {
+  if (!episodeIds.length) return [];
   const parent = await readLibraryProfileAnchor(deps, parentId);
-  if (!parent || parent.subjectId !== parentId) return null;
-  const before = await readLibraryProfileAnchor(deps, episodeId);
-  if (!before || before.subjectId !== episodeId) return null;
+  if (!parent || parent.subjectId !== parentId) return episodeIds.map(() => null);
   const active = await activeRelease(deps.pool);
   if (!active) throw new ProblemError('semantic_not_ready');
-  const type = active.release.types[before.acceptingType];
   const relation = active.release.properties['schema:isPartOf'];
   // Missing released structure is explicit, rather than guessed from source numbers.
   if (
-    !type ||
     relation?.relation?.group !== 'membership' ||
     relation.datatype !== 'wikibase-item' ||
-    !type.properties.includes('schema:isPartOf') ||
     !relation.targets?.some(
       (target) => target === parent.acceptingType || active.release.types[parent.acceptingType]?.bases.includes(target),
     )
   )
-    return null;
-  if (before.acceptingType !== 'schema:Episode' && !type.bases.includes('schema:Episode')) return null;
+    return episodeIds.map(() => null);
   const authorize = async (id: string) => {
     const route = routeOf(id)!;
     return accessCheck(
@@ -66,47 +71,62 @@ export async function readEpisodeSource(
       { pool: deps.pool, deadline: deps.deadline, time: deps.at },
     );
   };
-  const check = await authorize(episodeId);
-  let value;
-  try {
-    value = await readSubject(deps.pool, episodeId, (client) => check(client, deps.at), GLOBAL_CONTEXT, deps.routeKey, {
-      deadline: deps.deadline,
-      readAs: (read) => readStatementAs(deps.pool, deps.access, deps.actor, deps.deadline, read),
-      prepareAuthorization: () => authorize(episodeId),
-      prepareAuthorize: authorize,
-      authorize: summaryAuthorization(authorize),
+  const episodes: (EpisodeSource | null)[] = [];
+  for (const episodeId of episodeIds) {
+    const check = await authorize(episodeId);
+    let value;
+    try {
+      value = await readSubject(
+        deps.pool,
+        episodeId,
+        (client) => check(client, deps.at),
+        GLOBAL_CONTEXT,
+        deps.routeKey,
+        {
+          deadline: deps.deadline,
+          readAs: (read) => readStatementAs(deps.pool, deps.access, deps.actor, deps.deadline, read),
+          prepareAuthorization: () => authorize(episodeId),
+          prepareAuthorize: authorize,
+          authorize: summaryAuthorization(authorize),
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof SubjectRedirectError)) throw error;
+    }
+    const type = value && active.release.types[value.subject.type];
+    if (
+      !value ||
+      value.subject.id !== episodeId ||
+      !type ||
+      !type.properties.includes('schema:isPartOf') ||
+      (value.subject.type !== 'schema:Episode' && !type.bases.includes('schema:Episode'))
+    ) {
+      episodes.push(null);
+      continue;
+    }
+    const members = (value.subject.statements['schema:isPartOf'] ?? []).filter((s) => s.rank !== 'deprecated');
+    const ordinal = value.subject.statements['schema:episodeNumber']?.find(
+      (s) => s.rank !== 'deprecated' && s.value.type === 'value',
+    )?.value;
+    episodes.push({
+      id: episodeId,
+      membership:
+        members.length === 1 &&
+        value.subject.resolution['schema:isPartOf'] === undefined &&
+        members.some((s) => s.value.type === 'value' && s.value.content === parentId)
+          ? 'member'
+          : 'detached',
+      ordinal:
+        ordinal?.type === 'value' && (typeof ordinal.content === 'string' || typeof ordinal.content === 'number')
+          ? String(ordinal.content)
+          : null,
     });
-  } catch (error) {
-    if (error instanceof SubjectRedirectError) return null;
-    throw error;
   }
-  if (!value) return null;
-  const [after, finalParent, finalRelease] = await Promise.all([
-    readLibraryProfileAnchor(deps, episodeId),
+  const [finalParent, finalRelease] = await Promise.all([
     readLibraryProfileAnchor(deps, parentId),
     activeRelease(deps.pool),
   ]);
-  if (
-    !sameLibraryProfileAnchor(before, after) ||
-    !sameLibraryProfileAnchor(parent, finalParent) ||
-    finalRelease?.digest !== active.digest
-  )
+  if (!sameLibraryProfileAnchor(parent, finalParent) || finalRelease?.digest !== active.digest)
     throw new ProblemError('semantic_not_ready');
-  const members = (value.subject.statements['schema:isPartOf'] ?? []).filter((s) => s.rank !== 'deprecated');
-  const ordinal = value.subject.statements['schema:episodeNumber']?.find(
-    (s) => s.rank !== 'deprecated' && s.value.type === 'value',
-  )?.value;
-  return {
-    id: episodeId,
-    membership:
-      members.length === 1 &&
-      value.subject.resolution['schema:isPartOf'] === undefined &&
-      members.some((s) => s.value.type === 'value' && s.value.content === parentId)
-        ? 'member'
-        : 'detached',
-    ordinal:
-      ordinal?.type === 'value' && (typeof ordinal.content === 'string' || typeof ordinal.content === 'number')
-        ? String(ordinal.content)
-        : null,
-  };
+  return episodes;
 }
