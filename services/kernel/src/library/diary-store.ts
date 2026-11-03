@@ -46,9 +46,13 @@ export async function diaryRows(
   if (filter) {
     const bucket = filter.month === 'unallocated' ? 13 : filter.month;
     const parameters: unknown[] = [route, accountId, filter.year];
-    const conditions = ['route=$1', 'account_id=$2', "state='completed'",
+    const conditions = [
+      'route=$1',
+      'account_id=$2',
+      "state='completed'",
       'library.reported_finish_valid(journal_finish_year,journal_finish_month,journal_finish_day)',
-      'journal_finish_year=$3'];
+      'journal_finish_year=$3',
+    ];
     if (bucket !== undefined) {
       parameters.push(bucket);
       conditions.push(`COALESCE(journal_finish_month,13)=$${parameters.length}`);
@@ -58,9 +62,13 @@ export async function diaryRows(
       conditions.push(`(started_at,session_id) < ($${parameters.length - 1}::timestamptz,$${parameters.length}::uuid)`);
     }
     parameters.push(limit);
-    return (await client.query<DiaryRow>(`SELECT ${columns} FROM library.progress_session
+    return (
+      await client.query<DiaryRow>(
+        `SELECT ${columns} FROM library.progress_session
       WHERE ${conditions.join(' AND ')} ORDER BY started_at DESC,session_id DESC LIMIT $${parameters.length}`,
-      parameters)).rows;
+        parameters,
+      )
+    ).rows;
   }
   const parameters = after ? [route, accountId, after.recordedStartedAt, after.id, limit] : [route, accountId, limit];
   return (
