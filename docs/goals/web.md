@@ -790,3 +790,9 @@ phone captures use `<state>.<locale>.<theme>.phone.png`. A full web check is req
 
 Production Worker bindings, object storage, abuse prevention and deployment configuration must be supplied through
 supported interfaces. Private provisioning is external; functional and visual acceptance uses isolated fixtures.
+
+## Server-saved drafts consumer handoff
+
+Web now has a bounded in-memory own-draft inventory and a private selected-body inspection component behind a typed `OwnDraftReader` seam. It builds one O(N) index for at most 20 metadata rows, reads a body only after explicit selection, replaces rather than accumulates pages, and fences page/selection results by account, authentication epoch, caller epoch, locale, source and address.
+
+Decision: keep native list and selection calls behind the typed seam until Content publishes the generated `own_drafts.list` and `own_drafts.resume` client methods; do not turn native action paths into browser fetch URLs or mix browser-local text into server drafts. The signed-in `/drafts` route and navigation, existing-composer resume, save/publish/erase with readback, browser-local recovery choice, and connected command-state stories remain in `.temp/continuation/own-drafts-native-client.md`.
