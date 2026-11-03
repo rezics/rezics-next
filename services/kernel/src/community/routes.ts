@@ -1,9 +1,17 @@
 import {
-  publishedSpace as published, publishedRealm,
-  createRealmHomeReader, createRealmHomeBoardReader,
-  RealmHomePageSchema, RealmHomeQuerySchema, realmHomeResponse,
+  publishedSpace as published,
+  publishedRealm,
+  createRealmHomeReader,
+  createRealmHomeBoardReader,
+  RealmHomePageSchema,
+  RealmHomeQuerySchema,
+  realmHomeResponse,
 } from './realm-home.ts';
-import { RealmHomeBoardPageSchema, RealmHomeBoardQuerySchema, realmHomeBoardResponse } from '../content/realm-board-home.ts';
+import {
+  RealmHomeBoardPageSchema,
+  RealmHomeBoardQuerySchema,
+  realmHomeBoardResponse,
+} from '../content/realm-board-home.ts';
 import { ContentNotFoundError } from '../content/reads.ts';
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
@@ -99,7 +107,13 @@ import {
   RealmHomePublicationQuerySchema,
   realmHomePublicationResponse,
 } from './realm-home-publications.ts';
-import { ownRealmsQuerySchema, ownRealmsResponseSchema, SpaceSchema as space, RealmSchema as realm, RealmVotesSchema as votes } from './schemas.ts';
+import {
+  ownRealmsQuerySchema,
+  ownRealmsResponseSchema,
+  SpaceSchema as space,
+  RealmSchema as realm,
+  RealmVotesSchema as votes,
+} from './schemas.ts';
 import { PublicationPreparationResponseSchema, readPublicationPreparation } from './publication-preparation.ts';
 import {
   listPublications,
@@ -686,7 +700,8 @@ export type CommunityRouteDependencies = {
 
 function communityProblem(error: unknown): never {
   if (error instanceof ContentNotFoundError) throw new ProblemError('not_found');
-  if (error instanceof TypeError && error.message === 'Invalid content cursor') throw new ProblemError('invalid_cursor');
+  if (error instanceof TypeError && error.message === 'Invalid content cursor')
+    throw new ProblemError('invalid_cursor');
   // Preserve the native ownership subclass for the central problem mapper.
   if (error instanceof ResourceAccessWriteDeniedError) throw error;
   if (error instanceof MemberPageUnavailableError) throw new ProblemError('dependency_unavailable');
@@ -1600,7 +1615,9 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         try {
           const page = await admission.run('normal', job, () =>
             createRealmHomeReader({ ...realmDependencies(), tokens: dependencies.tokens })(
-              realmId, { actor, deadline: job.deadline }, query,
+              realmId,
+              { actor, deadline: job.deadline },
+              query,
             ),
           );
           if (!page) throw new ProblemError('not_found');
@@ -1616,7 +1633,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         query: strict(RealmHomeBoardQuerySchema),
         response: {
-          200: strict(RealmHomeBoardPageSchema), ...readFailures,
+          200: strict(RealmHomeBoardPageSchema),
+          ...readFailures,
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1632,7 +1650,9 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         try {
           const page = await admission.run('normal', job, () =>
             createRealmHomeBoardReader({ ...realmDependencies(), tokens: dependencies.tokens })(
-              realmId, { actor, deadline: job.deadline }, query,
+              realmId,
+              { actor, deadline: job.deadline },
+              query,
             ),
           );
           if (!page) throw new ProblemError('not_found');

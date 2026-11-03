@@ -298,10 +298,7 @@ export const BoardRecordSchema = t.Object(
   closed,
 );
 export const BoardViewSchema = t.Unsafe<BoardView>(
-  t.Object(
-    { ...BoardRecordSchema.properties, community: t.Union([CommunityPresentationSchema, t.Null()]) },
-    closed,
-  ),
+  t.Object({ ...BoardRecordSchema.properties, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed),
 );
 export const ThreadInputSchema = t.Object(
   {

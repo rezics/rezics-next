@@ -51,15 +51,18 @@ const closed = { additionalProperties: false } as const;
 const advice = t.Union([t.Literal('sign-in'), t.Literal('unavailable')]);
 export const RealmHomeQuerySchema = t.Pick(RealmHomePublicationQuerySchema, ['languages'], closed);
 export const RealmHomePresentationSchema = t.Omit(CommunityPresentationSchema, ['join'], closed);
-export const RealmHomePageSchema = t.Object({
-  realm: RealmSchema,
-  space: SpaceSchema,
-  presentation: RealmHomePresentationSchema,
-  boards: RealmHomeBoardPageSchema,
-  publications: RealmHomePublicationPageSchema,
-  viewer: t.Object({ state: t.Union([t.Literal('anonymous'), t.Literal('unavailable')]) }, closed),
-  actions: t.Object({ participate: advice, join: advice, leave: advice, claim: advice, manage: advice }, closed),
-}, closed);
+export const RealmHomePageSchema = t.Object(
+  {
+    realm: RealmSchema,
+    space: SpaceSchema,
+    presentation: RealmHomePresentationSchema,
+    boards: RealmHomeBoardPageSchema,
+    publications: RealmHomePublicationPageSchema,
+    viewer: t.Object({ state: t.Union([t.Literal('anonymous'), t.Literal('unavailable')]) }, closed),
+    actions: t.Object({ participate: advice, join: advice, leave: advice, claim: advice, manage: advice }, closed),
+  },
+  closed,
+);
 
 /** The native container witness binds identity/presentation and both shelves.
  * Fresh Realm and Space decisions run outside one another's preparation; the
@@ -84,7 +87,9 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
       if (!currentRealm) return null;
       const identity = { route: routeOf(before.spaceId)!, id: before.spaceId };
       const check = await accessCheck(
-        deps.access, context.actor, 'space:read',
+        deps.access,
+        context.actor,
+        'space:read',
         { ...identity, eligibility: spaceReadEligibility(identity) },
         { pool: deps.pool, deadline: context.deadline },
       );
@@ -94,8 +99,12 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
         if (!(await check(client, at))) return null;
         const space = await readSpace(client, before.spaceId, authoritativeTimeValue(at));
         if (!space) return null;
-        if (currentRealm.headRevisionId !== before.realmHead || currentRealm.spaceId !== before.spaceId ||
-            space.headRevisionId !== before.spaceHead || !(await revalidateContainerBinding(client, before, at)))
+        if (
+          currentRealm.headRevisionId !== before.realmHead ||
+          currentRealm.spaceId !== before.spaceId ||
+          space.headRevisionId !== before.spaceHead ||
+          !(await revalidateContainerBinding(client, before, at))
+        )
           throw new AccessUnavailableError('contention');
         return { realm: currentRealm, space };
       });
@@ -158,7 +167,10 @@ export function createRealmHomeBoardReader(deps: RealmHomeDependencies) {
 export function realmHomeResponse(page: RealmHomePage) {
   // Serialize through the same ordinary Realm/Space and native shelf models.
   // Join is deliberately absent from the presentation wire projection.
-  const presentation = communityPresentationResponse({ ...page.presentation, join: { membership: 'unknown', action: null } });
+  const presentation = communityPresentationResponse({
+    ...page.presentation,
+    join: { membership: 'unknown', action: null },
+  });
   const { join: _join, ...withoutJoin } = presentation;
   return {
     realm: publishedRealm(page.realm),
@@ -213,4 +225,3 @@ export function publishedRealm(value: RealmView) {
     presentation: value.presentation,
   };
 }
-

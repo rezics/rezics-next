@@ -183,9 +183,10 @@ export async function selectRealmBoardPage(
   const after = selected.at(-1);
   return {
     ids: selected,
-    next: result.candidates.length > limit && after
-      ? encodeCursor(dependencies.tokens, binding, { epoch: result.partition.epoch, after: [after] }, now)
-      : null,
+    next:
+      result.candidates.length > limit && after
+        ? encodeCursor(dependencies.tokens, binding, { epoch: result.partition.epoch, after: [after] }, now)
+        : null,
     anchor: { partition: result.partition, epoch: result.partition.epoch, position: result.partition.position },
   };
 }
@@ -199,7 +200,7 @@ export async function listRealmBoards(
   const selected = await selectRealmBoardPage(dependencies, realmId, context, input);
   const disclosed = await readBoards(dependencies, selected.ids, context);
   return {
-    items: disclosed.flatMap(({ value }) => value?.realmId === realmId ? [value] : []),
+    items: disclosed.flatMap(({ value }) => (value?.realmId === realmId ? [value] : [])),
     next: selected.next,
     anchors: [selected.anchor, ...disclosed.map(({ anchor }) => anchor)],
   };

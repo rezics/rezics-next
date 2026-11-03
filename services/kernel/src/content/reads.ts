@@ -574,7 +574,12 @@ export function readResource(
         const current = await native.point(context, () =>
           point(client, row.kind, row.id, row.thread_id ?? row.id, false, true),
         );
-        if (!current || current.title !== row.title || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
+        if (
+          !current ||
+          current.title !== row.title ||
+          signature(current) !== signature(row) ||
+          !admissible(current, actor, tombstone)
+        )
           throw new ContentNotFoundError();
         if (
           current.kind === 'board' &&
@@ -2685,22 +2690,22 @@ async function boardRecordRound(
   decisions: Awaited<ReturnType<typeof prepareBoardPageDecisions>>,
 ) {
   return batchSnapshot(dependencies, ids, context, async (client) => {
-      const boards = await batchRows(
-        client,
-        'board',
-        ids.map((id) => batchKey(id)),
-      );
-      const realms = await batchRealms(
-        client,
-        boards.flatMap((row) => (row.realm_id ? [row.realm_id] : [])),
-      );
-      const checked = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
-      return new Map(
-        boards
-          .filter((row) => checked.boards.get(row.id) && (!row.realm_id || checked.realms.get(row.realm_id)))
-          .map((row) => [row.id, row]),
-      );
-    });
+    const boards = await batchRows(
+      client,
+      'board',
+      ids.map((id) => batchKey(id)),
+    );
+    const realms = await batchRealms(
+      client,
+      boards.flatMap((row) => (row.realm_id ? [row.realm_id] : [])),
+    );
+    const checked = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
+    return new Map(
+      boards
+        .filter((row) => checked.boards.get(row.id) && (!row.realm_id || checked.realms.get(row.realm_id)))
+        .map((row) => [row.id, row]),
+    );
+  });
 }
 
 /** Exact native board records for a containing page that owns presentation.
@@ -2711,10 +2716,12 @@ export async function observeBoardRecords(
   dependencies: ContentReadDependencies,
   boardIds: readonly string[],
   context: ReadContext,
-): Promise<Readonly<{
-  records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
-  current: () => Promise<boolean>;
-}>> {
+): Promise<
+  Readonly<{
+    records: readonly Anchored<import('./model.ts').BoardRecord | null>[];
+    current: () => Promise<boolean>;
+  }>
+> {
   if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
   const ids = [...new Set(boardIds)];
   if (!ids.length) return { records: [], current: async () => true };
@@ -2737,8 +2744,13 @@ export async function observeBoardRecords(
       for (const [id, row] of initial.value) {
         const current = final.value.get(id);
         const home = partitionOf(route(id));
-        if (!current || current.title !== row.title || signature(current) !== signature(row) ||
-            initial.anchors.get(home)?.epoch !== final.anchors.get(home)?.epoch) return false;
+        if (
+          !current ||
+          current.title !== row.title ||
+          signature(current) !== signature(row) ||
+          initial.anchors.get(home)?.epoch !== final.anchors.get(home)?.epoch
+        )
+          return false;
       }
       return true;
     },

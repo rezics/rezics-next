@@ -16,8 +16,12 @@ let people: Fixture;
 let runtime: ReturnType<typeof communityFixtureRuntime>;
 const key = () => JSON.stringify(crypto.randomUUID());
 const context = () => ({ actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 });
-const deps = () => ({ pool: runtime.system.database.pool, access: runtime.system.access,
-  routeKey: runtime.system.routeKey, tokens: runtime.system.tokenKeys });
+const deps = () => ({
+  pool: runtime.system.database.pool,
+  access: runtime.system.access,
+  routeKey: runtime.system.routeKey,
+  tokens: runtime.system.tokenKeys,
+});
 
 beforeAll(async () => {
   driver = await createCommunityDriver();
@@ -27,8 +31,14 @@ beforeAll(async () => {
 afterAll(closeCommunityDrivers);
 
 async function command<T>(path: string, body: unknown, method = 'POST', head?: string, actor = people.owner) {
-  const response = await driver.request({ actor, path, method, body, key: key(),
-    ...(head === undefined ? {} : { ifMatch: JSON.stringify(head) }) });
+  const response = await driver.request({
+    actor,
+    path,
+    method,
+    body,
+    key: key(),
+    ...(head === undefined ? {} : { ifMatch: JSON.stringify(head) }),
+  });
   const json = await response.json();
   expect(response.status, JSON.stringify(json)).toBe(method === 'POST' ? 201 : 200);
   return json as T;
@@ -36,7 +46,11 @@ async function command<T>(path: string, body: unknown, method = 'POST', head?: s
 async function realm(visibility: 'public' | 'protected' = 'public') {
   const { space } = await command<{ space: { spaceId: string } }>('/v1/spaces', { title: 'Home carrier' });
   const { realm } = await command<{ realm: { realmId: string; headRevisionId: string } }>('/v1/realms', {
-    spaceId: space.spaceId, contextId: people.contextId, title: 'Home identity', summary: 'Current description', visibility,
+    spaceId: space.spaceId,
+    contextId: people.contextId,
+    title: 'Home identity',
+    summary: 'Current description',
+    visibility,
   });
   return { ...realm, spaceId: space.spaceId };
 }
@@ -51,9 +65,19 @@ async function home(id: string, actor: Account | null = null): Promise<Home> {
   return json as Home;
 }
 async function subject(type: string, label: string, statements?: unknown) {
-  return (await command<{ subject: { id: string } }>('/v1/subjects', {
-    type, labels: { en: label }, ...(statements ? { statements } : {}),
-  }, 'POST', undefined, people.subjectOwner)).subject.id;
+  return (
+    await command<{ subject: { id: string } }>(
+      '/v1/subjects',
+      {
+        type,
+        labels: { en: label },
+        ...(statements ? { statements } : {}),
+      },
+      'POST',
+      undefined,
+      people.subjectOwner,
+    )
+  ).subject.id;
 }
 
 test('mounted empty home keeps carrier, identity, optional states and unavailable viewer decisions distinct', async () => {
@@ -76,10 +100,15 @@ test('mounted empty home keeps carrier, identity, optional states and unavailabl
   expect(Object.values(signedIn.actions)).toEqual(Array(5).fill('unavailable'));
   const fault = observeSql(runtime.system.database.pool);
   try {
-    fault.armFault({ match: { statement: memberCount.sql }, boundary: 'before',
-      error: new AccessUnavailableError('overloaded') });
+    fault.armFault({
+      match: { statement: memberCount.sql },
+      boundary: 'before',
+      error: new AccessUnavailableError('overloaded'),
+    });
     expect((await home(target.realmId)).presentation.members).toEqual({ state: 'unknown', count: null, version: null });
-  } finally { await fault.close(); }
+  } finally {
+    await fault.close();
+  }
   const protectedRealm = await realm('protected');
   expect((await read(`/v1/realms/${protectedRealm.realmId}/home`)).status).toBe(404);
   expect((await home(protectedRealm.realmId, people.owner)).realm.visibility).toBe('protected');
@@ -96,7 +125,11 @@ test('twenty boards and twelve summaries retain independent ordinary sparse cont
     const conceptId = await subject('skos:Concept', `Board ${index}`, {
       'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
     });
-    await command(`/v1/realms/${target.realmId}/boards`, { conceptId, title: `Board ${index}`, visibility: 'published' });
+    await command(`/v1/realms/${target.realmId}/boards`, {
+      conceptId,
+      title: `Board ${index}`,
+      visibility: 'published',
+    });
   }
   for (let index = 0; index < 13; index++) {
     const subjectId = await subject('schema:Book', `Home work ${index}`);
@@ -112,33 +145,44 @@ test('twenty boards and twelve summaries retain independent ordinary sparse cont
   expect(initial.publications.items.every((item) => item.summary.id === item.publication.subjectId)).toBe(true);
   const observed = observeSql(runtime.system.database.pool);
   try {
-    const response = await read(`/v1/realms/${target.realmId}/boardShelf?cursor=${encodeURIComponent(initial.boards.next!)}`);
+    const response = await read(
+      `/v1/realms/${target.realmId}/boardShelf?cursor=${encodeURIComponent(initial.boards.next!)}`,
+    );
     expect(response.status).toBe(200);
     const page = await response.json();
     expect(page.items).toHaveLength(1);
     expect(page.next).toBeNull();
     expect(initial.boards.items.map((board) => board.id)).not.toContain(page.items[0].id);
     expect(observed.records.some((entry) => entry.statement === summaries.sql)).toBe(false);
-  } finally { await observed.close(); }
+  } finally {
+    await observed.close();
+  }
   const observedPublications = observeSql(runtime.system.database.pool);
   try {
-    const response = await read(`/v1/realms/${target.realmId}/publicationShelf?cursor=${encodeURIComponent(initial.publications.next!)}`);
+    const response = await read(
+      `/v1/realms/${target.realmId}/publicationShelf?cursor=${encodeURIComponent(initial.publications.next!)}`,
+    );
     expect(response.status).toBe(200);
     expect((await response.json()).items).toHaveLength(1);
     expect(observedPublications.records.some((entry) => entry.statement === boardWindow.sql)).toBe(false);
-  } finally { await observedPublications.close(); }
+  } finally {
+    await observedPublications.close();
+  }
   const raw = await (await read(`/v1/realms/${target.realmId}/boards?limit=20`)).json();
   expect(raw.items.map((board: { id: string }) => board.id)).toEqual(initial.boards.items.map((board) => board.id));
   const continuation = await read(`/v1/realms/${target.realmId}/boardShelf?cursor=${encodeURIComponent(raw.next)}`);
   expect((await continuation.json()).items).toHaveLength(1);
-  expect((await read(`/v1/realms/${target.realmId}/boardShelf?cursor=${encodeURIComponent(raw.next)}`, people.owner)).status).toBe(400);
+  expect(
+    (await read(`/v1/realms/${target.realmId}/boardShelf?cursor=${encodeURIComponent(raw.next)}`, people.owner)).status,
+  ).toBe(400);
 });
 
 test('retained observations reject late publication replacement and required hydration failure retries the same window', async () => {
   const target = await realm();
   const subjectId = await subject('schema:Book', 'No stale home label');
   const { publication } = await command<{ publication: { publicationId: string } }>(
-    `/v1/realms/${target.realmId}/publications`, { subjectId },
+    `/v1/realms/${target.realmId}/publications`,
+    { subjectId },
   );
   await driver.settle();
   const selected = await createRealmHomePublicationObservationReader(deps())(target.realmId, context());
@@ -147,15 +191,26 @@ test('retained observations reject late publication replacement and required hyd
   expect(await boards.current()).toBe(true);
   const fault = observeSql(runtime.system.database.pool);
   try {
-    fault.armFault({ match: { statement: summaries.sql }, boundary: 'before', error: new AccessUnavailableError('overloaded') });
+    fault.armFault({
+      match: { statement: summaries.sql },
+      boundary: 'before',
+      error: new AccessUnavailableError('overloaded'),
+    });
     const response = await read(`/v1/realms/${target.realmId}/home`);
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('No stale home label');
-  } finally { await fault.close(); }
+  } finally {
+    await fault.close();
+  }
   expect((await home(target.realmId)).publications.items[0]!.summary.label?.value).toBe('No stale home label');
-  const withdrawn = await driver.request({ actor: people.owner, method: 'DELETE',
-    path: `/v1/realms/${target.realmId}/publications/${subjectId}`, key: key(), body: {},
-    ifMatch: JSON.stringify(publication.publicationId) });
+  const withdrawn = await driver.request({
+    actor: people.owner,
+    method: 'DELETE',
+    path: `/v1/realms/${target.realmId}/publications/${subjectId}`,
+    key: key(),
+    body: {},
+    ifMatch: JSON.stringify(publication.publicationId),
+  });
   expect(withdrawn.status).toBe(200);
   await command(`/v1/realms/${target.realmId}/publications`, { subjectId });
   expect(await selected!.current()).toBe(false);
@@ -170,6 +225,10 @@ test('retained observations reject late publication replacement and required hyd
     const stale = await pending;
     expect(stale.status).toBe(503);
     expect(await stale.text()).not.toContain('Current description');
-  } finally { barrier.release(); await pending; await barrierObserver.close(); }
+  } finally {
+    barrier.release();
+    await pending;
+    await barrierObserver.close();
+  }
   expect((await home(target.realmId)).realm.summary).toBe('New description');
 });
