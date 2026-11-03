@@ -223,6 +223,9 @@ nor purge timing, and this contract adds no lifecycle engine or synchronous wait
 Decision: second-scope saved queries use the installed rule, Source, Members and explicit Publication contracts
 with `id` order; private meaning stays private, with no new grammar, sort family or publication engine. The
 [second-scope plan](research/commerce-second-scope-plan.md) owns the delivery slices and their composition.
+Decision: Web reads ordinary saved identities through the existing Dynamic Collection reader and members GET;
+owner-only rule edit stays off the public page, and 202/empty 200/503/stale-cursor recovery follow
+[saved-query results](../apps/web/src/library/saved-query-results.md).
 
 Saved dynamic Collections use `POST /v1/collections` with the closed body
 `{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}`.

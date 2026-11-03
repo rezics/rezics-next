@@ -253,6 +253,7 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       retryAfterMs: page.retryAfterMs,
       unavailable: page.unavailable,
       ...(page.filterStatus ? { filterStatus: page.filterStatus } : {}),
+      ...(page.cursorRestarted ? { cursorRestarted: true as const } : {}),
     };
   });
 

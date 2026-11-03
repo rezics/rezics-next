@@ -12,16 +12,16 @@ import { LibraryNavigation } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
-import { RuleEditLink } from './collection-rule-editor';
-import { useSession } from '../session/query';
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
+import { isOrdinarySavedQuery, RuleEditLink } from './saved-query-results';
 
 type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
   search?: Record<string, string | string[]>;
   readMembers?: (id: string, cursor?: string) => Promise<DynamicMembersResult>;
+  viewerId?: string | null;
 };
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
@@ -54,6 +54,7 @@ function DynamicCollectionPageLifetime({
   page,
   readMembers,
   search,
+  viewerId = null,
   pins,
   pinActions,
   collections,
@@ -117,7 +118,7 @@ function DynamicCollectionPageLifetime({
     }
   }
   const locale = getLocale();
-  const session = useSession();
+  const saved = isOrdinarySavedQuery(current);
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
@@ -127,6 +128,16 @@ function DynamicCollectionPageLifetime({
             <PageHeading>{current.title}</PageHeading>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <PinControlView control={pinActions} />
+              <RuleEditLink
+                collection={{
+                  id: current.id,
+                  curatorAccountId: current.curatorAccountId ?? null,
+                  membershipKind: 'dynamic',
+                  ...(current.builtinKind ? { builtinKind: current.builtinKind } : {}),
+                }}
+                viewerId={viewerId}
+                allowed={Boolean(viewerId)}
+              />
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
               />
@@ -142,19 +153,8 @@ function DynamicCollectionPageLifetime({
         </header>
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
-        {current.builtinKind ? (
-          <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>
-        ) : (
-          <RuleEditLink
-            collection={{
-              id: current.id,
-              curatorAccountId: current.curatorAccountId ?? null,
-              membershipKind: 'dynamic',
-            }}
-            viewerId={session.subject ?? null}
-            allowed={session.state === 'signed-in'}
-          />
-        )}
+        {saved ? null : <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>}
+        {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
         {current.filterProperties && current.filterParams ? (
           <CollectionFilters
             id={current.id}
@@ -200,7 +200,7 @@ function DynamicCollectionPageLifetime({
           <div>
             <p>{m.library_dynamic_try_later()}</p>
             <button
-              className="underline"
+              className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               type="button"
               onClick={() => {
                 if (!active.current || retrying) return;

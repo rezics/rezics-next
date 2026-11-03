@@ -281,7 +281,12 @@ function CollectionResultLifetime({
     return result;
   }
   return 'preparing' in page ? (
-    <DynamicCollectionPage page={page} {...(input.search ? { search: input.search } : {})} readMembers={readMembers} />
+    <DynamicCollectionPage
+      page={page}
+      {...(input.search ? { search: input.search } : {})}
+      readMembers={readMembers}
+      viewerId={mode === 'session' ? viewerId : null}
+    />
   ) : (
     <CollectionPage
       page={page}

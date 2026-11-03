@@ -32,3 +32,8 @@ properties and applied params, without introducing another filter store or claim
 An admitted Collection filter document, or a Library type/label selection, can open `/library/rules/new` as a private
 saved dynamic Collection. A Library state ID without profile and state set stays unsaved with correction. Built-in
 Collections keep their immutable rules. Native member execution remains Commerce.
+
+Ordinary saved dynamic Collections use this same Collection address and Dynamic Collection reader. See
+[saved-query results](saved-query-results.md) for 202 preparing versus empty 200 versus 503, exact URL/cursor retry,
+and the owner-only rule edit boundary. Built-in identities keep the fixed-rule copy; they are not relabelled as saved
+membership.

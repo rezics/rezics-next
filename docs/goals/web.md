@@ -52,8 +52,12 @@ independent rather than making shared files or unfinished producer delivery into
   `id` sort; representable predicates seed a private create draft for explicit Save. Unrepresentable Library state
   (no profile/state set) and invalid filter JSON stay unsaved with correction. Built-in identities have no rule
   editor. Create uses `POST /v1/collections` `{membershipKind:'dynamic', visibility:'private', rule:{filter,sort:'id'}}`;
-  edit uses `PUT .../rule` with CAS revision. Native execution and publication remain Commerce; Web shows
-  unavailable, conflict and uncertain recovery without inventing members, counts or occurrence IDs.
+  edit uses `PUT .../rule` with CAS revision. Ordinary saved identities then use the existing Dynamic Collection
+  reader at `/collections/{id}`: unique-subject members, retained URL filter/`id` sort, owner-only rule edit, and
+  explicit 202 preparing / empty 200 / 503 / stale-cursor restart. Public readers receive only published permitted
+  membership, never the owner predicate. Native execution and publication remain Commerce; Web shows unavailable,
+  conflict and uncertain recovery without inventing members, counts or occurrence IDs. The Web results seam is
+  documented in [saved-query results](../../apps/web/src/library/saved-query-results.md).
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
   count-free value continuation for that exact Collection. Keep at most eight active properties; changing the
   property window does not discard selected operands. This is shared by curated and built-in dynamic readers.

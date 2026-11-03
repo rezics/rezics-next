@@ -72,7 +72,7 @@ type CollectionReadResult = { provenance?: CollectionReadProvenance };
 export type CollectionPageResult = (EditableCollectionPage | DynamicCollectionPage) & CollectionReadResult;
 export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
-  'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable'
+  'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable' | 'cursorRestarted'
 > & { filterStatus?: DynamicCollectionPage['filterStatus'] } & CollectionReadResult;
 
 export function collectionResultMatches(
@@ -171,7 +171,7 @@ function collectionMembersReader(
         ...headers,
       });
     } catch (error) {
-      if (![202, 400, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
+      if (![202, 400, 409, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
       return error;
     }
   };
@@ -407,7 +407,7 @@ export async function loadEditableCollectionPage(
     readMembers(input.cursor).then(
       (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
       (error: unknown) => {
-        if (error instanceof StaleCursorError) return { stale: true as const };
+        if (error instanceof StaleCursorError || isStaleCursorResult(error)) return { stale: true as const };
         if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
         throw error;
       },
@@ -416,6 +416,7 @@ export async function loadEditableCollectionPage(
   ]);
   const membersResult = first.stale ? await readMembers() : first.page;
   const filterStatus = filterState.status;
+  const cursorRestarted = first.stale;
   if (collection.membershipKind === 'dynamic') {
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
     const filterFields = {
@@ -431,6 +432,7 @@ export async function loadEditableCollectionPage(
       ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
       ...(input.filterParams ? { filterParams: input.filterParams } : {}),
       following,
+      ...(cursorRestarted ? { cursorRestarted: true as const } : {}),
     };
     const status = resultStatus(membersResult);
     if (status === 202) {

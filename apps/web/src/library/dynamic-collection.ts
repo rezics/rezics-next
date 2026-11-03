@@ -54,6 +54,7 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   preparing: boolean;
   retryAfterMs: number;
   unavailable: boolean;
+  cursorRestarted?: boolean;
   filterActive?: boolean;
   filter?: FilterDocument;
   filterIgnored?: string[];
