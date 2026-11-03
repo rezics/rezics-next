@@ -7,6 +7,7 @@ import type {
   SourceObservationOutcome,
   SourceObservationProvider,
   SourceObservationRequest,
+  SourceObservationInspect,
 } from './contract';
 
 type Failure = Exclude<SourceObservationOutcome, { kind: 'ready' }>;
@@ -19,8 +20,6 @@ type State =
       selected: SourceObservationItem | null;
       request: SourceObservationRequest;
     };
-export type SourceObservationInspect = (request: SourceObservationRequest) => Promise<SourceObservationOutcome>;
-
 const controlClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
 const linkClass =
@@ -38,6 +37,18 @@ function ObservationDetails({
   const options = { locale: locale as never };
   const number = (value: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(value);
   const payload = item.payload;
+  const distributionLabel =
+    'scale' in payload && payload.figures?.distribution
+      ? m.source_observation_distribution(
+          {
+            completeness:
+              payload.figures.distribution.completeness === 'complete'
+                ? m.source_observation_complete({}, options)
+                : m.source_observation_partial({}, options),
+          },
+          options,
+        )
+      : undefined;
   return (
     <div data-slot="source-observation-item" className="min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]">
       <dl className="grid min-w-0 gap-x-3 gap-y-1 sm:grid-cols-[max-content_minmax(0,1fr)]">
@@ -62,7 +73,7 @@ function ObservationDetails({
             : `${item.nativeOrder} · ${m.source_observation_native_order_note({}, options)}`}
         </dd>
       </dl>
-      {payload.count === 0 ? (
+      {!('scale' in payload) ? (
         <p role="status">{m.source_observation_cleared({}, options)}</p>
       ) : (
         <>
@@ -73,18 +84,8 @@ function ObservationDetails({
           <p>{m.source_observation_attribution({ attribution: payload.attribution }, options)}</p>
           {payload.figures?.distribution && (
             <div className="space-y-1">
-              <p>
-                {m.source_observation_distribution(
-                  {
-                    completeness:
-                      payload.figures.distribution.completeness === 'complete'
-                        ? m.source_observation_complete({}, options)
-                        : m.source_observation_partial({}, options),
-                  },
-                  options,
-                )}
-              </p>
-              <ul className="flex flex-wrap gap-x-3 gap-y-1" aria-label={m.source_observation_distribution({}, options)}>
+              <p>{distributionLabel}</p>
+              <ul className="flex flex-wrap gap-x-3 gap-y-1" aria-label={distributionLabel}>
                 {payload.figures.distribution.bins.map((bin) => (
                   <li key={bin.score}>
                     {m.source_observation_bin({ score: number(bin.score), count: number(bin.count) }, options)}

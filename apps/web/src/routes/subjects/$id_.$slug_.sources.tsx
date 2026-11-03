@@ -104,5 +104,5 @@ function SourcesPresentation({
     loading: result.kind === 'loading',
     ...(reset ? { reset } : {}),
   });
-  return <SubjectSourcesPage result={result} locale={locale} observation={observation} {...retry} />;
+  return <SubjectSourcesPage result={result} locale={locale} {...(observation ? { observation } : {})} {...retry} />;
 }

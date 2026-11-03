@@ -11,8 +11,7 @@ import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
 import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sources';
 import { SourceObservationReader } from './source-observation/reader';
-import type { SourceObservationInspect } from './source-observation/reader';
-import type { SourceObservationProvider } from './source-observation/contract';
+import type { SourceObservationInspect, SourceObservationProvider } from './source-observation/contract';
 
 type SourceObservationMount = {
   source: SourceObservationProvider;

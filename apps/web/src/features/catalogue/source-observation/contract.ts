@@ -76,6 +76,7 @@ export type SourceObservationOutcome =
 export type SourceObservationOperation = (
   request: SourceObservationRequest,
 ) => Promise<{ status: number; data?: unknown }>;
+export type SourceObservationInspect = (request: SourceObservationRequest) => Promise<SourceObservationOutcome>;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
