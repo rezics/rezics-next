@@ -168,11 +168,23 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId, after_id: after };
       if (kind === 'copy_archive') {
-        const root = (await tx.query<{ upload_id: string }>(
-          'SELECT upload_id FROM library.copy_archive_upload WHERE route=$1 AND account_id=$2 FOR UPDATE',
-          [route,accountId])).rows[0];
-        const page = root ? await removeCopyArchivePage(tx,route,accountId,root.upload_id) : { removed: 0, complete: true };
-        return noEffect({ kind, removed: page.removed, parent: null, retain: false, blocked: false, hasMore: !page.complete });
+        const root = (
+          await tx.query<{ upload_id: string }>(
+            'SELECT upload_id FROM library.copy_archive_upload WHERE route=$1 AND account_id=$2 FOR UPDATE',
+            [route, accountId],
+          )
+        ).rows[0];
+        const page = root
+          ? await removeCopyArchivePage(tx, route, accountId, root.upload_id)
+          : { removed: 0, complete: true };
+        return noEffect({
+          kind,
+          removed: page.removed,
+          parent: null,
+          retain: false,
+          blocked: false,
+          hasMore: !page.complete,
+        });
       }
       if (kind === 'library_export') {
         const result = await tx.query(`DELETE FROM library.library_export WHERE route=$1 AND account_id=$2`, [

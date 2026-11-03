@@ -496,6 +496,7 @@ admission against the current released role; scores, simultaneous progress measu
 dates, privacy and unsupported fields remain visible private source evidence. Identifier matching uses existing
 external claims, with explicit unmatched resolution and guarded conflict replacement. Uploads and reviews belong
 to Library account erasure. This source does not provide live synchronization, catalogue creation or public reviews.
+
 # Native archive holdings inspection
 
 [Native archive holdings recovery](library-copy-archive-recovery.md) owns the admitted v1 format, private evidence
@@ -503,4 +504,3 @@ methods and continuation boundary. The installed first part preserves independen
 current copy review and effects remain undelivered. Holding evidence never restores an entry, progress, entitlement
 or financial fact. Decision: split admission/inspection from native review/effects while keeping both in that owner
 contract; do not expose a completed recovery interface before command composition and expiry scheduling land.
-

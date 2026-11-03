@@ -62,7 +62,9 @@ export type ParsedCopyArchive = {
   holdings: { ordinal: number; evidence: ArchivedHolding }[];
 };
 
-const invalid = (): never => { throw new ProblemError('invalid_request'); };
+const invalid = (): never => {
+  throw new ProblemError('invalid_request');
+};
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
   return value as Record<string, unknown>;
@@ -71,16 +73,24 @@ function exact(value: Record<string, unknown>, keys: readonly string[]) {
   if (Object.keys(value).length !== keys.length || keys.some((k) => !Object.hasOwn(value, k))) invalid();
 }
 function text(value: unknown, max: number): value is string {
-  return typeof value === 'string' && value.length <= max * 2 && value.isWellFormed() &&
-    !value.includes('\u0000') && [...value].length <= max;
+  return (
+    typeof value === 'string' &&
+    value.length <= max * 2 &&
+    value.isWellFormed() &&
+    !value.includes('\u0000') &&
+    [...value].length <= max
+  );
 }
 function uuid(value: unknown): value is string {
   return typeof value === 'string' && routeOf(value) !== null;
 }
 function stamp(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= 64 &&
+  return (
+    typeof value === 'string' &&
+    value.length <= 64 &&
     /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.test(value) &&
-    Number.isFinite(Date.parse(value));
+    Number.isFinite(Date.parse(value))
+  );
 }
 function date(value: unknown): boolean {
   if (value === null) return true;
@@ -91,7 +101,8 @@ function date(value: unknown): boolean {
 
 /** Reject excessive nesting before native parsing allocates an object graph. */
 function boundedDepth(text: string) {
-  let depth = 0, quoted = false;
+  let depth = 0,
+    quoted = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (quoted) {
@@ -105,22 +116,62 @@ function boundedDepth(text: string) {
 }
 
 function holding(value: Record<string, unknown>): ArchivedHolding {
-  exact(value, ['section', 'copy_id', 'subject_id', 'subject_id_reference', 'kind', 'status',
-    'library_profile_pin', 'kind_profile_pin', 'status_profile_pin', 'location', 'source',
-    'acquired_on', 'disposed_on', 'note', 'revision', 'created_at', 'updated_at']);
-  if (!uuid(value.copy_id) || !uuid(value.subject_id) ||
-    !(value.kind === null || text(value.kind, 200)) || !text(value.status, 200) ||
-    !Number.isInteger(value.revision) || Number(value.revision) < 1 || Number(value.revision) > 2_147_483_647 ||
-    !stamp(value.created_at) || !stamp(value.updated_at) || !date(value.acquired_on) || !date(value.disposed_on)) invalid();
-  for (const [key, limit] of [['note', 1000], ['location', 200], ['source', 200]] as const)
+  exact(value, [
+    'section',
+    'copy_id',
+    'subject_id',
+    'subject_id_reference',
+    'kind',
+    'status',
+    'library_profile_pin',
+    'kind_profile_pin',
+    'status_profile_pin',
+    'location',
+    'source',
+    'acquired_on',
+    'disposed_on',
+    'note',
+    'revision',
+    'created_at',
+    'updated_at',
+  ]);
+  if (
+    !uuid(value.copy_id) ||
+    !uuid(value.subject_id) ||
+    !(value.kind === null || text(value.kind, 200)) ||
+    !text(value.status, 200) ||
+    !Number.isInteger(value.revision) ||
+    Number(value.revision) < 1 ||
+    Number(value.revision) > 2_147_483_647 ||
+    !stamp(value.created_at) ||
+    !stamp(value.updated_at) ||
+    !date(value.acquired_on) ||
+    !date(value.disposed_on)
+  )
+    invalid();
+  for (const [key, limit] of [
+    ['note', 1000],
+    ['location', 200],
+    ['source', 200],
+  ] as const)
     if (value[key] !== null && !text(value[key], limit)) invalid();
   const reference = object(value.subject_id_reference);
   exact(reference, ['id', 'href']);
-  if (reference.id !== value.subject_id || reference.href !== `https://rezics.com/subjects/${value.subject_id}`) invalid();
+  if (reference.id !== value.subject_id || reference.href !== `https://rezics.com/subjects/${value.subject_id}`)
+    invalid();
   for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin'] as const) {
-    try { decodeLibraryProfilePin(value[field]); } catch { invalid(); }
-    if (value[field] !== null && Object.values(object(value[field])).some((v) =>
-      typeof v === 'string' && (!v.isWellFormed() || v.includes('\u0000')))) invalid();
+    try {
+      decodeLibraryProfilePin(value[field]);
+    } catch {
+      invalid();
+    }
+    if (
+      value[field] !== null &&
+      Object.values(object(value[field])).some(
+        (v) => typeof v === 'string' && (!v.isWellFormed() || v.includes('\u0000')),
+      )
+    )
+      invalid();
   }
   // Evidence only: no UUID, pin, revision or timestamp here is a command operand.
   return value as ArchivedHolding;
@@ -134,23 +185,53 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
     const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     boundedDepth(source);
     raw = parseStrictJson(source);
-  } catch { return invalid(); }
+  } catch {
+    return invalid();
+  }
   const archive = object(raw);
   exact(archive, ['manifest', 'records']);
   const m = object(archive.manifest);
-  exact(m, ['format', 'version', 'exportId', 'capturedAt', 'expiresAt', 'privacy', 'completeness',
-    'sections', 'omissions', 'fullExport', 'rows', 'recordBytes']);
-  if (m.format !== 'https://rezics.com/formats/library-export' || m.version !== 1 ||
-    m.privacy !== 'private' || m.completeness !== 'supported-native-facts' || m.fullExport !== false ||
-    !uuid(m.exportId) || !stamp(m.capturedAt) || !stamp(m.expiresAt) ||
+  exact(m, [
+    'format',
+    'version',
+    'exportId',
+    'capturedAt',
+    'expiresAt',
+    'privacy',
+    'completeness',
+    'sections',
+    'omissions',
+    'fullExport',
+    'rows',
+    'recordBytes',
+  ]);
+  if (
+    m.format !== 'https://rezics.com/formats/library-export' ||
+    m.version !== 1 ||
+    m.privacy !== 'private' ||
+    m.completeness !== 'supported-native-facts' ||
+    m.fullExport !== false ||
+    !uuid(m.exportId) ||
+    !stamp(m.capturedAt) ||
+    !stamp(m.expiresAt) ||
     Date.parse(m.expiresAt) <= Date.parse(m.capturedAt) ||
-    !Number.isSafeInteger(m.rows) || Number(m.rows) < 0 || Number(m.rows) > COPY_ARCHIVE_LIMITS.records ||
-    !Number.isSafeInteger(m.recordBytes) || Number(m.recordBytes) < 0 || Number(m.recordBytes) > COPY_ARCHIVE_LIMITS.bytes)
+    !Number.isSafeInteger(m.rows) ||
+    Number(m.rows) < 0 ||
+    Number(m.rows) > COPY_ARCHIVE_LIMITS.records ||
+    !Number.isSafeInteger(m.recordBytes) ||
+    Number(m.recordBytes) < 0 ||
+    Number(m.recordBytes) > COPY_ARCHIVE_LIMITS.bytes
+  )
     invalid();
   // v1 has no section counters or availability flags: missing declared sections are incomplete captures.
   const sections = m.sections;
-  if (!Array.isArray(sections) || sections.length !== exportSections.length ||
-    new Set(sections).size !== exportSections.length || exportSections.some((s) => !sections.includes(s))) invalid();
+  if (
+    !Array.isArray(sections) ||
+    sections.length !== exportSections.length ||
+    new Set(sections).size !== exportSections.length ||
+    exportSections.some((s) => !sections.includes(s))
+  )
+    invalid();
   const omissions = object(m.omissions);
   if (Object.keys(omissions).length > 32 || Object.entries(omissions).some(([k, v]) => !text(k, 200) || !text(v, 2000)))
     invalid();
@@ -158,7 +239,8 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   const coverage = new Map(exportSections.map((section) => [section, 0]));
   const holdings: ParsedCopyArchive['holdings'] = [];
   const ids = new Set<string>();
-  let recordBytes = 0, retainedBytes = Buffer.byteLength(JSON.stringify(m), 'utf8');
+  let recordBytes = 0,
+    retainedBytes = Buffer.byteLength(JSON.stringify(m), 'utf8');
   for (let ordinal = 0; ordinal < archive.records.length; ordinal++) {
     const record = object(archive.records[ordinal]);
     if (typeof record.section !== 'string' || !coverage.has(record.section)) invalid();
@@ -177,8 +259,11 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   if (recordBytes !== m.recordBytes) invalid();
   return {
     manifest: m as CopyArchiveManifest,
-    coverage: [...coverage].map(([section, records]) => ({ section, records,
-      support: section === 'holdings' ? 'evidence-only' : 'unsupported' })),
+    coverage: [...coverage].map(([section, records]) => ({
+      section,
+      records,
+      support: section === 'holdings' ? 'evidence-only' : 'unsupported',
+    })),
     holdings,
   };
 }

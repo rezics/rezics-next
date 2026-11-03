@@ -14,12 +14,12 @@ All requests require the receiving owner's bearer identity, `copy:list`, current
 `personal_library` gate. Operational reads hold the native account barrier through the page transaction.
 Responses are private and no-store. Upload IDs never authorize another account, even on a shared route.
 
-| Method | Input | Result |
-| --- | --- | --- |
-| `POST /v1/libraryCopyArchives` | Actual JSON file bytes, structured-string `Idempotency-Key` | `{uploadId,holdings,expiresAt}` |
-| `GET /v1/libraryCopyArchives/{id}?after=…` | Original archive ordinal; default -1 | Manifest, section coverage, ten evidence rows, `next` |
-| `POST /v1/libraryCopyArchives/{id}:cancel` | No body | `{uploadId,cancelled:true}` |
-| `DELETE /v1/libraryCopyArchives/{id}` | No body; repeat while incomplete | `{uploadId,removed,complete}` |
+| Method                                     | Input                                                       | Result                                                |
+| ------------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------- |
+| `POST /v1/libraryCopyArchives`             | Actual JSON file bytes, structured-string `Idempotency-Key` | `{uploadId,holdings,expiresAt}`                       |
+| `GET /v1/libraryCopyArchives/{id}?after=…` | Original archive ordinal; default -1                        | Manifest, section coverage, ten evidence rows, `next` |
+| `POST /v1/libraryCopyArchives/{id}:cancel` | No body                                                     | `{uploadId,cancelled:true}`                           |
+| `DELETE /v1/libraryCopyArchives/{id}`      | No body; repeat while incomplete                            | `{uploadId,removed,complete}`                         |
 
 `createCopyArchive` owns these methods; `ArchivedHolding`, `CopyArchiveManifest`, `ArchiveSectionCoverage` and
 `COPY_ARCHIVE_LIMITS` are defined in `services/kernel/src/library/copy-archive-format.ts`. Client declaration

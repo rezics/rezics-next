@@ -484,6 +484,7 @@ receipts. Private evidence retains fields without native admission, including si
 `services/kernel/test/library/list-import-mal.test.ts` covers parser losses and HTTP preview/review/apply,
 unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
 Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.
+
 # Native archive holdings inspection
 
 [Installed evidence methods and limits](../library-copy-archive-recovery.md) accept actual personal Library v1
@@ -491,4 +492,3 @@ artifacts and expose owner-only holding pages, cancellation and bounded removal.
 stable effect outcomes, scheduled expiry removal, client generation and Web adoption remain a continuation.
 The focused native scenario is `services/kernel/test/library/copy-archive.test.ts`; full recovery acceptance and
 native64/512/4096 executed caller growth are not claimed.
-
