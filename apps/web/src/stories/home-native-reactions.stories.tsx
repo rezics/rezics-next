@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
 import { HomeFeed } from '../features/pages/home-feed';
 import type { FeedItem, FeedPage } from '../features/pages/home-feed-read';
 import type { FeedReaction } from '../features/feed/vote-control';
@@ -97,6 +98,25 @@ export const AnonymousPhoneDark: Story = { ...CurrentViewerPhoneDark, args: { an
 export const AnonymousDesktop: Story = { ...CurrentViewerDesktop, args: { anonymous: true } };
 export const AnonymousDesktopDark: Story = { ...CurrentViewerDesktopDark, args: { anonymous: true } };
 export const UnavailablePhone: Story = { ...CurrentViewerPhone, args: { state: 'unavailable' } };
+export const UnavailablePhoneDark: Story = { ...CurrentViewerPhoneDark, args: { state: 'unavailable' } };
+export const UnavailableDesktop: Story = { ...CurrentViewerDesktop, args: { state: 'unavailable' } };
 export const UnavailableDesktopDark: Story = { ...CurrentViewerDesktopDark, args: { state: 'unavailable' } };
 export const TargetMismatchPhone: Story = { ...CurrentViewerPhone, args: { state: 'mismatch' } };
+export const TargetMismatchPhoneDark: Story = { ...CurrentViewerPhoneDark, args: { state: 'mismatch' } };
+export const TargetMismatchDesktop: Story = { ...CurrentViewerDesktop, args: { state: 'mismatch' } };
 export const TargetMismatchDesktopDark: Story = { ...CurrentViewerDesktopDark, args: { state: 'mismatch' } };
+export const ReplacementAndRevocation: Story = {
+  ...CurrentViewerDesktopDark,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const selected = () => canvasElement.querySelectorAll('[data-slot="vote-control"] [aria-pressed="true"]');
+    await expect(selected()).toHaveLength(4);
+    const previous = [...canvasElement.querySelectorAll('[data-feed-id]')].map(row => row.getAttribute('data-feed-id'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace page and targets' }));
+    await expect([...canvasElement.querySelectorAll('[data-feed-id]')].map(row => row.getAttribute('data-feed-id'))).not.toEqual(previous);
+    await expect(selected()).toHaveLength(4);
+    await userEvent.click(canvas.getByRole('button', { name: 'Revoke viewer' }));
+    await expect(selected()).toHaveLength(0);
+    await expect(canvasElement.querySelectorAll('[data-slot="vote-unavailable"]')).toHaveLength(4);
+  },
+};
