@@ -87,13 +87,25 @@ test('rating erasure status is done only after every vote, population vote and v
   };
   expect((await status()).done).toBe(false);
   const rankedTarget = targets[0]!;
-  await applyRatingChanges(db.pool, Array.from({ length: 4 }, (_, index) => ({
-    voterId: newId(route), countingKey: countingKey(`remaining-${index}`), questionId: STANDARD_QUESTION_ID,
-    populationId: realms[0]!, targetId: rankedTarget, units: 10, revision: 1, at,
-  })));
+  await applyRatingChanges(
+    db.pool,
+    Array.from({ length: 4 }, (_, index) => ({
+      voterId: newId(route),
+      countingKey: countingKey(`remaining-${index}`),
+      questionId: STANDARD_QUESTION_ID,
+      populationId: realms[0]!,
+      targetId: rankedTarget,
+      units: 10,
+      revision: 1,
+      at,
+    })),
+  );
   await drainPublicFigures(db.pool, partitionOf(routeOf(rankedTarget)!));
-  const rank = () => db.admin.query('SELECT count FROM rating.realm_rank WHERE subject_id=$1 AND population_id=$2',
-    [rankedTarget, realms[0]]);
+  const rank = () =>
+    db.admin.query('SELECT count FROM rating.realm_rank WHERE subject_id=$1 AND population_id=$2', [
+      rankedTarget,
+      realms[0],
+    ]);
   expect((await rank()).rows).toEqual([{ count: '5' }]);
   await deletePersona({ version: 1, pool: db.pool, auth }, voter);
   expect((await status()).done).toBe(false);
@@ -215,14 +227,27 @@ test('rating erasure status is done only after every vote, population vote and v
   ).toHaveLength(0);
   expect(await status()).toEqual({ done: true, hadVotes: true });
   expect((await rank()).rows).toEqual([]);
-  const late = { voterId: voter.accountId, countingKey: countingKey(voter.accountId),
-    questionId: STANDARD_QUESTION_ID, populationId: realms[0]!, targetId: rankedTarget,
-    units: 20, revision: 1, at };
+  const late = {
+    voterId: voter.accountId,
+    countingKey: countingKey(voter.accountId),
+    questionId: STANDARD_QUESTION_ID,
+    populationId: realms[0]!,
+    targetId: rankedTarget,
+    units: 20,
+    revision: 1,
+    at,
+  };
   await applyRatingChanges(db.pool, [late, { ...late, rekey: true, rekeyAt: at, rekeyAllowMissing: true }]);
   await drainPublicFigures(db.pool, partitionOf(routeOf(rankedTarget)!));
   expect((await rank()).rows).toEqual([]);
-  expect((await db.admin.query('SELECT count FROM rating.public_figure WHERE subject_id=$1 AND population_id=$2',
-    [rankedTarget, realms[0]])).rows).toEqual([{ count: '4' }]);
+  expect(
+    (
+      await db.admin.query('SELECT count FROM rating.public_figure WHERE subject_id=$1 AND population_id=$2', [
+        rankedTarget,
+        realms[0],
+      ])
+    ).rows,
+  ).toEqual([{ count: '4' }]);
 
   expect(pages.filter((page) => (page.data as { votes: unknown[] }).votes.length === 0)).toHaveLength(3);
   await applyRatingSegmentPageEvent(db.pool, async (_client, id) => countingKey(id), pages[0]!);
