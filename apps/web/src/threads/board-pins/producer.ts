@@ -1,11 +1,18 @@
-import type { BoardPinBoardQuery, BoardPinCommand, BoardPinProducer } from './contract';
+import type {
+  BoardPinBoardQuery,
+  BoardPinBoardRead,
+  BoardPinCommand,
+  BoardPinCommandResult,
+  BoardPinProducer,
+  BoardPinReadResult,
+} from './contract';
 
 /** Production caller. Native listing capability is still absent, so readPage stays a decorator seam. */
 export const productionBoardPinProducer: BoardPinProducer = Object.freeze({
-  async readPage() {
-    return { state: 'unavailable' } as const;
+  async readPage(): Promise<BoardPinReadResult> {
+    return { state: 'unavailable' };
   },
-  async readBoard(query: BoardPinBoardQuery) {
+  async readBoard(query: BoardPinBoardQuery): Promise<BoardPinBoardRead> {
     const { readBoardPinBoard } = await import('./server');
     return readBoardPinBoard({
       data: {
@@ -15,7 +22,7 @@ export const productionBoardPinProducer: BoardPinProducer = Object.freeze({
       },
     });
   },
-  async change(command: BoardPinCommand) {
+  async change(command: BoardPinCommand): Promise<BoardPinCommandResult> {
     const { changeBoardPin } = await import('./server');
     return changeBoardPin({
       data: {

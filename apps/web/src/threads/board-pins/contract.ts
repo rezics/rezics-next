@@ -34,6 +34,15 @@ export type BoardPinCommandResult =
   | Readonly<{ state: 'applied'; boardId: string; thread: BoardPinThread }>
   | Readonly<{ state: 'denied' | 'conflict' | 'unknown' | 'unavailable' }>;
 
+export type BoardPinJson =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly BoardPinJson[]
+  | { readonly [key: string]: BoardPinJson };
+export type BoardPinJsonRecord = { readonly [key: string]: BoardPinJson };
+
 export const BOARD_PINNED_SECTION_LIMIT = 5;
 
 const pinId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -54,8 +63,8 @@ export type BoardPinBoardRead =
       state: 'ready';
       boardId: string;
       management: 'allowed' | 'denied';
-      pinnedThreads: readonly unknown[];
-      threads: readonly unknown[];
+      pinnedThreads: readonly BoardPinJsonRecord[];
+      threads: readonly BoardPinJsonRecord[];
       next: string | null;
       rankRefreshedAt: string | null;
     }>
@@ -154,6 +163,11 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function jsonRecords(value: unknown): readonly BoardPinJsonRecord[] | undefined {
+  if (!Array.isArray(value) || value.some((item) => !record(item))) return undefined;
+  return value as BoardPinJsonRecord[];
+}
+
 function pinPosition(value: unknown, pinned: boolean): number | null | undefined {
   if (value === null) return pinned ? undefined : null;
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > BOARD_PINNED_SECTION_LIMIT)
@@ -191,15 +205,16 @@ export function parseBoardPinCommandResult(
 }
 
 export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoardRead {
-  if (!record(body) || !Array.isArray(body.threads)) return { state: 'unavailable' };
-  const pinnedThreads = body.pinnedThreads === undefined ? [] : body.pinnedThreads;
-  if (!Array.isArray(pinnedThreads)) return { state: 'unavailable' };
+  if (!record(body)) return { state: 'unavailable' };
+  const threads = jsonRecords(body.threads);
+  const pinnedThreads = body.pinnedThreads === undefined ? [] : jsonRecords(body.pinnedThreads);
+  if (!threads || !pinnedThreads) return { state: 'unavailable' };
   const next = body.next === null || typeof body.next === 'string' ? body.next : undefined;
   const rankRefreshedAt =
     body.rankRefreshedAt === null || typeof body.rankRefreshedAt === 'string' ? body.rankRefreshedAt : undefined;
   if (next === undefined || rankRefreshedAt === undefined) return { state: 'unavailable' };
   const management = body.management === 'allowed' ? 'allowed' : 'denied';
-  return { state: 'ready', boardId, management, pinnedThreads, threads: body.threads, next, rankRefreshedAt };
+  return { state: 'ready', boardId, management, pinnedThreads, threads, next, rankRefreshedAt };
 }
 
 /** Owns exact-command recovery for one mounted board/session visit. Retiring it never cancels a sent command. */
