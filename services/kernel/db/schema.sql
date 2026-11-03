@@ -3220,6 +3220,13 @@ CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING 
 
 
 --
+-- Name: history_event_consumer_open_consumer; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_event_consumer_open_consumer ON core.history_event_consumer USING btree (consumer) WHERE (state = 'open'::text);
+
+
+--
 -- Name: history_family_runnable; Type: INDEX; Schema: core; Owner: -
 --
 

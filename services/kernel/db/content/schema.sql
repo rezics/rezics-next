@@ -1665,6 +1665,79 @@ CREATE TABLE content.realm_subject_generation (
 
 
 --
+-- Name: realm_subject_identity_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_identity_work (
+    route integer NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    event_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    after_route integer DEFAULT '-1'::integer NOT NULL,
+    after_realm_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    after_thread_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT realm_subject_identity_work_after_route_check CHECK (((after_route >= '-1'::integer) AND (after_route <= 65535))),
+    CONSTRAINT realm_subject_identity_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_subject_identity_work_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT realm_subject_identity_work_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
+    CONSTRAINT realm_subject_identity_work_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
+-- Name: realm_subject_scope_event; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_scope_event (
+    route integer NOT NULL,
+    scope_kind text NOT NULL,
+    scope_id uuid NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    event_id uuid NOT NULL,
+    CONSTRAINT realm_subject_scope_event_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_subject_scope_event_scope_kind_check CHECK ((scope_kind = ANY (ARRAY['realm'::text, 'space'::text, 'realm-board-set'::text]))),
+    CONSTRAINT realm_subject_scope_event_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT realm_subject_scope_event_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
+    CONSTRAINT realm_subject_scope_event_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
+-- Name: realm_subject_scope_state; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_scope_state (
+    route integer NOT NULL,
+    scope_kind text NOT NULL,
+    scope_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT realm_subject_scope_state_generation_check CHECK ((generation > 0)),
+    CONSTRAINT realm_subject_scope_state_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_subject_scope_state_scope_kind_check CHECK ((scope_kind = ANY (ARRAY['realm'::text, 'space'::text, 'realm-board-set'::text])))
+);
+
+
+--
+-- Name: realm_subject_sweep_state; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.realm_subject_sweep_state (
+    singleton boolean DEFAULT true NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    next_route integer DEFAULT 0 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT realm_subject_sweep_state_check CHECK (((complete AND (next_route = 65536)) OR ((NOT complete) AND (next_route < 65536)))),
+    CONSTRAINT realm_subject_sweep_state_next_route_check CHECK (((next_route >= 0) AND (next_route <= 65536))),
+    CONSTRAINT realm_subject_sweep_state_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: realm_subject_thread_fence; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2326,6 +2399,38 @@ ALTER TABLE ONLY content.realm_subject_generation
 
 
 --
+-- Name: realm_subject_identity_work realm_subject_identity_work_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_identity_work
+    ADD CONSTRAINT realm_subject_identity_work_pkey PRIMARY KEY (route, source_partition, source_epoch, source_position, event_id);
+
+
+--
+-- Name: realm_subject_scope_event realm_subject_scope_event_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_scope_event
+    ADD CONSTRAINT realm_subject_scope_event_pkey PRIMARY KEY (route, scope_kind, scope_id, source_partition, source_epoch, source_position, event_id);
+
+
+--
+-- Name: realm_subject_scope_state realm_subject_scope_state_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_scope_state
+    ADD CONSTRAINT realm_subject_scope_state_pkey PRIMARY KEY (route, scope_kind, scope_id);
+
+
+--
+-- Name: realm_subject_sweep_state realm_subject_sweep_state_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.realm_subject_sweep_state
+    ADD CONSTRAINT realm_subject_sweep_state_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: realm_subject_thread_fence realm_subject_thread_fence_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2669,6 +2774,13 @@ CREATE INDEX realm_discovery_operation_recovery ON content.realm_discovery_opera
 
 
 --
+-- Name: realm_subject_candidate_original; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX realm_subject_candidate_original ON content.realm_subject_candidate USING btree (original_id, route, realm_id, thread_id);
+
+
+--
 -- Name: realm_subject_candidate_prefix; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2687,6 +2799,13 @@ CREATE INDEX realm_subject_candidate_thread ON content.realm_subject_candidate U
 --
 
 CREATE INDEX realm_subject_candidate_unresolved ON content.realm_subject_candidate USING btree (route, realm_id, original_id, thread_id) WHERE (active AND (terminal_id IS NULL));
+
+
+--
+-- Name: realm_subject_identity_work_pending; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX realm_subject_identity_work_pending ON content.realm_subject_identity_work USING btree (route, source_partition, source_epoch, source_position, event_id) WHERE (NOT complete);
 
 
 --
