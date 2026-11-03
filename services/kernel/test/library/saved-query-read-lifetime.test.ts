@@ -30,28 +30,43 @@ beforeAll(async () => {
   subjectId = await f.subject('Saved read lifetime');
   await f.entry(subjectId);
   const created = await f.send('POST', '/v1/collections', {
-    title: 'Owned read lifetimes', membershipKind: 'dynamic', visibility: 'private',
+    title: 'Owned read lifetimes',
+    membershipKind: 'dynamic',
+    visibility: 'private',
     rule: { filter: { owner: { presence: true } }, sort: 'id' },
   });
   expect(created.status).toBe(201);
   const { collection } = await created.json();
   collectionId = collection.id;
   expect((await f.page(collectionId)).members).toContainEqual({ kind: 'dynamic', subjectId });
-  const begun = await service().begin(actor, { collectionId, revision: collection.revision, visibility: 'public' }, randomUUID());
+  const begun = await service().begin(
+    actor,
+    { collectionId, revision: collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
   publicationId = begun.value.locator.publicationId;
   const episode = await originalEpisode(f.database.pool, begun.value.locator);
-  expect(episode?.source.input.identity).toMatchObject({ scope: 'private_builtin', accountId: actor.accountId, collectionId });
+  expect(episode?.source.input.identity).toMatchObject({
+    scope: 'private_builtin',
+    accountId: actor.accountId,
+    collectionId,
+  });
   expect(episode?.initiator.recordedTransactionId).toBe(begun.transactionId);
 }, 120_000);
 afterEach(() => mock.restore());
-afterAll(async () => { await f?.close(); });
+afterAll(async () => {
+  await f?.close();
+});
 
 function service() {
   return createCollectionPublicationService({ pool: f.database.pool, access: f.runtime.identity.access });
 }
 function members() {
-  return createCollectionReads({ pool: f.database.pool, access: f.runtime.identity.access, tokens: f.runtime.identity.tokenKeys })
-    .readMembers(actor, collectionId);
+  return createCollectionReads({
+    pool: f.database.pool,
+    access: f.runtime.identity.access,
+    tokens: f.runtime.identity.tokenKeys,
+  }).readMembers(actor, collectionId);
 }
 function closed(time: command.AuthoritativeTime) {
   expect(() => command.authoritativeTimeValue(time)).toThrow('Authoritative time is not from a live command attempt');
@@ -64,7 +79,10 @@ function observeBindings(afterBind?: () => void) {
     expect(result.status).toBe('bound');
     if (result.status === 'bound') {
       expect(native.nativeOwnerFilterBinding(result.binding)).toBeDefined();
-      expect(result.binding.scope.key.source).toMatchObject({ kind: 'library', identity: { scope: 'private_builtin', collectionId, accountId: actor.accountId } });
+      expect(result.binding.scope.key.source).toMatchObject({
+        kind: 'library',
+        identity: { scope: 'private_builtin', collectionId, accountId: actor.accountId },
+      });
       acquired.push(result.binding);
       afterBind?.();
     }
