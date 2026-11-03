@@ -22,7 +22,10 @@ test('the actual Sources route retains an exact provider link through search val
     expect(search).toEqual({ realm: 'realm-a', provider, digest });
     expect(sourceObservationSelection(validate(search))).toEqual({ source: provider, digest });
   }
-  for (const input of [{ provider: 'other', digest }, { provider: 'vndb', digest: 'invalid' }]) {
+  for (const input of [
+    { provider: 'other', digest },
+    { provider: 'vndb', digest: 'invalid' },
+  ]) {
     const search = validate({ realm: 'realm-a', ...input });
     expect(search).toEqual({ realm: 'realm-a' });
     expect(sourceObservationSelection(search)).toBeUndefined();
