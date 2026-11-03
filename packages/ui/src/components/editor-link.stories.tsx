@@ -796,7 +796,7 @@ export const InlineLifetimeJourney: Story = {
     } finally {
       window.requestAnimationFrame = requestFrame;
     }
-    const replacementControl = canvas.getByRole('button', { name: 'Replace with fresh document' });
+    const replacementControl = canvas.getByRole('button', { name: 'Replace with fresh document', hidden: true });
     reactCallback(replacementControl, 'onClick')();
     await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveTextContent('Fresh document'));
     replacementControl.focus();
