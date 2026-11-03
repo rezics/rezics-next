@@ -20,4 +20,4 @@ Fixture binding: `createCommunityDriver` provisions Auth-issued accounts and pro
 
 Eventual acceptance command: `bun run --cwd services/kernel check test/community/growth-realm-member-count-read.test.ts`.
 
-Controller launch deferral kept that acceptance unrun in this attempt. No three-scale measurements or reached runtime assertions are claimed; the authored test records the exact scales and assertions for controller execution after integration.
+Typecheck command: `bun run --cwd services/kernel typecheck`. It completed with errors in unchanged access, history, search and test files; it reported no diagnostics for the new test or fixture. The acceptance command was not run under controller launch deferral. No runtime assertions or three-scale measurements are claimed; the authored test records the scales and assertions for controller execution after integration.
