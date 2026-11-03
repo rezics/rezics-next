@@ -32,6 +32,7 @@ export type NativeKernelRequest = {
   authorization: string | null;
   idempotencyKey: string | null;
   body?: string;
+  responseStatus?: number;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
   fixtureRequest?: boolean;
   failure?: { status: number; body: string };
@@ -870,14 +871,21 @@ async function startStack(): Promise<
           authorization: request.headers.get('authorization'),
           idempotencyKey: request.headers.get('idempotency-key'),
           fixtureRequest: request.headers.get('x-native-fixture-request') === '1',
-          ...(request.method === 'POST' && url.pathname === '/v1/copies' ? { body: await request.clone().text() } : {}),
+          ...(request.method === 'POST' && ['/v1/copies', '/v1/subjects'].includes(url.pathname)
+            ? { body: await request.clone().text() }
+            : {}),
         };
         requests.push(observed);
         const failureIndex = injectedKernelFailures.findIndex(
-          (failure) => failure.method === request.method && failure.path === url.pathname,
+          (failure) =>
+            failure.method === request.method &&
+            (failure.path.endsWith('*')
+              ? url.pathname.startsWith(failure.path.slice(0, -1))
+              : failure.path === url.pathname),
         );
         if (failureIndex >= 0) {
           const [failure] = injectedKernelFailures.splice(failureIndex, 1);
+          observed.responseStatus = failure!.status;
           observed.failure = { status: failure!.status, body: failure!.body };
           return new Response(failure!.body, {
             status: failure!.status,
@@ -886,6 +894,7 @@ async function startStack(): Promise<
         }
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
+          observed.responseStatus = response.status;
           if (!response.ok)
             observed.failure = {
               status: response.status,
