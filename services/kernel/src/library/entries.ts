@@ -37,7 +37,11 @@ import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { assertPreProfileLibraryRead, readLibraryProfileSource } from './profile-source.ts';
+import {
+  assertPreProfileLibraryRead,
+  readLibraryProfileSource,
+  readLibraryProfileSourceObservation,
+} from './profile-source.ts';
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
@@ -290,7 +294,13 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-  async function putEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
+  async function putEntry(
+    actor: Actor,
+    subjectId: string,
+    input: unknown,
+    requestKey: string,
+    review?: { subjectId: string; pin: unknown; epoch: string },
+  ) {
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -315,6 +325,7 @@ export function createEntryCommands(config: Dependencies) {
       state: parsed.state,
       revision: parsed.revision ?? null,
       ...(parsed.incarnationId === undefined ? {} : { incarnationId: parsed.incarnationId }),
+      ...(review === undefined ? {} : { importReview: review }),
     };
     const expectedRevision = parsed.revision;
     let preparedType: PreparedType | undefined;
@@ -328,10 +339,18 @@ export function createEntryCommands(config: Dependencies) {
           input: requestInput,
           async prepare(attempt) {
             try {
-              const source = await readLibraryProfileSource(
-                { pool, access, actor: owner, at: attempt.time, deadline },
-                subjectId,
-              );
+              const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline };
+              const observation = review ? await readLibraryProfileSourceObservation(sourceDeps, subjectId) : null;
+              const source = review ? observation?.source : await readLibraryProfileSource(sourceDeps, subjectId);
+              if (
+                review &&
+                (!observation ||
+                  source?.kind !== 'supported' ||
+                  source.subjectId !== review.subjectId ||
+                  String(observation.anchor.identityEpoch) !== review.epoch ||
+                  canonicalize(source.pin) !== canonicalize(review.pin))
+              )
+                throw new LibraryConflictError();
               if (!source) throw new LibraryNotFoundError();
               if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
                 throw new ProblemError('unsupported_library_profile');

@@ -422,6 +422,7 @@ export function createAniListImport(deps: Dependencies) {
                   : {}),
               },
               reviewed.commandKey,
+              { subjectId: observed.subjectId, pin: observed.pin, epoch: observed.epoch },
             );
             status = 'applied';
           } catch (e) {

@@ -26,7 +26,8 @@ claims. Titles are display/search assistance only. Conflicting media ids or diff
 explicit review; no first-hit choice is made. Match states are matched, unmatched, ambiguous and unavailable.
 Review may select any currently readable canonical target or skip. Apply refreshes identity, access, claim
 fingerprint and release pin; a stale unstarted review must be refreshed. Native entry commands enforce original
-revision/incarnation guards and current account admission; original source timestamps never order commands.
+revision/incarnation guards and current account admission; an optional internal review guard pins identity/profile
+again inside native command preparation without changing ordinary entry requests. Source timestamps never order commands.
 
 Every row exposes its evidence, group metadata, provider identifiers and field validity/reason; header rawUpload
 retains the original text, including numeric spellings that JSON parsing cannot represent exactly. Absent fields
