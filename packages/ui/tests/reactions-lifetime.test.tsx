@@ -211,7 +211,9 @@ test('shared Reactions serialize original choices and retire every obsolete visi
         {
           name: 'workspace-react',
           setup(build) {
-            build.onResolve({ filter: /^react(?:\/.*)?$/ }, ({ path }) => ({ path: packageRequire.resolve(path) }));
+            build.onResolve({ filter: /^(?:react|react-dom)(?:\/.*)?$/ }, ({ path }) => ({
+              path: packageRequire.resolve(path),
+            }));
           },
         },
       ],
