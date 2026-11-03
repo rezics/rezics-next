@@ -6047,6 +6047,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         day?: number;
                                     } | null;
                                     reflection: string | null;
+                                    assessment: {
+                                        meaningRevision: 1;
+                                        units: number | null;
+                                    };
                                 };
                             };
                             401: Response | {
@@ -6134,6 +6138,9 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 day?: number;
                             } | null;
                             reflection?: string | null;
+                            assessment?: {
+                                units: number;
+                            } | null;
                         };
                         params: {
                             sessionId: string;

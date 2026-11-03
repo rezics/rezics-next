@@ -136,8 +136,10 @@ The original Web personal specification retains 23 cases. Library-relevant entri
 The [private consumption diary](../library-consumption-diary.md) installs `GET /v1/libraryDiary` and
 `POST /v1/libraryDiary:cancel`, with exact reopening through the existing presented progress-session detail.
 Recording-start/UUID descending navigation preserves repeats and incomplete sessions without a shelf entry,
-publication or known historical dates. The installed journal supplies optional partial dates and its independent
-revision without changing recording order; corrections and clearing use that owner's methods. Native owner/subject authority, caller-bound absolute expiry,
+publication or known historical dates. The installed journal supplies optional partial dates and a private numeric
+assessment with its independent meaning revision; the diary projects it without changing recording order. Both stay
+independent of progress revision and public Subject votes; corrections and clearing use the journal owner's methods.
+Native owner/subject authority, caller-bound absolute expiry,
 bounded indexed slots and terminal erasure are part of the reader contract. The compact native scenarios are
 `services/kernel/test/library/diary.test.ts`; frozen acceptance and the reserved integrating Web surface remain
 controller-owned. No competing interface or new historical-date writer is introduced.
@@ -219,8 +221,9 @@ session, update or correct either measure under explicit revision control, and r
 history or effects. `services/kernel/test/library/progress-http.test.ts` owns the focused native journey;
 [Independent progress measures](../library-progress-measures.md) defines the exact API contract and limits.
 
-Each existing occurrence also has a private journal for partial reported start/finish dates and a reflection, with
-one revision independent of progress values. [Private progress-session journal](../library-occurrence-reflections.md)
+Each existing occurrence also has a private journal for partial reported start/finish dates, a reflection and an
+integer assessment (units 0–20, displayed as units/2), with one revision independent of progress values and an
+assessment meaning revision independent of public questions. [Private progress-session journal](../library-occurrence-reflections.md)
 defines the exact producer and Web318 receiving contract; [Personal consumption dates](../library-consumption-history.md)
 owns reported-date meaning.
 Entry state recovery is a separate owner-only journey: inspect exact native transitions, review one before-state
@@ -543,8 +546,9 @@ and font readiness; a recorded response or source export is not a screenshot or 
 
 ## Personal Library portability
 
-The native export now retains version 2 annotation, accepted provenance and live occurrence-journal records under
-the installed private capture and source-fence contract. Version 1 and the archive-entry/label merge remain
+The native export now retains version 3 annotation, accepted provenance and live occurrence-journal records with
+private assessments under the installed private capture and source-fence contract. Version 1 and 2 captures retain
+their original shape; the archive-entry/label merge remains
 version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
 
 MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner

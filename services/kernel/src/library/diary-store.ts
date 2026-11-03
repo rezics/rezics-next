@@ -15,6 +15,7 @@ export type DiaryRow = Pick<
   | 'recordedStartedAt'
   | 'recordedCompletedAt'
   | 'reportedDates'
+  | 'assessment'
 >;
 export type DiaryKey = { recordedStartedAt: string; id: string };
 export type DiaryNavigation = {
@@ -40,6 +41,8 @@ export async function diaryRows(
         'year', journal_start_year, 'month', journal_start_month, 'day', journal_start_day)) END,
       'finishDate', CASE WHEN journal_finish_year IS NULL THEN NULL ELSE jsonb_strip_nulls(jsonb_build_object(
         'year', journal_finish_year, 'month', journal_finish_month, 'day', journal_finish_day)) END) AS "reportedDates",
+    jsonb_build_object('meaningRevision', journal_assessment_meaning_revision,
+      'units', journal_assessment_units) AS assessment,
     to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedStartedAt",
     to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedCompletedAt"`;
   // Literal query shapes put the exact year/bucket and tuple boundary in the index range.

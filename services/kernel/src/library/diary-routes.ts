@@ -80,6 +80,10 @@ const reportedDate = t.Union([
   ),
   t.Null(),
 ]);
+const assessment = t.Object(
+  { meaningRevision: t.Literal(1), units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]) },
+  closed,
+);
 const diaryPageSchema = t.Unsafe<DiaryPage>(
   t.Object(
     {
@@ -102,6 +106,7 @@ const diaryPageSchema = t.Unsafe<DiaryPage>(
               },
               closed,
             ),
+            assessment,
             subject,
             versionSubject: subject,
           },

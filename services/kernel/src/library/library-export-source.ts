@@ -8,7 +8,7 @@ import {
   type LibraryExportSectionV2,
   type LibraryExportVersion,
 } from './library-export-format.ts';
-export { exportSections, exportSectionsV2 } from './library-export-format.ts';
+export { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
 
 type JournalDate = { year: number } | { year: number; month: number } | { year: number; month: number; day: number };
 type PrivacyFact =
@@ -53,7 +53,7 @@ export type ProvenanceExportRecord = {
     recordedAt: string;
   };
 };
-export type JournalExportRecord = {
+export type JournalExportRecordV2 = {
   section: 'journals';
   accountId: string;
   sessionId: string;
@@ -73,6 +73,12 @@ export type JournalExportRecord = {
     reflection: string | null;
   };
 };
+export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
+  journal: JournalExportRecordV2['journal'] & {
+    assessment: { meaningRevision: 1; units: number | null };
+  };
+};
+export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
 export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
@@ -93,7 +99,7 @@ export const initialExportSeek = (version: LibraryExportVersion = 1): ExportSeek
   after: '',
   rows: 0,
   bytes: 0,
-  ...(version === 2 ? { sectionTotals: exportSectionsV2.map(() => [0, 0] as [number, number]) } : {}),
+  ...(version >= 2 ? { sectionTotals: exportSectionsV2.map(() => [0, 0] as [number, number]) } : {}),
 });
 export type ExportSourcePage = {
   records: ExportRecord[];
@@ -191,6 +197,21 @@ const queries: Partial<Record<LibraryExportSectionV2, string>> = {
     WHERE p.route=$1 AND p.account_id=$2 AND p.state<>'retired' AND p.journal_revision>0 AND p.session_id>$3::uuid
     ORDER BY p.session_id LIMIT ${FETCH_ROWS}`,
 };
+const journalQueryV3 = `SELECT p.session_id::text AS key,p.account_id::text AS "accountId",p.session_id::text AS "sessionId",
+    p.subject_id::text AS "subjectId",p.version_subject_id::text AS "versionSubjectId",p.state,
+    p.revision AS "progressRevision",p.library_profile_pin AS "libraryProfilePin",
+    p.started_at::text AS "startedAt",p.completed_at::text AS "completedAt",p.last_changed_at::text AS "lastChangedAt",
+    jsonb_build_object('sessionId',p.session_id::text,'revision',p.journal_revision,
+      'startDate',CASE WHEN p.journal_start_year IS NULL THEN NULL ELSE
+        jsonb_strip_nulls(jsonb_build_object('year',p.journal_start_year,'month',p.journal_start_month,'day',p.journal_start_day)) END,
+      'finishDate',CASE WHEN p.journal_finish_year IS NULL THEN NULL ELSE
+        jsonb_strip_nulls(jsonb_build_object('year',p.journal_finish_year,'month',p.journal_finish_month,'day',p.journal_finish_day)) END,
+      'reflection',p.journal_reflection,
+      'assessment',jsonb_build_object('meaningRevision',p.journal_assessment_meaning_revision,
+        'units',p.journal_assessment_units)) AS journal
+    FROM library.progress_session p
+    WHERE p.route=$1 AND p.account_id=$2 AND p.state<>'retired' AND p.journal_revision>0 AND p.session_id>$3::uuid
+    ORDER BY p.session_id LIMIT ${FETCH_ROWS}`;
 
 /** The database refuses a single unbounded row before it reaches the driver buffer. */
 async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unknown[], maxRecordBytes: number) {
@@ -226,7 +247,7 @@ export async function readExportSourcePage(
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
-    const sourceSql = queries[section];
+    const sourceSql = version === 3 && section === 'journals' ? journalQueryV3 : queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
@@ -352,7 +373,7 @@ export async function readExportSourcePage(
     }
     const record = { section, ...data } as ExportRecord;
     const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
-    if (version === 2 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
+    if (version !== 1 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
       oversized = true;
       break;
     }

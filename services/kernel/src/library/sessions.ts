@@ -520,10 +520,14 @@ export function createSessionCommands(config: Dependencies) {
         const startDate = Object.hasOwn(patch, 'startDate') ? (patch.startDate ?? null) : current.startDate;
         const finishDate = Object.hasOwn(patch, 'finishDate') ? (patch.finishDate ?? null) : current.finishDate;
         const reflection = Object.hasOwn(patch, 'reflection') ? (patch.reflection ?? null) : current.reflection;
+        const assessment = Object.hasOwn(patch, 'assessment')
+          ? { meaningRevision: current.assessment.meaningRevision, units: patch.assessment?.units ?? null }
+          : current.assessment;
         const unchanged =
           sameJournalDate(startDate, current.startDate) &&
           sameJournalDate(finishDate, current.finishDate) &&
-          reflection === current.reflection;
+          reflection === current.reflection &&
+          assessment.units === current.assessment.units;
         if (unchanged) return noEffect({ sessionId, revision: current.revision, changed: false });
         if (current.revision >= 2_147_483_646) throw new ProgressConflictError();
 
@@ -533,6 +537,7 @@ export function createSessionCommands(config: Dependencies) {
           startDate,
           finishDate,
           reflection,
+          assessment,
         });
         if (!updated) throw new ProgressConflictError();
         return {

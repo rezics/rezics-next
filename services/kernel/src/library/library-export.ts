@@ -66,7 +66,7 @@ function binding(accountId: string, capture: Capture) {
       accountId,
       exportId: capture.export_id,
       generation: capture.generation,
-      ...(capture.format_version === 2 ? { formatVersion: capture.format_version } : {}),
+      ...(capture.format_version >= 2 ? { formatVersion: capture.format_version } : {}),
     },
   };
 }
@@ -82,7 +82,7 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
         seek.after,
         seek.rows,
         seek.bytes,
-        ...(capture.format_version === 2 ? [seek.sectionTotals] : []),
+        ...(capture.format_version >= 2 ? [seek.sectionTotals] : []),
       ],
     },
     Date.parse(capture.created_at),
@@ -307,7 +307,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
             `INSERT INTO library.library_export(route,account_id,export_id,format_version,generation,created_at,expires_at,state)
-          VALUES($1,$2,$3,2,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
+          VALUES($1,$2,$3,3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
           ON CONFLICT(route,account_id) DO UPDATE SET export_id=EXCLUDED.export_id,generation=EXCLUDED.generation,
             format_version=EXCLUDED.format_version,created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
             [route, account.accountId, id, source, at],
@@ -378,7 +378,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
                 fullExport: false as const,
                 rows: page.seek.rows,
                 recordBytes: page.seek.bytes,
-                ...(capture.format_version === 2
+                ...(capture.format_version >= 2
                   ? {
                       sectionTotals: Object.fromEntries(
                         exportSectionsV2.map((section, index) => {

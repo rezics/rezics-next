@@ -100,6 +100,7 @@ test('native owner pages across subjects and separate repeats, then reopens exac
   expect(new Set(rows.map((item) => item.state))).toEqual(new Set(['active', 'completed', 'abandoned']));
   for (const row of rows) {
     expect(row.recordedStartedAt).toMatch(/\.\d{6}Z$/);
+    expect(row.assessment).toEqual({ meaningRevision: 1, units: null });
     expect(row.reportedDates).toEqual(
       row.id === datedId
         ? { availability: 'available', revision: 1, startDate: { year: 1999 }, finishDate: { year: 2000, month: 2 } }
@@ -146,6 +147,53 @@ test('native owner pages across subjects and separate repeats, then reopens exac
   expect((await page()).occurrences.map((row) => row.id)).toEqual(expected.slice(0, 2));
   expect((await page(first.next!)).occurrences).toEqual((await page(first.next!)).occurrences);
   await cancel(first.continuation!);
+});
+
+test('repeated completed occurrences keep zero and cleared assessments independently', async () => {
+  const subject = await native.createSubject('game', 'Assessment subject');
+  const zero = await start(subject);
+  const cleared = await start(subject);
+  for (const occurrence of [zero, cleared])
+    await json(await send('POST', `/v1/progressSessions/${occurrence.id}:complete`, { revision: 1 }));
+  const before = await Promise.all(
+    [zero, cleared].map(async (occurrence) =>
+      (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
+    ),
+  );
+
+  const zeroPath = `/v1/progressSessions/${zero.id}/journal`;
+  const zeroPatch = { revision: 0, assessment: { units: 0 } };
+  const zeroWrite = await json(await native.send('owner', 'PATCH', zeroPath, zeroPatch, 'assessment-zero'));
+  expect(await json(await native.send('owner', 'PATCH', zeroPath, zeroPatch, 'assessment-zero'))).toEqual(zeroWrite);
+  await json(await native.send('owner', 'PATCH', zeroPath, { revision: 0, assessment: { units: 8 } }), 409);
+  await json(await send('PATCH', `/v1/progressSessions/${zero.id}/journal`, { revision: 0, assessment: null }, other.bearer), 404);
+
+  const clearedPath = `/v1/progressSessions/${cleared.id}/journal`;
+  await json(await send('PATCH', clearedPath, { revision: 0, assessment: { units: 12 } }));
+  await json(await send('PATCH', clearedPath, { revision: 1, reflection: 'Private assessment note.' }));
+  await json(await send('PATCH', clearedPath, { revision: 2, assessment: null }));
+  const zeroJournal = (await json(await send('GET', zeroPath))).journal;
+  const clearedJournal = (await json(await send('GET', clearedPath))).journal;
+  expect(zeroJournal).toMatchObject({ revision: 1, assessment: { meaningRevision: 1, units: 0 } });
+  expect(clearedJournal).toMatchObject({ revision: 3, assessment: { meaningRevision: 1, units: null } });
+  const diary = await page(undefined, owner.bearer, 25);
+  expect(diary.occurrences.find((row) => row.id === zero.id)?.assessment).toEqual(zeroJournal.assessment);
+  expect(diary.occurrences.find((row) => row.id === cleared.id)?.assessment).toEqual(clearedJournal.assessment);
+  expect(JSON.stringify(diary)).not.toContain('Private assessment note.');
+  if (diary.continuation) await cancel(diary.continuation);
+
+  const after = await Promise.all(
+    [zero, cleared].map(async (occurrence) =>
+      (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
+    ),
+  );
+  for (let index = 0; index < before.length; index++)
+    expect(after[index]).toMatchObject({
+      revision: before[index]!.revision,
+      state: 'completed',
+      completedAt: before[index]!.completedAt,
+      completedUnitCount: before[index]!.completedUnitCount,
+    });
 });
 
 test('native subject concealment withholds labels without hiding private occurrences or leaking them to others', async () => {

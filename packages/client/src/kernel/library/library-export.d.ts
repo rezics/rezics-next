@@ -35,7 +35,7 @@ export type LibraryExportPage =
       manifest: LibraryExportFinalManifest | null;
     };
 export declare const exportAuthorityTypes: string[];
-/** Version 1 cursors and manifests remain readable; new captures use version 2. */
+/** Version 1 and 2 cursors and manifests remain readable; new captures use version 3. */
 export declare function createLibraryExport(deps: LibraryExportDependencies): {
   create(actor: Actor, requestKey: string, signal?: AbortSignal): Promise<LibraryExportStatus>;
   get(actor: Actor, id: string, signal?: AbortSignal): Promise<LibraryExportStatus>;

@@ -116,6 +116,10 @@ test('default native worker removes private sessions/history, labels, archives, 
     revision: session.revision,
     amount: '3',
   });
+  await f.json(as, 'PATCH', `/v1/progressSessions/${session.id}/journal`, 200, {
+    revision: 0,
+    assessment: { units: 17 },
+  });
   const log = (
     await f.json(as, 'POST', '/v1/publishedLogs', 201, { sessionId: session.id, note: 'private progress snapshot' })
   ).publishedLog;
@@ -192,6 +196,14 @@ test('default native worker removes private sessions/history, labels, archives, 
       ])
     ).rows,
   ).toHaveLength(1);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT journal_assessment_units FROM library.progress_session WHERE route=$1 AND session_id=$2',
+        [owner[0], session.id],
+      )
+    ).rows,
+  ).toEqual([{ journal_assessment_units: 17 }]);
   await deletePersona(f.options, as);
   expect((await retire()).status).toBe(401); // Terminal authority precedes the original receipt.
   expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);

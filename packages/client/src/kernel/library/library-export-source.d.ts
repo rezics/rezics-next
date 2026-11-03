@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { LibraryExportSectionV1, LibraryExportSectionV2, LibraryExportVersion } from './library-export-format.ts';
-export { exportSections, exportSectionsV2 } from './library-export-format.ts';
+export { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
 
 export type JournalDate =
   | { year: number }
@@ -46,7 +46,7 @@ export type ProvenanceTimestampFact =
       precision: 'year' | 'month' | 'day' | 'minute' | 'second' | 'fraction';
       zone: 'utc' | 'offset' | 'unknown';
     };
-export type JournalExportRecord = {
+export type JournalExportRecordV2 = {
   section: 'journals';
   accountId: string;
   sessionId: string;
@@ -66,6 +66,12 @@ export type JournalExportRecord = {
     reflection: string | null;
   };
 };
+export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
+  journal: JournalExportRecordV2['journal'] & {
+    assessment: { meaningRevision: 1; units: number | null };
+  };
+};
+export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
 export type ExistingExportRecord = Record<string, unknown> & { section: LibraryExportSectionV1 };
 export type ExportRecord =
   | ExistingExportRecord

@@ -1,8 +1,9 @@
 # Private progress-session journal
 
-This is the owner contract for personal start and finish dates and a private reflection on one existing Library
-progress session. The session ID identifies one real occurrence, so rereads and rewatches of the same subject retain
-separate journals. Native session progress remains authoritative; this journal does not create or replace a session.
+This is the owner contract for personal start and finish dates, a private reflection and a private numeric assessment on
+one existing Library progress session. The session ID identifies one real occurrence, so rereads and rewatches of the
+same subject retain separate journals. Native session progress remains authoritative; this journal does not create or
+replace a session.
 
 ## Mounted API
 
@@ -13,20 +14,24 @@ GET   /v1/progressSessions/{sessionId}/journal
 PATCH /v1/progressSessions/{sessionId}/journal
 ```
 
-GET returns `{journal:{sessionId,revision,startDate,finishDate,reflection}}`. Missing values are `null`. PATCH takes
-`{revision,startDate?,finishDate?,reflection?}` and an `Idempotency-Key`, and returns
+GET returns `{journal:{sessionId,revision,startDate,finishDate,reflection,assessment}}`. Dates and reflection are null
+when absent. Assessment is `{meaningRevision:1,units:number|null}`. PATCH takes
+`{revision,startDate?,finishDate?,reflection?,assessment?}` and an `Idempotency-Key`, and returns
 `{journal:{sessionId,revision,changed}}`. The PATCH receipt intentionally contains no private date or reflection
 copy. Read the current values with GET after the write; an uncertain PATCH retry returns the original revision and
 `changed` result without applying another edit.
 
 Decision: date and reflection fields share one journal-local revision independent of progress; PATCH receipts retain
-only session ID, resulting journal revision and `changed`, while GET supplies private values.
+only session ID, resulting journal revision and `changed`, while GET supplies private values. Assessment is stored on
+the same occurrence row with meaning revision 1; its integer units range from 0 through 20 in steps of 1 and display as
+`units / 2`. PATCH accepts `{units:number}` to set it or `null` to clear it; omission preserves it.
 
-`revision` is journal-local and starts at `0`. One revision covers all three fields. It advances once when at least
+`revision` is journal-local and starts at `0`. One revision covers dates, reflection and assessment. It advances once when at least
 one value changes. An omitted field is unchanged; `null` explicitly clears that field; a supplied equal value is a
-no-op. Clearing an already absent value and an empty patch return `changed:false` without advancing the revision.
-The command receipt still binds the original request, so an uncertain response retries with the same key and exact
-body. A different edit with a stale journal revision returns `409 conflict` and changes nothing.
+no-op. Zero is an assessment value; `assessment:null` means no current assessment, while an omitted assessment
+preserves the current one. Clearing an already absent value and an empty patch return `changed:false` without advancing
+the revision. The command receipt still binds the original request, so an uncertain response retries with the same key
+and exact body. A different edit with a stale journal revision returns `409 conflict` and changes nothing.
 
 The journal revision is independent of `progressSession.revision`. Progress recording, completion, abandonment,
 completed units and measures keep their existing revision and history. Journal edits never change those facts,
@@ -56,9 +61,10 @@ escaping and the bounded date/revision fields while limiting parse work to a con
 
 The values are columns on the owned `progress_session` row and use its exact `(route, session_id)` key plus the
 account owner predicate. They do not enter progress-change history, public logs, public Collections, Search, public
-DTOs, event payloads or errors. The existing session-updated event carries only `sessionId`. The journal adds no
-separate metadata receipt, event type or cleanup worker. Terminal account erasure deletes the owning session row;
-the idempotency receipt stores only its request digest and the small revision/change acknowledgement.
+DTOs, native Subject votes or aggregates, event payloads or errors. Assessment writes do not call the public vote
+writer. The existing session-updated event carries only `sessionId`. The journal adds no separate metadata receipt,
+event type or cleanup worker. Terminal account erasure deletes the owning session row; the idempotency receipt stores
+only its request digest and the small revision/change acknowledgement.
 
 Historical import adapters may admit dates that fit this contract. They must preserve unsupported source evidence
 privately rather than round it to a supported precision. No importer is part of this producer contract.
@@ -66,8 +72,9 @@ privately rather than round it to a supported precision. No importer is part of 
 ## Web318 receiving contract
 
 Web318 owns the reserved private diary/journal integration. An existing progress detail opens this API by its
-session ID; it does not add another diary navigator. GET supplies the current journal revision and values. The editor
-PATCHes changed values with that revision, retaining one idempotency key and the exact body while the result is
+session ID; it does not add another diary navigator. GET supplies the current journal revision and values, including
+`assessment:{meaningRevision:1,units}`. The editor PATCHes changed values with that revision; assessment is
+`{units:number}` to set or `null` to clear, while omission preserves it. It retains one idempotency key and the exact body while the result is
 uncertain. On `200`, it GETs the current journal before treating local state as synchronized. On `409`, it keeps the
 draft and GETs again before offering reconciliation. `401` means the current sign-in is unavailable; `403` means
 editing is denied; `404` means the occurrence is missing or concealed; `503` leaves the draft and original retry
@@ -87,18 +94,20 @@ source derivation, not a measured total:
   probes one `(route, account_id, session_id)` row. PATCH locks that exact owner/session row once and, only for a
   changed value, performs one primary-key owner/revision compare-and-swap UPDATE. Missing, foreign and stale rows do
   not add a history traversal; stale edits roll back without a write or event.
-- `Cmetadata` is no separate row: the at-most-six date integers and one bounded reflection share that session row.
-  The request frame is at most 16,384 bytes, and selected-field work is `O(B + F)`, independent of owner history
-  `H`. GET returns at most the 4,096-byte reflection plus fixed identifiers, revision and six date components.
+- `Cmetadata` is no separate row: at most six date integers, one bounded reflection, assessment units and its meaning
+  revision share that session row. The request frame remains at most 16,384 bytes, and selected-field work is
+  `O(B + F)`, independent of owner history `H`. GET adds only the fixed assessment fields to its existing bound.
 - `Cnative-command/history` uses one indexed original-receipt lookup by principal, kind and candidate key after
   current authority; stored receipts have a 32-byte digest and a 1..255-character key. A fresh changed PATCH adds
   the ordinary command fence and one ID-only progress event. Its receipt response is only session ID, revision and
   `changed`; no journal value is copied there. Omitted, clear, unchanged and stale paths use the same fixed receipt
   envelope; a replay returns the stored acknowledgement and does not relock or update the session or emit an event.
+  A changed row still runs the existing profile-migration BEFORE trigger and native-source AFTER trigger once; that
+  AFTER trigger applies the fixed old/new account fence upserts. Shared command-receipt retention remains unchanged.
 - `Ccleanup` uses the installed owner erasure seek `(route, account_id, session_id)` with `LIMIT 1`; deletion targets
   that exact key after an existence check on each possible `(route, session_id)` child key for progress units and
-  changes. Shared account command-receipt retention remains authoritative. Journal values add no side-table page or
-  traversal; deleting the session row removes its dates and reflection with it.
+  changes. Journal values add no side-table page or traversal; deleting the session row removes its dates, reflection
+  and assessment with it.
 
 Native growth acceptance remains controller-owned and unmeasured here. It must compare 64, 512 and 4,096 same-owner
 occurrences, unrelated owners, and retained versus cleared journal values with a fixed addressed response, and record
@@ -109,8 +118,8 @@ typing and this derivation do not establish that execution evidence.
 
 The existing progress-session detail now reads the installed
 progressSessions({sessionId}).journal.get method and edits with .journal.patch. The editor accepts only reported year,
-year-month or full calendar date and keeps reflection independent of current shelf state. Clearing a date or reflection
-is explicit. A journal correction uses the native journal revision and a fresh addressed readback; a stale revision
+year-month or full calendar date, displays assessment units as `units / 2`, and keeps reflection independent of current
+shelf state. Clearing a date, reflection or assessment is explicit. A journal correction uses the native journal revision and a fresh addressed readback; a stale revision
 keeps the draft visible and requires review of the latest journal before resubmission. Unknown results retain the
 original key and exact patch for explicit retry. Private reflection is never copied into publication.
 

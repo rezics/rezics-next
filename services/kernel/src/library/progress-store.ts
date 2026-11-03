@@ -23,6 +23,7 @@ import {
   type ProgressScalarMeasure,
   type ProgressSession,
   type ProgressSessionJournal,
+  type ProgressSessionJournalAssessment,
   type ProgressSessionJournalDate,
   type ProgressSessionDraft,
   type ProgressSessionPage,
@@ -57,6 +58,8 @@ type JournalColumns = Pick<
   | 'finishMonth'
   | 'finishDay'
   | 'reflection'
+  | 'assessmentUnits'
+  | 'assessmentMeaningRevision'
 >;
 
 const MODES = new Set<ProgressMode>(['scalar_amount', 'cursor_position', 'completed_units']);
@@ -132,6 +135,10 @@ function asJournal(row: JournalColumns): ProgressSessionJournal {
     startDate: readJournalDate(row.startYear, row.startMonth, row.startDay),
     finishDate: readJournalDate(row.finishYear, row.finishMonth, row.finishDay),
     reflection: row.reflection,
+    assessment: {
+      meaningRevision: row.assessmentMeaningRevision as 1,
+      units: row.assessmentUnits,
+    } satisfies ProgressSessionJournalAssessment,
   };
 }
 
@@ -298,6 +305,8 @@ export async function updateSessionJournal(
     finish_month: journal.finishDate?.month ?? null,
     finish_day: journal.finishDate?.day ?? null,
     reflection: journal.reflection,
+    assessment_units: journal.assessment.units,
+    assessment_meaning_revision: journal.assessment.meaningRevision,
   });
   return row ? asJournal(row) : null;
 }

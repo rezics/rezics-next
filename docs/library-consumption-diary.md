@@ -1,8 +1,8 @@
 # Private consumption diary
 
 The diary navigates actual private `progress_session` occurrences across subjects. A repeat is another session ID;
-incomplete, completed and abandoned sessions all remain occurrences. No Library entry, publication, rating, dated
-journal or aggregate is required. The existing session engine owns recording, correction, revision checks, accepted
+incomplete, completed and abandoned sessions all remain occurrences. No Library entry, publication, public rating or
+aggregate is required. The existing session engine owns recording, correction, revision checks, accepted
 meaning and terminal fences. This reader creates only bounded navigation metadata.
 
 Decision: order occurrences by immutable native recording start time descending, then full session UUID descending;
@@ -30,6 +30,7 @@ The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, curs
       startDate: { year: number; month?: number; day?: number } | null;
       finishDate: { year: number; month?: number; day?: number } | null;
     };
+    assessment: { meaningRevision: 1; units: number | null };
     subject: { id: string; label: string | null; language: string | null } | null;
     versionSubject: { id: string; label: string | null; language: string | null } | null;
   }>;
@@ -64,6 +65,10 @@ Read or correct dates with the existing [journal methods](library-occurrence-ref
 revision, retry and clear semantics; this reader adds no writer or historical-date sort. Navigation still works
 when all dates are unknown. After a date correction, retry the current page or reopen the same journal; an edit
 during page rendering yields the same `409 conflict` recovery as a progress correction.
+
+The bounded occurrence row also returns its private `assessment:{meaningRevision:1,units}` value. Units are integers
+0–20 in steps of 1 and display as `units / 2`; `null` means no current assessment. This field is read from the same
+indexed progress-session row and is not derived from a public Subject vote or question.
 
 ## Currentness and recovery
 

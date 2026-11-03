@@ -1,4 +1,4 @@
-import type { ProgressSessionJournal } from './progress-model.ts';
+import type { ProgressSessionJournal, ProgressSessionJournalAssessment } from './progress-model.ts';
 /** Compact private occurrence; identifiers are retained native facts, never catalogue disclosure. */
 export type DiaryOccurrence = {
     id: string;
@@ -12,6 +12,7 @@ export type DiaryOccurrence = {
     reportedDates: {
         availability: 'available';
     } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>;
+    assessment: ProgressSessionJournalAssessment;
     subject: DiarySubject | null;
     versionSubject: DiarySubject | null;
 };

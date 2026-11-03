@@ -83,6 +83,12 @@ const journalDate = t.Object(
   closed,
 );
 const nullableJournalDate = t.Union([journalDate, t.Null()]);
+const assessmentUnits = t.Integer({ minimum: 0, maximum: 20 });
+const journalAssessment = t.Object(
+  { meaningRevision: t.Literal(1), units: t.Union([assessmentUnits, t.Null()]) },
+  closed,
+);
+const journalAssessmentPatch = t.Union([t.Object({ units: assessmentUnits }, closed), t.Null()]);
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
 const unitInput = libraryVocabularyIdSchema;
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
@@ -171,6 +177,7 @@ const sessionJournalSchema = t.Object(
     startDate: nullableJournalDate,
     finishDate: nullableJournalDate,
     reflection: t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()]),
+    assessment: journalAssessment,
   },
   closed,
 );
@@ -185,6 +192,7 @@ const sessionJournalPatchBody = t.Object(
     startDate: t.Optional(nullableJournalDate),
     finishDate: t.Optional(nullableJournalDate),
     reflection: t.Optional(t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()])),
+    assessment: t.Optional(journalAssessmentPatch),
   },
   closed,
 );

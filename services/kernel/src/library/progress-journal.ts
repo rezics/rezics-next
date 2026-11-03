@@ -2,6 +2,7 @@ import type { ProgressSessionJournalDate, ProgressSessionJournalPatch } from './
 
 export const MAX_JOURNAL_REFLECTION_CHARACTERS = 2_000;
 export const MAX_JOURNAL_REFLECTION_BYTES = 4_096;
+export const OCCURRENCE_ASSESSMENT_MEANING_REVISION = 1 as const;
 
 export type JournalPatchOutcome = { ok: true; value: ProgressSessionJournalPatch } | { ok: false; field: string };
 
@@ -34,7 +35,7 @@ function validDate(value: unknown): ProgressSessionJournalDate | null {
 export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOutcome {
   const source = record(input);
   if (!source) return { ok: false, field: 'journal' };
-  const allowed = new Set(['revision', 'startDate', 'finishDate', 'reflection']);
+  const allowed = new Set(['revision', 'startDate', 'finishDate', 'reflection', 'assessment']);
   const unexpected = Object.keys(source)
     .filter((key) => !allowed.has(key))
     .sort()[0];
@@ -48,6 +49,7 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
     startDate?: ProgressSessionJournalDate | null;
     finishDate?: ProgressSessionJournalDate | null;
     reflection?: string | null;
+    assessment?: Readonly<{ units: number }> | null;
   } = { revision: revision as number };
   for (const field of ['startDate', 'finishDate'] as const) {
     if (!Object.hasOwn(source, field)) continue;
@@ -68,6 +70,22 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
         return { ok: false, field: 'reflection' };
       patch.reflection = reflection;
     } else return { ok: false, field: 'reflection' };
+  }
+  if (Object.hasOwn(source, 'assessment')) {
+    const assessment = source.assessment;
+    if (assessment === null) patch.assessment = null;
+    else {
+      const value = record(assessment);
+      if (
+        !value ||
+        Object.keys(value).some((key) => key !== 'units') ||
+        !Number.isInteger(value.units) ||
+        (value.units as number) < 0 ||
+        (value.units as number) > 20
+      )
+        return { ok: false, field: 'assessment' };
+      patch.assessment = { units: value.units as number };
+    }
   }
   return { ok: true, value: patch };
 }

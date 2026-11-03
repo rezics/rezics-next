@@ -20,6 +20,22 @@ test('journal patches preserve omitted, cleared and partial date fields', () => 
   });
 });
 
+test('assessment keeps zero, preserve and explicit clear distinct', () => {
+  expect(parseProgressSessionJournalPatch({ revision: 0 })).toEqual({ ok: true, value: { revision: 0 } });
+  expect(parseProgressSessionJournalPatch({ revision: 0, assessment: { units: 0 } })).toEqual({
+    ok: true,
+    value: { revision: 0, assessment: { units: 0 } },
+  });
+  expect(parseProgressSessionJournalPatch({ revision: 1, assessment: null })).toEqual({
+    ok: true,
+    value: { revision: 1, assessment: null },
+  });
+  expect(parseProgressSessionJournalPatch({ revision: 0, assessment: { units: 21 } })).toEqual({
+    ok: false,
+    field: 'assessment',
+  });
+});
+
 test('journal patches reject invented date shapes and over-bound reflections', () => {
   expect(parseProgressSessionJournalPatch({ revision: 0, startDate: { year: 2024, day: 2 } })).toEqual({
     ok: false,
