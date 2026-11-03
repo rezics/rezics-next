@@ -55,17 +55,17 @@ export function RealmMembersPage({
   const selectedAddress = snapshot.selection?.address;
   const lastFocused = useRef<typeof selectedAddress>(undefined);
   useLayoutEffect(() => {
-    if (!selectedAddress || lastFocused.current === selectedAddress || !caller.current()) return;
+    if (!selectedAddress || lastFocused.current === selectedAddress || !visit.isCurrent()) return;
     lastFocused.current = selectedAddress;
     inspection.current?.focus();
-  }, [selectedAddress, caller]);
+  }, [selectedAddress, visit]);
   useLayoutEffect(() => {
     const request = returnFocus.current;
     if (!request || snapshot.selection) return;
     returnFocus.current = null;
     if (
       request.visit !== visit ||
-      !caller.current() ||
+      !visit.isCurrent() ||
       (document.activeElement !== request.from && document.activeElement !== document.body)
     )
       return;

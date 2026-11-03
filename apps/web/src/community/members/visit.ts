@@ -64,6 +64,9 @@ export class RealmMembersVisit {
     return this.connected && !this.retired;
   }
 
+  /** Deferred UI effects share the same caller and producer lifetime as reads. */
+  isCurrent = () => this.admitted();
+
   retire = () => {
     if (this.retired) return;
     this.retired = true;
@@ -72,6 +75,7 @@ export class RealmMembersVisit {
     this.selectedOperation++;
     this.stop?.();
     this.stop = undefined;
+    this.observation = undefined;
     this.rows.clear();
     this.value = {
       read: { kind: 'retired' },
@@ -108,6 +112,7 @@ export class RealmMembersVisit {
       this.pageBusy = false;
       this.stop?.();
       this.stop = undefined;
+      this.observation = undefined;
       this.rows.clear();
       this.value = {
         read: { kind: 'loading' },
