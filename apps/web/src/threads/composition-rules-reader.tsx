@@ -77,7 +77,11 @@ export function CompositionRulesReader({
           <p className="mb-2 text-sm font-medium">{m.composition_rules_reader_outline()}</p>
           <ol className="min-w-0 space-y-1">
             {outline.entries.map((entry) => (
-              <li key={entry.index} className="min-w-0" style={{ paddingInlineStart: `${(entry.level - 1) * 0.75}rem` }}>
+              <li
+                key={entry.index}
+                className="min-w-0"
+                style={{ paddingInlineStart: `${(entry.level - 1) * 0.75}rem` }}
+              >
                 <button
                   type="button"
                   data-outline-index={entry.index}

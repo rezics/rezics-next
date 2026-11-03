@@ -1,7 +1,13 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { fromMarkdown, fromPlainText, serializeDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import {
+  fromMarkdown,
+  fromPlainText,
+  serializeDocument,
+  type DocumentNode,
+  type DocumentSnapshot,
+} from '@rezics/document';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { NewThreadPageResult } from '../src/threads/new-thread-read';
@@ -90,9 +96,9 @@ test('the existing board response keeps Global, producer, rules and revision sta
   delete missingProducer.community;
   expect(reader.read(missingProducer as Board).community).toEqual({ state: 'unavailable' });
   expect(reader.read(boardFor('discussion', { state: 'none', value: null })).community.state).toBe('available');
-  expect(
-    reader.read(boardFor('discussion', { state: 'unavailable', value: null } as Rules)).community.state,
-  ).toBe('available');
+  expect(reader.read(boardFor('discussion', { state: 'unavailable', value: null } as Rules)).community.state).toBe(
+    'available',
+  );
   expect(availableRules(reader.read(boardFor('discussion', rules(body)))).revisionId).toBe(id(50));
 });
 
@@ -164,18 +170,27 @@ async function mountComposition(purpose: 'discussion' | 'reviews') {
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-  const [{ createRoot }, { QueryClient, QueryClientProvider }, { sessionQuery }, { setLocale }, { m }, lifetime, route, actions, voteRead] =
-    await Promise.all([
-      import('react-dom/client'),
-      import('@tanstack/react-query'),
-      import('../src/session/query'),
-      import('../src/paraglide/runtime.js'),
-      import('../src/paraglide/messages.js'),
-      import('../src/threads/thread-creation-lifetime'),
-      import('../src/routes/boards/$id_.new'),
-      import('../src/threads/actions'),
-      import('../src/threads/review-vote-read'),
-    ]);
+  const [
+    { createRoot },
+    { QueryClient, QueryClientProvider },
+    { sessionQuery },
+    { setLocale },
+    { m },
+    lifetime,
+    route,
+    actions,
+    voteRead,
+  ] = await Promise.all([
+    import('react-dom/client'),
+    import('@tanstack/react-query'),
+    import('../src/session/query'),
+    import('../src/paraglide/runtime.js'),
+    import('../src/paraglide/messages.js'),
+    import('../src/threads/thread-creation-lifetime'),
+    import('../src/routes/boards/$id_.new'),
+    import('../src/threads/actions'),
+    import('../src/threads/review-vote-read'),
+  ]);
   const storybookRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
   const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
@@ -304,7 +319,12 @@ for (const purpose of ['discussion', 'reviews'] as const) {
       expect(page.startThread).not.toHaveBeenCalled();
 
       const oldRules = 'First revision text.';
-      const refreshed = boardFor(purpose, rules(fromPlainText('Second current revision.', 'text'), 52), id(10), 'Current title');
+      const refreshed = boardFor(
+        purpose,
+        rules(fromPlainText('Second current revision.', 'text'), 52),
+        id(10),
+        'Current title',
+      );
       page.replaceBoard(refreshed, id(99));
       await page.render();
       expect(host.querySelector('[data-slot="composition-rules-reader"]')).toBeNull();

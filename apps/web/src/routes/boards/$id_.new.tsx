@@ -128,17 +128,16 @@ function NewThreadEditor({
   const { lifetime, ticket, current, bound } = visit;
   const [destinationReader] = useState(() => createCompositionDestinationReader());
   const destinationBinding = useRef<{ boardId: string; projection: CompositionDestinationProjection } | null>(null);
-  const destination =
-    current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
+  const destination = current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
   destinationBinding.current = destination ? { boardId: board.id, projection: destination } : null;
   const destinationIsCurrent = useCallback(
     (expected: CompositionDestinationProjection) => {
       const active = destinationBinding.current;
       return Boolean(
         active?.projection === expected &&
-          active.boardId === origin.boardId &&
-          lifetime.isBound(ticket, false) &&
-          lifetime.isCurrent(ticket, false),
+        active.boardId === origin.boardId &&
+        lifetime.isBound(ticket, false) &&
+        lifetime.isCurrent(ticket, false),
       );
     },
     [lifetime, origin.boardId, ticket],
@@ -264,7 +263,13 @@ function NewThreadEditor({
                 boardId={origin.boardId}
                 submissionContext={submissionContext}
                 onIntentLockChange={handleIntentLockChange}
-                onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
+                onSubmit={async ({
+                  title,
+                  body,
+                  idempotencyKey: key,
+                  mediaIds,
+                  submissionContext: originalContext,
+                }) => {
                   if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
                   const result = await startThread({
                     data: {

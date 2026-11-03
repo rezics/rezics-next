@@ -26,9 +26,7 @@ export function CompositionDestinationPanel({
   const rules = community.state === 'available' ? community.rules : undefined;
   const available = rules?.state === 'available' ? rules.value : undefined;
   const currentIdentity = available ? destination.rulesIdentity : undefined;
-  const readerVisible = Boolean(
-    open && available && sameCompositionRulesIdentity(inspected, currentIdentity ?? null),
-  );
+  const readerVisible = Boolean(open && available && sameCompositionRulesIdentity(inspected, currentIdentity ?? null));
 
   useLayoutEffect(() => {
     if (wasOpen.current && !readerVisible && isCurrent(destination)) triggerRef.current?.focus();
@@ -103,7 +101,8 @@ export function CompositionDestinationPanel({
             triggerRef={triggerRef}
             onInspect={inspectCurrent}
           />
-          {!readerVisible && !(
+          {!readerVisible &&
+          !(
             inspected &&
             currentIdentity.destinationKey === inspected.destinationKey &&
             !sameCompositionRulesIdentity(inspected, currentIdentity)

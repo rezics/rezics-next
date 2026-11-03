@@ -78,7 +78,8 @@ export function projectCompositionRulesOutline(body: DocumentSnapshot): Composit
     if (node.type === 'heading') {
       const index = total++;
       if (entries.length < outlineLimit) {
-        const label = clippedLabel(visibleHeadingText(node)) || m.composition_rules_reader_section({ number: index + 1 });
+        const label =
+          clippedLabel(visibleHeadingText(node)) || m.composition_rules_reader_section({ number: index + 1 });
         const level = typeof node.attrs?.level === 'number' ? node.attrs.level : 1;
         entries.push({ index, level, label });
       }
