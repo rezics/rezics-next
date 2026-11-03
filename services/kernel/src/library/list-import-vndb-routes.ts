@@ -9,6 +9,7 @@ import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { createVndbImport } from './list-import-vndb.ts';
+import { vndbLabelAdoptionRoutes } from './list-import-vndb-label-routes.ts';
 import { VNDB_LIMITS, VndbInvalid } from './list-import-vndb-parser.ts';
 import {
   vndbApplySchema,
@@ -72,7 +73,7 @@ export function vndbImportRoutes(
   dependencies: Omit<Parameters<typeof createVndbImport>[0], 'access'> & { access: () => Access },
 ) {
   const service = () => createVndbImport({ ...dependencies, access: dependencies.access() });
-  return app
+  return vndbLabelAdoptionRoutes(app, dependencies)
     .post(
       customMethod('/v1/libraryImports/vndb', 'preview'),
       {
