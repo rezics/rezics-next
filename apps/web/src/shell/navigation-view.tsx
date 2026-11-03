@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
+import { Folders, House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import {
@@ -41,6 +41,19 @@ export const defaultNavigation = createNavigation([
     match: 'prefix',
     signedIn: true,
     operation: 'library_entry.list',
+    retainWhenUnavailable: true,
+  },
+  {
+    id: 'shell.collections',
+    kind: 'navigation',
+    group: 'personal',
+    order: 5,
+    href: '/library/collections',
+    label: ({ locale }) => m.library_nav_collections({}, { locale }),
+    icon: Folders,
+    match: 'prefix',
+    signedIn: true,
+    operation: 'collection.list',
     retainWhenUnavailable: true,
   },
   {

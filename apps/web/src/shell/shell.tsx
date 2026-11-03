@@ -1,4 +1,6 @@
-import { AppearanceControls, LanguageControl, ThemeControl } from './appearance-controls';
+import { AppearanceControls } from './appearance-controls';
+import { TopBar, ShellTopActions } from './top-bar';
+import { SideNavProvider, useSideNavCommunities } from './side-nav';
 import { RezicsMark } from './mobile-mark';
 import { PhoneNavigation, PhoneCreationProvider, PhoneUnreadDot, phoneTabClass } from './phone-navigation';
 import { useOperation } from '../kernel/exposure';
@@ -107,12 +109,13 @@ function Logo() {
   );
 }
 function Navigation({ pathname, session }: { pathname: string; session: ShellSession }) {
+  const communities = useSideNavCommunities();
   return (
     <nav
       aria-label={m.shell_navigation()}
       className="fixed top-16 start-0 z-10 w-(--sidebar-width) group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
     >
-      <SidebarContent className="overflow-visible!">
+      <SidebarContent className="max-h-[calc(100svh-4rem)] overflow-y-auto!">
         <SidebarGroup>
           <SidebarMenu>
             <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
@@ -146,6 +149,9 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
               }}
             </NavigationEntries>
           </SidebarMenu>
+          <div className="group-data-[collapsible=icon]:[&_h2]:sr-only group-data-[collapsible=icon]:[&_[data-community-label]]:sr-only group-data-[collapsible=icon]:[&_[data-community-footer]]:hidden">
+            {communities}
+          </div>
         </SidebarGroup>
       </SidebarContent>
     </nav>
@@ -200,13 +206,18 @@ export function NavigationToggle({
   session: ShellSession;
 }) {
   const hydrated = useHydrated();
+  const communities = useSideNavCommunities();
   const navigation = (
-    <NavigationLinks context={{ locale: getLocale(), pathname }} session={session} label={m.shell_navigation()} />
+    <div className="grid gap-3">
+      <NavigationLinks context={{ locale: getLocale(), pathname }} session={session} label={m.shell_navigation()} />
+      {communities}
+    </div>
   );
   return (
     <>
       <Menu
         title={m.shell_navigation()}
+        closeOnNavigation
         content={navigation}
         trigger={
           <Button
@@ -260,16 +271,18 @@ export function AccountMenu({
     if (session !== 'signed-in') return;
     return resolveAccountSecurity(readIssuer, (href) => setSecurity({ lifecycle, href }));
   }, [session, lifecycle, readIssuer]);
-  const settings = phone ? (
+  const settings = (
     <div className="space-y-4 border-t border-border pt-4">
-      <h2 className="text-base font-semibold">{m.settings_heading()}</h2>
+      {phone && <h2 className="text-base font-semibold">{m.settings_heading()}</h2>}
       <AppearanceControls />
-      <a href={`/${getLocale()}/settings`} className={accountMenuLinkClass}>
-        <Settings aria-hidden="true" className="size-4" />
-        {m.settings_heading()}
-      </a>
+      {phone && (
+        <a href={`/${getLocale()}/settings`} className={accountMenuLinkClass}>
+          <Settings aria-hidden="true" className="size-4" />
+          {m.settings_heading()}
+        </a>
+      )}
     </div>
-  ) : null;
+  );
   const trigger = phone ? (
     <button
       id="phone-account-menu-button"
@@ -437,19 +450,29 @@ export type AppShellProps = {
   navigation?: readonly NavigationContribution[];
   subjectPurchase?: SubjectPurchaseRegions;
   search?: React.ReactNode;
+  communities?: React.ReactNode;
+  notifications?: React.ReactNode;
 };
-export function AppShell({ children, navigation, subjectPurchase, search }: AppShellProps) {
+export function AppShell({ children, navigation, subjectPurchase, search, communities, notifications }: AppShellProps) {
   return (
     <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
       <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
         <Toaster>
-          <ShellContent search={search}>{children}</ShellContent>
+          <SideNavProvider communities={communities}>
+            <ShellContent search={search} notifications={notifications}>
+              {children}
+            </ShellContent>
+          </SideNavProvider>
         </Toaster>
       </FeatureSlotsProvider>
     </NavigationProvider>
   );
 }
-function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'search'>) {
+function ShellContent({
+  children,
+  search,
+  notifications,
+}: Pick<AppShellProps, 'children' | 'search' | 'notifications'>) {
   const { state: session, csrfToken } = useSession();
   const location = useLocation();
   const router = useRouter();
@@ -485,46 +508,27 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
             {m.shell_skip_to_content()}
           </a>
           <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
-          <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 has-[[data-expanded=true]]:z-50">
-            {/* Equal side tracks reserve the wider control group's bounded width (language, theme, account).
-                Below lg the search deliberately becomes a compact trigger instead of squeezing this field. */}
-            <div className="flex h-16 items-center gap-2 px-3 lg:grid lg:grid-cols-[minmax(21rem,1fr)_minmax(0,40rem)_minmax(21rem,1fr)]">
-              <div className="flex shrink-0 items-center gap-2">
-                <NavigationToggle
-                  collapsed={railCollapsed}
-                  onToggle={() => setCollapsed(!railCollapsed)}
-                  pathname={location.pathname}
-                  session={session}
-                />
-                <div className="hidden md:block">
-                  <Logo />
-                </div>
-              </div>
-              <div className="min-w-0 flex-1">{search ?? <ShellSearch />}</div>
-              <div className="ms-auto hidden w-max shrink-0 items-center gap-2 md:flex">
-                <LanguageControl />
-                <ThemeControl />
-                <div
-                  data-session-slot
-                  className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36 [&_button_span]:min-w-0 [&_button_span]:truncate"
-                >
-                  <AccountMenu session={session} csrfToken={csrfToken} />
-                  <noscript>
-                    <a
-                      href={`/${getLocale()}/settings`}
-                      className={cn(
-                        headerControlClass,
-                        'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
-                      )}
-                    >
-                      <UserRound aria-hidden="true" className="size-4" />
-                      <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-                    </a>
-                  </noscript>
-                </div>
-              </div>
-            </div>
-          </header>
+          <TopBar
+            navigation={
+              <NavigationToggle
+                collapsed={railCollapsed}
+                onToggle={() => setCollapsed(!railCollapsed)}
+                pathname={location.pathname}
+                session={session}
+              />
+            }
+            logo={<Logo />}
+            search={search ?? <ShellSearch />}
+            actions={
+              <ShellTopActions
+                notifications={notifications}
+                session={session}
+                pathname={location.pathname}
+                returnTo={location.publicHref.split('#')[0]!}
+                account={<AccountMenu session={session} csrfToken={csrfToken} />}
+              />
+            }
+          />
           <ScriptFreeNavigation pathname={location.pathname} session={session} />
           <div className="flex flex-1">
             <NavigationColumn pathname={location.pathname} session={session} />

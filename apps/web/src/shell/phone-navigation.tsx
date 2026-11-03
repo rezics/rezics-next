@@ -188,25 +188,13 @@ export function PhoneNavigationView({
     </nav>
   );
 }
-export function PhoneNavigation({
-  session,
-  pathname,
-  account,
-}: {
-  session: Session;
-  pathname: string;
-  csrfToken: string | null;
-  account: ReactNode;
-}) {
-  const library = useOperation('library_entry.list');
+export function useShellCreationActions(session: Session) {
   const collection = useOperation('collection.create');
   const contextualActions = useContext(CreationContext);
-  const unread = usePhoneUnread(session);
   const actions: PhoneCreationAction[] = [];
   if (session === 'signed-in') {
     const ids = new Set<string>();
     const destinations = new Set<string>();
-    // The built-in Collection entry wins, then the first mounted owner and its action order.
     for (const action of [
       ...(collection
         ? [{ id: 'collection', label: m.library_collection_new(), href: `/${getLocale()}/collections/new` }]
@@ -220,6 +208,21 @@ export function PhoneNavigation({
       actions.push(action);
     }
   }
+  return actions;
+}
+export function PhoneNavigation({
+  session,
+  pathname,
+  account,
+}: {
+  session: Session;
+  pathname: string;
+  csrfToken: string | null;
+  account: ReactNode;
+}) {
+  const library = useOperation('library_entry.list');
+  const actions = useShellCreationActions(session);
+  const unread = usePhoneUnread(session);
   return (
     <PhoneNavigationView
       pathname={pathname}
