@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createReplyNoticeEffect } from '../../src/content/reply-notices.ts';
 import { effectWorkflowId, launchWork, registerEffects, shutdownWork } from '../../src/events/effects.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 
 let f: Awaited<ReturnType<typeof replyNoticeFixture>>;
@@ -44,7 +44,7 @@ test("a reply notifies the parent post's author and a top-level post notifies th
   expect(await f.notices(self.id)).toEqual([]);
   // Opening-post events, when present, cannot notify their own actor.
   const opening = await f.db.admin.query(
-    "SELECT 1 FROM core.outbox WHERE type='com.rezics.content.post.created.v1' AND data->>'itemId'=$1",
+    "SELECT 1 FROM core.outbox WHERE type='com.rezics.content.post.published.v1' AND data->>'itemId'=$1",
     [thread.firstPost.id],
   );
   if (opening.rowCount) {
@@ -137,5 +137,25 @@ test('replayed post events add no second notice', async () => {
   // A second effect invocation still reaches the store's unique source constraint.
   const envelope = await f.envelope(post.id);
   await createReplyNoticeEffect(f.db.pool, f.accounts.access).run(envelope.events.find(Boolean)!);
+  expect(await f.notices(post.id)).toHaveLength(1);
+}, 60_000);
+
+test('reply effects require a closed publication payload and its exact available source revision and actor', async () => {
+  const thread = await f.thread();
+  const post = await f.post(thread.id);
+  const source = (await f.envelope(post.id)).events.find(Boolean)!;
+  const effect = createReplyNoticeEffect(f.db.pool, f.accounts.access);
+  expect(effect.types).toEqual(['com.rezics.content.post.published.v1']);
+  for (const type of ['thread.created', 'post.created', 'revision.created'])
+    await expect(effect.run({ ...source, type: `com.rezics.content.${type}.v1` })).rejects.toThrow(
+      'Invalid reply notice source event',
+    );
+  await expect(effect.run({ ...source, data: { ...source.data, unexpected: true } })).rejects.toThrow(
+    'Invalid reply notice source event',
+  );
+  for (const changes of [{ revisionId: newId(routeOf(post.id)!) }, { actorId: f.accounts.principal }])
+    await effect.run({ ...source, data: { ...source.data, ...changes } });
+  expect(await f.notices(post.id)).toEqual([]);
+  await deliver(post.id);
   expect(await f.notices(post.id)).toHaveLength(1);
 }, 60_000);

@@ -10,5 +10,5 @@ JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
 JOIN content.post opening ON opening.route = t.route AND opening.post_id = t.first_post_id
 LEFT JOIN content.post parent ON parent.route = p.route AND parent.post_id = p.reply_to_post_id
 JOIN content.revision r ON r.route = p.route AND r.thread_id = p.thread_id
-  AND r.post_id = p.post_id AND r.revision_id = :revision_id::uuid
+  AND r.post_id = p.post_id AND r.revision_id = :revision_id::uuid AND r.availability = 'available'
 WHERE p.route = :route::integer AND p.post_id = :post_id::uuid;

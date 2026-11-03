@@ -51,15 +51,17 @@ test('draft creation and edits stay silent; opening publication and immediate re
 });
 
 test('current recipient authority, preferences and ancestor disclosure govern publication sends', async () => {
-  const { mentioned, author, readers: [controlRecipient] } = f.people;
+  const { mentioned, author, readers: [controlRecipient, preferenceRecipient] } = f.people;
   const protectedThread = await f.thread([], 'published', f.people.protectedBoardId);
   const denied = await f.reply(protectedThread, [mentioned]);
+  await f.call(mentioned, 'GET', `/v1/posts/${denied.id}`);
   await f.setup.realmMember(mentioned, false);
   await f.setup.setPreference(author, 'reply', false);
   const publicThread = await f.thread();
   const ancestorDenied = await f.reply(publicThread, [mentioned], 'published', publicThread.firstPost.id);
-  const preferenceDenied = await f.reply(await f.thread(), [mentioned]);
-  await f.setup.setPreference(mentioned, 'mention', false);
+  await f.call(mentioned, 'GET', `/v1/posts/${ancestorDenied.id}`);
+  const preferenceDenied = await f.reply(await f.thread(), [preferenceRecipient!]);
+  await f.setup.setPreference(preferenceRecipient!, 'mention', false);
   const control = await f.reply(await f.thread(), [controlRecipient!]);
   await f.takeDown(publicThread.firstPost, publicThread);
   await f.deliver();
@@ -67,7 +69,7 @@ test('current recipient authority, preferences and ancestor disclosure govern pu
   expect(await f.inbox(controlRecipient!, control)).toEqual([expect.objectContaining({ kind: 'mention' })]);
   await f.setup.realmMember(mentioned, true);
   await f.setup.setPreference(author, 'reply', true);
-  await f.setup.setPreference(mentioned, 'mention', true);
+  await f.setup.setPreference(preferenceRecipient!, 'mention', true);
   await f.deliver(true);
   for (const post of [denied, ancestorDenied, preferenceDenied]) expect(await f.notices(post)).toEqual([]);
 });

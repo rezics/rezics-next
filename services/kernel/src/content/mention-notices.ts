@@ -16,8 +16,7 @@ import readMentionSource from './read-mention-source.sql';
 import readBoard from './read-board.sql';
 import { postReadableByAccount } from './reads.ts';
 
-const postCreated = 'com.rezics.content.post.created.v1';
-const threadCreated = 'com.rezics.content.thread.created.v1';
+const postPublished = 'com.rezics.content.post.published.v1';
 const MAX_MENTIONS = 10;
 
 type MentionRow = {
@@ -110,11 +109,11 @@ async function readBoardMetadata(pool: Pool, boardId: string, deadline: number):
 export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
   return {
     name: 'content_mention_notice',
-    types: [postCreated, threadCreated],
+    types: [postPublished],
     async run(event: CloudEvent) {
       if (
-        (event.type !== postCreated && event.type !== threadCreated) ||
-        !Value.Check(CONTENT_EVENTS[event.type], event.data)
+        event.type !== postPublished ||
+        !Value.Check(CONTENT_EVENTS[postPublished], event.data)
       )
         throw new TypeError('Invalid mention source event');
       const data = event.data as {
@@ -145,8 +144,7 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
         !row ||
         row.actor_id !== data.actorId ||
         row.thread_id !== data.threadId ||
-        row.revision_id !== data.revisionId ||
-        (event.type === threadCreated && row.first_post_id !== row.post_id)
+        row.revision_id !== data.revisionId
       )
         return;
       const excluded = new Set([row.actor_id, row.reply_to_post_id ? row.parent_author_id : row.first_post_author_id]);

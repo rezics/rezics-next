@@ -32,7 +32,7 @@ function event(
   postId: string,
   revisionId: string,
   actorId: string,
-  type = 'com.rezics.content.post.created.v1',
+  type = 'com.rezics.content.post.published.v1',
 ): CloudEvent {
   const route = routeOf(threadId)!;
   return {
@@ -258,6 +258,19 @@ test('replayed post events add no second notice', async () => {
   const first = await notices();
   await effect.run(source);
   expect(await notices()).toEqual(first);
+});
+
+test('mention effects accept only the closed first-publication source payload', async () => {
+  const effect = registeredMentionEffect();
+  expect(effect.types).toEqual(['com.rezics.content.post.published.v1']);
+  const source = event(newId(0x1234), newId(0x1234), newId(0x1234), fixture.actor);
+  for (const type of ['thread.created', 'post.created', 'revision.created'])
+    await expect(effect.run({ ...source, type: `com.rezics.content.${type}.v1` })).rejects.toThrow(
+      'Invalid mention source event',
+    );
+  await expect(effect.run({ ...source, data: { ...source.data, unexpected: true } })).rejects.toThrow(
+    'Invalid mention source event',
+  );
 });
 
 test('mention notices use public Realm eligibility and withhold sends after Realm read authority is denied', async () => {

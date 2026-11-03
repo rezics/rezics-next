@@ -12,18 +12,18 @@ import { deadlineFor } from '../request/deadline.ts';
 import { postReadableByAccount } from './reads.ts';
 import readRecipient from './read-reply-notice-recipient.sql';
 
-const postCreated = 'com.rezics.content.post.created.v1';
+const postPublished = 'com.rezics.content.post.published.v1';
 
 /** registerEffects records this entire outcome in its single effect.run DBOS step.
  * A denied send returns successfully, so workflow replay never reevaluates it. */
 export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
   return {
     name: 'content_reply_notice',
-    types: [postCreated],
+    types: [postPublished],
     async run(event) {
-      if (event.type !== postCreated || !Value.Check(CONTENT_EVENTS[postCreated], event.data))
+      if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS[postPublished], event.data))
         throw new TypeError('Invalid reply notice source event');
-      const data = event.data as ContentEventData<typeof postCreated>;
+      const data = event.data as ContentEventData<typeof postPublished>;
       const route = routeOf(data.threadId);
       if (route === null || routeOf(data.itemId) !== route || routeOf(data.revisionId) !== route)
         throw new TypeError('Invalid reply notice content route');
@@ -34,6 +34,8 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
           route,
           thread_id: data.threadId,
           post_id: data.itemId,
+          revision_id: data.revisionId,
+          actor_id: data.actorId,
         });
       });
       if (!recipient || recipient.author_account_id === data.actorId) return;

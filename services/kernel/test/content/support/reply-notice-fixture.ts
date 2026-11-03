@@ -107,7 +107,7 @@ export async function replyNoticeFixture() {
   }
   async function envelope(postId: string): Promise<Envelope> {
     const { rows } = await db.admin.query(
-      "SELECT * FROM core.outbox WHERE type='com.rezics.content.post.created.v1' AND data->>'itemId'=$1",
+      "SELECT * FROM core.outbox WHERE type='com.rezics.content.post.published.v1' AND data->>'itemId'=$1",
       [postId],
     );
     expect(rows).toHaveLength(1);

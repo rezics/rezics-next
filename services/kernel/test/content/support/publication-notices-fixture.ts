@@ -84,7 +84,8 @@ export async function publicationNoticesFixture() {
     },
     async takeDown(post: Post, thread: Thread) {
       await setup.grantModerationTarget(post.id, thread.id);
-      await call(people.moderator, 'POST', `/v1/posts/${post.id}:takeDown`, { reason: 'Ancestor no longer readable' });
+      await call(people.moderator, 'POST', `/v1/posts/${post.id}:takeDown`,
+        { reason: 'Ancestor no longer readable' }, { status: 200 });
     },
     async close() {
       try { await host.close(); } finally { await setup.close(); }
