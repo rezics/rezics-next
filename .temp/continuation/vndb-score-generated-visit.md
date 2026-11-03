@@ -28,19 +28,19 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/personal-list-import.test.tsx
   placement: default
   failing: true
   tests:
-    - "The installed generated client exposes typed VNDB score review, page and apply-result fields; Web sends only those generated requests and reports only native results."
-    - "One selected row can review vote units or clear against the actual question and current vote, with separate explicit consent and no automatic conversion."
-    - "State-only import leaves votes unchanged; source zero is invalid, native zero is valid, clear and absence remain distinct, and unsupported precision is preserved."
-    - "A changed question, identity, vote observation or review requires a new confirmation and command key; an unknown result retries the original selected score review and apply command exactly."
-    - "Partial cancellation preserves acknowledged state and vote outcomes, and retirement clears source, baseline, consent and late callbacks."
+    - 'The installed generated client exposes typed VNDB score review, page and apply-result fields; Web sends only those generated requests and reports only native results.'
+    - 'One selected row can review vote units or clear against the actual question and current vote, with separate explicit consent and no automatic conversion.'
+    - 'State-only import leaves votes unchanged; source zero is invalid, native zero is valid, clear and absence remain distinct, and unsupported precision is preserved.'
+    - 'A changed question, identity, vote observation or review requires a new confirmation and command key; an unknown result retries the original selected score review and apply command exactly.'
+    - 'Partial cancellation preserves acknowledged state and vote outcomes, and retirement clears source, baseline, consent and late callbacks.'
 estimate:
   lines: 1000
   files: 10
