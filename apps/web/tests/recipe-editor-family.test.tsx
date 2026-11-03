@@ -184,14 +184,18 @@ test('Recipe creation and current correction share complete frames with independ
       alternate: Fiber;
       stateNode: { current: Fiber };
     };
-    let fiber = Reflect.get(
-      element,
-      Object.keys(element).find((key) => key.startsWith('__reactFiber$'))!,
-    ) as Fiber;
-    let top = fiber;
+    const fiberKey = (node: object) => Object.keys(node).find((key) => key.startsWith('__reactFiber$'));
+    let node: HTMLElement | null = element;
+    let fiber: Fiber | undefined;
+    while (node && !fiber) {
+      const key = fiberKey(node);
+      fiber = key ? (Reflect.get(node, key) as Fiber) : undefined;
+      node = node.parentElement;
+    }
+    let top = fiber!;
     while (top.return) top = top.return;
-    if (top.stateNode.current !== top) fiber = fiber.alternate;
-    while (!matches(fiber.memoizedProps)) fiber = fiber.return!;
+    if (top.stateNode.current !== top) fiber = fiber!.alternate;
+    while (!matches(fiber!.memoizedProps)) fiber = fiber!.return!;
     return fiber.memoizedProps;
   };
   const scalar = (scope: HTMLElement) =>
@@ -206,7 +210,8 @@ test('Recipe creation and current correction share complete frames with independ
     ).onChange;
   const document = (scope: HTMLElement) =>
     retainedProps<ComponentProps<typeof RichTextEditor>>(
-      scope.querySelector('[contenteditable]')!,
+      scope.querySelector('[contenteditable="true"][role="textbox"]') ??
+        scope.querySelector('[contenteditable]')!,
       (props) => !!props.labels && !!props.onChange,
     );
   const picker = (scope: HTMLElement) =>
