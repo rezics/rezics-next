@@ -734,56 +734,73 @@ Publication uses the normal native generator; consumers derive the response and 
 
 #### Cost: current ban selection and inspection
 
-- Touches: two released native time preparations and two Realm read-only snapshots. Each snapshot performs the
-  existing full `realm:ban` admission, partition point, active Realm/host source point, one p+1 open-key window
-  and s optional exact current-ban seek, where p<=100 and s is zero or one. The final window is compared in full,
-  including lookahead and internal episode; no historical fill or write is dispatched. SQL adds BEGIN/COMMIT
-  per snapshot; errors charge the attempted work and ROLLBACK/release. Native Access preparation/formula work
-  and its authoritative clock/fence and candidate caps remain additional owner costs, not zero-cost callbacks.
-- Bound: source points return at most one row each; raw windows examine at most p+1 partial-btree current keys
-  plus p+1 exact temporal payload keys; inspection examines one current key plus one temporal payload key.
-  Across both rounds this is 2(p+s+1) current/payload pairs, independent of closed intervals. Payload reason is
-  at most 1024 Unicode scalars (4096 UTF-8 or 6146 JSON-string bytes). `realm_ban_current` already covers the
-  needed native route/Realm/account/interval key; materialized tuple seeks prevent a temporal history scan.
-  Cursors also bind the actual consented scope set and admit 4096 bytes of wire text. Each attempt makes one window, never scans old rows to fill it or
-  retries a command; an explicit read retry pays the complete read again.
+- Touches: each successful read retains its initial and final Realm/host source, raw window, optional exact
+  selected episode and caller state through both observation rounds. Two Realm snapshots each run BEGIN/COMMIT;
+  a failed snapshot charges its dispatched reads and ROLLBACK/release. Four native read-time preparations cover
+  the initial/final Realm checks and two optional context rounds; `releaseOperationalTime` removes only a WeakMap
+  entry and executes zero SQL. Six independent Access checks prepare fresh clock/deadline and candidate state,
+  then evaluate their native formulae. The mounted x-rate-limit stage costs one counter statement. The GET does
+  not invoke a worker, receipt lookup, command fence or membership writer; only the separate ban/unban command
+  charges its actual registered runner and removal phases.
+- Bound: with page limit p<=100 and selection flag s in {0,1}, the reader statement expression is
+  `34+2s+2I+b1+b2+sum_i(3+d_i+k_i+V_i)` across six Access checks. Here I is the actual count of distinct routed
+  identity queries over global chunks of at most 100 keys in each of two rounds; b1 and b2 are the protected
+  delegated-ban probes in the two context rounds; d<=1, k<=2 and V<=1000k are the admitted assignment, inverse
+  and matching-group proof work for each check. The maximal admitted expression is 12,478 reader statements,
+  source-derived rather than a measured ceiling. Mounted SQL adds the one rate counter and actual authentication
+  reads (one Account read, or three statements when `requested_by` is present), with JWKS/network and serialization
+  bytes retained separately. Each raw round examines at most p+1 current keys and p+1 exact temporal payload
+  keys, plus the optional selected pair; both rounds together are 2(p+1+s) pairs, independent of closed history.
+  Payload reason admits 1024 Unicode scalars (4096 UTF-8 or 6146 escaped JSON-string bytes), and the cursor admits
+  4096 wire bytes. The reader compares the whole raw window and never fills from history or retries a command.
 - Growth check: `test/community/ban-review-page.test.ts` pins mounted bounds and readback; native physical
   selection plans and independent retained-history growth are in `test/community/ban-review-page-growth.test.ts`.
 
+Decision: create production Auth with the captured Auth pool before its handler is constructed; each cold growth request receives a fresh verifier/cache.
+
 #### Cost: ban identities and currentness
 
-- Touches: two installed `readPublicIdentities` rounds on real routed account homes, each with at most 2p+2
-  IDs before deduplication, in owner batches of at most 100. The projection internally groups exact IDs by route.
-  Caller standing adds two installed full-key Account-state reads, one row each. Delegator/assignment, grants,
-  roles and session ceiling remain in both native Access admissions. Each helper checkout/driver statement and
-  runner acquisition/release is charged, including cold release and failures; this page introduces no Auth HTTP,
-  broad account query, callback pool, membership reader or workflow-status probe.
-- Bound: for k<=202 deduplicated identities and h represented routes, each round has at most
-  sum(ceil(k_home/100))<=k native identity statements/points, returning <=k rows. Each full dependency row admits
-  26624 JSON UTF-8 bytes (4096-scalar display name, 64-ASCII handle, fixed IDs/state/kind and public fields).
-  Two retained dependency rounds cost <=2k*26624 bytes before map/canonical copies. Output deliberately omits
-  authentication/operator fields. JSON repeats a permitted label/name and repeated moderators at most twice
-  per returned row; 101 records including selection, reason and controls fit the admitted 12 MiB serialized
-  response cap. This cap includes JSON escaping; it is not a character or sample-size estimate. Inputs, maps,
-  canonical comparisons and response strings each retain their own bounded copy; no dependent payload is free.
+- Touches: each of two real `readPublicIdentities` rounds materializes the exact routed current identities for
+  the page, lookahead and optional selection. The keys are split into global chunks of at most 100, so one route
+  can occur in multiple chunks. Two caller-state reads retain the full Account/session observations; both Access
+  rounds retain delegation, assignments, grants, roles, fences and group proofs. The native Auth verifier and its
+  database use the pool supplied when the fixture constructs the handler; the growth fixture captures that pool
+  through a second `GrowthDatabase` around the same awaited request. Each database is catalog-validated alone,
+  then foreground costs are added per invocation before repetition summaries. No broad account lookup, profile
+  history scan, membership reader or workflow-status probe is added.
+- Bound: before deduplication u<=2p+2<=202; for each observation round, I is the sum of distinct routes present
+  in each actual global chunk and I<=u. Thus identity SQL is 2I across both rounds, not the sum of per-home
+  ceilings. Each full dependency row admits 26,624 JSON UTF-8 bytes; two retained rows per key cost at most
+  2u*26,624 = 10,756,096 bytes before route maps, canonical copies and final projection. Output omits
+  authentication/operator fields. Bound every copied display name, handle, label, repeated moderator and reason
+  at source limits; JSON escaping is included. The 12 MiB response cap applies after materialization and does not
+  cap peak allocation. Keep cumulative dependency, map/canonical, serialized response and wire bytes as separate
+  terms, including the permitted full Realm/Space observations and cold JWKS response; do not infer them from
+  `responseBytes` alone.
 - Growth check: `test/community/ban-review-page.test.ts` uses native Accounts and failure/change barriers;
   `test/community/ban-review-page-growth.test.ts` fixes represented homes and text while growing unrelated and
-  historical bans, unrelated native identities and closed authority intervals. The installed identity producer reads the current Account key directly; it does not traverse former profile or handle history. All native identity and authority plans retain missing-plan refusal.
+  historical bans, unrelated native identities and closed authority intervals. It captures the production Auth
+  pool around the same awaited mounted request, validates each database catalog separately, adds both captures
+  before repetition summaries, and retains database, serialized HTTP and cold JWKS byte costs. The installed
+  identity producer reads the current Account key directly; it does not traverse former profile or handle history.
+  All native identity and authority plans retain missing-plan refusal.
 
 #### Cost: optional context and serialization
 
-- Touches: two released optional context preparations, each using the installed Realm/Space ordinary read
-  eligibility, its native Access preparation and formula, one read-only checkout and current source comparison.
-  Only permitted context adds the one exact Realm-head/Space-head title query. Each round mints/releases its
-  native read time; every branch pays executed controls and release. Serialization compares complete current
-  observations, projects permitted fields and seals at most one continuation, with no SQL, remote read or write.
-- Bound: each context round selects one Realm identity/head and one Space identity/head through the installed
-  eligibility helpers, then at most one title row. Each title has <=1024 Unicode scalars, at most 4096 UTF-8 bytes
-  or 6146 escaped JSON-string bytes; full title dependency admits 16384 JSON bytes. These two rounds add <=4
-  title keys and <=2 title rows. Native protected-ban/actor/principal checks and native Access candidate work
-  are additional bounded owner terms. Output serialization is O(p+k) bounded copies within the 12 MiB response
-  budget; denied/stale/unavailable paths serialize only the existing problem. No optional reader failure invents
-  an empty operational list or skips a raw key.
+- Touches: each of two optional-context rounds prepares and verifies the ordinary Realm and host Space reads,
+  reauthorizes each through its own Access preparation/formula, then compares the source and, only when both
+  reads permit disclosure, loads the exact current Realm and Space titles. The complete Realm revision is
+  hydrated by native eligibility even though only its title is disclosed. Both observations are retained and
+  compared in final disclosure, including identity, lifecycle and head; a changed source withholds the page.
+  This does not borrow management grants or inspect a management-only projection.
+- Bound: the two context rounds add 10+b1+b2 statements: six ordinary Realm/Space eligibility statements plus
+  two Realm and two Space Access checks, with up to one protected actor/principal current-ban statement per
+  round. Their bounded plan declarations total at most 26 source keys and 86 finite rows when both protected
+  probes reach two identities. Each permitted round reads at most one exact title row per home; title limits are
+  1024 Unicode scalars, 4096 UTF-8 bytes or 6146 escaped JSON-string bytes, with a full 16,384-byte dependency
+  ceiling. Failed, denied, concealed and stale paths retain only work actually dispatched and never turn a
+  required source failure into false absence. Serialize all 101 maximum records, controls, selected identity and
+  context with escaped JSON under the 12 MiB wire cap while accounting separately for peak and cumulative copies.
 - Growth check: `test/community/ban-review-page.test.ts` covers denied/current/changed pages and exact retry;
   `test/community/ban-review-page-growth.test.ts` supplies strict native plan coverage for the new key paths.
 
