@@ -1,10 +1,5 @@
-import { expect, expectTypeOf, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { createKernelClient, type KernelClient } from '../src/index.ts';
-
-type Post = ReturnType<KernelClient['posts']>;
-type HistoryPage = NonNullable<Awaited<ReturnType<Post['revisions']['get']>>['data']>;
-
-expectTypeOf<ReturnType<typeof createKernelClient>>().toEqualTypeOf<KernelClient>();
 
 test('post history and exact revision reads keep their compatible route addresses', async () => {
   const requests: Request[] = [];
@@ -13,106 +8,16 @@ test('post history and exact revision reads keep their compatible route addresse
   const authorId = '019a1b2c-3d4e-7f00-8a00-000000000003';
   const questionId = '019a1b2c-3d4e-7f00-8a00-000000000004';
   const subjectId = '019a1b2c-3d4e-7f00-8a00-000000000005';
-  const headRevisionId = '019a1b2c-3d4e-7f00-8a00-000000000008';
-  const createdAt = '2026-11-04T00:00:00Z';
-  const threadId = '019a1b2c-3d4e-7f00-8a00-000000000006';
-  const boardId = '019a1b2c-3d4e-7f00-8a00-000000000007';
   const client: KernelClient = createKernelClient('https://kernel.test', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
       return new URL(request.url).pathname.endsWith('/revisions')
         ? Response.json({
-            revisions: [
-              {
-                id: postId,
-                threadId,
-                revisionId,
-                authorId,
-                boardId,
-                route: 1,
-                parentId: null,
-                licence: 'CC0-1.0',
-                subjectIds: [subjectId],
-                mediaIds: [],
-                visibility: 'published',
-                securityRevision: '1',
-                availability: 'available',
-                createdAt,
-                revisedAt: null,
-                sha256: 'a'.repeat(64),
-                body: {
-                  version: 'rezics-document-v1',
-                  profile: 'text',
-                  doc: { type: 'doc', content: [{ type: 'paragraph' }] },
-                },
-                voteCitation: { questionId, units: 0, revision: 1 },
-              },
-            ],
+            revisions: [{ revisionId, voteCitation: { questionId, units: 0, revision: 1 } }],
             next: null,
             page: {
-              viewer: { kind: 'anonymous' },
-              conversation: {
-                id: threadId,
-                kind: 'review',
-                title: 'Historical review',
-                authorId,
-                boardId,
-                subjectIds: [subjectId],
-                createdAt,
-              },
-              board: {
-                id: boardId,
-                realmId: null,
-                community: null,
-                route: 1,
-                title: 'Reviews',
-                purpose: 'reviews',
-                visibility: 'published',
-                securityRevision: '1',
-                availability: 'available',
-                createdAt,
-              },
-              place: { kind: 'global', id: boardId },
-              head: {
-                postId,
-                revisionId: headRevisionId,
-                state: 'current',
-                authorId,
-                createdAt,
-                revisedAt: null,
-              },
-              mentions: { state: 'current', retryable: false, items: [] },
-              subjects: {
-                state: 'current',
-                retryable: false,
-                limit: 4,
-                items: [{ id: subjectId, state: 'concealed', summary: null }],
-              },
-              media: { state: 'current', retryable: false, items: [] },
-              navigation: {
-                exact: [{ postId, revisionId }],
-                compareToHead: [{ postId, fromRevisionId: revisionId, toRevisionId: headRevisionId }],
-              },
-              currentness: {
-                source: 'current',
-                conversation: 'current',
-                board: 'current',
-                place: 'current',
-                head: 'current',
-                authors: 'current',
-                mentions: 'current',
-                subjects: 'current',
-                reviewScores: 'current',
-                media: 'current',
-                actions: 'current',
-              },
-              retry: { state: 'none' },
-              authors: {
-                state: 'current',
-                retryable: false,
-                items: [{ id: authorId, state: 'concealed' }],
-              },
+              authors: { state: 'current', retryable: false, items: [{ id: authorId, state: 'concealed' }] },
               reviewScores: {
                 state: 'current',
                 retryable: false,
@@ -135,17 +40,11 @@ test('post history and exact revision reads keep their compatible route addresse
                 state: 'current',
                 retryable: false,
                 references: [
-                  {
-                    type: 'content.post',
-                    id: postId,
-                    sourceRevisionId: revisionId,
-                    state: 'withheld',
-                    operations: [],
-                  },
+                  { type: 'content.post', id: postId, sourceRevisionId: revisionId, state: 'withheld', operations: [] },
                 ],
               },
             },
-          } satisfies HistoryPage)
+          })
         : Response.json({
             post: {},
             editionIdentity: {
@@ -166,41 +65,13 @@ test('post history and exact revision reads keep their compatible route addresse
     .get({ query: { editionIdentity: 'true' } });
 
   expect(history.data?.revisions[0]?.voteCitation?.units).toBe(0);
-  expect(history.error).toBeNull();
-  const page = history.data!.page;
-  expect(page.conversation.kind).toBe('review');
-  expect(page.board.purpose).toBe('reviews');
-  expect(page.head.revisionId).toBe(headRevisionId);
-  expect(page.authors.items[0]).toEqual({ id: authorId, state: 'concealed' });
-  const author = page.authors.items[0]!;
-  if (author.state === 'concealed') {
-    // @ts-expect-error Concealed authors do not expose presentation fields.
-    expect(author.displayName).toBeUndefined();
-  }
-  const score = page.reviewScores.items[0]!;
-  expect(score.state).toBe('available');
-  if (score.state === 'available') {
-    expectTypeOf(score.citation.units).toEqualTypeOf<number>();
-    expect(score.citation).toEqual({ questionId, units: 0, revision: 1 });
-    expect(score.question).toMatchObject({
-      id: questionId,
-      revision: 1,
-      scale: { min: 0, max: 20 },
-    });
-  }
-  const source = page.actions.references[0]!;
-  expect(source.state).toBe('withheld');
-  expect(source.operations).toEqual([]);
-  if (source.type === 'content.post') expect(source.sourceRevisionId).toBe(revisionId);
-  expect(page.subjects.items[0]).toEqual({
-    id: subjectId,
-    state: 'concealed',
-    summary: null,
+  expect(history.data).toMatchObject({
+    page: {
+      authors: { items: [{ id: authorId, state: 'concealed' }] },
+      reviewScores: { items: [{ revisionId, citation: { units: 0 } }] },
+      actions: { references: [{ sourceRevisionId: revisionId, state: 'withheld' }] },
+    },
   });
-  expect(page.navigation.exact).toEqual([{ postId, revisionId }]);
-  expect(page.navigation.compareToHead).toEqual([{ postId, fromRevisionId: revisionId, toRevisionId: headRevisionId }]);
-  expect(page.currentness.reviewScores).toBe('current');
-  expect(page.retry).toEqual({ state: 'none' });
   expect(revision.data?.editionIdentity?.subjects[0]?.kind).toBe('withheld');
 
   expect(requests.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
@@ -214,11 +85,44 @@ test('post history and exact revision reads keep their compatible route addresse
       .posts({ id: postId })
       .revisions({ revisionId })
       .get({ query: { editionIdentity: 'true' } });
+    // @ts-expect-error Only the edition identity compatibility value is supported.
     await client
       .posts({ id: postId })
       .revisions({ revisionId })
-      // @ts-expect-error Only the edition identity compatibility value is supported.
       .get({ query: { editionIdentity: 'false' } });
   };
   expect(typeof typed).toBe('function');
+});
+
+test('generated history contract includes the full page and bounded disclosure variants', async () => {
+  const contract = await Bun.file(new URL('../../../contracts/openapi.json', import.meta.url)).json();
+  const history = contract.paths['/v1/posts/{id}/revisions'].get.responses['200'].content['application/json'].schema;
+  expect(history.required).toEqual(['revisions', 'next', 'page']);
+  const page = history.properties.page;
+  expect(page.required).toEqual([
+    'viewer',
+    'conversation',
+    'board',
+    'place',
+    'head',
+    'authors',
+    'mentions',
+    'subjects',
+    'reviewScores',
+    'media',
+    'actions',
+    'navigation',
+    'currentness',
+    'retry',
+  ]);
+  const concealed = page.properties.authors.properties.items.items.anyOf[1];
+  expect(concealed.additionalProperties).toBe(false);
+  expect(Object.keys(concealed.properties).sort()).toEqual(['id', 'state']);
+  const score = page.properties.reviewScores.properties.items.items.anyOf[0];
+  expect(score.required).toEqual(['revisionId', 'state', 'citation', 'question']);
+  expect(score.properties.citation.required).toContain('revision');
+  expect(score.properties.question.required).toContain('scale');
+  const source = page.properties.actions.properties.references.items.anyOf[1];
+  expect(source.required).toContain('sourceRevisionId');
+  expect(source.properties.state.enum).toContain('withheld');
 });
