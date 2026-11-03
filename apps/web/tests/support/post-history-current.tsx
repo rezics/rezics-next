@@ -87,7 +87,7 @@ mock.module('../../src/kernel/client', () => ({ kernelClient: () => kernel }));
 const { createRoot } = await import('react-dom/client');
 export const { PostHistory } = await import('../../src/threads/post-history');
 export const { m } = await import('../../src/paraglide/messages.js');
-export const { setLocale } = await import('../../src/paraglide/runtime.js');
+export const { getLocale, setLocale } = await import('../../src/paraglide/runtime.js');
 export { currentHistoryEnvelope, selected, later };
 export async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -109,6 +109,7 @@ export async function mount(envelope = currentHistoryEnvelope()) {
   runtime.defer = false;
   runtime.calls.length = 0;
   runtime.pending.length = 0;
+  window.history.replaceState(null, '', '/en/threads/current');
   setLocale('en', { reload: false });
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
