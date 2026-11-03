@@ -25,10 +25,7 @@ const progressSelection = t.Optional(
     {
       occurrence: t.Union([
         t.Object({ kind: t.Literal('existing'), sessionId: id }, closed),
-        t.Object(
-          { kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 128 }) },
-          closed,
-        ),
+        t.Object({ kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 128 }) }, closed),
       ]),
       measures: t.Array(
         t.Object(

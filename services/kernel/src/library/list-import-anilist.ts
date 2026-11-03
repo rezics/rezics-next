@@ -523,10 +523,7 @@ export function createAniListImport(deps: Dependencies) {
     const rows = [];
     for (const row of raw) {
       const matching = await match(actor, row.payload.source);
-      const inspected =
-        matching.state === 'matched'
-          ? await observe(actor, matching.candidates[0]!)
-          : null;
+      const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
       const { profile, profileBinding: _profileBinding, ...publicObservation } = inspected ?? {};
       const observation = inspected ? propose(publicObservation as AniListObservation, row.payload.source) : null;
       rows.push({
@@ -990,7 +987,10 @@ export function createAniListImport(deps: Dependencies) {
         outcome.progress = publicProgress(reviewed.progress, progressCheckpoint);
         const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
         if (measureStatuses.includes('stale')) status = 'stale';
-        else if (status === 'unsupported' && measureStatuses.some((value) => value === 'applied' || value === 'cleared'))
+        else if (
+          status === 'unsupported' &&
+          measureStatuses.some((value) => value === 'applied' || value === 'cleared')
+        )
           status = 'applied';
         else if (measureStatuses.includes('failed')) status = 'failed';
         outcome.status = status;

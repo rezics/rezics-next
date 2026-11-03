@@ -11,16 +11,16 @@ remain unsupported until a current accepting profile admits those exact units.
 
 ## Source field and unit matrix
 
-| Provider field | Subject kind | Exact scalar unit | Current standard profile support |
-| --- | --- | --- | --- |
-| MAL `my_watched_episodes` | anime | `episode` | Anime series and season |
-| MAL `my_read_chapters` | manga | `chapter` | Unsupported by current Book profiles |
-| MAL `my_read_volumes` | manga | `volume` | Unsupported by current Book profiles |
-| AniList `progress` | ANIME | `episode` | Anime series and season |
-| AniList `progress` | MANGA | `chapter` | Unsupported by current Book profiles |
-| AniList `progressVolumes` | MANGA | `volume` | Unsupported by current Book profiles |
-| AniList `progress` or `progressVolumes` | Other media type with retained field | none | Unsupported |
-| AniList `progressVolumes` | ANIME with retained field | none | Unsupported |
+| Provider field                          | Subject kind                         | Exact scalar unit | Current standard profile support     |
+| --------------------------------------- | ------------------------------------ | ----------------- | ------------------------------------ |
+| MAL `my_watched_episodes`               | anime                                | `episode`         | Anime series and season              |
+| MAL `my_read_chapters`                  | manga                                | `chapter`         | Unsupported by current Book profiles |
+| MAL `my_read_volumes`                   | manga                                | `volume`          | Unsupported by current Book profiles |
+| AniList `progress`                      | ANIME                                | `episode`         | Anime series and season              |
+| AniList `progress`                      | MANGA                                | `chapter`         | Unsupported by current Book profiles |
+| AniList `progressVolumes`               | MANGA                                | `volume`          | Unsupported by current Book profiles |
+| AniList `progress` or `progressVolumes` | Other media type with retained field | none              | Unsupported                          |
+| AniList `progressVolumes`               | ANIME with retained field            | none              | Unsupported                          |
 
 The source field mapping is fixed and does not use titles, labels, dimensions or conversion. An accepting profile must
 admit the exact unit as `scalar_amount` with native structure and identity `none`. The current profile also validates
