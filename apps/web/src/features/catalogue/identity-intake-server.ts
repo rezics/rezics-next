@@ -80,6 +80,7 @@ const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u;
 function projectResults(
   page: NativeSuggestionPage,
   descriptor: Extract<DescriptorRead, { ok: true }>['descriptor'],
+  locale: string,
   language: string,
 ): IdentityHit[] {
   return page.subjects.slice(0, 8).map((subject) => {
@@ -199,7 +200,7 @@ export async function identityIntakeResponse(
       request.signal,
       binding.locale,
     );
-    const results = projectResults(suggestions, descriptor.descriptor, binding.language);
+    const results = projectResults(suggestions, descriptor.descriptor, binding.locale, binding.language);
     const partial = results.some((hit) => !hit.summary || !hit.typeLabel || hit.labels.length === 0);
     return privateJson(createPage(binding, results.length === 0 ? 'empty' : partial ? 'partial' : 'ready', viewer, results));
   } catch (error) {
