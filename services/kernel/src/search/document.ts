@@ -1,4 +1,4 @@
-import { isCalendarDate } from '@rezics/filter';
+import { calendarInterval, isCalendarDate } from '@rezics/filter';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
@@ -10,7 +10,15 @@ export const MAX_NAME_SORT_CHARACTERS = 512;
 /** One nested fact. Qualifiers are `property=value` strings, unique and in source order. */
 export type SubjectFact =
   | { property: string; value: string; qualifiers: string[] }
-  | { property: string; year: number; qualifiers: string[] }
+  | {
+      property: string;
+      year: number;
+      month?: number;
+      day?: number;
+      time_lower?: string;
+      time_upper?: string;
+      qualifiers: string[];
+    }
   | { property: string; amount: number; unit: string; qualifiers: string[] };
 
 export type SubjectDocument = {
@@ -62,7 +70,7 @@ function uniqueValues(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-function statementFact(statement: IndexedStatement): SubjectFact | undefined {
+function statementFact(statement: IndexedStatement, calendarFormat?: 1): SubjectFact | undefined {
   const facet = statement.facet;
   if (facet === undefined) return undefined;
   const qualifiers = uniqueValues((statement.qualifiers ?? []).map((item) => `${item.property}=${item.value}`));
@@ -72,6 +80,19 @@ function statementFact(statement: IndexedStatement): SubjectFact | undefined {
     case 'code':
       return { property, value: statement.value, qualifiers };
     case 'time':
+      if (calendarFormat === 1) {
+        if (!isCalendarDate(facet)) return undefined;
+        const interval = calendarInterval(facet);
+        return {
+          property,
+          year: facet.year,
+          ...(facet.month === undefined ? {} : { month: facet.month }),
+          ...(facet.day === undefined ? {} : { day: facet.day }),
+          time_lower: interval.lower,
+          time_upper: interval.upper,
+          qualifiers,
+        };
+      }
       return { property, year: facet.year, qualifiers };
     case 'quantity':
       return { property, amount: facet.amount, unit: facet.unit, qualifiers };
@@ -79,11 +100,11 @@ function statementFact(statement: IndexedStatement): SubjectFact | undefined {
 }
 
 /** Facet-capable statements only, in source order. An exact duplicate fact is dropped. */
-function subjectFacts(statements: readonly IndexedStatement[]): SubjectFact[] {
+function subjectFacts(statements: readonly IndexedStatement[], calendarFormat?: 1): SubjectFact[] {
   const facts: SubjectFact[] = [];
   const seen = new Set<string>();
   for (const statement of statements) {
-    const fact = statementFact(statement);
+    const fact = statementFact(statement, calendarFormat);
     if (fact === undefined) continue;
     const identity = JSON.stringify(fact);
     if (seen.has(identity)) continue;
@@ -93,7 +114,7 @@ function subjectFacts(statements: readonly IndexedStatement[]): SubjectFact[] {
   return facts;
 }
 
-function subjectDocument(partition: number, subject: IndexedSubject): SubjectDocument {
+function subjectDocument(partition: number, subject: IndexedSubject, calendarFormat?: 1): SubjectDocument {
   // The source owns standard-question proof; this boundary validates Global and exact subject binding.
   const rating =
     subject.publicRating === undefined
@@ -117,7 +138,7 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
     descriptions: uniqueValues(subject.descriptions.map((item) => item.value)),
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
-    facts: subjectFacts(subject.statements),
+    facts: subjectFacts(subject.statements, calendarFormat),
     ...(rating === undefined ? {} : { rating_score: rating.score, rating_prior_epoch: rating.priorEpoch }),
     ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
       ? {}
@@ -129,6 +150,8 @@ export function documentActions(
   snapshot: SubjectSnapshot,
   ids: readonly string[],
   counts?: ReadonlyMap<string, number>,
+  /** Explicit successor projection; legacy physical writers retain their historical shape. */
+  calendarFormat?: 1,
 ): IndexAction[] {
   const subjects = new Map<string, IndexedSubject>();
   for (const subject of snapshot.subjects) {
@@ -144,7 +167,7 @@ export function documentActions(
     seen.add(id);
     const subject = subjects.get(id);
     if (subject?.visibility === 'visible' && subject.redirect === null) {
-      const document = subjectDocument(snapshot.partition, subject);
+      const document = subjectDocument(snapshot.partition, subject, calendarFormat);
       actions.push({
         op: 'index',
         id,

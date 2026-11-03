@@ -62,7 +62,9 @@ export function currentClauseKey(clause: FactClause): string {
     clause.property,
     'values' in clause
       ? ['values', sortedValues(clause.values)]
-      : ['range', clause.range.gte, clause.range.lte, clause.range.unit],
+      : clause.range.type === 'time'
+        ? ['time', clause.range.gte, clause.range.lte]
+        : ['range', clause.range.gte, clause.range.lte, clause.range.unit],
     normalizedQualifiers(clause.qualifiers),
   ]);
 }

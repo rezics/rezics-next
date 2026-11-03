@@ -1,4 +1,5 @@
 import type { OwnerLeaf } from './owner-filter.ts';
+import { calendarRangeBounds, readCalendarDate, type CalendarRange } from './calendar-date.ts';
 
 export const FILTER_LIMITS = Object.freeze({ leaves: 32, depth: 4, or: 16, in: 64, qualifiers: 4 } as const);
 
@@ -10,7 +11,15 @@ export type FieldErrorCode =
   | 'out_of_range'
   | 'unsupported';
 export type FilterProblem = 'invalid_request' | 'unsupported_query';
-export type FilterRange = { readonly gte?: number; readonly lte?: number; readonly unit?: string };
+export type NumericFilterRange = {
+  readonly type?: never;
+  readonly gte?: number;
+  readonly lte?: number;
+  readonly unit?: string;
+};
+/** Explicit calendar endpoints never inherit the numeric range's year/quantity meaning. */
+export type TimeFilterRange = Readonly<CalendarRange> & { readonly type: 'time'; readonly unit?: never };
+export type FilterRange = NumericFilterRange | TimeFilterRange;
 export type FilterQualifier = { readonly property: string; readonly in: readonly string[] };
 export type FilterStatement =
   | { readonly property: string; readonly in: readonly string[]; readonly qualifiers?: readonly FilterQualifier[] }
@@ -166,6 +175,23 @@ function parseFacet(input: unknown, pointer: string, statement: boolean): { prop
 
 function parseRange(input: unknown, pointer: string): FilterRange {
   const fields = record(input, pointer);
+  if (Object.hasOwn(fields, 'type')) {
+    const typePointer = appendPointer(pointer, 'type');
+    if (ownValue(fields, 'type', typePointer) !== 'time') fail(typePointer, 'invalid_format');
+    const parsed: { type: 'time'; gte?: string; lte?: string } = { type: 'time' };
+    for (const key of Object.getOwnPropertyNames(fields)) {
+      if (key === 'type') continue;
+      const fieldPointer = appendPointer(pointer, key);
+      if (key !== 'gte' && key !== 'lte') fail(fieldPointer, 'unknown_field');
+      const value = ownValue(fields, key, fieldPointer);
+      if (typeof value !== 'string') fail(fieldPointer, 'invalid_type');
+      if (!readCalendarDate(value)) fail(fieldPointer, 'invalid_format');
+      parsed[key] = value;
+    }
+    if (parsed.gte === undefined && parsed.lte === undefined) fail(appendPointer(pointer, 'gte'), 'required');
+    if (!calendarRangeBounds(parsed)) fail(pointer, 'out_of_range');
+    return parsed;
+  }
   const parsed: { gte?: number; lte?: number; unit?: string } = {};
   for (const key of Object.getOwnPropertyNames(fields)) {
     const fieldPointer = appendPointer(pointer, key);
@@ -790,9 +816,11 @@ function admitConstructed(
       if (datatype !== 'time' && datatype !== 'quantity')
         reject(rangePointer, source, 'unsupported', 'unsupported_query');
       const range = statement.range;
-      if (datatype === 'time') {
+      if (range.type === 'time') {
+        if (datatype !== 'time') reject(rangePointer, source, 'unsupported', 'unsupported_query');
+      } else if (datatype === 'time') {
         for (const key of Object.keys(range)) {
-          const value = range[key as keyof FilterRange];
+          const value = range[key as keyof NumericFilterRange];
           const rangeFieldPointer = appendPointer(rangePointer, key);
           if (key === 'unit') reject(rangeFieldPointer, source, 'unsupported', 'unsupported_query');
           if ((key === 'gte' || key === 'lte') && !Number.isSafeInteger(value))
@@ -929,7 +957,16 @@ function admitConstructed(
       if (statement.in.length === 0 || statement.in.length > FILTER_LIMITS.in)
         reject(appendPointer(appendPointer(pointer, 'statement'), 'in'), source, 'out_of_range', 'unsupported_query');
     } else {
-      if (
+      if (statement.range.type === 'time') {
+        // Admission also accepts typed construction directly, rather than only parser output.
+        try {
+          parseRange(statement.range, appendPointer(appendPointer(pointer, 'statement'), 'range'));
+        } catch (error) {
+          if (!(error instanceof FilterError)) throw error;
+          const field = error.errors[0]!;
+          reject(field.pointer, source, field.code, error.problem);
+        }
+      } else if (
         (statement.range.gte === undefined && statement.range.lte === undefined) ||
         (statement.range.gte !== undefined &&
           statement.range.lte !== undefined &&

@@ -1,5 +1,6 @@
 import type { FactClause } from './disclosure/check.ts';
 import type { IndexedStatement } from './source.ts';
+import { calendarRangeMatches } from '@rezics/filter';
 
 /** Match the current type by exact membership in the clause's values. */
 export function holdsCurrentType(type: string, clause: Extract<FactClause, { facet: 'type' }>): boolean {
@@ -21,6 +22,8 @@ export function holdsCurrentStatements(
     if (statement.property !== clause.property) return false;
     if ('values' in clause) {
       if (!clause.values.includes(statement.value)) return false;
+    } else if (clause.range.type === 'time') {
+      if (statement.facet?.kind !== 'time' || !calendarRangeMatches(statement.facet, clause.range)) return false;
     } else {
       const { gte, lte, unit } = clause.range;
       const facet = statement.facet;

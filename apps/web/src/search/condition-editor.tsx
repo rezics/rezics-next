@@ -662,29 +662,43 @@ function NodeEditor({
                     pointer={`${pointer}/statement/range/${bound}`}
                     label={label}
                   >
-                    {(props) => (
-                      <ConditionRangeInput
-                        {...props}
-                        draft={draft.ranges[bound]}
-                        datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
-                        locale={context.locale}
-                        label={label}
-                        value={range[bound]}
-                        onValue={(number) => {
-                          const next = { ...range };
-                          if (number === undefined) delete next[bound];
-                          else next[bound] = number;
-                          replaceStatement({ range: next });
-                        }}
-                      />
-                    )}
+                    {(props) =>
+                      range.type === 'time' ? (
+                        <Input
+                          {...props}
+                          type="text"
+                          value={range[bound] ?? ''}
+                          onChange={(event) => {
+                            const next = { ...range };
+                            if (event.target.value === '') delete next[bound];
+                            else next[bound] = event.target.value;
+                            replaceStatement({ range: next });
+                          }}
+                        />
+                      ) : (
+                        <ConditionRangeInput
+                          {...props}
+                          draft={draft.ranges[bound]}
+                          datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
+                          locale={context.locale}
+                          label={label}
+                          value={range[bound]}
+                          onValue={(number) => {
+                            const next = { ...range };
+                            if (number === undefined) delete next[bound];
+                            else next[bound] = number;
+                            replaceStatement({ range: next });
+                          }}
+                        />
+                      )
+                    }
                   </EditorField>
                 );
               })}
-              {definition?.datatype === 'time' && (
+              {definition?.datatype === 'time' && range.type !== 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>
               )}
-              {(definition?.datatype !== 'time' || range.unit !== undefined) && (
+              {range.type !== 'time' && (definition?.datatype !== 'time' || range.unit !== undefined) && (
                 <EditorField
                   context={context}
                   pointer={`${pointer}/statement/range/unit`}
