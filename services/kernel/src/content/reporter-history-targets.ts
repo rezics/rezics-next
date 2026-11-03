@@ -23,11 +23,16 @@ export async function readReporterHistoryTargets(
   const unique = [...new Map(targets.map((target) => [key(target), target])).values()];
   const output = new Map<string, ReporterTargetSummary>(unique.map((target) => [key(target), unavailable]));
   const readers = {
-    pool: dependencies.pool, access: dependencies.access,
+    pool: dependencies.pool,
+    access: dependencies.access,
     tokens: { current: 1, keys: new Map([[1, dependencies.routeKey]]) },
   };
   const boards = unique.filter((target) => target.kind === 'board');
-  const disclosedBoards = await readBoards(readers, boards.map((target) => target.id), context);
+  const disclosedBoards = await readBoards(
+    readers,
+    boards.map((target) => target.id),
+    context,
+  );
   boards.forEach((target, i) => {
     const board = disclosedBoards[i]?.value;
     if (board?.availability === 'available' && board.visibility !== 'taken_down')
@@ -44,22 +49,33 @@ export async function readReporterHistoryTargets(
   for (const ids of postHomes.values()) {
     const located = await snapshot(dependencies, ids[0]!, context, async (client) => {
       const parameters = { keys: JSON.stringify(ids.map((id) => ({ route: routeOf(id), id }))) };
-      return (await client.query<{ post_id: string; thread_id: string }>(postLocations.sql,
-        postLocations.params.map((name) => parameters[name as keyof typeof parameters]))).rows;
+      return (
+        await client.query<{ post_id: string; thread_id: string }>(
+          postLocations.sql,
+          postLocations.params.map((name) => parameters[name as keyof typeof parameters]),
+        )
+      ).rows;
     });
     for (const row of located.value) {
       if (routeOf(row.post_id) === routeOf(row.thread_id)) postThreads.set(row.post_id, row.thread_id);
     }
   }
-  const threadIds = [...new Set([
-    ...unique.filter((target) => target.kind === 'thread').map((target) => target.id), ...postThreads.values(),
-  ])];
+  const threadIds = [
+    ...new Set([
+      ...unique.filter((target) => target.kind === 'thread').map((target) => target.id),
+      ...postThreads.values(),
+    ]),
+  ];
   const disclosedThreads = await discloseThreads(readers, threadIds, context);
   const threads = new Map(threadIds.map((id, i) => [id, disclosedThreads[i]?.value]));
   for (const target of unique) {
     if (target.kind === 'thread') {
       const thread = threads.get(target.id);
-      if (thread?.availability === 'available' && thread.visibility !== 'taken_down' && thread.firstPost.availability === 'available')
+      if (
+        thread?.availability === 'available' &&
+        thread.visibility !== 'taken_down' &&
+        thread.firstPost.availability === 'available'
+      )
         output.set(key(target), { state: 'available', label: thread.title, href: `/v1/threads/${target.id}` });
     }
   }
@@ -77,14 +93,21 @@ export async function readReporterHistoryTargets(
   }
   const subjects = unique.filter((target) => target.kind === 'subject');
   if (subjects.length) {
-    const current = await readCurrentSubjectSummaries({ ...dependencies, ...context }, subjects.map((target) => target.id));
+    const current = await readCurrentSubjectSummaries(
+      { ...dependencies, ...context },
+      subjects.map((target) => target.id),
+    );
     await current.verify();
     for (const target of subjects) {
       const summary = current.summaries.get(target.id);
       // Keep exact native binding: redirects are not permission to link a report
       // against a different target, or to expose the concealed original.
       if (summary?.id === target.id)
-        output.set(key(target), { state: 'available', label: summary.label?.value ?? null, href: `/v1/subjects/${target.id}` });
+        output.set(key(target), {
+          state: 'available',
+          label: summary.label?.value ?? null,
+          href: `/v1/subjects/${target.id}`,
+        });
     }
   }
   return output;

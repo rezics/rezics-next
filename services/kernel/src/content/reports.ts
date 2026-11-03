@@ -648,8 +648,12 @@ export async function readReporterHistoryCases(
     if (!(await reporterHistoryAuthority(dependencies, context)).value) throw new ReportUnavailableError();
     const result = await snapshot(dependencies, keys[0]!, context.deadline, async (client) => {
       const parameters = { reporter, keys: JSON.stringify(keys.map((id) => ({ route: route(id), id }))) };
-      return (await client.query<ReportRow>(reporterHistoryCases.sql,
-        reporterHistoryCases.params.map((name) => parameters[name as keyof typeof parameters]))).rows;
+      return (
+        await client.query<ReportRow>(
+          reporterHistoryCases.sql,
+          reporterHistoryCases.params.map((name) => parameters[name as keyof typeof parameters]),
+        )
+      ).rows;
     });
     for (const row of result.value) {
       if (row.reporter_account_id === reporter && row.reason !== null) records.set(row.report_id, view(row));

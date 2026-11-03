@@ -46,13 +46,49 @@ These are wire examples for the Web owner; each successful response has `Cache-C
 For a populated page (`GET /v1/reports/me`, 200):
 
 ```json
-{"state":"ready","entries":[{"id":"11111111-1111-8111-8111-123411111111","target":{"kind":"thread","id":"22222222-2222-7222-8222-234522222222"},"revisionId":null,"reason":"spam","evidence":"My submission","createdAt":"2026-11-03T10:00:00.000000Z","outcome":"dismissed","resolvedAt":"2026-11-03T11:00:00.000000Z","targetSummary":{"state":"available","label":"Discussion title","href":"/v1/threads/22222222-2222-7222-8222-234522222222"},"viewer":{"ownsReport":true},"actions":{"open":{"method":"GET","href":"/v1/reports/11111111-1111-8111-8111-123411111111"},"follow":{"method":"GET","href":"/v1/reports/11111111-1111-8111-8111-123411111111"},"target":{"method":"GET","href":"/v1/threads/22222222-2222-7222-8222-234522222222"}}}],"selectedReportId":null,"nextCursor":null,"retry":{"cursor":null},"viewer":{"kind":"reporter"}}
+{
+  "state": "ready",
+  "entries": [
+    {
+      "id": "11111111-1111-8111-8111-123411111111",
+      "target": { "kind": "thread", "id": "22222222-2222-7222-8222-234522222222" },
+      "revisionId": null,
+      "reason": "spam",
+      "evidence": "My submission",
+      "createdAt": "2026-11-03T10:00:00.000000Z",
+      "outcome": "dismissed",
+      "resolvedAt": "2026-11-03T11:00:00.000000Z",
+      "targetSummary": {
+        "state": "available",
+        "label": "Discussion title",
+        "href": "/v1/threads/22222222-2222-7222-8222-234522222222"
+      },
+      "viewer": { "ownsReport": true },
+      "actions": {
+        "open": { "method": "GET", "href": "/v1/reports/11111111-1111-8111-8111-123411111111" },
+        "follow": { "method": "GET", "href": "/v1/reports/11111111-1111-8111-8111-123411111111" },
+        "target": { "method": "GET", "href": "/v1/threads/22222222-2222-7222-8222-234522222222" }
+      }
+    }
+  ],
+  "selectedReportId": null,
+  "nextCursor": null,
+  "retry": { "cursor": null },
+  "viewer": { "kind": "reporter" }
+}
 ```
 
 An empty page (200) is exactly:
 
 ```json
-{"state":"ready","entries":[],"selectedReportId":null,"nextCursor":null,"retry":{"cursor":null},"viewer":{"kind":"reporter"}}
+{
+  "state": "ready",
+  "entries": [],
+  "selectedReportId": null,
+  "nextCursor": null,
+  "retry": { "cursor": null },
+  "viewer": { "kind": "reporter" }
+}
 ```
 
 For a withheld target, the same retained entry replaces `targetSummary` with exactly

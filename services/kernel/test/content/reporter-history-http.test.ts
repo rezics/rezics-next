@@ -4,8 +4,12 @@ import { routeOf } from '../../src/route/route.ts';
 import { createReporterHistoryFixture } from './support/reporter-history-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof createReporterHistoryFixture>>;
-beforeAll(async () => { fixture = await createReporterHistoryFixture(); }, 120_000);
-afterAll(async () => { await fixture?.system.close(); });
+beforeAll(async () => {
+  fixture = await createReporterHistoryFixture();
+}, 120_000);
+afterAll(async () => {
+  await fixture?.system.close();
+});
 
 test('a signed reporter can return without a receipt URL and cannot enumerate another reporter', async () => {
   const target = await fixture.createThread(fixture.mainBoardId, 'Recognizable reported discussion');
@@ -20,12 +24,24 @@ test('a signed reporter can return without a receipt URL and cannot enumerate an
   expect(page.value!.state).toBe('ready');
   const entry = page.value!.entries.find((row: any) => row.id === id);
   expect(entry).toMatchObject({
-    id, reason: 'spam', evidence: 'My retained submission', outcome: null,
-    targetSummary: { state: 'available', label: 'Recognizable reported discussion', href: `/v1/threads/${target.threadId}` },
-    viewer: { ownsReport: true }, actions: { open: { method: 'GET', href: `/v1/reports/${id}` } },
+    id,
+    reason: 'spam',
+    evidence: 'My retained submission',
+    outcome: null,
+    targetSummary: {
+      state: 'available',
+      label: 'Recognizable reported discussion',
+      href: `/v1/threads/${target.threadId}`,
+    },
+    viewer: { ownsReport: true },
+    actions: { open: { method: 'GET', href: `/v1/reports/${id}` } },
   });
-  expect((await fixture.call('GET', entry.actions.open.href, { bearer: fixture.author.bearer })).response.status).toBe(200);
-  expect((await fixture.call('GET', entry.actions.target.href, { bearer: fixture.author.bearer })).response.status).toBe(200);
+  expect((await fixture.call('GET', entry.actions.open.href, { bearer: fixture.author.bearer })).response.status).toBe(
+    200,
+  );
+  expect(
+    (await fixture.call('GET', entry.actions.target.href, { bearer: fixture.author.bearer })).response.status,
+  ).toBe(200);
   expect(entry).not.toHaveProperty('reporterId');
   expect(entry).not.toHaveProperty('transactionId');
   expect(entry.actions).not.toHaveProperty('dismiss');
@@ -36,7 +52,9 @@ test('a signed reporter can return without a receipt URL and cannot enumerate an
   expect(other.response.status).toBe(200);
   expect(other.text).not.toContain('My retained submission');
   expect(other.text).not.toContain(id);
-  const suspended = await fixture.call('GET', `/v1/reports/me?reportId=${id}`, { bearer: fixture.system.actors.suspended.bearer });
+  const suspended = await fixture.call('GET', `/v1/reports/me?reportId=${id}`, {
+    bearer: fixture.system.actors.suspended.bearer,
+  });
   expect([401, 404]).toContain(suspended.response.status);
   expect(suspended.text).not.toContain(id);
 }, 120_000);
@@ -61,33 +79,55 @@ test('raw continuation survives an exact old selection, replay and another viewe
     const failed = await fixture.call('GET', `${path}&cursor=${cursor}`, { bearer: fixture.author.bearer });
     expect(failed.response.status).toBe(503);
     expect(failed.value).not.toHaveProperty('nextCursor');
-  } finally { restore(); }
+  } finally {
+    restore();
+  }
   const second = await fixture.call('GET', `${path}&cursor=${cursor}`, { bearer: fixture.author.bearer });
   expect(second.response.status).toBe(200);
   expect(second.value!.nextCursor).toBeNull();
   const all = new Set([...first.value!.entries, ...second.value!.entries].map((entry: any) => entry.id));
   for (const id of [...ids, replayed]) expect(all.has(id)).toBe(true);
-  expect((await fixture.call('GET', `${path}&cursor=${cursor}`, { bearer: fixture.other.bearer })).response.status).toBe(400);
-  expect((await fixture.call('GET', `/v1/reports/me?cursor=${cursor}`, { bearer: fixture.author.bearer })).response.status).toBe(400);
+  expect(
+    (await fixture.call('GET', `${path}&cursor=${cursor}`, { bearer: fixture.other.bearer })).response.status,
+  ).toBe(400);
+  expect(
+    (await fixture.call('GET', `/v1/reports/me?cursor=${cursor}`, { bearer: fixture.author.bearer })).response.status,
+  ).toBe(400);
 }, 120_000);
 
 test('current target retirement removes its label and action while the native dismissed receipt remains', async () => {
   const target = await fixture.createThread(fixture.mainBoardId, 'Hidden after retirement');
   const id = await fixture.submit({ kind: 'post', id: target.postId });
   const moderator = fixture.system.actors.moderator;
-  await fixture.command('POST', '/v1/grants', {
-    resource: { route: routeOf(target.postId)!, id: target.postId },
-    subject: { kind: 'account', id: moderator.actor.accountId },
-    actions: ['moderation:read_reports', 'moderation:takedown'], valid: '(,)',
-  }, { bearer: fixture.governance.bearer });
+  await fixture.command(
+    'POST',
+    '/v1/grants',
+    {
+      resource: { route: routeOf(target.postId)!, id: target.postId },
+      subject: { kind: 'account', id: moderator.actor.accountId },
+      actions: ['moderation:read_reports', 'moderation:takedown'],
+      valid: '(,)',
+    },
+    { bearer: fixture.governance.bearer },
+  );
   await fixture.command('POST', `/v1/reports/${id}:dismiss`, {}, { bearer: moderator.bearer, expectedStatus: 200 });
-  await fixture.command('POST', `/v1/posts/${target.postId}:takeDown`, { reason: 'Private moderator statement' }, {
-    bearer: moderator.bearer, expectedStatus: 200,
-  });
+  await fixture.command(
+    'POST',
+    `/v1/posts/${target.postId}:takeDown`,
+    { reason: 'Private moderator statement' },
+    {
+      bearer: moderator.bearer,
+      expectedStatus: 200,
+    },
+  );
   const page = await fixture.call('GET', `/v1/reports/me?reportId=${id}`, { bearer: fixture.author.bearer });
   expect(page.response.status).toBe(200);
   const row = page.value!.entries.find((entry: any) => entry.id === id);
-  expect(row).toMatchObject({ outcome: 'dismissed', evidence: 'My retained submission', targetSummary: { state: 'unavailable' } });
+  expect(row).toMatchObject({
+    outcome: 'dismissed',
+    evidence: 'My retained submission',
+    targetSummary: { state: 'unavailable' },
+  });
   expect(Object.keys(row.targetSummary)).toEqual(['state']);
   expect(row.actions.target).toBeNull();
   expect(page.text).not.toContain('Hidden after retirement');

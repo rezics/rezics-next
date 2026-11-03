@@ -98,11 +98,13 @@ async function deliverReportReporter(
       await markAccountErasureFound(tx, reporter, 'content');
       return {
         value: { late: true as const },
-        events: [{
-          type: 'com.rezics.access.account-updated.v1',
-          subject: reporter,
-          data: { accountId: reporter },
-        }],
+        events: [
+          {
+            type: 'com.rezics.access.account-updated.v1',
+            subject: reporter,
+            data: { accountId: reporter },
+          },
+        ],
       };
     }
     const added = await insert.run(tx, {
@@ -115,11 +117,13 @@ async function deliverReportReporter(
     if (!added) return noEffect({ late: false as const });
     return {
       value: { late: false as const },
-      events: [{
-        type: 'com.rezics.content.report-reporter.projected.v1',
-        subject: reportId,
-        data: { reportId },
-      }],
+      events: [
+        {
+          type: 'com.rezics.content.report-reporter.projected.v1',
+          subject: reportId,
+          data: { reportId },
+        },
+      ],
     };
   });
   if (result.value.late) {

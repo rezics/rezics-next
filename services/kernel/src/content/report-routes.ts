@@ -195,7 +195,8 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
           operationId: 'report.ownHistory',
           'x-exposure': 'public',
           'x-action': 'account:read',
-          description: 'The current reporter inventory and optional exact own case, with current native outcomes and readable target actions.',
+          description:
+            'The current reporter inventory and optional exact own case, with current native outcomes and readable target actions.',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -203,18 +204,22 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         set.headers['cache-control'] = 'private, no-store';
         if (actor.kind !== 'account') throw new ProblemError('authentication_required');
         if (query.reportId !== undefined) existingId(query.reportId);
-        return reportOperation(() => admission.run('normal', job, async () => {
-          try {
-            const { anchor, ...page } = await history.read({ actor, deadline: job.deadline }, query);
-            session.record(component(anchor));
-            return { ...page, entries: [...page.entries] };
-          } catch (error) {
-            if (error instanceof ReporterHistoryCursorError) throw new ProblemError('invalid_cursor');
-            if (error instanceof ReporterHistoryChangedError)
-              throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
-            throw error;
-          }
-        }), true);
+        return reportOperation(
+          () =>
+            admission.run('normal', job, async () => {
+              try {
+                const { anchor, ...page } = await history.read({ actor, deadline: job.deadline }, query);
+                session.record(component(anchor));
+                return { ...page, entries: [...page.entries] };
+              } catch (error) {
+                if (error instanceof ReporterHistoryCursorError) throw new ProblemError('invalid_cursor');
+                if (error instanceof ReporterHistoryChangedError)
+                  throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+                throw error;
+              }
+            }),
+          true,
+        );
       },
     )
     .get(
