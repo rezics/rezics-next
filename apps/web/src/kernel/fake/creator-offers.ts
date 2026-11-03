@@ -105,7 +105,10 @@ export function creatorOffersStoryPage(state: CreatorOffersStory): CreatorOffers
                   ? { title: 'A very long captured title / '.repeat(18) + '無空白の長い題名'.repeat(20) }
                   : {}),
               },
-              delistedCreatorOfferFixture,
+              {
+                ...delistedCreatorOfferFixture,
+                ...(state === 'history' ? { title: creatorOfferFixture.title } : {}),
+              },
               {
                 ...creatorOfferFixture,
                 id: id(1),

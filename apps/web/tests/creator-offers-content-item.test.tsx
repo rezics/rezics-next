@@ -60,7 +60,7 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     id: '019a2100-0000-7000-8000-220000000099',
     title: 'Another captured offer',
   };
-  const historical = { ...delistedCreatorOfferFixture };
+  const historical = { ...delistedCreatorOfferFixture, title: first.title };
   delete historical.moneyUnit;
   const data: CreatorOffersPageData = {
     page: { kind: 'ready', offers: [first, second, historical], next: null },
@@ -120,6 +120,25 @@ test('Creator Offer shared items preserve admitted destinations independent cont
           ? [`${m.creator_offers_amount_unavailable()} JPY`, m.commerce_tax_unknown(), m.creator_offers_unknown()]
           : ['$12.00 USD', m.commerce_before_tax(), m.creator_offers_captured()],
       );
+      if (index === 0) expect(heading.textContent).toBe(originalRows[2]!.querySelector('h2')!.textContent);
+      const details = row.querySelectorAll('details');
+      expect(details).toHaveLength(2);
+      const identity = details[1]!;
+      const identitySummary = identity.querySelector('summary')!;
+      expect(identitySummary.textContent).toBe(m.creator_offers_technical_details());
+      expect(identity.open).toBe(false);
+      await act(async () => user.click(identitySummary));
+      expect(identity.open).toBe(true);
+      expect(identity.textContent).toContain(offer.id);
+      expect(identity.textContent).toContain(String(offer.revision));
+      if (offer.contentEdition) {
+        const resource = offer.contentEdition.benefit.resource;
+        expect(identity.textContent).toContain(`${resource.route}/${resource.id}`);
+      } else {
+        expect(identity.textContent).not.toContain(m.creator_offers_edition_locator());
+      }
+      await act(async () => user.click(identitySummary));
+      expect(identity.open).toBe(false);
     }
     expect(originalRows[2]!.querySelector('form')).toBeNull();
     await show(data, false);
@@ -139,6 +158,14 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     await act(async () => user.click(summary));
     expect(row.querySelector('details')?.open).toBe(true);
     expect(row.querySelector('details > p')?.textContent).toBe(first.title);
+    await act(async () => user.tab());
+    const identitySummary = row.querySelectorAll('summary')[1]!;
+    expect(document.activeElement).toBe(identitySummary);
+    await act(async () => user.click(identitySummary));
+    const identityDetails = identitySummary.closest('details')!;
+    expect(identityDetails.open).toBe(true);
+    expect(identityDetails.textContent).toContain(first.id);
+    expect(identityDetails.textContent).toContain(String(first.revision));
     await act(async () => user.tab());
     expect(document.activeElement).toBe(price);
     await act(async () => user.type(price, '13.25'));

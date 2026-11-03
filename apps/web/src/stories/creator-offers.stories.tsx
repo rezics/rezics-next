@@ -52,7 +52,25 @@ export const History: Story = {
       'href',
       `/${getLocale()}/offers/${creatorOfferFixture.id}`,
     );
-    await expect(view.queryByRole('link', { name: delistedCreatorOfferFixture.title })).toBeNull();
+    const matchingTitles = await view.findAllByRole('heading', { name: creatorOfferFixture.title });
+    await expect(matchingTitles).toHaveLength(2);
+    const activeRow = matchingTitles[0]!.closest('li')!;
+    const delistedRow = matchingTitles[1]!.closest('li')!;
+    await expect(within(activeRow).getByText(m.creator_offers_active(), { exact: true })).toBeVisible();
+    await expect(within(delistedRow).getByText(m.creator_offers_delisted(), { exact: true })).toBeVisible();
+    await expect(within(delistedRow).queryByRole('link')).toBeNull();
+    const activeDetails = within(activeRow).getByText(m.creator_offers_technical_details(), { exact: true });
+    await userEvent.click(activeDetails);
+    await expect(within(activeRow).getByText(creatorOfferFixture.id)).toBeVisible();
+    await expect(within(activeRow).getByText(String(creatorOfferFixture.revision))).toBeVisible();
+    const resource = creatorOfferFixture.contentEdition!.benefit.resource;
+    await expect(within(activeRow).getByText(`${resource.route}/${resource.id}`)).toBeVisible();
+    await expect(activeRow.querySelector('details')).not.toHaveAttribute('open');
+    const delistedDetails = within(delistedRow).getByText(m.creator_offers_technical_details(), { exact: true });
+    await userEvent.click(delistedDetails);
+    await expect(within(delistedRow).getByText(delistedCreatorOfferFixture.id)).toBeVisible();
+    await expect(within(delistedRow).getByText(String(delistedCreatorOfferFixture.revision))).toBeVisible();
+    await expect(within(delistedRow).queryByText(m.creator_offers_edition_locator(), { exact: true })).toBeNull();
     await expect(view.getByText(m.creator_offers_unknown())).toBeVisible();
     await expect(view.getByRole('link', { name: m.creator_offers_next() })).toHaveAttribute(
       'href',

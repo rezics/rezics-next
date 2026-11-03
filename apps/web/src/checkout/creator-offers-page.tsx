@@ -528,12 +528,37 @@ export function CreatorOffersPage({
                         </p>
                       }
                       actions={
-                        <details className="min-w-0 max-w-sm">
-                          <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                            {m.commerce_full_title()}
-                          </summary>
-                          <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
-                        </details>
+                        <div className="min-w-0 max-w-sm space-y-2">
+                          <details>
+                            <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                              {m.commerce_full_title()}
+                            </summary>
+                            <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
+                          </details>
+                          <details>
+                            <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                              {m.creator_offers_technical_details()}
+                            </summary>
+                            <dl className="space-y-2 py-2 text-sm">
+                              <div>
+                                <dt className="font-medium">{m.creator_offers_offer_id()}</dt>
+                                <dd className="break-all"><code>{offer.id}</code></dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium">{m.creator_offers_offer_revision()}</dt>
+                                <dd><code>{offer.revision}</code></dd>
+                              </div>
+                              {offer.contentEdition !== null && (
+                                <div>
+                                  <dt className="font-medium">{m.creator_offers_edition_locator()}</dt>
+                                  <dd className="break-all">
+                                    <code>{`${offer.contentEdition.benefit.resource.route}/${offer.contentEdition.benefit.resource.id}`}</code>
+                                  </dd>
+                                </div>
+                              )}
+                            </dl>
+                          </details>
+                        </div>
                       }
                       trailing={
                         data && (

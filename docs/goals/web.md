@@ -90,6 +90,8 @@ reason permits a deleted tombstone. Withheld identity must not enter markup or a
 disclosure. Technical details may be optional, but essential warnings, permission/status, unknown outcomes and
 decision identity remain visible beside the action. Full exact dangerous operands must be inspectable before
 confirmation. Presentation changes add no row hydration, name lookup or fabricated richer fields.
+Creator offer rows expose the supplied offer ID and revision in a labeled keyboard-operable disclosure, adding the
+supplied captured edition route/ID only when present.
 
 - **Resource access — Web consumer, Accounts authorization.** Deliver the complete identity presentation in
   `accounts/resource-access/page.tsx` (including `identityName`, `subjectTitle`, `SubjectName` and the ready
