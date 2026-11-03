@@ -58,18 +58,11 @@ export const Open: Story = {
   },
 };
 export const Pending: Story = { ...pattern.Pending };
-export const ReversedUnavailable: Story = { ...pattern.ReversedUnavailable };
+export const Reversed: Story = { ...pattern.Reversed };
 export const Upheld: Story = { ...pattern.Upheld };
-export const Available: Story = { ...pattern.Available };
-export const OpenWithAvailableTarget: Story = { ...pattern.OpenWithAvailableTarget };
 export const Expired: Story = { ...pattern.Expired };
 export const ContextUnavailable: Story = { ...pattern.ContextUnavailable };
 export const AdviceUnavailable: Story = { ...pattern.AdviceUnavailable };
-export const BoardUnsupported: Story = { ...pattern.BoardUnsupported };
-export const NativeDenied: Story = { ...pattern.NativeDenied };
-export const Conflict: Story = { ...pattern.Conflict };
-export const UncertainRetry: Story = { ...pattern.UncertainRetry };
-export const NativeObservationReplaced: Story = { ...pattern.NativeObservationReplaced };
 export const Loading: Story = { ...pattern.Loading };
 export const ReadUnavailable: Story = { ...pattern.ReadUnavailable };
 export const ReadClosed: Story = { ...pattern.ReadClosed };
@@ -82,7 +75,7 @@ export const IllustrativeLongReferences: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByRole('heading', { level: 1, name: m.decision_heading() })).toBeVisible();
-    await expect(view.getByText(m.decision_target_concealed())).toBeVisible();
+    await expect(view.getByText(m.decision_target_context_unavailable())).toBeVisible();
     await expect(view.queryByRole('link', { name: /affected by this decision/i })).toBeNull();
     await expect(view.getByText(longDecisionReason)).toBeVisible();
     await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();

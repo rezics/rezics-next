@@ -8,16 +8,20 @@ pages until a dedicated case-detail outcome owns it.
 
 ## Affected-author decision receipt
 
-`/moderation/decisions/{id}` is the affected person's exact private receipt. One selected
-`GET /v1/moderation-decisions/{id}` supplies the retained reason, decision time, deadline, current appeal result,
-closed `viewer.appeal` advice and optional `targetContext`. Available context supplies only the current title and
-native Board or Thread destination. Concealed and unavailable context remain distinct and never hide the independent
-receipt. Web does not read a post or thread separately, infer advice from authorship or readability, scan a queue, or
-poll. The existing appeal command still performs final native authorization.
+`/moderation/decisions/{id}` is the affected person's exact private receipt. Content's response contract composes the
+retained reason, decision time, deadline, current appeal result, closed `viewer.appeal` advice, optional `targetContext`
+and final source provenance in `GET /v1/moderation-decisions/{id}`. The installed generated Web type still exposes only
+the existing receipt fields. Web selects that exact endpoint once and never hydrates a post or thread, but keeps the
+production route unavailable because generated provenance is missing; appeal advice and context therefore remain
+unrendered until publication. When generated, available context supplies only the current title and native Board or
+Thread destination, while concealed and unavailable context stay distinct without hiding the independent receipt.
+Web never infers advice from authorship or readability, scans a queue, or polls. The existing appeal command still
+performs final native authorization.
 
-The installed generated client does not yet expose the complete actor/session/source provenance tuple required to
-bind a private visit. Until generated publication supplies that tuple, the route keeps its typed unavailable state.
-The [private-reader guide](private-reader-lifetime.md) records the lifecycle and cost boundary.
+The installed generated client does not yet expose `viewer.appeal`, `targetContext`, or the complete actor/session/source
+provenance tuple required to bind a private visit. Until generated publication supplies those fields, the route keeps
+its typed unavailable state and the presenter cannot offer appeal or target context. The [private-reader
+guide](private-reader-lifetime.md) records the lifecycle and cost boundary.
 
 Decision: keep the author receipt on its composed native read; until generated source provenance is installed, fail
 closed at the existing unavailable seam and retire any visit whose supplied provenance changes.

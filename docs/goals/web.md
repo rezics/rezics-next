@@ -185,8 +185,10 @@ independent rather than making shared files or unfinished producer delivery into
   `viewer.appeal` controls appeal presentation; local authorship, target readability and the browser clock cannot
   grant native authority, and submission still reauthorizes. Exact retries retain the original decision ID,
   statement, idempotency key and captured CSRF header. Acknowledgement and current readback remain separate. Account,
-  CSRF/session, locale, exposure, route and native-source replacement retire the visit. Until generated provenance
-  supplies actor, session and final source identity, the production route remains on its typed unavailable seam.
+  CSRF/session, locale, exposure, route and native-source replacement retire the visit. The producer source defines
+  the composed fields, but the installed generated client currently exposes neither appeal advice nor target context
+  nor the actor/session/final-source provenance needed for admission; the production route remains on its typed
+  unavailable seam until generated publication supplies them.
   See the [moderation guide](../../apps/web/src/moderation/README.md) for its Touches/Bound/Growth contract.
 
 Consumer seams carry only native disclosed summaries, operation availability, revision/continuation and outcomes

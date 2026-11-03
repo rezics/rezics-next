@@ -14,7 +14,7 @@ type DecisionReadCall = ReturnType<ReturnType<KernelClient['moderation-decisions
 export type ModerationDecision = NonNullable<Awaited<DecisionReadCall>['data']>;
 
 export type DecisionPage = PrivateReaderRead & {
-  /** The exact generated response, including its closed native advice and current context variants. */
+  /** The exact installed generated response; native advice and context remain absent until publication. */
   decision: ModerationDecision;
   /** Hash of the exact native provenance; it is an observation, never browser authority. */
   nativeSourceFingerprint: string;

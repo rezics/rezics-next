@@ -27,13 +27,6 @@ const appealReview = [
   'The affected information had been published by its organization for public event enquiries and did not identify a private individual.',
   'The decision was reversed after this separate review, and this complete statement remains attached to that outcome.',
 ].join('\n\n');
-const currentTarget = {
-  id: targetId,
-  authorId: 'author-private-case-1',
-  threadId: 'thread-private-case-1',
-  text: 'A separately read current target preview.',
-  href: `/threads/thread-private-case-1#${targetId}`,
-};
 const decisionPage: DecisionPage = {
   viewerId: 'author-private-case-1',
   nativeSourceFingerprint: 'source-private-case-1',
@@ -46,16 +39,6 @@ const decisionPage: DecisionPage = {
     decidedAt,
     appealDeadline,
     appeal: null,
-    viewer: { affectedAuthor: true, observedAt: decidedAt, appeal: { state: 'permitted' } },
-    targetContext: {
-      state: 'available',
-      kind: 'thread',
-      threadId: 'thread-private-case-1',
-      postId: targetId,
-      boardId: 'board-private-case-1',
-      threadTitle: currentTarget.text,
-      boardTitle: 'Current board context',
-    },
   },
 };
 
@@ -116,40 +99,19 @@ test('private decision cases keep full evidence, named shared frames, independen
     expect(headings).toContain(m.decision_appeal_heading());
     expect(host.querySelector('h3')?.textContent).toBe(m.decision_reasons_heading());
     expect(host.textContent).toContain(decisionReason);
-      expect(host.textContent).toContain(currentTarget.text);
+    expect(host.textContent).toContain(m.decision_target_context_unavailable());
+    expect(host.textContent).toContain(m.decision_appeal_advice_unavailable());
     expect(host.querySelector(`time[datetime="${decidedAt}"]`)).not.toBeNull();
     expect(host.querySelector(`time[datetime="${appealDeadline}"]`)).not.toBeNull();
-
-    const targetLink = [...host.querySelectorAll('a')].find((link) => link.getAttribute('href')?.includes('/threads/'));
-    const form = host.querySelector('form');
-    expect(targetLink?.textContent).toContain(currentTarget.text);
-    expect(form).not.toBeNull();
-    expect(targetLink?.contains(form)).toBe(false);
-    expect(form?.contains(targetLink ?? null)).toBe(false);
-
-    const withheld = parseMarkup(
-      renderDecision({
-        ...decisionPage,
-        decision: { ...decisionPage.decision, targetContext: { state: 'concealed' } },
-      }),
-    );
-    try {
-      expect(withheld.host.textContent).toContain(m.decision_target_concealed());
-      expect(withheld.host.textContent).toContain(decisionReason);
-      expect(withheld.host.textContent).not.toContain(targetId);
-      expect(withheld.host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
-      expect(withheld.host.querySelector('form')).not.toBeNull();
-    } finally {
-      await withheld.window.happyDOM.close();
-    }
+    expect(host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
+    expect(host.querySelector('form')).toBeNull();
+    expect(host.querySelector('textarea')).toBeNull();
 
     const pendingPage: DecisionPage = {
       ...decisionPage,
       decision: {
         ...decisionPage.decision,
         appeal: { id: 'appeal-pending-1', outcome: null, statement: null, resolvedAt: null },
-        viewer: { ...decisionPage.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
-        targetContext: { state: 'concealed' },
       },
     };
     const pending = parseMarkup(renderDecision(pendingPage));
@@ -167,8 +129,6 @@ test('private decision cases keep full evidence, named shared frames, independen
         decision: {
           ...decisionPage.decision,
           appeal: { id: `appeal-${outcome}-1`, outcome, statement: appealReview, resolvedAt },
-          viewer: { ...decisionPage.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
-          targetContext: outcome === 'reversed' ? { state: 'concealed' } : decisionPage.decision.targetContext,
         },
       };
       const resolved = parseMarkup(renderDecision(resolvedPage));
@@ -181,10 +141,7 @@ test('private decision cases keep full evidence, named shared frames, independen
         expect(resolved.host.textContent).toContain(
           outcome === 'reversed' ? m.decision_appeal_reversed() : m.decision_appeal_upheld(),
         );
-        if (outcome === 'reversed') {
-          expect(resolved.host.textContent).toContain(m.decision_target_concealed());
-          expect(resolved.host.textContent).not.toContain(targetId);
-        }
+        expect(resolved.host.textContent).toContain(m.decision_target_context_unavailable());
       } finally {
         await resolved.window.happyDOM.close();
       }

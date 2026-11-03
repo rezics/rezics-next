@@ -76,28 +76,7 @@ const decisionPage: DecisionPage = {
     decidedAt: createdAt,
     appealDeadline: deadline,
     appeal: { id: appealId, outcome: 'reversed', statement: longReview, resolvedAt },
-    viewer: {
-      affectedAuthor: true,
-      observedAt: createdAt,
-      appeal: { state: 'unavailable', reason: 'already_appealed' },
-    },
-    targetContext: { state: 'concealed' },
   },
-};
-const currentTarget = {
-  id: targetId,
-  authorId: 'private-author-case-owner',
-  text: currentTargetText,
-  href: `/threads/current-thread#${targetId}`,
-};
-const currentTargetContext = {
-  state: 'available' as const,
-  kind: 'thread' as const,
-  threadId: 'current-thread',
-  postId: targetId,
-  boardId: 'current-board',
-  threadTitle: currentTargetText,
-  boardTitle: null,
 };
 const privateReport: ReporterStatus = {
   id: longId('report'),
@@ -247,7 +226,6 @@ test('Moderation cases prioritize human outcomes while exact support references 
           decision: {
             ...decisionPage.decision,
             appeal: { ...decisionPage.decision.appeal!, outcome: 'reversed' },
-            targetContext: { state: 'concealed' },
           },
         },
         callbacks,
@@ -268,7 +246,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.querySelector(`time[datetime="${resolvedAt}"]`)).not.toBeNull();
       expect(host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
       expect(host.textContent).not.toContain('PRIVATE target body');
-      expect(host.textContent).not.toContain(currentTarget.text);
+      expect(host.textContent).toContain(m.decision_target_context_unavailable());
       expect(host.textContent).not.toContain(targetId);
       expect(host.innerHTML).not.toContain(targetId);
 
@@ -290,8 +268,6 @@ test('Moderation cases prioritize human outcomes while exact support references 
           decision: {
             ...decisionPage.decision,
             appeal: null,
-            viewer: { ...decisionPage.decision.viewer, appeal: { state: 'permitted' } },
-            targetContext: currentTargetContext,
           },
         },
         callbacks,
@@ -301,47 +277,23 @@ test('Moderation cases prioritize human outcomes while exact support references 
     try {
       const { host } = currentDecision;
       const targetLink = host.querySelector(`a[href*="${targetId}"]`);
-      expect(targetLink?.textContent).toContain(currentTarget.text);
-      expect(targetLink?.closest('form')).toBeNull();
+      expect(targetLink).toBeNull();
       const refresh = [...host.querySelectorAll('button')].find((button) =>
         button.textContent?.includes(m.decision_refresh()),
       );
       const form = host.querySelector('form');
       expect(refresh).not.toBeNull();
-      expect(form).not.toBeNull();
-      expect(form?.contains(refresh ?? null)).toBe(false);
+      expect(form).toBeNull();
+      expect(host.textContent).toContain(m.decision_target_context_unavailable());
+      expect(host.textContent).toContain(m.decision_appeal_advice_unavailable());
       expect(host.querySelector('details')?.closest('form')).toBeNull();
       expect(host.querySelector('h2')?.textContent).toContain(m.decision_current_outcome());
       expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([
         decisionId,
-        targetId,
       ]);
       expect(host.querySelector('details dd')?.className).toContain('break-all');
     } finally {
       await currentDecision.window.happyDOM.close();
-    }
-
-    const fallbackDecision = parseMarkup(
-      renderDecision(
-        {
-          ...decisionPage,
-          decision: {
-            ...decisionPage.decision,
-            appeal: null,
-            viewer: { ...decisionPage.decision.viewer, appeal: { state: 'permitted' } },
-            targetContext: { ...currentTargetContext, threadTitle: '' },
-          },
-        },
-        callbacks,
-        width,
-      ),
-    );
-    try {
-      expect(fallbackDecision.host.textContent).toContain(
-        m.decision_target_fallback({ kind: m.reporter_status_post() }),
-      );
-    } finally {
-      await fallbackDecision.window.happyDOM.close();
     }
 
     const reporter = parseMarkup(

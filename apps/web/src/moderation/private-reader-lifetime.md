@@ -6,13 +6,14 @@ for its bounded native reads also supplies the prepared subject and a SHA-256 fi
 The fingerprint has distinct null and token domains. No bearer, raw CSRF, decoded token or expected browser identity
 is transported as provenance. Low-level injected read and presenter APIs remain separate from production admission.
 
-Decision uses one selected composed native read for the receipt, appeal advice and optional current target context.
-It never hydrates a post or thread and never rereads the decision to compose the page. The installed generated client
-currently exposes `viewer` and `targetContext`, but not the complete provenance tuple required by this reader. The
-typed boundary therefore returns unavailable until generated publication supplies `actorId`, session `clientId` and
-`authnEpoch`, and final source partition, epoch and position. `bindDecisionSource` validates that tuple and hashes it
-as an observation fingerprint; the fingerprint grants no authority. A new fingerprint retires the visit and requires
-an explicit fresh read of the same decision ID.
+Decision selects one exact composed native read and never hydrates a post or thread or rereads the decision to compose
+the page. Content's source contract adds `viewer.appeal`, `targetContext` and final provenance, but the installed
+generated client exposes none of those fields. The typed reader therefore stays unavailable until generated
+publication supplies the closed advice/context variants and `actorId`, session `clientId` and `authnEpoch`, plus final
+source partition, epoch and position. `bindDecisionSource` validates that tuple and hashes it as an observation
+fingerprint; the fingerprint grants no authority. A new fingerprint retires the visit and requires an explicit fresh
+read of the same decision ID. The current presenter cannot show native advice or target context and does not admit an
+appeal form.
 
 A healthy authenticated initial null-CSRF observation may read when its subject and distinguished null fingerprint
 match that actual origin. This replaces the old initial missing-CSRF denial oracles. Unknown, preparing, anonymous,
@@ -50,12 +51,14 @@ Reporter Status offers explicit refresh for every loaded outcome using that same
 
 Reports retain individual and sequential bulk controllers, loaded-only maximum 20, immutable payloads/keys and confirmed
 receipts. Appeals passes its original-current command callback to AppealResolution before freeze/retry/send/settlement.
-Decision retains its immutable uncertain appeal retry and drafts through current transient recovery. Reporter Status
-copies only the original reader's own report reference and checks its original connection at copy and settlement.
-Definitive refusals require fresh reads. Retirement never turns known native success into uncertainty.
+After generated appeal advice arrives, Decision retains its immutable uncertain appeal retry and draft through current
+transient recovery. Reporter Status copies only the original reader's own report reference and checks its original
+connection at copy and settlement. Definitive refusals require fresh reads. Retirement never turns known native
+success into uncertainty.
 
-Decision appeal composition registers with the shared authoring departure owner, including standalone presenters.
-Nonempty changed statements and immutable sending or uncertain commands require its accessible Stay/Leave decision.
+The remaining Decision appeal contract registers composition with the shared authoring departure owner, including
+standalone presenters. It is not reachable until generated advice is available. Nonempty changed statements and
+immutable sending or uncertain commands require its accessible Stay/Leave decision.
 Stay preserves the exact decision ID, statement, idempotency key and captured CSRF request header through uncertain
 retry. Each attempt prepares the native Authorization credential from the same admitted session and the native command
 repeats authorization. Command acknowledgement and its separate current decision readback remain distinct; a read
@@ -69,8 +72,9 @@ claims to cancel or undo a native request.
 
 ### Decision consumer cost
 
-- Touches: one selected composed decision GET plus existing session preparation; one explicit appeal POST and its
-  supported selected decision readback after acknowledgement or conflict.
+- Touches: one selected composed decision GET plus existing session preparation; after publication, one explicit appeal
+  POST and its supported selected decision readback after acknowledgement or conflict. The current generated seam
+  cannot admit an appeal.
 - Bound: the exact decision ID only. Web performs no target hydration, queue scan, polling, persistent private draft,
   or accumulated receipt history. It retains one response, draft, intent and readback for one visit.
 - Growth: the producer schema currently declares no `maxLength` or byte cap for read-side decision statements,

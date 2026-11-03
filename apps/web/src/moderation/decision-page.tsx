@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, ArrowUpRight, Check, FileText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, FileText, ShieldCheck } from 'lucide-react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -152,7 +152,7 @@ function DecisionBoundPage(props: DecisionPageProps) {
   useSession();
   const client = useContext(QueryClientContext);
   const original = useRef({
-    now: props.now,
+    now: props.now ?? Date.now(),
     onAppeal: props.onAppeal,
     onRefresh: props.onRefresh,
     navigation: props.navigation,
@@ -225,8 +225,13 @@ function DecisionBoundPage(props: DecisionPageProps) {
     >
       <DecisionVisit
         key={`${page.readGeneration ?? 'presenter'}:${page.nativeSourceFingerprint}`}
-        {...original}
         page={page}
+        now={original.now}
+        {...(original.onAppeal ? { onAppeal: original.onAppeal } : {})}
+        {...(original.onRefresh ? { onRefresh: original.onRefresh } : {})}
+        {...(original.isCurrent ? { isCurrent: original.isCurrent } : {})}
+        {...(original.canCommand ? { canCommand: original.canCommand } : {})}
+        {...(original.accepts ? { accepts: original.accepts } : {})}
         {...(owner
           ? {
               isCurrent: owner.isCurrent,
@@ -420,33 +425,11 @@ function DecisionVisit({
   }, [composition]);
   const displayed = current ?? page;
   const { decision } = displayed;
-  const context = decision.targetContext;
   const targetKind = m.decision_target_fallback({ kind: decision.targetKind });
   const locale = getLocale();
-  const nativeAdvice = decision.viewer.appeal;
-  const deadlineOpen = decision.appealDeadline !== null && now <= Date.parse(decision.appealDeadline);
-  const allowed =
-    !acknowledged &&
-    !decision.appeal &&
-    nativeAdvice.state === 'permitted' &&
-    deadlineOpen &&
-    canCommand();
-  const adviceMessage =
-    nativeAdvice.state === 'unsupported'
-      ? m.decision_appeal_unsupported()
-      : nativeAdvice.state === 'unavailable'
-        ? nativeAdvice.reason === 'not_affected_author'
-          ? m.decision_author_only()
-          : nativeAdvice.reason === 'already_appealed'
-            ? m.decision_appeal_already()
-            : nativeAdvice.reason === 'deadline_passed'
-              ? m.decision_appeal_expired()
-              : m.decision_appeal_advice_unavailable()
-        : !deadlineOpen
-          ? m.decision_appeal_expired()
-          : !canCommand()
-            ? m.decision_appeal_advice_unavailable()
-            : null;
+  // The installed generated response has no native advice field yet, so it cannot admit the form.
+  const allowed = false;
+  const adviceMessage = m.decision_appeal_advice_unavailable();
   const count = Array.from(text).length;
   const locked = Boolean(feedback && feedback !== 'invalid');
   const appeal = decision.appeal;
@@ -477,19 +460,6 @@ function DecisionVisit({
       : readbackAppeal
         ? m.decision_status_pending()
         : m.decision_status_taken_down();
-  const contextHref =
-    context.state !== 'available'
-      ? null
-      : context.kind === 'board'
-        ? `/boards/${encodeURIComponent(context.boardId)}`
-        : `/threads/${encodeURIComponent(context.threadId)}${context.postId ? `#${encodeURIComponent(context.postId)}` : ''}`;
-  const contextTitle =
-    context.state !== 'available'
-      ? null
-      : context.kind === 'board'
-        ? context.boardTitle
-        : context.threadTitle;
-
   useEffect(() => {
     const pending = outcomeFocus.current;
     if (!pending) return;
@@ -558,7 +528,11 @@ function DecisionVisit({
           return;
         }
         if (result.readback.state === 'available') {
-          const refreshed = { ...page, decision: result.readback.decision };
+          const refreshed = {
+            ...page,
+            decision: result.readback.decision,
+            ...(page.readGeneration === undefined ? {} : { readGeneration: page.readGeneration }),
+          };
           setCurrent(refreshed);
           adopt?.(refreshed);
         }
@@ -609,7 +583,10 @@ function DecisionVisit({
         return;
       }
       if (!active() || lifetime.current.readSerial !== token) return;
-      const admitted = { ...next, readGeneration: page.readGeneration };
+      const admitted = {
+        ...next,
+        ...(page.readGeneration === undefined ? {} : { readGeneration: page.readGeneration }),
+      };
       setCurrent(admitted);
       adopt?.(admitted);
       if (!composition.unresolved) setFeedback(null);
@@ -716,29 +693,7 @@ function DecisionVisit({
           </ContentItemHeading>
           <ContentItemFrame as="div" className="p-5 sm:p-6">
             <Badge variant="outline">{targetKind}</Badge>
-            {context.state === 'available' && contextHref ? (
-              <>
-                <p className="text-sm font-medium">{m.decision_target_available()}</p>
-                <a
-                  href={localizeHref(contextHref)}
-                  className="mt-3 inline-flex min-h-11 max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"
-                >
-                  <span className="line-clamp-3 wrap-anywhere">
-                    {contextTitle || m.decision_target_fallback({ kind: decision.targetKind })}
-                  </span>
-                  <ArrowUpRight className="size-4 shrink-0" aria-hidden="true" />
-                </a>
-                {context.kind === 'thread' && context.boardTitle ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {m.decision_target_fallback({ kind: 'board' })}: {context.boardTitle}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-sm leading-6 text-muted-foreground">
-                {context.state === 'concealed' ? m.decision_target_concealed() : m.decision_target_context_unavailable()}
-              </p>
-            )}
+            <p className="text-sm leading-6 text-muted-foreground">{m.decision_target_context_unavailable()}</p>
             <p className="mt-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
             <Button className="mt-4 min-h-11" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
               {refreshing ? m.decision_refreshing() : m.decision_refresh()}
@@ -892,12 +847,6 @@ function DecisionVisit({
               <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
               <dd className="select-text break-all font-mono leading-6">{decision.id}</dd>
             </div>
-            {context.state === 'available' ? (
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
-                <dd className="select-text break-all font-mono leading-6">{decision.targetId}</dd>
-              </div>
-            ) : null}
             {appeal ? (
               <div className="space-y-1">
                 <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>
