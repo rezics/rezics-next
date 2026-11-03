@@ -126,9 +126,10 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => new GrantDeniedError(),
       async prepare(attempt) {
-        const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
-        return evidence;
+        // Foreign reads may refresh the actor's native Access observations. Prepare
+        // the owner proof last, then consume it on the current owner transaction.
+        return native?.prepare?.(attempt);
       },
       async authorize(tx, attempt, evidence) {
         try {

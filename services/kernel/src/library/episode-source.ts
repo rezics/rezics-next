@@ -68,7 +68,7 @@ export async function readEpisodeSources(
         id,
         eligibility: subjectReadEligibility({ route, id }),
       },
-      { pool: deps.pool, deadline: deps.deadline, time: deps.at },
+      { pool: deps.pool, deadline: deps.deadline },
     );
   };
   const episodes: (EpisodeSource | null)[] = [];
@@ -76,20 +76,13 @@ export async function readEpisodeSources(
     const check = await authorize(episodeId);
     let value;
     try {
-      value = await readSubject(
-        deps.pool,
-        episodeId,
-        (client) => check(client, deps.at),
-        GLOBAL_CONTEXT,
-        deps.routeKey,
-        {
-          deadline: deps.deadline,
-          readAs: (read) => readStatementAs(deps.pool, deps.access, deps.actor, deps.deadline, read),
-          prepareAuthorization: () => authorize(episodeId),
-          prepareAuthorize: authorize,
-          authorize: summaryAuthorization(authorize),
-        },
-      );
+      value = await readSubject(deps.pool, episodeId, (client) => check(client), GLOBAL_CONTEXT, deps.routeKey, {
+        deadline: deps.deadline,
+        readAs: (read) => readStatementAs(deps.pool, deps.access, deps.actor, deps.deadline, read),
+        prepareAuthorization: () => authorize(episodeId),
+        prepareAuthorize: authorize,
+        authorize: summaryAuthorization(authorize),
+      });
     } catch (error) {
       if (!(error instanceof SubjectRedirectError)) throw error;
     }

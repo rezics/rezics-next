@@ -83,6 +83,7 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   const foreign = await create('schema:Episode', 'Foreign', otherParent.id, '1');
   const first = await session(parent.id),
     reread = await session(parent.id);
+  await send('POST', `/v1/progressSessions/${reread.id}:record`, { revision: 1, amount: '0' });
   const path = `/v1/progressSessions/${first.id}`;
   const body = { revision: 1, add: [one.id, three.id, special.id] };
   const retryKey = entryKey();
