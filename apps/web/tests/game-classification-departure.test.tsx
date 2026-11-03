@@ -20,6 +20,9 @@ test('Game departure preserves every private holder on Stay and permanently rele
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

@@ -255,7 +255,8 @@ test('Game retires refused readings, privately retains exact corrections, and re
     const field = (property: string) => host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
     const qualifier = (property: string) =>
       within(field(property)!).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
-    const picker = (property: string) => within(field(property)!).getByRole('combobox') as HTMLInputElement;
+    const picker = (property: string) =>
+      field(property)!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
     const classification = () =>
       [...host.querySelectorAll<HTMLElement>('summary')].find(
         (node) => node.textContent === m.game_profile_classification(),

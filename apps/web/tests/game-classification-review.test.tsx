@@ -102,7 +102,7 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
     expect(platform.textContent).toContain(gamePlatformId);
     expect(platform.textContent).toContain('Example platform');
     expect(platform.textContent).toContain(m.candidate_rank_normal());
-    expect(platform.textContent).toContain('ja');
+    expect(platform.textContent).toContain('Japanese');
     expect(platform.querySelector('a[href="https://example.test/game-notes"]')).not.toBeNull();
     expect(platform.textContent).toContain(m.candidate_value_unavailable());
     expect(within(genre).getByText(m.facts_no_value())).toBeDefined();
@@ -142,7 +142,7 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
     const reviewPanel = () => host.querySelector<HTMLElement>('[data-fact-review]')!;
     await waitFor(() => expect(reviewPanel()).not.toBeNull());
     expect(reviewPanel().textContent).toContain(extraPlatform);
-    expect(reviewPanel().textContent).toContain('fr');
+    expect(reviewPanel().textContent).toContain('French');
     expect(reviewPanel().textContent).toContain(extraUrl);
     const submit = () => within(host).getByRole('button', { name: m.facts_submit() }) as HTMLButtonElement;
     const openField = within(reviewPanel())
@@ -157,7 +157,7 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
       await user.type(qualifier, 'de');
     });
     await click(within(host).getByRole('button', { name: m.facts_review() }));
-    expect(reviewPanel().textContent).toContain('de');
+    expect(reviewPanel().textContent).toContain('German');
     expect(submit().disabled).toBe(false);
     await click(submit());
     expect(commands).toHaveLength(2);

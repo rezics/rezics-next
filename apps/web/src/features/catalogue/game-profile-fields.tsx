@@ -144,6 +144,7 @@ export function GameStatementFields({
   valueControl,
   reuse,
   focusReference,
+  stablePartAddresses,
 }: {
   id?: string;
   feedback?: StatementFeedback | undefined;
@@ -157,6 +158,7 @@ export function GameStatementFields({
   editAllowed?: (() => boolean) | undefined;
   reuse?: { disabled?: boolean; onReuse: (index: number, keyboard: boolean) => void } | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
+  stablePartAddresses?: boolean | undefined;
 }) {
   const change = (next: StatementInput) => {
     if (!editAllowed || editAllowed()) onChange(next);
@@ -194,7 +196,7 @@ export function GameStatementFields({
       change={change}
       valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
-      stablePartAddresses
+      stablePartAddresses={stablePartAddresses}
       reuse={reuse}
       focusReference={focusReference}
     />
@@ -876,6 +878,7 @@ function GameClassificationsLive({
                           locale={locale}
                           search={search}
                           feedback={feedback}
+                          stablePartAddresses
                           editAllowed={() => canEdit(draft)}
                           reuse={
                             factWritable(draft) && admitted

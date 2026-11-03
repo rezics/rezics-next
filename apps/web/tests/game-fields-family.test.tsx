@@ -138,7 +138,11 @@ function deferred<T>() {
 // One actual-component campaign covers both initial-fact consumers and the complete correction journey.
 test('Game and Addon complete fields family preserves independent labels, native drafts, bounded controls, outcomes and retired sessions', async () => {
   await mounted(async ({ host, render, user, within, waitFor }) => {
-    const { GameInitialFacts, GameClassifications } = await import('../src/features/catalogue/game-profile-fields');
+    const { GameInitialFacts: InitialFacts, GameClassifications } = await import(
+      '../src/features/catalogue/game-profile-fields'
+    );
+    const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
+    const GameInitialFacts = catalogueEditor(InitialFacts);
     const { InitialFieldChoice } = await import('../src/features/catalogue/initial-field-choice');
     const { GameProfile } = await import('../src/features/catalogue/game-profile-view');
     const { AddonProfileCreate } = await import('../src/features/catalogue/addon-profile-create');
@@ -435,7 +439,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     );
     expect(platform.textContent).toContain('Example platform');
     expect(platform.textContent).toContain(longName);
-    expect(platform.textContent).toContain('ja');
+    expect(platform.textContent).toContain('Japanese');
     expect(platform.querySelector('a[href="https://example.test/game-notes"]')).not.toBeNull();
     const submit = within(host).getByRole('button', { name: m.facts_submit() });
     const review = () => within(host).getByRole('button', { name: m.facts_review() });

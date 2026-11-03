@@ -102,7 +102,7 @@ test('Game classification keyboard opening and discard preserve independent draf
   const click = (node: HTMLElement) => act(async () => user.click(node));
   const input = () => within(section()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
   const picker = (property?: string) =>
-    within(section(property)).getByRole('combobox') as HTMLInputElement;
+    section(property).querySelector<HTMLInputElement>('input[role="combobox"]')!;
   const retainChange = (field: HTMLInputElement) => {
     const key = Object.getOwnPropertyNames(field).find((name) => name.startsWith('__reactProps$'));
     const handler = key ? (Reflect.get(field, key) as { onChange?: (event: unknown) => void }).onChange : undefined;
