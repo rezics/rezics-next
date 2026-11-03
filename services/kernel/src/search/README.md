@@ -1150,6 +1150,8 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   permitted. Future safe aggregates require separately admitted complete disclosure dependencies
   and query-level privacy acknowledgement. The adopted count-free discovery wire is owned by
   [Public facet discovery](../../../../docs/search-facets.md); it does not make this preview complete.
+  Malformed counted facet replies stay on `countFacets`/`admitFacetPayload`; `service.facets` uses the discovery
+  provider, not this parser.
 - Growth check: existing facet/overflow tests retain their scoped evidence. Native paused-indexer local/foreign
   reduction, NOT and order/count cases and three-scale engine/native captures remain required before safe aggregate
   claims; the shared matrix in [Filtered lists](../../../../docs/filtered-lists.md#shared-acceptance-matrix) owns outcomes.
@@ -1214,7 +1216,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Bound: One identity set and adjacent tuple comparisons over `k <= 200` existing hits, `O(k)` identities and work
   linear in returned tuple bytes. No extra engine, SQL or Source request, per-hit I/O, refill round or fetch limit.
   Native sorting/counting work remains match-dependent; admission does not establish whole-index privacy.
-- Evidence: `test/search/keyset-receipts.test.ts` retains the direct duplicate-root rejection.
+- Evidence: `test/search/keyset-receipts.test.ts` retains direct duplicate-root, identity, order and frontier rejection.
   `test/search/query.test.ts` executes native ordinary keysets and corrupts only clones of their actual receipts;
   `test/search/service.test.ts` proves rejection before current Source or signing, valid keysets/refills/empty pages,
   and fixed returned-hit bytes, calls and Source rows at 64/512/4096 unrelated roots and overwritten native versions.

@@ -8,6 +8,7 @@ import { createOpenSearch, SearchUnavailableError, type OpenSearch } from '../..
 import {
   countFacets,
   FACET_TEMPLATE,
+  HIT_TEMPLATE,
   installTemplates,
   SEARCH_TEMPLATE,
   searchSubjects,
@@ -71,7 +72,10 @@ function observe(fault?: Fault) {
       const original = structuredClone(response.body) as Body;
       replies.push(original);
       expect(original).toMatchObject({ timed_out: false, _shards: { total: 1, successful: 1, failed: 0 } });
-      expect((original.hits as Body).total).toMatchObject({ relation: 'eq' });
+      const template = typeof (body as { id?: unknown })?.id === 'string' ? (body as { id: string }).id : '';
+      if (template.endsWith(SEARCH_TEMPLATE) || template.endsWith(FACET_TEMPLATE))
+        expect((original.hits as Body).total).toMatchObject({ relation: 'eq' });
+      if (template.endsWith(HIT_TEMPLATE)) expect((original.hits as Body).total).toBeUndefined();
       const changed = structuredClone(original);
       if (fault) inject(changed, fault);
       // Only the addressed payload field may differ, even for oversized replies.
@@ -221,7 +225,7 @@ const hits = [
   ...invalid('hits.hits', arrays),
   ...invalid('hits.hits.0', [null, marker]),
   ...invalid('hits.hits.0._id', [undefined, null, '', 17, marker]),
-  ...invalid('hits.hits.0._index', [undefined, null, '', 17]),
+  ...invalid('hits.hits.0._index', [undefined, null, '', 17, 'foreign-subjects-g1']),
   ...invalid('hits.hits.0._source', arrays),
   ...invalid('hits.hits.0._source.partition', [...counters, 11, 4096]),
   ...invalid('hits.hits.0._source.security_revision', counters),
@@ -299,12 +303,19 @@ test('suggest does not require unconsumed totals sort or matched query fields', 
   }
 });
 
-for (const operation of ['search', 'suggest', 'facet'] as const) {
-  test(`actual service maps malformed ${operation} to index_not_ready 503 before Source`, async () => {
-    const observed = observe({
-      path: operation === 'facet' ? 'aggregations.facet_0.values.buckets' : 'hits.hits',
-      value: marker,
-    });
+const serviceFaults = [
+  { name: 'malformed search hits', operation: 'search' as const, fault: { path: 'hits.hits', value: marker } },
+  { name: 'malformed suggest hits', operation: 'suggest' as const, fault: { path: 'hits.hits', value: marker } },
+  {
+    name: 'inexact physical identity',
+    operation: 'search' as const,
+    fault: { path: 'hits.hits.0._index', value: 'foreign-subjects-g1' },
+  },
+  { name: 'duplicate native roots', operation: 'search' as const, fault: { path: 'hits.hits', grow: 2 } },
+];
+for (const { name, operation, fault } of serviceFaults) {
+  test(`actual service maps ${name} to index_not_ready 503 before Source`, async () => {
+    const observed = observe(fault);
     let reads = 0;
     const denied = async (): Promise<never> => {
       reads++;
@@ -320,11 +331,7 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
       cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) },
     });
     const pending =
-      operation === 'search'
-        ? service.search('anonymous', { text: 'kokoro' })
-        : operation === 'suggest'
-          ? service.suggest('Koko')
-          : service.facets('anonymous', { facets: [{ property: 'type', size: 1 }] });
+      operation === 'search' ? service.search('anonymous', { text: 'kokoro' }) : service.suggest('Koko');
     const outcome = await pending.then(
       (value) => ({ value }),
       (error: unknown) => ({ error }),
@@ -341,7 +348,7 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
     expect(
       observed.calls.every(
         ({ method, path }) =>
-          (method === 'PUT' && path.startsWith('/_scripts/')) ||
+          ((method === 'PUT' || method === 'GET') && path.startsWith('/_scripts/')) ||
           path.endsWith('/_search/template') ||
           (method === 'GET' && (path === resolvePath || path === mappingPath)),
       ),
