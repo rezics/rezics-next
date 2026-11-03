@@ -138,207 +138,220 @@ async function hydrate(page: Page): Promise<void> {
 
 function requestsForSubject(requests: readonly NativeKernelRequest[], id: string): NativeKernelRequest[] {
   return requests.filter(
-    (request) => !request.fixtureRequest && new URL(request.url, 'http://native.test').pathname === `/v1/subjects/${id}`,
+    (request) =>
+      !request.fixtureRequest && new URL(request.url, 'http://native.test').pathname === `/v1/subjects/${id}`,
   );
 }
 
-nativeTest('the anonymous Sources route reads current selected support and keeps provenance, rights, and failures distinct', 900_000, async () => {
-  const stack = await startNativeWebStack();
-  let auth: NativeAuthStack | undefined;
-  let page: Page | undefined;
-  try {
-    auth = await startAuthStack(stack);
-    await grantCatalogueReviewAuthority(stack);
-    await grant(stack, 'alice', ['subject:batch_write']);
+nativeTest(
+  'the anonymous Sources route reads current selected support and keeps provenance, rights, and failures distinct',
+  900_000,
+  async () => {
+    const stack = await startNativeWebStack();
+    let auth: NativeAuthStack | undefined;
+    let page: Page | undefined;
+    try {
+      auth = await startAuthStack(stack);
+      await grantCatalogueReviewAuthority(stack);
+      await grant(stack, 'alice', ['subject:batch_write']);
 
-    const subject = await createSubject(stack, `Native Sources ${crypto.randomUUID().slice(0, 8)}`, {
-      'schema:url': [
+      const subject = await createSubject(stack, `Native Sources ${crypto.randomUUID().slice(0, 8)}`, {
+        'schema:url': [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://example.org/catalogue-sources/book' },
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://example.org/catalogue-sources/url-citation' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const bangumi = createSourceRegistration('bangumi');
+      const bangumiMetadata = bangumi.describeSourceRecord!('17');
+      const { name, url, licence } = bangumiMetadata;
+      const metadata = { name, url, licence };
+      const metadataWrite = await stack.kernel(
+        '/v1/source-records:setMetadata',
         {
-          property: { id: 'schema:url' },
-          value: { type: 'value', content: 'https://example.org/catalogue-sources/book' },
-          references: [
-            {
-              parts: [
-                {
-                  property: { id: 'schema:url' },
-                  value: { type: 'value', content: 'https://example.org/catalogue-sources/url-citation' },
-                },
-              ],
-            },
-          ],
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(crypto.randomUUID()),
+          },
+          body: JSON.stringify({
+            source: bangumi.source,
+            external_id: '17',
+            metadata,
+            expected_metadata_revision: null,
+          }),
         },
-      ],
-    });
+        'alice',
+      );
+      const metadataText = await metadataWrite.text();
+      if (metadataWrite.status !== 201)
+        throw new Error(`Native source metadata fixture returned ${metadataWrite.status}: ${metadataText}`);
 
-    const bangumi = createSourceRegistration('bangumi');
-    const bangumiMetadata = bangumi.describeSourceRecord!('17');
-    const { name, url, licence } = bangumiMetadata;
-    const metadata = { name, url, licence };
-    const metadataWrite = await stack.kernel(
-      '/v1/source-records:setMetadata',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      const japanese = await proposeLanguage(
+        stack,
+        subject,
+        sourceTuple(bangumi.source, '17', '1', bangumi.converter_revision, 'ja'),
+        'ja',
+        { property: 'schema:author', value: { type: 'value', content: crypto.randomUUID() } },
+      );
+      const wikidata = createSourceRegistration('wikidata');
+      const korean = await proposeLanguage(
+        stack,
+        subject,
+        sourceTuple(wikidata.source, 'Q42', '1', wikidata.converter_revision, 'ko'),
+        'ko',
+        {
+          property: 'schema:url',
+          value: { type: 'value', content: 'https://example.org/catalogue-sources/korean-citation' },
         },
-        body: JSON.stringify({
-          source: bangumi.source,
-          external_id: '17',
-          metadata,
-          expected_metadata_revision: null,
-        }),
-      },
-      'alice',
-    );
-    const metadataText = await metadataWrite.text();
-    if (metadataWrite.status !== 201)
-      throw new Error(`Native source metadata fixture returned ${metadataWrite.status}: ${metadataText}`);
+      );
+      await acceptCatalogueReviewCandidate(stack, subject.id, japanese, null, 'bob');
+      await acceptCatalogueReviewCandidate(stack, subject.id, korean, null, 'bob');
+      let comparison = await listCatalogueReviewCandidates(stack, subject.id);
+      await adoptCatalogueReviewSelection(
+        stack,
+        subject.id,
+        [{ candidate: japanese, rank: 'preferred' }],
+        comparison.adoption.head,
+        'bob',
+      );
 
-    const japanese = await proposeLanguage(
-      stack,
-      subject,
-      sourceTuple(bangumi.source, '17', '1', bangumi.converter_revision, 'ja'),
-      'ja',
-      { property: 'schema:author', value: { type: 'value', content: crypto.randomUUID() } },
-    );
-    const wikidata = createSourceRegistration('wikidata');
-    const korean = await proposeLanguage(
-      stack,
-      subject,
-      sourceTuple(wikidata.source, 'Q42', '1', wikidata.converter_revision, 'ko'),
-      'ko',
-      {
-        property: 'schema:url',
-        value: { type: 'value', content: 'https://example.org/catalogue-sources/korean-citation' },
-      },
-    );
-    await acceptCatalogueReviewCandidate(stack, subject.id, japanese, null, 'bob');
-    await acceptCatalogueReviewCandidate(stack, subject.id, korean, null, 'bob');
-    let comparison = await listCatalogueReviewCandidates(stack, subject.id);
-    await adoptCatalogueReviewSelection(
-      stack,
-      subject.id,
-      [{ candidate: japanese, rank: 'preferred' }],
-      comparison.adoption.head,
-      'bob',
-    );
+      page = await (await auth.context('anonymous')).newPage();
+      page.setDefaultTimeout(60_000);
+      const sourcesUrl = `${stack.web}${subject.path}/sources?view=selected`;
+      const firstReadsStart = stack.kernelRequests().length;
+      let response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
+      expect(response?.status()).toBe(200);
+      await hydrate(page);
 
-    page = await (await auth.context('anonymous')).newPage();
-    page.setDefaultTimeout(60_000);
-    const sourcesUrl = `${stack.web}${subject.path}/sources?view=selected`;
-    const firstReadsStart = stack.kernelRequests().length;
-    let response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
-    expect(response?.status()).toBe(200);
-    await hydrate(page);
+      const noCitationField = page
+        .locator('[data-slot="source-property"]')
+        .filter({ hasText: m.sources_no_citations() });
+      expect(await noCitationField.count()).toBe(1);
+      expect(await noCitationField.innerText()).toContain('Japanese');
+      const urlField = page
+        .locator('[data-slot="source-property"]')
+        .filter({ hasText: 'https://example.org/catalogue-sources/url-citation' });
+      expect(await urlField.count()).toBe(1);
+      const urlFieldText = await urlField.innerText();
+      expect(urlFieldText).toContain('https://example.org/catalogue-sources/url-citation');
+      expect(urlFieldText).not.toContain(url);
+      const metadataSection = page.locator('[data-slot="subject-sources"]');
+      expect(await metadataSection.innerText()).toContain('CC-BY-SA-3.0');
+      const firstText = await page.locator('body').innerText();
+      expect(firstText).toContain(m.sources_attribution_unknown());
+      expect(firstText).toContain(m.sources_cover_unknown());
+      expect(await page.locator('[data-candidate-item]').count()).toBe(0);
 
-    const noCitationField = page.locator('[data-slot="source-property"]').filter({ hasText: m.sources_no_citations() });
-    expect(await noCitationField.count()).toBe(1);
-    expect(await noCitationField.innerText()).toContain('Japanese');
-    const urlField = page
-      .locator('[data-slot="source-property"]')
-      .filter({ hasText: 'https://example.org/catalogue-sources/url-citation' });
-    expect(await urlField.count()).toBe(1);
-    const urlFieldText = await urlField.innerText();
-    expect(urlFieldText).toContain('https://example.org/catalogue-sources/url-citation');
-    expect(urlFieldText).not.toContain(url);
-    const metadataSection = page.locator('[data-slot="subject-sources"]');
-    expect(await metadataSection.innerText()).toContain('CC-BY-SA-3.0');
-    const firstText = await page.locator('body').innerText();
-    expect(firstText).toContain(m.sources_attribution_unknown());
-    expect(firstText).toContain(m.sources_cover_unknown());
-    expect(await page.locator('[data-candidate-item]').count()).toBe(0);
+      await stack.refreshKernelRequests();
+      const firstReads = requestsForSubject(stack.kernelRequests().slice(firstReadsStart), subject.id);
+      expect(firstReads.length).toBeGreaterThan(0);
+      expect(firstReads.every((request) => request.authorization === null)).toBe(true);
+      expect(firstReads.every((request) => request.responseStatus === 200)).toBe(true);
 
-    await stack.refreshKernelRequests();
-    const firstReads = requestsForSubject(stack.kernelRequests().slice(firstReadsStart), subject.id);
-    expect(firstReads.length).toBeGreaterThan(0);
-    expect(firstReads.every((request) => request.authorization === null)).toBe(true);
-    expect(firstReads.every((request) => request.responseStatus === 200)).toBe(true);
+      comparison = await listCatalogueReviewCandidates(stack, subject.id);
+      await adoptCatalogueReviewSelection(
+        stack,
+        subject.id,
+        [{ candidate: korean, rank: 'normal' }],
+        comparison.adoption.head,
+        'bob',
+      );
+      response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
+      expect(response?.status()).toBe(200);
+      await hydrate(page);
+      const currentField = page
+        .locator('[data-slot="source-property"]')
+        .filter({ hasText: 'https://example.org/catalogue-sources/korean-citation' });
+      expect(await currentField.count()).toBe(1);
+      expect(await currentField.innerText()).toContain('Korean');
+      const currentText = await page.locator('body').innerText();
+      expect(currentText).not.toContain('Japanese');
+      expect(currentText).not.toContain(url);
+      expect(currentText).toContain(m.sources_metadata_unavailable());
 
-    comparison = await listCatalogueReviewCandidates(stack, subject.id);
-    await adoptCatalogueReviewSelection(
-      stack,
-      subject.id,
-      [{ candidate: korean, rank: 'normal' }],
-      comparison.adoption.head,
-      'bob',
-    );
-    response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
-    expect(response?.status()).toBe(200);
-    await hydrate(page);
-    const currentField = page
-      .locator('[data-slot="source-property"]')
-      .filter({ hasText: 'https://example.org/catalogue-sources/korean-citation' });
-    expect(await currentField.count()).toBe(1);
-    expect(await currentField.innerText()).toContain('Korean');
-    const currentText = await page.locator('body').innerText();
-    expect(currentText).not.toContain('Japanese');
-    expect(currentText).not.toContain(url);
-    expect(currentText).toContain(m.sources_metadata_unavailable());
-
-    await stack.injectKernelFailureOnce({
-      method: 'GET',
-      path: `/v1/subjects/${subject.id}`,
-      status: 503,
-      body: JSON.stringify({
-        type: 'https://rezics.com/problems/overloaded',
-        title: 'Overloaded',
+      await stack.injectKernelFailureOnce({
+        method: 'GET',
+        path: `/v1/subjects/${subject.id}`,
         status: 503,
-        code: 'overloaded',
-        retryable: true,
-        effect_status: 'not_applied',
-        request_id: crypto.randomUUID(),
-      }),
-    });
-    response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
-    expect(response?.status()).toBe(200);
-    await hydrate(page);
-    const failedText = await page.locator('body').innerText();
-    expect(failedText).toContain(m.sources_unavailable());
-    expect(failedText).not.toContain(m.sources_no_citations());
-    await stack.refreshKernelRequests();
-    expect(requestsForSubject(stack.kernelRequests(), subject.id).some((request) => request.responseStatus === 503)).toBe(
-      true,
-    );
+        body: JSON.stringify({
+          type: 'https://rezics.com/problems/overloaded',
+          title: 'Overloaded',
+          status: 503,
+          code: 'overloaded',
+          retryable: true,
+          effect_status: 'not_applied',
+          request_id: crypto.randomUUID(),
+        }),
+      });
+      response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
+      expect(response?.status()).toBe(200);
+      await hydrate(page);
+      const failedText = await page.locator('body').innerText();
+      expect(failedText).toContain(m.sources_unavailable());
+      expect(failedText).not.toContain(m.sources_no_citations());
+      await stack.refreshKernelRequests();
+      expect(
+        requestsForSubject(stack.kernelRequests(), subject.id).some((request) => request.responseStatus === 503),
+      ).toBe(true);
 
-    const hidden = await createSubject(stack, `Concealed Sources ${crypto.randomUUID().slice(0, 8)}`);
-    await grant(stack, 'steward', ['moderation:hide']);
-    await command(stack, `/v1/subjects/${hidden.id}:hide`, { reason: 'Native Sources concealment fixture' }, 'steward', 200);
-    const concealed = await stack.request(`${stack.web}${hidden.path}/sources`);
-    expect(concealed.status).toBe(404);
-    expect(await concealed.text()).not.toContain(hidden.label);
+      const hidden = await createSubject(stack, `Concealed Sources ${crypto.randomUUID().slice(0, 8)}`);
+      await grant(stack, 'steward', ['moderation:hide']);
+      await command(
+        stack,
+        `/v1/subjects/${hidden.id}:hide`,
+        { reason: 'Native Sources concealment fixture' },
+        'steward',
+        200,
+      );
+      const concealed = await stack.request(`${stack.web}${hidden.path}/sources`);
+      expect(concealed.status).toBe(404);
+      expect(await concealed.text()).not.toContain(hidden.label);
 
-    const missingPath = subjectHref({ id: crypto.randomUUID(), label: 'Missing Sources' }, 'en').href;
-    const missing = await stack.request(`${stack.web}${missingPath}/sources`);
-    expect(missing.status).toBe(404);
-    expect(await missing.text()).toContain(m.not_found_message());
+      const missingPath = subjectHref({ id: crypto.randomUUID(), label: 'Missing Sources' }, 'en').href;
+      const missing = await stack.request(`${stack.web}${missingPath}/sources`);
+      expect(missing.status).toBe(404);
+      expect(await missing.text()).toContain(m.not_found_message());
 
-    await grant(stack, 'bob', ['subject:merge', 'subject:read', 'gate:subject_identity']);
-    const mergeSubjects = [
-      await createSubject(stack, 'Sources merge first'),
-      await createSubject(stack, 'Sources merge second'),
-    ];
-    const labels = new Map(mergeSubjects.map(({ id, label }) => [id, label]));
-    const ids = mergeSubjects.map(({ id }) => id).sort();
-    await command(stack, '/v1/subjects:merge', { subjects: ids }, 'bob', 200);
-    const [survivor, redirected] = ids as [string, string];
-    const redirectedPath = `${subjectHref({ id: redirected, label: labels.get(redirected)! }, 'en').href}/sources`;
-    const survivorPath = `${subjectHref({ id: survivor, label: labels.get(survivor)! }, 'en').href}/sources`;
-    const mergePage = await (await auth.context('anonymous')).newPage();
-    mergePage.setDefaultTimeout(60_000);
-    response = await mergePage.goto(`${stack.web}${redirectedPath}?keep=selected#candidate-review`, {
-      waitUntil: 'domcontentloaded',
-    });
-    expect(response?.status()).toBe(200);
-    await hydrate(mergePage);
-    const canonical = new URL(mergePage.url());
-    expect(canonical.pathname).toBe(survivorPath);
-    expect(canonical.search).toBe('?keep=selected');
-    expect(canonical.hash).toBe('#candidate-review');
-    await mergePage.close();
-  } finally {
-    await page?.close().catch(() => {});
-    await auth?.stop().catch(() => {});
-    await stack.stop();
-  }
-});
+      await grant(stack, 'bob', ['subject:merge', 'subject:read', 'gate:subject_identity']);
+      const mergeSubjects = [
+        await createSubject(stack, 'Sources merge first'),
+        await createSubject(stack, 'Sources merge second'),
+      ];
+      const labels = new Map(mergeSubjects.map(({ id, label }) => [id, label]));
+      const ids = mergeSubjects.map(({ id }) => id).sort();
+      await command(stack, '/v1/subjects:merge', { subjects: ids }, 'bob', 200);
+      const [survivor, redirected] = ids as [string, string];
+      const redirectedPath = `${subjectHref({ id: redirected, label: labels.get(redirected)! }, 'en').href}/sources`;
+      const survivorPath = `${subjectHref({ id: survivor, label: labels.get(survivor)! }, 'en').href}/sources`;
+      const mergePage = await (await auth.context('anonymous')).newPage();
+      mergePage.setDefaultTimeout(60_000);
+      response = await mergePage.goto(`${stack.web}${redirectedPath}?keep=selected#candidate-review`, {
+        waitUntil: 'domcontentloaded',
+      });
+      expect(response?.status()).toBe(200);
+      await hydrate(mergePage);
+      const canonical = new URL(mergePage.url());
+      expect(canonical.pathname).toBe(survivorPath);
+      expect(canonical.search).toBe('?keep=selected');
+      expect(canonical.hash).toBe('#candidate-review');
+      await mergePage.close();
+    } finally {
+      await page?.close().catch(() => {});
+      await auth?.stop().catch(() => {});
+      await stack.stop();
+    }
+  },
+);
