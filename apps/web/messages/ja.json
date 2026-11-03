@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "表示可能なセクションがほかに {count} 件あります。投稿全体を続けてお読みください。",
   "post_sections_return": "前の読書位置に戻る",
   "post_sections_unavailable": "このセクションは利用できなくなりました。現在の投稿を続けてお読みください。",
-  "post_sections_entry": "見出しレベル {level}：{label}"
+  "post_sections_entry": "見出しレベル {level}：{label}",
+  "wide_document_code_title": "コード",
+  "wide_document_table_title": "表",
+  "wide_document_code_inspect": "コードを拡大表示",
+  "wide_document_table_inspect": "表を拡大表示",
+  "wide_document_code_wrap": "行を折り返す",
+  "wide_document_code_copy": "コードをコピー",
+  "wide_document_code_copying": "コードをコピー中…",
+  "wide_document_code_copied": "コードをコピーしました。",
+  "wide_document_code_copy_failed": "コピーに失敗しました。下のコードを選択してコピーしてください。",
+  "wide_document_code_clipboard_unavailable": "クリップボードを利用できません。下のコードを選択してコピーしてください。",
+  "wide_document_code_manual_copy": "コピーするコード",
+  "wide_document_code_too_large": "128 KiB を超えるコードはコピーできません。",
+  "wide_document_table_scroll": "スクロール可能な表です。矢印キーで内容を移動できます。",
+  "wide_document_inspector_close": "閉じる",
+  "wide_document_inspector_description": "選択した公開コンテンツを拡大表示します。"
 }

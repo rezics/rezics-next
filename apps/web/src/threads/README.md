@@ -253,6 +253,14 @@ attributes and taller leading; unknown document language stays unknown, independ
 Decision: Code wraps long tokens while preserving indentation and newlines, so phone readers can read complete code
 without a separate horizontal-scroll focus target.
 
+Decision: Wide reading shares one post-scoped inspector; plain tables with no media or interactive descendants are
+eligible, spoiler content becomes eligible only after disclosure, and code copying is capped at 128 KiB.
+
+Published current-post and immutable-revision readers register at most 64 disclosed code/table blocks once per visit.
+Inspection keeps the same rendered block in authored order; table overflow stays keyboard-scrollable, and code copy
+reports only a completed clipboard write or offers the same selected code for manual copying. Concealed spoiler content,
+an unavailable post, or an unsupported table structure keeps its ordinary renderer without a second preview or inspector.
+
 Long links and table cells wrap; native media keeps its supplied alt text, credit and unavailability/retry behavior.
 Spoiler and image-recovery controls retain phone targets and keyboard focus. Detail documents stay selectable and
 complete. The exact-revision page uses the same body composition and its existing localized return-to-post link;

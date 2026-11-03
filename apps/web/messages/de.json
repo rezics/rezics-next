@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "{count} weitere sichtbare Abschnitte sind nicht aufgeführt. Lies im vollständigen Beitrag weiter.",
   "post_sections_return": "Zur vorherigen Leseposition",
   "post_sections_unavailable": "Dieser Abschnitt ist nicht mehr verfügbar. Lies im aktuellen Beitrag weiter.",
-  "post_sections_entry": "Überschrift der Ebene {level}: {label}"
+  "post_sections_entry": "Überschrift der Ebene {level}: {label}",
+  "wide_document_code_title": "Code",
+  "wide_document_table_title": "Tabelle",
+  "wide_document_code_inspect": "Code ansehen",
+  "wide_document_table_inspect": "Tabelle ansehen",
+  "wide_document_code_wrap": "Zeilen umbrechen",
+  "wide_document_code_copy": "Code kopieren",
+  "wide_document_code_copying": "Code wird kopiert…",
+  "wide_document_code_copied": "Code kopiert.",
+  "wide_document_code_copy_failed": "Kopieren fehlgeschlagen. Markiere den Code unten und kopiere ihn.",
+  "wide_document_code_clipboard_unavailable": "Zwischenablage nicht verfügbar. Markiere den Code unten und kopiere ihn.",
+  "wide_document_code_manual_copy": "Zu kopierender Code",
+  "wide_document_code_too_large": "Code über 128 KiB kann nicht kopiert werden.",
+  "wide_document_table_scroll": "Scrollbare Tabelle. Mit den Pfeiltasten kannst du dich darin bewegen.",
+  "wide_document_inspector_close": "Schließen",
+  "wide_document_inspector_description": "Eine größere Ansicht des ausgewählten veröffentlichten Inhalts."
 }

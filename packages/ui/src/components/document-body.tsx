@@ -1,5 +1,5 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
-import { type DocumentSnapshot } from '@rezics/document';
+import { type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { createContext, createElement, useContext, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
@@ -90,8 +90,13 @@ type Props = {
   linkAttributes?: (occurrence: number) => DocumentLinkAttributes | undefined;
   /** Spoiler mark positions in document order, from the renderer's live disclosure authority. */
   onDisclosureChange?: (revealed: ReadonlySet<number>) => void;
+  /** Reader-owned key for retiring disclosure state when an equal snapshot changes source or revision. */
+  visitKey?: string;
   /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
   renderImage?: (image: { mediaId: string; alt: string }) => ReactNode;
+  /** Optional published-reader ports. Other DocumentBody consumers retain their existing plain rendering. */
+  renderCodeBlock?: (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => ReactNode;
+  renderTable?: (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => ReactNode;
 };
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
@@ -101,7 +106,10 @@ export function DocumentBody({
   labels,
   mentions,
   locale = 'en',
+  visitKey,
   renderImage,
+  renderCodeBlock,
+  renderTable,
   headingAttributes,
   linkAttributes,
   onDisclosureChange,
@@ -110,13 +118,13 @@ export function DocumentBody({
   const anchored = !!headingAttributes;
   const cachedSemantic = useMemo(() => (anchored ? semanticSnapshotJson(document) : null), [document, anchored]);
   const semanticSnapshot = cachedSemantic ?? semanticSnapshotJson(document);
-  const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
+  const [visit, setVisit] = useState(() => ({ semanticSnapshot, visitKey, id: 0 }));
   const concealment = useRef({ id: 0, revealed: new Set<number>() });
-  if (visit.semanticSnapshot !== semanticSnapshot) {
+  if (visit.semanticSnapshot !== semanticSnapshot || visit.visitKey !== visitKey) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
     const id = visit.id + 1;
     concealment.current = { id, revealed: new Set() };
-    setVisit({ semanticSnapshot, id });
+    setVisit({ semanticSnapshot, visitKey, id });
     return null;
   }
   if (concealment.current.id !== visit.id) {
@@ -208,19 +216,35 @@ export function DocumentBody({
             {children}
           </li>
         ),
-        codeBlock: ({ node, children }: any) => (
-          <pre>
-            <code data-language={node.attrs?.language ?? undefined}>{children}</code>
-          </pre>
+        codeBlock: ({ node, children }: any) => {
+          const defaultContent = (
+            <pre>
+              <code data-language={node.attrs?.language ?? undefined}>{children}</code>
+            </pre>
+          );
+          return renderCodeBlock ? renderCodeBlock(node, children, defaultContent) : defaultContent;
+        },
+        table: ({ node, children }: any) => {
+          const caption = typeof node.attrs?.caption === 'string' ? node.attrs.caption : undefined;
+          const defaultContent = (
+            <div className="document-table-scroll">
+              <table>
+                {caption !== undefined ? <caption>{caption}</caption> : null}
+                <tbody>{children}</tbody>
+              </table>
+            </div>
+          );
+          return renderTable ? renderTable(node, children, defaultContent) : defaultContent;
+        },
+        tableHeader: ({ node, children }: any) => (
+          <th
+            scope="col"
+            colSpan={positiveCellSpan(node.attrs?.colspan)}
+            rowSpan={positiveCellSpan(node.attrs?.rowspan)}
+          >
+            {children}
+          </th>
         ),
-        table: ({ children }: any) => (
-          <div className="document-table-scroll">
-            <table>
-              <tbody>{children}</tbody>
-            </table>
-          </div>
-        ),
-        tableHeader: ({ children }: any) => <th scope="col">{children}</th>,
         extensionBlock: ({ node }: any) => (
           <div data-document-component={node.attrs?.definition}>
             {node.attrs?.fallback ?? resolved.embeddedComponent}
@@ -261,4 +285,8 @@ export function DocumentBody({
       </Prose>
     </DocumentRenderContext.Provider>
   );
+}
+
+function positiveCellSpan(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }

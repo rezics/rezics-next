@@ -1,4 +1,4 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { DocumentBody, type DocumentMentions } from '../document-body';
 import { getLocale } from '../paraglide/runtime.js';
 import { NativeDocumentImage } from './document-media';
@@ -8,12 +8,15 @@ import { projectPostReading } from './post-reference-list';
 import { PostReadingOutlineView } from './post-reading-outline-view';
 import { PostReadingPosition } from './post-reading-position';
 import { PostReferenceView } from './post-reference-view';
+import { WideDocumentReading } from './wide-document-inspector';
 import './post-reading.css';
 
 type ReadingProps = ComponentProps<typeof DocumentBody> & {
   /** The supplied source/viewer/route visit; replacing it retires equal document bytes as well. */
   readerIdentity?: unknown;
   isReaderCurrent?: () => boolean;
+  /** Distinguishes a current post visit from an immutable revision visit with equal content. */
+  wideVisitKey?: string;
 };
 
 /**
@@ -25,14 +28,20 @@ export function PostReadingBody(props: ReadingProps) {
   const [visit, setVisit] = useState(() => ({
     document: props.document,
     identity: props.readerIdentity,
+    wideVisitKey: props.wideVisitKey,
     generation: 0,
     position: new PostReadingPosition(),
   }));
-  if (visit.document !== props.document || visit.identity !== props.readerIdentity) {
+  if (
+    visit.document !== props.document ||
+    visit.identity !== props.readerIdentity ||
+    visit.wideVisitKey !== props.wideVisitKey
+  ) {
     visit.position.retire();
     setVisit({
       document: props.document,
       identity: props.readerIdentity,
+      wideVisitKey: props.wideVisitKey,
       generation: visit.generation + 1,
       position: new PostReadingPosition(),
     });
@@ -47,12 +56,14 @@ function ReadingVisit({
   className,
   readerIdentity: _identity,
   isReaderCurrent: _current,
+  wideVisitKey,
   locale = getLocale(),
   headingAttributes: callerAttributes,
   onDisclosureChange: callerDisclosure,
   ...props
 }: ReadingProps & { position: PostReadingPosition }) {
   const namespace = `reading-${useId().replaceAll(':', '')}`;
+  const focusBoundaryRef = useRef<HTMLDivElement | null>(null);
   const [disclosed, setDisclosed] = useState<ReadonlySet<number>>(() => new Set());
   const projection = useMemo(() => projectPostReading(props.document, disclosed), [props.document, disclosed]);
   const outline = projection.outline;
@@ -89,33 +100,59 @@ function ReadingVisit({
     },
     [namespace, position, projection.references.byPosition],
   );
+  const setRoot = useCallback(
+    (element: HTMLDivElement | null) => {
+      focusBoundaryRef.current = element;
+      position.setRoot(element);
+    },
+    [position],
+  );
+  const isReadingCurrent = useCallback(() => position.isCurrent(), [position]);
   // Opening, dismissing and returning only render the controls; they never traverse the snapshot again.
   const body = useMemo(
-    () => (
-      <DocumentBody
-        {...props}
-        locale={locale}
-        headingAttributes={attributes}
-        linkAttributes={linkAttributes}
-        onDisclosureChange={disclosure}
-        className={`post-reading-document ${className ?? ''}`}
-      />
-    ),
+    () => {
+      const bodyProps = {
+        ...props,
+        locale,
+        headingAttributes: attributes,
+        linkAttributes,
+        onDisclosureChange: disclosure,
+        className: `post-reading-document ${className ?? ''}`,
+      };
+      return wideVisitKey ? (
+        <WideDocumentReading
+          {...bodyProps}
+          visitKey={`${wideVisitKey}:${namespace}`}
+          disclosedSpoilers={disclosed}
+          focusBoundaryRef={focusBoundaryRef}
+          isReadingCurrent={isReadingCurrent}
+        />
+      ) : (
+        <DocumentBody {...bodyProps} />
+      );
+    },
     [
       props.document,
       props.mentions,
       props.labels,
       props.renderImage,
+      props.renderCodeBlock,
+      props.renderTable,
+      props.visitKey,
       locale,
       attributes,
       linkAttributes,
       disclosure,
       className,
+      wideVisitKey,
+      namespace,
+      disclosed,
+      isReadingCurrent,
     ],
   );
   return (
     <div
-      ref={(element) => position.setRoot(element)}
+      ref={setRoot}
       data-slot="post-reading-body"
       className="post-reading-body min-w-0"
       lang=""
@@ -163,6 +200,7 @@ export function ThreadPostReadingBody({
       key={`${post.id}:${post.revisionId}:${post.sha256}`}
       readerIdentity={readerIdentity}
       {...(isReaderCurrent ? { isReaderCurrent } : {})}
+      wideVisitKey={`current:${post.threadId}:${post.id}:${post.revisionId}:${post.sha256}`}
       document={post.body}
       mentions={mentions}
       locale={locale}

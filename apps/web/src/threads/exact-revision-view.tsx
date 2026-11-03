@@ -88,6 +88,7 @@ export function ExactRevisionView({
             key={`${page.revision.id}:${page.revision.revisionId}`}
             readerIdentity={readingIdentity ?? page.revision}
             {...(isReadingCurrent ? { isReaderCurrent: isReadingCurrent } : {})}
+            wideVisitKey={`immutable-revision:${identity.postId}:${identity.revisionId}`}
             document={page.revision.body}
             mentions={page.mentions}
             locale={locale}

@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "Hay {count} secciones visibles más que no se muestran. Continúa leyendo la publicación completa.",
   "post_sections_return": "Volver a la posición anterior",
   "post_sections_unavailable": "Esta sección ya no está disponible. Continúa leyendo la publicación actual.",
-  "post_sections_entry": "Encabezado de nivel {level}: {label}"
+  "post_sections_entry": "Encabezado de nivel {level}: {label}",
+  "wide_document_code_title": "Código",
+  "wide_document_table_title": "Tabla",
+  "wide_document_code_inspect": "Inspeccionar código",
+  "wide_document_table_inspect": "Inspeccionar tabla",
+  "wide_document_code_wrap": "Ajustar líneas",
+  "wide_document_code_copy": "Copiar código",
+  "wide_document_code_copying": "Copiando código…",
+  "wide_document_code_copied": "Código copiado.",
+  "wide_document_code_copy_failed": "No se pudo copiar. Selecciona y copia el código de abajo.",
+  "wide_document_code_clipboard_unavailable": "Portapapeles no disponible. Selecciona y copia el código de abajo.",
+  "wide_document_code_manual_copy": "Código para copiar",
+  "wide_document_code_too_large": "No se puede copiar código de más de 128 KiB.",
+  "wide_document_table_scroll": "Tabla desplazable. Usa las flechas para recorrerla.",
+  "wide_document_inspector_close": "Cerrar",
+  "wide_document_inspector_description": "Vista ampliada del contenido publicado seleccionado."
 }

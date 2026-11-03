@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "표시 가능한 섹션 {count}개가 더 있습니다. 게시물 전체를 계속 읽어 주세요.",
   "post_sections_return": "이전 읽기 위치로 돌아가기",
   "post_sections_unavailable": "이 섹션은 더 이상 사용할 수 없습니다. 현재 게시물을 계속 읽어 주세요.",
-  "post_sections_entry": "제목 수준 {level}: {label}"
+  "post_sections_entry": "제목 수준 {level}: {label}",
+  "wide_document_code_title": "코드",
+  "wide_document_table_title": "표",
+  "wide_document_code_inspect": "코드 자세히 보기",
+  "wide_document_table_inspect": "표 자세히 보기",
+  "wide_document_code_wrap": "줄 바꿈",
+  "wide_document_code_copy": "코드 복사",
+  "wide_document_code_copying": "코드 복사 중…",
+  "wide_document_code_copied": "코드를 복사했습니다.",
+  "wide_document_code_copy_failed": "복사하지 못했습니다. 아래 코드를 선택해 복사하세요.",
+  "wide_document_code_clipboard_unavailable": "클립보드를 사용할 수 없습니다. 아래 코드를 선택해 복사하세요.",
+  "wide_document_code_manual_copy": "복사할 코드",
+  "wide_document_code_too_large": "128 KiB를 초과하는 코드는 복사할 수 없습니다.",
+  "wide_document_table_scroll": "스크롤 가능한 표입니다. 화살표 키로 표를 이동하세요.",
+  "wide_document_inspector_close": "닫기",
+  "wide_document_inspector_description": "선택한 게시 콘텐츠를 크게 보여줍니다."
 }

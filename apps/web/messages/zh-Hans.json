@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "另有 {count} 个可见章节未列出。请继续阅读完整帖子。",
   "post_sections_return": "返回先前阅读位置",
   "post_sections_unavailable": "此章节已无法使用。请继续阅读当前帖子。",
-  "post_sections_entry": "第 {level} 级标题：{label}"
+  "post_sections_entry": "第 {level} 级标题：{label}",
+  "wide_document_code_title": "代码",
+  "wide_document_table_title": "表格",
+  "wide_document_code_inspect": "查看代码",
+  "wide_document_table_inspect": "查看表格",
+  "wide_document_code_wrap": "自动换行",
+  "wide_document_code_copy": "复制代码",
+  "wide_document_code_copying": "正在复制代码…",
+  "wide_document_code_copied": "代码已复制。",
+  "wide_document_code_copy_failed": "复制失败。请选中并复制下方代码。",
+  "wide_document_code_clipboard_unavailable": "剪贴板不可用。请选中并复制下方代码。",
+  "wide_document_code_manual_copy": "要复制的代码",
+  "wide_document_code_too_large": "代码超过 128 KiB，无法复制。",
+  "wide_document_table_scroll": "可滚动表格。使用方向键浏览表格内容。",
+  "wide_document_inspector_close": "关闭",
+  "wide_document_inspector_description": "所选已发布内容的放大视图。"
 }

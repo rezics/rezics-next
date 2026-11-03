@@ -34,7 +34,14 @@
   max-width: 100%;
 }
 
-.post-reading-document > :is(figure, [data-slot='document-image'], .document-table-scroll, pre) {
+.post-reading-document > :is(
+  figure,
+  [data-slot='document-image'],
+  .document-table-scroll,
+  pre,
+  .wide-document-code,
+  .wide-document-table
+) {
   grid-column: 1 / -1;
 }
 
@@ -92,7 +99,7 @@
 }
 
 /* Wrapping code keeps indentation/newlines and permits reading every token without sideways page scrolling. */
-.post-reading-document pre {
+.post-reading-document pre:not(.wide-document-code-content) {
   min-width: 0;
   max-width: 100%;
   white-space: pre-wrap;
@@ -103,7 +110,23 @@
   direction: ltr;
 }
 
-.post-reading-document pre code {
+.post-reading-document .wide-document-code-content {
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+}
+
+.post-reading-document .wide-document-code-content[data-wrap] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.post-reading-document .wide-document-code-content:not([data-wrap]) {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.post-reading-document pre:not(.wide-document-code-content) code {
   white-space: inherit;
   overflow-wrap: inherit;
 }
@@ -111,6 +134,90 @@
 .post-reading-document .document-table-scroll {
   min-width: 0;
   max-width: 100%;
+}
+
+.post-reading-document .wide-document-code,
+.post-reading-document .wide-document-table {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wide-document-code-content {
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.wide-document-code-feedback,
+.wide-document-code-recovery {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.wide-document-code-recovery {
+  display: grid;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.wide-document-table-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-block-end: 0.5rem;
+}
+
+.post-reading-document .wide-document-table-scroll,
+.wide-document-inspector-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-radius: 0.5rem;
+  outline-offset: 2px;
+}
+
+.post-reading-document .wide-document-table-scroll:focus-visible,
+.wide-document-inspector-table-scroll:focus-visible {
+  outline: 2px solid var(--ring);
+}
+
+.post-reading-document .wide-document-table-scroll table,
+.wide-document-inspector-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  table-layout: auto;
+}
+
+.post-reading-document .wide-document-table-scroll :is(td, th),
+.wide-document-inspector-table-scroll :is(td, th) {
+  min-width: 10rem;
+  max-width: 32rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.post-reading-document .wide-document-table-scroll :is(th, td):first-child {
+  min-width: 8rem;
+}
+
+.wide-document-inspector-table-scroll {
+  min-height: 0;
+  height: 100%;
+  padding: 0.5rem;
+  background: color-mix(in oklab, var(--muted) 35%, transparent);
+}
+
+.wide-document-inspector-table-scroll table {
+  margin-inline: auto;
+}
+
+.wide-document-inspector-code {
+  min-height: 0;
+  max-height: 100%;
 }
 
 .post-reading-document table {

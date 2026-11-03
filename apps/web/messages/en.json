@@ -6809,5 +6809,20 @@
   "post_sections_overflow": "{count} more visible sections are not listed. Continue reading the full post.",
   "post_sections_return": "Return to previous position",
   "post_sections_unavailable": "This section is no longer available. Continue reading in the current post.",
-  "post_sections_entry": "Heading level {level}: {label}"
+  "post_sections_entry": "Heading level {level}: {label}",
+  "wide_document_code_title": "Code",
+  "wide_document_table_title": "Table",
+  "wide_document_code_inspect": "Inspect code",
+  "wide_document_table_inspect": "Inspect table",
+  "wide_document_code_wrap": "Wrap lines",
+  "wide_document_code_copy": "Copy code",
+  "wide_document_code_copying": "Copying code…",
+  "wide_document_code_copied": "Code copied.",
+  "wide_document_code_copy_failed": "Copy failed. Select and copy the code below.",
+  "wide_document_code_clipboard_unavailable": "Clipboard unavailable. Select and copy the code below.",
+  "wide_document_code_manual_copy": "Code to copy",
+  "wide_document_code_too_large": "Copy is unavailable for code over 128 KiB.",
+  "wide_document_table_scroll": "Scrollable table. Use arrow keys to move through it.",
+  "wide_document_inspector_close": "Close",
+  "wide_document_inspector_description": "A larger view of the selected published content."
 }

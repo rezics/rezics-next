@@ -6759,5 +6759,20 @@
   "post_sections_overflow": "另有 {count} 個可見章節未列出。請繼續閱讀完整貼文。",
   "post_sections_return": "返回先前閱讀位置",
   "post_sections_unavailable": "此章節已無法使用。請繼續閱讀目前的貼文。",
-  "post_sections_entry": "第 {level} 級標題：{label}"
+  "post_sections_entry": "第 {level} 級標題：{label}",
+  "wide_document_code_title": "程式碼",
+  "wide_document_table_title": "表格",
+  "wide_document_code_inspect": "檢視程式碼",
+  "wide_document_table_inspect": "檢視表格",
+  "wide_document_code_wrap": "自動換行",
+  "wide_document_code_copy": "複製程式碼",
+  "wide_document_code_copying": "正在複製程式碼…",
+  "wide_document_code_copied": "程式碼已複製。",
+  "wide_document_code_copy_failed": "複製失敗。請選取並複製下方程式碼。",
+  "wide_document_code_clipboard_unavailable": "剪貼簿不可用。請選取並複製下方程式碼。",
+  "wide_document_code_manual_copy": "待複製的程式碼",
+  "wide_document_code_too_large": "程式碼超過 128 KiB，無法複製。",
+  "wide_document_table_scroll": "可捲動表格。使用方向鍵瀏覽表格內容。",
+  "wide_document_inspector_close": "關閉",
+  "wide_document_inspector_description": "所選已發布內容的放大檢視。"
 }
