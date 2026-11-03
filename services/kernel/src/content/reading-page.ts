@@ -367,6 +367,10 @@ function entryWitness(entry: PostEntry) {
   ];
 }
 
+export function readingPageEntryWitness(entry: PostEntry): string {
+  return JSON.stringify(entryWitness(entry));
+}
+
 function threadWitness(thread: ThreadView) {
   return JSON.stringify([
     thread.id,
@@ -882,7 +886,7 @@ export async function createContentReadingCardBatch(
     postSources.push({
       reference,
       state,
-      witness: JSON.stringify(entryWitness(entry)),
+      witness: readingPageEntryWitness(entry),
       revisionId,
       securityRevision: 'securityRevision' in entry ? entry.securityRevision : null,
       ...(state === 'current' && 'authorId' in entry ? { authorId: entry.authorId } : {}),
@@ -1098,7 +1102,7 @@ export async function createContentReadingCardBatch(
             post.state = 'withheld';
             continue;
           }
-          if (JSON.stringify(entryWitness(current.value)) !== post.witness) throw sourceChanged();
+          if (readingPageEntryWitness(current.value) !== post.witness) throw sourceChanged();
           finalAnchors.push(current.anchor);
         }
 

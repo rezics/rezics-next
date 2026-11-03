@@ -2,12 +2,14 @@ import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { Compile } from 'typebox/compile';
 import type { Actor } from '../../src/request/access.ts';
+import type { PostEntry } from '../../src/content/reads.ts';
 import {
   READING_CARD_REFERENCE_LIMIT,
   ReadingPageQuerySchema,
   ReadingPageResponseSchema,
   normalizeSelectedReadingCardReferences,
   readingPageOperationState,
+  readingPageEntryWitness,
   readingPageReactionCoverageState,
   readingPageRawLimit,
 } from '../../src/content/reading-page.ts';
@@ -39,7 +41,7 @@ function item(itemId: string, parentId: string | null) {
     voteCitation: null,
     revisionId: id('5'),
     body: fromPlainText('Reading page item'),
-  };
+  } satisfies PostEntry;
 }
 
 function response(replyCount: number) {
@@ -119,6 +121,14 @@ test('reading-page cursor, reply and withheld-entry bounds are closed', () => {
   const unavailableReactions = response(0);
   unavailableReactions.currentness.reactions = 'unavailable';
   expect(page.Check(unavailableReactions)).toBe(true);
+});
+
+test('selected post rechecks accept repeated observations and reject changed source witnesses', () => {
+  const selected = item(id('10'), openingId);
+  const witness = readingPageEntryWitness(selected);
+  expect(readingPageEntryWitness(structuredClone(selected))).toBe(witness);
+  for (const change of [{ revisionId: id('6') }, { securityRevision: '2' }, { parentId: id('7') }])
+    expect(readingPageEntryWitness({ ...selected, ...change })).not.toBe(witness);
 });
 
 test('selected reading-card references keep exact keys and close raw and reaction coverage bounds', () => {
