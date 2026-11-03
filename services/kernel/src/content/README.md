@@ -921,7 +921,8 @@ There is no new cleanup coordinator, acknowledgement or custody proof; later nat
 
 - Touches: existing fixed collection/upload pages; each media disposition reads the exact permanent claim marker.
 - Bound: O(p log R) for existing page size p; no extra owner fanout, coordinator or historical revision walk.
-- Growth check: later reuse `test/content/growth-media-native-collection.test.ts` and `test/content/account-erasure-uploads.test.ts`.
+- Growth check: `test/content/growth-realm-asset-collection.test.ts` measures native Realm icon/banner collection and retained permanent-claim exclusion; account erasure remains `test/content/account-erasure-uploads.test.ts`.
+- Fixture decision: selected Realm assets and the permanent claim use native HTTP; unrelated media and retained history are seeded outside observation, while collector pages, refusal, retry and storage effects stay inside capture.
 
 ## Avatars
 
