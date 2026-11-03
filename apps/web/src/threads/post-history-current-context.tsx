@@ -60,32 +60,33 @@ export function HistoryNativeProvenance({ native, review }: { native: HistoryRev
       aria-label={m.post_history_recorded_context()}
       className="min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]"
     >
-      {native.subjectState === 'unavailable' ? (
-        <p>{m.post_history_targets_failed()}</p>
-      ) : native.subjects.length === 0 ? (
+      {native.subjects.length === 0 ? (
         <p>{m.post_history_targets_absent()}</p>
       ) : (
-        <ul>
-          {native.subjects.map((item) => (
-            <li key={item.id} className="space-y-1">
-              <p>{m.post_history_original_target({ id: item.id })}</p>
-              {item.state === 'available' ? (
-                <p>
-                  {m.post_history_terminal_target()}{' '}
-                  <a
-                    className={link}
-                    href={subjectHref({ id: item.summary.id, label: item.summary.label?.value ?? '' }, locale).href}
-                  >
-                    {item.summary.label?.value ?? item.summary.id}
-                  </a>{' '}
-                  <span dir="ltr">{item.summary.id}</span>
-                </p>
-              ) : (
-                <p>{m.post_history_target_concealed()}</p>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-2">
+          {native.subjectState === 'unavailable' ? <p>{m.post_history_targets_failed()}</p> : null}
+          <ul>
+            {native.subjects.map((item) => (
+              <li key={item.id} className="space-y-1">
+                <p>{m.post_history_original_target({ id: item.id })}</p>
+                {native.subjectState === 'unavailable' ? null : item.state === 'available' ? (
+                  <p>
+                    {m.post_history_terminal_target()}{' '}
+                    <a
+                      className={link}
+                      href={subjectHref({ id: item.summary.id, label: item.summary.label?.value ?? '' }, locale).href}
+                    >
+                      {item.summary.label?.value ?? item.summary.id}
+                    </a>{' '}
+                    <span dir="ltr">{item.summary.id}</span>
+                  </p>
+                ) : (
+                  <p>{m.post_history_target_concealed()}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {review ? (
         native.reviewState === 'unavailable' ? (

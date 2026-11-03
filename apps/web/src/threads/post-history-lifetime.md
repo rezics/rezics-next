@@ -2,12 +2,11 @@
 
 ## Native page admission
 
-The installed Kernel client currently declares only `revisions` and `next`; it does not admit the closed `page`
-context. The prepared consumer's `NativeHistoryPage['page']` binding therefore remains unavailable. Preserve
-that binding until supported shared publication delivers the response; service schemas and constructed fixtures
-cannot enable it. Do not replace it with a copied DTO, cast or separate transport.
+The installed KernelClient now declares the closed `page` context alongside `revisions` and `next` through supported
+shared publication. The consumer retains its original `NativeHistoryPage['page']` binding and existing transport;
+service schemas and constructed fixtures alone cannot admit current-context disclosure.
 
-After publication, the loader derives both revisions and the closed `page` context from the generated Kernel client. One native
+The loader derives both revisions and the closed `page` context from the installed Kernel client. One native
 GET supplies the admitted conversation, Board, place, current head identity and current author presentation,
 plus revision-keyed citations, question scales, subjects, mentions, media and navigation. Before projecting
 any presentation, the consumer checks the requested post, shared conversation and Board, prepared viewer,
@@ -22,8 +21,10 @@ request clears them synchronously; failure retries the exact failed cursor. An u
 the delivered same-cursor retry, independently of whether there is another page.
 
 Current names are presentation and never immutable authorship. Original Subject keys remain visible beside the
-separate delivered terminal Subject identity. Concealed presentation and failed owner reads remain distinct;
-an undisclosed citation is never labelled an unscored review. Zero, recorded question revision, delivered question
+separate delivered terminal Subject identity. Concealed presentation and failed owner reads remain distinct.
+failed Subject presentation retains every recorded target ID without displaying a terminal summary. An empty
+recorded target list remains absent even when the Subject owner is unavailable.
+An undisclosed citation is never labelled an unscored review. Zero, recorded question revision, delivered question
 revision, scale and lifecycle are displayed as separate supplied facts. The consumer does not infer a past scale
 from a current private vote.
 
@@ -34,14 +35,15 @@ its exact-reader provenance. It cannot read the current head endpoint or create 
 
 ### Cost
 
-For N returned revisions and K supplied related keys/references, the prepared closed-page validation and projection
+For N returned revisions and K supplied related keys/references, the installed closed-page consumer's validation and projection
 use O(N + K) work and
 memory. Maps index scores by revision identity, comparisons by their from-revision, subjects by their original
 key, identities by account key and images by media key. Documents are retained by reference and never copied
 for summaries. Only the selected inspector mounts, and only an explicit comparison opens an exact destination.
 No continuation accumulates earlier pages, rehydrates native enrichment or refills a sparse native page.
-These are consumer source bounds at 1/20/100 rows, pending installed publication and mounted acceptance;
-they do not establish a delivered native-enrichment path.
+Installed declaration and factory delivery enable this path; O(N + K) at 1/20/100 rows remains a consumer source
+bound until controller acceptance executes the original mounted variants. Source review and constructed envelopes
+do not establish native execution or growth.
 
 The native 20-row default, 100-row maximum, opaque cursor and unchanged retry/media/exact-reader assertions remain.
 Native growth256/1024/4096, browser inspection and frozen integration acceptance are controller work.

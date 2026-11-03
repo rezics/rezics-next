@@ -348,6 +348,8 @@ private no-store responses and retirement.
 Decision: consume the generated closed history page context as the authority for current presentation and
 revision-keyed enrichment; exact links open in a separate tab, while admitted comparisons reuse the exact reader
 inside the selected inspector and return focus to their trigger.
+The installed KernelClient declaration and factory now supply this context. The [Cost bounds](post-history-lifetime.md#cost)
+describe consumer source work; mounted acceptance, native growth and browser inspection remain controller verification.
 Current names never change immutable authorship, and current votes cannot replace recorded citations or scales.
 Concealed, absent and failed context retain their native meanings; failed context retries the same history address.
 Decision: a recorded target omitted from a bounded native summary retains its original ID with withheld presentation; only an empty recorded target list is absent.
