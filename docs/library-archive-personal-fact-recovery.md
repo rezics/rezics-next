@@ -105,3 +105,7 @@ typechecks are worker checks; frozen acceptance and composed native growth measu
 
 After landing, Commerce receives the exact installed review/apply methods and field outcomes. Web323 remains the
 single coordinated archive consumer; no second restoration interface is introduced.
+
+The route/schema producer is implemented in this source. Generated client snapshot emission remains unavailable
+until the shared compiler/check host can run; the existing snapshot must not be presented as the reflection handoff.
+The remaining generation and focused verification are recorded in the reflection client continuation.

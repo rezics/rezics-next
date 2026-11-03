@@ -585,6 +585,7 @@ Web adoption, frozen acceptance and measured native64/512/4096 cost evidence rem
 evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
 supported fields, immutable review confirmations, exact native PATCH replay and visibility decision. Reflection
 adoption includes empty/set, explicit null/clear and preserve; assessment stays with its coordinated native producer.
+The generated client snapshot handoff remains unavailable pending compiler-host emission and focused verification.
 
 ## Evidence stage
 

@@ -27,7 +27,9 @@ global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes 
 are verified against the records. A missing final manifest, missing section declaration or absent assignment label
 parent is incomplete, never explicitly empty.
 Malformed envelopes, unsupported formats/versions, inconsistent counts, duplicate JSON keys, invalid Unicode,
-unknown record sections, repeated native record identities and out-of-order sections are refused. Failures expose
+unknown record sections, repeated native record identities and out-of-order sections are refused.
+Journal reflection strings are the one retained Unicode exception: malformed text remains encoded evidence with an
+explicit unsupported adoption reason under [personal fact recovery](library-archive-personal-fact-recovery.md). Failures expose
 only fixed codes, without raw JSON parser messages, archive values or private names.
 
 The output preserves records and manifest omissions as private evidence. Every installed section reports its
