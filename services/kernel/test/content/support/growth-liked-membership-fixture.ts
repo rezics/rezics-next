@@ -97,12 +97,24 @@ export async function createMembershipGrowthFixture() {
     // Capture the real committed envelopes before adding unrelated retained history.
     const envelopes: Envelope[] = [];
     for (const sourcePartition of new Set(sources.map(({ actorId }) => partitionOf(routeOf(actorId)!)))) {
+      const consumer = `membership_setup_${crypto.randomUUID().replaceAll('-', '')}`;
+      const start = await growth.admin.query<{ epoch: number; position: string }>(
+        `SELECT epoch,(min(position)-1)::text AS position FROM core.receipt
+         WHERE partition_no=$1 AND transaction_id=ANY($2::uuid[]) GROUP BY epoch`,
+        [sourcePartition, sources.map(({ result }) => result.transactionId)],
+      );
+      if (start.rowCount !== 1) throw new Error('Expected one native selected reaction source epoch');
+      await growth.admin.query(
+        'INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)',
+        [sourcePartition, consumer, start.rows[0]!.epoch, start.rows[0]!.position],
+      );
       const read = await readBatch(growth.pool, {
-        consumer: `membership_setup_${crypto.randomUUID().replaceAll('-', '')}`,
+        consumer,
         partition: sourcePartition,
         apply: async (batch) => { envelopes.push(...batch); },
       });
-      if (read.status !== 'read') throw new Error(`Native membership setup source stopped: ${JSON.stringify(read)}`);
+      if (read.status !== 'read')
+        throw new Error(`Native membership setup source: ${read.status}${read.status === 'stopped' ? ` ${read.reason}` : ''}`);
     }
     const registered: Effect[] = [];
     client = await createWorkClient(growth.url, growth.openPool({ max: 4 }));
