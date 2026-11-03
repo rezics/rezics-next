@@ -5364,12 +5364,19 @@ export async function withCheckGitTransfer<T>(
     if (transfer.stage) {
       const stage = transfer.stage;
       // Result/settlement delivery does not wait on GitHub cleanup. Frozen callers retain controller custody.
-      void import('./check-git.ts').then(async ({ releaseCheckGit, sweepCheckGit }) => {
-        if (!options.expectedSourceManifest) await releaseCheckGit(options.workspace, stage.manifest);
-        await sweepCheckGit(options.workspace);
-      }).catch(() => {}).finally(() => {
-        try { rmSync(stage.directory, { recursive: true, force: true }); } catch { /* Best effort staging cleanup. */ }
-      });
+      void import('./check-git.ts')
+        .then(async ({ releaseCheckGit, sweepCheckGit }) => {
+          if (!options.expectedSourceManifest) await releaseCheckGit(options.workspace, stage.manifest);
+          await sweepCheckGit(options.workspace);
+        })
+        .catch(() => {})
+        .finally(() => {
+          try {
+            rmSync(stage.directory, { recursive: true, force: true });
+          } catch {
+            /* Best effort staging cleanup. */
+          }
+        });
     }
   }
 }
@@ -5447,7 +5454,13 @@ async function uploadRun(
           const manifest = await stageCheckGit(options.workspace, directory, {
             ref: `refs/checks/${randomUUID()}`,
             retain: options.expectedSourceManifest !== undefined,
-            deadlineMs: Date.now() + configuredTimeout(options.preparationTimeoutMs, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+            deadlineMs:
+              Date.now() +
+              configuredTimeout(
+                options.preparationTimeoutMs,
+                'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
+                DEFAULT_PREPARATION_TIMEOUT_MS,
+              ),
           });
           transfer.stage = { directory, manifest };
         } catch (error) {

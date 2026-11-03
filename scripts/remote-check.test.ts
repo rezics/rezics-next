@@ -2826,7 +2826,13 @@ test("the remote run's output streams back and its exit code becomes the local e
   expect(script).toMatch(/\/srv\/rezics-check\/runs\/[a-z0-9-]+/);
   expect(script).toContain('src bun test');
   const files = (seen.find((event) => event.kind === 'rsync')!.files as string[]).sort();
-  expect(files).toEqual(['.gitignore', 'src/tracked.ts', 'src/untracked.ts']);
+  expect(files.filter((file) => !file.startsWith('.temp/remote-check-git-'))).toEqual([
+    '.gitignore',
+    'src/tracked.ts',
+    'src/untracked.ts',
+  ]);
+  expect(files.filter((file) => file.endsWith('/manifest.json'))).toHaveLength(1);
+  expect(files.filter((file) => file.endsWith('/snapshot.pack'))).toHaveLength(1);
   const cleanup = seen.find((event) => event.kind === 'cleanup')!.script as string;
   expect(cleanup).toContain('rm -rf');
   expect(cleanup).toMatch(/\/srv\/rezics-check\/runs\/[a-z0-9-]+/);
@@ -2911,12 +2917,17 @@ test('a fetched staged tree needs only working edits and untracked inputs, with 
   expect(overlay.files).not.toContain('src/staged.ts');
 });
 
-test.each([[0, 0], [1, 0], [1, 19]])(
+test.each([
+  [0, 0, false],
+  [1, 0, false],
+  [1, 19, false],
+  [0, 19, true],
+] as const)(
   'GitHub fetch exit %i preserves command exit %i and deletes the shared check ref',
-  async (gitFetchExit, commandExit) => {
+  async (gitFetchExit, commandExit, rejectDelete) => {
     const fixture = scenario({
       a: { available: 8e9, gitFetchExit, exit: commandExit, preCommandFailures: gitFetchExit === 0 ? 1 : 0 },
-      ...(gitFetchExit === 0 ? { b: { available: 8e9, gitFetchExit } } : {}),
+      ...(gitFetchExit === 0 ? { b: { available: 8e9, gitFetchExit, exit: commandExit } } : {}),
     });
     const directory = workspace();
     const origin = join(directory, '.temp/origin.git');
@@ -2924,6 +2935,14 @@ test.each([[0, 0], [1, 0], [1, 19]])(
     expect(git('init', '--bare', '-q', origin).status).toBe(0);
     expect(git('remote', 'add', 'origin', origin).status).toBe(0);
     expect(git('push', '-q', 'origin', 'HEAD:refs/heads/dev').status).toBe(0);
+    if (rejectDelete) {
+      const hook = join(origin, 'hooks/pre-receive');
+      writeFileSync(
+        hook,
+        '#!/bin/sh\nread old new ref\ncase "$new" in *[!0]*) exit 0;; *) echo "cleanup refused" >&2; exit 1;; esac\n',
+      );
+      chmodSync(hook, 0o755);
+    }
     const result = await remote(fixture.env, directory);
     expect(result.code, result.stderr).toBe(commandExit);
     const fetched = fixture.events().filter((event) => event.kind === 'github-fetch');
@@ -2938,7 +2957,9 @@ test.each([[0, 0], [1, 0], [1, 19]])(
       } else expect(files.some((file) => file.endsWith('/snapshot.pack'))).toBe(true);
     }
     expect(result.stderr.match(/check-git: Writing objects: 100%/g)).toHaveLength(1);
-    expect(git('--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/').stdout.trim()).toBe('');
+    const remaining = git('--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/').stdout.trim();
+    expect(remaining.length > 0).toBe(rejectDelete);
+    if (rejectDelete) expect(result.stderr).toContain('cleanup refused');
   },
 );
 
@@ -7962,19 +7983,22 @@ test('nested official placement admits the named profile and physically receives
   }
 });
 
-
 test('publication cleanup cannot replace a result or a primary failure when its manifest is lost', async () => {
   const directory = workspace();
   const stage = () => {
     const path = mkdtempSync(join(directory, '.temp/publication-'));
     return { directory: path, manifest: join(path, 'missing.json') };
   };
-  expect(await withCheckGitTransfer({ workspace: directory }, async (transfer) => {
-    transfer.stage = stage();
-    return 19;
-  })).toBe(19);
-  await expect(withCheckGitTransfer({ workspace: directory }, async (transfer) => {
-    transfer.stage = stage();
-    throw new Error('primary transport failure');
-  })).rejects.toThrow('primary transport failure');
+  expect(
+    await withCheckGitTransfer({ workspace: directory }, async (transfer) => {
+      transfer.stage = stage();
+      return 19;
+    }),
+  ).toBe(19);
+  await expect(
+    withCheckGitTransfer({ workspace: directory }, async (transfer) => {
+      transfer.stage = stage();
+      throw new Error('primary transport failure');
+    }),
+  ).rejects.toThrow('primary transport failure');
 });

@@ -1,6 +1,16 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   stageCheckGit,
@@ -35,6 +45,7 @@ function repository(root: string) {
   const source = join(root, 'source');
   mkdirSync(source);
   git(source, 'init', '-q');
+  writeFileSync(join(source, '.git/info/exclude'), '.temp/\n');
   git(source, 'config', 'user.email', 'fixture@example.test');
   git(source, 'config', 'user.name', 'Fixture');
   writeFileSync(join(source, 'tracked.txt'), 'historical\n');
@@ -248,7 +259,6 @@ test('private key material in the staged tree is refused before a ref can be pus
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
 });
 
-
 function publicationFixture(hook: string) {
   const root = sandbox();
   const { source } = repository(root);
@@ -265,9 +275,14 @@ test('one failed push retries the identical candidate and retains redacted trans
     `if [ "$(wc -l < '../pushes')" -eq 1 ]; then echo 'fatal: gateway https://user:credential@github.test/repo?token=private authorization: Bearer hidden' >&2; exit 1; fi`,
   );
   const errors: string[] = [];
-  const output = spyOn(console, 'error').mockImplementation((message) => { errors.push(String(message)); });
+  const output = spyOn(console, 'error').mockImplementation((message) => {
+    errors.push(String(message));
+  });
   try {
-    const path = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/retry', backoff: async () => {} });
+    const path = await stageCheckGit(source, join(root, 'publication'), {
+      ref: 'refs/checks/retry',
+      backoff: async () => {},
+    });
     const publication = JSON.parse(readFileSync(path, 'utf8')) as CheckGitPublication;
     const pushes = readFileSync(log, 'utf8').trim().split('\n');
     expect(pushes).toHaveLength(2);
@@ -276,27 +291,37 @@ test('one failed push retries the identical candidate and retains redacted trans
     expect(git(root, '--git-dir', origin, 'rev-parse', publication.remote.ref)).toBe(publication.remote.commit);
     expect(errors.join('\n')).toContain('exit 1');
     expect(errors.join('\n')).toContain('gateway');
-    expect(errors.join('\n')).not.toMatch(/credential@|token=private|Bearer hidden/);
+    expect(errors.join('\n')).not.toMatch(/credential@|token=private|hidden/);
     await releaseCheckGit(source, path);
-  } finally { output.mockRestore(); }
+  } finally {
+    output.mockRestore();
+  }
 });
 
 test.each([false, true])('final push failure keeps stderr and snapshot fallback; expired retry=%s', async (expire) => {
   const { root, source, log } = publicationFixture(`echo 'fatal: gateway unavailable' >&2; exit 1`);
   const errors: string[] = [];
-  const output = spyOn(console, 'error').mockImplementation((message) => { errors.push(String(message)); });
+  const output = spyOn(console, 'error').mockImplementation((message) => {
+    errors.push(String(message));
+  });
   let clock = 0;
   try {
     const manifest = await stageCheckGit(source, join(root, 'publication'), {
-      ref: 'refs/checks/final-failure', deadlineMs: 1000, now: () => clock,
-      backoff: async () => { if (expire) clock = 1000; },
+      ref: 'refs/checks/final-failure',
+      deadlineMs: 1000,
+      now: () => clock,
+      backoff: async () => {
+        if (expire) clock = 1000;
+      },
     });
     expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
     expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(expire ? 1 : 2);
     expect(errors.join('\n')).toContain('gateway unavailable');
     expect(errors.join('\n')).toContain(expire ? 'deadline exceeded' : 'exit 1');
     expect(errors.join('\n')).toContain('using full snapshot upload');
-  } finally { output.mockRestore(); }
+  } finally {
+    output.mockRestore();
+  }
 });
 
 test('failed manifest delivery releases a published ref using the earlier intent', async () => {
@@ -316,7 +341,10 @@ test('stale sweep deletes only settled owned identities and preserves active, fr
   const { source, head } = repository(root);
   const origin = publicOrigin(root, source);
   for (const name of ['stale', 'active', 'retained', 'replaced', 'foreign', 'recent', 'unknown']) {
-    const path = await stageCheckGit(source, join(root, name), { ref: `refs/checks/${name}`, retain: name === 'retained' });
+    const path = await stageCheckGit(source, join(root, name), {
+      ref: `refs/checks/${name}`,
+      retain: name === 'retained',
+    });
     const journal = join(source, `.temp/check-git-publications/${name}.json`);
     const record = JSON.parse(readFileSync(journal, 'utf8'));
     record.ownership.createdAt = name === 'recent' ? 10 * 86400000 : 0;
@@ -327,12 +355,40 @@ test('stale sweep deletes only settled owned identities and preserves active, fr
     if (name === 'replaced') git(source, 'push', '-q', '--force', 'origin', `${head}:refs/checks/replaced`);
     if (name === 'retained') await releaseCheckGit(source, path);
   }
-  git(source, 'push', '-q', 'origin', `${head}:refs/heads/main`, `${head}:refs/tags/keep`, `${head}:refs/other/foreign`);
+  git(
+    source,
+    'push',
+    '-q',
+    'origin',
+    `${head}:refs/heads/main`,
+    `${head}:refs/tags/keep`,
+    `${head}:refs/other/foreign`,
+  );
   await sweepCheckGit(source, 10 * 86400000);
   const refs = git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)');
   expect(refs).not.toContain('refs/checks/stale');
-  for (const ref of ['active', 'retained', 'replaced', 'foreign', 'recent', 'unknown']) expect(refs).toContain(`refs/checks/${ref}`);
-  for (const ref of ['refs/heads/dev', 'refs/heads/main', 'refs/tags/keep', 'refs/other/foreign']) expect(refs).toContain(ref);
+  for (const ref of ['active', 'retained', 'replaced', 'foreign', 'recent', 'unknown'])
+    expect(refs).toContain(`refs/checks/${ref}`);
+  for (const ref of ['refs/heads/dev', 'refs/heads/main', 'refs/tags/keep', 'refs/other/foreign'])
+    expect(refs).toContain(ref);
   await releaseCheckGit(source, join(root, 'retained/manifest.json'), { settled: true });
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/retained')).toBe('');
+});
+
+test('a lost push response falls back and releases the exact remotely accepted candidate', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  const receiver = join(root, 'receive');
+  const requests = join(root, 'requests');
+  writeFileSync(receiver, `#!/bin/sh\nprintf 'request\\n' >> '${requests}'\ngit-receive-pack "$@"\nexit 1\n`);
+  chmodSync(receiver, 0o755);
+  git(source, 'config', 'remote.origin.receivepack', receiver);
+  const manifest = await stageCheckGit(source, join(root, 'publication'), {
+    ref: 'refs/checks/lost-response',
+    backoff: async () => {},
+  });
+  expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
+  expect(readFileSync(requests, 'utf8').trim().split('\n').length).toBeGreaterThanOrEqual(2);
+  const journal = join(source, '.temp/check-git-publications/lost-response.json');
+  if (existsSync(journal)) await releaseCheckGit(source, journal);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
 });
