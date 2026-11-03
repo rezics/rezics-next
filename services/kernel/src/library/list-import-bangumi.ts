@@ -351,7 +351,10 @@ export function createBangumiImport(deps: Dependencies) {
           'UPDATE library.bangumi_upload SET cancelled=true WHERE route=$1 AND account_id=$2 AND upload_id=$3',
           args(a, id),
         );
-        await tx.query('UPDATE library.bangumi_upload_row SET labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3', args(a, id));
+        await tx.query(
+          'UPDATE library.bangumi_upload_row SET labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3',
+          args(a, id),
+        );
         return { uploadId: id, cancelled: true };
       })
     ).value;
@@ -368,5 +371,13 @@ export function createBangumiImport(deps: Dependencies) {
       })
     ).value;
   }
-  return { preview, page, review, apply, cancel, remove, ...createBangumiLabelReview(deps, { read, change, header, row }) };
+  return {
+    preview,
+    page,
+    review,
+    apply,
+    cancel,
+    remove,
+    ...createBangumiLabelReview(deps, { read, change, header, row }),
+  };
 }

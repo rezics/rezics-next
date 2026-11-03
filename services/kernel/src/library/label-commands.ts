@@ -128,17 +128,26 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
     };
     if (!admission) return run(actor, 'library_label.create', { name: parsed.name }, key, body);
     try {
-      return await runner.ownAccountPrepared(actor, {
-        action: 'library_entry:update', kind: 'library_label.create', requestKey: key,
-        input: { name: parsed.name, review: admission.input },
-        prepare: (attempt) => admission.prepare(attempt.time),
-      }, async (tx, command, validate) => {
-        await validate(tx);
-        return body(tx, command);
-      });
+      return await runner.ownAccountPrepared(
+        actor,
+        {
+          action: 'library_entry:update',
+          kind: 'library_label.create',
+          requestKey: key,
+          input: { name: parsed.name, review: admission.input },
+          prepare: (attempt) => admission.prepare(attempt.time),
+        },
+        async (tx, command, validate) => {
+          await validate(tx);
+          return body(tx, command);
+        },
+      );
     } catch (error) {
-      if ((error as { code?: string; constraint?: string })?.code === '23505' &&
-          (error as { constraint?: string }).constraint === 'personal_label_live_name') throw new LibraryConflictError();
+      if (
+        (error as { code?: string; constraint?: string })?.code === '23505' &&
+        (error as { constraint?: string }).constraint === 'personal_label_live_name'
+      )
+        throw new LibraryConflictError();
       throw error;
     }
   }

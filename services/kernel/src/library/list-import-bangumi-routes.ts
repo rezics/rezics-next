@@ -19,7 +19,12 @@ import {
   type BangumiOutcome,
 } from './list-import-bangumi-model.ts';
 
-import { BANGUMI_LABEL_LIMITS, type BangumiLabelState, type BangumiLabelOutcome, type BangumiTagPage } from './list-import-bangumi-label-model.ts';
+import {
+  BANGUMI_LABEL_LIMITS,
+  type BangumiLabelState,
+  type BangumiLabelOutcome,
+  type BangumiTagPage,
+} from './list-import-bangumi-label-model.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -164,7 +169,10 @@ export function bangumiImportRoutes(
       '/v1/libraryImports/bangumi/:uploadId/rows/:ordinal/tags',
       {
         params: t.Object({ uploadId: id, ordinal }, closed),
-        query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: BANGUMI_LIMITS.rowBytes, default: -1 })) }, closed),
+        query: t.Object(
+          { after: t.Optional(t.Integer({ minimum: -1, maximum: BANGUMI_LIMITS.rowBytes, default: -1 })) },
+          closed,
+        ),
         response: { 200: result<BangumiTagPage>(), ...failures },
         detail: detail('library_bangumi.tags', false),
       },
@@ -176,18 +184,45 @@ export function bangumiImportRoutes(
     .post(
       customMethod('/v1/libraryImports/bangumi/:uploadId', 'reviewLabels'),
       {
-        params, headers,
-        body: t.Object({ ordinal, rowRevision: id, mappings: t.Array(t.Object({
-          index: t.Integer({ minimum: 0, maximum: BANGUMI_LIMITS.rowBytes }),
-          target: t.Union([t.Object({ labelId: id }, closed), t.Object({ name: t.String({ maxLength: 8192 }) }, closed)]),
-        }, closed), { maxItems: BANGUMI_LABEL_LIMITS.selections }) }, closed),
+        params,
+        headers,
+        body: t.Object(
+          {
+            ordinal,
+            rowRevision: id,
+            mappings: t.Array(
+              t.Object(
+                {
+                  index: t.Integer({ minimum: 0, maximum: BANGUMI_LIMITS.rowBytes }),
+                  target: t.Union([
+                    t.Object({ labelId: id }, closed),
+                    t.Object({ name: t.String({ maxLength: 8192 }) }, closed),
+                  ]),
+                },
+                closed,
+              ),
+              { maxItems: BANGUMI_LABEL_LIMITS.selections },
+            ),
+          },
+          closed,
+        ),
         response: { 200: result<{ ordinal: number; labels: BangumiLabelState }>(), ...failures },
         detail: detail('library_bangumi.reviewLabels'),
       },
       ({ actor, params, body, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admitted(actor, () => admission.run('normal', job, () => engine().reviewLabels(actor,
-          params.uploadId, body.ordinal, body.rowRevision, body.mappings, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]))));
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().reviewLabels(
+              actor,
+              params.uploadId,
+              body.ordinal,
+              body.rowRevision,
+              body.mappings,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
       },
     )
     .post(
@@ -195,13 +230,19 @@ export function bangumiImportRoutes(
       {
         params,
         body: t.Object({ ordinal, reviewToken: id }, closed),
-        response: { 200: result<{ uploadId: string; ordinal: number; outcomes: BangumiLabelOutcome[]; remaining: number[] }>(), ...failures },
+        response: {
+          200: result<{ uploadId: string; ordinal: number; outcomes: BangumiLabelOutcome[]; remaining: number[] }>(),
+          ...failures,
+        },
         detail: detail('library_bangumi.applyLabels'),
       },
       ({ actor, params, body, request, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admitted(actor, () => admission.run('normal', job, () => engine().applyLabels(actor,
-          params.uploadId, body.ordinal, body.reviewToken, request.signal, job.deadline)));
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().applyLabels(actor, params.uploadId, body.ordinal, body.reviewToken, request.signal, job.deadline),
+          ),
+        );
       },
     )
     .post(

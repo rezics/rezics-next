@@ -141,7 +141,9 @@ export function createLabelAssignmentCommands(deps: {
       tx: Client,
       command: { transactionId: string; time: AuthoritativeTime },
       prepared: { subjectId?: string; error?: unknown; validate?: (tx: Client) => Promise<void> },
-    ): Promise<CommandResult<(ReturnType<typeof minimal> & { unchanged?: boolean }) | { deleted: true; revision: number }>> => {
+    ): Promise<
+      CommandResult<(ReturnType<typeof minimal> & { unchanged?: boolean }) | { deleted: true; revision: number }>
+    > => {
       if (prepared.error !== undefined) throw prepared.error;
       await prepared.validate?.(tx);
       const route = sameAccountRoute(account.accountId, labelId);
@@ -164,7 +166,10 @@ export function createLabelAssignmentCommands(deps: {
           case 'existing':
             return noEffect({ ...minimal(result.assignment), ...(admission ? { unchanged: true } : {}) });
           case 'applied':
-            return { value: { ...minimal(result.assignment), ...(admission ? { unchanged: false } : {}) }, events: events(account, labelId) };
+            return {
+              value: { ...minimal(result.assignment), ...(admission ? { unchanged: false } : {}) },
+              events: events(account, labelId),
+            };
         }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
@@ -209,7 +214,10 @@ export function createLabelAssignmentCommands(deps: {
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
             if (!resolved) throw new LibraryNotFoundError();
-            return { subjectId: resolved.subjectId, ...(admission ? { validate: await admission.prepare(attempt.time) } : {}) };
+            return {
+              subjectId: resolved.subjectId,
+              ...(admission ? { validate: await admission.prepare(attempt.time) } : {}),
+            };
           } catch (error) {
             return { error };
           }
@@ -219,10 +227,21 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, admission?: LabelCommandAdmission) {
-    return (await mutate(actor, labelId, value, key, 'assign', admission)) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal> & { unchanged?: boolean }
-    >;
+  async function assignLabel(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    key: string,
+    admission?: LabelCommandAdmission,
+  ) {
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'assign',
+      admission,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
     return (await mutate(actor, labelId, value, key, 'unassign')) as import('../command/command.ts').CommandOutcome<{
