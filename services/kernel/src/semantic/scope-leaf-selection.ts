@@ -1,6 +1,6 @@
 /** Private Source selection and bounded native IO; not a matcher or permission resolver. */
 import type { IndexedStatement } from '../search/source.ts';
-import { readNativeCalendarDate } from '@rezics/filter';
+import { readNativeCalendarDate, readNativeSpoilerLevel } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
@@ -531,6 +531,15 @@ export function normalizeSourceStatement(
         return [];
       const qualifierDefinition = properties[raw.property];
       const content = raw.value.content;
+      if (
+        raw.property === 'rezics:spoilerLevel' &&
+        qualifierDefinition?.datatype === 'quantity' &&
+        qualifierDefinition.units?.includes('1') &&
+        definition?.qualifiers?.includes(raw.property)
+      ) {
+        const level = readNativeSpoilerLevel(content);
+        return level === null ? [] : [{ property: raw.property, value: level }];
+      }
       return (qualifierDefinition?.datatype === 'wikibase-item' || qualifierDefinition?.datatype === 'string') &&
         typeof content === 'string'
         ? [{ property: raw.property, value: content }]

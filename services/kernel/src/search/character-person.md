@@ -30,6 +30,20 @@ qualifiers. These checks do not supply an inverse relation or a context preview.
 
 ## Native probe step bound
 
+The ordinary qualifier equality grammar also admits canonical `"0"`, `"1"` and `"2"`
+operands for `rezics:spoilerLevel`, only when the parent property declares that qualifier
+and its released datatype is a dimensionless quantity. Native exact quantities are
+normalized to those operands on the same selected statement. Unknown, malformed or
+uncertain quantities cannot provide a witness. Source release changes during foreign
+disclosure also invalidate the witness.
+
+Decision: spoiler equality uses canonical decimal string operands in the existing qualifier
+grammar; absence does not invent a level. Journey-wide threshold policy remains separate.
+
+Released classification facets, including `schema:keywords` and `schema:gender`, use the
+same bounded selected-value source and current target checks as other relation groups.
+They retain exact concept UUID operands, with no concept seeding or alias inference.
+
 Let P be the number of distinct requested subject/property/value keys (P <= 256), and A the
 number with available current source/release admission. Qualifier variants do not increase P.
 The existing selected-value index seeks at most A cursor positions and returns at most

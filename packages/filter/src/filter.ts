@@ -21,6 +21,26 @@ export type NumericFilterRange = {
 export type TimeFilterRange = Readonly<CalendarRange> & { readonly type: 'time'; readonly unit?: never };
 export type FilterRange = NumericFilterRange | TimeFilterRange;
 export type FilterQualifier = { readonly property: string; readonly in: readonly string[] };
+
+/** Canonical equality operands for the released, dimensionless spoiler quantity. */
+export const SPOILER_LEVELS = Object.freeze(['0', '1', '2'] as const);
+
+/**
+ * Read an exact native quantity, without coercing strings, units or uncertainty.
+ * An absent or malformed value stays unknown; it is never an implicit level zero.
+ */
+export function readNativeSpoilerLevel(input: unknown): string | null {
+  const amount = dataField(input, 'amount');
+  if (dataField(input, 'unit') !== '1' || typeof amount !== 'string') return null;
+  // Match exact decimals rather than rounding through Number (1.000...001 is not 1).
+  const level = /^\+?0*([012])(?:\.0+)?$/.exec(amount)?.[1];
+  if (level === undefined) return null;
+  for (const key of ['lowerBound', 'upperBound']) {
+    const bound = dataField(input, key);
+    if (bound !== undefined && bound !== amount) return null;
+  }
+  return level;
+}
 export type FilterStatement =
   | { readonly property: string; readonly in: readonly string[]; readonly qualifiers?: readonly FilterQualifier[] }
   | { readonly property: string; readonly range: FilterRange; readonly qualifiers?: readonly FilterQualifier[] };
@@ -520,6 +540,7 @@ export function relationFacetProperty(release: FilterRelease, property: string):
     case 'association':
     case 'credit':
     case 'appearance':
+    case 'classification':
       return true;
     default:
       return false;
@@ -847,7 +868,15 @@ function admitConstructed(
         const inPointer = appendPointer(qualifierPointer, 'in');
         const datatype = dataField(qualifierDefinition, 'datatype');
         if (datatype === 'wikibase-item') validateUuidValues(qualifier.in, inPointer, source);
-        else if (datatype === 'string') {
+        else if (
+          datatype === 'quantity' &&
+          qualifier.property === 'rezics:spoilerLevel' &&
+          construction.units.get(qualifier.property)?.has('1')
+        ) {
+          for (const [valueIndex, value] of qualifier.in.entries())
+            if (!(SPOILER_LEVELS as readonly string[]).includes(value))
+              reject(appendPointer(inPointer, valueIndex), source, 'invalid_format', 'invalid_request');
+        } else if (datatype === 'string') {
           const schema = dataField(qualifierDefinition, 'value');
           const declaredPattern = dataField(schema, 'pattern');
           const pattern = codePattern(qualifierDefinition, construction);

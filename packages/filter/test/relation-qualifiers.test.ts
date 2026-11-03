@@ -15,7 +15,7 @@ const plain = { statement: { property: 'schema:author', in: [author] } };
 const qualified = {
   statement: { ...plain.statement, qualifiers: [{ property: 'rezics:role', in: [lead] }] },
 };
-const groups = ['order', 'derivation', 'world', 'membership', 'association', 'credit', 'appearance'];
+const groups = ['order', 'derivation', 'world', 'membership', 'association', 'credit', 'appearance', 'classification'];
 const releaseFor = (group?: string): FilterRelease => ({
   types: {
     'schema:Book': { facets: ['schema:author'] },
@@ -58,8 +58,8 @@ test('released relation qualifiers and unqualified membership share ordinary adm
   }
 });
 
-test('classification, missing metadata and other groups retain descriptive qualifier admission and errors', () => {
-  for (const group of [undefined, 'classification', 'unknown', 'Credit', 'credit ']) {
+test('missing metadata and other groups retain descriptive qualifier admission and errors', () => {
+  for (const group of [undefined, 'unknown', 'Credit', 'credit ']) {
     const release = releaseFor(group);
     expect(relationFacetProperty(release, 'schema:author')).toBe(false);
     expect(relationFacetProperty(release, 'schema:missing')).toBe(false);

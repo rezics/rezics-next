@@ -5,6 +5,7 @@ import {
   facetProperties,
   FilterError,
   parseFilter,
+  readNativeSpoilerLevel,
   relationFacetProperty,
 } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
@@ -108,7 +109,8 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           const stable =
             !before ||
             (value?.current_revision === before.current_revision &&
-              value?.securityRevision === before.securityRevision);
+              value?.securityRevision === before.securityRevision &&
+              value?.currentRelease === before.currentRelease);
           states.set(id, { visible: value?.visibility === 'visible' && stable, redirect: value?.redirect ?? null });
           if (value?.visibility === 'visible' && value.redirect) pending.push(value.redirect);
         }
@@ -162,16 +164,32 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             !object(qualifier) ||
             typeof qualifier.property !== 'string' ||
             !object(qualifier.value) ||
-            qualifier.value.type !== 'value' ||
-            typeof qualifier.value.content !== 'string'
+            qualifier.value.type !== 'value'
           ) {
             complete = false;
             break;
           }
           const datatype = release.properties[qualifier.property]?.datatype;
+          if (datatype === 'quantity' && qualifier.property === 'rezics:spoilerLevel') {
+            // Scalar spoiler evidence has no foreign identity, but must be declared
+            // on this exact relation and preserve an exact dimensionless quantity.
+            if (
+              !release.properties[row.property]?.qualifiers?.includes(qualifier.property) ||
+              !release.properties[qualifier.property]?.units?.includes('1') ||
+              readNativeSpoilerLevel(qualifier.value.content) === null
+            ) {
+              complete = false;
+              break;
+            }
+            continue;
+          }
           if (datatype !== 'wikibase-item' && datatype !== 'string') {
             // IndexedStatement cannot represent this qualifier. Omitting it would turn
             // an incomplete association into apparently complete negative evidence.
+            complete = false;
+            break;
+          }
+          if (typeof qualifier.value.content !== 'string') {
             complete = false;
             break;
           }
