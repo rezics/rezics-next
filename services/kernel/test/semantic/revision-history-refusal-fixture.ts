@@ -39,8 +39,7 @@ export async function revisionHistoryRefusalFixture(db: GrowthDatabase) {
     options: { cursor?: string; bearer?: string | null; status?: number } = {},
   ): Promise<{ status: number; body: Record<string, any> }> {
     const headers: Record<string, string> = {};
-    if (options.bearer !== null)
-      headers.authorization = `Bearer ${options.bearer ?? leaf.real.bearer('reader')}`;
+    if (options.bearer !== null) headers.authorization = `Bearer ${options.bearer ?? leaf.real.bearer('reader')}`;
     const query = new URLSearchParams({ limit: String(pageLimit) });
     if (options.cursor !== undefined) query.set('cursor', options.cursor);
     const response = await kernel.handle(
@@ -171,10 +170,7 @@ export function revisionListing(sample: ReportSample): readonly string[] {
   );
 }
 
-export function reportGrowth(report: {
-  readonly name: string;
-  readonly samples: readonly ReportSample[];
-}): void {
+export function reportGrowth(report: { readonly name: string; readonly samples: readonly ReportSample[] }): void {
   console.info(
     `REVISION_HISTORY_REFUSAL_GROWTH ${JSON.stringify({
       name: report.name,
