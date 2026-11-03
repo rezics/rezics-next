@@ -695,6 +695,14 @@ test('catalogue editors retain only their original live reader, exact address an
     await ui.click(m.catalogue_terms_compare());
     await ui.until(() => ui.buttons(m.catalogue_terms_confirm()).length > 0);
     expect(staleTerms.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+    const overlap = [...ui.host.querySelectorAll('fieldset')].find(
+      (element) => element.querySelector('legend')?.textContent === `en: ${m.catalogue_create_label()}`,
+    );
+    const choice = [...(overlap?.querySelectorAll('label') ?? [])].find(
+      (element) => element.textContent === m.catalogue_terms_resolve_choice(),
+    );
+    await input(`[id="${choice?.htmlFor}"]`, 'draft');
+    await ui.click(m.catalogue_terms_review());
     await submitTerms();
     await ui.until(() => ui.host.textContent!.includes(m.catalogue_terms_saved()));
     const reapplied = staleTerms.calls.filter((call) => call.method === 'PATCH')[1]!;

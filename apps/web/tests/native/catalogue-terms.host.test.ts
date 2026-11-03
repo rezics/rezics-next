@@ -224,6 +224,8 @@ describe('native catalogue terms', () => {
     await page.getByRole('button', { name: 'Reload and compare', exact: true }).click();
     await page.getByText('Concurrent native title', { exact: true }).waitFor({ state: 'visible' });
     await page.getByText('Alice stale draft', { exact: true }).waitFor({ state: 'visible' });
+    await fieldset(page, 'en: Name').getByLabel('Resolution', { exact: true }).selectOption('draft');
+    await page.getByRole('button', { name: 'Review resolved patch', exact: true }).click();
     await submitTerms(page, 'Confirm changes to latest terms');
     await page.getByText('Terms saved.').waitFor({ state: 'visible' });
     await stack.refreshKernelRequests();

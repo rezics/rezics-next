@@ -9,6 +9,11 @@ import {
   type TermsCommand,
   type TermsRead,
 } from '../src/features/catalogue/subject-terms';
+import {
+  applyTermResolutions,
+  partitionTermChanges,
+  resolutionKey,
+} from '../src/features/catalogue/subject-terms-resolution';
 import { patchSubjectTerms, readSubjectTerms } from '../src/features/catalogue/subject-terms-request';
 import type { SessionEnv } from '../src/session/client';
 
@@ -341,4 +346,53 @@ test('a stale terms edit retains every language draft for explicit comparison, w
   expect(deniedReader.ok && deniedReader.reader).toEqual({ state: 'denied' });
   fixture.setScenario('concealed');
   expect(await fixture.transport.read(termsSubjectId)).toEqual({ state: 'concealed' });
+});
+
+test('overlapping term fields require an explicit choice and omit unchanged languages from the resolved patch', () => {
+  const original = catalogueTermsFixture().subject;
+  const current = {
+    ...original,
+    labels: { ...original.labels, en: 'Another editor’s title', ja: '同時の題名' },
+  };
+  const intent = { labels: { en: 'My correction' }, descriptions: { en: null } };
+  const changes = partitionTermChanges(original, current, intent);
+  expect(changes.map((change) => [change.language, change.field, change.overlap])).toEqual([
+    ['en', 'labels', true],
+    ['en', 'descriptions', false],
+    ['ja', 'labels', false],
+  ]);
+  expect(changes.find((change) => change.language === 'en' && change.field === 'labels')).toMatchObject({
+    currentUnchanged: false,
+    userUnchanged: false,
+    sameResult: false,
+  });
+  expect(changes.find((change) => change.language === 'ja' && change.field === 'labels')).toMatchObject({
+    currentUnchanged: false,
+    userUnchanged: true,
+    overlap: false,
+  });
+  const incomplete = applyTermResolutions(changes, current, {}, {});
+  expect(incomplete.unresolved).toHaveLength(1);
+  expect(incomplete.patch).toEqual({ descriptions: { en: null } });
+  const resolved = applyTermResolutions(changes, current, { [resolutionKey('en', 'labels')]: 'draft' }, {});
+  expect(resolved.unresolved).toEqual([]);
+  expect(resolved.patch).toEqual({ labels: { en: 'My correction' }, descriptions: { en: null } });
+  expect(resolved.omittedLanguages).toEqual(['ja']);
+  expect(resolved.removals).toEqual([{ language: 'en', field: 'descriptions' }]);
+  const kept = applyTermResolutions(changes, current, { [resolutionKey('en', 'labels')]: 'current' }, {});
+  expect(kept.patch).toEqual({ descriptions: { en: null } });
+  const replacement = applyTermResolutions(
+    changes,
+    current,
+    { [resolutionKey('en', 'labels')]: 'replacement' },
+    { [resolutionKey('en', 'labels')]: { mode: 'set', value: 'Replacement title' } },
+  );
+  expect(replacement.patch).toEqual({ labels: { en: 'Replacement title' }, descriptions: { en: null } });
+  const blank = applyTermResolutions(
+    changes,
+    current,
+    { [resolutionKey('en', 'labels')]: 'replacement' },
+    { [resolutionKey('en', 'labels')]: { mode: 'set', value: '' } },
+  );
+  expect(blank.unresolved).toHaveLength(1);
 });

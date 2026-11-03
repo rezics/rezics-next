@@ -286,6 +286,17 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await select(a, m.catalogue_create_language(), 'en');
     associations(a);
     associations(b);
+    await select(
+      [...a.querySelectorAll('fieldset')].find(
+        (element) => element.querySelector('legend')?.textContent === `en: ${m.catalogue_create_label()}`,
+      )!,
+      m.catalogue_terms_resolve_choice(),
+      'draft',
+    );
+    expect(button(a, m.catalogue_terms_confirm()).disabled).toBe(true);
+    await click(a, m.catalogue_terms_review());
+    expect(a.textContent).toContain('"8"');
+    expect(a.textContent).toContain(m.catalogue_terms_review_omitted());
     await click(a, m.catalogue_terms_confirm());
     expect(first.calls.map((call) => call.method)).toEqual(['GET', 'PATCH', 'GET', 'PATCH', 'GET']);
     expect(first.calls[3]).toMatchObject({ ...originalCommand, etag: '"8"', key: expect.any(String) });
@@ -455,6 +466,8 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       expect(commands).toEqual([command]);
       if (mode === 'comparison') {
         expect(control(name, m.catalogue_create_label()).value).toBe('Private recovery draft');
+        expect(button(page, m.catalogue_terms_confirm()).disabled).toBe(true);
+        await click(page, m.catalogue_terms_review());
         expect(button(page, m.catalogue_terms_confirm()).disabled).toBe(false);
       }
     }

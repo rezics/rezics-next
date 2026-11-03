@@ -37,15 +37,25 @@ import {
   termFields,
   termsPatch,
   type LanguageDraft,
+  type TermEdit,
   type TermField,
   type TermsCommand,
   type TermsDraft,
   type TermsFailure,
+  type TermsPatch,
   type TermsRead,
   type TermsResult,
   type TermsSnapshot,
   type TermsTransport,
 } from './subject-terms';
+import {
+  applyTermResolutions,
+  partitionTermChanges,
+  resolutionKey,
+  reviewFingerprint,
+  type ResolutionKind,
+} from './subject-terms-resolution';
+import { TermsConflictResolution } from './subject-terms-resolution-view';
 
 // Keep dense fine-pointer controls while allowing translated actions to grow onto multiple lines.
 const actionClassName =
@@ -158,6 +168,10 @@ function SubjectTermsPageLive({
   const [drafts, setDrafts] = useState<TermsDraft>({});
   const [failure, setFailure] = useState<TermsFailure>();
   const [comparison, setComparison] = useState<TermsRead>();
+  const [resolution, setResolution] = useState<{ original: TermsSnapshot; intent: TermsPatch }>();
+  const [choices, setChoices] = useState<Record<string, ResolutionKind>>({});
+  const [replacements, setReplacements] = useState<Record<string, TermEdit>>({});
+  const [reviewed, setReviewed] = useState<string | null>(null);
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -243,6 +257,19 @@ function SubjectTermsPageLive({
       retryFocus.current = null;
     };
   }, [visit]);
+  useEffect(() => {
+    setResolution(undefined);
+    setComparison(undefined);
+    setChoices({});
+    setReplacements({});
+    setReviewed(null);
+  }, [visit]);
+  const comparisonRevision = comparison?.state === 'ready' ? comparison.snapshot.subject.revision : 0;
+  const originalRevision = resolution?.original.subject.revision ?? 0;
+  useEffect(() => {
+    setChoices({});
+    setReviewed(null);
+  }, [comparisonRevision, originalRevision]);
   async function retryInitial(event: MouseEvent<HTMLButtonElement>) {
     if (
       !lifetime.active() ||
@@ -332,6 +359,28 @@ function SubjectTermsPageLive({
   };
   const activeDecision = localDecision && isCurrentDecision(localDecision) ? localDecision : null;
   const locked = busy || uncertain || stale || !!saved || session !== 'signed-in' || !!activeDecision;
+  const resolving = stale && comparison?.state === 'ready' && !!resolution;
+  const resolved = useMemo(() => {
+    if (!resolving || comparison?.state !== 'ready' || !resolution) return;
+    const changes = partitionTermChanges(
+      resolution.original.subject,
+      comparison.snapshot.subject,
+      resolution.intent,
+    );
+    const applied = applyTermResolutions(changes, comparison.snapshot.subject, choices, replacements);
+    return {
+      changes,
+      ...applied,
+      fingerprint: reviewFingerprint(
+        comparison.snapshot.etag,
+        comparison.snapshot.subject.revision,
+        applied.patch,
+        choices,
+        replacements,
+      ),
+    };
+  }, [resolving, comparison, resolution, choices, replacements]);
+  const reviewCurrent = !!resolved && reviewed === resolved.fingerprint && resolved.unresolved.length === 0;
 
   function chooseLanguage(next: string) {
     // Retire immediately, including two retained callbacks dispatched before React renders.
@@ -573,13 +622,13 @@ function SubjectTermsPageLive({
     setCorrection(undefined);
     if (
       !lifetime.active() ||
-      locked ||
+      (locked && !resolving) ||
       correction.failure !== failure ||
       correction.drafts !== drafts ||
-      correction.tag !== language
+      (correction.tag !== language && !resolving)
     )
       return;
-    controls.current[correction.control]?.focus();
+    (controls.current[correction.control] ?? document.getElementById(domId(correction.control)))?.focus();
   }, [correction, failure, drafts, language, locked, lifetime]);
   const fieldLabel = (field: TermField) =>
     field === 'labels'
@@ -618,10 +667,22 @@ function SubjectTermsPageLive({
     if (activeDecision) return;
     if (!base || running.current || saved || session !== 'signed-in' || (stale && !confirmed)) return;
     const snapshot = confirmed ?? base;
-    if (!pending.current || confirmed) {
+    if (stale && confirmed) {
+      if (!resolved || resolved.unresolved.length || reviewed !== resolved.fingerprint) return;
+      if (resolved.errors.length || !hasTermsPatch(resolved.patch)) {
+        setFailure({ ok: false, reason: 'invalid', errors: resolved.errors });
+        return;
+      }
+      pending.current = {
+        id: snapshot.subject.id,
+        etag: snapshot.etag,
+        key: crypto.randomUUID(),
+        patch: resolved.patch,
+        ...(snapshot.session ? { session: snapshot.session } : {}),
+      };
+    } else if (!pending.current) {
       const draft = termsPatch(snapshot.subject, drafts);
       if (draft.errors.length || !hasTermsPatch(draft.patch)) {
-        if (confirmed) pending.current = null;
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
@@ -633,20 +694,30 @@ function SubjectTermsPageLive({
         ...(snapshot.session ? { session: snapshot.session } : {}),
       };
     }
+    const command = pending.current;
     running.current = true;
     setSubmitting(true);
     setBusy(true);
-    setComparison(undefined);
+    if (!stale) setComparison(undefined);
     setFailure(undefined);
     try {
-      const result = await transport.submit(pending.current);
+      const result = await transport.submit(command);
       if (!lifetime.active()) return;
       if (result.ok) {
         setSaved(result);
         pending.current = null;
+        setResolution(undefined);
+        setChoices({});
+        setReviewed(null);
       } else {
         setFailure(result);
-        if (!['unavailable', 'stale', 'conflict'].includes(result.reason)) pending.current = null;
+        if (result.reason === 'stale' || result.reason === 'conflict') {
+          pending.current = null;
+          setComparison(undefined);
+          setResolution({ original: snapshot, intent: command.patch });
+          setChoices({});
+          setReviewed(null);
+        } else if (result.reason !== 'unavailable') pending.current = null;
       }
     } catch {
       if (!lifetime.active()) return;
@@ -758,6 +829,7 @@ function SubjectTermsPageLive({
     if (!match) return;
     const [, fieldName, tag, index] = match;
     const field = fieldName as TermField;
+    if (resolving) return { tag: tag!, field, control: `resolve-${tag}/${field}` };
     const draft = drafts[tag!];
     if (
       !draft ||
@@ -1166,17 +1238,17 @@ function SubjectTermsPageLive({
                             className={actionClassName}
                             type="button"
                             variant="outline"
-                            disabled={locked}
+                            disabled={locked && !resolving}
                             onClick={() => {
                               const current = currentCorrection.current;
                               if (
                                 !lifetime.active() ||
-                                current.locked ||
+                                (current.locked && !resolving) ||
                                 current.failure !== failure ||
                                 current.drafts !== drafts
                               )
                                 return;
-                              chooseLanguage(target.tag);
+                              if (!resolving) chooseLanguage(target.tag);
                               setCorrection({ failure, drafts, tag: target.tag, control: target.control });
                             }}
                           >
@@ -1238,10 +1310,55 @@ function SubjectTermsPageLive({
                   )}
                 </ContentItemFrame>
               )}
+              {resolving && resolved && comparison?.state === 'ready' && (
+                <TermsConflictResolution
+                  changes={resolved.changes}
+                  choices={choices}
+                  replacements={replacements}
+                  unresolved={resolved.unresolved}
+                  omittedLanguages={resolved.omittedLanguages}
+                  removals={resolved.removals}
+                  patch={resolved.patch}
+                  etag={comparison.snapshot.etag}
+                  revision={comparison.snapshot.subject.revision}
+                  reviewed={reviewCurrent}
+                  locale={locale}
+                  fieldLabel={fieldLabel}
+                  controlId={domId}
+                  disabled={busy}
+                  onChoose={(language, field, kind) => {
+                    const key = resolutionKey(language, field);
+                    setChoices((previous) => {
+                      if (!kind) {
+                        const next = { ...previous };
+                        delete next[key];
+                        return next;
+                      }
+                      return { ...previous, [key]: kind };
+                    });
+                    setReviewed(null);
+                  }}
+                  onReplacement={(language, field, value) => {
+                    setReplacements((previous) => ({
+                      ...previous,
+                      [resolutionKey(language, field)]: { mode: 'set', value },
+                    }));
+                    setReviewed(null);
+                  }}
+                  onReview={() => {
+                    if (!resolved || resolved.unresolved.length) return;
+                    setReviewed(resolved.fingerprint);
+                  }}
+                />
+              )}
               <Button
                 className={actionClassName}
                 type="submit"
-                disabled={busy || session !== 'signed-in' || (stale && comparison?.state !== 'ready')}
+                disabled={
+                  busy ||
+                  session !== 'signed-in' ||
+                  (stale && (comparison?.state !== 'ready' || !reviewCurrent || !hasTermsPatch(resolved?.patch ?? {})))
+                }
               >
                 {busy
                   ? m.correction_saving({}, options)

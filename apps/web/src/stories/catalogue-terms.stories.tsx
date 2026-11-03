@@ -157,6 +157,13 @@ export const StaleDraft: Story = {
     expect(canvas.getAllByText('元の映画', { selector: 'span[lang="ja"]' })[0]).toBeVisible();
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Corrected title');
+    await userEvent.selectOptions(
+      within(canvas.getByRole('group', { name: `en: ${m.catalogue_create_label()}` })).getByRole('combobox', {
+        name: m.catalogue_terms_resolve_choice(),
+      }),
+      'draft',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_review() }));
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_confirm() }));
     expect(await canvas.findByText(m.catalogue_terms_saved())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(

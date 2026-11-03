@@ -23,6 +23,16 @@ even after discard. The unsaved-language review lists explicit field choices, in
 replacements, and lets the contributor return to each language. Both local reset actions lock during submission,
 uncertain delivery and stale comparison; they never delete stored terms or send a request.
 
+A definite stale or conflicting write, or an explicit current comparison, opens a three-way resolution workspace.
+The admitted original snapshot, the intended patch and the fresh native comparison stay separate. Overlapping
+language fields (exact map presence, exact strings and exact alias arrays) require Keep current, Use my draft or
+Edit a replacement; a blank replacement never deletes. Non-overlapping edits are preclassified. Confirmation waits
+for an explicit whole-patch review bound to that comparison revision and ETag, then sends only the resolved patch
+with a new command key. A second stale result returns to a new resolution. Uncertain delivery stays on the sealed
+command. Private comparisons and resolutions retire with the current authority.
+Decision: replacement is an exact set value for that language field; removal uses Keep current when the current map
+lacks it, or Use my draft when the intended patch already removes it.
+
 Navigation is dirty only when the effective patch changes stored terms; staying retains every language draft and the
 selected language, and the existing pending-send warning says an unresolved request may finish and is not cancelled by
 leaving.
@@ -30,7 +40,8 @@ leaving.
 The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Native website proof
 provisions subjects through ordinary `POST /v1/subjects`; imported field support remains the kernel terms command
 that BFF already calls. Uncertain delivery freezes the payload, ETag and key for retry. Stale revisions or
-conflicting keys require reload, comparison and an explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read
+conflicting keys require reload, per-field resolution against the current comparison, whole-patch review and an
+explicit new confirmation with that revision's ETag. A successful write is followed by a native read of the same returned ID; only that read
 supplies current terms and the canonical reader address. Failed or concealed rereads never publish a local preview.
 The generated client supplies the PATCH body type. A successful response must contain exactly the requested Subject
 and positive revision with its matching strong ETag; its returned Session is passed to the immediate current read.

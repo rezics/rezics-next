@@ -353,6 +353,18 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     await select('terms-language', 'en');
     expect(termsControl('terms-labels').value).toBe('Phone draft');
     staleTerms.setScenario('uncertain');
+    const overlap = [...host.querySelectorAll('fieldset')].find(
+      (element) => element.querySelector('legend')?.textContent === `en: ${m.catalogue_create_label()}`,
+    )!;
+    const choice = [...overlap.querySelectorAll('label')].find(
+      (element) => element.textContent === m.catalogue_terms_resolve_choice(),
+    )!;
+    await act(async () => {
+      const control = window.document.getElementById(choice.htmlFor) as HTMLSelectElement;
+      control.value = 'draft';
+      control.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await act(async () => button(m.catalogue_terms_review()).click());
     await act(async () => button(m.catalogue_terms_confirm()).click());
     expect(host.textContent).toContain(m.catalogue_terms_uncertain());
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
