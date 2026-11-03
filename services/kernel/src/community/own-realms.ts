@@ -24,7 +24,10 @@ export type OwnRealmsDependencies = {
   access: Access;
   clock?: () => Date;
 };
-export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & { epoch: number; since: string };
+export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & {
+  epoch: number;
+  since: string;
+};
 type OwnRealmsInput = { cursor?: string };
 type Context = { deadline: number; at: string };
 
@@ -41,8 +44,11 @@ async function snapshot<T>(pool: Pool, deadline: number, read: (client: AccessCl
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      try { await connection.query('ROLLBACK'); }
-      catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
+      try {
+        await connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(connection, rollbackError as Error);
+      }
       throw error;
     }
   });
@@ -76,7 +82,10 @@ export async function observeOwnRealmMembership(
     const partition = await readPartition(client, partitionOf(route));
     if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
     const member = await confirmMembership.run(client, {
-      route, realm_id: realmId, account_id: actor.accountId, at: context.at,
+      route,
+      realm_id: realmId,
+      account_id: actor.accountId,
+      at: context.at,
     });
     if (member && (member.since === null || !Number.isFinite(Date.parse(member.since))))
       throw new ProblemError('dependency_unavailable');
@@ -111,11 +120,12 @@ export async function listOwnRealms(
     if (cursor.epoch !== epoch) throw new ProblemError('stale_cursor');
     after = cursor.after[0];
   }
-  const scan = (key: string, limit: number) => snapshot(dependencies.pool, context.deadline, async (client) => {
-    requireSameViewer();
-    if (await accountEpoch(client, viewer) !== epoch) throw new ProblemError('stale_cursor');
-    return inversePage.run(client, { route: accountRoute, account_id: viewer.accountId, after: key, limit });
-  });
+  const scan = (key: string, limit: number) =>
+    snapshot(dependencies.pool, context.deadline, async (client) => {
+      requireSameViewer();
+      if ((await accountEpoch(client, viewer)) !== epoch) throw new ProblemError('stale_cursor');
+      return inversePage.run(client, { route: accountRoute, account_id: viewer.accountId, after: key, limit });
+    });
   const selected: OwnRealmMembership[] = [];
   let fetched = 0;
   let lastConsumed: string | undefined;
@@ -155,13 +165,14 @@ export async function listOwnRealms(
     if (JSON.stringify(current) !== JSON.stringify(member)) throw new ProblemError('transaction_retry_exhausted');
   }
   await snapshot(dependencies.pool, context.deadline, async (client) => {
-    if (await accountEpoch(client, viewer) !== epoch) throw new ProblemError('stale_cursor');
+    if ((await accountEpoch(client, viewer)) !== epoch) throw new ProblemError('stale_cursor');
   });
   requireSameViewer();
   return {
     items,
-    next: nextExists && lastConsumed
-      ? encodeCursor(dependencies.tokens, binding(viewer), { epoch, after: [lastConsumed] })
-      : null,
+    next:
+      nextExists && lastConsumed
+        ? encodeCursor(dependencies.tokens, binding(viewer), { epoch, after: [lastConsumed] })
+        : null,
   };
 }

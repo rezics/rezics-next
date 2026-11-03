@@ -107,10 +107,16 @@ export const ownRealmsResponseSchema = t.Object(
               ]),
               destination: t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
               spaceId: id,
-              viewer: t.Object({
-                membership: t.Object({ state: t.Literal('member'), since: t.String({ format: 'date-time' }) }, closed),
-                participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
-              }, closed),
+              viewer: t.Object(
+                {
+                  membership: t.Object(
+                    { state: t.Literal('member'), since: t.String({ format: 'date-time' }) },
+                    closed,
+                  ),
+                  participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
+                },
+                closed,
+              ),
               actions: t.Object({ state: t.Literal('unavailable') }, closed),
             },
             closed,

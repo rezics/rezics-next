@@ -217,11 +217,18 @@ test('own Realm pages use confirmed memberships, signed cursors and bounded inve
   const current = await driver.request({ actor, method: 'GET', path: '/v1/me/realms' });
   expect(current.status).toBe(200);
   expect(await body(current)).toMatchObject({
-    items: [{ realmId: growth.realmId, name: 'Growth probe Realm', role: 'member', current: {
-      destination: { kind: 'realm', realmId: growth.realmId },
-      viewer: { membership: { state: 'member' } },
-      actions: { state: 'unavailable' },
-    } }],
+    items: [
+      {
+        realmId: growth.realmId,
+        name: 'Growth probe Realm',
+        role: 'member',
+        current: {
+          destination: { kind: 'realm', realmId: growth.realmId },
+          viewer: { membership: { state: 'member' } },
+          actions: { state: 'unavailable' },
+        },
+      },
+    ],
     next: null,
   });
 

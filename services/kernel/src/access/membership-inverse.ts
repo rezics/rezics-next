@@ -70,13 +70,18 @@ function admission(input: MembershipAdmission) {
   return { accountId: input.accountId, principal, key: input.key };
 }
 
-function requireCompleteAnchor(account: {
-  accountKind: string;
-  state: string;
-  fenced: boolean;
-  operatorAccountId: string | null;
-  complete: boolean;
-} | null | undefined): asserts account {
+function requireCompleteAnchor(
+  account:
+    | {
+        accountKind: string;
+        state: string;
+        fenced: boolean;
+        operatorAccountId: string | null;
+        complete: boolean;
+      }
+    | null
+    | undefined,
+): asserts account {
   requireAllowed(
     account &&
       account.accountKind === 'actor' &&
@@ -96,7 +101,9 @@ export async function requireMembershipInverseReady(
 ): Promise<void> {
   const account = await ready.run(client, { route: route(input.accountId), account_id: input.accountId });
   requireCompleteAnchor(account);
-  requireAllowed(Number.isSafeInteger(input.authnEpoch) && BigInt(input.authnEpoch) >= BigInt(account.minimumAuthnEpoch));
+  requireAllowed(
+    Number.isSafeInteger(input.authnEpoch) && BigInt(input.authnEpoch) >= BigInt(account.minimumAuthnEpoch),
+  );
 }
 
 /** Exact actor-anchor superset read: never use its rows to prove membership.

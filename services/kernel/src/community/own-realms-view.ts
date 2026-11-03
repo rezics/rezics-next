@@ -31,9 +31,10 @@ export async function hydrateOwnRealms(
       if (!realm) continue;
       if (realm.headRevisionId !== member.headRevisionId) throw new ProblemError('transaction_retry_exhausted');
       initial.set(member.realmId, realm);
-      participates.set(member.realmId, await participation(
-        deps.pool as unknown as AccessClient, { realmId: member.realmId, actor },
-      ));
+      participates.set(
+        member.realmId,
+        await participation(deps.pool as unknown as AccessClient, { realmId: member.realmId, actor }),
+      );
     }
     const presentations = await readCommunityPresentations(deps, [...initial.keys()], { ...context, actor });
     for (const member of members) {
@@ -46,9 +47,13 @@ export async function hydrateOwnRealms(
       const current = await readRealm(deps, actor, member.realmId, context);
       if (!current) continue;
       if (!presentation) throw new ProblemError('transaction_retry_exhausted');
-      if (JSON.stringify(before) !== JSON.stringify(current) ||
-          presentation.name !== current.title || presentation.description !== current.summary ||
-          presentation.spaceId !== current.spaceId || presentation.join.membership !== 'member')
+      if (
+        JSON.stringify(before) !== JSON.stringify(current) ||
+        presentation.name !== current.title ||
+        presentation.description !== current.summary ||
+        presentation.spaceId !== current.spaceId ||
+        presentation.join.membership !== 'member'
+      )
         throw new ProblemError('transaction_retry_exhausted');
       const allowed = await participation(deps.pool as unknown as AccessClient, { realmId: member.realmId, actor });
       if (allowed !== participates.get(member.realmId)) throw new ProblemError('transaction_retry_exhausted');
@@ -65,7 +70,7 @@ export async function hydrateOwnRealms(
           spaceId: current.spaceId,
           viewer: {
             membership: { state: 'member' as const, since: new Date(member.since).toISOString() },
-            participation: allowed ? 'allowed' as const : 'denied' as const,
+            participation: allowed ? ('allowed' as const) : ('denied' as const),
           },
           // Mounted permission advice lacks the leave holder invariant and a
           // Realm home action observation. Keep these capabilities unavailable
