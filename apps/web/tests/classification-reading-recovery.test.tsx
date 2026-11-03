@@ -127,6 +127,7 @@ function withdrawClassifications(read: { release: { types: Record<string, { prop
 test('Album and Manga keep one classification holder across reading loss, withdrawal and keyboard recovery', async () => {
   await mounted(async ({ host, render, click, enter }) => {
     const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
+    const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
     const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
     const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
     const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
@@ -167,16 +168,26 @@ test('Album and Manga keep one classification holder across reading loss, withdr
       relations: null,
       authored: null,
     };
+    const MangaHolder = catalogueEditor(function MangaHolderLive({
+      children,
+    }: {
+      children: ReactNode;
+      id?: string;
+    }) {
+      return children;
+    });
     function MangaHost({ ready, reading }: { ready: boolean; reading: typeof mangaRead }) {
       return (
-        <MangaCorrections
-          read={ready ? reading : undefined}
-          locale="en"
-          disabled={false}
-          ports={ports}
-          reload={async () => {}}
-          search={async () => []}
-        />
+        <MangaHolder id={mangaVolumeId}>
+          <MangaCorrections
+            read={ready ? reading : undefined}
+            locale="en"
+            disabled={false}
+            ports={ports}
+            reload={async () => {}}
+            search={async () => []}
+          />
+        </MangaHolder>
       );
     }
     let showManga!: (ready: boolean, reading?: typeof mangaRead) => void;
