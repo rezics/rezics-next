@@ -231,8 +231,12 @@ function fixture(
               await stage('goto');
               if (!captures.length) {
                 for (const listener of listeners.get('console') ?? [])
-                  listener({ type: () => 'error', text: () => 'auth_session=auth-screenshot-session token=screenshot-token' });
-                for (const listener of listeners.get('pageerror') ?? []) listener(new Error('login failed: reader@example.test'));
+                  listener({
+                    type: () => 'error',
+                    text: () => 'auth_session=auth-screenshot-session token=screenshot-token',
+                  });
+                for (const listener of listeners.get('pageerror') ?? [])
+                  listener(new Error('login failed: reader@example.test'));
               }
               return { status: () => 200 };
             },

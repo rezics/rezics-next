@@ -36,10 +36,7 @@ test('capture identities cover every Auth state, locale, theme and viewport with
   const imageFor = (state: string, theme: string, viewport: string) =>
     targets.find(
       (target) =>
-        target.state === state &&
-        target.locale === 'en' &&
-        target.theme === theme &&
-        target.viewport.name === viewport,
+        target.state === state && target.locale === 'en' && target.theme === theme && target.viewport.name === viewport,
     )?.imagePath;
   expect(imageFor('login', 'light', 'desktop1280')).toBe('login.en.light.png');
   expect(imageFor('login', 'light', 'phone390')).toBe('login.en.phone.png');

@@ -375,17 +375,12 @@ async function capture(
   try {
     const { state, theme, viewport } = target;
     await owner.step('page defaults', () => page.setDefaultTimeout(30_000));
-    await owner.step('page viewport', () =>
-      page.setViewportSize({ width: viewport.width, height: viewport.height }),
-    );
+    await owner.step('page viewport', () => page.setViewportSize({ width: viewport.width, height: viewport.height }));
     await owner.step('page media', () => page.emulateMedia({ colorScheme: theme }));
     page.on('console', (message) => {
-      if (message.type() === 'error')
-        errors.push({ source: 'console', message: redactCaptureError(message.text()) });
+      if (message.type() === 'error') errors.push({ source: 'console', message: redactCaptureError(message.text()) });
     });
-    page.on('pageerror', (error) =>
-      errors.push({ source: 'pageerror', message: redactCaptureError(error.message) }),
-    );
+    page.on('pageerror', (error) => errors.push({ source: 'pageerror', message: redactCaptureError(error.message) }));
     const response = await owner.step('page navigation', () =>
       page.goto(`${origin}${target.route}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }),
     );
