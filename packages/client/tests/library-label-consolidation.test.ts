@@ -72,22 +72,20 @@ test('typed label consolidation calls preserve review evidence and retry the sel
   };
   const confirmation = await client.libraryLabels({ id: sourceLabelId }).$confirmConsolidation.post(evidence, options);
   if (confirmation.data === null) throw new Error('confirmation failed');
-  const apply = await client.libraryLabels({ id: sourceLabelId }).$applyConsolidation.post(
-    { confirmationId: confirmation.data.confirmationId },
-    options,
-  );
+  const apply = await client
+    .libraryLabels({ id: sourceLabelId })
+    .$applyConsolidation.post({ confirmationId: confirmation.data.confirmationId }, options);
   if (apply.data === null) throw new Error('apply failed');
   const selectedResult = apply.data.items[0];
   if (selectedResult?.selected === undefined) throw new Error('selected item missing');
-  await client.libraryLabels({ id: sourceLabelId }).$retryConsolidation.post(
-    { confirmationId: confirmation.data.confirmationId, item: selectedResult.item },
-    options,
-  );
-  await client.libraryLabels({ id: sourceLabelId }).$cancelConsolidation.post(
-    { confirmationId: confirmation.data.confirmationId },
-    options,
-  );
-  await client.libraryLabels({ id: sourceLabelId })
+  await client
+    .libraryLabels({ id: sourceLabelId })
+    .$retryConsolidation.post({ confirmationId: confirmation.data.confirmationId, item: selectedResult.item }, options);
+  await client
+    .libraryLabels({ id: sourceLabelId })
+    .$cancelConsolidation.post({ confirmationId: confirmation.data.confirmationId }, options);
+  await client
+    .libraryLabels({ id: sourceLabelId })
     .consolidations({ confirmationId: confirmation.data.confirmationId })
     .get();
 
