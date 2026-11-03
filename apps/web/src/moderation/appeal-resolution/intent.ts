@@ -1,5 +1,4 @@
 import type { AppealResolutionResult } from '../actions';
-import type { AppealResolutionSnapshot } from '../appeals-read';
 
 export type ResolutionCommand = Readonly<{
   id: string;
@@ -13,7 +12,7 @@ export type ResolutionSender = (command: ResolutionCommand) => Promise<AppealRes
 export function appealResolutionObservation(
   phase: 'draft' | 'pending' | 'uncertain' | 'settled' | 'retired',
   response: AppealResolutionResult | null,
-  observation: AppealResolutionSnapshot | null | undefined,
+  observation: { outcome: 'upheld' | 'reversed'; statement: string } | null | undefined,
 ): { outcome: 'upheld' | 'reversed'; statement: string } | null | undefined {
   if (response?.state === 'resolved')
     return { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement };

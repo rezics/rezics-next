@@ -20,7 +20,9 @@ export type AppealAppellantIdentity =
       displayName: string | null;
       automated: boolean;
     }
-  | { state: 'deleted' | 'concealed' | 'unavailable' };
+  | { state: 'deleted' }
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
 export type AppealTargetContext =
   | {
       state: 'available';
@@ -28,7 +30,8 @@ export type AppealTargetContext =
         | { kind: 'board'; id: string }
         | { kind: 'thread'; id: string; boardId: string };
     }
-  | { state: 'concealed' | 'unavailable' };
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
 export type AppealResolutionSnapshot = {
   outcome: 'upheld' | 'reversed';
   statement: string;
