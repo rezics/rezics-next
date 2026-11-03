@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "Examiner la demande initiale",
   "realm_review_inspected_approved": "La demande initiale est enregistrée comme approuvée. Récupérez séparément le reçu de la commande.",
   "realm_review_inspected_pending": "La demande initiale est toujours en attente. Cette observation ne confère aucune propriété.",
-  "realm_review_inspected_missing": "La demande initiale est invisible dans cette observation. La récupération utilise uniquement la commande et la clé initiales."
+  "realm_review_inspected_missing": "La demande initiale est invisible dans cette observation. La récupération utilise uniquement la commande et la clé initiales.",
+  "realm_publication_read": "Lire la publication actuelle",
+  "realm_publication_reading": "Lecture de la publication actuelle…",
+  "realm_publication_no_decision": "Aucune décision de publication pour le moment.",
+  "realm_publication_current_adopted": "La décision actuelle est adoptée.",
+  "realm_publication_current_withdrawn": "La décision actuelle est retirée.",
+  "realm_publication_current_rejected": "La décision actuelle est rejetée.",
+  "realm_publication_prepared_realm": "Realm : {realm} · Espace hôte : {host}",
+  "realm_publication_prepared_subject": "Œuvre sélectionnée : {original} · Référence actuelle : {current}",
+  "realm_publication_decided_at": "Décision du {at}",
+  "realm_publication_presentation_unavailable": "La présentation facultative de l’œuvre est indisponible.",
+  "realm_publication_preparation_unavailable": "La préparation de la publication actuelle est indisponible. Le rayon reste disponible."
 }

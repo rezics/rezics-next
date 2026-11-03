@@ -151,7 +151,7 @@ test('publishing, withdrawing and rejecting address the same subject shelf with 
   status = 412;
   expect(await changePublication(client, 'Bearer curator', withdraw)).toEqual({
     kind: 'conflict',
-    currentHead: id(52),
+    currentHead: null,
   });
   status = 200;
   expect(

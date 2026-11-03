@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "Ursprünglichen Antrag prüfen",
   "realm_review_inspected_approved": "Der ursprüngliche Antrag ist als genehmigt vermerkt. Stelle den Befehlsbeleg separat wieder her.",
   "realm_review_inspected_pending": "Der ursprüngliche Antrag ist noch offen. Diese Beobachtung verleiht kein Eigentum.",
-  "realm_review_inspected_missing": "Der ursprüngliche Antrag ist hier nicht sichtbar. Die Wiederherstellung verwendet nur den ursprünglichen Befehl und Schlüssel."
+  "realm_review_inspected_missing": "Der ursprüngliche Antrag ist hier nicht sichtbar. Die Wiederherstellung verwendet nur den ursprünglichen Befehl und Schlüssel.",
+  "realm_publication_read": "Aktuelle Veröffentlichung lesen",
+  "realm_publication_reading": "Aktuelle Veröffentlichung wird gelesen…",
+  "realm_publication_no_decision": "Noch keine Veröffentlichungsentscheidung.",
+  "realm_publication_current_adopted": "Die aktuelle Entscheidung lautet angenommen.",
+  "realm_publication_current_withdrawn": "Die aktuelle Entscheidung lautet zurückgezogen.",
+  "realm_publication_current_rejected": "Die aktuelle Entscheidung lautet abgelehnt.",
+  "realm_publication_prepared_realm": "Realm: {realm} · Host: {host}",
+  "realm_publication_prepared_subject": "Ausgewähltes Werk: {original} · Aktuelle Werkreferenz: {current}",
+  "realm_publication_decided_at": "Entschieden am {at}",
+  "realm_publication_presentation_unavailable": "Die optionale Werkdarstellung ist nicht verfügbar.",
+  "realm_publication_preparation_unavailable": "Die Vorbereitung der aktuellen Veröffentlichung ist nicht verfügbar. Das Regal bleibt verfügbar."
 }

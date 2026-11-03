@@ -1,3 +1,4 @@
+import { preparationFixture } from './realm-publication-preparation-fixture';
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useCallback, type ReactNode } from 'react';
@@ -79,6 +80,7 @@ let activeCredential = 'csrf-one';
 let latestControl: ReturnType<typeof import('../src/community/publication-controls-view').usePublicationControls>;
 let rerenderMarker = 0;
 let shelfSubjects = subjects();
+const prepare = preparationFixture(reader, () => shelfSubjects.find((item) => item.id === target().id)?.publicationId ?? null);
 
 function HookHarness() {
   const send = useCallback(
@@ -96,6 +98,7 @@ function HookHarness() {
     shelfSubjects,
     true,
     reader,
+    prepare,
   );
   latestControl = control;
   return <output data-marker={rerenderMarker}>{control.target?.title ?? 'No target'}</output>;
@@ -113,6 +116,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/community/space-actions', () => ({
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
   readRealmBoards: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
+  readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
   readRealmPublications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
 }));
 
@@ -225,10 +229,10 @@ describe('Complete Realm publication original caller lifetime', () => {
         return { kind: 'unavailable' as const };
       },
       () => undefined,
-      subjects,
+      subjects, true, undefined, prepare,
     );
     draft.connect();
-    draft.choose(target());
+    await draft.choose(target());
     await draft.change('publish');
     const exact = calls[0];
     const owner = new AuthoringDepartureState();
@@ -250,7 +254,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     expect(await leaving).toBe(false);
   });
 
-  test('healthy renders keep the draft and read the current authoritative shelf head', async () => {
+  test('healthy renders retain the explicitly prepared head without adopting a later shelf head', async () => {
     await mountHook();
     await act(async () => latestControl.choose(target()));
     const selected = latestControl.target;
@@ -261,7 +265,7 @@ describe('Complete Realm publication original caller lifetime', () => {
 
     const { completion } = await startChange('withdraw');
     expect(writes).toHaveLength(1);
-    expect(writes[0]!.input.expectedHead).toBe(nextHead);
+    expect(writes[0]!.input.expectedHead).toBe(head);
     await settle(0, { kind: 'saved', head: id(32) });
     await completion;
     expect(saved).toEqual([{ subject: target().id, head: id(32) }]);
@@ -349,12 +353,16 @@ describe('Complete Realm publication original caller lifetime', () => {
       retry = latestControl.retry();
     });
     expect(writes[1]!.input).toEqual(exact);
+    shelfSubjects = [{ ...target(), publicationId: nextHead }];
     await settle(1, { kind: 'conflict', currentHead: nextHead });
     await retry;
     let review: Promise<void> | undefined;
     await act(async () => {
       review = latestControl.review();
     });
+    await review;
+    expect(writes).toHaveLength(2);
+    await act(async () => { review = latestControl.change('withdraw'); });
     expect(writes[2]!.input).toMatchObject({
       realmId,
       subjectId: target().id,
@@ -463,7 +471,8 @@ describe('Complete Realm publication original caller lifetime', () => {
   const hostTransport = {
     boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
     publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
-    change: (input: Write['input']) => {
+    prepare,
+          change: (input: Write['input']) => {
       const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input) };
       hostWrites.push(call);
       return call.promise;

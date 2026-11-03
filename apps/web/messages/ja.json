@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "元の申請を確認",
   "realm_review_inspected_approved": "元の申請は承認済みとして記録されています。コマンドの受領記録は別の操作で復元してください。",
   "realm_review_inspected_pending": "元の申請は保留中です。この確認で所有権は付与されません。",
-  "realm_review_inspected_missing": "この確認では元の申請は表示されません。復元には元のコマンドとキーのみを使用します。"
+  "realm_review_inspected_missing": "この確認では元の申請は表示されません。復元には元のコマンドとキーのみを使用します。",
+  "realm_publication_read": "現在の公開状態を確認",
+  "realm_publication_reading": "現在の公開状態を確認中…",
+  "realm_publication_no_decision": "公開の判断はまだありません。",
+  "realm_publication_current_adopted": "現在の判断は採用です。",
+  "realm_publication_current_withdrawn": "現在の判断は取り下げです。",
+  "realm_publication_current_rejected": "現在の判断は却下です。",
+  "realm_publication_prepared_realm": "Realm: {realm} · ホスト: {host}",
+  "realm_publication_prepared_subject": "選択した作品: {original} · 現在の作品参照: {current}",
+  "realm_publication_decided_at": "判断日時: {at}",
+  "realm_publication_presentation_unavailable": "作品の追加表示情報は利用できません。",
+  "realm_publication_preparation_unavailable": "現在の公開状態を準備できません。棚は引き続き利用できます。"
 }

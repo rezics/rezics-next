@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "检查原始请求",
   "realm_review_inspected_approved": "原始请求已记录为已批准。请另行恢复命令回执。",
   "realm_review_inspected_pending": "原始请求仍在等待处理。此检查不会授予所有权。",
-  "realm_review_inspected_missing": "本次检查无法显示原始请求。恢复只使用原始命令和密钥。"
+  "realm_review_inspected_missing": "本次检查无法显示原始请求。恢复只使用原始命令和密钥。",
+  "realm_publication_read": "读取当前发布状态",
+  "realm_publication_reading": "正在读取当前发布状态…",
+  "realm_publication_no_decision": "尚无发布决定。",
+  "realm_publication_current_adopted": "当前决定为采纳。",
+  "realm_publication_current_withdrawn": "当前决定为撤回。",
+  "realm_publication_current_rejected": "当前决定为拒绝。",
+  "realm_publication_prepared_realm": "Realm：{realm} · 承载空间：{host}",
+  "realm_publication_prepared_subject": "所选作品：{original} · 当前作品引用：{current}",
+  "realm_publication_decided_at": "决定时间：{at}",
+  "realm_publication_presentation_unavailable": "作品的可选展示信息不可用。",
+  "realm_publication_preparation_unavailable": "当前发布准备不可用。书架仍可使用。"
 }

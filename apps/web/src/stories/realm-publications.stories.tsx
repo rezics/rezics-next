@@ -1,3 +1,4 @@
+import type { PublicationPrepare } from '../community/realm-publication-preparation';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { RealmShelf, type RealmShelfTransport } from '../community/space-page';
@@ -61,10 +62,28 @@ const subjects: PublishedSubject[] = Object.entries(subjectsRecording.subjects).
     ...(publicationId ? { publicationId } : {}),
   };
 });
+// Supplied native-reference shape; installed client/presentation delivery is still unavailable.
+const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
+  const head = publicationsRecording.items[0]!.publicationId;
+  const command = (action: 'publish' | 'withdraw' | 'reject') => ({
+    method: 'POST' as const, subjectId, expectedHead: head, ifMatch: JSON.stringify(head),
+    href: `/v1/realms/${realmId}/publications${action === 'publish' ? '' : `/${subjectId}:${action}`}`,
+  });
+  return { kind: 'ready', preparation: {
+    realm: { realmId, spaceId: realmId, contextId: realmId, title: realmRecording.realm.title, hostTitle: realmRecording.realm.title },
+    subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
+    current: { publicationId: head, verdict: 'adopt', decidedAt: publicationsRecording.items[0]!.publishedAt },
+    commands: { publish: command('publish'), withdraw: command('withdraw'), reject: command('reject') },
+    viewer: { accountId: 'story-viewer', clientId: 'fixture', authnEpoch: 1 },
+    recovery: { requestIdentity: 'unknown', replay: 'original-command' },
+  } };
+};
+const sendUnavailable = async () => ({ kind: 'unavailable' as const });
 function Example({ mode = 'ready', signedOut = false }: { mode?: Mode; signedOut?: boolean }) {
   let decisions = 0;
   let originalKey: string | undefined;
   const transport: RealmShelfTransport = {
+    prepare,
     boards: async () => {
       if (mode === 'loading') return new Promise(() => {});
       if (mode === 'denied' || mode === 'unavailable' || mode === 'stale') return { kind: mode };
@@ -112,6 +131,7 @@ async function withdraw(canvasElement: HTMLElement) {
   trigger.focus();
   await userEvent.keyboard('{Enter}');
   await userEvent.click(await screen.findByText(m.realm_publication_withdraw()));
+  await userEvent.click(await within(canvasElement).findByRole('button', { name: m.realm_publication_review_withdraw() }));
 }
 export const Rest: Story = { render: () => <Example signedOut /> };
 export const LaterItems: Story = {
@@ -168,7 +188,7 @@ export const WithdrawAndRepublish: Story = {
     const view = within(canvasElement);
     await withdraw(canvasElement);
     await view.findByText(m.realm_publication_removed());
-    await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_read() }));
     await userEvent.click(view.getByRole('button', { name: m.realm_publication_publish() }));
     await view.findByText(m.realm_publication_saved());
     await expect(
@@ -186,6 +206,7 @@ export const Conflict: Story = {
     await withdraw(canvasElement);
     await view.findByText(m.realm_publication_conflict());
     await userEvent.click(view.getByRole('button', { name: m.realm_publication_review() }));
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_review_withdraw() }));
     await view.findByText(m.realm_publication_removed());
   },
 };
@@ -217,9 +238,12 @@ function LongSelection() {
   const title = Array(12).fill(pickText(subject.labels, getLocale()).text).join(' · ');
   const control = usePublicationControls(
     realmRecording.realm.realmId,
-    async () => ({ kind: 'unavailable' }),
+    sendUnavailable,
     () => {},
     subjects,
+    true,
+    '',
+    prepare,
   );
   return (
     <section className="min-w-0 space-y-4">

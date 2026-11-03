@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "Inspeccionar solicitud original",
   "realm_review_inspected_approved": "La solicitud original figura como aprobada. Recupera por separado el recibo del comando.",
   "realm_review_inspected_pending": "La solicitud original sigue pendiente. Esta observación no concede propiedad.",
-  "realm_review_inspected_missing": "La solicitud original no es visible en esta observación. La recuperación usa solo el comando y la clave originales."
+  "realm_review_inspected_missing": "La solicitud original no es visible en esta observación. La recuperación usa solo el comando y la clave originales.",
+  "realm_publication_read": "Leer la publicación actual",
+  "realm_publication_reading": "Leyendo la publicación actual…",
+  "realm_publication_no_decision": "Todavía no hay una decisión de publicación.",
+  "realm_publication_current_adopted": "La decisión actual es adoptada.",
+  "realm_publication_current_withdrawn": "La decisión actual es retirada.",
+  "realm_publication_current_rejected": "La decisión actual es rechazada.",
+  "realm_publication_prepared_realm": "Realm: {realm} · Espacio anfitrión: {host}",
+  "realm_publication_prepared_subject": "Obra seleccionada: {original} · Referencia actual: {current}",
+  "realm_publication_decided_at": "Decidido el {at}",
+  "realm_publication_presentation_unavailable": "La presentación opcional de la obra no está disponible.",
+  "realm_publication_preparation_unavailable": "La preparación de la publicación actual no está disponible. La estantería sigue disponible."
 }

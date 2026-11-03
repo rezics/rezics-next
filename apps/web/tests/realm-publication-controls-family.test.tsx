@@ -1,3 +1,4 @@
+import { preparationFixture } from './realm-publication-preparation-fixture';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -105,6 +106,7 @@ test('Realm publication selection and outcomes use installed shared family with 
       as_of: publication.publishedAt,
     };
   });
+  const prepare = preparationFixture(viewer.subject, () => currentSubjects[0]?.publicationId ?? null);
   const send = (input: PublicationChange) =>
     new Promise<PublicationOutcome>((resolve) => writes.push({ input, resolve }));
   function Harness() {
@@ -115,6 +117,7 @@ test('Realm publication selection and outcomes use installed shared family with 
       currentSubjects,
       true,
       viewer.subject,
+      prepare,
     );
     return (
       <section>
@@ -321,7 +324,9 @@ test('Realm publication selection and outcomes use installed shared family with 
           : action === 'reject'
             ? m.realm_publication_review_reject()
             : m.realm_publication_review();
-      await click(button(review));
+      currentSubjects = [{ ...supplied, publicationId: head }];
+      await click(button(m.realm_publication_review()));
+      await startChange(action);
       expect(writes.at(-1)!.input).toMatchObject({
         ...original,
         expectedHead: head,
@@ -334,15 +339,9 @@ test('Realm publication selection and outcomes use installed shared family with 
     await choose();
     await startChange('publish');
     await settle({ kind: 'conflict', currentHead: null });
-    expect(status()).toContain(m.realm_publication_head_unavailable());
-    expect(selected()).toBeNull();
-    expect(picker()).not.toBeNull();
-    for (const label of [
-      m.realm_publication_review(),
-      m.realm_publication_review_withdraw(),
-      m.realm_publication_review_reject(),
-    ])
-      expect(buttons().some((node) => node.textContent === label)).toBe(false);
+    expect(status()).toContain(m.realm_publication_conflict());
+    expect(selected()).not.toBeNull();
+    expect(picker()).toBeNull();
     noFalseResult();
     await click(button(m.realm_shelf_restart()));
     expect(restarts).toBe(1);

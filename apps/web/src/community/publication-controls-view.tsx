@@ -24,6 +24,7 @@ import {
   type PublicationTarget,
 } from './publication-subject-picker';
 import type { PublicationChange } from './publication-controls';
+import { admittedPublicationCommand, unavailablePublicationPreparation, type PublicationPrepare } from './realm-publication-preparation';
 import type { PublishedSubject } from './space';
 import { sessionQuery, useSession } from '../session/query';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
@@ -97,6 +98,8 @@ export function usePublicationControls(
   currentSubjects: PublishedSubject[] = [],
   enabled = true,
   reader = '',
+  prepare: PublicationPrepare = unavailablePublicationPreparation,
+  sourceIdentity?: object,
 ) {
   const locale = getLocale();
   const queryClient = useContext(QueryClientContext) ?? null;
@@ -140,6 +143,9 @@ export function usePublicationControls(
     dataUpdatedAt,
     cacheIdentity,
   ]);
+  const transportIdentity = useMemo(() => ({}), [send, prepare, sourceIdentity]);
+  const currentTransport = useRef(transportIdentity);
+  currentTransport.current = transportIdentity;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
   const subjects = useRef(currentSubjects);
@@ -150,6 +156,7 @@ export function usePublicationControls(
       return (
         ready &&
         currentIdentity.current === identity &&
+        currentTransport.current === transportIdentity &&
         getLocale() === locale &&
         !!queryClient &&
         !!source &&
@@ -164,8 +171,13 @@ export function usePublicationControls(
       current,
       ...(source ? { watch: source.subscribe } : {}),
       startDisconnected: true,
+    }, async (input) => {
+      const result = await prepare(input);
+      return result.kind === 'ready' && reader && result.preparation.viewer.accountId !== reader
+        ? { kind: 'denied' }
+        : result;
     });
-  }, [realmId, identity]);
+  }, [realmId, identity, transportIdentity]);
   const previousDraft = useRef(draft);
   usePublicationLayoutEffect(() => {
     if (previousDraft.current !== draft) {
@@ -214,6 +226,8 @@ export function PublicationControls({
   const locale = getLocale();
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
+  const preparation = control.preparation;
+  useEffect(() => { if (control.reviewAction) setOpen(true); }, [control.reviewAction, control.target?.id]);
   const opener = useRef<HTMLButtonElement>(null);
   const picker = useRef<HTMLDivElement>(null);
   const summary = useRef<HTMLDivElement>(null);
@@ -252,6 +266,13 @@ export function PublicationControls({
         : picker.current?.querySelector<HTMLInputElement>('input');
     if (destination?.isConnected) destination.focus();
   });
+
+  usePublicationLayoutEffect(() => {
+    if (!control.reviewAction || !open || !selected) return;
+    const active = document.activeElement;
+    if (active === document.body || (active instanceof HTMLElement && active.getAttribute('role') === 'menuitem'))
+      summary.current?.querySelector<HTMLElement>('[data-content-item-slot="title"]')?.focus();
+  }, [control.scope, control.reviewAction, selected?.id, open]);
 
   const choose = (subject: EntityPickerSubject | undefined) => {
     const scope = control.scope;
@@ -375,17 +396,44 @@ export function PublicationControls({
                 />
               </div>
             )}
-            <ListRowControl data-content-item-slot="actions">
-              <Button
-                className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                disabled={!selected || control.locked}
-                onClick={() => void control.change('publish')}
-              >
-                {m.realm_publication_publish()}
-              </Button>
+            {preparation ? (
+              <div className="min-w-0 space-y-2" aria-label={m.realm_publication_read()}>
+                <p>{m.realm_publication_prepared_realm({ realm: preparation.realm.title, host: preparation.realm.hostTitle })}</p>
+                <p className="text-sm">{m.realm_publication_prepared_subject({ original: preparation.subject.originalId, current: preparation.subject.currentId })}</p>
+                <p>{preparation.current === null ? m.realm_publication_no_decision()
+                  : preparation.current.verdict === 'adopt' ? m.realm_publication_current_adopted()
+                  : preparation.current.verdict === 'withdraw' ? m.realm_publication_current_withdrawn()
+                  : m.realm_publication_current_rejected()}</p>
+                {preparation.current ? <p><time dateTime={preparation.current.decidedAt}>{m.realm_publication_decided_at({ at: preparation.current.decidedAt })}</time></p> : null}
+                <p className="text-sm text-muted-foreground">{m.realm_publication_presentation_unavailable()}</p>
+              </div>
+            ) : null}
+            <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">
+              {(['publish', 'withdraw', 'reject'] as const).map((action) => (
+                <Button key={action}
+                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                  disabled={!selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)}
+                  onClick={() => void control.change(action)}
+                >
+                  {action === 'publish' ? m.realm_publication_publish() : action === 'withdraw' ? m.realm_publication_review_withdraw() : m.realm_publication_review_reject()}
+                </Button>
+              ))}
             </ListRowControl>
           </fieldset>
         </div>
+      ) : null}
+      {control.preparationState && control.preparationState !== 'ready' ? (
+        <div role="status" className="min-w-0 space-y-2 text-sm">
+          {control.preparationState === 'loading' ? m.realm_publication_reading()
+            : control.preparationState === 'denied' ? m.realm_publication_denied()
+            : control.preparationState === 'unavailable' ? m.realm_publication_preparation_unavailable() : null}
+        </div>
+      ) : null}
+      {(selected || control.preparationState || control.outcome?.kind === 'unavailable') && !control.busy ? (
+        <Button className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal" variant="outline"
+          disabled={control.preparationState === 'loading'} onClick={() => void control.inspect()}>
+          {m.realm_publication_read()}
+        </Button>
       ) : null}
       {control.busy ? (
         <ContentItemFrame as="div" role="status" className="py-3 text-sm">
@@ -422,23 +470,12 @@ export function PublicationControls({
           {control.outcome.kind === 'conflict' ? (
             <>
               <p>{m.realm_publication_conflict()}</p>
-              {control.outcome.currentHead ? (
-                <ListRowControl data-content-item-slot="actions">
-                  <Button
-                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                    variant="outline"
-                    onClick={() => void control.review()}
-                  >
-                    {control.action === 'withdraw'
-                      ? m.realm_publication_review_withdraw()
-                      : control.action === 'reject'
-                        ? m.realm_publication_review_reject()
-                        : m.realm_publication_review()}
-                  </Button>
-                </ListRowControl>
-              ) : (
-                <p>{m.realm_publication_head_unavailable()}</p>
-              )}
+              <ListRowControl data-content-item-slot="actions">
+                <Button className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal" variant="outline"
+                  disabled={control.preparationState === 'loading'} onClick={() => void control.review()}>
+                  {m.realm_publication_review()}
+                </Button>
+              </ListRowControl>
               <ListRowControl data-content-item-slot="actions">
                 <Button
                   className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"

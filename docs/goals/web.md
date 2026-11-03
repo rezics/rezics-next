@@ -911,3 +911,17 @@ cover only this page seam; frozen acceptance, native growth and phone/desktop in
 References inspected: the earlier Work history region, the other post History page and UnitRevisionHistory,
 and the current [page-needs audit](../research/page-needs-api-render-audit.md).
 Their restore/moderation actions supply no authority to this reader; no legacy code is ported.
+
+## Selected Realm publication review
+
+The existing curation caller now owns one explicit selected-work preparation, distinguishes absent/adopted/rejected/
+withdrawn decisions and confirms only its admitted native command advice. Conflict review is a read followed by a
+separate explicit decision; unknown retries retain the original sender, identity and operands. Preparation failure
+preserves the independent shelves. All launch locales carry the review states. The
+[publication lifetime guide](../../apps/web/src/community/realm-publication-lifetime.md) owns retirement and cost.
+
+Decision: keep mounted confirmation unavailable at the named generated-preparation seam until Content installs the
+actual client binding; never use shelf heads as preparation. The native source and OpenAPI route are integrated,
+but the installed client omits this method and the native presentation remains unavailable-only. Full optional
+presentation, selected detail-byte bounds, native growth, frozen acceptance and public delivery remain distinct
+continuations. Full Realm/Space page composition and its Board and membership consumers keep their existing owner.

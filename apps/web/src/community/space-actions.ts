@@ -1,3 +1,4 @@
+import { unavailablePublicationPreparation } from './realm-publication-preparation';
 import { notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { validateRealmClaimStatusRead, type RealmClaimStatusInput } from './realm-claim-status';
@@ -365,6 +366,20 @@ export const readRealmPublications = createServerFn({ method: 'GET' })
     };
   });
 
+/** Named unavailable seam until the mounted native resource reaches KernelClient. */
+export const readRealmPublicationPreparation = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    const { realmId } = validateRealm(input);
+    if (!input || typeof input !== 'object' || !('subjectId' in input) ||
+        typeof input.subjectId !== 'string' || !idempotencyKeyPattern.test(input.subjectId))
+      throw new Error('Invalid Realm publication selection');
+    return { realmId, subjectId: input.subjectId };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return unavailablePublicationPreparation(data);
+  });
+
 export const changeRealmPublication = createServerFn({ method: 'POST' })
   .validator((input: unknown): PublicationChange => {
     const { realmId } = validateRealm(input);
@@ -379,6 +394,8 @@ export const changeRealmPublication = createServerFn({ method: 'POST' })
       !('idempotencyKey' in input) ||
       typeof input.idempotencyKey !== 'string' ||
       !idempotencyKeyPattern.test(input.idempotencyKey) ||
+      ('href' in input && typeof input.href !== 'string') ||
+      ('ifMatch' in input && input.ifMatch !== null && typeof input.ifMatch !== 'string') ||
       ('expectedHead' in input &&
         input.expectedHead !== undefined &&
         (typeof input.expectedHead !== 'string' || !idempotencyKeyPattern.test(input.expectedHead)))
@@ -389,6 +406,8 @@ export const changeRealmPublication = createServerFn({ method: 'POST' })
       subjectId: input.subjectId,
       action: input.action,
       idempotencyKey: input.idempotencyKey,
+      ...('href' in input && typeof input.href === 'string' ? { href: input.href } : {}),
+      ...('ifMatch' in input && (typeof input.ifMatch === 'string' || input.ifMatch === null) ? { ifMatch: input.ifMatch } : {}),
       ...('expectedHead' in input && typeof input.expectedHead === 'string'
         ? { expectedHead: input.expectedHead }
         : {}),

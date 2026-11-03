@@ -7505,5 +7505,16 @@
   "realm_review_inspect_original": "원래 요청 확인",
   "realm_review_inspected_approved": "원래 요청은 승인된 것으로 기록되어 있습니다. 명령 영수증 복구는 별도로 실행하세요.",
   "realm_review_inspected_pending": "원래 요청은 대기 중입니다. 이 확인으로 소유권이 부여되지는 않습니다.",
-  "realm_review_inspected_missing": "이번 확인에서는 원래 요청이 보이지 않습니다. 복구에는 원래 명령과 키만 사용합니다."
+  "realm_review_inspected_missing": "이번 확인에서는 원래 요청이 보이지 않습니다. 복구에는 원래 명령과 키만 사용합니다.",
+  "realm_publication_read": "현재 게시 상태 확인",
+  "realm_publication_reading": "현재 게시 상태 확인 중…",
+  "realm_publication_no_decision": "아직 게시 결정이 없습니다.",
+  "realm_publication_current_adopted": "현재 결정은 채택입니다.",
+  "realm_publication_current_withdrawn": "현재 결정은 철회입니다.",
+  "realm_publication_current_rejected": "현재 결정은 거부입니다.",
+  "realm_publication_prepared_realm": "Realm: {realm} · 호스트: {host}",
+  "realm_publication_prepared_subject": "선택한 작품: {original} · 현재 작품 참조: {current}",
+  "realm_publication_decided_at": "결정 시각: {at}",
+  "realm_publication_presentation_unavailable": "작품의 선택적 표시 정보를 사용할 수 없습니다.",
+  "realm_publication_preparation_unavailable": "현재 게시 상태를 준비할 수 없습니다. 서가는 계속 이용할 수 있습니다."
 }

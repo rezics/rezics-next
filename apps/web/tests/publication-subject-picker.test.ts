@@ -1,3 +1,4 @@
+import { preparationFixture } from './realm-publication-preparation-fixture';
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
@@ -78,14 +79,14 @@ test('Realm curation chooses a real disclosed subject before native publish', as
     (_input, chosen, head) => {
       shelf = [{ ...chosen, publicationId: head }];
     },
-    () => shelf,
+    () => shelf, true, undefined, preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
   );
-  draft.choose({ ...target(), id: subject!.id, title: subject!.title });
+  await draft.choose({ ...target(), id: subject!.id, title: subject!.title });
   expect(calls).toHaveLength(0);
-  draft.choose(null);
+  await draft.choose(null);
   await draft.change('publish');
   expect(calls).toHaveLength(0);
-  draft.choose(target());
+  await draft.choose(target());
   await draft.change('publish');
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({
@@ -100,6 +101,7 @@ test('Realm curation chooses a real disclosed subject before native publish', as
   });
   // A Search disclosure never grants readability/publication; current native refusal clears the disclosed label.
   denied = true;
+  await draft.inspect();
   await draft.change('publish');
   expect(draft.getSnapshot()).toMatchObject({ target: null, outcome: { kind: 'denied' } });
   expect(calls).toHaveLength(2);
@@ -127,32 +129,35 @@ test('uncertain commands retain subject, head, action and key; conflict recovery
         return writes.length === 1 ? first.promise : response;
       },
       () => {},
-      () => shelf,
+      () => shelf, true, undefined, preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
     );
     const selected = target();
-    draft.choose(selected);
+    await draft.choose(selected);
     const pending = draft.change(action);
-    draft.choose(null);
+    await draft.choose(null);
     await draft.change('publish', { ...target(), id: id(41) });
     expect(writes).toHaveLength(1);
     selected.id = id(99);
     shelf = [{ ...target(), publicationId: id(54) }];
     first.resolve({ kind: 'unavailable' });
     await pending;
-    draft.choose(null);
+    await draft.choose(null);
     expect(draft.getSnapshot().target?.id).toBe(id(40));
     await draft.retry();
     expect(writes[1]).toEqual(writes[0]);
     expect(writes[1]).toMatchObject({ realmId: id(2), subjectId: id(40), action, expectedHead: id(50) });
     expect(writes).toHaveLength(2);
     response = { kind: 'saved', head: id(56) };
+    shelf = [{ ...target(), publicationId: id(55) }];
     await draft.review();
+    expect(writes).toHaveLength(2);
+    await draft.change(action);
     expect(writes[2]).toMatchObject({ subjectId: id(40), action, expectedHead: id(55) });
     expect(writes[2]!.idempotencyKey).not.toBe(writes[1]!.idempotencyKey);
     await draft.retry();
     expect(writes).toHaveLength(3);
     // Explicit clearing also discards old recovery intent; it cannot queue a hidden write.
-    draft.choose(null);
+    await draft.choose(null);
     await draft.review();
     await draft.change(action);
     expect(writes).toHaveLength(3);
@@ -199,9 +204,9 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
     () => {
       saved += 1;
     },
-    () => [],
+    () => [], true, undefined, preparationFixture('curator', () => null),
   );
-  draft.choose(target());
+  await draft.choose(target());
   const pending = draft.change('publish');
   draft.retire();
   reply.resolve({ kind: 'saved', head: id(51) });
@@ -210,7 +215,7 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
   await draft.retry();
   await draft.review();
   await draft.change('publish');
-  draft.choose(target());
+  await draft.choose(target());
   expect(writes).toBe(1);
   const next = createPublicationDraft(
     id(3),
@@ -219,7 +224,7 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
       return { kind: 'denied' };
     },
     () => {},
-    () => [],
+    () => [], true, undefined, preparationFixture('curator', () => null),
   );
   expect(next.getSnapshot().target).toBeNull();
   await next.change('publish');
@@ -239,9 +244,9 @@ test('retirement is irreversible and duplicate explicit actions cross transport 
     () => {
       saved += 1;
     },
-    () => [],
+    () => [], true, undefined, preparationFixture('curator', () => null),
   );
-  draft.choose(target());
+  await draft.choose(target());
   const pending = draft.change('publish');
   await draft.change('publish');
   expect(writes).toBe(1);
@@ -250,7 +255,7 @@ test('retirement is irreversible and duplicate explicit actions cross transport 
   reply.resolve({ kind: 'saved', head: id(51) });
   await pending;
   await draft.change('publish');
-  draft.choose(target());
+  await draft.choose(target());
   expect(writes).toBe(1);
   expect(saved).toBe(0);
   expect(draft.getSnapshot()).toEqual({ target: null, outcome: null, busy: false });
@@ -268,9 +273,9 @@ test('a caller retired during the busy publication boundary never reaches transp
     () => {},
     () => [],
     true,
-    { current: () => valid },
+    { current: () => valid }, preparationFixture('curator', () => null),
   );
-  draft.choose(target());
+  await draft.choose(target());
   const unsubscribe = draft.subscribe(() => {
     if (draft.getSnapshot().busy) valid = false;
   });

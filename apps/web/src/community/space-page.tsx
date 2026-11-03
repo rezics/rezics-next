@@ -1,3 +1,4 @@
+import type { PublicationPrepare } from './realm-publication-preparation';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
@@ -17,7 +18,7 @@ import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
 import { useSpacePageLifetime } from './space-page-lifetime';
-import { changeRealmPublication, readRealmBoards, readRealmPublications } from './space-actions';
+import { changeRealmPublication, readRealmBoards, readRealmPublications, readRealmPublicationPreparation } from './space-actions';
 import {
   PublicationControls,
   ShelfContinuation,
@@ -178,13 +179,13 @@ function Published({
                           type: 'item' as const,
                           label: m.realm_publication_withdraw(),
                           disabled: control.locked || !subject.publicationId,
-                          onSelect: () => void control.change('withdraw', { ...subject, title: cover.title }),
+                          onSelect: () => void control.choose({ ...subject, title: cover.title }, 'withdraw'),
                         },
                         {
                           type: 'destructive' as const,
                           label: m.realm_publication_reject(),
                           disabled: control.locked || !subject.publicationId,
-                          onSelect: () => void control.change('reject', { ...subject, title: cover.title }),
+                          onSelect: () => void control.choose({ ...subject, title: cover.title }, 'reject'),
                         },
                       ],
                     }
@@ -214,6 +215,7 @@ export type RealmShelfTransport = {
     credentialMode: ReadCredentialMode;
   }) => Promise<ShelfPage<PublishedSubject>>;
   change: PublicationSend;
+  prepare?: PublicationPrepare;
 };
 
 /** One reusable shelf region; its stories exercise the same controls used on Space and Realm pages. */
@@ -263,6 +265,10 @@ export function RealmShelf({
           : Promise.resolve({ kind: 'denied' }),
     [transport?.change, csrfToken],
   );
+  const preparePublication = useCallback<PublicationPrepare>(
+    (input) => transport?.prepare ? transport.prepare(input) : readRealmPublicationPreparation({ data: input }),
+    [transport?.prepare],
+  );
   const control = usePublicationControls(
     realm.id,
     sendPublication,
@@ -277,6 +283,8 @@ export function RealmShelf({
     publications.items,
     !frozen && state === 'signed-in' && Boolean(csrfToken),
     reader ?? '',
+    preparePublication,
+    realm,
   );
   return (
     <>
