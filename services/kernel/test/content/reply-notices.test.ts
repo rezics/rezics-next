@@ -150,11 +150,11 @@ test('reply effects require a closed publication payload and its exact available
     await expect(effect.run({ ...source, type: `com.rezics.content.${type}.v1` })).rejects.toThrow(
       'Invalid reply notice source event',
     );
-  await expect(effect.run({ ...source, data: { ...source.data, unexpected: true } })).rejects.toThrow(
+  await expect(effect.run({ ...source, data: { ...(source.data as object), unexpected: true } })).rejects.toThrow(
     'Invalid reply notice source event',
   );
   for (const changes of [{ revisionId: newId(routeOf(post.id)!) }, { actorId: f.accounts.principal }])
-    await effect.run({ ...source, data: { ...source.data, ...changes } });
+    await effect.run({ ...source, data: { ...(source.data as object), ...changes } });
   expect(await f.notices(post.id)).toEqual([]);
   await deliver(post.id);
   expect(await f.notices(post.id)).toHaveLength(1);

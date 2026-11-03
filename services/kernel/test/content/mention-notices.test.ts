@@ -268,7 +268,7 @@ test('mention effects accept only the closed first-publication source payload', 
     await expect(effect.run({ ...source, type: `com.rezics.content.${type}.v1` })).rejects.toThrow(
       'Invalid mention source event',
     );
-  await expect(effect.run({ ...source, data: { ...source.data, unexpected: true } })).rejects.toThrow(
+  await expect(effect.run({ ...source, data: { ...(source.data as object), unexpected: true } })).rejects.toThrow(
     'Invalid mention source event',
   );
 });
