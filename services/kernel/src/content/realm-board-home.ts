@@ -1,5 +1,4 @@
 import { t } from 'elysia';
-import type { Static } from 'typebox';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
@@ -59,6 +58,6 @@ export function createRealmHomeBoardObservationReader(deps: ContentBoardDependen
   };
 }
 
-export function realmHomeBoardResponse(page: RealmHomeBoardPage): Static<typeof RealmHomeBoardPageSchema> {
+export function realmHomeBoardResponse(page: RealmHomeBoardPage) {
   return { items: page.items.map((board) => ({ ...board })), next: page.next };
 }

@@ -183,7 +183,7 @@ describe('public review discovery adapter', () => {
     if (firstCard.status !== 'ready') return;
     expect(firstCard.value.get(fifthDocument.identity)?.text).toBe(initial[4]!.text);
     const authorSummary = await adapter.readCurrent([initial[4]!.id], context);
-    expect(authorSummary.get(initial[4]!.id)).toMatchObject({
+    expect(authorSummary.get(initial[4]!.id)).toEqual({
       id: initial[4]!.id,
       title: initial[4]!.title,
       summary: initial[4]!.text,
