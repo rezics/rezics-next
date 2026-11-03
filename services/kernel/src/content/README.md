@@ -746,7 +746,7 @@ Current disclosed batch figures, bounded repair and Board/thread/Subject integra
   a missing post uses one episode PK retirement instead of the source lookup/upsert. The command emits at most
   one registered event containing at most 100 UUIDs. The supervisor still owns dispatch/checkpoint work.
 - Bound: local body statements are at most `1 + 3p`, for `p <= 100`; proof examines at most the envelope's
-  1,000 event slots, then each post examines at most one post, one thread, one post and one episode. Returned
+  1,000 event slots, then each post examines at most one post, one thread, one post, one head and one episode. Returned
   metadata has no body/subject/media arrays. Add the existing `runCommand` gate, time, partition fence,
   transaction control, record-source finalization, outbox write and supervisor/runner work; the complete
   all-pool physical/byte ceiling is pending Performance review and is not claimed here. A duplicate that changes
@@ -762,7 +762,7 @@ Current disclosed batch figures, bounded repair and Board/thread/Subject integra
 - Bound: for `t <= 100` raw inputs and `h <= t` represented homes, at most `4h` normal statements, `h` partition
   rows and `32t` episode rows through `(route, thread_id, contributed_at DESC, post_id DESC)` with the exact
   partial-index predicate. Input is at most 100 route/UUID pairs; each returned row is two UUIDs, a boolean and
-  one 27-byte timestamp, plus its selected thread UUID. No unrelated keys or inactive episodes are requested.
+  one 27-byte timestamp. No unrelated keys or inactive episodes are requested.
   Empty input performs no checkout; invalid/oversize input performs no SQL. Missing/moved homes throw the
   shared unavailable error rather than returning an empty figure. This bound covers the internal source only.
 - Growth check: the focused native test covers an opening, replies, next remaining contribution, edit,

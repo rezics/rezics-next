@@ -1,8 +1,8 @@
 INSERT INTO content.conversation_activity_episode AS stored
-  (route, post_id, thread_id, author_account_id, opening, contributed_at,
+  (route, post_id, thread_id, opening, contributed_at,
    native_eligible, security_revision, source_epoch, source_position)
 VALUES
-  (:route::integer, :post_id::uuid, :thread_id::uuid, :author_id::uuid, :opening::boolean,
+  (:route::integer, :post_id::uuid, :thread_id::uuid, :opening::boolean,
    :contributed_at::nullable(timestamptz), :eligible::boolean, :security_revision::bigint,
    :source_epoch::integer, :source_position::bigint)
 ON CONFLICT (route, post_id) DO UPDATE SET

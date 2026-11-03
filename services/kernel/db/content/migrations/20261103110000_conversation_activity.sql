@@ -5,7 +5,6 @@ CREATE TABLE content.conversation_activity_episode (
   route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
   post_id uuid NOT NULL,
   thread_id uuid NOT NULL,
-  author_account_id uuid NOT NULL,
   opening boolean NOT NULL,
   contributed_at timestamptz,
   native_eligible boolean NOT NULL,
@@ -21,7 +20,7 @@ CREATE TABLE content.conversation_activity_episode (
 -- Removed posts and revision history cannot lengthen a live contribution seek.
 CREATE INDEX conversation_activity_live_prefix_idx
   ON content.conversation_activity_episode (route, thread_id, contributed_at DESC, post_id DESC)
-  INCLUDE (author_account_id, opening)
+  INCLUDE (opening)
   WHERE native_eligible AND contributed_at IS NOT NULL;
 
 -- migrate:down

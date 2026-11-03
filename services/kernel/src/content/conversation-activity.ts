@@ -33,7 +33,6 @@ export const CONVERSATION_ACTIVITY_BATCH_LIMIT = 100;
 /** Internal candidates only. Neither a timestamp nor a length is a disclosed figure. */
 export type ConversationContributionSource = Readonly<{
   postId: string;
-  authorId: string;
   opening: boolean;
   contributedAt: string;
 }>;
@@ -134,7 +133,7 @@ export function createConversationActivityEffect(pool: Pool): Effect {
             const eligible = current.post_availability === 'available' && current.head_availability === 'available' &&
               !current.author_erased && ['published', 'protected'].includes(current.post_visibility!);
             const parameters = {
-              route: postRoute, post_id: postId, thread_id: threadId, author_id: current.author_account_id,
+              route: postRoute, post_id: postId, thread_id: threadId,
               opening: current.first_post_id === postId, contributed_at: input.contributedAt,
               eligible, security_revision: BigInt(current.security_revision),
               source_epoch: identity.epoch, source_position: identity.position,
@@ -197,7 +196,7 @@ export async function readConversationActivitySources(
     for (const row of selected.rows) {
       const entries = contributions.get(row.thread_id) ?? [];
       entries.push({
-        postId: row.post_id, authorId: row.author_account_id, opening: row.opening,
+        postId: row.post_id, opening: row.opening,
         contributedAt: row.contributed_at!.replace(/(\.\d{3})000Z$/, '$1Z'),
       });
       contributions.set(row.thread_id, entries);
