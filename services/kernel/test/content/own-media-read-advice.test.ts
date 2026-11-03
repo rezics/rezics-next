@@ -3,6 +3,7 @@ import type { OwnMediaInventoryPage } from '../../src/content/schemas.ts';
 import { mediaRealmDownloadFixture } from './media-realm-download-fixture.ts';
 import objects from '../../src/content/own-media-objects.sql';
 import { observeSql } from './support/sql-observer.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 setDefaultTimeout(360_000);
 let fixture: Awaited<ReturnType<typeof mediaRealmDownloadFixture>>;
@@ -41,7 +42,10 @@ test('retained uploader ownership does not advertise download after Realm read r
 
 test('Realm revocation between advice rounds fails without consuming the inventory frontier', async () => {
   const observer = observeSql(fixture.db.pool);
-  const finalObjects = observer.hold({ statement: objects.sql, occurrence: 2 }, 'after');
+  const homes = new Set(
+    [fixture.privateImage.id, fixture.publicRealmImage.id].map((id) => partitionOf(routeOf(id)!)),
+  );
+  const finalObjects = observer.hold({ statement: objects.sql, occurrence: homes.size + 1 }, 'after');
   const pending = fixture.call('GET', '/v1/media', { bearer: fixture.alice.bearer });
   try {
     await finalObjects.entered;
