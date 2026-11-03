@@ -3333,7 +3333,7 @@ The native reader is
 `listWatches(deps: WatchDependencies, actor: Actor, accountId: string, input: {kind: WatchManagementKind; limit?: number; cursor?: string}, deadline: number): Promise<WatchManagementPage>`;
 `WatchManagementItem` is the closed available/unavailable union and `WatchManagementPage` is `{items,next}`.
 Web imports `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`;
-options are `{fetch?, headers?, session?, onSession?}`. Its installed inventory reader is
+options are `{fetch?, headers?, session?, onSession?}`. The generated inventory contract uses
 `client.accounts({accountId}).watches.get({query: {kind, limit?, cursor?}})`;
 removal is `client.accounts({accountId}).watches({watchId}).delete({expectedRevision}, {query: {kind}, headers: {'idempotency-key': key}})`.
 The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` for these consumers.
