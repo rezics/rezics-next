@@ -1123,6 +1123,9 @@ query field is `cursor`; unknown fields, including voter, selection, search, sor
 Responses use `Cache-Control: no-store`. `register.ts` exports `createOwnVotesReader`, `OWN_VOTES_PAGE_SIZE`,
 `OwnVoteActions`, `OwnVoteEntry`, `OwnVotesPage` and their mounted schemas. The factory takes the existing
 `{pool, access, tokens, routeKey, clock?}` dependencies; `page(actor, {cursor?}, deadline)` returns the same DTO.
+The mounted route is in the generated client declaration `packages/client/src/kernel/rating/routes.d.ts`; the
+closed DTO types are generated in `packages/client/src/kernel/rating/own-votes-page.d.ts` and re-exported from
+`packages/client/src/index.ts`.
 The default Kernel passes its existing trusted route key; this read-only operation registers no new writer,
 projection, event or worker. Existing vote effects and session-token transport remain the mutation authority.
 

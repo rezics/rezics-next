@@ -115,6 +115,7 @@ export type {
   OwnCountedVoteRow,
   StandardRatingMeasurement,
 } from './kernel/rating/own-votes-counted';
+export type { OwnVoteActions, OwnVoteEntry, OwnVotesPage } from './kernel/rating/own-votes-page';
 type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
 
