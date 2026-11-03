@@ -13,6 +13,7 @@ import {
   workbenchCaseQueueHref,
 } from '../src/moderation/workbench-case/read-model';
 import { WorkbenchCaseDetail } from '../src/moderation/workbench-case';
+import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -20,7 +21,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { workbenchCaseHref: workbenchRowHref, workbenchQueueHref, workbenchSearch } = await import(
   '../src/moderation/workbench-queue/scope'
 );
-const { readWorkbench, type WorkbenchNativeSource } = await import('../src/moderation/workbench-queue/read');
+const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
 
 const report: Report = {
   id: 'report-1',
