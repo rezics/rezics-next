@@ -15,6 +15,16 @@ const producerProperties: Record<ReleaseProducerRole, string> = {
   publisher: 'schema:publisher',
 };
 
+/** Producer controls are available only when the active subtype admits their exact property. */
+export function admittedReleaseProducerRoles(release: FilterRelease, releaseType: string): ReleaseProducerRole[] {
+  const facets = release.types[releaseType]?.facets;
+  if (!facets) return [];
+  return (['developer', 'publisher'] as const).filter((role) => {
+    const property = producerProperties[role];
+    return release.properties[property] !== undefined && facets.includes(property);
+  });
+}
+
 function requireFacet(release: FilterRelease, type: string, property: string): void {
   if (!release.types[type]?.facets?.includes(property))
     throw new FilterError('unsupported_query', '/releaseType', 'unsupported');

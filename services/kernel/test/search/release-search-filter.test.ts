@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { buildReleaseSearchFilter } from '../../src/search/release-search.ts';
+import {
+  admittedReleaseProducerRoles,
+  buildReleaseSearchFilter,
+} from '../../src/search/release-search.ts';
 
 const releaseType = 'wd:Q20631656';
 const platformId = '018f0000-0000-7000-8000-000000000001';
@@ -58,4 +61,12 @@ test('language alone uses the released release-level language facet', () => {
   expect(buildReleaseSearchFilter(bundledRelease, releaseType, { languages: ['en', 'ja'] })).toEqual({
     and: [{ type: { in: [releaseType] } }, { statement: { property: 'schema:inLanguage', in: ['en', 'ja'] } }],
   });
+});
+
+test('producer controls expose only exact properties admitted by the active subtype', () => {
+  const release = structuredClone(bundledRelease);
+  release.types[releaseType]!.facets = release.types[releaseType]!.facets.filter(
+    (property) => property !== 'schema:publisher',
+  );
+  expect(admittedReleaseProducerRoles(release, releaseType)).toEqual(['developer']);
 });
