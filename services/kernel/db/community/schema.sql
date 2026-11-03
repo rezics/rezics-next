@@ -537,6 +537,25 @@ $$;
 
 
 --
+-- Name: maintain_space_discovery_population(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.maintain_space_discovery_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE community.space_discovery_population SET population = population +
+    CASE WHEN TG_OP = 'INSERT' THEN 1 ELSE -1 END
+    WHERE partition_no = (COALESCE(NEW.route, OLD.route) >> 4);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Space discovery census is unavailable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: realm_presentation_allowed(jsonb); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -622,6 +641,20 @@ BEGIN
     ON CONFLICT DO NOTHING;
   END IF;
   RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: reset_space_discovery_population(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.reset_space_discovery_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE community.space_discovery_population SET population = 0;
+  RETURN NULL;
 END;
 $$;
 
@@ -1364,6 +1397,18 @@ CREATE TABLE community.space_address_claim (
 
 
 --
+-- Name: space_discovery_population; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_population (
+    partition_no integer NOT NULL,
+    population bigint NOT NULL,
+    CONSTRAINT space_discovery_population_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT space_discovery_population_population_check CHECK ((population >= 0))
+);
+
+
+--
 -- Name: space_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -1684,6 +1729,14 @@ ALTER TABLE ONLY community.space_address_claim
 
 
 --
+-- Name: space_discovery_population space_discovery_population_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_population
+    ADD CONSTRAINT space_discovery_population_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: space space_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -1999,6 +2052,20 @@ CREATE TRIGGER realm_revision_immutable BEFORE DELETE OR UPDATE ON community.rea
 --
 
 CREATE TRIGGER realm_revision_votes BEFORE INSERT ON community.realm_revision FOR EACH ROW WHEN (((new.predecessor IS NOT NULL) AND (new.votes = '{"upvote": 1, "downvote": -1}'::jsonb))) EXECUTE FUNCTION community.inherit_realm_votes();
+
+
+--
+-- Name: space space_discovery_population; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_population AFTER INSERT OR DELETE ON community.space FOR EACH ROW EXECUTE FUNCTION community.maintain_space_discovery_population();
+
+
+--
+-- Name: space space_discovery_population_truncate; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER space_discovery_population_truncate AFTER TRUNCATE ON community.space FOR EACH STATEMENT EXECUTE FUNCTION community.reset_space_discovery_population();
 
 
 --

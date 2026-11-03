@@ -112,13 +112,13 @@ never apply an old event body or interpret its type as current permission. Searc
 replacement/removal and query behavior. Current native Space/Realm/Content hydration remains the final disclosure
 authority while delivery lags. This producer does not establish index convergence or whole-query privacy proof.
 
-**Space-source seam.** The separate population/bootstrap producer should use these same existing native events
+**Space-source seam.** The population/bootstrap producer below uses current native positions alongside these existing native events
 and the retained origin tuple, without importing its reader here. Direct targets are canonical Space IDs. Shared
 `context`, `media`, `source-fence` and `exposure` targets are durable invalidation obligations, not expanded Space
 lists or an assertion that no Spaces depend on them. Completing their propagation still requires a bounded,
 durable dependency-to-Space frontier and Search consumer integration; it must use native dependency keys, survive
 duplicate/reordered changes, and never scan all partitions or census the population per mutation. Until that
-frontier and the population/current hydration owner are connected, Space discovery remains unenabled.
+frontier and Search consumer integration are connected, Space discovery remains unenabled.
 
 Cost: the original mutation adds no reads or writes. A direct Space effect adds no source checkout; a Realm effect
 adds one exact retained `(route, realm_id)` point read, released before its delivery command. Each delivered
@@ -127,6 +127,68 @@ A shared dependency change emits one scope obligation with no Space enumeration.
 retry retain their existing per-event bounds. Physical/native/main convergence costs remain unmeasured; focused
 `test/community/space-discovery.test.ts` covers actual native edit/gate/removal/restoration delivery, reordering,
 duplicate delivery and one actual source-fence scope obligation.
+## Public Space discovery source
+
+`spaceDiscoverySource({pool,access,clock?}, {deadline}?)` in `space-discovery.ts` exports Community's internal
+`SpaceDiscoverySource`: `read(partition, ids)`, `page(partition, after, limit)` and `count(partition)`. Search owns
+kind registration, index generations, query admission and frontend integration. This interface adds no HTTP
+endpoint or public count. Its identity is the existing Space UUID and native route, including when carrying a Realm;
+it never manufactures a second Realm identity in mixed discovery. Popular/Trending discussion ranking above remains
+independent and unchanged.
+
+Decision: bootstrap traverses all retained Space identities with a private candidate census and sparse eligible pages;
+the census is never an eligible-result count, and consumers must follow native frontiers even on an empty page.
+`read` accepts at most 100 input IDs, deduplicates them and rejects malformed or cross-partition keys. `page` accepts
+1–100 candidates and a full `{route,id}` frontier in that partition. It examines one indexed range of at most `limit`
+candidates plus one continuation probe, returns eligible `spaces`, and returns the last examined key as `next` only
+when that probe exists. Protected/removed candidates still advance the frontier. There is no scan/refill to fill an
+eligible page. `count` returns the exact number of retained native candidates, including protected/removed identities,
+from one `space_discovery_population` row. Its insert/delete trigger runs inside the native writer transaction;
+metadata, visibility and lifecycle transitions do not change that identity census. The migration initializes the
+census once under a Space write lock; requests never reconstruct it by counting a table.
+
+All three return `{partition,position,...}` with `position` the exact bigint `core.partition.position` from the same
+released REPEATABLE READ snapshot as the candidates/census and projected current text. An unavailable, fenced or
+moved partition fails the operation rather than becoming an empty population. `spaces` contains
+`{id,realmId,name,description,revision}`; `revision` is the current native Realm head UUID for a carried Realm, or Space
+head UUID otherwise. It is an equality witness, never an ordering/version surrogate for `position`.
+
+`readSpaceDiscoverySummaries(deps, ids, {deadline})` hydrates at most 100 fixed full keys across their actual homes and
+returns a map of current `{id,realmId,name,description,avatar}`. Both source reads and hydration always prepare native
+anonymous Space and Realm decisions, independent of caller privileges. Standalone text uses `readSpace`; occupied
+slots use the same exact native Realm/current-revision reader as community presentation. A slot occupied by an
+unreadable, protected, removed or source-unsettled Realm suppresses the whole Space, without standalone fallback.
+Both containers must be active and their current heads available at the native read time. Name is the current native
+title; description uses `discoveryDescription` (collapsed whitespace, 160 Unicode characters). No text copy is stored.
+
+Hydration releases each first owner snapshot before resolving only its selected avatar through the original
+`readRealmPresentationImages` as anonymous, with no banner. Unset, erased, denied or unavailable optional images
+yield null, using the exact native `RealmPresentationImage` schema when available. It then repeats owner reads and
+anonymous/source decisions. A changed placement epoch, head, lifecycle version, slot, Context, source gate or
+presentation omits the candidate without retry/refill, including remove/restore cycles. Missing candidates stay
+absent regardless of index evidence. No member counts, rules, private membership or copied media authority are read.
+
+### Cost and lifecycle handoff
+
+Read/page use one released snapshot in one requested partition: one placement/position seek, at most 101 keyset rows,
+at most 100 exact Space/head and occupied-slot reads, one exact Realm/head batch, two native Access batches and at
+most 100 exact current Realm source gates. Count uses one placement/position and one census seek. Hydration groups
+only the supplied keys, with two such owner rounds per occupied partition and at most one native optional avatar
+protocol per candidate (at most twelve derivatives). Work is linear in the fixed input limit, with logarithmic
+indexed seeks; there is no all-partition scan, ranking read, historical text scan or refill. Focused outcomes live in
+`test/community/space-discovery.test.ts`; physical/growth and broader acceptance remain integration obligations.
+
+Bootstrap and current hydration are delivered here alongside the native invalidation relay above. Decision: retain
+both producer interfaces and their existing names; direct invalidations identify exactly the Space keys accepted by
+this source. Consumers reread those keys at current native positions, never apply invalidation bodies as projections.
+Ongoing index convergence remains explicitly incomplete: dependency scope obligations still require the bounded,
+durable dependency-to-Space frontier described above, and Search owns their consumer and registered generations.
+The Realm discussion source gate is checked on every owner round; its `realm-discovery.changed` events are not
+consumed by the existing Space invalidation relay. Connecting that gate's wakes is also part of the dependent
+lifecycle increment. No claim is made that an existing index converges after every gate change. Search must use
+current hydration and must not expose this private census as kind-count evidence.
+
+## Space commands and reads
 
 `createSpace` derives its route from the authenticated account and idempotency key.
 It requires `space:create` on the Global Context through `parentCreationAuthorization`.
