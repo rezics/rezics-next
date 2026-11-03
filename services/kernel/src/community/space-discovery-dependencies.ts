@@ -92,7 +92,7 @@ export async function spaceDiscoveryDependencyReadiness(pool: Pool): Promise<Spa
   const cut = createHash('sha256')
     .update(`${observation.install_cut ?? 'missing'}:${observation.tuple_cut ?? 'missing'}:${observation.producer_cut ?? 'missing'}`)
     .digest('hex');
-  const capabilities = (sourceFence: SourceFenceCapability) => ({
+  const capabilities = <T extends SourceFenceCapability>(sourceFence: T): DependencyCapabilities<T> => ({
     context: 'connected' as const,
     media: 'connected' as const,
     exposure: 'connected' as const,
