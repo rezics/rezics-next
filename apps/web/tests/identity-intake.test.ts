@@ -1,9 +1,6 @@
 import { expect, test } from 'bun:test';
 import { problem } from '../src/media/kernel';
-import {
-  identityIntakeResponse,
-  type IdentityIntakeRuntime,
-} from '../src/features/catalogue/identity-intake-server';
+import { identityIntakeResponse, type IdentityIntakeRuntime } from '../src/features/catalogue/identity-intake-server';
 import { parseIdentityIntakeRequest } from '../src/features/catalogue/identity-intake';
 
 const query = new URLSearchParams({
@@ -96,7 +93,16 @@ test('one private read returns current suggestions, viewer and unknown create au
     status: 'ready',
     viewer: { state: 'signed-in' },
     actions: { openExisting: true, continueWithResults: true, createAuthority: 'unknown' },
-    results: [{ id: subjectId, type: 'schema:Book', labels: [{ language: 'ja', value: '本' }, { language: 'en', value: 'A Book' }] }],
+    results: [
+      {
+        id: subjectId,
+        type: 'schema:Book',
+        labels: [
+          { language: 'ja', value: '本' },
+          { language: 'en', value: 'A Book' },
+        ],
+      },
+    ],
   });
   expect(seenCredential).toBe('Bearer current-reader');
   expect(seenQuery).toEqual({
@@ -120,7 +126,7 @@ test('Search failure stays unavailable and a changed release avoids a stale sear
   });
   expect(failed.searchCalls()).toBe(1);
 
-  const stale = makeRuntime(async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' } as never), 'release-2');
+  const stale = makeRuntime(async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' }) as never, 'release-2');
   const stalePage = await (await identityIntakeResponse(request, {}, stale.runtime)).json();
   expect(stalePage).toMatchObject({ status: 'stale', results: [], actions: { retry: true } });
   expect(stale.searchCalls()).toBe(0);

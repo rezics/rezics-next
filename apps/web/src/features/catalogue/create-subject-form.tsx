@@ -303,8 +303,7 @@ function CreateSubjectFormLive({
         }
       : null;
   const identityKey = identityIntentKey(identityInput, identityRevision, identityIntake?.viewerKey ?? '');
-  const identityConfirmed =
-    !directIdentityIntake || (!!identityKey && identityConfirmation?.key === identityKey);
+  const identityConfirmed = !directIdentityIntake || (!!identityKey && identityConfirmation?.key === identityKey);
   const draftDisabled = directIdentityIntake ? locked : disabled;
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = directoryMode ? false : profile?.metadata ? !profile.metadata.ready : definitions.isError;

@@ -68,7 +68,10 @@ test('current intent replaces late matches and offers only deliberate navigation
         id: resultId,
         type: 'schema:Book',
         typeLabel: 'Book',
-        labels: [{ language: 'en', value: 'Known Book' }, { language: 'ja', value: '既知の本' }],
+        labels: [
+          { language: 'en', value: 'Known Book' },
+          { language: 'ja', value: '既知の本' },
+        ],
         summary: { label: { language: 'en', value: 'A novel.' }, creativeWork: true, types: ['schema:Book'] },
       },
     ],

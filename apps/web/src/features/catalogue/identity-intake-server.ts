@@ -182,8 +182,7 @@ export async function identityIntakeResponse(
   } catch {
     return privateJson(createPage(binding, 'unavailable', viewer));
   }
-  if (!descriptor.ok && descriptor.reason === 'missing')
-    return privateJson(createPage(binding, 'stale', viewer));
+  if (!descriptor.ok && descriptor.reason === 'missing') return privateJson(createPage(binding, 'stale', viewer));
   if (!descriptor.ok) return privateJson(createPage(binding, 'unavailable', viewer));
   if (descriptor.descriptor.typeId !== binding.typeId || descriptor.descriptor.releaseDigest !== binding.releaseDigest)
     return privateJson(createPage(binding, 'stale', viewer));
@@ -202,7 +201,9 @@ export async function identityIntakeResponse(
     );
     const results = projectResults(suggestions, descriptor.descriptor, binding.locale, binding.language);
     const partial = results.some((hit) => !hit.summary || !hit.typeLabel || hit.labels.length === 0);
-    return privateJson(createPage(binding, results.length === 0 ? 'empty' : partial ? 'partial' : 'ready', viewer, results));
+    return privateJson(
+      createPage(binding, results.length === 0 ? 'empty' : partial ? 'partial' : 'ready', viewer, results),
+    );
   } catch (error) {
     const status = failureStatus(error);
     const nextViewer = status === 'signed-out' ? 'signed-out' : viewer;

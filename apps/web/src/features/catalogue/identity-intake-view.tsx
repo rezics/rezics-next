@@ -88,11 +88,23 @@ export function IdentityIntakePanel({
     running.current = true;
     setState({ intentKey, phase: 'loading' });
     try {
-      const page = await read({ ...intent, q: query, language: intent.language.trim() }, requestGeneration, requestController.signal);
-      if (!requestController.signal.aborted && generation.current === requestGeneration && currentKey.current === intentKey)
+      const page = await read(
+        { ...intent, q: query, language: intent.language.trim() },
+        requestGeneration,
+        requestController.signal,
+      );
+      if (
+        !requestController.signal.aborted &&
+        generation.current === requestGeneration &&
+        currentKey.current === intentKey
+      )
         setState({ intentKey, phase: 'page', page });
     } catch {
-      if (!requestController.signal.aborted && generation.current === requestGeneration && currentKey.current === intentKey)
+      if (
+        !requestController.signal.aborted &&
+        generation.current === requestGeneration &&
+        currentKey.current === intentKey
+      )
         setState({ intentKey, phase: 'failure' });
     } finally {
       if (generation.current === requestGeneration) running.current = false;
@@ -125,7 +137,10 @@ export function IdentityIntakePanel({
     m.identity_intake_metadata_unavailable({}, options);
 
   return (
-    <section aria-labelledby={headingId} className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/20 p-4 sm:p-5">
+    <section
+      aria-labelledby={headingId}
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/20 p-4 sm:p-5"
+    >
       <div className="min-w-0 space-y-2">
         <h2 id={headingId} className="text-lg font-semibold">
           {m.identity_intake_heading({}, options)}
@@ -141,7 +156,9 @@ export function IdentityIntakePanel({
       {!hasType ? <p role="status">{m.identity_intake_choose_type({}, options)}</p> : null}
       {hasType && !typeCurrent ? <p role="alert">{m.identity_intake_changed({}, options)}</p> : null}
       {hasType && typeCurrent && !termsReady ? <p role="status">{m.identity_intake_enter_terms({}, options)}</p> : null}
-      {hasType && typeCurrent && termsReady && !query ? <p role="alert">{m.identity_intake_invalid({}, options)}</p> : null}
+      {hasType && typeCurrent && termsReady && !query ? (
+        <p role="alert">{m.identity_intake_invalid({}, options)}</p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {!retry ? (
@@ -161,10 +178,14 @@ export function IdentityIntakePanel({
           </Button>
         ) : null}
       </div>
-      {loading ? <p role="status" aria-live="polite">{m.identity_intake_searching({}, options)}</p> : null}
+      {loading ? (
+        <p role="status" aria-live="polite">
+          {m.identity_intake_searching({}, options)}
+        </p>
+      ) : null}
 
-      {((page?.viewer.state === 'signed-out' && page.status !== 'signed-out') ||
-        (!page && failedLocally && viewerState === 'signed-out')) ? (
+      {(page?.viewer.state === 'signed-out' && page.status !== 'signed-out') ||
+      (!page && failedLocally && viewerState === 'signed-out') ? (
         <p role="status">{m.identity_intake_signed_out({}, options)}</p>
       ) : null}
       {page?.status === 'empty' ? <p role="status">{m.identity_intake_empty({}, options)}</p> : null}
@@ -199,7 +220,11 @@ export function IdentityIntakePanel({
                 <li key={hit.id} className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
                   <article aria-labelledby={`identity-hit-${hit.id}`} className="min-w-0 space-y-3">
                     <div className="min-w-0 space-y-1">
-                      <h4 id={`identity-hit-${hit.id}`} lang={hit.labels[0]?.language} className="break-words font-medium">
+                      <h4
+                        id={`identity-hit-${hit.id}`}
+                        lang={hit.labels[0]?.language}
+                        className="break-words font-medium"
+                      >
                         {label}
                       </h4>
                       <p className="break-words text-sm text-muted-foreground">
@@ -210,7 +235,11 @@ export function IdentityIntakePanel({
                           <p className="font-medium">{m.identity_intake_other_labels({}, options)}</p>
                           <ul className="grid min-w-0 gap-1">
                             {alternateLabels.map((entry) => (
-                              <li key={`${entry.language}-${entry.value}`} lang={entry.language} className="break-words">
+                              <li
+                                key={`${entry.language}-${entry.value}`}
+                                lang={entry.language}
+                                className="break-words"
+                              >
                                 {entry.value} <span className="text-muted-foreground">({entry.language})</span>
                               </li>
                             ))}
@@ -227,15 +256,20 @@ export function IdentityIntakePanel({
                             {hit.summary.label.value}
                           </p>
                         ) : null}
-                        {!hit.summary.label ? (
-                          <p>{m.identity_intake_metadata_unavailable({}, options)}</p>
-                        ) : null}
+                        {!hit.summary.label ? <p>{m.identity_intake_metadata_unavailable({}, options)}</p> : null}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">{m.identity_intake_metadata_unavailable({}, options)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {m.identity_intake_metadata_unavailable({}, options)}
+                      </p>
                     )}
 
-                    <a className={buttonVariants({ variant: 'outline', size: 'lg' })} href={href} target="_blank" rel="noopener noreferrer">
+                    <a
+                      className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       {m.identity_intake_open({}, options)}
                       <span className="sr-only"> · {m.guide_new_tab({}, options)}</span>
                     </a>
@@ -252,12 +286,7 @@ export function IdentityIntakePanel({
       ) : null}
       <div className="flex flex-wrap gap-2">
         {continueWithResults && intentKey ? (
-          <Button
-            type="button"
-            size="lg"
-            disabled={disabled || confirmed}
-            onClick={() => onContinue(intentKey, false)}
-          >
+          <Button type="button" size="lg" disabled={disabled || confirmed} onClick={() => onContinue(intentKey, false)}>
             {m.identity_intake_continue({}, options)}
           </Button>
         ) : null}
@@ -274,9 +303,7 @@ export function IdentityIntakePanel({
         ) : null}
         {confirmed ? (
           <p role="status" className="min-h-11 content-center text-sm">
-            {confirmedUnverified
-              ? m.identity_intake_unverified({}, options)
-              : m.identity_intake_continue({}, options)}
+            {confirmedUnverified ? m.identity_intake_unverified({}, options) : m.identity_intake_continue({}, options)}
           </p>
         ) : null}
         {currentState.phase !== 'idle' ? (
