@@ -410,3 +410,40 @@ composition. Preserve native candidate/frontier bounds and unavailable responses
 browser filter, downloaded-first-page directory or selectable placeholder supplies these
 dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
 outcome remains incomplete.
+
+## Home review and immediate-parent receiving
+
+The mounted method is `KernelClient.feedItems.get` (`GET /v1/feedItems`). Its response is
+`FeedPageSchema`; `FeedItemSchema` embeds the closed `FeedReviewContextSchema` and, for posts,
+`FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem` and `FeedContentItem`
+from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
+`list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
+`prepareFeedContentContext(dependencies: ContentReadDependencies, references: readonly FeedContentContextReference[],
+context: ReadContext, languages: readonly string[] = [], options: { observeThreads?: FeedThreadObserver } = {})`
+returns a single-use `FeedContentContextComposition.finish(): Promise<FeedContentContextFinished>`.
+
+The composition admits at most 20 selected references, 20 Subject keys, 20 question keys and 60 author keys.
+Posts and their immediate parents use distinct `(threadId, postId)` keys; parent previews are capped at
+160 characters and 640 UTF-8 bytes. It does not emit an ancestor list. These output limits do not bound
+the native post reader's internal ancestry, revision or authority work.
+
+Decision: Home displays recorded rating units without normalizing a nonstandard question to ten, and keeps
+spoiler-marked parent text behind an explicit reveal that retires with the page, target or account.
+
+The existing consumers are `apps/web/src/features/feed/home-feed-item.tsx` and
+`HomeFeedActions` / `FeedActionBar` in `apps/web/src/features/feed/action-bar.tsx`, mounted by
+`apps/web/src/features/pages/home-feed.tsx`. Review context is the authority for the reviewed work when
+present; concealed context must not fall back to a discovery label. An available parent carries both the
+current exact post destination and an exact revision destination. Removed and withheld parents disclose
+only their respective admitted fields.
+
+Kernel generation owns declarations and OpenAPI. `tools/goal/defaults.json` already lists
+`packages/client/src/kernel/**` and `contracts/openapi.json` as promotion outputs of
+`bun run --cwd services/kernel derived`, with `services/kernel/**` as inputs. No Web DTO is added.
+
+Experience acceptance remains open until the existing Home owner reviews populated review/reply, concealed
+and removed parent, guest, retry, language/spoiler and account-switch states against native responses.
+Native lifecycle and three-scale acceptance, and the Performance review of complete nested source observations
+(rows, statements, body/serialization bytes, physical homes, transaction/pool/runner phases and retry),
+remain required. In particular, two Content/owner passes plus the selected post/parent readers are not
+a constant physical-row cost claim. The current native fixed-size regression remains in place.
