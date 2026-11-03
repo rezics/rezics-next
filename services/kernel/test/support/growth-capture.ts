@@ -523,7 +523,8 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     // Finish a fully consumed unnamed portal before Sync. Otherwise a following ROLLBACK destroys its executor
     // without an auto_explain notice, even though SELECT succeeded. Close adds no SQL or query execution and leaves
     // transaction locks and writes intact. Suspended and named portals retain their caller's lifetime.
-    if (wireStatement?.record && !config.portal && !config.rows) connection.close({ type: 'P', name: '' });
+    if (config && wireStatement?.record && !config.portal && !config.rows)
+      connection.close({ type: 'P', name: '' }, more);
     return result;
   }) as typeof connection.execute;
 

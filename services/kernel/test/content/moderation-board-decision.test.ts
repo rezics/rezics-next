@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -27,7 +27,7 @@ async function act(board: string, key: string = randomUUID()) {
 async function read(url: string, bearer = f.people.reviewer.bearer) {
   return f.call('GET', url, { bearer });
 }
-async function source(board: string, key: string) {
+async function source(target: string, key: string, kind: 'board' | 'thread' = 'board', board = target) {
   const { rows } = await f.db.admin.query(
     `SELECT d.*, r.partition_no, r.epoch, r.position, o.id AS event_id, o.type, o.data
      FROM content.moderation_decision d
@@ -36,8 +36,8 @@ async function source(board: string, key: string) {
        AND o.type='com.rezics.content.moderation.takedown.v1'
      WHERE d.route=$1 AND d.target_id=$2 AND r.idempotency_key=$3`,
     [
-      routeOf(board),
-      board,
+      routeOf(target),
+      target,
       encodeReceiptKey(
         testReceiptKeys(),
         'content.moderation:takedown',
@@ -49,7 +49,7 @@ async function source(board: string, key: string) {
   expect(rows).toHaveLength(1);
   const row = rows[0]!;
   expect(row.board_id).toBe(board);
-  expect(row.data).toMatchObject({ targetKind: 'board', targetId: board, securityRevision: row.security_revision });
+  expect(row.data).toMatchObject({ targetKind: kind, targetId: target, securityRevision: row.security_revision });
   const event: CloudEvent = {
     specversion: '1.0',
     id: row.event_id,
@@ -127,31 +127,27 @@ test('native board journey keeps physical work fixed across retained history at 
   const board = await f.createBoard('History growth');
   for (const who of [f.people.decider, f.people.reviewer]) await f.grant(board, who.accountId, authority);
   const denied = await f.createThread(board, 'Withheld history target');
+  await f.grant(denied.threadId, f.people.decider.accountId, authority);
   const first = await act(board);
   await f.completeRegisteredCommand(f.people.decider.accountId, first.key);
   const { event, exact } = await source(board, first.key);
-  const route = routeOf(board)!;
   // Real thread/post targets share the board, but grant no moderation authority to this reviewer.
   const samples = await checkGrowth(f.db, {
     name: 'native board decision and sparse scoped history',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    async grow(db, scale, previous) {
-      const ids = Array.from({ length: scale - previous }, () => newId(denied.threadRoute));
-      await db.admin.query(
-        `INSERT INTO content.moderation_decision
-         (route,decision_id,target_kind,target_id,action,statement,security_revision,decided_at,board_id)
-         SELECT $1,id,'thread',$3,'takedown','Retained source',$4+ordinality,
-                now()+interval '1 day'+ordinality*interval '1 microsecond',$5
-         FROM unnest($2::uuid[]) WITH ORDINALITY AS d(id,ordinality)`,
-        [denied.threadRoute, ids, denied.threadId, previous + 10000, board],
-      );
-      await db.admin.query(
-        `INSERT INTO content.moderation_decision_board(route,board_id,decision_id,target_kind,target_id,decided_at)
-         SELECT $1,$2,decision_id,target_kind,target_id,decided_at FROM content.moderation_decision
-         WHERE route=$3 AND decision_id=ANY($4::uuid[])`,
-        [route, board, denied.threadRoute, ids],
-      );
+    async grow(_db, scale, previous) {
+      for (let index = previous; index < scale; index++) {
+        const key = `retained-thread-${index}`;
+        const action = await f.call('POST', `/v1/threads/${denied.threadId}:takeDown`, {
+          bearer: f.people.decider.bearer,
+          key,
+          body: { reason: 'Retained source' },
+        });
+        expect(action.response.status).toBe(200);
+        const { event } = await source(denied.threadId, key, 'thread', board);
+        await f.moderationEffect.run(event);
+      }
     },
     async operation(_db, scale, repetition) {
       const action = await act(board, `board-history-${scale}-${repetition}`);
@@ -175,4 +171,4 @@ test('native board journey keeps physical work fixed across retained history at 
     'content.moderation_decision',
     'content.moderation_decision_board',
   ]);
-}, 300_000);
+}, 1_800_000);

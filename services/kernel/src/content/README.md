@@ -510,7 +510,9 @@ Responses are private/no-store and the history is not a public feed or search so
   caller work, additional to these engine terms. Memory is O(B+D_total), with at most four concurrent role reads.
   Both all-kind and exact-kind seeks include their complete board/selection/order prefix; no filter can scan
   unrelated kinds, no request refills a sparse page, and cursor progress follows raw keys rather than returned rows.
-- Growth check: the same native journey seeds 256/1024/4096 retained source/index decisions under fixed L=1, measures
+- Growth check: the same native journey records and projects 256/1024/4096 thread decisions through native commands
+  and original events, growing receipts and discovery ledgers with retained history rather than isolating synthetic
+  decision rows. Under fixed L=1 it measures
   action/replay/projection/exact/all-kind/exact-kind/sparse continuation together, and retains strict indexed physical
   access-path assertions. It checks that changing selection refuses a signed cursor and denied candidates do not refill.
   This source declaration is distinct from successful native execution and main promotion.
