@@ -1,6 +1,5 @@
 import { createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import type { AccessClient } from '../request/access.ts';
 import { readCurrentResourceRolePage } from '../access/current-resource-roles.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
@@ -188,7 +187,11 @@ async function readCurrentMembers(
   return result;
 }
 
-async function readTransaction<T>(pool: Pool, deadline: number, run: (client: AccessClient) => Promise<T>): Promise<T> {
+async function readTransaction<T>(
+  pool: Pool,
+  deadline: number,
+  run: (client: ReturnType<typeof deadlineClient>) => Promise<T>,
+): Promise<T> {
   return withConnection(pool, async (client) => {
     const bounded = deadlineClient(client, deadline);
     await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
