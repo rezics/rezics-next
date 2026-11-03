@@ -68,9 +68,16 @@ test('the Search editor adds and edits canonical IDs in place and submits the au
   const window = new Window({ url: 'https://site.test/en/search' });
   const globals = {
     ...Object.fromEntries(
-      ['document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Document', 'DocumentFragment', 'MutationObserver'].map(
-        (key) => [key, Reflect.get(window, key)],
-      ),
+      [
+        'document',
+        'navigator',
+        'HTMLElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+      ].map((key) => [key, Reflect.get(window, key)]),
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),

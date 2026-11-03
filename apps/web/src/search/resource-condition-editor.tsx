@@ -21,9 +21,7 @@ function messageOptions(locale: string): MessageOptions {
 }
 
 function resourceLabel(kind: RequestResourceKind, options: MessageOptions) {
-  return kind === 'collection'
-    ? m.library_following_kind_collection({}, options)
-    : m.space_realm_heading({}, options);
+  return kind === 'collection' ? m.library_following_kind_collection({}, options) : m.space_realm_heading({}, options);
 }
 
 function unavailableCode(code: string) {
@@ -74,9 +72,7 @@ function ResourceConditionFields({
           {...(fieldIssues.length ? { 'aria-describedby': errorId } : {})}
           autoComplete="off"
           spellCheck={false}
-          onChange={(event) =>
-            onChange({ [kind]: { id: event.currentTarget.value } } as unknown as FilterDocument)
-          }
+          onChange={(event) => onChange({ [kind]: { id: event.currentTarget.value } } as unknown as FilterDocument)}
         />
         {fieldIssues.length > 0 && (
           <p id={errorId} className="text-sm text-destructive">

@@ -87,7 +87,9 @@ export function requestResourceAdmissionShadow(condition: FilterDocument): Reque
       const operator = keys[0];
       const children = own(node, operator).value;
       if (Array.isArray(children)) {
-        const updated = children.map((child, index) => visit(child, childPointer(childPointer(pointer, operator), index)));
+        const updated = children.map((child, index) =>
+          visit(child, childPointer(childPointer(pointer, operator), index)),
+        );
         ancestors.delete(node);
         return { [operator]: updated };
       }

@@ -401,8 +401,9 @@ function NodeEditor({
   const operator = groupOperator ?? ('not' in value ? 'not' : '');
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
   const extensionLabel = context.extension?.label?.(value, { locale: context.locale });
-  const label = extensionLabel ?? (
-    operator === 'and'
+  const label =
+    extensionLabel ??
+    (operator === 'and'
       ? m.condition_and({}, options)
       : operator === 'or'
         ? m.condition_or({}, options)
@@ -414,8 +415,7 @@ function NodeEditor({
               ? m.search_type({}, options)
               : 'statement' in value
                 ? m.condition_statement({}, options)
-                : m.condition_leaf({}, options)
-  );
+                : m.condition_leaf({}, options));
   const extensionLeaf = context.extension?.render(value, onChange, {
     pointer,
     locale: context.locale,

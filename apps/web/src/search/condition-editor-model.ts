@@ -85,8 +85,7 @@ function constructionIssues(
 
   const shadow = requestResourceAdmissionShadow(condition);
   const issues = [...shadow.issues];
-  if (!options.owner)
-    for (const pointer of shadow.ownerPointers) issues.push({ pointer, code: 'unsupported' });
+  if (!options.owner) for (const pointer of shadow.ownerPointers) issues.push({ pointer, code: 'unsupported' });
 
   // Resource leaves are request-only, including when a released saved filter is expanded beside them.
   for (const saved of shadow.saved) {
@@ -102,7 +101,8 @@ function constructionIssues(
   const errors = construction.validateFilter({ and: [shadow.condition] }, { owner: true });
   issues.push(...errors.map(({ pointer, code }) => ({ pointer, code })));
   return issues.filter(
-    (entry, index, all) => all.findIndex((candidate) => candidate.pointer === entry.pointer && candidate.code === entry.code) === index,
+    (entry, index, all) =>
+      all.findIndex((candidate) => candidate.pointer === entry.pointer && candidate.code === entry.code) === index,
   );
 }
 
