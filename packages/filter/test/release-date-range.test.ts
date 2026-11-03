@@ -41,16 +41,16 @@ const dateFilter = (range: unknown, property = 'schema:datePublished') => ({ sta
 test('typed calendar ranges survive Boolean/saved expansion without changing numeric meanings', () => {
   const precise = dateFilter({ type: 'time', gte: '2024-02-29', lte: '2024-03' });
   const parsed = parseFilter({ or: [precise, { not: { saved: 'test/date' } }] });
-  expect(admitFilter(parsed, release)).toEqual({
+  expect<unknown>(admitFilter(parsed, release)).toEqual({
     or: [precise, { not: dateFilter({ type: 'time', gte: '2024-02-29' }) }],
   });
   for (const range of [
     { type: 'time', lte: '2024-02' },
     { gte: 2024, lte: 2025 },
   ])
-    expect(admitFilter(parseFilter(dateFilter(range)), release)).toEqual(dateFilter(range));
+    expect<unknown>(admitFilter(parseFilter(dateFilter(range)), release)).toEqual(dateFilter(range));
   const quantity = dateFilter({ gte: 18, unit: 'years' }, 'schema:rating');
-  expect(admitFilter(parseFilter(quantity), release)).toEqual(quantity);
+  expect<unknown>(admitFilter(parseFilter(quantity), release)).toEqual(quantity);
   expect(() => admitFilter(parseFilter(dateFilter({ type: 'time', gte: '2024' }, 'schema:rating')), release)).toThrow();
 });
 
