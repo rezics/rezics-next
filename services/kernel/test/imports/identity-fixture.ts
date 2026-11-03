@@ -24,6 +24,8 @@ import type { GrantInput } from '../../src/access/grant-commands.ts';
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import {
   COMMON_ACTIONS,
   IMPORT_ACTIONS,
@@ -37,7 +39,7 @@ let mountedActions: ReturnType<typeof actionCatalogue> | undefined;
 
 /** Route metadata is immutable; every fixture still owns its Access and credentials. */
 export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8Array) {
-  mountedActions ??= actionCatalogue(createKernel({ pool: database.pool, routeKey }));
+  mountedActions ??= actionCatalogue(createKernel({ pool: database.pool, routeKey, receiptKeys: testReceiptKeys() }));
   return new Map(mountedActions);
 }
 
@@ -1046,7 +1048,7 @@ export async function runIdentityBootstrap(
 ): Promise<{ exitCode: number }> {
   const child = spawn([process.execPath, 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId], {
     cwd: new URL('../../../../', import.meta.url).pathname,
-    env: { ...process.env, DATABASE_URL: url },
+    env: workerTestEnv({ ...process.env, DATABASE_URL: url }),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -1055,15 +1057,22 @@ export async function runIdentityBootstrap(
     drainBootstrapPipe(child.stdout),
     drainBootstrapPipe(child.stderr),
   ]);
-  if (required && exitCode !== 0)
-    throw new Error(`Deployment governance bootstrap exited ${exitCode}`, {
+  if (required && exitCode !== 0) {
+    const stdoutText = bootstrapDiagnostic(stdout, url);
+    const stderrText = bootstrapDiagnostic(stderr, url);
+    const output = [
+      stderrText && `stderr: ${stderrText}`,
+      stdoutText && `stdout: ${stdoutText}`,
+    ].filter((line): line is string => line !== undefined);
+    throw new Error([`Deployment governance bootstrap exited ${exitCode}`, ...output].join('\n'), {
       cause: {
         exitCode,
-        stdout: bootstrapDiagnostic(stdout, url),
-        stderr: bootstrapDiagnostic(stderr, url),
+        stdout: stdoutText,
+        stderr: stderrText,
         stdoutTruncated: stdout.truncated,
         stderrTruncated: stderr.truncated,
       },
     });
+  }
   return { exitCode };
 }

@@ -38,6 +38,8 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createMediaBoundary } from './media-boundary.ts';
 import { createApiCapture } from './api-capture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 type GrowthSqliteCapture = {
   instrument(database: Database): Database;
@@ -94,6 +96,7 @@ function preparedDatabases(base: string, time: Timer) {
         const database = await openGrowthDatabase(application.url);
         try {
           await time('prepare semantic and presentation template', async () => {
+            configureTestReceiptKeys(database.pool);
             await setupSemantic(database.pool, bundledRelease);
             await setupPresentation(database.pool);
           });
@@ -227,7 +230,7 @@ export async function openApiRuntime(
                 clock: () => new Date(),
               },
               fetchConfig,
-              workerEnvironment: {
+              workerEnvironment: workerTestEnv({
                 AUTH_ISSUER: auth.issuer,
                 AUTH_AUDIENCE: auth.audience,
                 AUTH_JWKS_URL: auth.jwksUrl,
@@ -239,7 +242,7 @@ export async function openApiRuntime(
                 CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
                 OPENSEARCH_URL: '',
                 STRIPE_SECRET_KEY: '',
-              },
+              }),
             }),
           );
           // The isolated kernel worker and Auth provisioning are independent.
@@ -293,6 +296,7 @@ export async function openApiRuntime(
         routeKey: identity.routeKey,
         access,
         tokens: identity.tokenKeys,
+        receiptKeys: testReceiptKeys(),
         workClient: work!,
         content: { fetchConfig },
         writeRate: createWriteRateLimiter({ secret, ...(overrides ? { overrides } : {}) }),

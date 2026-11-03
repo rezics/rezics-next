@@ -1,4 +1,9 @@
-export function workerTestEnv(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
+export function workerTestEnv(): Record<string, string>;
+export function workerTestEnv(overrides: Record<string, string>): Record<string, string>;
+export function workerTestEnv(overrides: Record<string, string | undefined>): Record<string, string | undefined>;
+export function workerTestEnv(
+  overrides: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
   // A module that adds a required worker variable adds its fixture here in the same task.
   return {
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 41).toString('base64url'),

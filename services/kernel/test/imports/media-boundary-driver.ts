@@ -30,6 +30,8 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
 import { effectWorkflowId } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 // SQL compilation depends on the unchanged migrated schema, not on a fixture's
 // accounts or rows. Retain only the real compiler's output between isolated
@@ -513,7 +515,7 @@ async function applicationHost(): Promise<RpcHost> {
     boundary = await createMediaBoundary({
       content: { pool: f.database.pool, access, routeKey: f.routeKey, clock: () => new Date() },
       fetchConfig,
-      workerEnvironment: {
+      workerEnvironment: workerTestEnv({
         AUTH_ISSUER: auth.issuer,
         AUTH_AUDIENCE: auth.audience,
         AUTH_JWKS_URL: auth.jwksUrl,
@@ -525,7 +527,7 @@ async function applicationHost(): Promise<RpcHost> {
         CF_ACCESS_CLIENT_SECRET: 'external-fixture-secret',
         OPENSEARCH_URL: '',
         STRIPE_SECRET_KEY: '',
-      },
+      }),
     });
     const app = createKernel({
       // Match the shared test kernel's request deadline.
@@ -533,6 +535,7 @@ async function applicationHost(): Promise<RpcHost> {
       pool: f.database.pool,
       access,
       routeKey: f.routeKey,
+      receiptKeys: testReceiptKeys(),
       tokens: f.tokenKeys,
       content: { fetchConfig },
       writeRate: createWriteRateLimiter({
