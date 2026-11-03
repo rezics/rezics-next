@@ -228,6 +228,85 @@ test('native different-language publication uses exactly the supplied public Jap
   expect(visible).not.toContain(english[0]!);
 }, 300_000);
 
+test('complete original recipe evidence groups survive a later native correction of one assertion', async () => {
+  const created = (
+    await command('/v1/subjects', {
+      type: 'schema:Recipe',
+      labels: { en: 'Complete native recipe' },
+      statements: {
+        'schema:recipeIngredient': [
+          {
+            property: { id: 'schema:recipeIngredient' },
+            value: { type: 'value', content: { language: 'en', text: '200 g rice' } },
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://example.org/rice' },
+                  },
+                  { property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'en' } },
+                ],
+              },
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://example.org/second' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        'schema:cookTime': [statement('schema:cookTime', { amount: '+25', unit: minute })],
+        'schema:recipeInstructions': [
+          statement('schema:recipeInstructions', {
+            language: 'en',
+            document: documents.en,
+            licence: 'CC-BY-4.0',
+          }),
+        ],
+      },
+    })
+  ).subject;
+  const original = await read(created.id);
+  const ingredient = original.subject.statements['schema:recipeIngredient']![0] as {
+    id: string;
+    value: { type: string; content: unknown };
+    references: { parts: { property: { id: string }; value: unknown }[] }[];
+  };
+  expect(ingredient.references.map((group) => group.parts.map((part) => part.property.id))).toEqual([
+    ['schema:url', 'schema:inLanguage'],
+    ['schema:url'],
+  ]);
+  const proposal = await stack.kernel(
+    `/v1/subjects/${created.id}/candidates`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
+      body: JSON.stringify({
+        statement: {
+          property: { id: 'schema:cookTime' },
+          value: { type: 'value', content: { amount: '+40', unit: minute } },
+          references: statement('schema:cookTime', { amount: '+40', unit: minute }).references,
+          rank: 'normal',
+        },
+      }),
+    },
+    'editor',
+  );
+  expect(proposal.status).toBe(201);
+  const current = await read(created.id);
+  expect(current.subject.statements['schema:recipeIngredient']).toEqual(original.subject.statements['schema:recipeIngredient']);
+  expect(current.subject.statements['schema:cookTime']![0]!.value).toEqual({
+    type: 'value',
+    content: { amount: '+25', unit: minute },
+  });
+  const method = current.subject.statements['schema:recipeInstructions']![0]!.value;
+  expect(method.type).toBe('value');
+}, 300_000);
+
 test('native author erasure withholds the actual instruction body from served publication', async () => {
   const withheld = (
     await command('/v1/subjects', {

@@ -5,6 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import type { TermDraft } from './create-subject';
 import { createSubjectGuidance } from './create-subject-guidance';
 import type { StatementInput } from './statement-editor';
+import { statementHolderKey } from './statement-editor-view';
 import { presentStatementViolations } from './statement-validation-presentation';
 
 export type RecipeCorrection = {
@@ -110,15 +111,17 @@ export function recipeCorrections(
     } else if (definition?.datatype === 'wikibase-item' && path === '/value/content') {
       target = `${rowId}-entity`;
       instruction = `${reasons[error.code]} ${m.correction_error_value({}, o)}`;
-    } else if (
-      path === '/references/0/parts/0/value/content' &&
-      row.statement.references.length === 1 &&
-      row.statement.references[0]?.parts[0]?.property.id === 'schema:url'
-    ) {
-      target = `citation-${row.id}`;
-      fieldLabel = m.relation_citation({}, o);
-      instruction = `${reasons[error.code]} ${m.correction_error_url({}, o)}`;
     } else {
+      const qualifier = /^\/qualifiers\/(0|[1-9]\d*)(\/.*)?$/.exec(path);
+      const reference = /^\/references\/(0|[1-9]\d*)\/parts\/(0|[1-9]\d*)(\/.*)?$/.exec(path);
+      const part = qualifier
+        ? row.statement.qualifiers?.[Number(qualifier[1])]
+        : reference
+          ? row.statement.references[Number(reference[1])]?.parts[Number(reference[2])]
+          : path.startsWith('/value')
+            ? row.statement
+            : undefined;
+      const holder = part ? statementHolderKey(part) : undefined;
       const scalar = presentStatementViolations(
         [{ ...error, pointer: `/statement${path}` }],
         row.statement,
@@ -126,10 +129,18 @@ export function recipeCorrections(
         locale,
         rowId,
       )[0]!;
-      if (scalar.target.startsWith(`${rowId}-fact-`)) {
-        target = scalar.target;
+      const stable =
+        holder !== undefined
+          ? scalar.target.replace(/-(?:fact|qualifier-\d+|reference-\d+-part-\d+)-/, `-part-${holder}-`)
+          : scalar.target;
+      if (stable.startsWith(`${rowId}-`) && (part === row.statement || holder !== undefined || !reference)) {
+        target = stable;
         fieldLabel = scalar.label;
         instruction = scalar.instruction;
+      } else if (reference && !part) {
+        target = `${rowId}-references`;
+        fieldLabel = m.correction_references({}, o);
+        instruction = `${reasons[error.code]} ${m.correction_error_uneditable({}, o)}`;
       }
     }
     return {

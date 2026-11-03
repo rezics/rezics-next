@@ -100,11 +100,60 @@ export function validateRecipe(release: Release, item: RecipeItem, locale: strin
   }
   return errors;
 }
+function populatedSnak(part: { value: StatementInput['value'] }) {
+  const content = (value: unknown): boolean => {
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number' || typeof value === 'boolean') return true;
+    if (Array.isArray(value)) return value.some(content);
+    if (value && typeof value === 'object') return Object.values(value).some(content);
+    return false;
+  };
+  return part.value.type !== 'value' || content(part.value.content);
+}
+
+/** Empty citation scaffolds are omitted; typed zero, false and novalue remain. */
+export function recipeEvidence(statement: StatementInput): StatementInput {
+  const next = structuredClone(statement);
+  next.qualifiers = (next.qualifiers ?? []).filter(populatedSnak);
+  next.references = next.references
+    .map((group) => ({ parts: group.parts.filter(populatedSnak) }))
+    .filter((group) => group.parts.length);
+  return next;
+}
+
 export function recipeDraft(release: Release, locale: string, terms: TermDraft[], statements: StatementInput[]) {
   const initial = initialTerms('schema:Recipe', terms);
   const item: RecipeItem = { ...initial.item, statements: {} };
-  for (const statement of statements) (item.statements[statement.property.id] ??= []).push(structuredClone(statement));
+  for (const statement of statements) {
+    const next = recipeEvidence(statement);
+    (item.statements[next.property.id] ??= []).push(next);
+  }
   return { item, errors: [...initial.errors, ...validateRecipe(release, item, locale)] };
+}
+
+export type RecipeEvidenceChange = 'retained' | 'added' | 'edited' | 'removed';
+export type RecipeEvidenceChangeEntry = {
+  change: RecipeEvidenceChange;
+  current?: StatementInput['references'][number];
+  next?: StatementInput['references'][number];
+};
+export function recipeEvidenceChanges(
+  current: StatementInput['references'] | undefined,
+  next: StatementInput['references'],
+): RecipeEvidenceChangeEntry[] {
+  const remaining = [...(current ?? [])];
+  const changes: RecipeEvidenceChangeEntry[] = [];
+  for (const group of next) {
+    const index = remaining.findIndex((entry) => JSON.stringify(entry) === JSON.stringify(group));
+    if (index >= 0) {
+      changes.push({ change: 'retained', current: remaining.splice(index, 1)[0], next: group });
+      continue;
+    }
+    const edited = remaining.shift();
+    changes.push(edited ? { change: 'edited', current: edited, next: group } : { change: 'added', next: group });
+  }
+  for (const group of remaining) changes.push({ change: 'removed', current: group });
+  return changes;
 }
 export async function createRecipe(
   client: KernelClient,

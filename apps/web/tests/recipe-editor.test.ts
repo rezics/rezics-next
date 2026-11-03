@@ -3,6 +3,8 @@ import { checkDocument } from '@rezics/document';
 import {
   createRecipe,
   recipeDraft,
+  recipeEvidence,
+  recipeEvidenceChanges,
   recipeFields,
   recipeTarget,
   validateRecipe,
@@ -68,6 +70,84 @@ test('Create and correct a released recipe with authored instructions and cited 
       (call) => call.path.endsWith(recipeId) && call.authorization === null && call.session === 'recipe-session',
     ),
   ).toBe(true);
+});
+
+test('complete independent evidence groups survive create and a later correction of one assertion', async () => {
+  const fixture = recipeFixture();
+  const read = await fixture.transport.load();
+  if (!read.ok) throw new Error('Expected released recipe profile');
+  const item = recipeExample();
+  const ingredient = item.statements['schema:recipeIngredient']![0]!;
+  ingredient.references = [
+    {
+      parts: [
+        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/lentils' } },
+        { property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'en' } },
+      ],
+    },
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/second' } }] },
+  ];
+  item.statements['schema:cookTime']![0]!.references = [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/time' } }] },
+  ];
+  const draft = recipeDraft(read.release, 'en', [{ language: 'en', label: 'Lentil soup', description: '', aliases: '' }], [
+    ingredient,
+    item.statements['schema:cookTime']![0]!,
+    item.statements['schema:recipeInstructions']![0]!,
+  ]);
+  expect(draft.errors).toEqual([]);
+  const created = await fixture.transport.create({ item: draft.item, key: crypto.randomUUID() });
+  expect(created.ok).toBe(true);
+  expect(fixture.publicRead.subject.statements['schema:recipeIngredient']![0]!.references.map((group) => group.parts.map((part) => part.property.id))).toEqual([
+    ['schema:url', 'schema:inLanguage'],
+    ['schema:url'],
+  ]);
+  const untouched = fixture.publicRead.subject.statements['schema:cookTime']![0]!;
+  const source = fixture.publicRead.subject.statements['schema:recipeIngredient']![0]!;
+  const correction = statementInput(source);
+  correction.references = [
+    correction.references[0]!,
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/revised' } }] },
+  ];
+  expect(await fixture.transport.propose({ id: recipeId, statement: correction, key: crypto.randomUUID() })).toMatchObject({
+    ok: true,
+    kind: 'proposed-awaiting-review',
+  });
+  expect(fixture.publicRead.subject.statements['schema:cookTime']![0]).toEqual(untouched);
+  expect(fixture.publicRead.subject.statements['schema:recipeIngredient']![0]).toEqual(source);
+  expect(fixture.calls.find((call) => call.path.endsWith('/candidates') && call.method === 'POST')?.body).toEqual({
+    statement: correction,
+  });
+  const retry = { id: recipeId, statement: correction, key: crypto.randomUUID() };
+  fixture.setScenario('uncertain');
+  expect(await fixture.transport.propose(retry)).toMatchObject({ ok: false, reason: 'unavailable' });
+  fixture.setScenario('ready');
+  expect(await fixture.transport.propose(retry, true)).toMatchObject({ ok: true });
+  const writes = fixture.calls.filter((call) => call.path.endsWith('/candidates') && call.method === 'POST');
+  expect(writes.at(-2)!.key).toBe(writes.at(-1)!.key);
+  expect(writes.at(-2)!.body).toEqual(writes.at(-1)!.body);
+  expect(writes.at(-1)!.key).not.toBe(writes[0]!.key);
+});
+
+test('empty citation scaffolds are omitted; evidence changes classify retained added edited and removed groups', () => {
+  const statement = recipeExample().statements['schema:recipeIngredient']![0]!;
+  statement.references.push({ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] });
+  statement.qualifiers = [{ property: { id: 'schema:position' }, value: { type: 'value', content: '' } }];
+  expect(recipeEvidence(statement).references).toEqual(recipeExample().statements['schema:recipeIngredient']![0]!.references);
+  expect(recipeEvidence(statement).qualifiers).toEqual([]);
+  const current = recipeExample().statements['schema:recipeIngredient']![0]!.references;
+  const next = [
+    current[0]!,
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/new' } }] },
+  ];
+  next[0] = {
+    parts: [
+      { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/edited' } },
+      current[0]!.parts[0]!,
+    ],
+  };
+  expect(recipeEvidenceChanges(current, next).map((entry) => entry.change)).toEqual(['edited', 'added']);
+  expect(recipeEvidenceChanges(next, current).map((entry) => entry.change)).toEqual(['edited', 'removed']);
 });
 
 test('uses emitted fields, exact native quantities and selected targets; refuses invented profiles, units and document licences', async () => {

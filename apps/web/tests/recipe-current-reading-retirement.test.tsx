@@ -179,7 +179,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
         !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') && !control.closest('[hidden], [inert]'),
     );
     expect(window.document.activeElement).toBe(firstUsableControl);
-    expect(input(secondIngredientDraft, m.relation_citation()).value).toBe(secondCitation);
+    expect(input(secondIngredientDraft, m.correction_url()).value).toBe(secondCitation);
     expect((sourceAssertions[0] as HTMLButtonElement).disabled).toBe(false);
     expect(secondCorrect.disabled).toBe(true);
     const untouched = initial.fields.find(
@@ -212,7 +212,8 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     const privateValue = 'Retained correction, private until reviewed';
     const privateCitation = 'https://example.test/private-recipe-source';
     await replace(input(ingredientDraft, m.correction_value()), privateValue);
-    await replace(input(ingredientDraft, m.relation_citation()), privateCitation);
+    await replace(input(ingredientDraft, m.correction_url()), privateCitation);
+    await click(ingredientDraft, m.recipe_review());
     await click(ingredientDraft, m.correction_submit());
     await until(() => ingredientDraft.textContent!.includes(m.correction_stale()));
 
@@ -220,6 +221,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     const currentCookTime = section(cookTimeLabel);
     await click(currentCookTime, m.recipe_correct());
     const cookTimeDraft = section(cookTimeLabel, true);
+    await click(cookTimeDraft, m.recipe_review());
     await click(cookTimeDraft, m.correction_submit());
     await until(() => sent.length === 2);
     const exactCommand = structuredClone(sent[1]!.command);
@@ -231,9 +233,9 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     expect(host.textContent).not.toContain(untouchedLabel);
     expect(ingredientDraft.isConnected).toBe(true);
     expect(secondIngredientDraft.isConnected).toBe(true);
-    expect(input(secondIngredientDraft, m.relation_citation()).value).toBe(secondCitation);
+    expect(input(secondIngredientDraft, m.correction_url()).value).toBe(secondCitation);
     expect(input(ingredientDraft, m.correction_value()).value).toBe(privateValue);
-    expect(input(ingredientDraft, m.relation_citation()).value).toBe(privateCitation);
+    expect(input(ingredientDraft, m.correction_url()).value).toBe(privateCitation);
     expect(sent).toHaveLength(2);
 
     lateResult = {
@@ -292,7 +294,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
       untouchedHeadingCount,
     );
     expect(input(ingredientDraft, m.correction_value()).value).toBe(privateValue);
-    expect(input(ingredientDraft, m.relation_citation()).value).toBe(privateCitation);
+    expect(input(ingredientDraft, m.correction_url()).value).toBe(privateCitation);
     expect(sent).toHaveLength(2);
     await click(cookTimeDraft, m.correction_retry());
     await until(() => sent.length === 3 && cookTimeDraft.textContent!.includes(m.correction_proposed()));

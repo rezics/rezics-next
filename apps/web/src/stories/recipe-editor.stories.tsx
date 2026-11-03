@@ -112,16 +112,23 @@ async function addField(canvasElement: HTMLElement, property: string) {
   const heading = canvas.getAllByRole('heading', { name: fieldName(property) }).at(-1)!;
   return within(heading.closest('section')!);
 }
+async function cite(scope: ReturnType<typeof within>, url: string) {
+  await userEvent.click(scope.getByRole('button', { name: m.correction_add_reference() }));
+  const group = [...scope.getByRole('heading').closest('section')!.querySelectorAll('fieldset')]
+    .filter((node) => node.querySelector('legend')?.textContent?.includes(m.correction_references()))
+    .at(-1)!;
+  const region = within(group as HTMLElement);
+  await userEvent.selectOptions(region.getByRole('combobox', { name: m.correction_add_part() }), 'schema:url');
+  await userEvent.click(region.getByRole('button', { name: m.correction_add() }));
+  await userEvent.type(region.getByRole('textbox', { name: m.correction_url() }), url);
+}
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'Lentil soup');
   const ingredient = await addField(canvasElement, 'schema:recipeIngredient');
   await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_value() }), '200 g lentils');
   await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_language() }), 'en');
-  await userEvent.type(
-    ingredient.getByRole('textbox', { name: m.relation_citation() }),
-    'https://cook.example/my-lentil-soup',
-  );
+  await cite(ingredient, 'https://cook.example/my-lentil-soup');
   const body = within(canvasElement.ownerDocument.body);
   for (const [property, title] of [
     ['wdt:P186', 'Lentils'],
@@ -130,28 +137,19 @@ async function fill(canvasElement: HTMLElement) {
     const target = await addField(canvasElement, property);
     await userEvent.type(target.getByRole('combobox', { name: fieldName(property) }), title);
     await userEvent.click(await body.findByRole('option', { name: new RegExp(title) }));
-    await userEvent.type(
-      target.getByRole('textbox', { name: m.relation_citation() }),
-      'https://cook.example/my-lentil-soup',
-    );
+    await cite(target, 'https://cook.example/my-lentil-soup');
   }
   const yieldField = await addField(canvasElement, 'schema:recipeYield');
   await userEvent.type(yieldField.getByRole('textbox', { name: m.correction_amount() }), '+2');
   await userEvent.selectOptions(yieldField.getByRole('combobox', { name: m.correction_unit() }), '1');
-  await userEvent.type(
-    yieldField.getByRole('textbox', { name: m.relation_citation() }),
-    'https://cook.example/my-lentil-soup',
-  );
+  await cite(yieldField, 'https://cook.example/my-lentil-soup');
   const duration = await addField(canvasElement, 'schema:cookTime');
   await userEvent.type(duration.getByRole('textbox', { name: m.correction_amount() }), '+25');
   await userEvent.selectOptions(
     duration.getByRole('combobox', { name: m.correction_unit() }),
     'http://www.wikidata.org/entity/Q7727',
   );
-  await userEvent.type(
-    duration.getByRole('textbox', { name: m.relation_citation() }),
-    'https://cook.example/my-lentil-soup',
-  );
+  await cite(duration, 'https://cook.example/my-lentil-soup');
   const method = await addField(canvasElement, 'schema:recipeInstructions');
   await userEvent.click(method.getByRole('button', { name: m.recipe_replace_method() }));
   await userEvent.type(method.getByRole('textbox', { name: m.catalogue_create_language() }), 'en');
@@ -160,15 +158,13 @@ async function fill(canvasElement: HTMLElement) {
     await method.findByRole('textbox', { name: fieldName('schema:recipeInstructions') }),
     'Simmer my lentils gently, then serve the soup.',
   );
-  await userEvent.type(
-    method.getByRole('textbox', { name: m.relation_citation() }),
-    'https://cook.example/my-lentil-soup',
-  );
+  await cite(method, 'https://cook.example/my-lentil-soup');
   await userEvent.click(method.getByRole('checkbox', { name: m.recipe_original() }));
   return canvas;
 }
 async function create(canvasElement: HTMLElement) {
   const canvas = await fill(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.recipe_review() }));
   await userEvent.click(canvas.getByRole('button', { name: m.recipe_title() }));
   return canvas;
 }
@@ -182,26 +178,21 @@ export const LanguageRowRecovery: Story = {
       const ingredient = await addField(canvasElement, 'schema:recipeIngredient');
       await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_value() }), text);
       await userEvent.type(ingredient.getByRole('textbox', { name: m.correction_language() }), 'en');
-      await userEvent.type(
-        ingredient.getByRole('textbox', { name: m.relation_citation() }),
-        'https://cook.example/my-lentil-soup',
-      );
+      await cite(ingredient, 'https://cook.example/my-lentil-soup');
     }
     const material = await addField(canvasElement, 'wdt:P186');
     await userEvent.type(material.getByRole('combobox', { name: fieldName('wdt:P186') }), 'Lentils');
     await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: /Lentils/ }));
-    await userEvent.type(
-      material.getByRole('textbox', { name: m.relation_citation() }),
-      'https://cook.example/my-lentil-soup',
-    );
+    await cite(material, 'https://cook.example/my-lentil-soup');
     const observed = args.onCreate as ReturnType<typeof createObserver>;
     const terms = await recoverLanguageRow(
       canvasElement,
-      m.recipe_title(),
+      m.recipe_review(),
       observed,
       'Lentil soup',
       'レンズ豆のスープ',
     );
+    await userEvent.click(canvas.getByRole('button', { name: m.recipe_review() }));
     const example = recipeExample();
     await retryLanguageRecovery(canvasElement, m.recipe_title(), m.correction_retry(), observed, {
       type: 'schema:Recipe',
@@ -328,19 +319,17 @@ export const Proposed: Story = {
     );
     await userEvent.clear(amount);
     await userEvent.type(amount, '+30');
-    const citation = field.getByRole('textbox', { name: m.relation_citation() });
+    const citation = field.getByRole('textbox', { name: m.correction_url() });
+    await userEvent.clear(citation);
     await userEvent.type(citation, 'https://cook.example/revised-time');
     const remove = field.getByRole('button', { name: m.recipe_remove_field() });
+    const reviewDraft = field.getByRole('button', { name: m.recipe_review() });
     const submit = field.getByRole('button', { name: m.correction_submit() });
-    for (const control of [amount, citation, remove, submit]) await phoneControl(control, region);
-    citation.focus();
-    await userEvent.tab();
-    await expect(remove).toHaveFocus();
-    await userEvent.tab();
-    await expect(submit).toHaveFocus();
+    for (const control of [amount, citation, remove, reviewDraft, submit]) await phoneControl(control, region);
+    await userEvent.click(reviewDraft);
 
     fixture.setScenario('conflict');
-    await userEvent.keyboard('{Enter}');
+    await userEvent.click(submit);
     await expect(await field.findByText(m.correction_stale())).toBeVisible();
     const reviewNew = field.getByRole('button', { name: m.catalogue_create_review_new() });
     const staleRetry = field.getByRole('button', { name: m.correction_retry() });
@@ -377,7 +366,6 @@ export const Proposed: Story = {
         ...original,
         value: { type: 'value', content: { amount: '+30', unit: 'http://www.wikidata.org/entity/Q7727' } },
         references: [
-          ...original.references,
           {
             parts: [
               {
@@ -426,17 +414,17 @@ export const Proposed: Story = {
     await userEvent.click(replace);
     const language = method.getByRole('textbox', { name: m.catalogue_create_language() });
     const licence = method.getByRole('textbox', { name: m.subject_source_licence() });
-    const methodCitation = method.getByRole('textbox', { name: m.relation_citation() });
-    for (const control of [language, licence, methodCitation]) await phoneControl(control, methodRegion);
+    for (const control of [language, licence]) await phoneControl(control, methodRegion);
     await userEvent.type(language, 'en');
     await userEvent.type(licence, 'CC-BY-4.0');
     await userEvent.type(
       await method.findByRole('textbox', { name: fieldName('schema:recipeInstructions') }),
       'Simmer my lentils gently, then serve the soup.',
     );
-    await userEvent.type(methodCitation, 'https://cook.example/my-lentil-soup');
+    await cite(method, 'https://cook.example/my-lentil-soup');
     await expect(method.getByRole('button', { name: m.correction_submit() })).toBeDisabled();
     await userEvent.click(method.getByRole('checkbox', { name: m.recipe_original() }));
+    await userEvent.click(method.getByRole('button', { name: m.recipe_review() }));
     await expect(method.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
     await userEvent.click(method.getByRole('button', { name: m.recipe_remove_field() }));
     await expect(methodRegion).not.toBeInTheDocument();
@@ -580,16 +568,12 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
   const value = field.getByRole('textbox', { name: m.correction_value() });
   await expect(value).toHaveValue(familyValue);
   await expect(within(ownField).getByRole('textbox', { name: m.correction_value() })).toHaveValue('');
-  const citation = field.getByRole('textbox', { name: m.relation_citation() });
+  const citation = field.getByRole('textbox', { name: m.correction_url() });
+  await userEvent.clear(citation);
   await userEvent.type(citation, familyCitation);
   const remove = field.getByRole('button', { name: m.recipe_remove_field() });
   const submit = field.getByRole('button', { name: m.correction_submit() });
   for (const node of [value, citation, remove, submit]) await target(node, replacement);
-  citation.focus();
-  await userEvent.tab();
-  await expect(remove).toHaveFocus();
-  await userEvent.tab();
-  await expect(submit).toHaveFocus();
   const style = getComputedStyle(submit);
   await expect(style.outlineStyle !== 'none' || style.boxShadow !== 'none').toBe(true);
   await expect(fixture.calls).toHaveLength(calls); // Drafts, focus and association add zero reads.

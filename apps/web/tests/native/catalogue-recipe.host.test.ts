@@ -171,6 +171,7 @@ test('native Recipe website creation selects structured facts; later per-field c
     await pickTarget(page, draft(page, 'made from material'), 'made from material', names.food);
   }
 
+  await page.getByRole('button', { name: 'Review this recipe' }).click();
   await page.locator('form button[type="submit"]').click();
   await page
     .getByRole('status')
@@ -232,6 +233,7 @@ test('native Recipe website creation selects structured facts; later per-field c
     .click();
   const cookCorrection = draft(page, 'cooking time');
   await cookCorrection.getByRole('textbox', { name: 'Amount' }).fill('+40');
+  await cookCorrection.getByRole('button', { name: 'Review this recipe' }).click();
   await cookCorrection.getByRole('button', { name: 'Submit proposal' }).click();
   await cookCorrection
     .getByRole('status')
@@ -246,6 +248,7 @@ test('native Recipe website creation selects structured facts; later per-field c
     .click();
   const ingredientCorrection = draft(page, 'ingredient');
   await ingredientCorrection.getByRole('textbox', { name: 'Value' }).fill(names.corrected);
+  await ingredientCorrection.getByRole('button', { name: 'Review this recipe' }).click();
 
   let dropped: { status: number; body: string } | undefined;
   const dropFirst = async (route: import('playwright').Route) => {

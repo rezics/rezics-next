@@ -34,9 +34,11 @@ import type { CandidateSlot } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
 import { newAuthoredField, authoredFieldValue, type AuthoredField } from './authored-field';
+import { catalogueEntries } from './catalogue-entry';
 import type { CreateFailure, CreateResult } from './create-subject';
 import {
   recipeDraft,
+  recipeEvidence,
   recipePropertyCompatible,
   recipeTarget,
   type RecipeCommand,
@@ -44,9 +46,16 @@ import {
   type RecipeTransport,
   type RecipeRead,
 } from './recipe-editor';
-import { statementInput, type ProposalCommand, type ProposalResult, type StatementInput } from './statement-editor';
+import { RecipeCorrectionReview, RecipeCreateReview } from './recipe-editor-review';
+import { statementInput, type ProposalCommand, type ProposalResult, type SnakInput, type StatementInput } from './statement-editor';
 import { statementDraftChanged } from './statement-editor-navigation';
-import { EditorFailure, ScalarControl } from './statement-editor-view';
+import {
+  EditorFailure,
+  StatementFields,
+  statementHolderKey,
+  type StatementFieldsRead,
+} from './statement-editor-view';
+import { controlId, type StatementFeedback } from './statement-validation-presentation';
 import {
   focusRecipeCorrection,
   recipeCorrections,
@@ -171,6 +180,7 @@ function RecipeEditorLive({
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<RecipeCorrection[]>([]);
+  const [createReview, setCreateReview] = useState<string>();
   const validationFocus = useRef<string | undefined>(undefined);
   const workspace = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -198,6 +208,7 @@ function RecipeEditorLive({
     setFailure(next);
   };
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
+  const [createdLabel, setCreatedLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const pending = useRef<RecipeCommand | null>(null);
   const pendingUncertain = useRef(false);
@@ -278,6 +289,11 @@ function RecipeEditorLive({
       ));
   const pendingWrite = (pending.current !== null && pendingUncertain.current) || rows.some((row) => row.uncertain);
   const name = (id: string) => pickText(draftRead?.release.properties[id]?.labels ?? {}, locale).text || id;
+  const createReviewFingerprint = JSON.stringify({
+    terms: terms.map((term) => [term.id, term.language, term.label, term.description, term.aliases]),
+    rows: rows.map((row) => [row.id, row.statement, row.original === true]),
+  });
+  const createReviewCurrent = createReview === createReviewFingerprint;
   const offeredAdditionalFields = read ? availableAdditionalFields(read, rows) : [];
   const selectedAdditionalField = offeredAdditionalFields.includes(property) ? property : '';
   const withdrawnChoice = !!property && !selectedAdditionalField;
@@ -483,6 +499,62 @@ function RecipeEditorLive({
       running.current = false;
     }
   }
+  function preparedCreateDraft() {
+    if (!read) return;
+    const draft = recipeDraft(
+      read.release,
+      locale,
+      terms,
+      rows.map((row) => row.statement),
+    );
+    const originalErrors: RecipeCorrection[] = [];
+    const positions = new Map<string, number>();
+    for (const row of rows) {
+      const property = row.statement.property.id;
+      const index = positions.get(property) ?? 0;
+      positions.set(property, index + 1);
+      if (read.release.properties[property]?.datatype !== 'document') continue;
+      const content =
+        row.statement.value.type === 'value' ? (row.statement.value.content as AuthoredField) : undefined;
+      const authored = !!content && typeof content === 'object';
+      if (!authored || !hasDocumentContent(content.document)) {
+        draft.errors.push({
+          pointer: `/statements/${property}/` + index + '/value/content/document',
+          code: 'required',
+        });
+      }
+      if (authored && !row.original) {
+        const owner = recipeRowId(termsId, row.id);
+        originalErrors.push({
+          id: `${owner}-original-error`,
+          owner,
+          target: `${owner}-original`,
+          label: `${name(property)} · ${m.recipe_original({}, o)}`,
+          instruction: m.correction_error_required({}, o),
+        });
+      }
+    }
+    for (const row of rows) {
+      const pointer = `/statements/${row.statement.property.id}`;
+      if (!rowMatchesCurrentDefinition(row, read) && !draft.errors.some((error) => error.pointer === pointer))
+        draft.errors.push({ pointer, code: 'unsupported' });
+    }
+    return { draft, originalErrors };
+  }
+  function prepareCreateReview() {
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || !read || created || session !== 'signed-in') return;
+    if (running.current || pending.current || failure?.reason === 'conflict' || failure?.refreshDefinitions) return;
+    const prepared = preparedCreateDraft();
+    if (!prepared) return;
+    if (prepared.draft.errors.length || prepared.originalErrors.length) {
+      setCreateReview(undefined);
+      reject({ ok: false, reason: 'invalid', errors: prepared.draft.errors }, prepared.originalErrors);
+      return;
+    }
+    setFailure(undefined);
+    setCorrections([]);
+    setCreateReview(createReviewFingerprint);
+  }
   async function create() {
     if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
     const exactReplay = pending.current !== null && pendingUncertain.current;
@@ -496,50 +568,18 @@ function RecipeEditorLive({
     )
       return;
     if (!pending.current) {
-      if (!read) return;
-      const draft = recipeDraft(
-        read.release,
-        locale,
-        terms,
-        rows.map((row) => row.statement),
-      );
-      const originalErrors: RecipeCorrection[] = [];
-      const positions = new Map<string, number>();
-      for (const row of rows) {
-        const property = row.statement.property.id;
-        const index = positions.get(property) ?? 0;
-        positions.set(property, index + 1);
-        if (read.release.properties[property]?.datatype !== 'document') continue;
-        const content =
-          row.statement.value.type === 'value' ? (row.statement.value.content as AuthoredField) : undefined;
-        const authored = !!content && typeof content === 'object';
-        if (!authored || !hasDocumentContent(content.document)) {
-          draft.errors.push({
-            pointer: `/statements/${property}/` + index + '/value/content/document',
-            code: 'required',
-          });
-        }
-        if (authored && !row.original) {
-          const owner = recipeRowId(termsId, row.id);
-          originalErrors.push({
-            id: `${owner}-original-error`,
-            owner,
-            target: `${owner}-original`,
-            label: `${name(property)} · ${m.recipe_original({}, o)}`,
-            instruction: m.correction_error_required({}, o),
-          });
-        }
-      }
-      for (const row of rows) {
-        const pointer = `/statements/${row.statement.property.id}`;
-        if (!rowMatchesCurrentDefinition(row, read) && !draft.errors.some((error) => error.pointer === pointer))
-          draft.errors.push({ pointer, code: 'unsupported' });
-      }
-      if (draft.errors.length || originalErrors.length) {
-        reject({ ok: false, reason: 'invalid', errors: draft.errors }, originalErrors);
+      if (!read || createReview !== createReviewFingerprint) {
+        prepareCreateReview();
         return;
       }
-      pending.current = { item: draft.item, key: crypto.randomUUID() };
+      const prepared = preparedCreateDraft();
+      if (!prepared) return;
+      if (prepared.draft.errors.length || prepared.originalErrors.length) {
+        setCreateReview(undefined);
+        reject({ ok: false, reason: 'invalid', errors: prepared.draft.errors }, prepared.originalErrors);
+        return;
+      }
+      pending.current = { item: prepared.draft.item, key: crypto.randomUUID() };
       pendingUncertain.current = false;
     }
     const wasUncertain = pendingUncertain.current;
@@ -552,9 +592,13 @@ function RecipeEditorLive({
       const result = await transport.create(pending.current, wasUncertain);
       if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       if (result.ok) {
+        setCreatedLabel(
+          pickText((pending.current?.item.labels ?? {}) as Record<string, string>, locale).text || createdLabel,
+        );
         setCreated(result);
         pending.current = null;
         pendingUncertain.current = false;
+        setCreateReview(undefined);
       } else {
         reject(result);
         const possiblyCommitted = wasUncertain || result.reason === 'unavailable';
@@ -652,6 +696,21 @@ function RecipeEditorLive({
               </Button>
             </>
           )}
+          <a
+            className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
+            href={
+              catalogueEntries.recipe({
+                id: created.id,
+                label:
+                  created.reader.state === 'ready'
+                    ? (created.reader.identity?.label ?? createdLabel)
+                    : createdLabel,
+                locale,
+              }).href
+            }
+          >
+            {m.recipe_continue({}, o)}
+          </a>
         </section>
       ) : (
         draftRead &&
@@ -1016,22 +1075,62 @@ function RecipeEditorLive({
                     )}
                   </div>
                 )}
-                <Button
-                  type="submit"
-                  className={`${recipeActionClassName} self-start`}
-                  disabled={
-                    busy ||
-                    session !== 'signed-in' ||
-                    failure?.reason === 'conflict' ||
-                    (failure?.refreshDefinitions === true && !(pending.current && pendingUncertain.current))
-                  }
-                >
-                  {busy
-                    ? m.catalogue_create_saving({}, o)
-                    : pending.current
-                      ? m.correction_retry({}, o)
-                      : m.recipe_title({}, o)}
-                </Button>
+                {createReview && draftRead && (
+                  <RecipeCreateReview
+                    terms={terms}
+                    rows={rows.map((row) => ({ ...row, statement: recipeEvidence(row.statement) }))}
+                    read={{
+                      release: draftRead.release,
+                      source: null,
+                      public: { related: {}, subject: { type: 'schema:Recipe' } },
+                    }}
+                    locale={locale}
+                    stale={!createReviewCurrent}
+                    onJump={(target) => {
+                      if (!lifetime.active()) return;
+                      const term = terms.find((row) => `term-${row.id}` === target);
+                      focusRecipeCorrection(
+                        workspace.current?.ownerDocument ?? document,
+                        term ? `${termsId}-language-${term.id}` : recipeRowId(termsId, target),
+                      );
+                    }}
+                  />
+                )}
+                <div className="flex min-w-0 flex-wrap gap-3">
+                  {!pending.current && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={recipeActionClassName}
+                      disabled={
+                        busy ||
+                        session !== 'signed-in' ||
+                        failure?.reason === 'conflict' ||
+                        failure?.refreshDefinitions === true
+                      }
+                      onClick={() => prepareCreateReview()}
+                    >
+                      {m.recipe_review({}, o)}
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    className={`${recipeActionClassName} self-start`}
+                    disabled={
+                      busy ||
+                      session !== 'signed-in' ||
+                      failure?.reason === 'conflict' ||
+                      (failure?.refreshDefinitions === true && !(pending.current && pendingUncertain.current)) ||
+                      (!(pending.current && pendingUncertain.current) && !createReviewCurrent)
+                    }
+                  >
+                    {busy
+                      ? m.catalogue_create_saving({}, o)
+                      : pending.current
+                        ? m.correction_retry({}, o)
+                        : m.recipe_title({}, o)}
+                  </Button>
+                </div>
               </>
             )}
           </Workspace>
@@ -1039,6 +1138,57 @@ function RecipeEditorLive({
       )}
       <RecipeNavigationGuard active={lifetime.active()} dirty={draftDirty} pending={pendingWrite} />
     </article>
+  );
+}
+
+function RecipeItemPart({
+  part,
+  release,
+  related,
+  locale,
+  search,
+  disabled,
+  change,
+}: {
+  part: SnakInput;
+  release: Ready['release'];
+  related: NonNullable<Ready['public']>['related'] | undefined;
+  locale: string;
+  search: EntityPickerSearch;
+  disabled: boolean;
+  change: (value: SnakInput['value']) => void;
+}) {
+  const o = { locale: locale as never };
+  const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
+  const property = part.property.id;
+  const selected =
+    picked.length > 0
+      ? picked
+      : part.value.type === 'value' && typeof part.value.content === 'string' && part.value.content
+        ? [
+            {
+              id: part.value.content,
+              title: pickText(related?.[part.value.content]?.labels ?? {}, locale).text || m.subject_value_unlabelled({}, o),
+              types: [],
+              typeLabel: '',
+              cover: null,
+            },
+          ]
+        : [];
+  return (
+    <EntityPicker
+      disabled={disabled}
+      label={pickText(release.properties[property]?.labels ?? {}, locale).text || property}
+      value={selected}
+      search={async (text, signal) =>
+        (await search(text, signal)).filter((entry) => entry.types.some((type) => recipeTarget(release, property, type)))
+      }
+      src={coverSrc}
+      onValueChange={(items) => {
+        setPicked(items);
+        change({ type: 'value', content: items[0]?.id ?? '' });
+      }}
+    />
   );
 }
 
@@ -1102,17 +1252,12 @@ function RecipeFieldLive({
   const label = pickText(currentDefinition?.labels ?? row.definition.labels, locale).text || property;
   const [authored, setAuthored] = useState<AuthoredField | undefined>(() => row.authored);
   const [picked, setPicked] = useState<EntityPickerSubject[]>(() => row.picked ?? []);
-  const [citation, setCitation] = useState(() => {
-    let current = '';
-    for (const reference of row.statement.references)
-      for (const part of reference.parts)
-        if (part.property.id === 'schema:url' && part.value.type === 'value' && typeof part.value.content === 'string')
-          current = part.value.content;
-    return current;
-  });
   const [busy, setBusy] = useState(false);
   const result = row.result;
   const [reviewing, setReviewing] = useState(false);
+  const [statementReview, setStatementReview] = useState<string>();
+  const statementReviewFingerprint = JSON.stringify(row.statement);
+  const statementReviewCurrent = statementReview === statementReviewFingerprint;
   const running = useRef(false);
   const command = row.command;
   const wasUncertain = !!command && row.uncertain === true;
@@ -1198,7 +1343,6 @@ function RecipeFieldLive({
       : populatedPart(row.statement)) ||
     !!row.original ||
     !!picked.length ||
-    !!citation.trim() ||
     row.statement.qualifiers?.some(populatedPart) ||
     row.statement.references.some((reference) => reference.parts.some(populatedPart));
   const updateAuthored = (patch: Partial<AuthoredField>, expected?: AuthoredField) => {
@@ -1229,13 +1373,21 @@ function RecipeFieldLive({
     typeof row.statement.value.content === 'string'
       ? { target: row.statement.value.content }
       : undefined;
+  function prepareStatementReview() {
+    if (!lifetime.active() || running.current || reviewRequired || !!command || result?.ok === true) return;
+    setStatementReview(statementReviewFingerprint);
+  }
   async function submit() {
     if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
     const exactReplay = !!command && wasUncertain;
     if ((!currentRead?.public && !exactReplay) || running.current || (reviewRequired && !wasUncertain)) return;
+    if (!exactReplay && !command && statementReview !== statementReviewFingerprint) {
+      prepareStatementReview();
+      return;
+    }
     const pending = command ?? {
       id: currentRead!.public!.subject.id,
-      statement: structuredClone(row.statement),
+      statement: recipeEvidence(structuredClone(row.statement)),
       key: crypto.randomUUID(),
     };
     onState({ command: pending, result: undefined, uncertain: true });
@@ -1285,193 +1437,196 @@ function RecipeFieldLive({
           {label}
         </ContentItemHeading>
         <fieldset data-content-item-slot="preview" disabled={frozen} className="min-w-0 space-y-4">
-          {definition.datatype === 'document' ? (
-            <>
-              {!authored ? (
-                <Button
-                  className={recipeActionClassName}
-                  type="button"
-                  variant="outline"
-                  id={`${fieldId}-replace`}
-                  {...recipeInvalid(corrections, `${fieldId}-replace`)}
-                  onClick={() => updateAuthored({})}
-                >
-                  {m.recipe_replace_method({}, o)}
-                </Button>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">{m.recipe_method_help({}, o)}</p>
-                  <Field>
-                    <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
-                    <Input
-                      className={recipeInputClassName}
-                      id={`${fieldId}-language`}
-                      {...recipeInvalid(corrections, `${fieldId}-language`)}
-                      aria-label={m.catalogue_create_language({}, o)}
-                      value={authored.language}
-                      onChange={(event) => updateAuthored({ language: event.target.value }, authored)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor={`${fieldId}-licence`}>{m.subject_source_licence({}, o)}</FieldLabel>
-                    <Input
-                      className={recipeInputClassName}
-                      id={`${fieldId}-licence`}
-                      {...recipeInvalid(corrections, `${fieldId}-licence`)}
-                      aria-label={m.subject_source_licence({}, o)}
-                      value={authored.licence}
-                      onChange={(event) => updateAuthored({ licence: event.target.value }, authored)}
-                    />
-                  </Field>
-                  <div
-                    id={`${fieldId}-document`}
-                    role="group"
-                    tabIndex={-1}
-                    aria-label={label}
-                    {...recipeInvalid(corrections, `${fieldId}-document`)}
+          <StatementFields
+            creation={!row.source}
+            localDraft
+            stablePartAddresses
+            heading="h4"
+            draft={row.statement}
+            current={
+              {
+                release: read.release,
+                source: row.source ?? null,
+                public: {
+                  related: currentRead?.public?.related ?? {},
+                  subject: { type: currentRead?.public?.subject.type ?? 'schema:Recipe' },
+                },
+              } satisfies StatementFieldsRead
+            }
+            locale={locale}
+            feedback={
+              {
+                id: fieldId,
+                errors: corrections
+                  .filter((error) => error.owner === fieldId && !!error.target)
+                  .map((error) => ({ id: error.id, target: error.target!, label: error.label, instruction: error.instruction })),
+              } satisfies StatementFeedback
+            }
+            guideReturn={
+              currentRead?.public
+                ? `${subjectHref({ id: currentRead.public.subject.id, label: pickText(currentRead.public.subject.labels, locale).text }, locale).href}/recipe`
+                : `/${locale}/catalogue/recipe`
+            }
+            valueControl={
+              definition.datatype === 'document' ? (
+                !authored ? (
+                  <Button
+                    className={recipeActionClassName}
+                    type="button"
+                    variant="outline"
+                    id={`${fieldId}-replace`}
+                    {...recipeInvalid(corrections, `${fieldId}-replace`)}
+                    onClick={() => updateAuthored({})}
                   >
-                    <RichTextEditor
-                      label={label}
-                      labels={editorLabels()}
-                      value={authored.document}
-                      lang={authored.language}
-                      disabled={frozen}
-                      onChange={(document) => {
-                        updateAuthored({ document }, authored);
-                      }}
-                    />
-                  </div>
-                  <Field orientation="horizontal">
-                    <Checkbox
-                      id={`${fieldId}-original`}
-                      {...recipeInvalid(corrections, `${fieldId}-original`)}
-                      className="size-11 after:inset-0"
-                      checked={row.original ?? false}
-                      onCheckedChange={(checked) => {
-                        if (!canEdit() || editing.current.row.original !== row.original) return;
-                        clearCorrection(`${fieldId}-original`);
-                        onOriginal(checked === true);
-                      }}
-                    />
-                    <FieldLabel className="min-h-11 items-center" htmlFor={`${fieldId}-original`}>
-                      {m.recipe_original({}, o)}
-                    </FieldLabel>
-                  </Field>
-                </>
-              )}
-            </>
-          ) : definition.datatype === 'wikibase-item' ? (
-            <div
-              id={`${fieldId}-entity`}
-              role="group"
-              tabIndex={-1}
-              aria-label={label}
-              {...recipeInvalid(corrections, `${fieldId}-entity`)}
-            >
-              <EntityPicker
-                disabled={frozen}
-                label={label}
-                value={
-                  picked.length
-                    ? picked
-                    : row.statement.value.type === 'value' &&
-                        typeof row.statement.value.content === 'string' &&
-                        row.statement.value.content
-                      ? [
-                          {
-                            id: row.statement.value.content,
-                            title:
-                              pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale)
-                                .text || m.subject_value_unlabelled({}, o),
-                            types: [],
-                            typeLabel: '',
-                            cover: null,
+                    {m.recipe_replace_method({}, o)}
+                  </Button>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground">{m.recipe_method_help({}, o)}</p>
+                    <Field>
+                      <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
+                      <Input
+                        className={recipeInputClassName}
+                        id={`${fieldId}-language`}
+                        {...recipeInvalid(corrections, `${fieldId}-language`)}
+                        aria-label={m.catalogue_create_language({}, o)}
+                        value={authored.language}
+                        onChange={(event) => updateAuthored({ language: event.target.value }, authored)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`${fieldId}-licence`}>{m.subject_source_licence({}, o)}</FieldLabel>
+                      <Input
+                        className={recipeInputClassName}
+                        id={`${fieldId}-licence`}
+                        {...recipeInvalid(corrections, `${fieldId}-licence`)}
+                        aria-label={m.subject_source_licence({}, o)}
+                        value={authored.licence}
+                        onChange={(event) => updateAuthored({ licence: event.target.value }, authored)}
+                      />
+                    </Field>
+                    <div
+                      id={`${fieldId}-document`}
+                      role="group"
+                      tabIndex={-1}
+                      aria-label={label}
+                      {...recipeInvalid(corrections, `${fieldId}-document`)}
+                    >
+                      <RichTextEditor
+                        label={label}
+                        labels={editorLabels()}
+                        value={authored.document}
+                        lang={authored.language}
+                        disabled={frozen}
+                        onChange={(document) => {
+                          updateAuthored({ document }, authored);
+                        }}
+                      />
+                    </div>
+                  </>
+                )
+              ) : definition.datatype === 'wikibase-item' ? (
+                <div
+                  id={`${fieldId}-entity`}
+                  role="group"
+                  tabIndex={-1}
+                  aria-label={label}
+                  {...recipeInvalid(corrections, `${fieldId}-entity`)}
+                >
+                  <EntityPicker
+                    disabled={frozen}
+                    label={label}
+                    value={
+                      picked.length
+                        ? picked
+                        : row.statement.value.type === 'value' &&
+                            typeof row.statement.value.content === 'string' &&
+                            row.statement.value.content
+                          ? [
+                              {
+                                id: row.statement.value.content,
+                                title:
+                                  pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale)
+                                    .text || m.subject_value_unlabelled({}, o),
+                                types: [],
+                                typeLabel: '',
+                                cover: null,
+                              },
+                            ]
+                          : []
+                    }
+                    search={async (text, signal) =>
+                      (await search(text, signal)).filter((entry) =>
+                        entry.types.some((type) => recipeTarget(read.release, property, type)),
+                      )
+                    }
+                    src={coverSrc}
+                    onValueChange={(items) => {
+                      if (
+                        !changePart('value', (entry) => ({
+                          ...entry,
+                          picked: items,
+                          statement: {
+                            ...entry.statement,
+                            value: { type: 'value', content: items[0]?.id ?? '' },
                           },
-                        ]
-                      : []
-                }
-                search={async (text, signal) =>
-                  (await search(text, signal)).filter((entry) =>
-                    entry.types.some((type) => recipeTarget(read.release, property, type)),
-                  )
-                }
-                src={coverSrc}
-                onValueChange={(items) => {
-                  if (
-                    !changePart('value', (entry) => ({
-                      ...entry,
-                      picked: items,
-                      statement: {
-                        ...entry.statement,
-                        value: { type: 'value', content: items[0]?.id ?? '' },
-                      },
-                    }))
-                  )
-                    return;
-                  clearCorrection(`${fieldId}-entity`);
-                  setPicked(items);
+                        }))
+                      )
+                        return;
+                      clearCorrection(`${fieldId}-entity`);
+                      setPicked(items);
+                    }}
+                  />
+                </div>
+              ) : undefined
+            }
+            partControl={(part, change) =>
+              read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
+                <div
+                  id={
+                    statementHolderKey(part) !== undefined
+                      ? controlId(fieldId, `part-${statementHolderKey(part)}`, 'value')
+                      : undefined
+                  }
+                >
+                  <RecipeItemPart
+                    part={part}
+                    release={read.release}
+                    related={currentRead?.public?.related}
+                    locale={locale}
+                    search={search}
+                    disabled={frozen}
+                    change={(value) => {
+                      if (!canEdit()) return;
+                      change(value);
+                    }}
+                  />
+                </div>
+              ) : undefined
+            }
+            change={(statement) => {
+              if (!canEdit()) return;
+              changeRow((entry) => ({ ...entry, statement }));
+            }}
+          />
+          {definition.datatype === 'document' && authored && (
+            <Field orientation="horizontal">
+              <Checkbox
+                id={`${fieldId}-original`}
+                {...recipeInvalid(corrections, `${fieldId}-original`)}
+                className="size-11 after:inset-0"
+                checked={row.original ?? false}
+                onCheckedChange={(checked) => {
+                  if (!canEdit() || editing.current.row.original !== row.original) return;
+                  clearCorrection(`${fieldId}-original`);
+                  onOriginal(checked === true);
                 }}
               />
-            </div>
-          ) : (
-            <ScalarControl
-              part={row.statement}
-              feedback={{
-                id: fieldId,
-                address: 'fact',
-                errors: corrections
-                  .filter((error) => !!error.target)
-                  .map((error) => ({ ...error, target: error.target! })),
-              }}
-              definition={definition}
-              read={{ release: read.release, public: { related: currentRead?.public?.related ?? {} } }}
-              locale={locale}
-              onChange={(value) =>
-                changePart('value', (entry) => ({ ...entry, statement: { ...entry.statement, value } }))
-              }
-            />
+              <FieldLabel className="min-h-11 items-center" htmlFor={`${fieldId}-original`}>
+                {m.recipe_original({}, o)}
+              </FieldLabel>
+            </Field>
           )}
-          <Field>
-            <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
-            <Input
-              className={recipeInputClassName}
-              id={`citation-${row.id}`}
-              {...recipeInvalid(corrections, `citation-${row.id}`)}
-              type="url"
-              value={citation}
-              onChange={(event) => {
-                const url = event.target.value;
-                if (!canEdit() || editing.current.row.statement.references !== row.statement.references) return;
-                setCitation(url);
-                changePart('references', (entry) => ({
-                  ...entry,
-                  statement: {
-                    ...entry.statement,
-                    references: [
-                      ...structuredClone(row.source?.references ?? []).map((reference) => ({
-                        parts: reference.parts.map((part) => ({
-                          property: { id: part.property.id },
-                          value: part.value,
-                        })),
-                      })),
-                      ...(url.trim()
-                        ? [
-                            {
-                              parts: [
-                                {
-                                  property: { id: 'schema:url' },
-                                  value: { type: 'value' as const, content: url.trim() },
-                                },
-                              ],
-                            },
-                          ]
-                        : []),
-                    ],
-                  },
-                }));
-              }}
-            />
-          </Field>
         </fieldset>
         {reviewRequired && <p role="alert">{m.catalogue_create_invalid_field({}, o)}</p>}
         <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
@@ -1577,24 +1732,68 @@ function RecipeFieldLive({
                   {m.catalogue_create_review_new({}, o)}
                 </Button>
               )}
-            {(currentRead?.public || (command && wasUncertain)) && (
-              <Button
-                className={recipeActionClassName}
-                type="button"
-                disabled={
-                  disabled ||
-                  busy ||
-                  (!currentRead?.public && !wasUncertain) ||
-                  (reviewRequired && !wasUncertain) ||
-                  (result && !result.ok && result.refreshDefinitions === true && !wasUncertain) ||
-                  (definition.datatype === 'document' &&
-                    (!authored || !row.original || !hasDocumentContent(authored.document))) ||
-                  (result && !result.ok && result.reason === 'stale' && !wasUncertain)
+            {statementReview && currentRead && (
+              <RecipeCorrectionReview
+                row={{
+                  id: row.id,
+                  statement: recipeEvidence(row.statement),
+                  definition,
+                  original: row.original,
+                  source: row.source ? statementInput(row.source) : undefined,
+                }}
+                read={{
+                  release: read.release,
+                  source: row.source ?? null,
+                  public: {
+                    related: currentRead.public?.related ?? {},
+                    subject: { type: currentRead.public?.subject.type ?? 'schema:Recipe' },
+                  },
+                }}
+                locale={locale}
+                stale={!statementReviewCurrent}
+                onJump={() =>
+                  focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`)
                 }
-                onClick={() => void submit()}
-              >
-                {command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
-              </Button>
+              />
+            )}
+            {(currentRead?.public || (command && wasUncertain)) && (
+              <>
+                {!command && (
+                  <Button
+                    className={recipeActionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      disabled ||
+                      busy ||
+                      reviewRequired ||
+                      (definition.datatype === 'document' &&
+                        (!authored || !row.original || !hasDocumentContent(authored.document)))
+                    }
+                    onClick={() => prepareStatementReview()}
+                  >
+                    {m.recipe_review({}, o)}
+                  </Button>
+                )}
+                <Button
+                  className={recipeActionClassName}
+                  type="button"
+                  disabled={
+                    disabled ||
+                    busy ||
+                    (!currentRead?.public && !wasUncertain) ||
+                    (reviewRequired && !wasUncertain) ||
+                    (result && !result.ok && result.refreshDefinitions === true && !wasUncertain) ||
+                    (definition.datatype === 'document' &&
+                      (!authored || !row.original || !hasDocumentContent(authored.document))) ||
+                    (result && !result.ok && result.reason === 'stale' && !wasUncertain) ||
+                    (!wasUncertain && !command && !statementReviewCurrent)
+                  }
+                  onClick={() => void submit()}
+                >
+                  {command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
+                </Button>
+              </>
             )}
           </div>
         )}

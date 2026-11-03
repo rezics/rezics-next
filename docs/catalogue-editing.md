@@ -856,6 +856,46 @@ a neighbour. The exact returned UUID is reread before offering the readable publ
 the original work. Unknown delivery retries the sealed body and key; a confirmed unread result retries only the
 read. Returning or changing language after a confirmed result cannot create another publication.
 
+## Browser flow: original recipe composition and correction
+
+The catalogue creation entry and a Recipe subject's Contribute menu open the canonical Recipe editor at
+`/{locale}/catalogue/recipe` and `/{locale}/subjects/{id}/{slug}/recipe`. These private, noindex pages keep
+`schema:Recipe` identity and the exact effective released profile. Ingredient text, material `wdt:P186`,
+`cookTime`, `recipeYield`, `suitableForDiet` and `recipeInstructions` keep distinct meanings, datatypes and
+multiplicity. An ingredient string is not a material identity or diet classification. Nutrition, substitutions,
+fetched instructions, ingredient parsing, serving scaling and health claims are omitted.
+
+An author enters multilingual terms and adds recipe rows through the current profile. Ingredient language,
+native quantity amount/unit/precision and item targets stay explicit. Instructions reuse the ordinary authored
+document composer with original language and licence; citations never copy source wording or grant reuse.
+Each row shows its meaning and actual definition-language fallback. Row identity and entered values survive
+removing another row or term. Populated removal keeps the established confirmation and focuses a surviving control.
+
+Each assertion composes complete evidence through shared StatementFields, retaining specialized authored, target
+and scalar value controls. Independent reference groups, ordered parts, admitted properties, value discriminators
+and supported qualifiers stay as the pinned release and creation/proposal API allow. Unsupported parts keep
+field-specific feedback. Existing groups appear in full, exactly once, without mutating source objects, replacing
+a URL in place, sharing across rows or merging look-alike groups. Empty controls send no evidence or fact.
+Decision: contributors add complete groups in the shared statement editor rather than a URL-only citation field;
+untouched empty scaffolds are omitted.
+
+Before initial creation, a whole-recipe review shows exact language maps, ingredient text, distinct
+materials/diets, quantities with native units, safely rendered authored instructions and every statement's
+complete evidence. Editing a member invalidates only that unsent review and returns to its control. Unsupported
+or malformed authored input stays editable and cannot appear as a successful preview. Confirm seals the reviewed
+native RecipeCommand item and key. Unknown create outcomes keep that body, key and credential. Confirmed-but-unread
+results retry only the returned identity read. After readback, the current Recipe reader and continue-editing
+the exact UUID are ordinary navigation, not a second identity or an implicit correction.
+
+A correction edits one selected assertion's value or complete evidence, reviews that proposed statement against
+the currently authorized selected reading, and submits through proposeRecipe. Retained, added, edited and
+explicitly removed evidence groups are listed. Existing source evidence initializes the private draft once under
+its holder identity. A newly selected current candidate does not overwrite that draft. Untouched rows and their
+groups stay unchanged. Proposed, reviewed, selected and current readable results stay distinct. Uncertain
+correction recovery keeps its own sealed key, independent of creation. A failed correction does not roll back
+creation. Nested diagnostics use stable holder mapping so a delayed pointer cannot focus a different row after
+an earlier group is removed.
+
 ## Browser flow: definition guide
 
 Decision: the active guide opens on the first bounded page and provides separate localized label-prefix and

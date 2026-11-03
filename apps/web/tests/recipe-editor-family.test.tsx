@@ -88,8 +88,24 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () =>
       user.selectOptions(within(scope).getByRole('combobox', { name: m.character_add_fact() }), property),
     );
+    const before = new Set(scope.querySelectorAll('section[id*="-row-"]'));
     await click(scope, m.correction_add());
-    return [...scope.querySelectorAll<HTMLElement>('section')].at(-1)!;
+    return [...scope.querySelectorAll<HTMLElement>('section[id*="-row-"]')].find((node) => !before.has(node))!;
+  };
+  const cite = async (scope: HTMLElement, url: string) => {
+    await click(scope, m.correction_add_reference());
+    const group = [...scope.querySelectorAll('fieldset')].filter((node) =>
+      node.querySelector('legend')?.textContent?.includes(m.correction_references()),
+    ).at(-1)!;
+    await act(async () => user.selectOptions(within(group).getByRole('combobox', { name: m.correction_add_part() }), 'schema:url'));
+    await click(within(group).getByRole('button', { name: m.correction_add() }));
+    await replace(within(group).getByRole('textbox', { name: m.correction_url() }), url);
+  };
+  const url = (scope: HTMLElement) => within(scope).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
+  const reviewRecipe = (scope: HTMLElement) => click(scope, m.recipe_review());
+  const propose = async (scope: HTMLElement) => {
+    await reviewRecipe(scope);
+    await click(scope, m.correction_submit());
   };
   const section = (scope: HTMLElement, name: string, last = false) => {
     const headings = within(scope).getAllByRole('heading', { name: name.replace(/\s+/g, ' ').trim(), level: 2 });
@@ -343,10 +359,10 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(ownIngredient, m.correction_value()), '400 ml water');
     await replace(input(ownIngredient, m.correction_language()), 'en');
     const siblingScalar = scalar(ownIngredient);
-    const retiredCitation = retainedChange(input(ownIngredient, m.relation_citation()));
-    await replace(input(ownIngredient, m.relation_citation()), longCitation);
+    await cite(ownIngredient, longCitation);
+    const retiredCitation = retainedChange(url(ownIngredient));
     await act(async () => retiredCitation({ target: { value: 'https://example.test/retired' } }));
-    expect(input(ownIngredient, m.relation_citation()).value).toBe(longCitation);
+    expect(url(ownIngredient).value).toBe(longCitation);
     await act(async () =>
       siblingScalar({
         type: 'value',
@@ -358,15 +374,9 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () => retiredScalar({ type: 'value', content: 'retired scalar' }));
     expect(input(ownIngredient, m.correction_value()).value).toBe('500 ml water');
     await replace(input(ownIngredient, m.correction_value()), '400 ml water');
-    await replace(input(draft, m.relation_citation()), longCitation);
-    const citation = input(draft, m.relation_citation());
-    await act(async () => {
-      citation.focus();
-      await user.tab();
-    });
-    expect(window.document.activeElement).toBe(within(draft).getByRole('button', { name: m.recipe_remove_field() }));
-    await act(async () => user.tab());
-    expect(window.document.activeElement).toBe(within(draft).getByRole('button', { name: m.correction_submit() }));
+    await replace(url(draft), longCitation);
+    expect(url(draft).value).toBe(longCitation);
+    expect(within(draft).getByRole('button', { name: m.recipe_remove_field() })).toBeDefined();
     expect(correction.calls).toEqual(baseline);
 
     const cookTime = 'schema:cookTime';
@@ -374,11 +384,11 @@ test('Recipe creation and current correction share complete frames with independ
     await click(section(b, cookTimeLabel), m.recipe_correct());
     const independentDraft = section(b, cookTimeLabel, true);
     const lockedScalar = scalar(independentDraft);
-    const lockedCitation = retainedChange(input(independentDraft, m.relation_citation()));
+    const lockedCitation = retainedChange(url(independentDraft));
     await click(independentDraft, m.recipe_remove_field());
     const uncertainRemove = queued(within(independentDraft).getByRole('button', { name: m.recipe_remove_field() }));
     correction.setScenario('uncertain');
-    await click(independentDraft, m.correction_submit());
+    await propose(independentDraft);
     await until(() => independentDraft.textContent!.includes(m.correction_unavailable()));
     const sealedRow = independentDraft.innerHTML;
     await act(async () => {
@@ -397,6 +407,7 @@ test('Recipe creation and current correction share complete frames with independ
     correction.release.properties[cookTime]!.datatype = 'string';
 
     correction.setScenario('conflict');
+    await reviewRecipe(draft);
     await act(async () => {
       within(draft).getByRole('button', { name: m.correction_submit() }).focus();
       await user.keyboard('{Enter}');
@@ -430,8 +441,8 @@ test('Recipe creation and current correction share complete frames with independ
 
     const rereadDraft = section(b, currentCorrectionIngredientLabel, true);
     expect(input(rereadDraft, m.correction_value()).value).toBe(longValue);
-    expect(input(rereadDraft, m.relation_citation()).value).toBe(longCitation);
-    await click(rereadDraft, m.correction_submit());
+    expect(url(rereadDraft).value).toBe(longCitation);
+    await propose(rereadDraft);
     await until(() => rereadDraft.textContent!.includes(m.correction_proposed()));
     const writes = posts(correction, '/candidates');
     const ingredientWrites = writes.filter(
@@ -442,9 +453,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(ingredientWrites[1]!.key).not.toBe(stale.key);
     expect(ingredientWrites[1]!.authorization).toBe('Bearer fixture');
     const expected = statementInput(original);
-    expected.references.push({
-      parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: longCitation } }],
-    });
+    expected.references[0]!.parts[0]!.value = { type: 'value', content: longCitation };
     expect(ingredientWrites[1]!.body).toEqual({ statement: expected });
     expect(correction.publicRead.subject.statements[ingredient]![0]).toEqual(original);
     expect(rereadDraft.querySelector('[data-content-item-slot="state"]')!.textContent).toBe(m.correction_proposed());
@@ -469,7 +478,7 @@ test('Recipe creation and current correction share complete frames with independ
     await click(section(b, materialLabel), m.recipe_correct());
     const incompatibleDraft = section(b, materialLabel, true);
     correction.setScenario('conflict');
-    await click(incompatibleDraft, m.correction_submit());
+    await propose(incompatibleDraft);
     await until(() => incompatibleDraft.textContent!.includes(m.correction_stale()));
     const beforeIncompatibleRefresh = posts(correction, '/candidates').length;
     Object.assign(correction.release.properties[material]!, { datatype: 'string' });
@@ -517,7 +526,7 @@ test('Recipe creation and current correction share complete frames with independ
       true,
     );
     await replace(input(a, m.catalogue_create_label()), 'My lentil soup');
-    await click(a, m.recipe_title());
+    await reviewRecipe(a);
     await until(() => a.textContent!.includes(m.catalogue_create_invalid()));
     expect(posts(creation, '/subjects')).toHaveLength(0); // Original consent is required before native submission.
     const originalDeclaration = within(methodA).getByRole('checkbox', { name: m.recipe_original() });
@@ -527,9 +536,9 @@ test('Recipe creation and current correction share complete frames with independ
       window.document.getElementById(originalDeclaration.getAttribute('aria-describedby')!)?.textContent,
     ).toContain(m.recipe_original());
     await act(async () => user.click(within(methodA).getByRole('checkbox', { name: m.recipe_original() })));
-    await replace(input(methodA, m.relation_citation()), longCitation);
+    await cite(methodA, longCitation);
     await cancelRemoval(methodA);
-    await click(a, m.recipe_title());
+    await reviewRecipe(a);
     await until(() => !!within(a).queryByRole('button', { name: m.catalogue_create_review_new() }));
     expect(posts(creation, '/subjects')).toHaveLength(0);
     await click(a, m.catalogue_create_review_new());
@@ -539,13 +548,13 @@ test('Recipe creation and current correction share complete frames with independ
     await until(() => a.querySelector('form') !== null && a.textContent!.includes(currentIngredientLabel));
     const retainedIngredient = section(a, currentIngredientLabel, true);
     expect(input(retainedIngredient, m.correction_value()).value).toBe('400 ml water');
-    expect(input(retainedIngredient, m.relation_citation()).value).toBe(longCitation);
+    expect(url(retainedIngredient).value).toBe(longCitation);
     expect(input(a, m.catalogue_create_label()).value).toBe('My lentil soup');
     const instructionLabel = creation.release.properties['schema:recipeInstructions']!.labels.en!;
     const retainedMethod = section(a, instructionLabel, true);
     expect(input(retainedMethod, m.catalogue_create_language()).value).toBe('en');
     expect(input(retainedMethod, m.subject_source_licence()).value).toBe('CC-BY-4.0');
-    expect(input(retainedMethod, m.relation_citation()).value).toBe(longCitation);
+    expect(url(retainedMethod).value).toBe(longCitation);
     expect(
       within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }).getAttribute('aria-checked'),
     ).toBe('true');
@@ -556,7 +565,8 @@ test('Recipe creation and current correction share complete frames with independ
     const lockedDocument = document(retainedMethod);
     const lockedPicker = picker(diet);
     const lockedCreateScalar = scalar(retainedIngredient);
-    const lockedCreateCitation = retainedChange(input(retainedMethod, m.relation_citation()));
+    const lockedCreateCitation = retainedChange(url(retainedMethod));
+    await reviewRecipe(a);
     await click(a, m.recipe_title());
     await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
     expect(creationCommands).toHaveLength(2);
@@ -609,6 +619,9 @@ test('Recipe creation and current correction share complete frames with independ
     expect(within(a).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toBe(
       subjectHref({ id: recipeId, label: 'My lentil soup' }, 'en').href,
     );
+    expect(within(a).getByRole('link', { name: m.recipe_continue() }).getAttribute('href')).toBe(
+      `${subjectHref({ id: recipeId, label: 'My lentil soup' }, 'en').href}/recipe`,
+    );
     expect(creation.documents.size).toBe(1);
     expect([...creation.documents.values()][0]).toMatchObject({
       origin: 'account',
@@ -659,7 +672,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(host.contains(empty)).toBe(false);
     expect(window.document.activeElement).toBe(within(host).getByRole('combobox', { name: m.character_add_fact() }));
     const citationOnly = await add(host, ingredient);
-    await replace(input(citationOnly, m.relation_citation()), longCitation);
+    await cite(citationOnly, longCitation);
     await cancelRemoval(citationOnly);
     await click(citationOnly, m.recipe_remove_field());
     await click(citationOnly, m.recipe_remove_field());
@@ -684,7 +697,7 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(instructions, m.catalogue_create_language()), '??');
     await replace(input(instructions, m.subject_source_licence()), 'Not-an-SPDX-licence');
     await cancelRemoval(instructions);
-    await click(host, m.recipe_title());
+    await reviewRecipe(host);
     expect(commands).toHaveLength(0);
     const duplicateLanguage = input(termRows()[1]!, m.catalogue_create_language());
     expect(window.document.activeElement).toBe(duplicateLanguage);
@@ -723,11 +736,12 @@ test('Recipe creation and current correction share complete frames with independ
         await new Promise((resolve) => setTimeout(resolve, 180));
         editor.dispatchEvent(new window.FocusEvent('blur'));
       });
-    await click(host, m.recipe_title());
+    await reviewRecipe(host);
     const documentGroup = instructions.querySelector<HTMLElement>('[role="group"][aria-invalid="true"]')!;
     await go(documentGroup);
     await writeMethod('Retain every word of my original instructions.');
     expect(declaration.getAttribute('aria-checked')).toBe('true');
+    await reviewRecipe(host);
     await click(host, m.recipe_title());
     await until(
       () => commands.length === 1 && input(second, m.correction_value()).getAttribute('aria-invalid') === 'true',
@@ -752,6 +766,7 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(second, m.correction_value()), '450 ml water');
     expect(host.querySelector('[aria-invalid="true"]')).toBeNull();
     server = 'unknown';
+    await reviewRecipe(host);
     await click(host, m.recipe_title());
     await until(() => commands.length === 2 && !!host.querySelector('[role="alert"]'));
     const fallback = host.querySelector<HTMLElement>('[role="alert"]')!;
@@ -778,8 +793,62 @@ test('Recipe creation and current correction share complete frames with independ
     });
     expect(editor.textContent).toContain('Retain every word');
     server = 'ready';
+    await reviewRecipe(host);
     await click(host, m.recipe_title());
     await until(() => host.textContent!.includes(m.recipe_created()));
+
+    // Nested evidence diagnostic keeps the surviving group's control after an earlier holder is removed.
+    const nested = recipeFixture();
+    await show(
+      <RecipeEditor
+        key="nested-evidence"
+        locale="en"
+        session="signed-in"
+        search={search}
+        transport={{
+          ...nested.transport,
+          create: async () => ({
+            ok: false,
+            reason: 'invalid',
+            errors: [
+              {
+                pointer: `/statements/${ingredient}/0/references/1/parts/0/value/content`,
+                code: 'invalid_format',
+              },
+            ],
+          }),
+        }}
+      />,
+    );
+    await until(() => !!host.querySelector('select'));
+    await replace(input(host, m.catalogue_create_label()), 'Soup');
+    const nestedRow = await add(host, ingredient);
+    await replace(input(nestedRow, m.correction_value()), '200 g lentils');
+    await replace(input(nestedRow, m.correction_language()), 'en');
+    await cite(nestedRow, 'https://cook.example/first');
+    await cite(nestedRow, 'https://cook.example/second');
+    const firstGroup = [...nestedRow.querySelectorAll('fieldset')].find((node) =>
+      node.querySelector('legend')?.textContent?.includes(`${m.correction_references()} 1`),
+    )!;
+    await act(async () =>
+      user.selectOptions(within(firstGroup).getByRole('combobox', { name: m.correction_add_part() }), 'schema:inLanguage'),
+    );
+    await click(within(firstGroup).getByRole('button', { name: m.correction_add() }));
+    await replace(within(firstGroup).getByRole('textbox', { name: m.correction_value() }), 'en');
+    await reviewRecipe(host);
+    await click(host, m.recipe_title());
+    await until(() => within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })[1]?.getAttribute('aria-invalid') === 'true');
+    const survivingUrl = within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })[1]! as HTMLInputElement;
+    expect(window.document.activeElement).toBe(survivingUrl);
+    const described = survivingUrl.getAttribute('aria-describedby');
+    await click(firstGroup, m.correction_remove_reference());
+    await click(firstGroup, m.contribution_confirm());
+    expect(host.contains(firstGroup)).toBe(false);
+    expect(survivingUrl.isConnected).toBe(true);
+    expect(survivingUrl.getAttribute('aria-describedby')).toBe(described);
+    await go(survivingUrl);
+    expect(window.document.activeElement).toBe(survivingUrl);
+    expect(within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })).toHaveLength(1);
 
     // Supplied reading growth only: creation input has a separate per-property limit.
     // No backend population/cost claim follows from these fixture/DOM witnesses.
@@ -873,7 +942,7 @@ test('Recipe creation and current correction share complete frames with independ
     const deniedLabel = denied.release.properties['schema:cookTime']!.labels.en!;
     await click(section(host, deniedLabel), m.recipe_correct());
     const deniedPanel = section(host, deniedLabel, true);
-    await click(deniedPanel, m.correction_submit());
+    await propose(deniedPanel);
     await until(() => deniedPanel.textContent!.includes(m.correction_denied()));
     expect(posts(denied, '/candidates')).toHaveLength(1);
     expect(denied.publicRead.subject.statements).toEqual(deniedOriginal);
@@ -933,7 +1002,7 @@ test('Recipe creation and current correction share complete frames with independ
       await click(pending, m.recipe_remove_field());
       const oldRemove = queued(within(pending).getByRole('button', { name: m.recipe_remove_field() }));
       const oldSubmit = queued(within(pending).getByRole('button', { name: m.correction_submit() }));
-      await click(pending, m.correction_submit());
+      await propose(pending);
       await entered.promise;
       await act(async () => oldRemove());
       expect(host.contains(pending)).toBe(true);
@@ -956,7 +1025,7 @@ test('Recipe creation and current correction share complete frames with independ
       // New live mount submits normally; no old command/key is revived.
       await click(section(host, fixture.release.properties['schema:cookTime']!.labels.en!), m.recipe_correct());
       const fresh = section(host, fixture.release.properties['schema:cookTime']!.labels.en!, true);
-      await click(fresh, m.correction_submit());
+      await propose(fresh);
       await until(() => posts(fixture, '/candidates').length === 2);
       expect(posts(fixture, '/candidates')[1]!.key).not.toBe(posts(fixture, '/candidates')[0]!.key);
       await until(() => fresh.textContent!.includes(m.correction_proposed()));
