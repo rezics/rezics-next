@@ -65,9 +65,10 @@ test('add-on review addressing keeps captured holders and bounded reuse without 
   ]);
   expect(draft.errors).toEqual([]);
   expect(draft.item.statements[addonBase]?.[0]?.value).toEqual({ type: 'value', content: addonWorkId });
-  expect(addonIncludedBase(draft.item.statements, { id: addonWorkId, type: 'schema:VideoGame', labels: { en: 'Harbor' } })?.subject?.id).toBe(
-    addonWorkId,
-  );
+  expect(
+    addonIncludedBase(draft.item.statements, { id: addonWorkId, type: 'schema:VideoGame', labels: { en: 'Harbor' } })
+      ?.subject?.id,
+  ).toBe(addonWorkId);
   expect(addonIncludedBase({}, { id: addonWorkId, type: 'schema:VideoGame', labels: {} })).toBeUndefined();
   expect(JSON.stringify(draft.item)).not.toContain('Harbor Studio');
   const nested = addonCreateControl(

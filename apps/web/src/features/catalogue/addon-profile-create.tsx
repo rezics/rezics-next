@@ -106,8 +106,7 @@ export function AddonProfileCreate({
         hideHeading: true,
         labelLanguage: (type) => pageText(release.types[type]?.labels, locale).lang,
         descriptionLanguage: (type) => pageText(release.types[type]?.descriptions, locale).lang,
-        control: (pointer) =>
-          addonCreateControl(pointer, captured.current, facts, baseDraft, release, locale, factsId),
+        control: (pointer) => addonCreateControl(pointer, captured.current, facts, baseDraft, release, locale, factsId),
         prepare: (initial) => {
           captured.current = captureAddonHolders(facts, baseDraft);
           return addonInitialDraft(release, initial, [

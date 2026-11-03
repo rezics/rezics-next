@@ -67,7 +67,8 @@ function nestedControl(
     pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale).text || row.statement.property.id;
   if (
     !pointerTail.length ||
-    (holder.kind === 'base' && (pointerTail[0] === 'value' || pointerTail[0] === 'property' || pointerTail[0] === 'rank'))
+    (holder.kind === 'base' &&
+      (pointerTail[0] === 'value' || pointerTail[0] === 'property' || pointerTail[0] === 'rank'))
   )
     return { id: `${id}-fact`, label: name };
   let part: StatementInput | SnakInput = row.statement;

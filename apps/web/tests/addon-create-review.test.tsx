@@ -40,7 +40,8 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
   const { AddonProfileCreate } = await import('../src/features/catalogue/addon-profile-create');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { addonBase, addonType } = await import('../src/features/catalogue/addon-profile');
-  const { addonProfileFixture, addonWorkId, addonCreatedId } = await import('../src/kernel/fake/catalogue-addon-profile');
+  const { addonProfileFixture, addonWorkId, addonCreatedId } =
+    await import('../src/kernel/fake/catalogue-addon-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const testing = createRequire(require.resolve('storybook/test'));
@@ -93,7 +94,9 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     return group().querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]')[index]!;
   }
   async function add(property: string) {
-    await act(async () => user.selectOptions(within(group()).getByRole('combobox', { name: m.character_add_fact() }), property));
+    await act(async () =>
+      user.selectOptions(within(group()).getByRole('combobox', { name: m.character_add_fact() }), property),
+    );
     await act(async () => user.click(within(group()).getAllByRole('button', { name: m.correction_add() })[0]!));
     return fact(group().querySelectorAll('[data-slot="game-initial-fact"]').length - 1);
   }
@@ -102,7 +105,9 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     const part = within(row).getByRole('combobox', { name: m.correction_add_part() });
     await act(async () => user.selectOptions(part, 'schema:url'));
     await act(async () =>
-      user.click(within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() })),
+      user.click(
+        within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
+      ),
     );
     const urls = within(row).getAllByRole('textbox', { name: m.correction_url() });
     await input(urls.at(-1)!, href);
@@ -137,7 +142,9 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
           return {
             ok: false,
             reason: 'invalid',
-            errors: [{ pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' }],
+            errors: [
+              { pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' },
+            ],
           };
         return fixture.transport.create(command);
       },
@@ -175,7 +182,10 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
       ).toContain('https://example.org/addon-source'),
     );
     expect(within(fact(1)).getAllByRole('group', { name: /Citations/ }).length).toBeGreaterThan(1);
-    await input(within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1]!, 'https://example.org/addon-stale');
+    await input(
+      within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1]!,
+      'https://example.org/addon-stale',
+    );
     expect(panel.textContent).toContain(m.facts_reuse_stale());
     await act(async () => user.click(within(panel).getByRole('button', { name: m.candidate_cancel() })));
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
@@ -277,7 +287,9 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     await input(host.querySelector('input[id="create-label-0"]')!, 'Retired expansion');
     await confirm();
     await render(null, false, true);
-    await act(async () => finish({ ok: true, id: addonCreatedId, reader: { state: 'ready', href: '/en/subjects/retired' } }));
+    await act(async () =>
+      finish({ ok: true, id: addonCreatedId, reader: { state: 'ready', href: '/en/subjects/retired' } }),
+    );
     expect(created).toHaveLength(beforeCreated);
     expect(host.innerHTML).not.toContain(addonCreatedId);
   } finally {

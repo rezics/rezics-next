@@ -228,8 +228,7 @@ export function AddonCreateReview({
         )}
         {suggestionShown && (
           <p className="text-sm text-muted-foreground">
-            {m.addon_create_review_suggestion({}, o)}{' '}
-            <code className="break-all">{suggested.subject.id}</code>
+            {m.addon_create_review_suggestion({}, o)} <code className="break-all">{suggested.subject.id}</code>
           </p>
         )}
       </div>
