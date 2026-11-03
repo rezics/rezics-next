@@ -390,6 +390,7 @@ function publishedModels(): void {
       model.PostInput,
       Readonly<{
         threadId: string;
+        visibility?: 'published' | 'draft';
         body: unknown;
         licence: string;
         subjectIds?: readonly string[];
@@ -404,6 +405,7 @@ function publishedModels(): void {
       model.RevisionInput,
       Readonly<{
         threadId: string;
+        visibility?: 'published' | 'draft';
         itemId: string;
         body: unknown;
         licence?: string;
