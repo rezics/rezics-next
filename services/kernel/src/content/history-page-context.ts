@@ -113,7 +113,11 @@ function documentMentionIds(posts: readonly ItemView[]): string[] {
       const value = pending.pop();
       if (!value || typeof value !== 'object') continue;
       const node = value as { type?: unknown; attrs?: Record<string, unknown>; content?: unknown };
-      if (node.type === 'mention' && typeof node.attrs?.accountId === 'string' && routeOf(node.attrs.accountId) !== null)
+      if (
+        node.type === 'mention' &&
+        typeof node.attrs?.accountId === 'string' &&
+        routeOf(node.attrs.accountId) !== null
+      )
         ids.add(node.attrs.accountId);
       if (Array.isArray(node.content)) {
         for (let index = node.content.length - 1; index >= 0; index--) pending.push(node.content[index]);
@@ -221,9 +225,7 @@ function mediaViews(ids: readonly string[], images: readonly DocumentImagePresen
   const byId = new Map(images.map((image) => [image.id, image]));
   return ids.map((id) => {
     const image = byId.get(id);
-    return image
-      ? { id, state: 'available' as const, image }
-      : { id, state: 'concealed' as const };
+    return image ? { id, state: 'available' as const, image } : { id, state: 'concealed' as const };
   });
 }
 
@@ -274,7 +276,12 @@ function actionReferences(
   actor: Actor,
   runtime: ReadingPageViewerActionRuntime,
   refs: readonly Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>[],
-  results: readonly Readonly<{ type: string; id: string; error?: string; viewerActions?: readonly { operations: readonly string[] }[] }>[],
+  results: readonly Readonly<{
+    type: string;
+    id: string;
+    error?: string;
+    viewerActions?: readonly { operations: readonly string[] }[];
+  }>[],
 ) {
   const byKey = new Map(results.map((result) => [`${result.type}/${result.id}`, result]));
   const watch = { state: 'unavailable' as const, retryable: true as const };
@@ -330,7 +337,11 @@ async function readHistoryActions(
       refs.map(({ type, id }) => ({ type, id })),
       deadline,
     );
-    return { state: 'current' as const, retryable: false, references: actionReferences(actor, runtime, refs, result.resources) };
+    return {
+      state: 'current' as const,
+      retryable: false,
+      references: actionReferences(actor, runtime, refs, result.resources),
+    };
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
     return { state: 'unavailable' as const, retryable: true, references: [] as const };
@@ -412,7 +423,9 @@ export async function readContentHistoryPage(
   if (firstThread.value.kind === 'review') {
     try {
       questions = await readReviewQuestions(dependencies, actor, selected.posts, deadline);
-      if (reviewItems(selected.posts, questions, new Set()).some((item) => responseBytes(item) > MAX_REVIEW_DISPLAY_BYTES))
+      if (
+        reviewItems(selected.posts, questions, new Set()).some((item) => responseBytes(item) > MAX_REVIEW_DISPLAY_BYTES)
+      )
         reviewState = 'unavailable';
     } catch (error) {
       if (!dependencyUnavailable(error)) throw error;
@@ -427,11 +440,16 @@ export async function readContentHistoryPage(
   if (identityState === 'current' && identityKeys.length) {
     try {
       const current = await loadIdentitySummaries(dependencies, actor, identityKeys, deadline);
-      if (JSON.stringify(identityViews(identityKeys, identitySummaries)) !== JSON.stringify(identityViews(identityKeys, current)))
+      if (
+        JSON.stringify(identityViews(identityKeys, identitySummaries)) !==
+        JSON.stringify(identityViews(identityKeys, current))
+      )
         identityState = 'unavailable';
       else {
         identitySummaries = current;
-        if (identityViews(authors, identitySummaries).some((author) => responseBytes(author) > MAX_AUTHOR_DISPLAY_BYTES))
+        if (
+          identityViews(authors, identitySummaries).some((author) => responseBytes(author) > MAX_AUTHOR_DISPLAY_BYTES)
+        )
           identityState = 'unavailable';
       }
     } catch (error) {
@@ -526,10 +544,8 @@ export async function readContentHistoryPage(
           items: reviewItemsForPage,
         }
       : { state: 'current' as const, retryable: false, items: [] as HistoryReviewItem[] };
-  const authorItems =
-    identityState === 'current' ? identityViews(authors, identitySummaries) : [];
-  const mentionItems =
-    identityState === 'current' ? mentionViews(mentions, identitySummaries) : [];
+  const authorItems = identityState === 'current' ? identityViews(authors, identitySummaries) : [];
+  const mentionItems = identityState === 'current' ? mentionViews(mentions, identitySummaries) : [];
   const subjectItems =
     subjectState === 'current' && subjectObservation ? subjectViews(subjects, subjectObservation.summaries) : [];
   const imageItems = mediaState === 'current' ? mediaViews(media, mediaImages) : [];
@@ -540,7 +556,8 @@ export async function readContentHistoryPage(
     reviewState === 'unavailable' ||
     actions.state === 'unavailable';
   const page = {
-    viewer: actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
+    viewer:
+      actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
     conversation: {
       id: firstThread.value.id,
       kind: firstThread.value.kind,
@@ -603,9 +620,7 @@ export async function readContentHistoryPage(
       media: mediaState,
       actions: actions.state,
     },
-    retry: unavailable
-      ? { state: 'same_cursor' as const, cursor: cursor ?? null }
-      : { state: 'none' as const },
+    retry: unavailable ? { state: 'same_cursor' as const, cursor: cursor ?? null } : { state: 'none' as const },
   };
   const response = { revisions: outputRevisions, next: selected.nextCursor, page };
   if (responseBytes(response) > MAX_HISTORY_RESPONSE_BYTES) throw new ProblemError('content_too_large');

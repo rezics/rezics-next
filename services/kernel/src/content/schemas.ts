@@ -391,8 +391,14 @@ const historyAvatar = t.Union([
       media: ContentIdSchema,
       width: t.Integer({ minimum: 1 }),
       height: t.Integer({ minimum: 1 }),
-      placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
-      variants: t.Array(t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed), { maxItems: 12 }),
+      placeholder: t.Object(
+        { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+        closed,
+      ),
+      variants: t.Array(
+        t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+        { maxItems: 12 },
+      ),
       focalPoint: t.Union([
         t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
         t.Null(),
@@ -426,7 +432,10 @@ const historyCover = t.Union([
       media: ContentIdSchema,
       width: t.Integer({ minimum: 1 }),
       height: t.Integer({ minimum: 1 }),
-      placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+      placeholder: t.Object(
+        { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+        closed,
+      ),
       variants: t.Array(
         t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
         { maxItems: 12 },
@@ -446,7 +455,10 @@ const historySubjectSummary = t.Object(
     id: ContentIdSchema,
     type: t.String({ minLength: 1, maxLength: 128 }),
     types: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: 128 }),
-    label: t.Union([t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed), t.Null()]),
+    label: t.Union([
+      t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
+      t.Null(),
+    ]),
     creativeWork: t.Boolean(),
     cover: historyCover,
   },
@@ -468,14 +480,23 @@ const historyQuestion = t.Object(
     canonicalLabel: t.Optional(t.String({ maxLength: 4096 })),
     labelRevision: t.Optional(t.Integer({ minimum: 1 })),
     lifecycle: t.Optional(
-      t.Object({ state: t.Union([t.Literal('active'), t.Literal('retired')]), revision: t.Integer({ minimum: 1 }) }, closed),
+      t.Object(
+        { state: t.Union([t.Literal('active'), t.Literal('retired')]), revision: t.Integer({ minimum: 1 }) },
+        closed,
+      ),
     ),
   },
   closed,
 );
 const historyReviewItem = t.Union([
-  t.Object({ revisionId: ContentIdSchema, state: t.Literal('available'), citation: voteCitation, question: historyQuestion }, closed),
-  t.Object({ revisionId: ContentIdSchema, state: t.Literal('unavailable'), citation: t.Null(), question: t.Null() }, closed),
+  t.Object(
+    { revisionId: ContentIdSchema, state: t.Literal('available'), citation: voteCitation, question: historyQuestion },
+    closed,
+  ),
+  t.Object(
+    { revisionId: ContentIdSchema, state: t.Literal('unavailable'), citation: t.Null(), question: t.Null() },
+    closed,
+  ),
 ]);
 const historyImage = t.Object(
   {
@@ -485,11 +506,21 @@ const historyImage = t.Object(
     width: imageDimension,
     height: imageDimension,
     variants: t.Array(
-      t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1, maximum: 2560 }), height: imageDimension }, closed),
+      t.Object(
+        {
+          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+          width: t.Integer({ minimum: 1, maximum: 2560 }),
+          height: imageDimension,
+        },
+        closed,
+      ),
       { minItems: 1, maxItems: 12 },
     ),
     placeholder: t.Union([
-      t.Object({ thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+      t.Object(
+        { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+        closed,
+      ),
       t.Null(),
     ]),
     focalPoint: t.Union([
@@ -657,7 +688,10 @@ export const HistoryPageContextSchema = t.Object(
     ),
     currentness: historyPageCurrentness,
     retry: t.Union([
-      t.Object({ state: t.Literal('same_cursor'), cursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]) }, closed),
+      t.Object(
+        { state: t.Literal('same_cursor'), cursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]) },
+        closed,
+      ),
       t.Object({ state: t.Literal('none') }, closed),
     ]),
   },
