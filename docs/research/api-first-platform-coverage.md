@@ -54,14 +54,13 @@ not just interfaces. The client is the Eden client derived from the mounted kern
 | **K** | [Collections][K]: `POST/GET /v1/collections`, `GET/PATCH /v1/collections/:collectionId`, `POST/GET /v1/collections/:collectionId/members`, member edit/removal and publication commands. Native collection visibility and member notes support overlapping lists; publication is distinct from a private collection. |
 | **H** | [Copies][L] and [copy model][E]: `POST/GET /v1/copies`, `GET/PATCH /v1/copies/:copyId`. Released profiles admit physical/digital kinds; a copy has status, location, source, acquisition/disposal dates and note. A copy is not a DRM licence or a provider-authenticated ownership assertion. |
 | **P** | [Progress routes][P], [model][PM] and [profile admission][PP]: `POST/GET /v1/progressSessions`, `GET /v1/progressSessions/:sessionId`, `POST /v1/progressSessions/:sessionId:record`, `:complete`, `:abandon`, and completed-unit/change reads. Native fields include subject, versionSubjectId, mode, unit, amount, position and state. `/v1/publishedLogs` publishes a session snapshot with an optional note. |
-| **R** | [Rating routes][R]: `PUT/GET/DELETE /v1/subjects/:id/ratings/:questionId/vote`, question reads, subject `/figure`, `/ratings` and `/ratings/populations`. Native vote/question/population models, not catalogue predicates. [Source statistics][RS] expose `GET/PUT /v1/subjects/:id/source-statistics[/ :source]` (without the space); the current admitted source is specifically `vndb`. Mean, count, scale, asOf, licence and attribution stay separate from native votes. |
+| **R** | [Rating routes][R]: `PUT/GET/DELETE /v1/subjects/:id/ratings/:questionId/vote`, question reads, subject `/figure`, `/ratings` and `/ratings/populations`. Native vote/question/population models, not catalogue predicates. [Source statistics][RS]: `GET /v1/subjects/:id/source-statistics`, `PUT /v1/subjects/:id/source-statistics/:source`; the current admitted source is specifically `vndb`. Mean, count, scale, asOf, licence and attribution stay separate from native votes. |
 | **C** | [Content routes][C]: `POST /v1/threads`, `GET /v1/threads/:id`, `POST/GET /v1/threads/:id/posts`, revision writes/reads, `GET /v1/subjects/:id/threads`, subject/thread/post reaction routes. Reviews use the review board/thread contract; this is not a catalogue statement or a progress event. |
 | **F** | [Follow routes][L]: `PUT/DELETE/GET /v1/follows/:targetId`, list reads. Native follow edges are distinct from library states. Following and collection membership cover different user intentions. |
 | **Q** | [Search routes][Q]: `POST /v1/subjects:search`, `:suggest`, `:facets`; [public filter source][QF] reads real semantic/library/rating producers. Search is implemented but grant-gated; advanced facets/scopes/rating sorts are second scope. |
 | **I** | [Source-record metadata][I], [VNDB inventory][VN] and [Bangumi inventory][BG] describe provenance and source mappings. The inventories' `proposed`/`omitted` labels are import decisions, not proof of a current kernel gap or a scope exclusion. Only Bangumi, VNDB, Open Library and Wikidata imports are in the launch scope. A metadata endpoint is not an authenticated personal-list importer. |
 
-The exact source-statistic operations are `GET /v1/subjects/:id/source-statistics` and
-`PUT /v1/subjects/:id/source-statistics/:source`. Public custom-method notation is `:verb`;
+Public custom-method notation is `:verb`;
 [custom-method.ts](../../services/kernel/src/http/custom-method.ts) registers the internal `/$verb` form.
 
 The semantic value schema admits item, string, external-id, URL, monolingual text, quantity,
@@ -207,8 +206,11 @@ Works, editions, authors and subjects are catalogue data; reading logs, ratings 
 
 ### Goodreads
 
-Primary evidence: official [multiple-shelf help](https://help.goodreads.com/s/announcements/a031H00000OfCxDQAV/helpful-goodreads-hack-viewing-books-on-multiple-shelves)
-and [account/import-export announcement](https://help.goodreads.com/s/announcements/a038V00000XKLxSQAX/faqs-duplicate-accounts-incorrect-email-addresses-and-password-resets).
+Primary evidence: official [multiple-shelf help](https://help.goodreads.com/s/announcements/a031H00000OfCxDQAV/helpful-goodreads-hack-viewing-books-on-multiple-shelves),
+[account/import-export announcement](https://help.goodreads.com/s/announcements/a038V00000XKLxSQAX/faqs-duplicate-accounts-incorrect-email-addresses-and-password-resets),
+[reading challenge announcement](https://www.goodreads.com/blog/show/3144-join-the-goodreads-reading-challenge)
+and [moderator explanation of reread dates](https://help.goodreads.com/s/question/0D5ar00000F858WCAR/how-to-add-two-different-editions-of-the-same-book-without-switching-between-them-if-now-im-rereading-a-book-in-a-different-edition-i-would-like-to-save-both-thanks).
+The help site's direct rendering was inconsistent; its indexed official content was readable.
 The [API page](https://www.goodreads.com/api) returned a script challenge; a current public
 API or dump was not verified. Product/export evidence must not be presented as API access permission.
 
@@ -216,7 +218,7 @@ API or dump was not verified. Product/export evidence must not be presented as A
 | --- | --- | --- |
 | Books/editions/authors, series, cover, ISBN, language and subjects | **A S/G**, book/edition/person/series model [BK][CO][SE][CL]; typed Goodreads IDs **B V/S** on external-id values [T]. | **Yes W1–W4**; provider ID conditional W3. |
 | Exclusive reading state plus overlapping user shelves, lists, score/review and page progress | **A L/K/R/C/P**, current book profiles and native models [BK][L][LL][K][R][C][P]. | **Yes W5–W8**. |
-| Reread history with historical dates, per-read reviews/scores, yearly reading challenge and private entry notes | **C** occurrence/date model and challenge aggregate, plus entry extension [PM][E][R]. Existing repeated sessions and collection notes **A P/K** do not supply all these semantics. | Sessions/collection notes **yes W6/W7**; no challenge or complete reading diary. |
+| Reread history with historical dates and yearly reading challenge | **C** historical occurrence/date model and challenge aggregate [PM]. Existing repeated sessions **A P** do not supply imported past dates or a yearly challenge. | Sessions **yes W6**; no challenge or complete historical reading diary. |
 | Library export/import and friends' activity | Manual native lists/follows/posts **A K/F/C** [K][L][C]; Goodreads export parser, reconciliation and social import **C**. Personalized recommendations **D SC**. | Native lists/following **yes W7/W8**; no verified Goodreads migration flow. |
 
 ### Wikidata
@@ -308,7 +310,7 @@ not interchangeable with the public game catalogue.
 ### Discogs
 
 Primary evidence: [master/release guidelines](https://support.discogs.com/hc/en-us/articles/360005055493-Database-Guidelines-16-Master-Release)
-and [collection help](https://support.discogs.com/hc/en-us/articles/360007331534-How-To-Use-The-Collection-Feature).
+and [collection help](https://support.discogs.com/hc/en-us/articles/360007331534-How-Does-The-Collection-Feature-Work).
 The [developer documentation](https://www.discogs.com/developers) and dump host returned
 access errors; current bulk/API availability was not verified. The comparison concerns
 the documented product distinctions, not permission to collect its database.
@@ -330,30 +332,6 @@ constitute a dump of members' private watchlists, reviews or viewing histories.
 | Titles, episodes, alternate names, genres, people, crew and principal characters | Screen/person/credit/character/classification primitives **A S/G** [AN][CO][CH][CL]; live-action/title-kind admissions, IMDb typed IDs and exact principal ordering/role mappings **B V/S** [AN][T][CO]. | Existing screen/credits **yes W1–W4**; general title profile and source IDs conditional. |
 | Rating count/mean | **C** IMDb source-statistic extension and provenance projection; **R** currently admits only VNDB [RS]. Native score/review **A R/C** [R][C]. | Native rating **yes W8**; IMDb aggregate absent. |
 | Watchlists, lists, score/review and community actions | Native **A K/R/C/F** [K][R][C][L]; authorized member-data migration **C**, and not available from the documented public datasets. Personalized recommendations **D SC**. | **Yes W7/W8** for native equivalents. |
-
-## Gaps ranked for VNDB and Bangumi users
-
-This ranking separates new engine/product work from configured data that the web still needs
-to make useful. The first six items directly affect the expected catalogue-and-tracker journey.
-The remaining items matter when expanding beyond that promise; they should not delay the
-already supported catalogue merely because another reference platform has them.
-
-| Rank | Gap and class | User-visible completion criterion |
-| --- | --- | --- |
-| 1 | **C — personal data portability and richer entries.** Provider consent/linking, identity resolution, list states/labels/votes, entry notes/priority/privacy and original timestamps. Evidence: native entries/copies differ [E], imports [VN][BG] omit private data. | A user can preview and import a VNDB/Bangumi library, see every lossy or unsupported field, correct matches and export it again without inventing local voters or making private entries public. Existing W5–W8 remain the native editing surfaces. |
-| 2 | **C — canonical episode and multi-measure progress.** Current native profile admission permits no structure and only none/session-local unit identities [PP]; current screen profiles use scalar episodes [AN]. | A Bangumi user can mark episodes 1 and 3 watched while 2 is queued, keep specials distinct, and track manga chapters and volumes independently. Render a checklist linked to actual Episode subjects, not a counter or opaque token list. |
-| 3 | **B plus unpresented configuration — complete people/producer/character profiles.** Organization history, occupations/languages, character-to-character relationships and source-specific appearance facts [CO][CH][VN][BG]. | Release explicit properties/concepts and add field groups to W4 or a clear W3 path; show relationships in W2 with direction and qualifiers. Generic capacity alone should not require a user to know property IDs. |
-| 4 | **B/C plus unpresented configuration — Bangumi music/live-action completeness.** Album identity exists, but release/track/consumption profiles and live-action bindings need configuration; the initial adapter excludes subject types 3/6 [MU][AN][BG]. | Every Bangumi subject type has a distinct, useful page and relevant library controls. Preserve music release/track boundaries; extend the source mapping separately from profile publication. |
-| 5 | **C — source classification ballots and aggregate figures.** VNDB tag confidence/lie flags are not native ratings, and provider figures other than VNDB have no admitted SourceStatistic [RS][VN]. | Show native votes and source figures with clear provenance; support classification voting only with an explicit ballot and aggregate contract. Do not report a Bangumi mean as a REZICS public figure. VNDB mean/count display is already A and presented. |
-| 6 | **B plus unpresented configuration — release and source vocabulary fidelity.** Release-to-release relations, TBA/status and exact role/tag/trait/episode-kind concepts [GA][CO][CL][VN][BG]. | Seed and release the required concepts/qualifiers, preserve unknown source codes for review, and make the configured facts discoverable in W1–W4. Do not silently coerce a source relationship or TBA into a different existing meaning. |
-| 7 | **C — occurrence history and personal analytics.** Historical dates, per-occurrence rating/review, repeat totals, challenges and library statistics [PM][E][R]. | A diary and import preserve the difference between a current state and each past consumption event. Existing repeated sessions/log snapshots are retained; add only the missing occurrence semantics. |
-| 8 | **A unpresented / B conditional — optional richer graph, quote and domain browsing.** Graph read A [G] lacks a general visualizer; quotations and music/file/location profiles are B [T][MU]. | Add these surfaces when a concrete reader task needs them. Current finite relation/credit/appearance lists already satisfy the basic VNDB/Bangumi relation-reading expectation. A visual graph alone is not a parity blocker. |
-| 9 | **C — other-provider integrations and specialized observations.** Steam ownership/achievements, AniDB file matching, non-launch catalogue adapters and lossless Wikidata datatypes. | Each integration has an explicit rights/consent and fidelity contract; current catalogue/API breadth is not represented as an existing synchronizer. |
-
-No deferred recommendation engine, advanced search sort, email reminder, launcher, scan reader
-or external marketplace should be counted as a blocker to the launch catalogue-and-library
-scope. They remain D until the owning scope changes. Basic source/API/web omissions above
-remain visible even when their source site cannot currently be fetched.
 
 ## Shared patterns and recommendation
 
@@ -416,10 +394,29 @@ make the source citations reproducible without treating clones as trusted progra
 | `api-first-platform-coverage/anilist-docs` (shallow clone) | `03281c0a4bbf0c7f2097e0c935cddaed1096aa65` | `docs/reference/object/media.md`, `medialist.md`, `docs/guide/graphql/index.md`; no repository-wide licence found. |
 | `api-first-platform-coverage/shokoserver` (shallow clone) | `93dfaba4fa82547765fb1dbfc791672fb997a1f5` | `Shoko.Server/Models/AniDB/AniDB_Anime.cs`, `Providers/AniDB/UDP/User/RequestAddMylist.cs`, `UDP/Info/RequestGetFile.cs`, HTTP/UDP request inventory; `LICENSE` GPL-3.0. |
 
-Only this report changes in the repository. The external reference INDEX was updated for
-the required clone provenance. No code workspace or test file changed; typechecks and
-changed-test runs therefore do not apply. Frozen acceptance and integration checks are
-deferred to the controller as instructed; runtime behavior was not verified in this attempt.
+## Gaps ranked for VNDB and Bangumi users
+
+This ranking separates new engine/product work from configured data that the web still needs
+to make useful. The first six items directly affect the expected catalogue-and-tracker journey.
+The remaining items matter when expanding beyond that promise; they should not delay the
+already supported catalogue merely because another reference platform has them.
+
+| Rank | Gap and class | User-visible completion criterion |
+| --- | --- | --- |
+| 1 | **C — personal data portability and richer entries.** Provider consent/linking, identity resolution, list states/labels/votes, entry notes/priority/privacy and original timestamps. Evidence: native entries/copies differ [E], imports [VN][BG] omit private data. | A user can preview and import a VNDB/Bangumi library, see every lossy or unsupported field, correct matches and export it again without inventing local voters or making private entries public. Existing W5–W8 remain the native editing surfaces. |
+| 2 | **C — canonical episode and multi-measure progress.** Current native profile admission permits no structure and only none/session-local unit identities [PP]; current screen profiles use scalar episodes [AN]. | A Bangumi user can mark episodes 1 and 3 watched while 2 is queued, keep specials distinct, and track manga chapters and volumes independently. Render a checklist linked to actual Episode subjects, not a counter or opaque token list. |
+| 3 | **B plus unpresented configuration — complete people/producer/character profiles.** Organization history, occupations/languages, character-to-character relationships and source-specific appearance facts [CO][CH][VN][BG]. | Release explicit properties/concepts and add field groups to W4 or a clear W3 path; show relationships in W2 with direction and qualifiers. Generic capacity alone should not require a user to know property IDs. |
+| 4 | **B/C plus unpresented configuration — Bangumi music/live-action completeness.** Album identity exists, but release/track/consumption profiles and live-action bindings need configuration; the initial adapter excludes subject types 3/6 [MU][AN][BG]. | Every Bangumi subject type has a distinct, useful page and relevant library controls. Preserve music release/track boundaries; extend the source mapping separately from profile publication. |
+| 5 | **C — source classification ballots and aggregate figures.** VNDB tag confidence/lie flags are not native ratings, and provider figures other than VNDB have no admitted SourceStatistic [RS][VN]. | Show native votes and source figures with clear provenance; support classification voting only with an explicit ballot and aggregate contract. Do not report a Bangumi mean as a REZICS public figure. VNDB mean/count display is already A and presented. |
+| 6 | **B plus unpresented configuration — release and source vocabulary fidelity.** Release-to-release relations, TBA/status and exact role/tag/trait/episode-kind concepts [GA][CO][CL][VN][BG]. | Seed and release the required concepts/qualifiers, preserve unknown source codes for review, and make the configured facts discoverable in W1–W4. Do not silently coerce a source relationship or TBA into a different existing meaning. |
+| 7 | **C — occurrence history and personal analytics.** Historical dates, per-occurrence rating/review, repeat totals, challenges and library statistics [PM][E][R]. | A diary and import preserve the difference between a current state and each past consumption event. Existing repeated sessions/log snapshots are retained; add only the missing occurrence semantics. |
+| 8 | **A unpresented / B conditional — optional richer graph, quote and domain browsing.** Graph read A [G] lacks a general visualizer; quotations and music/file/location profiles are B [T][MU]. | Add these surfaces when a concrete reader task needs them. Current finite relation/credit/appearance lists already satisfy the basic VNDB/Bangumi relation-reading expectation. A visual graph alone is not a parity blocker. |
+| 9 | **C — other-provider integrations and specialized observations.** Steam ownership/achievements, AniDB file matching, non-launch catalogue adapters and lossless Wikidata datatypes. | Each integration has an explicit rights/consent and fidelity contract; current catalogue/API breadth is not represented as an existing synchronizer. |
+
+No deferred recommendation engine, advanced search sort, email reminder, launcher, scan reader
+or external marketplace should be counted as a blocker to the launch catalogue-and-library
+scope. They remain D until the owning scope changes. Basic source/API/web omissions above
+remain visible even when their source site cannot currently be fetched.
 
 [S]: ../../services/kernel/src/semantic/http/subjects.ts
 [G]: ../../services/kernel/src/semantic/graph.ts
