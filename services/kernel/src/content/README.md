@@ -1775,7 +1775,7 @@ an already published/protected native source and never inserts or publishes a bo
 source's creation/revision admission, nor does it charge the same source a second time.
 
 Cost: each admitted ordinary write adds one setting PK probe, one explicit Access check and one board/actor
-PK upsert; a refusal adds one PK probe for retry metadata. Disabled writes add only the setting probe.
+PK upsert; a refusal adds one PK probe for retry metadata. Disabled writes prepare the same bounded capability evidence but add only the setting probe in the body.
 One opaque HMAC key/timestamp per board/actor is retained, without bodies, account IDs or request keys.
 Setting changes use one board point validation and one setting PK upsert; status uses one setting point and at
 most one actor point plus ordinary disclosure/Access bounds. B-tree work is O(log N), constant returned rows;

@@ -130,7 +130,8 @@ const writeFailures = {
   ...readFailures,
   403: problemSchema('forbidden'),
   429: problemSchema('rate_limited', 'board_slow_mode', {
-    retryAt: t.Optional(t.String({ format: 'date-time' })), intervalSeconds: t.Optional(t.Integer({ minimum: 1, maximum: 86400 })),
+    retryAt: t.Optional(t.String({ format: 'date-time' })),
+    intervalSeconds: t.Optional(t.Integer({ minimum: 1, maximum: 86400 })),
   }),
   503: problemSchema(
     'overloaded',
@@ -170,11 +171,18 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
-const slowModeInput = t.Object({ intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }) }, { additionalProperties: false });
-const slowModeResponse = t.Object({
-  intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
-  retryAt: t.Union([t.String({ format: 'date-time' }), t.Null()]), exempt: t.Boolean(),
-}, { additionalProperties: false });
+const slowModeInput = t.Object(
+  { intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }) },
+  { additionalProperties: false },
+);
+const slowModeResponse = t.Object(
+  {
+    intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
+    retryAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    exempt: t.Boolean(),
+  },
+  { additionalProperties: false },
+);
 const globalBoardDirectoryQuery = strictContentSchema(GlobalBoardDirectoryQuerySchema);
 const globalBoardDirectoryResponse = strictContentSchema(GlobalBoardDirectoryResponseSchema);
 const realmBoardsQuery = t.Object(
@@ -267,10 +275,12 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch (error) {
     if (error instanceof BoardSlowModeInputError) throw new ProblemError('invalid_request');
-    if (error instanceof BoardSlowModeError) throw new ProblemError('board_slow_mode', {
-      effectStatus: 'not_applied', extensions: { retryAt: error.retryAt, intervalSeconds: error.intervalSeconds },
-      headers: { 'retry-after': new Date(error.retryAt).toUTCString() },
-    });
+    if (error instanceof BoardSlowModeError)
+      throw new ProblemError('board_slow_mode', {
+        effectStatus: 'not_applied',
+        extensions: { retryAt: error.retryAt, intervalSeconds: error.intervalSeconds },
+        headers: { 'retry-after': new Date(Math.ceil(Date.parse(error.retryAt) / 1000) * 1000).toUTCString() },
+      });
     if (error instanceof ContentUndisclosedError)
       throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
@@ -409,39 +419,63 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     .get(
       '/v1/boards/:id/slowMode',
       {
-        params, response: { 200: withHeaders(slowModeResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'board.slow_mode.get', 'x-action': 'board:read', 'x-exposure': 'public',
-          'x-resource-types': ['content.board'], security: readSecurity },
+        params,
+        response: { 200: withHeaders(slowModeResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'board.slow_mode.get',
+          'x-action': 'board:read',
+          'x-exposure': 'public',
+          'x-resource-types': ['content.board'],
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, actor, admission, job, session }) => {
         existingId(id);
-        return contentOperation(() => admission.run('normal', job, async () => {
-          const context = { actor, deadline: job.deadline };
-          if (!(await readRealmBoard(dependencies, id, context)).value) throw new ProblemError('not_found');
-          const value = await readBoardSlowMode(dependencies, actor, id, job.deadline);
-          const final = await readRealmBoard(dependencies, id, context);
-          if (!final.value) throw new ProblemError('not_found');
-          session.record(sessionComponent(final.anchor));
-          return value;
-        }));
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const context = { actor, deadline: job.deadline };
+            if (!(await readRealmBoard(dependencies, id, context)).value) throw new ProblemError('not_found');
+            const value = await readBoardSlowMode(dependencies, actor, id, job.deadline);
+            const final = await readRealmBoard(dependencies, id, context);
+            if (!final.value) throw new ProblemError('not_found');
+            session.record(sessionComponent(final.anchor));
+            return value;
+          }),
+        );
       },
     )
     .put(
       '/v1/boards/:id/slowMode',
       {
-        params, headers: commandHeaders, body: strictContentSchema(slowModeInput),
+        params,
+        headers: commandHeaders,
+        body: strictContentSchema(slowModeInput),
         response: { 200: withHeaders(slowModeInput, sessionHeader), ...writeFailures },
-        detail: { operationId: 'board.slow_mode.set', 'x-action': 'moderation:takedown', 'x-exposure': 'public',
-          'x-resource-types': ['content.board'], 'x-rate-limit': writeRate, security: writeSecurity },
+        detail: {
+          operationId: 'board.slow_mode.set',
+          'x-action': 'moderation:takedown',
+          'x-exposure': 'public',
+          'x-resource-types': ['content.board'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
       },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         existingId(id);
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        return contentOperation(() => admission.run('normal', job, async () => {
-          const result = await setBoardSlowMode(dependencies, actor, id, body.intervalSeconds, requestContext(request, job.deadline));
-          session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-          return result.value;
-        }));
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await setBoardSlowMode(
+              dependencies,
+              actor,
+              id,
+              body.intervalSeconds,
+              requestContext(request, job.deadline),
+            );
+            session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+            return result.value;
+          }),
+        );
       },
     )
     .get(
