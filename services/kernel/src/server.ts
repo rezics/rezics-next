@@ -31,7 +31,7 @@ import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } fro
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
 import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
 import type { AccessFactory } from './request/access.ts';
-import { MAX_BODY_LIMIT } from './http/body.ts';
+import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
@@ -338,7 +338,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
-    maxRequestBodySize: MAX_BODY_LIMIT,
+    maxRequestBodySize: MAX_HTTP_BODY_LIMIT,
     async fetch(request, transport) {
       let finish!: () => void;
       const active = new Promise<void>((resolve) => (finish = resolve));

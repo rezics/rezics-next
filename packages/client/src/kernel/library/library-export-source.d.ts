@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-export declare const exportSections: readonly [...string[], "units", "history", "occurrences", "malEvidence"];
+export { exportSections } from './library-export-format.ts';
 export type ExportRecord = Record<string, unknown>;
 export type ExportSeek = {
     section: number;

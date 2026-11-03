@@ -496,12 +496,13 @@ Focused native HTTP cases cover two owners, independent facts, paging, stale edi
 barriers. Full integration acceptance remains deferred. Installed Bangumi and unexpired MAL row evidence preserve stored provider identifiers;
 raw XML and review/apply capabilities are excluded; no Web export page or re-import compatibility is claimed.
 
-[Personal archive validation and remaining merge journey](../library-archive-merge.md) share the installed v1
-producer vocabulary and bounds. An inert bounded decoder checks completed artifacts and reports explicit
-entry/label/assignment mapping coverage and retained unsupported sections. Its focused cases include a decode of
-actual native export records. No archive-consumer HTTP methods, native merge effects or integrating Web interface
-are installed by this preparatory slice. Native review/apply, journal, cancellation, retention/erasure and composed
-cost/growth evidence remain pending; the existing export's evidence status is unchanged.
+[Curated Collection recovery](../library-archive-collection-recovery.md) consumes completed v1 native exports through
+owner-only upload, indexed preview, explicit canonical Subject review, bounded native apply and per-occurrence
+outcomes. The typed client exposes upload, status, Collection/occurrence pages, review, apply, outcomes and cancel.
+Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
+and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. Dynamic and built-in
+Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
+the adjacent Web recovery interface remain deferred to integration; Web323 still owns export UI.
 
 ## Evidence stage
 
