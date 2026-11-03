@@ -558,6 +558,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     settings.stateDirectory,
     LANDING_CHECK_ENVIRONMENT,
     checkResultOptions,
+    settings.policy?.merge,
   );
   const runGate: GateRunner = options.runGate ?? execute;
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
@@ -568,6 +569,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       settings.stateDirectory,
       {},
       checkResultOptions,
+    settings.policy?.merge,
     );
   // The dev verifier checks after integration at ordinary priority: at landing priority its checks held every host's
   // ordinary admission at zero, and workers waited an hour behind one run (2026-10-30).
@@ -578,9 +580,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       undefined,
       {},
       checkResultOptions,
+    settings.policy?.merge,
     );
   // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
-  const typecheckGate = processGroupRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, process.env);
+  const typecheckGate = processGroupRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, process.env, true, settings.policy?.merge);
   let train!: MergeTrain;
   const pump = () => train.pump();
   const managerContext = () => {
@@ -657,7 +660,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     // Every control-plane release must execute its complete mandatory proof on the exact final candidate.
     runControlPlaneGate:
       options.runGate ??
-      gateRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, LANDING_CHECK_ENVIRONMENT),
+      gateRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, LANDING_CHECK_ENVIRONMENT, undefined, settings.policy?.merge),
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
     handOff,

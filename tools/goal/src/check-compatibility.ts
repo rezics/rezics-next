@@ -349,7 +349,7 @@ function commandResultCheck(
   result: RunResult,
   ok: boolean,
   detail: string,
-  evidence: Record<string, unknown> = {},
+  evidence: Record<string, unknown> = {}, policy = defaultPolicy.nativeCommands
 ): void {
   pushCheck(checks, field, command, ok, detail, { ...displayResult(result), ...evidence });
 }
@@ -403,7 +403,7 @@ function startWorkerCheck(
   exitCode: number,
   contract: CheckCompatibilityContract,
   waitForRelease: boolean,
-  pinnedRuntime = false,
+  pinnedRuntime = false, policy = defaultPolicy.nativeCommands
 ): { id?: string; childArgv: string[]; recordArgv: string[]; gatePath?: string } {
   const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
   if (gatePath) rmSync(gatePath, { force: true });
@@ -432,7 +432,7 @@ function startWorkerCheck(
   delete env.GOAL_TASK_ID;
   delete env.GOAL_ATTEMPT;
   delete env.GOAL_CHECK_REGISTRY;
-  const result = run(command, scratchRoot, env);
+  const result = run(command, scratchRoot, env, policy);
   const ids = [...result.stdout.matchAll(/^check: id ([0-9a-f-]{36})$/gm)].map((match) => match[1]!);
   const id = ids[0];
   const validId = ids.length === 1 && UUID.test(id ?? '');
@@ -445,7 +445,7 @@ function startWorkerCheck(
     result.status === 0 && validId
       ? 'The actual worker-check start form returned a UUID.'
       : `Expected a successful start command to print a UUID; received exit ${String(result.status)}.`,
-    { id: id ?? null, idIsUuid: validId },
+    { id: id ?? null, idIsUuid: validId }, policy
   );
   return {
     ...(validId ? { id } : {}),
@@ -460,7 +460,7 @@ function checkWorkerCheckLifecycle(
   scriptsRoot: string,
   scratchRoot: string,
   contract: CheckCompatibilityContract,
-  pinnedRuntime = false,
+  pinnedRuntime = false, policy = defaultPolicy.nativeCommands
 ): void {
   const workerScript = resolve(scriptsRoot, contract.workerCheck.script);
   if (!commandExists(workerScript)) {
@@ -481,7 +481,7 @@ function checkWorkerCheckLifecycle(
     'Required worker-check script exists.',
   );
 
-  const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime);
+  const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true, pinnedRuntime, policy);
   if (!pending.id) {
     if (pending.gatePath) writeFileSync(pending.gatePath, 'release after malformed start output\n');
     return;
@@ -510,7 +510,7 @@ function checkWorkerCheckLifecycle(
   writeFileSync(gatePath, 'continue\n');
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? pending.id! : part));
   const waitCommand = [process.execPath, workerScript, ...waitArgs];
-  const pendingWait = run(waitCommand, scratchRoot, process.env);
+  const pendingWait = run(waitCommand, scratchRoot, process.env, policy);
   const pendingRecord = readWorkerRecord(scratchRoot, pending.id, contract);
   const pendingLog = pendingWait.stdout
     .split(/\r?\n/)
@@ -529,7 +529,7 @@ function checkWorkerCheckLifecycle(
     pendingWaitOk
       ? 'The foreground wait form completed the still-running check successfully.'
       : 'The foreground wait form did not report the successful result and log path.',
-    { id: pending.id },
+    { id: pending.id }, policy
   );
   addRecordChecks(
     checks,
@@ -544,11 +544,11 @@ function checkWorkerCheckLifecycle(
     false,
   );
 
-  const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false, pinnedRuntime);
+  const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false, pinnedRuntime, policy);
   if (!failure.id) return;
   const failureWaitArgs = contract.workerCheck.foregroundArgv.map((part) => (part === '<id>' ? failure.id! : part));
   const failureWaitCommand = [process.execPath, workerScript, ...failureWaitArgs];
-  const failureWait = run(failureWaitCommand, scratchRoot, process.env);
+  const failureWait = run(failureWaitCommand, scratchRoot, process.env, policy);
   const failureRecord = readWorkerRecord(scratchRoot, failure.id, contract);
   const failureLog = failureWait.stdout
     .split(/\r?\n/)
@@ -567,7 +567,7 @@ function checkWorkerCheckLifecycle(
     failureWaitOk
       ? 'The foreground wait form preserved a failing child exit status.'
       : 'The foreground wait form did not report the failing result and log path.',
-    { id: failure.id },
+    { id: failure.id }, policy
   );
   addRecordChecks(
     checks,
@@ -871,7 +871,7 @@ function checkRemoteOptions(
   checks: CompatibilityCheck[],
   scriptsRoot: string,
   scratchRoot: string,
-  contract: CheckCompatibilityContract,
+  contract: CheckCompatibilityContract, policy = defaultPolicy.nativeCommands
 ): void {
   const remoteScript = resolve(scriptsRoot, contract.remoteCheck.script);
   if (!commandExists(remoteScript)) {
@@ -908,7 +908,7 @@ function checkRemoteOptions(
     ];
     const command = [process.execPath, remoteScript, ...args];
     const env = { ...process.env, KERNEL_CHECK_REMOTE: hostsPath, REMOTE_CHECK_PRIORITY: 'landing' };
-    const result = run(command, scratchRoot, env);
+    const result = run(command, scratchRoot, env, policy);
     const parseReachedHosts = result.status !== 0 && !result.error && result.stderr.includes('lists no hosts');
     const notAdmitted = !existsSync(marker);
     const ok = parseReachedHosts && notAdmitted;
@@ -921,7 +921,7 @@ function checkRemoteOptions(
       ok
         ? `${option.flag} parsed successfully; the empty-host fixture stopped before check-host admission.`
         : `${option.flag} did not reach the empty-host boundary without admitting a command.`,
-      { environment: contract.remoteCheck.requiredEnvironment, parseReachedHosts, commandWasNotAdmitted: notAdmitted },
+      { environment: contract.remoteCheck.requiredEnvironment, parseReachedHosts, commandWasNotAdmitted: notAdmitted }, policy
     );
     rmSync(marker, { force: true });
   }
@@ -946,7 +946,7 @@ function report(
 }
 
 /** Check a scripts checkout using real worker-check and remote-check child processes. */
-export function checkScriptCompatibility(scriptsRoot: string): CompatibilityReport {
+export function checkScriptCompatibility(scriptsRoot: string, policy = defaultPolicy.nativeCommands): CompatibilityReport {
   const root = resolve(scriptsRoot);
   const checks: CompatibilityCheck[] = [];
   if (!existsSync(root) || !statSync(root).isDirectory()) {
@@ -959,15 +959,15 @@ export function checkScriptCompatibility(scriptsRoot: string): CompatibilityRepo
   const scratchRoot = mkdtempSync(join(temporaryBase, 'check-compatibility-'));
   try {
     // Keep production Git-based ledger discovery inside the isolated checkout, rather than the caller's main tree.
-    const isolation = run(['git', 'init', '--quiet', scratchRoot], scratchRoot);
+    const isolation = run(['git', 'init', '--quiet', scratchRoot], scratchRoot, undefined, policy);
     if (isolation.status !== 0) throw new Error(`Could not isolate compatibility checkout: ${isolation.stderr}`);
-    const pinnedRuntime = checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT);
+    const pinnedRuntime = checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT, policy);
     if (pinnedRuntime) {
       writeFileSync(join(scratchRoot, 'package.json'), readFileSync(join(root, 'package.json')));
       symlinkSync(join(root, 'node_modules'), join(scratchRoot, 'node_modules'), 'dir');
     }
-    checkWorkerCheckLifecycle(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, pinnedRuntime);
-    checkRemoteOptions(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT);
+    checkWorkerCheckLifecycle(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, pinnedRuntime, policy);
+    checkRemoteOptions(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT, policy);
   } catch (error) {
     pushCheck(
       checks,

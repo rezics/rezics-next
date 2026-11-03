@@ -305,7 +305,7 @@ export function hostRequest(
 }
 
 async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
-  await ensureServiceHost(runtime.managerSocket);
+  await ensureServiceHost(runtime.managerSocket, undefined, runtime.managerServices.policy?.service);
 }
 
 export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
@@ -444,7 +444,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (readinessTimer) clearTimeout(readinessTimer);
     // The socket is already accepting requests. Yield once so a submitted recovery RPC reaches its provider first.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    stopHeartbeat = await startHostHeartbeat();
+    stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     console.log('ready');
     const remind = () => {
       try {

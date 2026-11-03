@@ -375,7 +375,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
         try {
-          const evidencePath = intent.options.evidence ?? evidenceBundle(task, store.attempt(ref));
+          const evidencePath = intent.options.evidence ?? evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
           const answer = await this.consultation(this.tasks, ref, evidencePath);
           intent = store.updateRetryIntent(ref, (value) => {
             value.options.consultation = answer;
@@ -812,7 +812,7 @@ export class WorkerJob implements GateOutcomeSink {
           !this.hasCommit(ref) &&
           !stopping
         ) {
-          const evidencePath = evidenceBundle(task, store.attempt(ref));
+          const evidencePath = evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
           const event = {
             managerId: task.brief.manager,
             taskId: task.id,
@@ -1069,7 +1069,7 @@ export class WorkerJob implements GateOutcomeSink {
         });
         let evidencePath: string | undefined;
         try {
-          evidencePath = evidenceBundle(task, store.attempt(ref));
+          evidencePath = evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
         } catch {
           /* The failure event still carries the driver error. */
         }
@@ -1309,7 +1309,7 @@ export class WorkerJob implements GateOutcomeSink {
               firstFailure(
                 `Landing for task ${task.id} attempt ${ref.attempt} was lost: no pending landing entry or live train owner remains.`,
               );
-            const evidence = evidenceBundle(task, attempt, failure);
+            const evidence = evidenceBundle(task, attempt, failure, store.policy.evidence);
             const event = {
               managerId: this.tasks.settings.integration.supermanager,
               taskId: task.id,
@@ -1741,7 +1741,7 @@ export class WorkerJob implements GateOutcomeSink {
       store.updateAttempt(ref, (a) => {
         a.escalation = stalledForSilence ? 'stalled' : failureClass;
       });
-      const evidencePath = evidenceBundle(task, store.attempt(ref));
+      const evidencePath = evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
       if (kind === 'spec-conflict' || kind === 'scope-growth') {
         store.updateTask(ref, (t) => {
           t.state = 'stopped';
@@ -1765,9 +1765,9 @@ export class WorkerJob implements GateOutcomeSink {
           // Product work on dev also stops after two consecutive attempts without a new commit; other work keeps
           // stopping when the worker did not rerun the failing command.
           const silence = attempt.result.startsWith('stalled: no output for ');
-          const fingerprint = blockerFingerprint(attempt, task.worktree);
+          const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
           const repeated =
-            previous?.failureKind === 'tool' && blockerFingerprint(previous, task.worktree) === fingerprint;
+            previous?.failureKind === 'tool' && blockerFingerprint(previous, task.worktree, store.policy.worker) === fingerprint;
           const unrerun =
             !devProductBrief(task.brief) &&
             previous?.failureKind === 'tool' &&
@@ -1978,7 +1978,7 @@ export class WorkerJob implements GateOutcomeSink {
             result: failure ? `${failure.assertion}: ${failure.excerpt}` : 'Failed at rebase',
           });
         });
-        const evidencePath = evidenceBundle(task, store.attempt(outcome));
+        const evidencePath = evidenceBundle(task, store.attempt(outcome), undefined, store.policy.evidence);
         if (outcome.controlPlaneConflictRepeated) {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
@@ -2137,7 +2137,7 @@ export class WorkerJob implements GateOutcomeSink {
             : `Failed at ${outcome.stage}`,
         });
       });
-      const evidencePath = evidenceBundle(task, store.attempt(outcome));
+      const evidencePath = evidenceBundle(task, store.attempt(outcome), undefined, store.policy.evidence);
       const automatic = ['environment', 'pool-exhausted', 'repeated-assertion', 'new-failure', 'early-stop'].includes(
         failureClass,
       );
@@ -2274,7 +2274,7 @@ export class WorkerJob implements GateOutcomeSink {
     const task = this.tasks.store.task(taskId),
       ref = { taskId, attempt: task.currentAttempt };
     this.tasks.store.assertCurrent(ref);
-    const path = evidenceBundle(task, this.tasks.store.attempt(ref));
+    const path = evidenceBundle(task, this.tasks.store.attempt(ref), undefined, this.tasks.store.policy.evidence);
     const answer = await this.consultation(this.tasks, ref, path);
     await this.start(taskId, { evidence: path, consultation: answer, consulted: true, escalation: 'consultation' });
   }

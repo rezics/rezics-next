@@ -6,14 +6,34 @@
   "silenceMs": 2400000,
   "affectedTests": [
     {
-      "paths": ["services/kernel/**"],
-      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
+      "paths": [
+        "services/kernel/**"
+      ],
+      "command": [
+        "env",
+        "KERNEL_CHECK_AFFECTED_MAX=60",
+        "bun",
+        "run",
+        "--cwd",
+        "services/kernel",
+        "check"
+      ]
     }
   ],
   "verifierChecks": [
     {
-      "paths": ["services/kernel/**"],
-      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
+      "paths": [
+        "services/kernel/**"
+      ],
+      "command": [
+        "env",
+        "KERNEL_CHECK_AFFECTED_MAX=60",
+        "bun",
+        "run",
+        "--cwd",
+        "services/kernel",
+        "check"
+      ]
     },
     {
       "paths": [
@@ -26,18 +46,37 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": ["bun", "scripts/workspace-imports.ts"]
+      "command": [
+        "bun",
+        "scripts/workspace-imports.ts"
+      ]
     },
     {
-      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
-      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
+      "paths": [
+        "apps/web/**",
+        "packages/ui/**",
+        "packages/document/**"
+      ],
+      "command": [
+        "bun",
+        "test",
+        "apps/web/tests/library-page-smoke.test.ts"
+      ]
     },
     {
-      "paths": ["apps/web/scripts/**"],
-      "command": ["bun", "test", "apps/web/scripts/remote-browser.test.ts"]
+      "paths": [
+        "apps/web/scripts/**"
+      ],
+      "command": [
+        "bun",
+        "test",
+        "apps/web/scripts/remote-browser.test.ts"
+      ]
     },
     {
-      "paths": ["packages/client/src/kernel/**"],
+      "paths": [
+        "packages/client/src/kernel/**"
+      ],
       "command": [
         "sh",
         "-c",
@@ -46,7 +85,10 @@
     }
   ],
   "siblingTests": {
-    "command": ["bun", "test"]
+    "command": [
+      "bun",
+      "test"
+    ]
   },
   "integrationChecks": [
     {
@@ -60,7 +102,10 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": ["bun", "install"]
+      "command": [
+        "bun",
+        "install"
+      ]
     },
     {
       "paths": [
@@ -73,7 +118,10 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": ["bun", "scripts/typecheck.ts"]
+      "command": [
+        "bun",
+        "scripts/typecheck.ts"
+      ]
     },
     {
       "paths": [
@@ -86,14 +134,27 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": ["bun", "scripts/workspace-imports.ts"]
+      "command": [
+        "bun",
+        "scripts/workspace-imports.ts"
+      ]
     },
     {
-      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
-      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
+      "paths": [
+        "apps/web/**",
+        "packages/ui/**",
+        "packages/document/**"
+      ],
+      "command": [
+        "bun",
+        "test",
+        "apps/web/tests/library-page-smoke.test.ts"
+      ]
     },
     {
-      "paths": ["packages/client/src/kernel/**"],
+      "paths": [
+        "packages/client/src/kernel/**"
+      ],
       "command": [
         "sh",
         "-c",
@@ -105,27 +166,55 @@
     {
       "path": "bun.lock",
       "stage": "integration",
-      "command": ["bun", "install"]
+      "command": [
+        "bun",
+        "install"
+      ]
     },
     {
       "path": "services/kernel/db/*/schema.sql",
       "stage": "integration",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived", "schema"]
+      "command": [
+        "bun",
+        "run",
+        "--cwd",
+        "services/kernel",
+        "derived",
+        "schema"
+      ]
     },
     {
       "path": "packages/client/src/kernel/**",
       "stage": "promotion",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
-      "inputs": ["services/kernel/**"]
+      "command": [
+        "bun",
+        "run",
+        "--cwd",
+        "services/kernel",
+        "derived"
+      ],
+      "inputs": [
+        "services/kernel/**"
+      ]
     },
     {
       "path": "contracts/openapi.json",
       "stage": "promotion",
-      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
-      "inputs": ["services/kernel/**"]
+      "command": [
+        "bun",
+        "run",
+        "--cwd",
+        "services/kernel",
+        "derived"
+      ],
+      "inputs": [
+        "services/kernel/**"
+      ]
     }
   ],
-  "jsonMessageConflicts": ["apps/web/messages/*.json"],
+  "jsonMessageConflicts": [
+    "apps/web/messages/*.json"
+  ],
   "integration": {
     "batchSize": 4,
     "devLandingChecks": true,
@@ -156,8 +245,13 @@
     "toolOutputTokens": 4000,
     "backgroundTerminalMaxTimeoutMs": 7200000
   },
-  "launchSmokePaths": ["tools/goal/**"],
-  "gate": ["bun", "scripts/gate.ts"],
+  "launchSmokePaths": [
+    "tools/goal/**"
+  ],
+  "gate": [
+    "bun",
+    "scripts/gate.ts"
+  ],
   "promotionParallelism": 4,
   "flow": {
     "efficiencyBelow": 0.4,
@@ -175,7 +269,8 @@
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
-      "refusalSummaryCharacters": 1000
+      "refusalSummaryCharacters": 1000,
+      "expiredTaskExamples": 5
     },
     "capacity": {
       "maxWorkers": 32,
@@ -204,16 +299,27 @@
       "orphanStartGraceMultiplier": 2,
       "sweepYieldItems": 8,
       "retryIntentLeadMs": 1000,
-      "toolRetryBackoffMs": [120000, 600000, 1800000],
+      "toolRetryBackoffMs": [
+        120000,
+        600000,
+        1800000
+      ],
       "toolRetryWindowMs": 3600000,
       "toolRetryEventRows": 5000,
-      "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],
+      "settlementBackoffMs": [
+        500,
+        1000,
+        2000,
+        4000,
+        8000
+      ],
       "logTailBytes": 262144,
       "diagnosticCharacters": 4000,
       "summaryCharacters": 1000,
       "reportResultCharacters": 2000,
       "failedResultCharacters": 500,
-      "fixtureCleanupGraceMs": 250
+      "fixtureCleanupGraceMs": 250,
+      "blockerFingerprintCharacters": 300
     },
     "workerResources": {
       "cpuWeight": 50,
@@ -561,6 +667,111 @@
     "nativeCommands": {
       "commandTimeoutMs": 30000,
       "commandBufferBytes": 32768
+    },
+    "evidence": {
+      "manifestCharacters": 8000,
+      "outputLines": 60,
+      "outputCharacters": 2800,
+      "fieldCharacters": 500,
+      "approaches": 3,
+      "approachCharacters": 140,
+      "approachResultCharacters": 160,
+      "pathCharacters": 800,
+      "visiblePathCharacters": 700,
+      "commandCharacters": 250,
+      "statCharacters": 250,
+      "failureCharacters": 4000,
+      "gitBufferBytes": 33554432,
+      "commandTimeoutMs": 30000
+    },
+    "merge": {
+      "gitBufferBytes": 33554432,
+      "commandTimeoutMs": 30000,
+      "cleanupCommandTimeoutMs": 10000,
+      "terminationGraceMs": 12000,
+      "killGraceMs": 1000,
+      "pollMs": 50,
+      "gateTimeoutMs": 600000,
+      "failureLines": 60,
+      "failureHeadCharacters": 4000,
+      "failureCharacters": 8000
+    },
+    "trainResolver": {
+      "inputBytes": 262144,
+      "outputBytes": 262144,
+      "timeoutMs": 240000,
+      "killGraceMs": 5000,
+      "sourceContracts": 4,
+      "sourceContractCharacters": 16000
+    },
+    "toolIncidents": {
+      "threshold": 3,
+      "windowMs": 1200000,
+      "probeMs": 600000,
+      "exampleTasks": 5,
+      "sourceBufferBytes": 1048576,
+      "sourceTimeoutMs": 30000
+    },
+    "localSettings": {
+      "diagnosticCharacters": 300
+    },
+    "service": {
+      "logLines": 50,
+      "socketTimeoutMs": 1000,
+      "diagnosticCharacters": 4096
+    },
+    "cpSync": {
+      "configSmokeTimeoutMs": 60000,
+      "cliSmokeTimeoutMs": 300000,
+      "testTimeoutMs": 30000,
+      "installTimeoutMs": 600000,
+      "typecheckTimeoutMs": 900000,
+      "suiteTimeoutMs": 1800000,
+      "gitBufferBytes": 268435456,
+      "dirtyPaths": 20,
+      "terminationGraceMs": 15000,
+      "heartbeatMs": 120000,
+      "pipeGraceMs": 5000,
+      "compilerLines": 40,
+      "failureLines": 30,
+      "conflictPaths": 10,
+      "changedPaths": 10,
+      "residentSamples": 10,
+      "residentSampleMs": 60000,
+      "statColumns": 120
+    },
+    "gateParity": {
+      "budgetMs": 270000,
+      "gitTimeoutMs": 5000,
+      "gitBufferBytes": 131072,
+      "testTimeoutMs": 30000,
+      "fixtureTimeoutMs": 60000,
+      "compatibilityTimeoutMs": 120000,
+      "outputBytes": 32768,
+      "cloneTimeoutMs": 30000,
+      "checkoutTimeoutMs": 10000,
+      "installTimeoutMs": 120000
+    },
+    "candidateProbe": {
+      "gitBufferBytes": 1048576,
+      "paths": 64,
+      "gitDetailCharacters": 800,
+      "diagnosticCharacters": 1200,
+      "statusCharacters": 500
+    },
+    "lifecycleRegressions": {
+      "testTimeoutMs": 30000,
+      "commandTimeoutMs": 60000,
+      "diagnosticCharacters": 2500
+    },
+    "managerSmoke": {
+      "compactTokens": 300000,
+      "tokenBudget": 20000
+    },
+    "hostRoute": {
+      "journalAgeSeconds": 120,
+      "clockSkewSeconds": 1,
+      "connectTimeoutSeconds": 15
     }
   }
 }

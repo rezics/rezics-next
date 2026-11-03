@@ -360,7 +360,7 @@ export async function settle(
       }
       finished = true;
     });
-    if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref));
+    if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref), undefined, store.policy.evidence);
     if (finished) {
       store.assertCurrent(ref);
       const task = store.task(ref.taskId);
@@ -395,7 +395,7 @@ export async function settle(
       const unchangedClaim = !task.workspace && unchangedSource(task, workerCommit) && branchHead === workerCommit;
       const sourceDirtyAtSettlement =
         unchangedClaim && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
-      evidenceBundle(task, store.attempt(ref));
+      evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
       await write(() => {
         store.updateTask(ref, (t) => {
           t.state = 'landing';

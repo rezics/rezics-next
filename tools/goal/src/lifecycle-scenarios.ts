@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { driveGateParity } from '../scripts/gate-parity.ts';
 import { integrationHarness } from './test-support.ts';
 import { git } from './merge.ts';
@@ -328,6 +329,7 @@ export function assertLifecycleComplete(report: {
 }
 
 export async function runNamedLifecycleRegressions(options: {
+  policy?: ControlPolicy;
   root: string;
   artifactDirectory?: string;
   deadline: number;
@@ -336,6 +338,7 @@ export async function runNamedLifecycleRegressions(options: {
   onScenario: (scenario: ScenarioEvidence) => void;
   report: (line: string) => void;
 }): Promise<{ incidents: ExecutedRegression[]; suite: ExecutedRegression[] }> {
+  const policy = options.policy ?? defaultPolicy;
   const allCases = [...MANAGER_INCIDENT_REGRESSIONS, ...LIFECYCLE_SUITE_TESTS];
   const groups = new Map<string, (RegressionCase | LifecycleTestCase)[]>();
   for (const testCase of allCases) {
@@ -361,7 +364,7 @@ export async function runNamedLifecycleRegressions(options: {
     const promotionEvidencePath = join(scenarioDirectory, `promotion-${randomUUID()}.json`);
     const result: BoundedProcessResult = await runBoundedProcess(
       process.execPath,
-      ['test', '--timeout', '30000', '--test-name-pattern', pattern, file],
+      ['test', '--timeout', String(policy.lifecycleRegressions.testTimeoutMs), '--test-name-pattern', pattern, file],
       {
         cwd: options.root,
         env: {
@@ -369,7 +372,8 @@ export async function runNamedLifecycleRegressions(options: {
           REZICS_LIFECYCLE_EVIDENCE: '1',
           REZICS_LIFECYCLE_SCENARIO_REPORT: promotionEvidencePath,
         },
-        timeoutMs: Math.min(60_000, remainingMs),
+        policy: policy.launchSmoke,
+        timeoutMs: Math.min(policy.lifecycleRegressions.commandTimeoutMs, remainingMs),
       },
     );
     const output = `${result.stdout}\n${result.stderr}`.trim();
@@ -386,7 +390,7 @@ export async function runNamedLifecycleRegressions(options: {
     const caseStatus = complete ? 'passed' : capacityTimeout ? 'unverified' : 'failed';
     let evidence = complete
       ? `executed ${passCount} selected tests; ${result.durationMs}ms`
-      : `${capacityTimeout ? 'capacity timeout: unverified' : `expected ${expectedCount} selected passing tests, observed ${passCount}; exit ${String(result.status)}`}${output ? `; ${output.slice(-2500)}` : ''}`;
+      : `${capacityTimeout ? 'capacity timeout: unverified' : `expected ${expectedCount} selected passing tests, observed ${passCount}; exit ${String(result.status)}`}${output ? `; ${output.slice(-policy.lifecycleRegressions.diagnosticCharacters)}` : ''}`;
     if (!complete) {
       const logPath = join(
         options.artifactDirectory ?? scenarioDirectory,
@@ -561,6 +565,7 @@ export async function runSmallPromotionScenario(): Promise<SmallPromotionEvidenc
         ancestryChecks.push(false);
       }
       commandRuns.set(commandName, (commandRuns.get(commandName) ?? 0) + 1);
+      // Fixture delay creates concurrent candidate checks; it does not bound a production command.
       await new Promise((resolve) => setTimeout(resolve, 35));
       if (checked !== candidate)
         return { passed: false, output: `AssertionError: expected ${candidate}, checked ${checked}`, timedOut: false };
@@ -611,6 +616,7 @@ export async function runSmallPromotionScenario(): Promise<SmallPromotionEvidenc
       throw new Error('promotion did not classify and retry the injected infrastructure failure');
     if (!infrastructureFailureClassified)
       throw new Error('promotion did not persist the infrastructure-only failure classification and passing retry');
+    // Fixed regression assertion defines the small-promotion fixture, not operator execution policy.
     if (elapsedMs >= 60_000) throw new Error(`small promotion exceeded its bounded scenario time: ${elapsedMs}ms`);
     return evidence;
   } finally {

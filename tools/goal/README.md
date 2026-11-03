@@ -763,6 +763,98 @@ manager-message limits use the caller policy. Brief estimate defaults remain gui
 | `policy.routing.research.maxSteps`                    | `200`                       | Research route step limit.                                                                      |
 | `policy.routing.research.maxMs`                       | `3600000`                   | Research route attempt time budget (ms).                                                        |
 
+Remaining operator bounds retain the package defaults below. Protocol widths, Git index modes,
+filesystem component sizes and systemd microsecond conversions are fixed representations.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `policy.evidence.manifestCharacters` | `8000` | Retry evidence capture and prompt manifest: manifest characters. |
+| `policy.evidence.outputLines` | `60` | Retry evidence capture and prompt manifest: output lines. |
+| `policy.evidence.outputCharacters` | `2800` | Retry evidence capture and prompt manifest: output characters. |
+| `policy.evidence.fieldCharacters` | `500` | Retry evidence capture and prompt manifest: field characters. |
+| `policy.evidence.approaches` | `3` | Retry evidence capture and prompt manifest: approaches. |
+| `policy.evidence.approachCharacters` | `140` | Retry evidence capture and prompt manifest: approach characters. |
+| `policy.evidence.approachResultCharacters` | `160` | Retry evidence capture and prompt manifest: approach result characters. |
+| `policy.evidence.pathCharacters` | `800` | Retry evidence capture and prompt manifest: path characters. |
+| `policy.evidence.visiblePathCharacters` | `700` | Retry evidence capture and prompt manifest: visible path characters. |
+| `policy.evidence.commandCharacters` | `250` | Retry evidence capture and prompt manifest: command characters. |
+| `policy.evidence.statCharacters` | `250` | Retry evidence capture and prompt manifest: stat characters. |
+| `policy.evidence.failureCharacters` | `4000` | Retry evidence capture and prompt manifest: failure characters. |
+| `policy.evidence.gitBufferBytes` | `33554432` | Retry evidence capture and prompt manifest: git buffer bytes. |
+| `policy.evidence.commandTimeoutMs` | `30000` | Retry evidence capture and prompt manifest: command timeout ms. |
+| `policy.merge.gitBufferBytes` | `33554432` | Merge Git, gate cleanup and failure excerpt: git buffer bytes. |
+| `policy.merge.commandTimeoutMs` | `30000` | Merge Git, gate cleanup and failure excerpt: command timeout ms. |
+| `policy.merge.cleanupCommandTimeoutMs` | `10000` | Merge Git, gate cleanup and failure excerpt: cleanup command timeout ms. |
+| `policy.merge.terminationGraceMs` | `12000` | Merge Git, gate cleanup and failure excerpt: termination grace ms. |
+| `policy.merge.killGraceMs` | `1000` | Merge Git, gate cleanup and failure excerpt: kill grace ms. |
+| `policy.merge.pollMs` | `50` | Merge Git, gate cleanup and failure excerpt: poll ms. |
+| `policy.merge.gateTimeoutMs` | `600000` | Merge Git, gate cleanup and failure excerpt: gate timeout ms. |
+| `policy.merge.failureLines` | `60` | Merge Git, gate cleanup and failure excerpt: failure lines. |
+| `policy.merge.failureHeadCharacters` | `4000` | Merge Git, gate cleanup and failure excerpt: failure head characters. |
+| `policy.merge.failureCharacters` | `8000` | Merge Git, gate cleanup and failure excerpt: failure characters. |
+| `policy.trainResolver.inputBytes` | `262144` | Isolated conflict resolver: input bytes. |
+| `policy.trainResolver.outputBytes` | `262144` | Isolated conflict resolver: output bytes. |
+| `policy.trainResolver.timeoutMs` | `240000` | Isolated conflict resolver: timeout ms. |
+| `policy.trainResolver.killGraceMs` | `5000` | Isolated conflict resolver: kill grace ms. |
+| `policy.trainResolver.sourceContracts` | `4` | Isolated conflict resolver: source contracts. |
+| `policy.trainResolver.sourceContractCharacters` | `16000` | Isolated conflict resolver: source contract characters. |
+| `policy.toolIncidents.threshold` | `3` | Shared tool-blocker incident: threshold. |
+| `policy.toolIncidents.windowMs` | `1200000` | Shared tool-blocker incident: window ms. |
+| `policy.toolIncidents.probeMs` | `600000` | Shared tool-blocker incident: probe ms. |
+| `policy.toolIncidents.exampleTasks` | `5` | Shared tool-blocker incident: example tasks. |
+| `policy.toolIncidents.sourceBufferBytes` | `1048576` | Shared tool-blocker incident: source buffer bytes. |
+| `policy.toolIncidents.sourceTimeoutMs` | `30000` | Shared tool-blocker incident: source timeout ms. |
+| `policy.localSettings.diagnosticCharacters` | `300` | Last-valid local settings error: diagnostic characters. |
+| `policy.service.logLines` | `50` | Systemd service diagnostics and readiness: log lines. |
+| `policy.service.socketTimeoutMs` | `1000` | Systemd service diagnostics and readiness: socket timeout ms. |
+| `policy.service.diagnosticCharacters` | `4096` | Systemd service diagnostics and readiness: diagnostic characters. |
+| `policy.worker.blockerFingerprintCharacters` | `300` | Normalized tool-blocker fingerprint: blocker fingerprint characters. |
+| `policy.backlog.expiredTaskExamples` | `5` | Expired task notification examples: expired task examples. |
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `policy.cpSync.configSmokeTimeoutMs` | `60000` | cpSync: config smoke timeout ms. |
+| `policy.cpSync.cliSmokeTimeoutMs` | `300000` | cpSync: cli smoke timeout ms. |
+| `policy.cpSync.testTimeoutMs` | `30000` | cpSync: test timeout ms. |
+| `policy.cpSync.installTimeoutMs` | `600000` | cpSync: install timeout ms. |
+| `policy.cpSync.typecheckTimeoutMs` | `900000` | cpSync: typecheck timeout ms. |
+| `policy.cpSync.suiteTimeoutMs` | `1800000` | cpSync: suite timeout ms. |
+| `policy.cpSync.gitBufferBytes` | `268435456` | cpSync: git buffer bytes. |
+| `policy.cpSync.dirtyPaths` | `20` | cpSync: dirty paths. |
+| `policy.cpSync.terminationGraceMs` | `15000` | cpSync: termination grace ms. |
+| `policy.cpSync.heartbeatMs` | `120000` | cpSync: heartbeat ms. |
+| `policy.cpSync.pipeGraceMs` | `5000` | cpSync: pipe grace ms. |
+| `policy.cpSync.compilerLines` | `40` | cpSync: compiler lines. |
+| `policy.cpSync.failureLines` | `30` | cpSync: failure lines. |
+| `policy.cpSync.conflictPaths` | `10` | cpSync: conflict paths. |
+| `policy.cpSync.changedPaths` | `10` | cpSync: changed paths. |
+| `policy.cpSync.residentSamples` | `10` | cpSync: resident samples. |
+| `policy.cpSync.residentSampleMs` | `60000` | cpSync: resident sample ms. |
+| `policy.cpSync.statColumns` | `120` | cpSync: stat columns. |
+| `policy.gateParity.budgetMs` | `270000` | gateParity: budget ms. |
+| `policy.gateParity.gitTimeoutMs` | `5000` | gateParity: git timeout ms. |
+| `policy.gateParity.gitBufferBytes` | `131072` | gateParity: git buffer bytes. |
+| `policy.gateParity.testTimeoutMs` | `30000` | gateParity: test timeout ms. |
+| `policy.gateParity.fixtureTimeoutMs` | `60000` | gateParity: fixture timeout ms. |
+| `policy.gateParity.compatibilityTimeoutMs` | `120000` | gateParity: compatibility timeout ms. |
+| `policy.gateParity.outputBytes` | `32768` | gateParity: output bytes. |
+| `policy.gateParity.cloneTimeoutMs` | `30000` | gateParity: clone timeout ms. |
+| `policy.gateParity.checkoutTimeoutMs` | `10000` | gateParity: checkout timeout ms. |
+| `policy.gateParity.installTimeoutMs` | `120000` | gateParity: install timeout ms. |
+| `policy.candidateProbe.gitBufferBytes` | `1048576` | candidateProbe: git buffer bytes. |
+| `policy.candidateProbe.paths` | `64` | candidateProbe: paths. |
+| `policy.candidateProbe.gitDetailCharacters` | `800` | candidateProbe: git detail characters. |
+| `policy.candidateProbe.diagnosticCharacters` | `1200` | candidateProbe: diagnostic characters. |
+| `policy.candidateProbe.statusCharacters` | `500` | candidateProbe: status characters. |
+| `policy.lifecycleRegressions.testTimeoutMs` | `30000` | lifecycleRegressions: test timeout ms. |
+| `policy.lifecycleRegressions.commandTimeoutMs` | `60000` | lifecycleRegressions: command timeout ms. |
+| `policy.lifecycleRegressions.diagnosticCharacters` | `2500` | lifecycleRegressions: diagnostic characters. |
+| `policy.managerSmoke.compactTokens` | `300000` | managerSmoke: compact tokens. |
+| `policy.managerSmoke.tokenBudget` | `20000` | managerSmoke: token budget. |
+| `policy.hostRoute.journalAgeSeconds` | `120` | hostRoute: journal age seconds. |
+| `policy.hostRoute.clockSkewSeconds` | `1` | hostRoute: clock skew seconds. |
+| `policy.hostRoute.connectTimeoutSeconds` | `15` | hostRoute: connect timeout seconds. |
+
 ### Delivery flow telemetry
 
 `report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports

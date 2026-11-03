@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
@@ -107,6 +108,7 @@ export async function reportServices(
   action: 'status' | 'restart' | 'logs',
   run = serviceCommand,
   print: (value: string) => void = console.log,
+  policy = defaultPolicy.service,
 ): Promise<number> {
   let failed = false;
   if (action === 'restart') {
@@ -129,7 +131,7 @@ export async function reportServices(
       /^(LoadState=not-found|ActiveState=failed|Result=(?!success\b)\S+)/m.test(health.output) ||
       (unit !== 'rezics-goal-maintenance.service' && /^ActiveState=(inactive|deactivating)$/m.test(health.output));
     if (action === 'logs') {
-      const logs = await run(['journalctl', '--user', '--unit', unit, '--no-pager', '--lines=50']);
+      const logs = await run(['journalctl', '--user', '--unit', unit, '--no-pager', `--lines=${policy.logLines}`]);
       print(logs.output.trim());
       failed ||= logs.code !== 0;
     }
@@ -137,7 +139,7 @@ export async function reportServices(
   return failed ? 1 : 0;
 }
 
-async function socketReady(path: string): Promise<boolean> {
+async function socketReady(path: string, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection(path);
     const finish = (ready: boolean) => {
@@ -146,35 +148,37 @@ async function socketReady(path: string): Promise<boolean> {
     };
     socket.once('connect', () => finish(true));
     socket.once('error', () => finish(false));
-    socket.setTimeout(1000, () => finish(false));
+    socket.setTimeout(timeoutMs, () => finish(false));
   });
 }
 
 /** A CLI can request activation; only systemd owns the host's lifetime and restart policy. */
-export async function ensureServiceHost(socket: string, run = serviceCommand): Promise<void> {
-  if (await socketReady(socket)) return;
+export async function ensureServiceHost(socket: string, run = serviceCommand, policy = defaultPolicy.service): Promise<void> {
+  if (await socketReady(socket, policy.socketTimeoutMs)) return;
   await checked(['systemctl', '--user', 'start', HOST_UNIT], run);
-  if (!(await socketReady(socket)))
+  if (!(await socketReady(socket, policy.socketTimeoutMs)))
     throw new Error(`Manager host socket unavailable after starting ${HOST_UNIT}: ${socket}`);
 }
 
 /** Notifications come from this event loop, so an unresponsive host cannot keep its watchdog alive. */
 export async function startHostHeartbeat(
   env = process.env,
-  notify: (message: string) => Promise<void> = async (message) => {
+  notify: ((message: string) => Promise<void>) | undefined = undefined,
+  policy = defaultPolicy.service,
+): Promise<() => void> {
+  notify ??= async (message) => {
     await new Promise<void>((resolve, reject) => {
       const child = spawn('systemd-notify', [`--pid=${process.pid}`, message], { stdio: ['ignore', 'ignore', 'pipe'] });
       let error = '';
       child.stderr?.on('data', (chunk) => {
-        error = (error + chunk).slice(-4096);
+        error = (error + chunk).slice(-policy.diagnosticCharacters);
       });
       child.once('error', reject);
       child.once('exit', (code) =>
         code === 0 ? resolve() : reject(new Error(error || `systemd-notify: exit ${code}`)),
       );
     });
-  },
-): Promise<() => void> {
+  };
   if (!env.NOTIFY_SOCKET) return () => {};
   await notify('READY=1');
   const watchdog = Number(env.WATCHDOG_USEC);
@@ -190,6 +194,7 @@ export async function startHostHeartbeat(
           sending = false;
         });
     },
+    // systemd supplies microseconds; notify twice per watchdog interval in milliseconds.
     Math.max(1, Math.floor(watchdog / 2000)),
   );
   timer.unref();

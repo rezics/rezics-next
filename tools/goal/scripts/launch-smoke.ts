@@ -1762,6 +1762,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const lifecycle = await import('../src/lifecycle-scenarios.ts');
   try {
     const { incidents, suite } = await lifecycle.runNamedLifecycleRegressions({
+      policy: settings.policy,
       root: tree,
       artifactDirectory: dirname(reportPath),
       deadline,

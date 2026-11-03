@@ -4,9 +4,10 @@
  * temporary worktree of main, then publishes it to main, stabilize and dev in one compare-and-swap transaction and
  * updates the main checkout's working tree. See "Control plane on dev: cp-sync" in tools/goal/README.md.
  *
- * The script imports nothing from tools/goal/src, so it runs from any checkout of the repository, including before
- * main has it.
+ * Only pure policy/settings helpers are imported from the source checkout; older target checkouts need no runtime composition.
  */
+import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
+import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -29,6 +30,7 @@ const MAIN = 'main';
 const DEV = 'dev';
 const STABILIZE = 'stabilize';
 const MINUTE = 60_000;
+// Git SHA-1 identity width; short hashes and baseline hashes below are persistent display/cache identities.
 const ZERO = '0'.repeat(40);
 
 export type Check = {
@@ -54,11 +56,11 @@ export const SMOKE_STATE = '.temp/cp-sync-state';
  * The candidate loaders parse the live local settings and the routing table they name. `checkSettings` is strict and
  * writes nothing; this check does not copy state, launch workers or signal processes.
  */
-export function configSmoke(checkout: string): Check {
+export function configSmoke(checkout: string, policy = scriptPolicy()): Check {
   return {
     name: 'config smoke',
     argv: ['bun', 'tools/goal/scripts/cp-config-smoke.ts'],
-    timeoutMs: MINUTE,
+    timeoutMs: policy.cpSync.configSmokeTimeoutMs,
     kind: 'smoke',
     env: () => ({
       GOAL_MAIN_CHECKOUT: checkout,
@@ -71,11 +73,11 @@ export function configSmoke(checkout: string): Check {
  * The candidate CLI loads the live settings and a copy of the live database, applying its migrations to the copy.
  * GOAL_MANAGER keeps orphan recovery from handing a train to a detached process, which would act on live refs.
  */
-export function cliSmoke(checkout: string): Check {
+export function cliSmoke(checkout: string, policy = scriptPolicy()): Check {
   return {
     name: 'cli smoke',
     argv: ['bun', 'tools/goal/src/cli.ts', 'status'],
-    timeoutMs: 5 * MINUTE,
+    timeoutMs: policy.cpSync.cliSmokeTimeoutMs,
     kind: 'smoke',
     env: (worktree) => ({
       GOAL_MAIN_CHECKOUT: checkout,
@@ -86,38 +88,43 @@ export function cliSmoke(checkout: string): Check {
   };
 }
 
-const SUITE = ['bun', 'test', '--timeout', '30000'];
+function proofChecks(policy: ControlPolicy): readonly Check[] {
+const suite = ['bun', 'test', '--timeout', String(policy.cpSync.testTimeoutMs)];
 // The install, typing and suite steps of the main-release proof (CONTROL_PLANE_CHECKS in src/merge-train.ts).
-export const PROOF_CHECKS: readonly Check[] = [
-  { name: 'root install', argv: ['bun', 'install', '--frozen-lockfile'], timeoutMs: 10 * MINUTE, kind: 'prepare' },
+return [
+  { name: 'root install', argv: ['bun', 'install', '--frozen-lockfile'], timeoutMs: policy.cpSync.installTimeoutMs, kind: 'prepare' },
   {
     name: 'tools/goal install',
     argv: ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
-    timeoutMs: 10 * MINUTE,
+    timeoutMs: policy.cpSync.installTimeoutMs,
     kind: 'prepare',
   },
   {
     name: 'type check',
     argv: ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-    timeoutMs: 15 * MINUTE,
+    timeoutMs: policy.cpSync.typecheckTimeoutMs,
     kind: 'typecheck',
   },
   {
     name: 'test suite',
-    argv: [...SUITE, 'tools/goal/src'],
-    timeoutMs: 30 * MINUTE,
+    argv: [...suite, 'tools/goal/src'],
+    timeoutMs: policy.cpSync.suiteTimeoutMs,
     kind: 'suite',
-    rerun: (files) => [...SUITE, ...files],
+    rerun: (files) => [...suite, ...files],
   },
 ];
 
+}
+export const PROOF_CHECKS = proofChecks(defaultPolicy);
+
 /** Installs, the type check, live config/routing parse and the CLI smoke; `full` adds the suite. */
-export function syncChecks(checkout: string, full = false): Check[] {
-  const suite = PROOF_CHECKS.filter((check) => check.kind === 'suite');
+export function syncChecks(checkout: string, full = false, policy = scriptPolicy()): Check[] {
+  const checks = proofChecks(policy);
+  const suite = checks.filter((check) => check.kind === 'suite');
   return [
-    ...PROOF_CHECKS.filter((check) => check.kind !== 'suite'),
-    configSmoke(checkout),
-    cliSmoke(checkout),
+    ...checks.filter((check) => check.kind !== 'suite'),
+    configSmoke(checkout, policy),
+    cliSmoke(checkout, policy),
     ...(full ? suite : []),
   ];
 }
@@ -207,7 +214,7 @@ function run(cwd: string, args: readonly string[], options: { input?: string; en
     encoding: 'utf8',
     ...(options.input === undefined ? {} : { input: options.input }),
     env: { ...childEnvironment(), ...options.env },
-    maxBuffer: 256 * 1024 * 1024,
+    maxBuffer: scriptPolicy().cpSync.gitBufferBytes,
   });
   return {
     status: result.status ?? 1,
@@ -306,9 +313,9 @@ function assertCheckoutReady(checkout: string, expectedHead: string, paths: read
   if (dirty.length)
     throw new Refusal(
       `The main checkout has uncommitted changes under ${paths.join(', ')}:\n${dirty
-        .slice(0, 20)
+        .slice(0, scriptPolicy().cpSync.dirtyPaths)
         .map((line) => `  ${line}`)
-        .join('\n')}${dirty.length > 20 ? `\n  ... ${dirty.length - 20} more` : ''}`,
+        .join('\n')}${dirty.length > scriptPolicy().cpSync.dirtyPaths ? `\n  ... ${dirty.length - scriptPolicy().cpSync.dirtyPaths} more` : ''}`,
     );
 }
 
@@ -373,11 +380,11 @@ export async function runCheck(
     timedOut = true;
     print(`cp-sync: ${check.name} exceeded ${Math.round(check.timeoutMs / MINUTE)} min; stopping it`);
     killGroup(child.pid, 'SIGTERM');
-    setTimeout(() => killGroup(child.pid, 'SIGKILL'), 15_000).unref();
+    setTimeout(() => killGroup(child.pid, 'SIGKILL'), scriptPolicy().cpSync.terminationGraceMs).unref();
   }, check.timeoutMs);
   const heartbeat = setInterval(
     () => print(`cp-sync: ${check.name} running (${Math.round((Date.now() - started) / MINUTE)} min)`),
-    2 * MINUTE,
+    scriptPolicy().cpSync.heartbeatMs,
   );
   const exitCode = await new Promise<number>((done) => {
     child.on('error', (error) => {
@@ -387,7 +394,7 @@ export async function runCheck(
     child.on('exit', (code, signal) => {
       // Output pipes can stay open in leftover group members; give them a moment, then stop the group.
       const finish = () => done(code ?? 128 + (signal ? (constants.signals[signal] ?? 0) : 1));
-      const grace = setTimeout(finish, 5_000);
+      const grace = setTimeout(finish, scriptPolicy().cpSync.pipeGraceMs);
       child.on('close', () => {
         clearTimeout(grace);
         finish();
@@ -467,7 +474,7 @@ function reportStep(step: StepResult, print: (line: string) => void): void {
   } else if (step.exitCode !== 0) {
     // Compiler diagnostics lead; install failures end with their cause.
     const lines = output.trimEnd().split('\n').slice(1);
-    for (const line of step.kind === 'typecheck' ? lines.slice(0, 40) : lines.slice(-30)) print(`  | ${line}`);
+    for (const line of step.kind === 'typecheck' ? lines.slice(0, scriptPolicy().cpSync.compilerLines) : lines.slice(-scriptPolicy().cpSync.failureLines)) print(`  | ${line}`);
   }
 }
 
@@ -757,7 +764,7 @@ function plan(
       const own = changedPaths(cwd, git(cwd, 'merge-base', stabilize, source!), stabilize, paths);
       if (own.length)
         throw new Refusal(
-          `${STABILIZE} changed ${own.slice(0, 10).join(', ')} without ${DEV}; syncing would drop those changes.`,
+          `${STABILIZE} changed ${own.slice(0, scriptPolicy().cpSync.conflictPaths).join(', ')} without ${DEV}; syncing would drop those changes.`,
         );
     } else if (changedPaths(cwd, previous, stabilize, paths).length) {
       keep = true;
@@ -853,7 +860,7 @@ async function reinstall(
         name: `main checkout install (${directory})`,
         argv: ['bun', 'install', '--frozen-lockfile'],
         cwd: directory,
-        timeoutMs: 10 * MINUTE,
+        timeoutMs: scriptPolicy().cpSync.installTimeoutMs,
       },
       checkout,
       join(logs, `main-install-${directory === '.' ? 'root' : 'goal'}.log`),
@@ -885,7 +892,7 @@ export async function observeResident(
   let workers = 0;
   try {
     const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
-    for (let minute = 0; minute < 10; minute++) {
+    for (let minute = 0; minute < scriptPolicy().cpSync.residentSamples; minute++) {
       const rows = db
         .query(`SELECT a.body FROM worker_attempts a JOIN worker_tasks t ON t.id = a.task_id
         AND t.current_attempt = a.attempt WHERE json_extract(a.body, '$.state') = 'running'`)
@@ -904,14 +911,14 @@ export async function observeResident(
           if (!['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
         }
       }
-      await pause(MINUTE);
+      await pause(scriptPolicy().cpSync.residentSampleMs);
     }
     const events = db
       .query(`SELECT body FROM worker_events WHERE kind = 'gate-outcome' AND at >= ? AND at < ?`)
       .all(start, new Date().toISOString()) as { body: string }[];
     const passed = events.map((row) => JSON.parse(row.body)).filter((outcome) => outcome.passed);
     return {
-      liveWorkers: workers / 10,
+      liveWorkers: workers / scriptPolicy().cpSync.residentSamples,
       passedGates: passed.length,
       landings: passed.filter((outcome) => outcome.stage === 'merge' && outcome.mergedCommit).length,
     };
@@ -943,6 +950,7 @@ export function residentRegression(before: ResidentHealth, after: ResidentHealth
 const residentControl: ResidentControl = { observe: observeResident, restart: restartResident };
 
 export type Options = {
+  policy?: ControlPolicy;
   dryRun?: boolean;
   rollback?: boolean;
   resident?: ResidentControl;
@@ -1015,6 +1023,7 @@ function validateIncludes(cwd: string, includes: readonly string[], main: string
 }
 
 export async function sync(options: Options = {}): Promise<number> {
+  return withScriptPolicy(options.policy ?? readScriptPolicy(findMainCheckout(options.cwd ?? process.cwd())), async () => {
   const print = options.print ?? ((line: string) => console.log(redact(line)));
   const now = (options.now ?? (() => new Date()))();
   const checkout = findMainCheckout(options.cwd ?? process.cwd());
@@ -1135,7 +1144,7 @@ export async function sync(options: Options = {}): Promise<number> {
     if (unexpected.length || paths.some((path) => object(worktree, tree, path) !== object(worktree, source, path)))
       throw new Error(`The candidate tree does not equal ${MAIN} plus ${DEV}'s ${paths.join(', ')}.`);
     print(`cp-sync: changes (${MAIN} ${short(main)} -> candidate):`);
-    for (const line of git(worktree, 'diff', '--stat=120', main, tree).split('\n')) print(`  ${line}`);
+    for (const line of git(worktree, 'diff', `--stat=${scriptPolicy().cpSync.statColumns}`, main, tree).split('\n')) print(`  ${line}`);
     for (const missing of missingControlPlanePaths(checkout, main, tree))
       print(`cp-sync: WARNING: ${missing}, which the candidate lacks`);
 
@@ -1171,7 +1180,7 @@ export async function sync(options: Options = {}): Promise<number> {
     }
     const touched = git(worktree, 'status', '--porcelain', '--untracked-files=no');
     if (touched || git(worktree, 'rev-parse', 'HEAD') !== commit)
-      throw new Refusal(`The checks changed the candidate checkout:\n${touched.split('\n').slice(0, 10).join('\n')}`);
+      throw new Refusal(`The checks changed the candidate checkout:\n${touched.split('\n').slice(0, scriptPolicy().cpSync.changedPaths).join('\n')}`);
     print(`cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`);
 
     if (options.dryRun) {
@@ -1241,9 +1250,12 @@ export async function sync(options: Options = {}): Promise<number> {
     process.off('SIGTERM', interrupt);
     cleanup();
   }
+
+  });
 }
 
 export async function rollback(options: Options = {}): Promise<number> {
+  return withScriptPolicy(options.policy ?? readScriptPolicy(findMainCheckout(options.cwd ?? process.cwd())), async () => {
   const print = options.print ?? ((line: string) => console.log(redact(line)));
   const now = (options.now ?? (() => new Date()))();
   const checkout = findMainCheckout(options.cwd ?? process.cwd());
@@ -1266,7 +1278,7 @@ export async function rollback(options: Options = {}): Promise<number> {
   print(
     `cp-sync: ${options.dryRun ? 'dry run: ' : ''}roll back ${paths.join(', ')} to ${MAIN} ${short(target.main.previous)} (now ${short(current)})`,
   );
-  for (const line of git(checkout, 'diff', '--stat=120', current, tree).split('\n')) print(`  ${line}`);
+  for (const line of git(checkout, 'diff', `--stat=${scriptPolicy().cpSync.statColumns}`, current, tree).split('\n')) print(`  ${line}`);
   const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
   try {
     // Main only moves forward (the repository's reference-transaction hook), so the rollback is a new commit
@@ -1304,6 +1316,8 @@ export async function rollback(options: Options = {}): Promise<number> {
   } finally {
     release();
   }
+
+  });
 }
 
 const USAGE = `Usage: bun tools/goal/scripts/cp-sync.ts [--dry-run] [--rollback] [--include <path>]... [--keep-worktree]

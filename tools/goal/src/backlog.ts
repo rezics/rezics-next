@@ -616,7 +616,9 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
   for (const [key, owner] of byOwner) {
     const managerId = key.split('\u0000', 1)[0]!;
     const listed =
-      owner.tasks.slice(0, 5).join(', ') + (owner.tasks.length > 5 ? ` and ${owner.tasks.length - 5} more` : '');
+      owner.tasks.slice(0, (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples).join(', ') +
+      (owner.tasks.length > (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples
+        ? ` and ${owner.tasks.length - (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples} more` : '');
     const event: ManagerEvent = {
       managerId,
       goalId: owner.goal,
