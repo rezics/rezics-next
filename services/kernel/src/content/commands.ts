@@ -1,3 +1,4 @@
+import { boardSlowAdmission } from './board-slow.ts';
 import { prepareRealmDiscoverySource, type RealmDiscoveryBinding } from '../community/discovery-source.ts';
 import { appendDiscoveryStart } from './discovery.ts';
 import readDiscoveryBoard from './discovery-board.sql';
@@ -369,6 +370,7 @@ function containerAuthorization(
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let currentPlaceId = GLOBAL_CONTEXT;
+  const slow = boardSlowAdmission(dependencies, actor, context);
   const limit = revising ? 33 : 32;
   // A non-author never held a revise receipt. Keep today's not_found ahead of
   // the authorship denial. The author's fresh key is refused in the body so an
@@ -392,6 +394,7 @@ function containerAuthorization(
   return {
     resource,
     validate,
+    slow,
     get current() {
       return current;
     },
@@ -426,6 +429,7 @@ function containerAuthorization(
               );
           }
           const boardId = prepared.thread.board_id;
+          await slow.prepare(boardId, attempt.time);
           const boardCheck = await accessCheck(
             dependencies.access,
             actor,
@@ -619,6 +623,7 @@ export async function createThread(
     ],
     inserted,
   );
+  const slow = boardSlowAdmission(dependencies, actor, context);
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
   let threadPlaceId = GLOBAL_CONTEXT;
   const discovery = new WeakMap<AuthoritativeTime, { boardVersion: string; binding: RealmDiscoveryBinding }>();
@@ -667,6 +672,7 @@ export async function createThread(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
+      await slow.prepare(body.boardId, attempt.time);
       boardCheck = await accessCheck(dependencies.access, actor, 'board:read', board, {
         pool: dependencies.pool,
         deadline: context.deadline,
@@ -734,6 +740,7 @@ export async function createThread(
           ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
           : null;
         const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
+        await slow.reserve(tx, body.boardId, command.time);
         const at = authoritativeTimeValue(command.time);
         await insertThread.run(tx, {
           route: target.route,
@@ -871,6 +878,7 @@ export async function createPost(
         body.licence,
         body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
       );
+      await container.slow.reserve(tx, root.board_id, command.time);
       await insertPost.run(tx, {
         route: r,
         thread_id: value.threadId,
@@ -964,6 +972,7 @@ export async function revisePost(
       const currentCitation = citation
         ? await currentReviewCitation(tx, author.accountId, container.current.thread.review_subject_id!, citation)
         : null;
+      await container.slow.reserve(tx, container.current.thread.board_id, command.time);
       const revisedSubjectIds = await appendRevision(
         tx,
         value,

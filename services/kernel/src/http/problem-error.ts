@@ -76,6 +76,7 @@ export const PROBLEMS = {
   transaction_retry_exhausted: { status: 503, title: 'Transaction Retry Exhausted', retryable: true },
   deadline_exceeded: { status: 503, title: 'Deadline Exceeded', retryable: true },
   dependency_unavailable: { status: 503, title: 'Dependency Unavailable', retryable: true },
+  board_slow_mode: { status: 429, title: 'Board Posting Interval', retryable: true },
   rate_limited: { status: 429, title: 'Request Budget Exhausted', retryable: true },
   rate_limit_unavailable: { status: 503, title: 'Request Budget Unavailable', retryable: true },
   index_not_ready: { status: 503, title: 'Search Index Not Ready', retryable: true },

@@ -126,3 +126,10 @@ Sources read on 2026-10-31: reused `.reference/partitioned-sitemap-feeds/discour
 `589325e2b8466178ee83acac9ec411de555a0093`, GPL-2.0-or-later (`README.md`, `LICENSE.txt`), source only.
 RFC 8785 carries IETF Trust/BCP 78 terms; ActivityPub links its W3C permissive document licence;
 SPDX 3.0.1 identifies Linux Foundation/contributor copyright. No source files or passages are proposed for copying.
+
+## Adopted board slow mode
+
+All opening/reply creation (including drafts) and revisions count; only the current explicit
+`moderation:takedown` capability on the selected board exempts the actual actor. The reversible setting is
+0–86400 seconds, with zero disabled. The native [Content contract](../../services/kernel/src/content/README.md#board-slow-mode)
+owns the API, atomic board/actor reservation, retry metadata, service distinction and bounded costs.

@@ -1744,3 +1744,39 @@ grants still use the ordinary formula. No Content permission evaluator is added.
 | Creator edition candidate projection          | One native outbox envelope (at most 1,000 slots), immutable edition and original write basis in one released source snapshot; one creator-home fence and idempotent candidate insert                                                     | Constant bounded envelope and indexed point keys; one candidate per creation event; O(log N) per home; no cross-home write inside creation                                                                              | Focused native outcomes in `test/content/edition-index.test.ts`; no growth claim                                                                                             |
 | Creator edition inventory                     | One creator-home primary-key range; at most two owning metadata reads per examined candidate, each releasing all checkouts                                                                                                               | At most min(limit,20) examined keys, no refill; O(log N + L × H log N) plus native Access bounds, L ≤ 20 and H ≤ 33 posts per metadata read; no body DTO, count or history scan                                         | Focused native denial, continuation, race and unavailability outcomes in `test/content/edition-index.test.ts`; no growth run requested                                       |
 | Edition sale/mechanical eligibility/byte read | Independent native publisher restorations per action and resource, exact receipt/operation/source, current subject and parent guards, final native checks; authenticated delivery separately checks the buyer edition grant and ancestry | At most 40 restorations for two sale actions, subject, board, Realm, Space, thread and at most 33 posts; shared 1,000 ms deadline; one exact revision at most 2 MiB; no history/entitlement enumeration or copied bytes | None: focused native outcomes in `test/content/edition.test.ts` and `test/content/edition-mechanical.test.ts`; producer integration and runtime verification remain separate |
+
+## Board slow mode
+
+Decision: all opening/reply creation (including drafts) and revisions count; only a current explicit
+`moderation:takedown` capability on that board exempts the actual actor, never a role label or authorship.
+
+`PUT /v1/boards/{id}/slowMode` requires that moderator capability, bearer and idempotency key, and the closed
+body `{ intervalSeconds }` (integer 0–86400; zero disables). It returns the committed setting. Replaying the
+same key returns its original result without resetting any author's timer. Current account, scope and board
+state pass the existing command pipeline on every attempt, including receipt replay.
+`GET /v1/boards/{id}/slowMode` requires ordinary current board/Realm disclosure before and after reading and
+returns `{ intervalSeconds, retryAt, exempt }`. `retryAt` is null when ready, disabled, anonymous or exempt;
+it describes only the actual actor. Web can load this point for its composer and moderator controls.
+An early ordinary write returns HTTP 429 `board_slow_mode`, `effect_status=not_applied`, the current
+`intervalSeconds`, stable UTC `retryAt` and `Retry-After`. Changing the interval applies it to the last
+successful ordinary admission; disabling does not clear that timestamp. Exempt writes do not advance it.
+
+Every native creation and revision reserves one unique board/opaque-actor key inside its serializable content
+transaction, after authorization and successful-receipt lookup. This shared native coordination key is used
+across thread routes; it is not a board projection or an asynchronously replicated allowance. A conflict retries
+through the executor with fresh Access evidence. Content, reservation, grants, receipt and outbox commit or roll
+back together. No other checkout is held and no application lock is introduced. Invalid documents and later
+write failures consume nothing. Successful replay never reaches reservation. Draft creation and publication
+both count, so precreated drafts cannot evade admission. Ordinary edits count too.
+Imports have no native thread/post creation authority: imported authored-field proposals are a separate service
+operation, not ordinary board posts. Service authority cannot be selected by caller input or a skip flag;
+any future service posting must explicitly enter this same native admission boundary. Edition publication uses
+an already published/protected native source and never inserts or publishes a board post. It cannot evade the
+source's creation/revision admission, nor does it charge the same source a second time.
+
+Cost: each admitted ordinary write adds one setting PK probe, one explicit Access check and one board/actor
+PK upsert; a refusal adds one PK probe for retry metadata. Disabled writes add only the setting probe.
+One opaque HMAC key/timestamp per board/actor is retained, without bodies, account IDs or request keys.
+Setting changes use one board point validation and one setting PK upsert; status uses one setting point and at
+most one actor point plus ordinary disclosure/Access bounds. B-tree work is O(log N), constant returned rows;
+no thread, grant, account or history enumeration. Focused outcomes are in `test/content/board-slow.test.ts`.
