@@ -131,7 +131,7 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
     secondScopeDiscoveryDocumentActions(
       registry,
       collectionObservation,
-      [{ ...reviewKey, owner: 'commerce' } as SecondScopeDiscoveryKey],
+      [{ ...reviewKey, owner: 'commerce' } as unknown as SecondScopeDiscoveryKey],
     ),
   ).toThrow();
   expect(() =>
