@@ -221,8 +221,8 @@ test('public review discovery refreshes the same thread and omits protected or r
     } as never,
     request(),
   );
-  const revisedReview = (await source.read(partition, [published.value.threadId])).reviews[0]!;
-  expect(revisedReview.sourceVersion).not.toBe(first.reviews[0]!.sourceVersion);
+  const revisedDirect = (await source.read(partition, [published.value.threadId])).reviews[0]!;
+  expect(revisedDirect.sourceVersion).not.toBe(first.reviews[0]!.sourceVersion);
   expect((await source.read(partition, [published.value.threadId])).reviews[0]?.excerpt).toBe(
     'Revised review excerpt.',
   );
