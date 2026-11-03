@@ -198,7 +198,8 @@ test('structured diff reports nested native values, unresolved targets and order
     true,
   );
   expect(diff.parts.some((part) => part.domain === 'media')).toBe(false);
-  expect(JSON.stringify(diff.parts)).not.toContain('vote');
+  expect(diff.parts.some((part) => part.domain === 'statistic')).toBe(true);
+  expect(JSON.stringify(diff.parts)).toContain('not a local vote');
 
   const equalFields = compareRetainedProjections(left, { ...left, digest: 'c'.repeat(64), converterRevision: 'other' });
   expect(equalFields.retainedEqual).toBe(true);
