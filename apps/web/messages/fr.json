@@ -7642,6 +7642,7 @@
   "release_search_pagination": "Pages d’éditions",
   "release_search_continue": "Éditions suivantes",
   "release_search_page_empty": "Aucune édition correspondante sur cette page. Poursuivez la recherche sur la page suivante.",
+  "release_search_related_releases": "Éditions associées",
   "realm_review_inspect_original": "Examiner la demande initiale",
   "realm_review_inspected_approved": "La demande initiale est enregistrée comme approuvée. Récupérez séparément le reçu de la commande.",
   "realm_review_inspected_pending": "La demande initiale est toujours en attente. Cette observation ne confère aucune propriété.",

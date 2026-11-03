@@ -7692,6 +7692,7 @@
   "release_search_pagination": "Release pages",
   "release_search_continue": "Next releases",
   "release_search_page_empty": "No matching releases on this page. Continue to search the next page.",
+  "release_search_related_releases": "Related releases",
   "realm_review_inspect_original": "Inspect original request",
   "realm_review_inspected_approved": "The original request is recorded as approved. Recover its command receipt separately.",
   "realm_review_inspected_pending": "The original request is still pending. This observation grants no ownership.",

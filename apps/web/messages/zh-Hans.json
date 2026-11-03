@@ -7642,6 +7642,7 @@
   "release_search_pagination": "发行版本分页",
   "release_search_continue": "下一页发行版本",
   "release_search_page_empty": "本页没有符合条件的发行版本。请继续搜索下一页。",
+  "release_search_related_releases": "相关发行版本",
   "realm_review_inspect_original": "检查原始请求",
   "realm_review_inspected_approved": "原始请求已记录为已批准。请另行恢复命令回执。",
   "realm_review_inspected_pending": "原始请求仍在等待处理。此检查不会授予所有权。",

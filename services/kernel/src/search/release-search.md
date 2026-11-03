@@ -60,7 +60,8 @@ and marks it ready only after reconciliation. Readiness is tied to the physical 
 supplies the compiler capability only when that exact generation is ready. Old year-only generations remain
 unavailable for precise candidate compilation, including under NOT.
 The universal condition editor preserves imported typed endpoints as text, with its existing localized bound
-labels, rather than coercing them into numeric years. These primitives do not enable the release journey.
+labels, rather than coercing them into numeric years. Grouped release search uses these existing precise range
+primitives when the exact physical generation is ready.
 
 Decision: when a platform is selected, release languages constrain that same `schema:gamePlatform` statement
 through its `schema:inLanguage` qualifier; without a platform, they use the release-level language facet.
@@ -78,7 +79,7 @@ need that exact qualifier admission. Missing properties, incompatible datatypes 
 withdraw the corresponding control. The filter builder consumes this same descriptor, preventing controls and
 admission from diverging. Existing role-specific producer operands retain their exact role meaning.
 
-## Remaining integration
+## Mounted release journey
 
 Decision: platform, developer and publisher operands are chosen from localized public subject suggestions; URLs retain canonical subject IDs and resolve their current labels again when opened.
 
@@ -88,8 +89,9 @@ edit drops result continuations, while navigation links preserve the complete fo
 The mounted `/search/releases` page derives subtype controls and its filter from the shared `@rezics/filter`
 release roster. It preserves precise calendar endpoints, separate developer/publisher operands, imported Boolean
 conditions, sort, spoiler threshold and display language order across URL navigation. Unsupported or withdrawn
-operands remain in the repair form and are never silently removed. Its current bounded universal response renders
-matching release cards with exact recorded date precision; no work or child association is inferred from previews.
+operands remain in the repair form and are never silently removed. Grouped responses render current work cards,
+matching release previews and standalone releases. Each work expansion has its own sealed child continuation; cards
+retain current summaries, exact recorded date precision and public figures.
 
 Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
 fact fields; format-2 documents and physical generations retain their year-only meaning. New mixed physical
@@ -120,21 +122,25 @@ caps candidate keys at 256 and logical source calls at 64, including initial/fin
 An exhausted work budget with no result produces preparation progress, never an empty terminal group. These
 are policy caps, not measured native seeks. Preview EOF comes only from the owner's complete child stream.
 
-`ReleaseGroupingSource` is an uninstalled native seam. Its distinct ordered group stream and per-work child
-stream must seek every required pool with native reservations; its bounded hydration must apply current
-matching, disclosure and canonical work selection from complete evidence, preserving existing viewer state and
-permitted actions. `SubjectSource.statements` and Search hit facts are sampled and cannot implement this seam.
-Before HTTP installation, authenticate/encrypt private payloads with the existing cursor lifecycle, binding the
-current viewer and expiry; never expose their raw source positions, work keys or epoch in response JSON.
+`ReleaseGroupingSource` connects the retained native group/child streams to whole-filter current matching,
+disclosure and canonical work hydration. Every admitted card is projected through the existing current summary,
+fact and public figure readers; sampled `SubjectSource.statements` and Search hit facts never establish ownership.
+The grouped HTTP response uses the existing encrypted, viewer-bound cursor lifecycle and exposes only opaque child
+tokens, never raw positions, work keys or source epochs.
 
 `release-search-cursor.ts` seals both the group continuation and every preview's child continuation, with separate
 stream and work bindings. Its public groups contain only opaque child tokens; it snapshots the ordered request
 before asynchronous reads so the policy and both cursor envelopes retain the same meaning.
 
-The native grouping source, HTTP cursor installation, active-release operand controls, mounted release page,
-eight-locale states and native all-pool growth measurements remain part of the same journey. There is no measured
-grouping seek count or native growth result yet; derive its seeks from real relation indexes, source caps and
-preparation plan before claiming a page bound.
+The native source reserves canonical-name seeks, native relevance reads, current source hydration and the complete
+work-link reader's internal work by pool. The grouped POST route binds both cursor streams to the viewer, request,
+active release, physical generation and current source epoch. The mounted page keeps work expansions independent,
+retains URL operands and localizes accessible preparation, repair and restart states in all eight locales. Growth
+measurement and browser inspection remain deferred until the applicable validation policy permits them.
+
+Decision: expose grouped release pages as `release-groups-v1` on the existing subjects search route; child requests
+carry the work ID and their own cursor while group requests retain the group cursor.
+Decision: relevance ranks each work by its first current matching release in native relevance order; ungroupable releases keep their own native relevance position.
 
 Decision: native name traversal uses one shared canonical-name frontier across occupied homes in all pools;
 every pool's retained cut, including an empty pool, participates in invalidation.
@@ -143,23 +149,23 @@ every pool's retained cut, including an empty pool, participates in invalidation
 frontier. It reserves every home seek and its internal observations before dispatch, repeats reservations for
 replayed lookahead and empty seeks, and revalidates all pools before returning. A full native window requires
 another seek to prove EOF. These internal candidate keys establish neither matching, grouping nor disclosure.
-Group and child classification, whole-filter hydration, card serialization, final authority reservations and the
-complete native growth measurements still need installation; this traversal supplies no whole-page work bound.
+The grouped source classifies these candidates, hydrates whole-filter matches and cards, and observes final
+authority before returning. Growth measurements remain deferred; this traversal alone does not claim a whole-page
+work bound.
 
 Decision: a current CreativeWork that also admits release operands can independently supply a work candidate and
 an ungroupable release candidate; neither role establishes a matching child.
 
-`release-search-native-stream.ts` connects the all-pool name frontier to current Subject snapshots and the complete
-native `schema:exampleOfWork` reader. Group candidates retain canonical name order; child candidates have independent
-per-work progress. Both advance past rejected names and require native EOF. A split pair replays its current name
-and complete ownership evidence before returning the second candidate, without a growing seen set. Sampled facts
-never determine ownership. Missing complete-reader support or missing evidence makes the operation unavailable;
-explicit incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
+`release-search-native-stream.ts` connects the all-pool name frontier and native relevance order to current Subject
+snapshots and the complete native `schema:exampleOfWork` reader. Relevance emits a canonical work at the first
+current matching release in native order, then suppresses later releases for that work. Child candidates have
+independent per-work progress. Both streams advance past rejected candidates and require native EOF. Sampled facts
+never determine ownership. Missing complete-reader support or evidence makes the operation unavailable; explicit
+incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
 
 Its retained cut includes a required full-authority observer in addition to every pool's canonical-name population.
 Current snapshot positions and security revisions must agree with their name homes. Release, physical generation
 and all source authority cuts participate in private stream bindings and before/after validation, including empty
-pools. This observer is a native integration seam, not an implementation of final disclosure. Dispatch reservations
-cover current snapshots, complete work-link calls and all-pool authority observations; they do not account for the
-complete reader's internal work or claim a whole-page bound. Relevance, current matching/card hydration, HTTP and
-page installation, native reservations for the complete plan and deferred measurements remain to be implemented.
+pools. Dispatch reservations cover current snapshots, complete work-link calls and the reader's bounded internal
+statements, canonical targets and final authority checks. Current matching, cards, viewer-bound HTTP continuation
+and the localized page are installed; growth measurement and browser inspection remain deferred by validation policy.

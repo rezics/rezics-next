@@ -107,6 +107,19 @@ const service: SearchService = {
     if (failure) throw failure;
     return { subjects: [result], as_of: asOf };
   },
+  async releaseGroups(principal, request) {
+    calls.push(['releaseGroups', principal, request]);
+    if (failure) throw failure;
+    const card = { ...result, figure: missingFigure };
+    if (request.work) return { status: 'ready', children: [card], next: null, as_of: asOf };
+    const release = { ...card, id: '018f0000-0000-7000-8000-00a000000002' };
+    return {
+      status: 'ready',
+      groups: [{ kind: 'work', id: result.id, work: card, releases: [release], next: 'opaque-child' }],
+      next: 'opaque-group',
+      as_of: asOf,
+    };
+  },
 };
 const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
 const offline = createKernel({ pool, access, tokens, routeKey });
@@ -275,6 +288,44 @@ test('search preserves semantic readiness failures and their retry header', asyn
   } finally {
     failure = null;
   }
+});
+
+test('grouped release and child POST requests retain viewer binding and return contextual cards', async () => {
+  calls.length = 0;
+  checks.length = 0;
+  const request = {
+    representation: 'release-groups-v1',
+    filter: { type: { in: ['schema:Book'] } },
+    sort: 'name',
+    languages: ['fr', 'en'],
+    spoilerThreshold: 0,
+    descriptions: true,
+    limit: 20,
+  };
+  const groups = await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: request });
+  expect(groups.response.status).toBe(200);
+  expect(groups.response.headers.get('cache-control')).toBe('private, no-store');
+  expect(groups.body.groups[0]).toMatchObject({
+    kind: 'work',
+    id: result.id,
+    work: { id: result.id, summary: null, figure: missingFigure, base: { id: result.id } },
+    releases: [{ id: '018f0000-0000-7000-8000-00a000000002', summary: null, figure: missingFigure }],
+    next: 'opaque-child',
+  });
+  expect(groups.body.next).toBe('opaque-group');
+
+  const childRequest = { ...request, work: result.id, childCursor: 'child-token' };
+  const children = await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: childRequest });
+  expect(children.response.status).toBe(200);
+  expect(children.body).toMatchObject({ status: 'ready', children: [{ id: result.id, figure: missingFigure }], next: null });
+  expect(calls).toEqual([
+    ['releaseGroups', `account:${reader.accountId}`, request],
+    ['releaseGroups', `account:${reader.accountId}`, childRequest],
+  ]);
+
+  calls.length = 0;
+  expect((await call(kernel, 'POST', '/v1/subjects:search', { token: 'denied', body: request })).response.status).toBe(403);
+  expect(calls).toEqual([]);
 });
 
 test('without a search service both routes are index_not_ready and retryable', async () => {

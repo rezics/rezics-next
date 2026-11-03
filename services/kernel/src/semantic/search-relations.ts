@@ -33,6 +33,7 @@ import { withConnection } from '../database/pool.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   MAX_RELATION_FACET_VALUES,
+  type CompleteWorkLinkReservation,
   type NativeWorkLinkEvidence,
   type NativeWorkLinkValue,
   type IndexedStatement,
@@ -109,6 +110,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     ids: readonly string[],
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
+    reserveNative?: (operations: number, keys: number) => void,
   ): Promise<Map<string, { id: string; type: string }>> {
     const roots = [...new Set(ids)];
     const states = new Map<string, { visible: boolean; redirect: string | null; type: string }>();
@@ -129,6 +131,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       }
       pending = [];
       for (const [partition, group] of groups) {
+        reserveNative?.(4, group.length);
         const values = await inSearchSnapshot(pool, async (client) => {
           const home = await readPartition(client, partition);
           if (!home || home.writeState === 'moved') return [];
@@ -188,8 +191,9 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     ids: readonly string[],
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
+    reserveNative?: (operations: number, keys: number) => void,
   ): Promise<Set<string>> {
-    return new Set((await canonicalPublicSubjects(ids, expected, observations)).keys());
+    return new Set((await canonicalPublicSubjects(ids, expected, observations, reserveNative)).keys());
   }
 
   async function disclosed(
@@ -198,6 +202,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     expected: ReadonlyMap<string, SourceSubject>,
     runtime: Prepared['runtime'],
     observations?: Map<string, string>,
+    reserveNative?: (operations: number, keys: number) => void,
   ): Promise<{ subject: string; statement: IndexedStatement }[]> {
     if (!routeKey || !runtime) return [];
     const facets = new Map<string, Set<string>>();
@@ -317,6 +322,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     for (const [partition, group] of tuples) {
       for (let offset = 0; offset < group.length; offset += 100) {
         const page = group.slice(offset, offset + 100);
+        reserveNative?.(4, page.length);
         const fences = await inSearchSnapshot(pool, async (client) => {
           const home = await readPartition(client, partition);
           return !home || home.writeState === 'moved' ? [] : readFences(client, page);
@@ -334,6 +340,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       prepared.flatMap((item) => item.dependencies),
       expected,
       observations,
+      reserveNative,
     );
     return prepared
       .filter((item) => item.dependencies.every((id) => visible.has(id)) && (!item.tuple || unfenced.has(item.tuple)))
@@ -751,7 +758,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       return results;
     },
 
-    async readCompleteWorkLinks(partition: number, submittedIds: readonly string[]) {
+    async readCompleteWorkLinks(
+      partition: number,
+      submittedIds: readonly string[],
+      options?: Readonly<{ reserve?: (reservation: CompleteWorkLinkReservation) => void }>,
+    ) {
       if (
         !Number.isInteger(partition) ||
         partition < 0 ||
@@ -772,9 +783,14 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       const unavailable = () =>
         new Map(ids.map((id) => [id, { complete: false, values: [] as NativeWorkLinkValue[] }]));
       if (!ids.length || !routeKey) return unavailable();
+      const reserve = (operations: number, keys: number) => {
+        if (options?.reserve) options.reserve({ operations, keys });
+      };
 
-      const snapshot = async () =>
-        inSearchSnapshot(pool, async (client) => {
+      const snapshot = async () => {
+        // Reserve the transaction, partition authority, active release, subjects and transaction close.
+        reserve(8, ids.length);
+        return inSearchSnapshot(pool, async (client) => {
           const home = await readPartition(client, partition);
           const runtime = await activeRelease(client);
           if (!home || home.writeState === 'moved' || !runtime) return null;
@@ -796,6 +812,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
               runtime.release.properties[WORK_LINK_PROPERTY]?.datatype === 'wikibase-item'
             );
           });
+          if (eligible.length) reserve(1, MAX_COMPLETE_WORK_LINK_ROWS + 1);
           const selected = eligible.length
             ? ((await readConcepts.run(client, {
                 partition_no: partition,
@@ -811,24 +828,38 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
               })) as SelectedStatement[])
             : [];
           const digests = [...new Set(selected.map((row) => row.release))];
+          if (digests.length) reserve(1, digests.length);
           const releaseRows = digests.length
             ? ((await readReleases.run(client, { route: 0, digests })) as { digest: string; body: Release }[])
             : [];
           const releases = new Map<string, Release | null>(releaseRows.map((row) => [row.digest, row.body]));
           for (const digest of digests)
-            if (!releases.has(digest)) releases.set(digest, await readRelease(client, digest));
+            if (!releases.has(digest)) {
+              reserve(3, 1);
+              releases.set(digest, await readRelease(client, digest));
+            }
           return { runtime, subjects: byId, eligible: new Set(eligible), selected, releases };
         });
+      };
 
       const first = await snapshot();
       if (!first || first.selected.length > MAX_COMPLETE_WORK_LINK_ROWS) return unavailable();
       const firstIdentities = new Map<string, string>();
       const expected = new Map([...first.subjects].filter(([id]) => first.eligible.has(id)));
-      const firstDisclosed = await disclosed(first.selected, first.releases, expected, first.runtime, firstIdentities);
+      const firstDisclosed = await disclosed(
+        first.selected,
+        first.releases,
+        expected,
+        first.runtime,
+        firstIdentities,
+        reserve,
+      );
+      const firstTargets = [...new Set(firstDisclosed.map(({ statement }) => statement.value))];
       const firstCanonical = await canonicalPublicSubjects(
-        firstDisclosed.map(({ statement }) => statement.value),
+        firstTargets,
         expected,
         firstIdentities,
+        reserve,
       );
       const project = (
         current: NonNullable<typeof first>,
@@ -876,13 +907,17 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         secondExpected,
         second.runtime,
         secondIdentities,
+        reserve,
       );
+      const secondTargets = [...new Set(secondDisclosed.map(({ statement }) => statement.value))];
       const secondCanonical = await canonicalPublicSubjects(
-        secondDisclosed.map(({ statement }) => statement.value),
+        secondTargets,
         secondExpected,
         secondIdentities,
+        reserve,
       );
       const reprojected = project(second, secondDisclosed, secondCanonical);
+      reserve(4, 0);
       if (
         !isDeepStrictEqual(firstIdentities, secondIdentities) ||
         !isDeepStrictEqual(firstCanonical, secondCanonical) ||

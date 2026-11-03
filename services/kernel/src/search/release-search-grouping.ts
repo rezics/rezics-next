@@ -28,6 +28,7 @@ export type ReleaseGroupingRequest = Readonly<{
   sort: 'name' | 'relevance';
   languages: readonly string[];
   spoilerThreshold: 0 | 1 | 2;
+  properties?: readonly string[];
   groupLimit: number;
   childLimit: number;
   previewLimit: number;
@@ -122,6 +123,15 @@ function requestCopy(request: ReleaseGroupingRequest): ReleaseGroupingRequest {
     ['previewLimit', RELEASE_GROUPING_LIMITS.preview],
   ] as const)
     if (!Number.isInteger(copy[key]) || copy[key] < 1 || copy[key] > max) throw new TypeError(`Invalid ${key}`);
+  if (
+    copy.properties !== undefined &&
+    (!Array.isArray(copy.properties) ||
+      copy.properties.length < 1 ||
+      copy.properties.length > 4 ||
+      copy.properties.some((property) => typeof property !== 'string' || !property) ||
+      new Set(copy.properties).size !== copy.properties.length)
+  )
+    throw new TypeError('Invalid properties');
   return copy;
 }
 

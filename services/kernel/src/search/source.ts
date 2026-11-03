@@ -29,6 +29,8 @@ export type NativeWorkLinkEvidence = Readonly<{
   /** An empty complete list proves no current work link. */
   values: readonly NativeWorkLinkValue[];
 }>;
+/** Internal native work charged by the complete work-link reader before it performs each bounded stage. */
+export type CompleteWorkLinkReservation = Readonly<{ operations: number; keys: number }>;
 
 /**
  * Filterable form of a statement value.
@@ -118,6 +120,7 @@ export interface SubjectSource {
   readCompleteWorkLinks?(
     partition: number,
     ids: readonly string[],
+    options?: Readonly<{ reserve?: (reservation: CompleteWorkLinkReservation) => void }>,
   ): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 

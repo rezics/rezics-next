@@ -7642,6 +7642,7 @@
   "release_search_pagination": "Veröffentlichungsseiten",
   "release_search_continue": "Weitere Veröffentlichungen",
   "release_search_page_empty": "Keine passenden Veröffentlichungen auf dieser Seite. Auf der nächsten Seite weitersuchen.",
+  "release_search_related_releases": "Zugehörige Veröffentlichungen",
   "realm_review_inspect_original": "Ursprünglichen Antrag prüfen",
   "realm_review_inspected_approved": "Der ursprüngliche Antrag ist als genehmigt vermerkt. Stelle den Befehlsbeleg separat wieder her.",
   "realm_review_inspected_pending": "Der ursprüngliche Antrag ist noch offen. Diese Beobachtung verleiht kein Eigentum.",

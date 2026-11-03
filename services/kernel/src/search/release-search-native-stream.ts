@@ -33,7 +33,9 @@ export type ReleaseSearchCandidateReservation = ReleaseSearchNameReservation &
   Readonly<{
     sourceReads: number;
     completeWorkLinkReads: number;
+    completeWorkLinkOperations: number;
     authorityObservations: number;
+    searchReads: number;
   }>;
 type Context = Readonly<{
   deadline: number;
@@ -46,6 +48,20 @@ export type ReleaseSearchCandidateCut = Readonly<{
   basis: ReleaseGroupingBasis;
 }>;
 type Candidate = { kind: 'work' | 'release'; id: string };
+export type ReleaseSearchNativeCandidate = Readonly<{
+  id: string;
+  pool: string;
+  partition: number;
+  name: string | null;
+  securityRevision: number;
+  /** Opaque native search-after position immediately after this candidate. */
+  after: string;
+}>;
+export type ReleaseSearchNativePage = Readonly<{
+  keys: readonly ReleaseSearchNativeCandidate[];
+  after: string;
+  exhausted: boolean;
+}>;
 type Classified = {
   id: string;
   work: boolean;
@@ -57,6 +73,8 @@ type Position = {
   namesAfter: string | null;
   /** Re-read this name and its complete current evidence before consuming its second candidate. */
   skipWorkFor?: string;
+  /** Prior work groups in native relevance order, so another release cannot repeat a group. */
+  seenWorks?: string[];
 };
 
 function unavailable(): never {
@@ -79,7 +97,9 @@ function nameContext(context: Context) {
         ...value,
         sourceReads: 0,
         completeWorkLinkReads: 0,
+        completeWorkLinkOperations: 0,
         authorityObservations: 0,
+        searchReads: 0,
       }),
   };
 }
@@ -87,7 +107,7 @@ function nameContext(context: Context) {
 function reserve(
   context: Context,
   pool: string,
-  phase: 'sourceReads' | 'completeWorkLinkReads' | 'authorityObservations',
+  phase: 'sourceReads' | 'completeWorkLinkReads' | 'completeWorkLinkOperations' | 'authorityObservations' | 'searchReads',
   keys = 0,
 ) {
   context.reserve({
@@ -98,7 +118,9 @@ function reserve(
     keys,
     sourceReads: 0,
     completeWorkLinkReads: 0,
+    completeWorkLinkOperations: 0,
     authorityObservations: 0,
+    searchReads: 0,
     [phase]: 1,
   });
 }
@@ -139,7 +161,13 @@ function position(after: string | null, expected: string, children: boolean): Po
     value.version !== 1 ||
     typeof value.binding !== 'string' ||
     (value.namesAfter !== null && typeof value.namesAfter !== 'string') ||
-    (value.skipWorkFor !== undefined && (children || typeof value.skipWorkFor !== 'string' || !value.skipWorkFor))
+    (value.skipWorkFor !== undefined && (children || typeof value.skipWorkFor !== 'string' || !value.skipWorkFor)) ||
+    (value.seenWorks !== undefined &&
+      (children ||
+        !Array.isArray(value.seenWorks) ||
+        value.seenWorks.length > 128 ||
+        value.seenWorks.some((id) => !canonicalId(id)) ||
+        new Set(value.seenWorks).size !== value.seenWorks.length))
   )
     return unavailable();
   if (value.binding !== expected) throw new ReleaseGroupingRestartRequired();
@@ -156,6 +184,11 @@ export function createReleaseSearchCandidateStreams(input: {
   release: FilterRelease;
   cut: ReleaseSearchCandidateCut;
   context: Context;
+  relevance?: (request: ReleaseGroupingRequest, after: string | null, size: number) => Promise<ReleaseSearchNativePage>;
+  currentMatches?: (
+    request: ReleaseGroupingRequest,
+    keys: readonly ReleaseSearchNativeCandidate[],
+  ) => Promise<ReadonlySet<string>>;
 }): Pick<ReleaseGroupingSource<never, never>, 'groups' | 'children'> {
   const pools = input.pools.map((pool) => ({ ...pool }));
   const release = structuredClone(input.release);
@@ -167,7 +200,8 @@ export function createReleaseSearchCandidateStreams(input: {
       throw new ReleaseGroupingRestartRequired();
   };
 
-  async function classify(keys: Awaited<ReturnType<typeof readReleaseSearchNames>>['keys']): Promise<Classified[]> {
+  type CandidateKey = Awaited<ReturnType<typeof readReleaseSearchNames>>['keys'][number] | ReleaseSearchNativeCandidate;
+  async function classify(keys: readonly CandidateKey[]): Promise<Classified[]> {
     const current = new Map<string, Classified>();
     // Native name order interleaves homes. Keep every current read anchored to its exact retained home.
     for (const pool of pools) {
@@ -194,7 +228,24 @@ export function createReleaseSearchCandidateStreams(input: {
         if (!releases.length) continue;
         if (!pool.source.readCompleteWorkLinks) return unavailable();
         reserve(context, pool.id, 'completeWorkLinkReads', releases.length);
-        const links = await pool.source.readCompleteWorkLinks(home.partition, releases);
+        const links = await pool.source.readCompleteWorkLinks(home.partition, releases, {
+          reserve: ({ operations, keys }) => {
+            if (!Number.isSafeInteger(operations) || operations < 0 || !Number.isSafeInteger(keys) || keys < 0)
+              return unavailable();
+            context.reserve({
+              pool: pool.id,
+              observations: 0,
+              ownerReads: 0,
+              nameSeeks: 0,
+              keys,
+              sourceReads: 0,
+              completeWorkLinkReads: 0,
+              completeWorkLinkOperations: operations,
+              authorityObservations: 0,
+              searchReads: 0,
+            });
+          },
+        });
         if ([...links.keys()].some((id) => !releases.includes(id))) return unavailable();
         for (const id of releases) {
           const evidence = links.get(id);
@@ -217,22 +268,50 @@ export function createReleaseSearchCandidateStreams(input: {
     if (!Number.isInteger(size) || size < 1 || size > 20) throw new TypeError('Invalid release candidate page size');
     const request = structuredClone(submitted);
     // Relevance needs its own native ordered plan; name traversal cannot establish that order.
-    if (request.sort !== 'name') return unavailable();
+    if (request.sort !== 'name' && (request.sort !== 'relevance' || !input.relevance)) return unavailable();
     if (request.releaseDigest !== cut.basis.releaseDigest) throw new ReleaseGroupingRestartRequired();
     const expected = binding(request, cut, work);
     const cursor = position(after, expected, work !== undefined);
     await assertCurrent();
-    const page = await readReleaseSearchNames({
-      pools,
-      cut: cut.names,
-      after: cursor.namesAfter,
-      size,
-      context: nameContext(context),
-    });
+    const page =
+      request.sort === 'name'
+        ? await readReleaseSearchNames({
+            pools,
+            cut: cut.names,
+            after: cursor.namesAfter,
+            size,
+            context: nameContext(context),
+          })
+        : await input.relevance!(request, cursor.namesAfter, size);
+    if (
+      !Array.isArray(page.keys) ||
+      page.keys.length > size ||
+      typeof page.after !== 'string' ||
+      !page.after ||
+      typeof page.exhausted !== 'boolean'
+    )
+      return unavailable();
+    if (request.sort === 'relevance')
+      for (const key of page.keys) {
+        if (
+          typeof key.id !== 'string' ||
+          !canonicalId(key.id) ||
+          key.pool !== pools[0]?.id ||
+          !Number.isInteger(key.partition) ||
+          typeof key.securityRevision !== 'number' ||
+          !Number.isSafeInteger(key.securityRevision) ||
+          key.securityRevision < 0 ||
+          typeof key.after !== 'string' ||
+          !key.after
+        )
+          return unavailable();
+      }
+    const currentMatches = request.sort === 'relevance' ? await input.currentMatches?.(request, page.keys) : undefined;
     const classified = new Map((await classify(page.keys)).map((key) => [key.id, key]));
     const keys: Candidate[] = [];
     let namesAfter = cursor.namesAfter;
     let skipWorkFor = cursor.skipWorkFor;
+    const seenWorks = new Set(cursor.seenWorks ?? []);
     if (skipWorkFor !== undefined && page.keys[0]?.id !== skipWorkFor) throw new ReleaseGroupingRestartRequired();
     if (skipWorkFor !== undefined) {
       const replay = classified.get(skipWorkFor);
@@ -241,10 +320,18 @@ export function createReleaseSearchCandidateStreams(input: {
     for (const key of page.keys) {
       const current = classified.get(key.id);
       const candidates: Candidate[] = [];
-      if (current) {
+      if (current && (currentMatches === undefined || currentMatches.has(key.id))) {
         if (work === undefined) {
-          if (current.work && skipWorkFor !== key.id) candidates.push({ kind: 'work', id: key.id });
-          if (current.link && current.link.kind !== 'linked') candidates.push({ kind: 'release', id: key.id });
+          if (request.sort === 'name') {
+            if (current.work && skipWorkFor !== key.id) candidates.push({ kind: 'work', id: key.id });
+            if (current.link && current.link.kind !== 'linked') candidates.push({ kind: 'release', id: key.id });
+          } else if (current.link?.kind === 'linked') {
+            if (!seenWorks.has(current.link.work)) candidates.push({ kind: 'work', id: current.link.work });
+          } else {
+            if (current.work && skipWorkFor !== key.id && !seenWorks.has(key.id))
+              candidates.push({ kind: 'work', id: key.id });
+            if (current.link) candidates.push({ kind: 'release', id: key.id });
+          }
         } else if (current.link?.kind === 'linked' && current.link.work === work) {
           candidates.push({ kind: 'release', id: key.id });
         }
@@ -254,20 +341,36 @@ export function createReleaseSearchCandidateStreams(input: {
         const first = candidates[0];
         if (keys.length < size && first) {
           keys.push(first);
-          skipWorkFor = key.id;
+          if (first.kind === 'work') {
+            skipWorkFor = key.id;
+            if (request.sort === 'relevance') seenWorks.add(first.id);
+          }
         }
         break;
       }
       keys.push(...candidates);
+      if (request.sort === 'relevance' && work === undefined)
+        for (const candidate of candidates) if (candidate.kind === 'work') seenWorks.add(candidate.id);
       skipWorkFor = undefined;
-      namesAfter = JSON.stringify({ version: 1, epoch: cut.names.epoch, key: { name: key.name, id: key.id } });
+      namesAfter =
+        request.sort === 'name'
+          ? JSON.stringify({ version: 1, epoch: cut.names.epoch, key: { name: key.name, id: key.id } })
+          : (key as ReleaseSearchNativeCandidate).after;
       if (keys.length === size) break;
     }
     const consumed = namesAfter === page.after && skipWorkFor === undefined;
     await assertCurrent();
     return {
       keys,
-      after: JSON.stringify({ version: 1, binding: expected, namesAfter, ...(skipWorkFor ? { skipWorkFor } : {}) }),
+      after: JSON.stringify({
+        version: 1,
+        binding: expected,
+        namesAfter,
+        ...(skipWorkFor ? { skipWorkFor } : {}),
+        ...(request.sort === 'relevance' && work === undefined && seenWorks.size
+          ? { seenWorks: [...seenWorks] }
+          : {}),
+      }),
       exhausted: page.exhausted && (consumed || page.keys.length === 0),
     };
   }

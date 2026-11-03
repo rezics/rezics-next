@@ -12,6 +12,12 @@ import {
 } from '@rezics/filter';
 import type { DiscoveryRequest } from './discovery';
 
+export type ReleaseSearchRequest = Omit<DiscoveryRequest, 'representation'> & {
+  representation: 'release-groups-v1';
+  work?: string;
+  childCursor?: string;
+};
+
 export type ReleaseSearchForm = {
   subtype: string;
   q: string;
@@ -206,8 +212,8 @@ export function parseReleaseSearch(
   return { form, search, controls, invalid };
 }
 
-/** One admitted universal request. Display languages never become release-language operands. */
-export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelease): DiscoveryRequest {
+/** One grouped request. Display languages never become release-language operands. */
+export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelease): ReleaseSearchRequest {
   const operands = buildReleaseSearchFilter(release, search.subtype, search.criteria);
   const filter = admitFilter(search.condition ? { and: [operands, search.condition] } : operands, release);
   const controls = admittedReleaseSearchControls(release, search.subtype)!;
@@ -217,7 +223,7 @@ export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelea
     ...controls.producers.map((producer) => producer.property),
   ].slice(0, 4);
   return {
-    representation: 'discovery-v1',
+    representation: 'release-groups-v1',
     filter,
     sort: search.sort,
     languages: search.languages,
