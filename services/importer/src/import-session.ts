@@ -161,7 +161,7 @@ export class ImportSession {
         const prior = db
           .prepare('SELECT pid,birth,capability FROM import_owners WHERE source=?')
           .get(source) as Ownership | null;
-        if (prior && alive(prior)) return 'busy' as const;
+        if (prior && importOwnerIsBusy(prior)) return 'busy' as const;
         const capability = randomBytes(24).toString('hex');
         db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
         ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
