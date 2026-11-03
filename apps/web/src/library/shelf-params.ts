@@ -18,7 +18,16 @@ export type ShelfLayout = (typeof shelfLayouts)[number];
 export const shelfSizes = ['s', 'm', 'l'] as const;
 export type ShelfSize = (typeof shelfSizes)[number];
 
-export const shelfColumnIds = ['cover', 'title', 'type', 'status', 'progress', 'added', 'finished', 'lastActivity'] as const;
+export const shelfColumnIds = [
+  'cover',
+  'title',
+  'type',
+  'status',
+  'progress',
+  'added',
+  'finished',
+  'lastActivity',
+] as const;
 export type PersonalShelfColumnId = (typeof shelfColumnIds)[number];
 
 /** A bounded display value. Omission and an explicit complete set remain distinct URL choices. */

@@ -107,19 +107,19 @@ test('a reader chooses personal Library table columns on the actual page and ret
     updatedAt: stamp,
     lastActivityAt: stamp,
     finishedAt: null,
-      ...(n === 1
-        ? {
-            activeProgressSession: {
-              mode: 'cursor_position',
-              unit: 'page',
-              amount: null,
-              total: '99',
-              completedUnitCount: 0,
-              locator: null,
-              position: '12',
-            },
-          }
-        : {}),
+    ...(n === 1
+      ? {
+          activeProgressSession: {
+            mode: 'cursor_position',
+            unit: 'page',
+            amount: null,
+            total: '99',
+            completedUnitCount: 0,
+            locator: null,
+            position: '12',
+          },
+        }
+      : {}),
     subject:
       n === 2
         ? null
@@ -161,7 +161,9 @@ test('a reader chooses personal Library table columns on the actual page and ret
   }) as typeof fetch;
   const reads = () => requests.filter((req) => new URL(req.url).pathname === '/v1/libraryEntries');
   const preferenceReads = () =>
-    requests.filter((req) => new URL(req.url).pathname === `/v1/accounts/${id(700)}/preferences` && req.method === 'GET');
+    requests.filter(
+      (req) => new URL(req.url).pathname === `/v1/accounts/${id(700)}/preferences` && req.method === 'GET',
+    );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: id(700), csrfToken });
   client.setQueryData(exposureQuery.queryKey, admitted);

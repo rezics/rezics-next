@@ -123,7 +123,12 @@ function SavedShelfJourney() {
       read: async () => ({
         signedIn: true,
         accountId,
-        preferences: { spoilerLevel: 0, suitability: 'blur', version: current.current.version, shelf: current.current.shelf },
+        preferences: {
+          spoilerLevel: 0,
+          suitability: 'blur',
+          version: current.current.version,
+          shelf: current.current.shelf,
+        },
         notifications: { reply: true, mention: true },
         securityHref: null,
       }),
@@ -147,7 +152,9 @@ function SavedShelfJourney() {
       <SettingsSessionContext.Provider value={owner}>
         <main className="mx-auto grid max-w-7xl gap-6 p-4 sm:p-8 lg:grid-cols-2">
           <section aria-labelledby="saved-shelf-story-settings" className="min-w-0">
-            <h1 id="saved-shelf-story-settings" className="mb-4 text-xl font-semibold">{m.settings_heading()}</h1>
+            <h1 id="saved-shelf-story-settings" className="mb-4 text-xl font-semibold">
+              {m.settings_heading()}
+            </h1>
             <ShelfPreferencesCard
               initial={saved.shelf}
               version={saved.version}
@@ -157,7 +164,9 @@ function SavedShelfJourney() {
             />
           </section>
           <section aria-labelledby="saved-shelf-story-library" className="min-w-0">
-            <h2 id="saved-shelf-story-library" className="mb-4 text-xl font-semibold">{m.library_heading()}</h2>
+            <h2 id="saved-shelf-story-library" className="mb-4 text-xl font-semibold">
+              {m.library_heading()}
+            </h2>
             <div data-testid="library-preview" data-layout={resolved.display.layout}>
               <PersonalLibraryPage
                 page={libraryPage}

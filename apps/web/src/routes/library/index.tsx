@@ -12,10 +12,7 @@ import { kernelClient } from '../../kernel/client';
 import { readPersonalLibraryCurrent } from '../../library/personal-library-server';
 import { PersonalLibraryCurrent } from '../../library/personal-library-current';
 import { resolveShelfPresentation } from '../../library/shelf-preferences';
-import {
-  readCurrentShelfPreferences,
-  ShelfPreferenceSnapshotOwner,
-} from '../../settings/shelf-preferences-current';
+import { readCurrentShelfPreferences, ShelfPreferenceSnapshotOwner } from '../../settings/shelf-preferences-current';
 import { sessionQuery, useSession } from '../../session/query';
 import { CurrentLabelShelf } from '../../library/label-shelf-current';
 import { loadCurrentLabelShelfPage, type CurrentLabelShelfData } from '../../library/label-shelf-read';
@@ -167,14 +164,14 @@ export const Route = createFileRoute('/library/')({
       const [page, shelfSnapshot] = await Promise.all([
         readLabelShelf({
           data: {
-          labelId: deps.label,
-          cursor: deps.cursor,
-          undoLabelId: deps.undoLabelId,
-          undoSubjectId: deps.undoSubjectId,
-          undoAssignmentId: deps.undoAssignmentId,
-          undoRevision: deps.undoRevision,
-          undoKey: deps.undoKey,
-          labelResult: deps.labelResult,
+            labelId: deps.label,
+            cursor: deps.cursor,
+            undoLabelId: deps.undoLabelId,
+            undoSubjectId: deps.undoSubjectId,
+            undoAssignmentId: deps.undoAssignmentId,
+            undoRevision: deps.undoRevision,
+            undoKey: deps.undoKey,
+            labelResult: deps.labelResult,
           },
         }),
         readCurrentShelfPreferences(),
@@ -255,7 +252,12 @@ function LibraryRoute() {
       {search.cursor && shelfPageResetCursor(data) ? (
         <ShelfStaleCursorRecovery locale={locale} search={rawSearch} />
       ) : null}
-      <PersonalLibraryCurrent initial={data} search={presentation.search} locale={locale} display={presentation.display} />
+      <PersonalLibraryCurrent
+        initial={data}
+        search={presentation.search}
+        locale={locale}
+        display={presentation.display}
+      />
     </>
   );
 }

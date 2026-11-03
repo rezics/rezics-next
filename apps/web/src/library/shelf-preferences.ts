@@ -97,7 +97,13 @@ export function resolveShelfPresentation(
   const layout = search.layout ?? (scope ? saved.layouts?.[scope] : undefined) ?? saved.layouts?.all ?? base.layout;
   const size =
     search.size ??
-    (saved.gridSize === 'small' ? 's' : saved.gridSize === 'large' ? 'l' : saved.gridSize === 'medium' ? 'm' : base.size);
+    (saved.gridSize === 'small'
+      ? 's'
+      : saved.gridSize === 'large'
+        ? 'l'
+        : saved.gridSize === 'medium'
+          ? 'm'
+          : base.size);
   const columns = search.columns ?? columnsFromShelf(saved);
   return {
     search: {

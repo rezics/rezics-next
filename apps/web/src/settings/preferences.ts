@@ -233,14 +233,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const shelfScope = /^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\S+)$/;
 function validShelfPatch(value: unknown): value is ShelfPreferencePatch | null {
   if (value === null) return true;
-  if (!isRecord(value) || Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key)))
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key))
+  )
     return false;
   if (value.layouts !== undefined && value.layouts !== null) {
     if (!isRecord(value.layouts) || Object.keys(value.layouts).length > 32) return false;
     if (
       Object.entries(value.layouts).some(
         ([scope, layout]) =>
-          scope.length > 256 || !shelfScope.test(scope) || (layout !== null && !shelfPreferenceLayouts.includes(layout as never)),
+          scope.length > 256 ||
+          !shelfScope.test(scope) ||
+          (layout !== null && !shelfPreferenceLayouts.includes(layout as never)),
       )
     )
       return false;
@@ -312,7 +317,10 @@ export function parsePreferenceChange(input: unknown): PreferenceChange | undefi
 
 function presentShelf(value: unknown): ShelfPreferences | undefined {
   if (value === undefined) return {};
-  if (!isRecord(value) || Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key)))
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key))
+  )
     return undefined;
   if (value.layouts !== undefined) {
     if (

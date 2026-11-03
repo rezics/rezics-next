@@ -65,12 +65,7 @@ export class ShelfPreferenceSnapshotOwner {
     const identity = JSON.stringify([viewer.state, viewer.subject ?? null, viewer.csrfToken]);
     if (this.viewer !== undefined && this.viewer !== identity) this.retired = true;
     this.viewer = identity;
-    if (
-      this.generation &&
-      (viewer.state !== 'signed-in' ||
-        !viewer.subject ||
-        !this.matchesSnapshot(viewer))
-    )
+    if (this.generation && (viewer.state !== 'signed-in' || !viewer.subject || !this.matchesSnapshot(viewer)))
       this.retired = true;
   }
 
@@ -85,10 +80,7 @@ export class ShelfPreferenceSnapshotOwner {
   private snapshotAccountId: string | null = null;
   private snapshotCsrfToken: string | null = null;
 
-  resolve(
-    snapshot: ShelfPreferenceSnapshot | undefined,
-    viewer: ShelfViewer,
-  ): ShelfPreferences {
+  resolve(snapshot: ShelfPreferenceSnapshot | undefined, viewer: ShelfViewer): ShelfPreferences {
     if (snapshot && snapshot.generation !== this.generation) {
       this.generation = snapshot.generation;
       this.snapshotAccountId = snapshot.accountId;

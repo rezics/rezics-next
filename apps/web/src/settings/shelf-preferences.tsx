@@ -92,7 +92,14 @@ function draftFrom(shelf: ShelfPreferences): ShelfDraft {
     tabs.map((tab) => {
       const stored = shelf.sorts?.[tab];
       const order = libraryOrderFromShelf(stored);
-      return [tab, order ? `${shelfOrderFromLibrary(order).field}:${order.direction}` : stored ? `unsupported:${stored.field}` : defaultSortChoice];
+      return [
+        tab,
+        order
+          ? `${shelfOrderFromLibrary(order).field}:${order.direction}`
+          : stored
+            ? `unsupported:${stored.field}`
+            : defaultSortChoice,
+      ];
     }),
   ) as Record<ShelfPreferenceTab, string>;
   return {
@@ -160,7 +167,11 @@ export class ShelfPreferenceDraftRecovery {
   private state: ShelfState;
   private listeners = new Set<() => void>();
 
-  constructor(initial: ReadingPreferences, private io: ReadingIO, private owner: ShelfOwner) {
+  constructor(
+    initial: ReadingPreferences,
+    private io: ReadingIO,
+    private owner: ShelfOwner,
+  ) {
     const shelf = initial.shelf ?? {};
     this.state = {
       known: { shelf, version: initial.version },
@@ -214,7 +225,10 @@ export class ShelfPreferenceDraftRecovery {
     }
     if (!this.owner.canWrite()) return;
     if (!result.ok) {
-      const uncertain = result.reason === 'unavailable' || result.reason === 'preparing' || (recovering && result.reason !== 'conflict');
+      const uncertain =
+        result.reason === 'unavailable' ||
+        result.reason === 'preparing' ||
+        (recovering && result.reason !== 'conflict');
       this.update({
         pending: uncertain ? pending : null,
         phase: uncertain ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
@@ -305,13 +319,20 @@ export class ShelfPreferenceDraftRecovery {
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
     } catch {
-      if (this.owner.canRead()) this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
+      if (this.owner.canRead())
+        this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
     }
   }
 
   useCurrent() {
     if (!this.owner.canRead() || this.state.pending || this.state.phase !== 'review') return;
-    this.update({ draft: draftFrom(this.state.known.shelf), dirty: new Set(), phase: 'idle', reason: undefined, failure: undefined });
+    this.update({
+      draft: draftFrom(this.state.known.shelf),
+      dirty: new Set(),
+      phase: 'idle',
+      reason: undefined,
+      failure: undefined,
+    });
   }
 }
 
@@ -373,16 +394,12 @@ export function ShelfPreferencesCard({
   ownerRef.current = { version, canWrite, canRead, onVersionChange };
   const [controller] = useState(
     () =>
-      new ShelfPreferenceDraftRecovery(
-        { spoilerLevel: 0, suitability: 'blur', version, shelf: initial },
-        io,
-        {
-          canRead: () => ownerRef.current.canRead,
-          canWrite: () => ownerRef.current.canWrite,
-          version: () => ownerRef.current.version,
-          onVersionChange: (next) => ownerRef.current.onVersionChange(next),
-        },
-      ),
+      new ShelfPreferenceDraftRecovery({ spoilerLevel: 0, suitability: 'blur', version, shelf: initial }, io, {
+        canRead: () => ownerRef.current.canRead,
+        canWrite: () => ownerRef.current.canWrite,
+        version: () => ownerRef.current.version,
+        onVersionChange: (next) => ownerRef.current.onVersionChange(next),
+      }),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const disabled = !canWrite || state.phase === 'saving' || state.phase === 'reloading';
@@ -395,11 +412,17 @@ export function ShelfPreferencesCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle><h2 id="settings-shelf-heading">{m.settings_shelf_heading()}</h2></CardTitle>
+        <CardTitle>
+          <h2 id="settings-shelf-heading">{m.settings_shelf_heading()}</h2>
+        </CardTitle>
         <CardDescription>{m.settings_shelf_text()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {unavailableColumns.length ? <p className="text-sm text-muted-foreground">{m.settings_shelf_columns_unavailable({ columns: unavailableColumns.join(', ') })}</p> : null}
+        {unavailableColumns.length ? (
+          <p className="text-sm text-muted-foreground">
+            {m.settings_shelf_columns_unavailable({ columns: unavailableColumns.join(', ') })}
+          </p>
+        ) : null}
         {unavailableSorts.map(({ tab, field }) => (
           <p key={tab} className="text-sm text-muted-foreground">
             {m.settings_shelf_order_unavailable({ tab: tabLabel(tab), field })}
@@ -411,7 +434,9 @@ export function ShelfPreferencesCard({
             <select
               className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
               value={state.draft.layout}
-              onChange={(event) => controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')}
+              onChange={(event) =>
+                controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')
+              }
             >
               <option value="grid">{m.library_layout_grid()}</option>
               <option value="list">{m.library_layout_list()}</option>
@@ -423,7 +448,9 @@ export function ShelfPreferencesCard({
             <select
               className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
               value={state.draft.gridSize}
-              onChange={(event) => controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')}
+              onChange={(event) =>
+                controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')
+              }
             >
               <option value="small">{m.library_size_small()}</option>
               <option value="medium">{m.library_size_medium()}</option>
@@ -442,7 +469,9 @@ export function ShelfPreferencesCard({
                     controller.edit(
                       {
                         columns: appColumns.filter(
-                          (item) => item === 'title' || (item === column ? checked === true : state.draft.columns.includes(item)),
+                          (item) =>
+                            item === 'title' ||
+                            (item === column ? checked === true : state.draft.columns.includes(item)),
                         ),
                       },
                       'columns',
@@ -467,7 +496,9 @@ export function ShelfPreferencesCard({
                 >
                   {current.startsWith('unsupported:') ? (
                     <option value={current} disabled>
-                      {m.settings_shelf_unavailable_option({ field: current.slice('unsupported:'.length).replaceAll('_', ' ') })}
+                      {m.settings_shelf_unavailable_option({
+                        field: current.slice('unsupported:'.length).replaceAll('_', ' '),
+                      })}
                     </option>
                   ) : null}
                   <option value={defaultSortChoice}>{m.settings_shelf_order_application_default()}</option>
@@ -492,11 +523,23 @@ export function ShelfPreferencesCard({
             <AlertDescription className="space-y-2">
               {state.failure?.requestId ? <p>{state.failure.requestId}</p> : null}
               {state.phase === 'uncertain' && state.pending ? (
-                <Button type="button" variant="outline" className="min-h-11" disabled={!canWrite} onClick={() => void controller.retry()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={!canWrite}
+                  onClick={() => void controller.retry()}
+                >
                   {m.settings_shelf_retry()}
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" className="min-h-11" disabled={!canRead || waiting} onClick={() => void controller.reload()}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={!canRead || waiting}
+                onClick={() => void controller.reload()}
+              >
                 {m.settings_shelf_reload()}
               </Button>
               {state.phase === 'review' ? (
@@ -509,10 +552,21 @@ export function ShelfPreferencesCard({
         ) : null}
         {state.phase === 'saved' ? <p role="status">{m.settings_saved()}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" className="min-h-11 max-w-full whitespace-normal" disabled={disabled || !state.dirty.size} onClick={() => void controller.submit()}>
+          <Button
+            type="button"
+            className="min-h-11 max-w-full whitespace-normal"
+            disabled={disabled || !state.dirty.size}
+            onClick={() => void controller.submit()}
+          >
             {m.settings_shelf_save()}
           </Button>
-          <Button type="button" variant="outline" className="min-h-11 max-w-full whitespace-normal" disabled={disabled || !!state.pending} onClick={() => void controller.submit(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 max-w-full whitespace-normal"
+            disabled={disabled || !!state.pending}
+            onClick={() => void controller.submit(true)}
+          >
             {m.settings_shelf_reset()}
           </Button>
         </div>

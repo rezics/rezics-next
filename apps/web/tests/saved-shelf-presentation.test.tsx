@@ -14,12 +14,15 @@ mock.module('@tanstack/react-start/server', () => ({
   },
   setResponseHeader() {},
 }));
-mock.module('cloudflare:workers', () => ({ get env() { return cloudflareEnv; } }));
+mock.module('cloudflare:workers', () => ({
+  get env() {
+    return cloudflareEnv;
+  },
+}));
 
 test('native shelf defaults resolve within limits, URL choices win, and replaced viewers retire the snapshot', async () => {
-  const { resolveShelfPresentation, unsupportedShelfColumns, unsupportedShelfSorts } = await import(
-    '../src/library/shelf-preferences'
-  );
+  const { resolveShelfPresentation, unsupportedShelfColumns, unsupportedShelfSorts } =
+    await import('../src/library/shelf-preferences');
   const { shelfColumnIds, shelfDisplay, shelfHref, validateShelfSearch } = await import('../src/library/shelf-params');
   const { parsePreferenceChange, shelfPreferenceColumns } = await import('../src/settings/preferences');
   const { ShelfPreferenceSnapshotOwner } = await import('../src/settings/shelf-preferences-current');
@@ -27,10 +30,10 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
 
   for (const size of [1, 16, 32]) {
     const scopes = Array.from({ length: size - 1 }, (_, index) => `https://types.example/${index}`);
-    const layouts = Object.fromEntries([
-      ['all', 'list'],
-      ...scopes.map((scope) => [scope, 'table']),
-    ]) as Record<string, 'grid' | 'list' | 'table'>;
+    const layouts = Object.fromEntries([['all', 'list'], ...scopes.map((scope) => [scope, 'table'])]) as Record<
+      string,
+      'grid' | 'list' | 'table'
+    >;
     const target = scopes.at(-1) ?? 'https://types.example/not-saved';
     const shelf = {
       layouts,
@@ -72,7 +75,10 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
 
   const shelf = {
     layouts: { all: 'list', 'https://schema.org/Book': 'table' as const },
-    sorts: { all: { field: 'added' as const, direction: 'asc' as const }, planned: { field: 'title' as const, direction: 'desc' as const } },
+    sorts: {
+      all: { field: 'added' as const, direction: 'asc' as const },
+      planned: { field: 'title' as const, direction: 'desc' as const },
+    },
     gridSize: 'large' as const,
     tableColumns: ['title', 'creator', 'progress', 'rating', 'started'] as const,
   };
@@ -104,7 +110,12 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
   expect(defaultsHref).toContain('size=m');
   expect(defaultsHref).toContain(`columns=${encodeURIComponent(shelfColumnIds.join(','))}`);
 
-  const snapshot = { generation: 'first', accountId: 'alice', csrfToken: 'token-a', shelf: { layouts: { all: 'table' as const } } };
+  const snapshot = {
+    generation: 'first',
+    accountId: 'alice',
+    csrfToken: 'token-a',
+    shelf: { layouts: { all: 'table' as const } },
+  };
   const viewer = { state: 'signed-in', subject: 'alice', csrfToken: 'token-a' };
   const custody = new ShelfPreferenceSnapshotOwner();
   expect(custody.resolve(snapshot, viewer)).toEqual(snapshot.shelf);
@@ -262,9 +273,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     const { ShelfPreferencesCard } = await import('../src/settings/shelf-preferences');
     const { SettingsSessionContext, SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
     const { sessionQuery } = await import('../src/session/query');
-    const { resolveShelfPresentation, unsupportedShelfColumns, unsupportedShelfSorts } = await import(
-      '../src/library/shelf-preferences'
-    );
+    const { resolveShelfPresentation, unsupportedShelfColumns, unsupportedShelfSorts } =
+      await import('../src/library/shelf-preferences');
     const { validateShelfSearch } = await import('../src/library/shelf-params');
     const { m } = await import('../src/paraglide/messages.js');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -332,17 +342,15 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
           createElement(
             QueryClientProvider,
             { client: queryClient },
-            createElement(
-              SettingsSessionContext.Provider,
-              { value: owner },
-              createElement(MountedCard),
-            ),
+            createElement(SettingsSessionContext.Provider, { value: owner }, createElement(MountedCard)),
           ),
         ),
       );
     };
     const button = (label: string) =>
-      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((node) => node.textContent?.trim() === label)!;
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+        (node) => node.textContent?.trim() === label,
+      )!;
     const click = async (label: string) => {
       const control = button(label);
       expect(control).toBeDefined();
@@ -362,7 +370,9 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await render();
       expect(host.querySelectorAll('select')).toHaveLength(8);
       expect(host.textContent).toContain(m.settings_shelf_columns_unavailable({ columns: 'creator, rating, started' }));
-      expect(host.textContent).toContain(m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }));
+      expect(host.textContent).toContain(
+        m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
+      );
 
       await select(0, 'table');
       await click(m.settings_shelf_save());
@@ -380,7 +390,10 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(current.spoilerLevel).toBe(1);
       expect(current.suitability).toBe('show');
       expect(current.notifications).toEqual({ reply: true, mention: false });
-      expect((current.shelf as typeof initialShelf).layouts).toEqual({ all: 'table', 'https://schema.org/Book': 'grid' });
+      expect((current.shelf as typeof initialShelf).layouts).toEqual({
+        all: 'table',
+        'https://schema.org/Book': 'grid',
+      });
       expect((current.shelf as typeof initialShelf).sorts.planned).toEqual({ field: 'title', direction: 'desc' });
       expect((current.shelf as typeof initialShelf).tableColumns).toEqual(initialShelf.tableColumns);
       expect(confirmedVersion).toBe(6);
