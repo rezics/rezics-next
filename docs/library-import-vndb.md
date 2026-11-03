@@ -12,8 +12,8 @@ Matching uses the admitted native `semantic.external_claim` tuple `(source="vndb
 its tuple home, current canonical identity and subject readability. Alternate source namespaces are unavailable
 through this slice. A title is display/search assistance only. Release IDs (`r123`) are never VN identities.
 Release records, reviews, length votes, unknown containers and export metadata are retained privately.
-Native catalogue batch creation now enrolls its existing receipt/events in native Record history (codec 3021);
-this repairs the producer seam without changing catalogue admission or command identity.
+Catalogue batch creation uses its existing native Record history (codec 3021) and admitted provider tuple;
+VNDB review extends the native import guard union while other sources keep their original command operands.
 Candidate arrays distinguish matched, ambiguous, unmatched, unavailable and unsupported. Native tuples are unique;
 the ambiguous shape is reserved for multiple disclosed canonical candidates, never generated from titles.
 Unmatched rows accept an explicit readable target obtained through ordinary catalogue search.

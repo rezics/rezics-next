@@ -809,6 +809,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof bangumiImportRoutes> &
   ReturnType<typeof malImportRoutes> &
   ReturnType<typeof aniListImportRoutes> &
+  ReturnType<typeof vndbImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
   ReturnType<typeof communityRoutes> &
