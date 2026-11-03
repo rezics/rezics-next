@@ -872,6 +872,11 @@ Before dimensions, credit, placeholders or variants are copied, each selected av
 pass its exact source/external-ID/field-group fence in that same snapshot. A fenced cover becomes null
 while the rest of the summary remains. The original point reader's independent cover guard remains.
 
+Composed current-summary observations retain the actual source components, expose `available`, `absent` and
+`concealed` cover outcomes, and load at most 64 requested/fallback label languages plus the Subject's original
+language. They use the same summary, media-reference and source-fence owners; callers keep these components through
+final disclosure. A caller may represent an unavailable optional presentation without serializing stale metadata.
+
 `summary-snapshot.test.ts` authors one mixed-partition mounted `createKernel` graph regression with native
 representative facts, re-encoded media, resource checks and tuple fences. A concurrent writer commits
 between its final representative probe and subsequent facts. The regression observes real PostgreSQL
