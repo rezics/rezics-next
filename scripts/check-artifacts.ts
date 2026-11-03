@@ -251,7 +251,7 @@ export async function registerArtifactDeclarations(
   const declared = validateArtifactDeclarations(paths);
   if (!declared.length) return;
   const stage = safeArtifactStage(root, stageRelative, physicalRunId);
-  await withCheckFence(root, `artifact-${physicalRunId}`, () => {
+  await withCheckFence(root, physicalRunId, () => {
     const manifest = readManifest(stage, physicalRunId) ?? {
       version: CHECK_ARTIFACTS_VERSION,
       physicalRunId,
@@ -291,7 +291,7 @@ export async function captureArtifactReturns(
   const declared = validateArtifactDeclarations(paths);
   if (!declared.length) return;
   const stage = safeArtifactStage(root, stageRelative, physicalRunId);
-  await withCheckFence(root, `artifact-${physicalRunId}`, () => {
+  await withCheckFence(root, physicalRunId, () => {
     const manifest = readManifest(stage, physicalRunId);
     if (!manifest) throw new Error('check-artifacts: physical run manifest is missing or malformed');
     const entries = new Map(manifest.entries.map((entry) => [entry.path, entry]));

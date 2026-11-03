@@ -347,7 +347,8 @@ test('official capture requires physical prepared custody, runs once, and never 
           async () => {
             runs++;
             expect(existsSync(join(root, PROFILE.transport))).toBe(false);
-            for (const [path, bytes] of previous) expect(readOutputTreeFile(root, path)).toEqual(bytes);
+            for (const [path, bytes] of previous)
+              expect(readOutputTreeFile(root, `${PROFILE.root}/${path}`)).toEqual(bytes);
             if (mode === 'unchanged') return 0;
             rmSync(join(root, PROFILE.root), { recursive: true });
             if (mode === 'complete' || mode === 'failed') generated(root);
