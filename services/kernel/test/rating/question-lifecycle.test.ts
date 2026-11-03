@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
+import { noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
+import { retireRealmRatingQuestion } from '../../src/rating/question-lifecycle.ts';
+import {
+  createQuestionVoteAdmission,
+  type QuestionVoteAdmissionPreparation,
+} from '../../src/rating/question-vote-admission.ts';
 import { createRealmRankSource } from '../../src/rating/realm-rank.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -59,6 +65,108 @@ test('Realm curators retire and restore without changing question meaning or pri
       await call('POST', author, fixture.member, { ...definition, label: 'Source fidelity' }),
       201,
     );
+    const admission = createQuestionVoteAdmission();
+    const questionHome = partitionOf(routeOf(question.id)!);
+    const reviewed = admission.prepare({ questionId: question.id, question: { revision: 1, lifecycleRevision: 1 } });
+    const admit = (
+      prepared = reviewed,
+      options: {
+        home?: number;
+        deadline?: number;
+        before?: (tx: CommandTransaction) => Promise<void>;
+        held?: (tx: CommandTransaction) => Promise<void>;
+      } = {},
+    ) =>
+      runCommand(
+        system.database.pool,
+        { partition: options.home ?? questionHome, deadline: options.deadline ?? Date.now() + 30_000 },
+        async (tx) => {
+          await options.before?.(tx);
+          const held = await admission.admit(tx, prepared);
+          await options.held?.(tx);
+          return noEffect(held);
+        },
+      );
+    // The implicit lifecycle head is positively serialized by its real question.
+    expect((await admit()).value).toEqual({
+      questionId: question.id,
+      revision: 1,
+      lifecycleRevision: 1,
+      lifecycleState: 'active',
+    });
+    const standard = admission.prepare({
+      questionId: STANDARD_QUESTION_ID,
+      question: { revision: 1, lifecycleRevision: 1 },
+    });
+    expect((await admit(standard, { home: 0 })).value.lifecycleState).toBe('active');
+    await expect(admit(reviewed, { home: questionHome ^ 1 })).rejects.toMatchObject({
+      code: 'vote_review_unavailable',
+      reason: 'atomic_guard_unavailable',
+    });
+    const missing = admission.prepare({
+      questionId: newId(routeOf(question.id)!),
+      question: { revision: 1, lifecycleRevision: 1 },
+    });
+    await expect(admit(missing)).rejects.toMatchObject({ code: 'vote_review_stale', reason: 'question_changed' });
+    const changed = admission.prepare({ questionId: question.id, question: { revision: 2, lifecycleRevision: 1 } });
+    await expect(admit(changed)).rejects.toMatchObject({ code: 'vote_review_stale', reason: 'question_changed' });
+    await json(
+      await call('PUT', `/v1/rating-questions/${question.id}/label`, fixture.member, {
+        expectedLabelRevision: 1,
+        label: 'Translation accuracy',
+      }),
+    );
+    expect((await admit()).value.revision).toBe(1);
+    await expect(
+      admit(reviewed, {
+        held: async () => {
+          throw new Error('abort participant');
+        },
+      }),
+    ).rejects.toThrow('abort participant');
+    await expect(
+      admit(reviewed, {
+        deadline: Date.now() + 500,
+        held: async (tx) => {
+          await tx.query('SELECT pg_sleep(2)');
+        },
+      }),
+    ).rejects.toMatchObject({ reason: 'deadline' });
+    let completed: CommandTransaction | undefined;
+    await admit(reviewed, {
+      held: async (tx) => {
+        completed = tx;
+      },
+    });
+    await expect(admission.admit(completed!, reviewed)).rejects.toThrow('No authorized live command transaction');
+
+    const memberActor = await system.access.authenticate(fixture.member.bearer, {
+      pool: system.database.pool,
+      deadline: Date.now() + 30_000,
+    });
+    // Hold a genuine native transaction while the actual manager command competes.
+    const locked = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const holding = admit(reviewed, {
+      held: async () => {
+        locked.resolve();
+        await release.promise;
+      },
+    });
+    try {
+      await Promise.race([locked.promise, holding]);
+      await expect(
+        retireRealmRatingQuestion(
+          { pool: system.database.pool, access: system.access },
+          memberActor,
+          { questionId: question.id, expectedRevision: 1 },
+          { deadline: Date.now() + 1_000, idempotencyKey: randomUUID() },
+        ),
+      ).rejects.toMatchObject({ reason: 'deadline' });
+    } finally {
+      release.resolve();
+      await holding;
+    }
     const vote = `/v1/subjects/${fixture.subject.id}/ratings/${question.id}/vote`;
     await json(await call('PUT', vote, fixture.member, { units: 8 }));
     const selection = `/v1/rating-questions?realm=${realmId}&limit=1`;
@@ -77,6 +185,19 @@ test('Realm curators retire and restore without changing question meaning or pri
       ),
     );
     expect(retired).toEqual({ questionId: question.id, lifecycle: { state: 'retired', revision: 2 } });
+    expect(
+      await json(
+        await call(
+          'POST',
+          `/v1/rating-questions/${question.id}/$retire`,
+          fixture.member,
+          { expectedLifecycleRevision: 1 },
+          retireKey,
+        ),
+      ),
+    ).toEqual(retired);
+    // Retirement wins after preparation, before this command's admission/commit.
+    await expect(admit()).rejects.toMatchObject({ code: 'vote_review_stale', reason: 'question_changed' });
     expect(
       (
         await call('POST', `/v1/rating-questions/${question.id}/$restore`, fixture.member, {
@@ -156,6 +277,42 @@ test('Realm curators retire and restore without changing question meaning or pri
       }),
     );
     expect(restored).toEqual({ questionId: question.id, lifecycle: { state: 'active', revision: 3 } });
+    await expect(admit()).rejects.toMatchObject({ code: 'vote_review_stale', reason: 'question_changed' });
+    const restoredReview: QuestionVoteAdmissionPreparation = admission.prepare({
+      questionId: question.id,
+      question: { revision: 1, lifecycleRevision: 3 },
+    });
+    // Mint the command snapshot before a real retirement. The owning tuple must
+    // force a retry; merely locking an unchanged question would admit the old head.
+    const snapshotReady = Promise.withResolvers<void>();
+    const retirementDone = Promise.withResolvers<void>();
+    const waiting = admit(restoredReview, {
+      before: async () => {
+        snapshotReady.resolve();
+        await retirementDone.promise;
+      },
+    });
+    try {
+      await Promise.race([snapshotReady.promise, waiting]);
+      await json(
+        await call('POST', `/v1/rating-questions/${question.id}/$retire`, fixture.member, {
+          expectedLifecycleRevision: 3,
+        }),
+      );
+    } finally {
+      retirementDone.resolve();
+    }
+    await expect(waiting).rejects.toMatchObject({ code: 'vote_review_stale', reason: 'question_changed' });
+    await json(
+      await call('POST', `/v1/rating-questions/${question.id}/$restore`, fixture.member, {
+        expectedLifecycleRevision: 4,
+      }),
+    );
+    const currentReview = admission.prepare({
+      questionId: question.id,
+      question: { revision: 1, lifecycleRevision: 5 },
+    });
+    expect((await admit(currentReview)).value.lifecycleRevision).toBe(5);
     await expect(source.page(actor, rankRequest, { deadline: Date.now() + 30_000 })).rejects.toMatchObject({
       name: 'RealmRankQuestionUnavailableError',
       reason: 'unavailable',
@@ -196,6 +353,8 @@ test('Realm curators retire and restore without changing question meaning or pri
     expect(events.rows).toEqual([
       { state: 'retired', revision: '2', generation: '1' },
       { state: 'active', revision: '3', generation: '2' },
+      { state: 'retired', revision: '4', generation: '3' },
+      { state: 'active', revision: '5', generation: '4' },
     ]);
   } finally {
     await driver.close();

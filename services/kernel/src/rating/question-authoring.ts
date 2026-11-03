@@ -54,7 +54,10 @@ export function validateQuestionDefinition(input: RealmQuestionInput): void {
     throw new QuestionDefinitionInvalidError('scale');
 }
 
-/** One Realm-home command, receipt and event. The current native manage decision
+/** Definitions are immutable after insertion. Any future definition-changing
+ * writer must update the owning question tuple before dependent heads, sharing
+ * question-vote-admission's native lock order; captions have a separate head.
+ * One Realm-home command, receipt and event. The current native manage decision
  * precedes receipt lookup on every attempt, including an exact replay. */
 export async function createRealmRatingQuestion(
   deps: { pool: Pool; access: Access; clock?: KernelClock },

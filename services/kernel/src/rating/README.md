@@ -485,7 +485,7 @@ messaging.
 #### Retire Cost
 
 - **Touches:** One question-home read, current Realm manager preparation, one command receipt, one locked question,
-  one lifecycle-head upsert, one Realm-generation upsert and one lifecycle event.
+  one same-value question-tuple update, one lifecycle-head upsert, one Realm-generation upsert and one lifecycle event.
 - **Bound:** Constant statements and rows per attempt; no vote or Subject scan. Index and receipt lookup blocks grow
   logarithmically with retained history.
 - **Growth check:** `test/rating/question-lifecycle.test.ts` checks one transition and exact replay/revocation behavior;
@@ -1158,6 +1158,77 @@ matching guarded no-op therefore returns typed `atomic_guard_unavailable`; no gu
 advertised to Library consumers. Guarded success/replay, absent-slot first-writer serialization and full native
 race/growth acceptance remain delivery work under those owner contracts. Bangumi, MAL and AniList independently
 retain unavailable adoption and do not depend on one another's publication.
+
+#### Native question participant
+
+`createQuestionVoteAdmission(): QuestionVoteAdmission` in `question-vote-admission.ts` supplies the question
+producer independently of the vote writer and Semantic identity admission. Its exact methods are:
+
+```ts
+prepare(input: Readonly<{
+  questionId: string;
+  question: VoteReviewGuard['question'];
+}>): QuestionVoteAdmissionPreparation;
+admit(
+  tx: CommandTransaction,
+  prepared: QuestionVoteAdmissionPreparation,
+): Promise<Readonly<{
+  questionId: string;
+  revision: number;
+  lifecycleRevision: number;
+  lifecycleState: 'active' | 'retired';
+}>>;
+```
+
+Preparation copies one routed UUID and the exact reviewed immutable-definition/lifecycle pair (positive int32
+revisions). It performs no I/O, holds no resources, and is accepted only by the factory that minted it. It may be
+reused across executor retries. The native body calls `admit` on the original live executor transaction after
+authorization and receipt lookup, before any no-op, cleanup or effect. The returned state is the state bound to
+that lifecycle revision; it does not grant permission to cast on a retired question. The writer still checks the
+entire guard, disclosure, units and authority. This participant writes no vote, consent, receipt or event and has
+no HTTP endpoint. A returned value is descriptive, never a reusable execution capability.
+
+Decision: question admission supports the command's own logical home only; cross-home attempts explicitly return
+`VoteReviewUnavailableError('atomic_guard_unavailable')`, even for currently co-resident homes. The executor has
+no multi-home participant enrollment/completion/abort protocol. Its owning command infrastructure must provide
+deterministically ordered native home fences held through the *same* owner commit, including movement and failure
+cleanup, before cross-home installation. Neither an arbitrary foreign checkout nor local SERIALIZABLE installs it.
+The original guarded vote journey remains unavailable until its writer integrates this participant and Semantic's
+separate exact-epoch participant. This source factory is not generated client delivery or provider adoption.
+
+Within one home (including different routes in that home), admission takes a PostgreSQL share lock on the actual
+question, then reads its lifecycle head. Absence of that head means active revision 1 under the owning question
+lock, never absence of serialization. Standard/native and Realm questions use the same path. Retire and restore
+update the question tuple to its existing definition revision before changing the lifecycle head. This physical
+tuple change forces an older SERIALIZABLE command snapshot to retry rather than read a superseded lifecycle head;
+it does not advance the immutable meaning revision. An authoritative definition-changing writer must likewise
+update this tuple before dependent heads. Current authoring only inserts immutable definitions. Caption writers
+change their independent head and do not invalidate meaning evidence. The common order is question tuple, lifecycle
+head, then the executor's native completion fence. Exact replay does not execute that body or update the tuple.
+
+Missing questions or mismatching definition/lifecycle revisions produce fresh `VoteReviewStaleError('question_changed')`.
+Malformed preparation is rejected; unknown lifecycle state is `question_observation_unavailable`. Native contention,
+deadline and operational failures retain executor outcomes and retries. There is no participant release method:
+the original executor COMMIT or ROLLBACK releases its row locks, including failed guards, no-effect completion,
+deadline and abort. A completed transaction cannot admit again. Preparation creates no checkout to clean up.
+
+##### Question participant Cost
+
+- **Touches:** Preparation/evaluation uses no Access preparation or evaluation of its own. Admission uses the live
+  authorized command's one pool/client, locks one primary-key question and reads at most one primary-key lifecycle
+  head in two statements; it adds no transaction controls. Lifecycle transitions additionally update that one
+  question tuple. Native receipt, management authorization, generation and event work remain owned above.
+- **Bound:** One supplied key and one logical home; at most two materialized physical rows. Retained preparation
+  contains one 36-byte UUID and two int32 revisions; the result contains that UUID, two int32 revisions and one
+  enum of at most seven ASCII bytes, plus fixed object/serialization keys. SQL never materializes meaning, scale,
+  captions, histories or unrelated questions. There are no extra pools, checkouts or independently retained handles.
+  Index positioning grows logarithmically; this bound does not count MVCC storage as work evidence.
+- **Growth check:** `test/rating/question-lifecycle.test.ts` retains real management actions/readback, replay and
+  revocation and exercises the native factory, implicit head, both competing schedules, restore ABA, standard
+  question, stale/missing keys, unavailable foreign home, abort/deadline and subsequent valid commands. Controller
+  acceptance owns observed SQL/controls, physical plans, bytes, pools and runner phases with independently grown
+  selected/unrelated question/lifecycle histories at 256/1024/4096 and fixed keys/native byte caps; no measured
+  growth pass is claimed by these source bounds.
 
 Commerce and own-score consumers import `OwnCountedVoteRequest`, `OwnCountedVotePreparation`,
 `OwnCountedVoteReadResult`, `OwnCountedVoteResult`, `OwnCountedVoteObservation` and their supporting types from
