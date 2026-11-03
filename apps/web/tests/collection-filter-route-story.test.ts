@@ -70,7 +70,9 @@ test('the routed Collection filter story uses the generated route, product reade
 
   for (const name of ['Reference', 'ConceptSelected', 'WordRangeApplied', 'CombinedFilters', 'NoMatches', 'Preparing'])
     expect(scenarios[name]).toContain('PatternStory');
-  expect(scenarios.CombinedFilters).toContain('longFilterPropertySuffix');
+  expect(story).toContain('longFilterPropertySuffix');
+  expect(story).toContain('search === states.combined');
+  expect(scenarios.CombinedFilters).toContain('states.combined');
   expect(scenarios.FilterSourceUnavailable).toContain('CollectionFilterFeedback');
   expect(scenarios.FilterSourceUnavailable).toContain('status="failed"');
 });
