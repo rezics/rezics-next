@@ -69,7 +69,14 @@ export const ContentIdSchema = t.String({
 const nullableId = t.Union([ContentIdSchema, t.Null()]);
 const reportTarget = t.Object(
   {
-    kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post'), t.Literal('subject'), t.Literal('space'), t.Literal('realm')]),
+    kind: t.Union([
+      t.Literal('board'),
+      t.Literal('thread'),
+      t.Literal('post'),
+      t.Literal('subject'),
+      t.Literal('space'),
+      t.Literal('realm'),
+    ]),
     id: ContentIdSchema,
   },
   closed,
@@ -655,7 +662,15 @@ export const ReportPageQuerySchema = t.Object(
     limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
     status: t.Optional(t.Union([t.Literal('all'), t.Literal('pending'), t.Literal('resolved')])),
     targetKind: t.Optional(
-      t.Union([t.Literal('all'), t.Literal('board'), t.Literal('thread'), t.Literal('post'), t.Literal('subject'), t.Literal('space'), t.Literal('realm')]),
+      t.Union([
+        t.Literal('all'),
+        t.Literal('board'),
+        t.Literal('thread'),
+        t.Literal('post'),
+        t.Literal('subject'),
+        t.Literal('space'),
+        t.Literal('realm'),
+      ]),
     ),
     order: t.Optional(t.Union([t.Literal('newest'), t.Literal('oldest')])),
   },

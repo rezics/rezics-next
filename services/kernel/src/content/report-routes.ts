@@ -151,7 +151,14 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         },
         detail: {
           operationId: 'report.create',
-          'x-resource-types': ['content.board', 'content.thread', 'content.post', 'semantic.subject', 'community.space', 'community.realm'],
+          'x-resource-types': [
+            'content.board',
+            'content.thread',
+            'content.post',
+            'semantic.subject',
+            'community.space',
+            'community.realm',
+          ],
           'x-exposure': 'public',
           'x-action': 'report:create',
           'x-rate-limit': defineRateLimit({ family: 'report', units: 1 }),
@@ -326,8 +333,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     },
     ({ params: { spaceId }, query, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
-      return list({ kind: 'space', id: spaceId }, { actor, deadline: job.deadline }, query,
-        (operation) => admission.run('normal', job, operation), session);
+      return list(
+        { kind: 'space', id: spaceId },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
     },
   );
   const realm = space.get(
@@ -345,8 +357,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     },
     ({ params: { realmId }, query, actor, admission, job, session, set }) => {
       set.headers['cache-control'] = 'private, no-store';
-      return list({ kind: 'realm', id: realmId }, { actor, deadline: job.deadline }, query,
-        (operation) => admission.run('normal', job, operation), session);
+      return list(
+        { kind: 'realm', id: realmId },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
     },
   );
   return realm.get(
@@ -388,7 +405,12 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     return reportOperation(
       () =>
         admit(async () => {
-          await requireReportInspection(dependencies, authorityId, context, target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined);
+          await requireReportInspection(
+            dependencies,
+            authorityId,
+            context,
+            target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined,
+          );
           let page;
           try {
             page =
@@ -406,7 +428,12 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
             if (query.cursor !== undefined && error instanceof TypeError) throw new ProblemError('invalid_cursor');
             throw error;
           }
-          await requireReportInspection(dependencies, authorityId, context, target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined);
+          await requireReportInspection(
+            dependencies,
+            authorityId,
+            context,
+            target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined,
+          );
           session.record(component(page.anchor));
           return { reports: [...page.entries], next: page.nextCursor };
         }),

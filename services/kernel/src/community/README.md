@@ -1193,7 +1193,6 @@ listing. Invalid/expired tokens use `invalid_cursor`; a changed available source
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | List pending Realm claims | Two ordinary exact Global Access evaluations; initial/final native Realm/head and partition point reads; one pending episode index seek and at most 20 exact request revalidations. | At most `min(limit,20)` examined candidates and final full-key reads; fixed snapshots/statements plus bounded Access; logarithmic index seeks independent of unrelated Realms and historical episodes. | Focused `test/community/realm-claim-review.test.ts` asserts the candidate cap and exact pending index shape. Native growth execution is deferred to integration. |
 
-
 ## Report target adapters
 
 `communityReportTargetFacts(client, {kind: 'space' | 'realm', id})` returns an internal current-head

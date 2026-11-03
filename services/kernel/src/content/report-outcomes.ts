@@ -122,10 +122,13 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
   if (!reference) throw new ReportUnavailableError();
   const route = routeOf(id)!;
   const targetRoute = routeOf(reference.target_id)!;
-  const nativeTarget = reference.target_kind === 'space' || reference.target_kind === 'realm'
-    ? { kind: reference.target_kind, id: reference.target_id } as const : null;
+  const nativeTarget =
+    reference.target_kind === 'space' || reference.target_kind === 'realm'
+      ? ({ kind: reference.target_kind, id: reference.target_id } as const)
+      : null;
   const nativeRead = nativeTarget
-    ? await communityReportReadCheck(deps, nativeTarget, { actor, deadline: context.deadline }) : null;
+    ? await communityReportReadCheck(deps, nativeTarget, { actor, deadline: context.deadline })
+    : null;
   const authorization = resourceAuthorization({
     access: deps.access,
     actor,
@@ -137,8 +140,12 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
             resource: { route: targetRoute, id: reference.target_id },
             async validate(client) {
               const partition = await readPartition(client, partitionOf(targetRoute));
-              return !!partition && partition.writeState !== 'moved' &&
-                (!nativeTarget || (!!(await communityReportTargetFacts(client, nativeTarget)) && await nativeRead!(client)));
+              return (
+                !!partition &&
+                partition.writeState !== 'moved' &&
+                (!nativeTarget ||
+                  (!!(await communityReportTargetFacts(client, nativeTarget)) && (await nativeRead!(client))))
+              );
             },
           },
     context: { pool: deps.pool, partition: partitionOf(route), deadline: context.deadline },

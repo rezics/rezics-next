@@ -14,7 +14,10 @@ export async function communityReportTargetFacts(client: AccessClient, target: C
   if (route === null) return null;
   const statement = target.kind === 'space' ? space : realm;
   const parameters = { route, id: target.id };
-  const result = await client.query(statement.sql, statement.params.map((name) => parameters[name as keyof typeof parameters]));
+  const result = await client.query(
+    statement.sql,
+    statement.params.map((name) => parameters[name as keyof typeof parameters]),
+  );
   return result.rows[0] ? { fingerprint: JSON.stringify(result.rows[0]) } : null;
 }
 
@@ -26,8 +29,14 @@ export function communityReportReadCheck(
   context: { actor: Actor; deadline: number },
 ) {
   const resource = { route: routeOf(target.id)!, id: target.id };
-  return accessCheck(deps.access, context.actor, `${target.kind}:read`, {
-    ...resource,
-    eligibility: target.kind === 'space' ? spaceReadEligibility(resource) : realmReadEligibility(resource),
-  }, { pool: deps.pool, deadline: context.deadline });
+  return accessCheck(
+    deps.access,
+    context.actor,
+    `${target.kind}:read`,
+    {
+      ...resource,
+      eligibility: target.kind === 'space' ? spaceReadEligibility(resource) : realmReadEligibility(resource),
+    },
+    { pool: deps.pool, deadline: context.deadline },
+  );
 }

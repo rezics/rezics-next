@@ -93,8 +93,12 @@ export async function requireReportInspection(
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved' || !(await check(client)) ||
-          (nativeTarget && (!(await communityReportTargetFacts(client, nativeTarget)) || !(await readable!(client)))))
+        if (
+          !partition ||
+          partition.writeState === 'moved' ||
+          !(await check(client)) ||
+          (nativeTarget && (!(await communityReportTargetFacts(client, nativeTarget)) || !(await readable!(client))))
+        )
           throw new ProblemError('not_found');
         await client.query('COMMIT');
       } catch (error) {

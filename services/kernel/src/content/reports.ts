@@ -245,7 +245,8 @@ async function discloseTarget(
   const facts = initial.value;
   if (!facts) throw new ReportUnavailableError();
   if (target.kind === 'space' || target.kind === 'realm') {
-    if (!(await readableCommunityTarget(dependencies, target, context, facts.fingerprint))) throw new ReportUnavailableError();
+    if (!(await readableCommunityTarget(dependencies, target, context, facts.fingerprint)))
+      throw new ReportUnavailableError();
     return facts;
   }
   if (target.kind === 'subject') {
@@ -402,7 +403,14 @@ export async function createReport(
       }
       const prepared = await accessAuthorization.prepare!(attempt);
       if (target.kind === 'space' || target.kind === 'realm') {
-        if (!(await readableCommunityTarget(dependencies, target, { actor, deadline: context.deadline }, observed.fingerprint)))
+        if (
+          !(await readableCommunityTarget(
+            dependencies,
+            target,
+            { actor, deadline: context.deadline },
+            observed.fingerprint,
+          ))
+        )
           throw new ReportUnavailableError();
       }
       return prepared;
@@ -470,10 +478,12 @@ async function readableCommunityTarget(
 ): Promise<boolean> {
   try {
     const check = await communityReportReadCheck(dependencies, target, context);
-    return (await snapshot(dependencies, target.id, context.deadline, async (client) => {
-      const facts = await communityReportTargetFacts(client, target);
-      return !!facts && (expected === undefined || facts.fingerprint === expected) && (await check(client));
-    })).value;
+    return (
+      await snapshot(dependencies, target.id, context.deadline, async (client) => {
+        const facts = await communityReportTargetFacts(client, target);
+        return !!facts && (expected === undefined || facts.fingerprint === expected) && (await check(client));
+      })
+    ).value;
   } catch (error) {
     if (error instanceof ProblemError && error.code === 'not_found') return false;
     throw error;
@@ -847,7 +857,14 @@ async function listReports(
       report_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
       limit: limit + 1,
     };
-    const statement = target.kind === 'catalogue' ? (targetKind === 'all' ? cataloguePage : catalogueKindPage) : target.kind === 'board' ? boardPage : page;
+    const statement =
+      target.kind === 'catalogue'
+        ? targetKind === 'all'
+          ? cataloguePage
+          : catalogueKindPage
+        : target.kind === 'board'
+          ? boardPage
+          : page;
     const { rows } = await client.query<{
       report_route: number;
       report_id: string;
