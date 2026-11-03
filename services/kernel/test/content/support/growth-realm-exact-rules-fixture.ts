@@ -207,6 +207,13 @@ export async function pressure(f: RulesFixture, anchor: Target, axis: 'populatio
   const at = '2000-01-01T00:00:00.000Z';
   return {
     name: `rules-${axis}-${randomUUID()}`, hotPartition: partitionOf(contentRoute), hotShare: 1,
+    async finish(admin) {
+      if (axis === 'history') await admin.query(
+        `UPDATE core.partition SET position=GREATEST(position,
+          (SELECT COALESCE(max(position),0) FROM core.outbox WHERE partition_no=$1)) WHERE partition_no=$1`,
+        [partitionOf(contentRoute)],
+      );
+    },
     rows({ ordinal }) {
       const transaction = randomUUID();
       const revisionId = newId(contentRoute), realmRevisionId = newId(realmRoute), spaceRevisionId = newId(realmRoute);
