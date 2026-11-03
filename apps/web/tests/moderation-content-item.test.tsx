@@ -568,8 +568,16 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     await select(3);
     setStage('review-click');
     await act(async () => buttonByText(host, m.moderation_bulk_review()).click());
-    setStage('review-flush');
-    await flush();
+    setStage('review-flush-start');
+    await act(async () => {
+      await new Promise<void>((resolve) =>
+        setTimeout(() => {
+          setStage('review-flush-tick');
+          resolve();
+        }, 0),
+      );
+    });
+    setStage('review-flush-done');
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
     expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
     expect(window.document.activeElement).toBe(reviewGroup);
