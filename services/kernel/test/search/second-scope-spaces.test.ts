@@ -19,6 +19,9 @@ const partition = partitionOf(route);
 const indexed = (id: string, realmId: string | null = null, revision = id) => ({
   id,
   realmId,
+  address: `space-${id[0]}`,
+  title: `Original ${id[0]}`,
+  realmTitle: realmId ? `Realm ${id[0]}` : null,
   name: `Space ${id[0]}`,
   description: 'Owner-approved public summary',
   revision,
@@ -35,6 +38,9 @@ const nativeReadiness = (state: 'preparing' | 'unavailable'): Awaited<ReturnType
 const summary = (id: string, realmId: string | null = null): SpaceDiscoverySummary => ({
   id,
   realmId,
+  address: `space-${id[0]}`,
+  title: `Current ${id[0]}`,
+  realmTitle: realmId ? `Realm ${id[0]}` : null,
   name: `Current ${id[0]}`,
   description: 'Current authorized summary',
   avatar: null,

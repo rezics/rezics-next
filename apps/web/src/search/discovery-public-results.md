@@ -13,7 +13,7 @@ The current public row shapes are intentionally small:
 | `content / review`     | thread `id`, `kind: review`, nullable `title`, optional current author, excerpt and reviewed Subject | `/{locale}/threads/{id}/{title-slug}` (the ID route uses `thread` when the title is absent) |
 | `community / space`    | `id`, `title`, current `address`, optional summary and Realm title                                   | `/{locale}/spaces/{address}`                                                                |
 
-Decision: Search UI uses `library/collection`, `content/review`, and the pending `community/space` source tags, and
+Decision: Search UI uses `library/collection`, `content/review`, and `community/space` public result tags, and
 derives canonical local links from the admitted full key and current owner summary; absent optional text stays absent.
 
 The row adapter performs no reads, federation, sorting, deduplication or count calculation. It renders only supplied
@@ -21,7 +21,8 @@ public titles, descriptions, excerpts, reviewed-Subject context, Space address a
 private membership or facts, review votes, and Realm rank figures are not accepted by the closed public summary schemas.
 Missing current summaries or addresses make the whole page unavailable rather than producing a partial row or preview.
 
-The retained Search producer on this base still registers only Subject and Account. Until the Collection, review and
-Space producers and current hydration are installed, native readiness remains unavailable; these UI contracts and
-focused presentation fixtures do not establish producer or native acceptance evidence. Subject and Account rows keep
-their existing summaries and routes.
+The retained default Search path now includes ready Collection, review and Space producers in the shared kind
+directory and current-page guard. Collection, review and Space rows use the closed public variants above; private
+Library overlays and owner-specific richer card contexts remain a separate current-reader seam. These source changes
+do not establish native growth or browser acceptance evidence. Subject and Account rows keep their existing summaries
+and routes.

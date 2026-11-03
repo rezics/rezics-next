@@ -337,10 +337,18 @@ export function createNativeCollectionDiscoveryAdapter(
             group.push(id);
             groups.set(partition, group);
           }
-          const current = new Map<string, DiscoveryOwnerMetadataSummary>();
+          const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
           for (const [partition, group] of groups) {
             for (let offset = 0; offset < group.length; offset += COLLECTION_DISCOVERY_BATCH_SIZE) {
               const batch = group.slice(offset, offset + COLLECTION_DISCOVERY_BATCH_SIZE);
+              const source = await leaf.source.read(partition, batch.map(keyOf));
+              if (source.status !== 'available')
+                throw new CollectionDiscoveryReadinessError('unavailable', source.reason);
+              const sourceRows = new Map(
+                source.items.flatMap((item) =>
+                  item.status === 'indexable' ? [[item.key.id, item.value] as const] : [],
+                ),
+              );
               // Use this request's Access, actor and deadline, never a cached viewer or indexing hint.
               const result = summaries(
                 await readPublicCollectionDiscoverySummaries({ ...dependencies, access: context.access }, batch, {
@@ -352,8 +360,19 @@ export function createNativeCollectionDiscoveryAdapter(
               );
               if (result.state === 'unavailable')
                 throw new CollectionDiscoveryReadinessError('unavailable', result.reason);
-              for (const card of result.summaries)
-                current.set(card.id, { id: card.id, title: card.title, summary: card.description });
+              for (const card of result.summaries) {
+                const row = sourceRows.get(card.id);
+                if (!row || row.revision !== card.revision)
+                  throw new CollectionDiscoveryReadinessError('unavailable', 'current_source_changed');
+                current.set(card.id, {
+                  id: card.id,
+                  title: card.title,
+                  summary: card.description,
+                  revision: String(card.revision),
+                  sourcePosition: source.stamp.position,
+                  card,
+                });
+              }
             }
           }
           return new Map([...new Set(ids)].flatMap((id) => (current.has(id) ? [[id, current.get(id)!]] : [])));

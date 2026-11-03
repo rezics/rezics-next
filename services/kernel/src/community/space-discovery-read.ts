@@ -174,6 +174,9 @@ export async function spaceDiscoveryRound(
         indexed: {
           id: key.id,
           realmId,
+          address: space.address,
+          title: space.title,
+          realmTitle: realm?.title ?? null,
           name: realm?.title ?? space.title,
           description: discoveryDescription(realm?.summary ?? space.summary),
           revision: realm?.head_revision_id ?? space.headRevisionId,

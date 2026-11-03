@@ -9,12 +9,14 @@ import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encod
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
 import { admitDiscoveryPage } from './discovery-http.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
+import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitDiscoveryRequest, ownDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
 import type {
-  DiscoveryHit,
   DiscoveryPage,
   DiscoveryReadContext,
   DiscoveryRegistry,
+  DiscoveryOwnerRegistry,
+  DiscoveryUnionHit,
   DiscoveryConsumerQuery,
   DiscoveryKey,
 } from './discovery.ts';
@@ -56,7 +58,7 @@ type DiscoveryConfiguration = {
   source: PublicFilterSource;
   keys: KeyRing;
   resolve(request: MixedDiscoveryRequest): Promise<{
-    registry: DiscoveryRegistry;
+    registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
     release: FilterRelease;
     digest: string;
   }>;
@@ -251,14 +253,17 @@ function executeDiscoverySearch(
       (spacePopulation && spacePopulation.observation.spaceId !== request.spaceId)
     )
       throw new ProblemError('dependency_unavailable');
+    const kindDirectory = discoveryKindDirectory(registry);
     const registryDigest = createHash('sha256')
       .update(
         canonicalize(
-          registry.entries.map((entry) => ({
-            owner: entry.owner,
-            kind: entry.kind,
-            domains: entry.domains,
-            metadata: entry.metadata,
+          kindDirectory.map(({ kind, metadata }) => ({
+            kind,
+            domains:
+              registry.domains?.(kind) ??
+              registry.entries.find((entry) => entry.kind === kind)?.domains ??
+              ['text', 'kind'],
+            metadata,
           })),
         )!,
       )
@@ -330,7 +335,7 @@ function executeDiscoverySearch(
       }
       if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
         throw new ProblemError('search_restart_required');
-      const hits: DiscoveryHit[] = [];
+      const hits: DiscoveryUnionHit[] = [];
       const seen = new Set<string>();
       const witnesses = new Map<string, number>();
       let last: Extract<DiscoveryConsumerQuery, { status: 'queried' }> | undefined;
@@ -436,7 +441,7 @@ function executeDiscoverySearch(
         const execution = last;
         const page = await finishDiscoveryDisclosure(coverage, async () => {
           await spacePopulation?.finish();
-          const entries = [...registry.entries].sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+          const entries = kindDirectory;
           if (kindAfter && !entries.some((entry) => entry.kind === kindAfter)) throw invalid('/kindPage/cursor');
           const remaining = entries.filter((entry) => entry.kind > kindAfter);
           const selected = remaining.slice(0, admitted.kindLimit);

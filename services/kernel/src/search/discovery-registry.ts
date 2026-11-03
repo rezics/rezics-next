@@ -12,6 +12,7 @@ import type {
   DiscoveryOwnerRegistration,
   DiscoveryRegistration,
   DiscoveryRegistry,
+  DiscoveryKindMetadata,
   DiscoveryRegistryOptions,
   DiscoveryTruth,
   KindCountEvidence,
@@ -173,6 +174,26 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
           : { owner: 'content', kind: 'space', route, id: value.id };
     },
   });
+}
+
+/** The executable kind directory includes only owner adapters with a delivered current reader. */
+export function discoveryKindDirectory(
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
+): readonly Readonly<{ kind: string; metadata: Readonly<Omit<DiscoveryKindMetadata, 'count'>> }>[] {
+  const values = registry.entries.map((entry) => ({ kind: entry.kind, metadata: entry.metadata }));
+  const adapters = registry.ownerAdapters;
+  if (adapters) {
+    for (const kind of ['collection', 'review', 'space'] as const) {
+      const slot = adapters[kind];
+      if (slot?.readiness === 'ready') values.push({ kind, metadata: slot.adapter.metadata });
+    }
+  }
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value.kind || seen.has(value.kind)) throw new TypeError('Discovery kind directory contains a duplicate');
+    seen.add(value.kind);
+  }
+  return Object.freeze(values.sort((left, right) => (left.kind < right.kind ? -1 : left.kind > right.kind ? 1 : 0)));
 }
 
 function registeredDomains(registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>, kind: string) {

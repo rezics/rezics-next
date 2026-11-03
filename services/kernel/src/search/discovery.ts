@@ -29,6 +29,11 @@ export type DiscoveryOwnerKey =
   | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
 export type DiscoveryUnionKey = DiscoveryKey | DiscoveryOwnerKey;
 export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
+/** Owner names used by the closed page DTO; native source owners remain on execution keys. */
+export type DiscoveryPublicOwnerKey =
+  | { owner: 'library'; kind: 'collection'; route: number; id: string }
+  | { owner: 'content'; kind: 'review'; route: number; id: string }
+  | { owner: 'community'; kind: 'space'; route: number; id: string };
 
 /** Already eligible native projection. Only the producer can establish eligibility and exact claims at T. */
 export type IndexedAccount = {
@@ -84,11 +89,27 @@ export type DiscoverySummary =
   | { kind: 'subject'; value: SubjectSummary }
   | { kind: 'account'; value: AccountDiscoverySummary };
 export type DiscoveryHit = { key: DiscoveryKey; summary: DiscoverySummary };
+export type PublicCollectionDiscoverySummary = Readonly<{ id: string; title: string; description: string | null }>;
+export type PublicReviewDiscoverySummary = Readonly<{
+  id: string;
+  kind: 'review';
+  title: string | null;
+  author?: Readonly<{ displayName: string | null; handle: string | null }>;
+  excerpt?: string;
+  subject?: Readonly<{ id: string; title: string | null }> | null;
+}>;
+export type PublicSpaceDiscoverySummary = Readonly<{
+  id: string;
+  title: string;
+  address: string;
+  summary?: string;
+  realm?: Readonly<{ id: string; title: string | null }> | null;
+}>;
 export type DiscoveryOwnerSummary =
-  | { kind: 'collection'; value: DiscoveryOwnerMetadataSummary }
-  | { kind: 'review'; value: DiscoveryOwnerMetadataSummary }
-  | { kind: 'space'; value: DiscoveryOwnerMetadataSummary };
-export type DiscoveryOwnerHit = { key: DiscoveryOwnerKey; summary: DiscoveryOwnerSummary };
+  | { kind: 'collection'; value: PublicCollectionDiscoverySummary }
+  | { kind: 'review'; value: PublicReviewDiscoverySummary }
+  | { kind: 'space'; value: PublicSpaceDiscoverySummary };
+export type DiscoveryOwnerHit = { key: DiscoveryPublicOwnerKey; summary: DiscoveryOwnerSummary };
 export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
 export type DiscoveryUnionHit = DiscoveryHit | DiscoveryOwnerHit;
 export type KindCountEvidence =
@@ -102,7 +123,7 @@ export type DiscoveryKindMetadata = {
   count?: KindCountEvidence;
 };
 export type DiscoveryPage = {
-  hits: DiscoveryHit[];
+  hits: DiscoveryUnionHit[];
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;
   as_of: string;
@@ -120,7 +141,36 @@ export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
 /** The closed public metadata envelope returned by owner-native current reads. */
-export type DiscoveryOwnerMetadataSummary = Readonly<{ id: string; title: string; summary: string | null }>;
+export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> =
+  K extends 'collection'
+    ? Readonly<{
+        id: string;
+        title: string;
+        summary: string | null;
+        revision: string;
+        sourcePosition: string;
+        card: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoverySummary;
+      }>
+    : K extends 'review'
+      ? Readonly<{
+          id: string;
+          title: string | null;
+          summary: string | null;
+          sourceVersion: string;
+          sourcePosition: string;
+          authorId: string;
+          subjectId: string;
+        }>
+      : Readonly<{
+          id: string;
+          title: string;
+          summary: string | null;
+          revision: string;
+          sourcePosition: string;
+          address: string | null;
+          realmId: string | null;
+          realmTitle: string | null;
+        }>;
 export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'> = Readonly<{
   owner: O;
   kind: K;
@@ -129,7 +179,7 @@ export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'comme
   readCurrent: (
     ids: readonly string[],
     context: DiscoveryReadContext,
-  ) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>>;
+  ) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary<K>>>;
 }>;
 export type DiscoveryAdapterSlot<T> =
   | Readonly<{ readiness: 'unavailable' }>
@@ -264,10 +314,11 @@ export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInpu
     comparator: 'mixed-public-v1';
   }>;
 export type DiscoveryEngineHit = Readonly<{
-  key: DiscoveryKey;
+  key: DiscoveryUnionKey;
   index: string;
   sourcePosition: string;
   revision: string;
+  sourceVersion?: string | null;
   matched: readonly string[];
   sort: readonly (string | number | null)[];
 }>;

@@ -393,7 +393,17 @@ test('Space bootstrap has exact native positions, sparse bounded pages and curre
     expect(nativeAvatar.avatar.state).toBe('available');
     const summary = (await hydrate([host.spaceId])).get(host.spaceId)!;
     expect(summary.avatar).toEqual(nativeAvatar.avatar.value);
-    expect(Object.keys(summary).sort()).toEqual(['avatar', 'description', 'id', 'name', 'realmId']);
+    expect(Object.keys(summary).sort()).toEqual([
+      'address',
+      'avatar',
+      'description',
+      'id',
+      'name',
+      'realmId',
+      'realmTitle',
+      'title',
+    ]);
+    expect(summary).toMatchObject({ address: null, title: 'Host metadata', realmTitle: 'Edited native name' });
     let boundary: 'failure' | 'edit' | 'cycle' = 'failure';
     let calls = 0;
     const duringMedia: Access = {

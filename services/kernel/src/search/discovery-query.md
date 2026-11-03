@@ -5,9 +5,9 @@ This page records the adopted second-scope mixed-query contract and what the ret
 applicability, authorization and privacy rules. The [Search Goal](../../../../docs/goals/search.md) owns the Goal
 boundary. A source-level implementation does not prove native producer readiness or runtime acceptance.
 
-Decision: Search owns the shared hit and summary union, kind registry and strict document codec; producer owners
-supply their native populations and current disclosure. Until those Search-owned assemblies admit a kind, it remains
-unavailable and cannot contribute a count.
+Decision: Search owns the shared hit and summary union, ready kind directory and strict document codec; producer owners
+supply their native populations and current disclosure. A kind is queryable only when its native current reader is
+ready and cannot contribute a count otherwise.
 
 ## Kinds and applicability
 
@@ -18,16 +18,17 @@ New metadata kinds do not create endpoints or client-side federated searches.
 | Kind                  | Primary identity                               | Conditions                                                           | Retained-source readiness |
 | --------------------- | ---------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
 | Released Subject type | Subject UUID plus registered type              | Text, kind, released type/subtype and applicable semantic conditions | Registered                |
-| Public Collection     | Existing Collection UUID                       | Text and kind                                                        | Not registered            |
-| Public review         | Existing thread UUID plus review discriminator | Text and kind; ordinary discussions are outside this slice           | Not registered            |
-| Space                 | Space UUID, with its carried Realm as context  | Text and kind; the Realm does not create another hit                 | Not registered            |
+| Public Collection     | Existing Collection UUID                       | Text and kind                                                        | Default owner adapter     |
+| Public review         | Existing thread UUID plus review discriminator | Text and kind; ordinary discussions are outside this slice           | Default owner adapter     |
+| Space                 | Space UUID, with its carried Realm as context  | Text and kind; the Realm does not create another hit                 | Default owner adapter     |
 | Account               | Account UUID                                   | Text and kind                                                        | Registered                |
 
-The installed registry currently contains released Subject types and Account. Its native hydrator and strict document
-codec also cover only those owners, so Collection, review and Space results cannot yet be returned by this source.
-Their text must use only approved public metadata or disclosed review opening text. Private membership, curator
-predicates, private producer fields and inaccessible parent text cannot affect matching, exclusion, ranking or
-displayed summaries.
+The default registry adds Collection, review and Space only when each native current-reader adapter is ready. Its
+kind directory, population filter and cursor digest use that same ready set. The strict document codec keeps native
+Commerce/Content identities separate from the closed public Library/Content/Community result keys. Collection cards
+are projected only after current source and disclosure checks; review opening text and Space destination/context are
+read from current owner summaries. Private membership, curator predicates, private producer fields and inaccessible
+parent text cannot affect matching, exclusion, ranking or displayed summaries.
 
 `kind` applies to every registered kind. `type` and semantic statement predicates apply to Subject kinds only.
 For a kind outside a leaf's declared domain, both truth polarities remain unproved: a Subject-only leaf and its
@@ -54,18 +55,17 @@ unavailable. Continuations and incomplete kind-filter populations keep counts un
 
 ## Producer readiness and retained-reader execution
 
-The current registry is built from released catalogue types and Accounts. `createNativeDiscoveryRegistry` supplies
-their source adapters and complete current summary hydrators. The shared reader captures one observation, consumes
-the ordered engine frontier, checks whole-query current eligibility, hydrates summaries and finishes disclosure
-before it publishes a page. Its cursor binds the principal, admitted request, registry and observation; counts use
-only bounded positive current witnesses and never a census.
+`createNativeDiscoveryRegistry` supplies released catalogue types, Accounts and ready owner adapters. The shared
+reader captures one observation, consumes the ordered mixed engine frontier, checks whole-query current eligibility,
+hydrates summaries and finishes disclosure before it publishes a page. Its cursor binds the principal, admitted
+request, ready kind directory and observation; counts use only bounded positive current witnesses and never a census.
 
 Commerce exposes `CollectionDiscoverySource` and current public Collection summaries. Community exposes the native
-Space source and current Space summaries. Content exposes `ContentReviewDiscoverySource`, but the review adapter has
-no default producer and reports `unavailable` until the complete eligible population and current summaries are
-covered. These owner seams do not make the new kinds executable by Search on this base: registration, shared
-projection encoding, candidate decoding, owner currentness and complete current hydration are not wired into the
-retained discovery query.
+Space source and current Space summaries, including its current destination and carried Realm. Content exposes
+`ContentReviewDiscoverySource`; the default adapter is ready only when the configured native review source covers the
+complete eligible population and current summaries. A Space without a current public address is excluded from the
+public result union. Missing or malformed current owner evidence rejects the page instead of producing an empty
+result.
 
 New-kind integration must keep the existing Search/Home invocation and its `search`, positional
 `currentPrimaryCandidates`, `finish` and `close` custody. Collection raw pages advance by the last examined full key;

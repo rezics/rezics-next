@@ -126,9 +126,12 @@ function compare(left: NativeSpaceDiscoveryKey, right: NativeSpaceDiscoveryKey):
 function indexedSpace(value: unknown, partition: number): IndexedSpace {
   if (
     !record(value) ||
-    !exactKeys(value, ['id', 'realmId', 'name', 'description', 'revision']) ||
+    !exactKeys(value, ['id', 'realmId', 'address', 'title', 'realmTitle', 'name', 'description', 'revision']) ||
     typeof value.id !== 'string' ||
     (value.realmId !== null && typeof value.realmId !== 'string') ||
+    (value.address !== null && typeof value.address !== 'string') ||
+    typeof value.title !== 'string' ||
+    (value.realmTitle !== null && typeof value.realmTitle !== 'string') ||
     typeof value.name !== 'string' ||
     typeof value.description !== 'string' ||
     typeof value.revision !== 'string'
@@ -141,6 +144,9 @@ function indexedSpace(value: unknown, partition: number): IndexedSpace {
   return {
     id: value.id,
     realmId: value.realmId,
+    address: value.address,
+    title: value.title,
+    realmTitle: value.realmTitle,
     name: value.name,
     description: value.description,
     revision: value.revision,
@@ -258,12 +264,19 @@ function validateSummaryMap(
     throw new TypeError('Space discovery hydration must return a keyed map');
   const summaries = new Map<string, SpaceDiscoverySummary>();
   for (const [id, raw] of value as ReadonlyMap<string, unknown>) {
-    if (!requested.has(id) || !record(raw) || !exactKeys(raw, ['id', 'realmId', 'name', 'description', 'avatar']))
+    if (
+      !requested.has(id) ||
+      !record(raw) ||
+      !exactKeys(raw, ['id', 'realmId', 'address', 'title', 'realmTitle', 'name', 'description', 'avatar'])
+    )
       throw new TypeError('Space discovery returned an unrequested or malformed summary');
     if (
       raw.id !== id ||
       routeOf(id) === null ||
       (raw.realmId !== null && (typeof raw.realmId !== 'string' || routeOf(raw.realmId) === null)) ||
+      (raw.address !== null && typeof raw.address !== 'string') ||
+      typeof raw.title !== 'string' ||
+      (raw.realmTitle !== null && typeof raw.realmTitle !== 'string') ||
       typeof raw.name !== 'string' ||
       typeof raw.description !== 'string' ||
       (raw.avatar !== null && !record(raw.avatar))

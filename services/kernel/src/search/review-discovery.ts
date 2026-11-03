@@ -37,6 +37,8 @@ export type ReviewDiscoveryRecord = {
   openingRevisionId: string;
   title: string | null;
   text: string;
+  subjectId?: string;
+  authorId?: string;
 };
 
 export type ReviewDiscoveryDocument = {
@@ -61,6 +63,8 @@ export type ReviewDiscoverySummary = {
   openingRevisionId: string;
   title: string | null;
   text: string;
+  subjectId?: string;
+  authorId?: string;
 };
 
 /** This is Content's installed producer contract, not a Search-owned lookalike. */
@@ -169,7 +173,11 @@ function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord
     sourceVersion: value.sourceVersion,
     ...(Object.hasOwn(value, 'excerpt') ? { excerpt: value.excerpt } : {}),
   };
-  return nativeRecord(row, partition);
+  return {
+    ...nativeRecord(row, partition),
+    subjectId: value.subjectId,
+    authorId: value.authorId,
+  };
 }
 
 function nativeCount(value: unknown, partition: number): ReviewDiscoveryCensus {
@@ -456,13 +464,22 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       const groups = requestedIds(ids, REVIEW_DISCOVERY_OWNER_CURRENT_LIMIT);
       const ownerSource = native(context);
       if (!ownerSource) return new Map();
-      const result = new Map<string, DiscoveryOwnerMetadataSummary>();
+      const result = new Map<string, DiscoveryOwnerMetadataSummary<'review'>>();
       for (const [partition, keys] of groups) {
         for (let offset = 0; offset < keys.length; offset += REVIEW_DISCOVERY_BATCH_SIZE) {
           const chunk = keys.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE);
           const current = await currentRows(ownerSource, partition, chunk);
           for (const row of current.reviews) {
-            result.set(row.id, { id: row.id, title: row.title ?? '', summary: row.text || null });
+            if (!row.subjectId || !row.authorId) throw new TypeError('Current Content review context is incomplete');
+            result.set(row.id, {
+              id: row.id,
+              title: row.title,
+              summary: row.text || null,
+              sourceVersion: row.sourceVersion,
+              sourcePosition: current.position.toString(),
+              authorId: row.authorId,
+              subjectId: row.subjectId,
+            });
           }
         }
       }

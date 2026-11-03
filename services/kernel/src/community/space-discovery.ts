@@ -210,6 +210,9 @@ export type SpaceDiscoveryKey = Readonly<{ route: number; id: string }>;
 export type SpaceDiscoverySummary = Readonly<{
   id: string;
   realmId: string | null;
+  address: string | null;
+  title: string;
+  realmTitle: string | null;
   name: string;
   description: string;
   avatar: RealmPresentationImage | null;

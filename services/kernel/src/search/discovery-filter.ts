@@ -7,7 +7,13 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import { FilterError } from '@rezics/filter';
-import type { DiscoveryCondition, DiscoveryRegistry, DiscoveryConsumerCaptureInput } from './discovery.ts';
+import type {
+  DiscoveryCondition,
+  DiscoveryRegistry,
+  DiscoveryOwnerRegistry,
+  DiscoveryConsumerCaptureInput,
+} from './discovery.ts';
+import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
 import { discoveryNativeQuery } from './discovery-query.ts';
 import { compileFilter } from './filter.ts';
@@ -25,9 +31,10 @@ const not = (query: Query): Query => ({ bool: { must_not: [query] } });
 /** Both polarities are compiled: NOT unknown must never become an Account complement. */
 export function compileDiscoveryFilter(
   filter: DiscoveryFilterDocument,
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   release: FilterRelease,
 ): { query: Query; condition: DiscoveryCondition } {
+  const kinds = discoveryKindDirectory(registry);
   let ordinal = 0;
   type Compiled = { yes: Query; no: Query; condition: DiscoveryCondition };
   function compile(node: DiscoveryFilterDocument): Compiled {
@@ -48,7 +55,10 @@ export function compileDiscoveryFilter(
     }
     const prefix = `f${ordinal++}_`;
     if ('kind' in node) {
-      node.kind.in.forEach((kind) => registry.get(kind));
+      const registered = new Set(kinds.map((entry) => entry.kind));
+      node.kind.in.forEach((kind) => {
+        if (!registered.has(kind)) throw new RangeError('Unregistered discovery kind');
+      });
       const yes = { terms: { kind: [...node.kind.in] } };
       return { yes, no: not(yes), condition: { domain: 'kind', value: node.kind.in } };
     }
@@ -79,14 +89,15 @@ export function compileDiscoveryFilter(
   }
   const result = compile(filter);
   return {
-    query: and([{ terms: { kind: registry.entries.map((entry) => entry.kind) } }, result.yes]),
+    query: and([{ terms: { kind: kinds.map((entry) => entry.kind) } }, result.yes]),
     condition: result.condition,
   };
 }
 
 /** The unfiltered mixed population is registry bounded; it never includes unregistered producers. */
-export function discoveryPopulation(registry: DiscoveryRegistry): Query {
-  return registry.entries.length ? { terms: { kind: registry.entries.map((entry) => entry.kind) } } : none;
+export function discoveryPopulation(registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>): Query {
+  const kinds = discoveryKindDirectory(registry).map((entry) => entry.kind);
+  return kinds.length ? { terms: { kind: kinds } } : none;
 }
 
 type CurrentPredicate = boolean | FilterDocument;
@@ -96,11 +107,11 @@ type CurrentPredicate = boolean | FilterDocument;
  */
 export function currentDiscoveryFilter(
   filter: DiscoveryFilterDocument,
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   kind: string,
   release: FilterRelease,
 ): CurrentPredicate {
-  const entry = registry.get(kind);
+  const domains = registry.domains ? registry.domains(kind) : registry.get(kind).domains;
   function combine(conjunction: boolean, predicates: CurrentPredicate[]): CurrentPredicate {
     if (predicates.includes(!conjunction)) return !conjunction;
     const children = predicates.filter((predicate): predicate is FilterDocument => typeof predicate !== 'boolean');
@@ -136,7 +147,7 @@ export function currentDiscoveryFilter(
     if ('saved' in node || 'owner' in node)
       throw new FilterError('unsupported_query', 'owner' in node ? '/owner' : '/saved', 'unsupported');
     const domain = 'type' in node ? 'type' : 'statement';
-    if (!entry.domains.includes(domain)) return { yes: false, no: false };
+    if (!domains.includes(domain)) return { yes: false, no: false };
     if ('type' in node) {
       const yes = node.type.in.some((type) => type === kind || release.types[kind]?.bases?.includes(type));
       return { yes, no: !yes };
@@ -149,7 +160,7 @@ export function currentDiscoveryFilter(
 /** Derive native evidence from the exact admitted root. Size/frontier remain execution data. */
 export function compileDiscoveryCapture(
   input: DiscoveryConsumerCaptureInput,
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   release: FilterRelease,
 ): DiscoveryConsumerCaptureInput {
   if (
@@ -165,7 +176,7 @@ export function compileDiscoveryCapture(
   )
     throw new RangeError('Invalid mixed capture');
   const filterDocument = input.filterDocument
-    ? admitDiscoveryFilter(input.filterDocument, release, new Set(registry.entries.map((entry) => entry.kind)))
+    ? admitDiscoveryFilter(input.filterDocument, release, new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)))
     : undefined;
   const compiled = filterDocument ? compileDiscoveryFilter(filterDocument, registry, release) : undefined;
   const text = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;
@@ -198,7 +209,7 @@ export function compileDiscoveryCapture(
 export function compileDiscoveryConsumerCapture(
   input: DiscoveryConsumerCaptureInput,
   meaning: PublicFilterProjectionMeaning,
-  registry: DiscoveryRegistry | undefined,
+  registry: (DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>) | undefined,
 ): Readonly<{ query: Query; dependencyKeys: readonly PublicFilterDependencyKey[] }> {
   if (!Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Mixed capture requires the exact root');

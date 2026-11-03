@@ -126,7 +126,7 @@ const publicReviewSummary = v.strictObject({
   kind: v.literal('review'),
   title: v.nullable(v.string()),
   author: v.exactOptional(reviewAuthor),
-  excerpt: v.exactOptional(v.pipe(v.string(), v.maxLength(320))),
+  excerpt: v.exactOptional(v.pipe(v.string(), v.maxLength(640))),
   subject: v.exactOptional(v.nullable(reviewSubject)),
 });
 const publicSpaceSummary = v.strictObject({

@@ -1,5 +1,9 @@
-import type { DiscoveryRegistry, IndexedDiscoveryDocument, DiscoveryKey, DiscoveryEngineResult } from './discovery.ts';
-import { parseDiscoveryHitIdentity, validateDiscoveryDocument } from './discovery-documents.ts';
+import type { DiscoveryEngineResult, DiscoveryRegistry, DiscoveryUnionKey } from './discovery.ts';
+import {
+  parseDiscoveryHitIdentity,
+  validateDiscoveryDocumentFormat,
+  type DiscoveryDocumentValue,
+} from './discovery-documents.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
@@ -8,8 +12,8 @@ import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
 
 export type DiscoveryOrder = 'id' | 'name' | 'relevance';
 export type DiscoveryCandidate = {
-  key: DiscoveryKey;
-  document: IndexedDiscoveryDocument;
+  key: DiscoveryUnionKey;
+  document: DiscoveryDocumentValue;
   index: string;
   sort: SearchSortValue[];
   matched?: readonly string[];
@@ -81,6 +85,7 @@ export function readDiscoveryCandidates(
   let previous = plan.after;
   return body.hits.hits.map((hit: unknown) => {
     const key = parseDiscoveryHitIdentity(registry, hit);
+    const document = validateDiscoveryDocumentFormat(registry, record(hit) ? hit._source : undefined);
     if (
       !record(hit) ||
       hit._index !== physicalTarget ||
@@ -109,7 +114,7 @@ export function readDiscoveryCandidates(
     return {
       key,
       index: physicalTarget,
-      document: validateDiscoveryDocument(registry, hit._source),
+      document,
       sort: hit.sort,
       ...(hit.matched_queries === undefined ? {} : { matched: hit.matched_queries }),
     };
@@ -202,11 +207,17 @@ export function readDiscoveryEngineResult(
         (plan.sort === 'name' && sort[0] !== document.name_sort)
       )
         malformed();
+      const ownerDocument = document.owner === 'commerce' || document.owner === 'content';
       return {
         key,
         index,
         sourcePosition: document.source_position,
-        revision: document.owner === 'accounts' ? document.revision : String(document.security_revision),
+        revision: ownerDocument
+          ? document.revision
+          : document.owner === 'accounts'
+            ? document.revision
+            : String(document.security_revision),
+        ...(ownerDocument ? { sourceVersion: document.source_version } : {}),
         matched: matched ?? [],
         sort,
       };

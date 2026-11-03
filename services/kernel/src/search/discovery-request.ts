@@ -9,7 +9,8 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
-import type { DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
+import type { DiscoveryOwnerRegistry, DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
+import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
 import { parseText, positiveText, TextSyntaxError } from './text.ts';
 
@@ -58,7 +59,7 @@ export function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscov
 /** Admission precedes any native enumeration. Saved/private domains remain closed here. */
 export function admitDiscoveryRequest(
   request: MixedDiscoveryRequest,
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   release: FilterRelease,
 ) {
   if (request.representation !== 'discovery-v1') invalid('/representation');
@@ -95,7 +96,7 @@ export function admitDiscoveryRequest(
       filter = admitDiscoveryFilter(
         parseDiscoveryFilter(request.filter),
         release,
-        new Set(registry.entries.map((entry) => entry.kind)),
+        new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)),
       );
   } catch (error) {
     if (error instanceof TextSyntaxError) unsupported('/text');

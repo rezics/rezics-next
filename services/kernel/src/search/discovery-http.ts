@@ -1,5 +1,5 @@
 import type { Static } from 'typebox';
-import type { DiscoveryHit, DiscoveryPage } from './discovery.ts';
+import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
@@ -36,6 +36,42 @@ const key = <Owner extends 'semantic' | 'accounts'>(owner: Owner) =>
     },
     closed,
   );
+const collectionKey = t.Object(
+  { owner: t.Literal('library'), kind: t.Literal('collection'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
+  closed,
+);
+const reviewKey = t.Object(
+  { owner: t.Literal('content'), kind: t.Literal('review'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
+  closed,
+);
+const spaceKey = t.Object(
+  { owner: t.Literal('community'), kind: t.Literal('space'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
+  closed,
+);
+const collectionSummary = t.Object({ id, title: t.String({ minLength: 1 }), description: nullableText }, closed);
+const reviewAuthor = t.Object({ displayName: nullableText, handle: nullableText }, closed);
+const reviewSubject = t.Object({ id, title: nullableText }, closed);
+const reviewSummary = t.Object(
+  {
+    id,
+    kind: t.Literal('review'),
+    title: nullableText,
+    author: t.Optional(reviewAuthor),
+    excerpt: t.Optional(t.String({ maxLength: 640 })),
+    subject: t.Optional(t.Union([reviewSubject, t.Null()])),
+  },
+  closed,
+);
+const spaceSummary = t.Object(
+  {
+    id,
+    title: t.String({ minLength: 1 }),
+    address: t.String({ minLength: 1, maxLength: 256 }),
+    summary: t.Optional(t.String()),
+    realm: t.Optional(t.Union([t.Object({ id, title: nullableText }, closed), t.Null()])),
+  },
+  closed,
+);
 const count = t.Union([
   t.Object({ kind: t.String(), value: t.Integer({ minimum: 0 }), exact: t.Literal(true) }, closed),
   t.Object({ kind: t.String(), value: t.Integer({ minimum: 1 }), exact: t.Literal(false) }, closed),
@@ -55,6 +91,18 @@ export const DiscoveryPageSchema = t.Object(
         ),
         t.Object(
           { key: key('accounts'), summary: t.Object({ kind: t.Literal('account'), value: accountSummary }, closed) },
+          closed,
+        ),
+        t.Object(
+          { key: collectionKey, summary: t.Object({ kind: t.Literal('collection'), value: collectionSummary }, closed) },
+          closed,
+        ),
+        t.Object(
+          { key: reviewKey, summary: t.Object({ kind: t.Literal('review'), value: reviewSummary }, closed) },
+          closed,
+        ),
+        t.Object(
+          { key: spaceKey, summary: t.Object({ kind: t.Literal('space'), value: spaceSummary }, closed) },
           closed,
         ),
       ]),
@@ -89,12 +137,15 @@ const unavailable = (): never => {
 };
 
 /** Validate the native owner reply without coercion or removal of unrecognized fields. */
-export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryHit {
+export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUnionHit {
   if (!hitCheck.Check(value)) unavailable();
   const { key, summary } = value as Static<typeof hitSchema>;
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject' && (key.owner !== 'semantic' || key.kind !== summary.value.type)) unavailable();
   if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
+  if (summary.kind === 'collection' && (key.owner !== 'library' || key.kind !== 'collection')) unavailable();
+  if (summary.kind === 'review' && (key.owner !== 'content' || key.kind !== 'review')) unavailable();
+  if (summary.kind === 'space' && (key.owner !== 'community' || key.kind !== 'space')) unavailable();
 }
 
 /** Run before cursor signing as well as at the wire boundary. Empty pages still carry metadata. */
@@ -116,7 +167,7 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
   }
 }
 
-/** Close the owner/summary union and materialize readonly native avatar arrays for the wire schema. */
+/** Close the owner/summary union and snapshot nested owner values before serialization. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
   return {
@@ -138,8 +189,37 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
           },
         };
       }
-      if (hit.key.owner !== 'semantic') throw new SearchUnavailableError('Discovery summary owner disagrees');
-      return { key: hit.key, summary: { kind: 'subject' as const, value: hit.summary.value } };
+      if (hit.summary.kind === 'subject') {
+        if (hit.key.owner !== 'semantic') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        return { key: hit.key, summary: { kind: 'subject' as const, value: hit.summary.value } };
+      }
+      const value = hit.summary.value;
+      if (hit.summary.kind === 'collection') {
+        if (hit.key.owner !== 'library') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        return { key: { ...hit.key }, summary: { kind: 'collection' as const, value: { ...value } } };
+      }
+      if (hit.summary.kind === 'review') {
+        if (hit.key.owner !== 'content') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        return {
+          key: { ...hit.key },
+          summary: {
+            kind: 'review' as const,
+            value: {
+              ...value,
+              ...(value.author ? { author: { ...value.author } } : {}),
+              ...(value.subject && value.subject !== null ? { subject: { ...value.subject } } : {}),
+            },
+          },
+        };
+      }
+      if (hit.key.owner !== 'community') throw new SearchUnavailableError('Discovery summary owner disagrees');
+      return {
+        key: { ...hit.key },
+        summary: {
+          kind: 'space' as const,
+          value: { ...value, ...(value.realm && value.realm !== null ? { realm: { ...value.realm } } : {}) },
+        },
+      };
     }),
   };
 }

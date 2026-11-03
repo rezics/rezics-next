@@ -6,13 +6,18 @@ import {
   type DiscoveryHit,
   type DiscoveryReadContext,
   type DiscoveryRegistry,
+  type DiscoveryOwnerRegistry,
+  type DiscoveryOwnerKey,
   type IndexedAccount,
   type DiscoveryEngineHit,
   type DiscoveryKey,
+  type DiscoveryUnionKey,
+  type DiscoveryUnionHit,
   type DiscoveryRegistration,
   type AccountSnapshot,
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
+import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
 import { checkHits } from './disclosure/check.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -23,9 +28,26 @@ import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
 }
-function requireCurrentOwner(registry: DiscoveryRegistry, key: DiscoveryKey): void {
-  const owner = String(registry.get(key.kind).owner);
-  if (owner !== String(key.owner) || (owner !== 'semantic' && owner !== 'accounts')) unavailable();
+function requireCurrentOwner(
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
+  key: DiscoveryUnionKey,
+): void {
+  if (key.owner === 'semantic' || key.owner === 'accounts') {
+    const owner = String(registry.get(key.kind).owner);
+    if (owner !== String(key.owner)) unavailable();
+    registry.key(key);
+    return;
+  }
+  const slot = registry.ownerAdapters?.[key.kind];
+  if (
+    !slot ||
+    slot.readiness !== 'ready' ||
+    slot.adapter.owner !== key.owner ||
+    slot.adapter.kind !== key.kind ||
+    !registry.ownerKey
+  )
+    unavailable();
+  registry.ownerKey(key as DiscoveryOwnerKey);
 }
 function partitioned<T extends { id: string }>(values: readonly T[]): Map<number, T[]> {
   const groups = new Map<number, T[]>();
@@ -204,16 +226,15 @@ export async function currentDiscoveryPrimaryCandidates(
  * through the canonical native Source and consumer; returned candidates alone never certify a page.
  */
 export async function currentDiscoveryCandidates<Candidate extends DiscoveryCandidate | DiscoveryEngineHit>(
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   candidates: readonly Candidate[],
   filter: DiscoveryFilterDocument | undefined,
   release: FilterRelease,
   context: DiscoveryReadContext,
-): Promise<Map<Candidate, DiscoveryHit>> {
+): Promise<Map<Candidate, DiscoveryUnionHit>> {
   if (candidates.length > 200) unavailable();
-  const passed = new Map<Candidate, DiscoveryHit>();
+  const passed = new Map<Candidate, DiscoveryUnionHit>();
   for (const candidate of candidates) {
-    registry.key(candidate.key);
     requireCurrentOwner(registry, candidate.key);
     if (
       'revision' in candidate &&
@@ -309,68 +330,115 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     }
   }
   const accounts = candidates.filter(({ key }) => key.owner === 'accounts');
-  if (!accounts.length) return passed;
-  const entry = registry.get('account');
-  if (entry.owner !== 'accounts') unavailable();
-  if (filter && currentDiscoveryFilter(filter, registry, entry.kind, release) !== true) return passed;
-  const selectedAccounts = new Map<Candidate, IndexedAccount>();
-  // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
-  for (const [partition, group] of partitioned(accounts.map(({ key }) => key))) {
-    const ids = [...new Set(group.map(({ id }) => id))];
-    const current = new Map<string, IndexedAccount>();
-    for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-      const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-      const observed = await entry.source.read(partition, chunk);
-      let snapshot;
-      try {
-        snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
-      } catch {
-        unavailable();
+  if (accounts.length) {
+    const entry = registry.get('account');
+    if (entry.owner !== 'accounts') unavailable();
+    if (!filter || currentDiscoveryFilter(filter, registry, entry.kind, release) === true) {
+      const selectedAccounts = new Map<Candidate, IndexedAccount>();
+      // Admit every native Account chunk before hydration; a later invalid chunk must not publish a prefix.
+      for (const [partition, group] of partitioned(accounts.map(({ key }) => key))) {
+        const ids = [...new Set(group.map(({ id }) => id))];
+        const current = new Map<string, IndexedAccount>();
+        for (let offset = 0; offset < ids.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
+          const chunk = ids.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
+          const observed = await entry.source.read(partition, chunk);
+          let snapshot;
+          try {
+            snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
+          } catch {
+            unavailable();
+          }
+          if (
+            accounts.some(
+              (candidate) =>
+                chunk.includes(candidate.key.id) &&
+                'sourcePosition' in candidate &&
+                BigInt(candidate.sourcePosition) > snapshot.position,
+            )
+          )
+            unavailable();
+          for (const account of snapshot.accounts) current.set(account.id, account);
+        }
+        const selected = accounts.filter((candidate) => {
+          const row = current.get(candidate.key.id);
+          if (!row || partitionOf(candidate.key.route) !== partition) return false;
+          if ('revision' in candidate) return row.revision.toString() === candidate.revision;
+          const document = candidate.document;
+          return (
+            document.owner === 'accounts' &&
+            row.revision.toString() === document.revision &&
+            row.handle === document.handle &&
+            row.displayName === document.display_name &&
+            row.accountKind === document.account_kind
+          );
+        });
+        for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
       }
-      if (
-        accounts.some(
-          (candidate) =>
-            chunk.includes(candidate.key.id) &&
-            'sourcePosition' in candidate &&
-            BigInt(candidate.sourcePosition) > snapshot.position,
-        )
-      )
-        unavailable();
-      for (const account of snapshot.accounts) current.set(account.id, account);
-    }
-    const selected = accounts.filter((candidate) => {
-      const row = current.get(candidate.key.id);
-      if (!row || partitionOf(candidate.key.route) !== partition) return false;
-      if ('revision' in candidate) return row.revision.toString() === candidate.revision;
-      const document = candidate.document;
-      return (
-        document.owner === 'accounts' &&
-        row.revision.toString() === document.revision &&
-        row.handle === document.handle &&
-        row.displayName === document.display_name &&
-        row.accountKind === document.account_kind
+      const selected = [...selectedAccounts.keys()];
+      const summaries = await completeSummaries(
+        selected.map(({ key }) => key.id),
+        (ids) => entry.hydrate(ids, context),
       );
-    });
-    for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
+      for (const candidate of selected) {
+        const summary = summaries.get(candidate.key.id);
+        const row = selectedAccounts.get(candidate)!;
+        const hit = { key: candidate.key as DiscoveryKey, summary: { kind: 'account' as const, value: summary } };
+        admitDiscoveryHit(hit);
+        if (
+          !summary ||
+          summary.handle !== row.handle ||
+          summary.displayName !== row.displayName ||
+          summary.accountKind !== row.accountKind
+        )
+          unavailable();
+        passed.set(candidate, hit);
+      }
+    }
   }
-  const selected = [...selectedAccounts.keys()];
-  const summaries = await completeSummaries(
-    selected.map(({ key }) => key.id),
-    (ids) => entry.hydrate(ids, context),
+
+  const owners = candidates.filter(
+    ({ key }) => key.owner === 'commerce' || (key.owner === 'content' && (key.kind === 'review' || key.kind === 'space')),
   );
-  for (const candidate of selected) {
-    const summary = summaries.get(candidate.key.id);
-    const row = selectedAccounts.get(candidate)!;
-    const hit = { key: candidate.key, summary: { kind: 'account', value: summary } };
-    admitDiscoveryHit(hit);
-    if (
-      !summary ||
-      summary.handle !== row.handle ||
-      summary.displayName !== row.displayName ||
-      summary.accountKind !== row.accountKind
-    )
-      unavailable();
-    passed.set(candidate, hit);
+  const ownerCandidates: DiscoveryOwnerCandidate[] = [];
+  const ownerOriginals: Candidate[] = [];
+  for (const candidate of owners) {
+    const specialized = filter ? currentDiscoveryFilter(filter, registry, candidate.key.kind, release) : true;
+    if (specialized !== true) continue;
+    const document = 'document' in candidate ? candidate.document : undefined;
+    let revision: string | undefined;
+    let sourcePosition: string | undefined;
+    let sourceVersion: string | null | undefined;
+    if ('revision' in candidate) {
+      revision = candidate.revision;
+      sourcePosition = candidate.sourcePosition;
+      sourceVersion = candidate.sourceVersion;
+    } else if (document && (document.owner === 'commerce' || document.owner === 'content')) {
+      revision = document.revision;
+      sourcePosition = document.source_position;
+      sourceVersion = document.source_version;
+    }
+    if (typeof revision !== 'string' || typeof sourcePosition !== 'string') unavailable();
+    ownerCandidates.push({
+      key: candidate.key as DiscoveryOwnerKey,
+      revision,
+      sourcePosition,
+      ...(sourceVersion === undefined ? {} : { sourceVersion }),
+    });
+    ownerOriginals.push(candidate);
+  }
+  if (ownerCandidates.length) {
+    if (!registry.ownerAdapters || !registry.ownerKey || !registry.getOwnerAdapter) unavailable();
+    const ownerHits = await hydrateOwnerDiscoveryHits(
+      registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+      ownerCandidates,
+      context,
+    );
+    for (let index = 0; index < ownerHits.length; index++) {
+      const hit = ownerHits[index];
+      if (!hit) continue;
+      admitDiscoveryHit(hit);
+      passed.set(ownerOriginals[index]!, hit);
+    }
   }
   return passed;
 }

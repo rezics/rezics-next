@@ -9,6 +9,7 @@ import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
+import type { SpaceDiscoverySummary } from '../community/space-discovery.ts';
 import type { DiscoveryOwnerAdapterSlots, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 import type { DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './generations.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
@@ -251,9 +252,48 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   reviewSource?: ReviewDiscoverySource;
 }): DefaultDiscoveryOwnerAdapters {
   const metadata = {
-    collection: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
-    review: { id: 'review', labels: { en: 'Reviews' }, icon: 'message-square' },
-    space: { id: 'space', labels: { en: 'Spaces' }, icon: 'users' },
+    collection: {
+      id: 'collection',
+      labels: {
+        de: 'Sammlungen',
+        en: 'Collections',
+        es: 'Colecciones',
+        fr: 'Collections',
+        ja: 'コレクション',
+        ko: '컬렉션',
+        'zh-Hans': '收藏集',
+        'zh-Hant': '收藏集',
+      },
+      icon: 'library',
+    },
+    review: {
+      id: 'review',
+      labels: {
+        de: 'Rezensionen',
+        en: 'Reviews',
+        es: 'Reseñas',
+        fr: 'Avis',
+        ja: 'レビュー',
+        ko: '리뷰',
+        'zh-Hans': '评论',
+        'zh-Hant': '評論',
+      },
+      icon: 'message-square',
+    },
+    space: {
+      id: 'space',
+      labels: {
+        de: 'Spaces',
+        en: 'Spaces',
+        es: 'Espacios',
+        fr: 'Espaces',
+        ja: 'スペース',
+        ko: '스페이스',
+        'zh-Hans': '空间',
+        'zh-Hant': '空間',
+      },
+      icon: 'users',
+    },
   } as const;
   const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
@@ -292,13 +332,52 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
         ids: readonly string[],
         context: DiscoveryReadContext,
       ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
-        const summaries = await space.hydrate(ids, ownerContext(context));
-        return new Map(
-          [...summaries].map(([id, summary]) => [
-            id,
-            { id, title: summary.name, summary: summary.description || null },
-          ]),
-        );
+        if (!Array.isArray(ids) || ids.length > 200) throw new RangeError('Space current read exceeds 200 identities');
+        const summaries = new Map<string, SpaceDiscoverySummary>();
+        for (let offset = 0; offset < ids.length; offset += 100) {
+          const batch = await space.hydrate(ids.slice(offset, offset + 100), ownerContext(context));
+          for (const [id, summary] of batch) summaries.set(id, summary);
+        }
+        const partitions = new Map<number, string[]>();
+        for (const id of ids) {
+          const route = routeOf(id);
+          if (route === null) throw new TypeError('Invalid Space discovery identity');
+          const partition = partitionOf(route);
+          const group = partitions.get(partition) ?? [];
+          group.push(id);
+          partitions.set(partition, group);
+        }
+        const current = new Map<string, DiscoveryOwnerMetadataSummary<'space'>>();
+        for (const [partition, group] of partitions) {
+          for (let offset = 0; offset < group.length; offset += 100) {
+            const batch = group.slice(offset, offset + 100);
+            const snapshot = await space.source.read(partition, batch);
+            for (const native of snapshot.spaces) {
+              const summary = summaries.get(native.id);
+              if (
+                !summary ||
+                summary.address !== native.address ||
+                summary.title !== native.title ||
+                summary.realmTitle !== native.realmTitle ||
+                summary.realmId !== native.realmId ||
+                summary.name !== native.name ||
+                summary.description !== native.description
+              )
+                throw new TypeError('Current Space discovery presentation changed');
+              current.set(native.id, {
+                id: native.id,
+                title: summary.title,
+                summary: summary.description || null,
+                revision: native.revision,
+                sourcePosition: snapshot.position.toString(),
+                address: summary.address,
+                realmId: summary.realmId,
+                realmTitle: summary.realmTitle,
+              });
+            }
+          }
+        }
+        return current;
       },
     },
   };

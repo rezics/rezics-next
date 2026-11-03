@@ -10,6 +10,7 @@ import {
   type DiscoveryIndexAction,
   type DiscoveryIndexDefinition,
   type DiscoveryKey,
+  type DiscoveryUnionKey,
   type DiscoveryRegistry,
   type DiscoverySnapshot,
   type IndexedDiscoveryDocument,
@@ -599,8 +600,8 @@ export function parseDiscoveryHitKey(registry: DiscoveryRegistry, hit: unknown):
 }
 
 /** Additive parser for native mixed hits. This never changes the UUID-only Subject receipt/parser contract. */
-export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unknown): DiscoveryKey {
-  return parseDiscoveryHitKey(registry, hit) as DiscoveryKey;
+export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unknown): DiscoveryUnionKey {
+  return parseDiscoveryHitKey(registry, hit);
 }
 
 /**
