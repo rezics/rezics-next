@@ -139,10 +139,12 @@ export async function openMultisourceBatchCli() {
       try {
         const owner = { source, external_id: externalId };
         const active = session.store.activeRun(source);
+        const claim = session.bindings.claim(owner);
         return {
           count: session.store.source(source).count,
           active,
-          claim: session.bindings.claim(owner),
+          claim,
+          subject: claim?.state === 'bound' ? claim.subject : null,
           candidates: session.bindings.candidates(owner, 'facts', { limit: 100 }),
           pending: active ? session.store.pagePending(active, { limit: 100 }) : [],
           journals: session.store.database
@@ -213,7 +215,7 @@ export async function openMultisourceBatchCli() {
         fetch: (async (input: RequestInfo | URL) => {
           network.push(String(input));
           throw new Error('preview must not use the network');
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
         observer: {
           onAccountKey() {
             throw new Error('preview must not read credentials');
@@ -230,7 +232,7 @@ export async function openMultisourceBatchCli() {
       const start = exchanges.length;
       const result = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials], {
         fetch: ((input: Request | string | URL, init?: RequestInit) =>
-          authorizedFetch(input, init, loseOpenLibrary)) as typeof fetch,
+          authorizedFetch(input, init, loseOpenLibrary)) as unknown as typeof fetch,
       });
       expect(result.openHandles, JSON.stringify(result)).toBe(0);
       return { ...result, exchanges: exchanges.slice(start), document: JSON.parse(result.stdout) };
@@ -267,7 +269,7 @@ export async function openMultisourceBatchCli() {
           state,
           ...credentials,
         ],
-        { fetch: ((input: Request | string | URL, init?: RequestInit) => authorizedFetch(input, init)) as typeof fetch },
+        { fetch: ((input: Request | string | URL, init?: RequestInit) => authorizedFetch(input, init)) as unknown as typeof fetch },
       );
       expect(result.openHandles).toBe(0);
       return result;

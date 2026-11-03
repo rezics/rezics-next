@@ -62,8 +62,8 @@ function importFetch(options: { loseOpenLibrary?: boolean; requests?: string[]; 
   let tokens = 0;
   const subjects = new Map<string, string>();
   const effects = new Map<string, BatchWriteResult['results'][number]>();
-  return async (input: Request | string | URL) => {
-    const request = input instanceof Request ? input : new Request(input);
+  return async (input: Request | string | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     options.requests?.push(`${request.method} ${url.origin}${url.pathname}`);
     if (url.origin === authOrigin) {
@@ -150,13 +150,31 @@ test('preview performs no credential, state or network work', async () => {
       throw new Error('preview must not open state');
     },
   };
-  const result = await runImportCli(['batch', '--manifest', manifest, '--json', ...credentials(key)], {
-    fetch: (async (input: RequestInfo | URL) => {
-      requests.push(String(input));
-      throw new Error('preview network');
-    }) as typeof fetch,
-    observer,
-  });
+  const result = await runImportCli(
+    [
+      'batch',
+      '--manifest',
+      manifest,
+      '--json',
+      '--api',
+      'https://api.rezics.example',
+      '--account-key',
+      key,
+      '--account',
+      account,
+      '--client',
+      'batch-cli',
+      '--auth',
+      authOrigin,
+    ],
+    {
+      fetch: (async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        throw new Error('preview network');
+      }) as unknown as typeof fetch,
+      observer,
+    },
+  );
   expect(requests).toEqual([]);
   expect(result.code).toBe(0);
   expect(result.openHandles).toBe(0);
@@ -184,7 +202,7 @@ test('run executes independent jobs serially, reimports idempotently and stops l
   };
   const first = await runImportCli(
     ['batch', '--manifest', manifest, '--run', '--json', '--progress', 'jsonl', ...credentials(key)],
-    { fetch: importFetch() as typeof fetch, testOrigin: origin, progressSink: sink, clock },
+    { fetch: importFetch() as unknown as typeof fetch, testOrigin: origin, progressSink: sink, clock },
   );
   expect(first.code, first.stderr + first.stdout).toBe(0);
   expect(first.openHandles).toBe(0);
@@ -201,7 +219,7 @@ test('run executes independent jobs serially, reimports idempotently and stops l
   expect(inspect(state, 'catalogue-ol').count).toBeGreaterThan(0);
 
   const repeat = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch() as typeof fetch,
+    fetch: importFetch() as unknown as typeof fetch,
     testOrigin: origin,
     clock,
   });
@@ -212,7 +230,7 @@ test('run executes independent jobs serially, reimports idempotently and stops l
 
   await writeFile(join(directory, 'openlibrary.tsv'), 'not-a-dump\n', { mode: 0o600 });
   const stopped = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch() as typeof fetch,
+    fetch: importFetch() as unknown as typeof fetch,
     testOrigin: origin,
     clock,
   });
@@ -242,14 +260,14 @@ test('run stops on lost writes, cancellation, busy owners and broken sinks witho
     { source: 'wikidata', dump: 'wikidata.jsonl', state: 'state.sqlite' },
   ]);
   const lost = await runImportCli(['batch', '--manifest', three, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch({ loseOpenLibrary: true }) as typeof fetch,
+    fetch: importFetch({ loseOpenLibrary: true }) as unknown as typeof fetch,
     testOrigin: origin,
     clock,
   });
   expect([1, 130]).toContain(lost.code);
   const lostReport = JSON.parse(lost.stdout) as {
     jobs: { status: string; sourceAlias: string }[];
-    notStarted: { name: string }[];
+    notStarted: { index: number; name: string }[];
   };
   expect(lostReport.jobs.map((job) => job.status)).toEqual(['completed', 'stopped', 'not-started']);
   expect(lostReport.notStarted).toEqual([{ index: 3, name: 'wikidata' }]);
@@ -259,7 +277,7 @@ test('run stops on lost writes, cancellation, busy owners and broken sinks witho
   const controller = new AbortController();
   controller.abort(new DOMException('Cancelled before jobs', 'AbortError'));
   const cancelled = await runImportCli(['batch', '--manifest', three, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch() as typeof fetch,
+    fetch: importFetch() as unknown as typeof fetch,
     testOrigin: origin,
     signal: controller.signal,
     clock,
@@ -270,7 +288,7 @@ test('run stops on lost writes, cancellation, busy owners and broken sinks witho
   const owner = new ImportSession(state);
   expect(owner.acquire('bangumi')).not.toBe('busy');
   const busy = await runImportCli(['batch', '--manifest', three, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch() as typeof fetch,
+    fetch: importFetch() as unknown as typeof fetch,
     testOrigin: origin,
     clock,
   });
@@ -286,7 +304,7 @@ test('run stops on lost writes, cancellation, busy owners and broken sinks witho
   };
   const broken = await runImportCli(
     ['batch', '--manifest', three, '--run', '--json', '--progress', 'jsonl', ...credentials(key)],
-    { fetch: importFetch() as typeof fetch, testOrigin: origin, progressSink: sink, clock },
+    { fetch: importFetch() as unknown as typeof fetch, testOrigin: origin, progressSink: sink, clock },
   );
   expect(broken.code).toBe(1);
   expect(JSON.parse(broken.stdout).notStarted.length).toBeGreaterThan(0);
@@ -304,7 +322,7 @@ test('changed dump after earlier success is refused and credentials stay off the
     },
   };
   const result = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
-    fetch: importFetch() as typeof fetch,
+    fetch: importFetch() as unknown as typeof fetch,
     testOrigin: origin,
     observer,
     clock,
