@@ -97,7 +97,7 @@ type StatementRow = {
 };
 
 /** Current name/fact/visibility publication fence used by complete Search traversals. */
-export async function readSearchCanonicalGeneration(pool: Pool): Promise<string> {
+export async function readSearchCanonicalGeneration(pool: Pool | PoolClient): Promise<string> {
   const result = await pool.query<{ last_value: string; is_called: boolean }>(
     `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
   );

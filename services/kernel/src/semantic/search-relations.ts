@@ -43,7 +43,7 @@ import {
 import { activeRelease, readRelease } from './definitions.ts';
 import { sourceTuple } from './fences.ts';
 import { prepareCharacterPersonPage } from '../search/character-person-voice.ts';
-import { indexedStatement, inSearchSnapshot } from './search-source.ts';
+import { indexedStatement, inSearchSnapshot, readSearchCanonicalGeneration } from './search-source.ts';
 import readSubjects from './search-source-subjects.sql';
 import readBatch from './search-selected-batch.sql';
 import readProbeBatch from './search-selected-probe-batch.sql';
@@ -401,7 +401,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         // The observation binds resumption to the original native subject and release, not to
         // the page size or the returned rows. It supplies no absence or disclosure certificate.
         const observation = createHash('sha256')
-          .update(JSON.stringify([runtime.digest, runtime.head, subject]))
+          .update(JSON.stringify([runtime.digest, runtime.head, subject, await readSearchCanonicalGeneration(client)]))
           .digest('hex');
         if (cursor && cursor.observation !== observation) return { changed: true } as const;
         const rows = (await readConcepts.run(client, {
@@ -442,6 +442,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         // selection_ready means this is the full current selected prefix. A short first
         // window therefore proves absence; a full or resumed window only proves progress.
         complete: completeNativeStatementPrefix(first.subject.selection_ready, cursor, first.rows.length, limit),
+        readyPrefix: first.observation,
       },
       async revalidate() {
         const final = await snapshot();

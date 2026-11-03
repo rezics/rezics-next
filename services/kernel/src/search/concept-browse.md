@@ -2,9 +2,10 @@
 
 Search's hierarchy traversal is derived work beneath the existing retained-plan worker. It does not establish
 Semantic graph coverage, release admission, disclosure or authorization. Indexed storage and worker dispatch
-are installed; native classified-statement windows and a complete first-prefix absence proof are
-available through SubjectSource. The hierarchy source, multi-window absence proof and public hierarchy
-journey remain to be connected.
+are installed, including the admitted native hierarchy source. Native classified-statement windows
+and a complete first-prefix absence proof are available through SubjectSource. An explicitly budgeted
+multi-window prefix matcher composes these windows; Search dispatch and the public hierarchy journey
+remain to be connected.
 Absent a native source adapter the worker leaves the plan preparing; it cannot seal an empty closure.
 
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
@@ -109,8 +110,8 @@ retains only the selected concept; descendant mode probes retained membership wi
 closure. An empty witness page still probes the selected root, so complete absence cannot bypass
 retained currentness. The `complete` input is reserved for Semantic's current complete-absence proof;
 partial or withheld native evidence cannot set it. The enclosing caller must revalidate native
-statement evidence before publishing results. These ports do not implement that native producer,
-its completeness proof, source cost derivation or the universal Search and page installation.
+statement evidence before publishing results. Source cost derivation and universal Search and page
+installation remain separate work.
 
 ## Native hierarchy closure source
 
@@ -125,7 +126,7 @@ using `search_selected_page (route,subject_id,property,slot_id,candidate_id) WHE
 one full `(slot,candidate)` continuation and at most 64 raw rows per dispatch. Hidden, rejected,
 retracted and withheld candidates count towards that bound. The native cursor advances past them;
 matching never replaces a closure with `in:64` and never refills a window implicitly. Exactly full
-windows require a later terminal seek. A cursor carries the source identity/revision/security and
+windows require a later terminal seek. A cursor carries the source identity/revision/security, canonical generation and
 active release observation; replacement discards it. These internal cursors are not public Search cursors.
 
 Decision: native statement windows remain internal. A complete-absence proof is valid only when
@@ -146,14 +147,15 @@ Qualifiers and the independently supplied spoiler threshold constrain each state
 Semantic marks `complete` only when `selection_ready` holds, the first request has no cursor, and the
 raw selected prefix contains fewer rows than the bounded window. The proof includes hidden, rejected
 and withheld raw candidates and is returned only after the full prefix and its native dependencies are
-revalidated. A full window or a terminal continuation suffix stays incomplete. This proves absence
-only for prefixes that fit one dispatch; a multi-window aggregate still needs a native owner proof.
+revalidated. A full window or a terminal continuation suffix stays incomplete. This single-window
+proof covers only prefixes that fit one dispatch. Each ready native window also carries its
+selected-prefix observation for the bounded multi-window composition below.
 After membership the reader revalidates native evidence even if the candidate was rejected. Any
 changed raw candidate or native dependency retires the retained cut and returns restart without a
 verdict or cursor. Unavailable evidence discards provisional positives.
 
 The window has two native prefix reads (initial and revalidation), each examining at most B raw
-selected rows for B <= 64, plus point joins for candidate, hidden candidate, disclosure, acceptance
+selected rows for B <= 64, plus one canonical-generation point read and point joins for candidate, hidden candidate, disclosure, acceptance
 and latest retraction on those exact keys. Each prefix read has one source home/identity observation
 and one active-release read; at most B distinct stored-release lookups interpret the rows. Each
 native disclosure pass visits the source, target and item qualifier identities along at most eight
@@ -164,9 +166,35 @@ observations; no native window performs graph traversal per candidate.
 
 This expands the operation structure, not an all-pool dispatch reservation: stored-release/body byte
 bounds, qualifier fanout, owner control-query work and physical tuple/identity footprints must still
-be composed before enabling this port in the Search dispatcher. The port is exposed by SubjectSource
-but is not activated by Search or the hierarchy worker. Multi-window complete-absence ownership,
-native growth and useful-page guarantees, the hierarchy adapter/APIs and the installed localized page
-remain in the continuation. The focused tests cover statement isolation, complete first-prefix proof,
-terminal uncertainty and restart on a rejected candidate's changed evidence; they do not measure
-native growth or connected browser work.
+be composed before enabling this port in the Search dispatcher. The statement port is exposed by
+SubjectSource but is not activated by Search. The native hierarchy
+adapter is installed in the retained worker. All-pool reservation composition, native growth and
+useful-page guarantees, universal Search installation, hierarchy APIs and the localized page remain
+in the continuation. Focused tests do not measure native growth or connected browser work.
+
+## Bounded complete statement prefixes
+
+Decision: multi-window absence starts at the native prefix origin on each attempt and spends an explicit raw-row and window allowance; exhausted allowances remain unknown and never trigger an implicit refill.
+
+`matchNativeConceptStatementPrefix` owns the request, retained cut and allowance before awaiting.
+Each native seek admits at most 64 raw rows and consumes its full admitted row limit, even for
+rejected candidates, replay or an empty terminal seek. A full window requires another seek; a
+short window proves termination only when every window carries the same native ready-prefix
+observation and the complete full-key continuation advances through all raw candidates. A suffix
+cannot be supplied as the starting point. Missing native prefix evidence preserves uncertainty.
+
+The matcher probes membership in bounded windows and combines property, value, qualifiers and
+spoilers on the same statement. It keeps each native revalidator until after the last membership
+read and runs them even when an earlier window already supplied a positive. A mutation in any
+rejected window retires the cut and discards all provisional results. Unavailable evidence also
+discards positives. The final membership read confirms the root still belongs to the same sealed
+retained cut before those native revalidations; no further membership I/O follows them. Each native
+prefix observation also binds the canonical generation, fencing hierarchy mutations during native
+revalidation.
+Only a certified terminal prefix can supply false to Boolean exclusion.
+
+Working memory is bounded by the admitted row and window allowances, including attempt-local
+native revalidation closures. The returned counts describe traversal progress, not native work
+receipts. This seam deliberately remains outside universal Search until its caller composes the
+native owner, retained membership, release/body, identity and tuple-fence reservations before
+dispatch. It introduces no lifecycle, public cursor, retained permission or closure-size cap.

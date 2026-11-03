@@ -369,6 +369,24 @@ export async function matchCurrentConceptStatements(
     complete: boolean;
   }>,
 ): Promise<RelationFacetMatch> {
+  if (typeof input.complete !== 'boolean') return 'not_proven';
+  const complete = input.complete;
+  const matches = await currentConceptStatementWitnesses(source, store, state, input);
+  return matches === null ? 'not_proven' : currentConceptStatementsMatch(matches, complete);
+}
+
+/** Current evidence for one bounded window, without claiming absence outside that window.
+ * A null result invalidates the whole cut, including otherwise negative witnesses.
+ */
+export async function currentConceptStatementWitnesses(
+  source: ConceptBrowseSource,
+  store: ConceptBrowseStore,
+  state: ConceptBrowseState,
+  input: Readonly<{
+    selection: Readonly<{ property: string; concept: string; scheme: string; includeChildren?: boolean }>;
+    statements: readonly ConceptStatementWitness[];
+  }>,
+): Promise<readonly Readonly<{ membership: RelationFacetMatch; witness: RelationFacetMatch }>[] | null> {
   if (!Array.isArray(input.statements) || input.statements.length > CONCEPT_BROWSE_LIMITS.pageSize)
     throw new RangeError('Invalid concept statement page');
   const selection = { ...input.selection };
@@ -376,11 +394,9 @@ export async function matchCurrentConceptStatements(
     selection.property !== state.selection.property ||
     selection.concept !== state.selection.concept ||
     selection.scheme !== state.selection.scheme ||
-    (selection.includeChildren !== undefined && typeof selection.includeChildren !== 'boolean') ||
-    typeof input.complete !== 'boolean'
+    (selection.includeChildren !== undefined && typeof selection.includeChildren !== 'boolean')
   )
-    return 'not_proven';
-  const complete = input.complete;
+    return null;
   const statements: ConceptStatementWitness[] = [];
   for (const statement of input.statements) {
     if (
@@ -389,7 +405,7 @@ export async function matchCurrentConceptStatements(
       !key(statement.concept) ||
       ![true, false, 'not_proven'].includes(statement.witness)
     )
-      return 'not_proven';
+      return null;
     if (
       statement.property === selection.property &&
       (selection.includeChildren || statement.concept === selection.concept)
@@ -404,13 +420,7 @@ export async function matchCurrentConceptStatements(
     statements.length ? statements.map((statement) => statement.concept) : [selection.concept],
   );
   // Losing the retained cut invalidates the entire result, including an otherwise false witness.
-  if (members.includes('not_proven')) return 'not_proven';
-  if (!statements.length && members[0] !== true) return 'not_proven';
-  return currentConceptStatementsMatch(
-    statements.map((statement, index) => ({
-      membership: members[index]!,
-      witness: statement.witness,
-    })),
-    complete,
-  );
+  if (members.includes('not_proven')) return null;
+  if (!statements.length && members[0] !== true) return null;
+  return statements.map((statement, index) => ({ membership: members[index]!, witness: statement.witness }));
 }

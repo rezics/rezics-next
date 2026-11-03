@@ -2,12 +2,15 @@ import { parseFilter, type FilterQualifier, type SpoilerThreshold } from '@rezic
 import { holdsCurrentStatements } from './current-leaf.ts';
 import {
   matchCurrentConceptStatements,
+  currentConceptMemberships,
+  currentConceptStatementWitnesses,
   type ConceptBrowseSource,
   type ConceptBrowseState,
   type ConceptBrowseStore,
 } from './concept-browse.ts';
 import type { IndexedStatement, RelationFacetMatch } from './source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { currentConceptStatementsMatch } from './current-filter-plan.ts';
 
 export type ConceptStatementRequest = Readonly<{
   subject: string;
@@ -28,6 +31,11 @@ export type ConceptStatementWindow = Readonly<{
   terminal: boolean;
   /** True only when the native owner proves the complete selected prefix in this window. */
   complete: boolean;
+  /** Native owner's ready, unsampled selected prefix identity. Every raw row, including
+   * rejected/hidden rows, participates in the full-key continuation and revalidation.
+   * This is not an absence proof until traversal from the start reaches a short window.
+   */
+  readyPrefix?: string;
 }>;
 export type ConceptStatementRead =
   | Readonly<{
@@ -47,6 +55,19 @@ export type ConceptStatementReader = (
 ) => Promise<ConceptStatementRead>;
 
 export const CONCEPT_STATEMENT_PAGE_SIZE = 64;
+export type ConceptStatementPrefixAllowance = Readonly<{
+  /** Dispatches, including a possible empty terminal seek. */
+  windows: number;
+  /** Sum of admitted raw window limits, including rejected rows and terminal seeks. */
+  rows: number;
+}>;
+export type ConceptStatementPrefixResult = Readonly<{
+  status: 'current' | 'preparing' | 'unavailable' | 'restart';
+  match: RelationFacetMatch;
+  windows: number;
+  examined: number;
+  complete: boolean;
+}>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A short first window over a ready selection is the whole current native prefix. */
 export function completeNativeStatementPrefix(
@@ -189,4 +210,136 @@ export async function matchNativeConceptStatements(
   if (current === 'changed') return restart();
   if (current !== 'current') return { status: 'unavailable', match: 'not_proven' };
   return { status: 'current', match, page };
+}
+
+/** Prove a selected prefix across explicitly admitted bounded windows. Always starts at
+ * the beginning: a caller cannot supply a suffix cursor as an absence certificate. This
+ * performs no refill beyond the supplied dispatch and raw-row allowance. Callers must
+ * reserve native and retained owner costs before enabling it in a Search dispatcher.
+ * Revalidation closures retain at most the admitted windows, never a whole population.
+ */
+export async function matchNativeConceptStatementPrefix(
+  reader: ConceptStatementReader,
+  source: ConceptBrowseSource,
+  store: ConceptBrowseStore,
+  state: ConceptBrowseState,
+  partition: number,
+  input: ConceptStatementRequest,
+  allowance: ConceptStatementPrefixAllowance,
+): Promise<ConceptStatementPrefixResult> {
+  // Own the allowance, request and cut before any owner I/O.
+  const budget = { ...allowance };
+  if (
+    !Number.isSafeInteger(budget.windows) ||
+    budget.windows < 1 ||
+    !Number.isSafeInteger(budget.rows) ||
+    budget.rows < 1
+  )
+    throw new RangeError('Invalid concept statement prefix allowance');
+  const request = conceptStatementRequest(partition, input, null, Math.min(CONCEPT_STATEMENT_PAGE_SIZE, budget.rows));
+  const retained: ConceptBrowseState = structuredClone(state);
+  const qualifiers = conceptStatementQualifiers(request);
+  const revalidate: (() => Promise<'current' | 'changed' | 'unavailable'>)[] = [];
+  let windows = 0,
+    examined = 0,
+    remainingRows = budget.rows;
+  let cursor: ConceptStatementCursor | null = null;
+  let prefix: string | undefined;
+  let certified = true,
+    terminal = false,
+    matched = false,
+    unknown = false;
+  const result = (
+    status: ConceptStatementPrefixResult['status'],
+    match: RelationFacetMatch = 'not_proven',
+    complete = false,
+  ): ConceptStatementPrefixResult => ({ status, match, complete, windows, examined });
+  async function restart() {
+    await store.retire(retained);
+    return result('restart');
+  }
+  while (windows < budget.windows && remainingRows > 0) {
+    const limit = Math.min(CONCEPT_STATEMENT_PAGE_SIZE, remainingRows);
+    // Consume the admitted full raw window even if it turns out to be short or empty.
+    remainingRows -= limit;
+    windows++;
+    const read = await reader(partition, request, cursor === null ? null : { ...cursor }, limit);
+    if (read.status === 'changed') return restart();
+    if (read.status !== 'current') return result(read.status);
+    const page = structuredClone(read.page);
+    if (
+      !Array.isArray(page.statements) ||
+      !Number.isSafeInteger(page.examined) ||
+      page.examined < page.statements.length ||
+      page.examined > limit ||
+      page.terminal !== page.examined < limit ||
+      (page.examined > 0 && page.after === null)
+    )
+      return restart();
+    if (page.after !== null) {
+      // Also admit empty terminal continuations before treating them as evidence.
+      try {
+        conceptStatementRequest(partition, request, page.after, limit);
+      } catch {
+        return restart();
+      }
+      if (
+        cursor &&
+        (page.after.observation !== cursor.observation ||
+          (page.examined > 0 &&
+            (page.after.slot < cursor.slot ||
+              (page.after.slot === cursor.slot && page.after.candidate <= cursor.candidate))) ||
+          (page.examined === 0 && (page.after.slot !== cursor.slot || page.after.candidate !== cursor.candidate)))
+      )
+        return restart();
+    }
+    if (page.readyPrefix === undefined) certified = false;
+    else {
+      if (
+        !/^[0-9a-f]{64}$/.test(page.readyPrefix) ||
+        (prefix !== undefined && page.readyPrefix !== prefix) ||
+        (page.after !== null && page.readyPrefix !== page.after.observation)
+      )
+        return restart();
+      prefix = page.readyPrefix;
+    }
+    examined += page.examined;
+    const witnesses = await currentConceptStatementWitnesses(source, store, retained, {
+      selection: request.selection,
+      statements: page.statements.map((statement) => ({
+        property: statement.property,
+        concept: statement.value,
+        witness: holdsCurrentStatements([statement], {
+          facet: 'statement',
+          property: request.selection.property,
+          values: [statement.value],
+          qualifiers,
+        }),
+      })),
+    });
+    // Window-local false evidence becomes predicate absence only after every window is
+    // visited and every native witness is revalidated after the last membership read.
+    if (witnesses === null) unknown = true;
+    else {
+      const local = currentConceptStatementsMatch(witnesses, true);
+      matched ||= local === true;
+      unknown ||= local === 'not_proven';
+    }
+    revalidate.push(() => read.revalidate());
+    terminal = page.terminal;
+    cursor = page.after;
+    if (terminal) break;
+  }
+  // Finish all retained owner I/O before the final native evidence reads.
+  const current = await currentConceptMemberships(source, store, retained, [request.selection.concept]);
+  // Do not stop on a positive: a changed rejected row invalidates that positive too.
+  for (const validate of revalidate) {
+    const current = await validate();
+    if (current === 'changed') return restart();
+    if (current !== 'current') return result('unavailable');
+  }
+  // Losing the sealed cut at any point invalidates every verdict, including exclusion.
+  if (unknown || current[0] !== true) return result('current');
+  const complete = terminal && certified;
+  return result('current', matched ? true : complete ? false : 'not_proven', complete);
 }
