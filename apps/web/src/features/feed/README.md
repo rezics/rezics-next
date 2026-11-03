@@ -23,7 +23,14 @@ unrelated failures remain visible.
 
 Home's native `FeedItem` projection is `homeFeedItemPresentation(item, locale)`. It retains the installed title,
 canonical destination, cover/avatar, language, preview, source and occurrence attributes, Continue progress, and
-the separate resume link. This adapter is not a native summary union and performs no reads.
+the separate resume link. Collection, review and Space rows use this same adapter: a Collection keeps
+`/collections/{id}` with its supplied title and description; a review keeps the thread destination and optional
+disclosed reviewed-Subject context rather than becoming its target Subject; a Space keeps `/spaces/{address}`
+when that address is readable and shows a Realm title only as carrier text. The adapter is not a native summary
+union, performs no reads, does not rank or apply public/private predicates, and omits missing author, excerpt,
+image and rating. Following Collections and review threads are consumed when Content discloses them. Public
+discovery Collection, review and Space kinds remain Search's pending registration. Space feed rows use the named
+`HomeSpaceFeedItem` seam until Content/Community deliver that branch.
 
 An embedded owner list can use the same body without claiming a native mixed-feed branch:
 
@@ -46,5 +53,5 @@ An embedded owner list can use the same body without claiming a native mixed-fee
 />
 ```
 
-Board, Realm and public-discovery summaries absent from the installed native feed remain owner dependencies. Add a
+Board and Realm public-discovery summaries absent from the installed native feed remain owner dependencies. Add a
 native branch only after the source schema, disclosure, ordering, and generated-client receiving are delivered.

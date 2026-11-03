@@ -4491,6 +4491,7 @@
   "home_kinds_unavailable": "無法載入類型。目前動態選擇保持不變。",
   "home_kinds_retry": "重新載入類型",
   "home_kinds_next": "更多類型",
+  "home_feed_kind_review": "評論",
   "library_type_action": "類型：{type}",
   "library_types_heading": "選擇類型",
   "library_types_description": "分頁查看你資料庫中的類型。此篩選僅用於已追蹤項目，不影響繼續閱讀。",

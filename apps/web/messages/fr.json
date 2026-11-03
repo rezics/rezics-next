@@ -4491,6 +4491,7 @@
   "home_kinds_unavailable": "Impossible de charger les types. Votre sélection de flux est conservée.",
   "home_kinds_retry": "Réessayer de charger les types",
   "home_kinds_next": "Plus de types",
+  "home_feed_kind_review": "Critique",
   "library_type_action": "Type : {type}",
   "library_types_heading": "Choisir un type",
   "library_types_description": "Parcourez les types de votre bibliothèque, une page à la fois. Le filtre concerne les entrées suivies ; la section « Continuer » reste inchangée.",

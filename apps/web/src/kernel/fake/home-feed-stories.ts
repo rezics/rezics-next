@@ -120,16 +120,44 @@ export function homeFeedStoryPage(
     },
     destination: { kind: 'collection', id: collection.collection.id, title: collection.collection.title },
   };
+  const reviewId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
+  const reviewed: FeedItem = {
+    id: `activity:${reviewId}`,
+    source: 'following',
+    key: { owner: 'content', kind: 'thread', route: thread.thread.route, id: reviewId },
+    occurredAt: thread.thread.createdAt,
+    summary: {
+      id: reviewId,
+      kind: 'review',
+      title: 'A careful reread',
+      createdAt: thread.thread.createdAt,
+    },
+    destination: { kind: 'thread', id: reviewId, title: 'A careful reread' },
+  };
   // Explicit selected wire examples; this fake is not the native candidate-selection implementation.
   const selectedItems =
-    kind === first.type ? (state === 'following' || cursor ? [] : personal ? [discovery, continued] : [discovery]) : [];
+    kind === first.type
+      ? state === 'following' || cursor
+        ? []
+        : personal
+          ? [discovery, continued]
+          : [discovery]
+      : kind === 'collection'
+        ? personal
+          ? [curated]
+          : []
+        : kind === 'thread'
+          ? personal
+            ? [followed, reviewed]
+            : []
+          : [];
   const items =
     kind !== undefined
       ? selectedItems
       : !personal
         ? [discovery]
         : state === 'following'
-          ? [followed, curated]
+          ? [followed, reviewed, curated]
           : cursor
             ? [curated]
             : [discovery, followed, continued];

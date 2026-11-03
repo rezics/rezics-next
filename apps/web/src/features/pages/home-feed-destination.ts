@@ -38,6 +38,10 @@ export function homeFeedDestination(item: FeedItem, locale: string): string | un
       );
     case 'collection':
       return `/${encodeURIComponent(locale)}/collections/${encodeURIComponent(destination.id)}`;
+    case 'space':
+      return destination.address
+        ? `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(destination.address)}`
+        : undefined;
   }
 }
 

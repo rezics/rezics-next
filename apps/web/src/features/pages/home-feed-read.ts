@@ -7,17 +7,44 @@ type AccountSummary = Extract<
   ClientFeedPage['feedItems'][number],
   { source: 'discovery'; key: { owner: 'accounts' } }
 >['summary'];
-/** Additive native summary seam until the dev landing regenerates the client. */
+export type HomeReviewSubject = { id: string; title?: string | null };
+/** Additive native summary seam until the generated client includes Content's optional fields. */
 type WithContentSummary<Item> = Item extends { key: { owner: 'content' }; summary: infer Summary }
   ? Omit<Item, 'summary'> & {
       summary: Summary & {
         author?: Pick<AccountSummary, 'displayName' | 'handle' | 'avatar'>;
         excerpt?: string;
+        subject?: HomeReviewSubject;
       };
     }
   : Item;
+/** Public discovery Collection rows until Search registers that kind and Content discloses them. */
+export type HomeDiscoveryCollectionItem = {
+  id: string;
+  occurredAt: string | null;
+  source: 'discovery';
+  key: { owner: 'library'; kind: 'collection'; route: number; id: string };
+  summary: { id: string; title: string; description: string | null };
+  destination: { kind: 'collection'; id: string; title: string | null };
+};
+/** Space feed rows until Content/Community disclose this branch. Realm is carrier context only. */
+export type HomeSpaceFeedItem = {
+  id: string;
+  occurredAt: string | null;
+  source: 'discovery' | 'following';
+  key: { owner: 'community'; kind: 'space'; route: number; id: string };
+  summary: {
+    id: string;
+    title: string;
+    address: string | null;
+    summary?: string;
+    realm?: { id: string; title?: string | null } | null;
+  };
+  destination: { kind: 'space'; id: string; title: string | null; address: string | null };
+};
+export type HomePendingFeedItem = HomeDiscoveryCollectionItem | HomeSpaceFeedItem;
 export type FeedPage = Omit<ClientFeedPage, 'feedItems'> & {
-  feedItems: WithContentSummary<ClientFeedPage['feedItems'][number]>[];
+  feedItems: Array<WithContentSummary<ClientFeedPage['feedItems'][number]> | HomePendingFeedItem>;
 };
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedStream = 'home' | 'following';

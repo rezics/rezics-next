@@ -74,11 +74,17 @@ independent rather than making shared files or unfinished producer delivery into
   never proves permission or submits a post automatically.
 - **Watch.** Start with a signed-in reader's thread watch toggle for in-app thread activity. Watching grants no read
   access; existing preferences and send-time access still govern notices. Board-wide watching is a later extension.
-- **Collection discovery.** Add native public Collection hits to existing Search and mixed Home rows, with the
-  supplied title, description and canonical destination. Membership and private rule facts are not row enrichment.
-- **Review and Space discovery.** Add native review and Space hits through the same consumers. A review keeps its
-  native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
-  meaning. A Realm-backed Space does not become a second Realm hit.
+- **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
+  and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are
+  used as supplied. Membership, rules, covers, authors and ratings stay omitted when absent. Public discovery
+  Collection hits remain Search/Content's pending registration; Home types that discovery branch locally and does
+  not invent a successful native page.
+- **Review and Space discovery.** Home renders a review as its thread identity (`key.kind` stays `thread`,
+  destination `/threads/{id}`) with a Review label and optional disclosed reviewed-Subject context; it never
+  substitutes the Subject as the primary row. Space rows use the named `HomeSpaceFeedItem` seam: destination
+  `/spaces/{address}` when the address is readable, Realm title as carrier text only. Search has not registered
+  review or Space discovery kinds and Content has not delivered Space feed rows; those remain named pending
+  producer bindings. Missing author, excerpt, image and rating stay omitted.
 - **Moderator workbench.** Compose existing board and catalogue queues, decisions and appeals behind one navigation
   entry. Select one authorized queue at a time, with its own filters, cursor, evidence and native resolution actions.
   This adds no aggregate case search or platform-wide appeal adjudication.
@@ -405,9 +411,11 @@ directly through this adapter and keeps `homeFeedTitle`, `homeFeedDestination` a
 and local-destination authorities; it does not add a Home DTO or per-row hydration.
 
 The row's supplied summary determines its content: subjects keep their proportional cover, accounts use a supplied
-avatar when present, and text-only discussions have no blank visual column or fabricated image. Supplied subject
-descriptions remain short previews. Continue rows use the existing human progress label and a distinct Continue
-action. The item title is a real level-two heading and the only stretched primary link; independent actions remain
+avatar when present, and text-only discussions have no blank visual column or fabricated image. Collections, reviews
+and Spaces share that adapter: a Collection stays a Collection, a review stays a review thread, and a Space keeps
+its readable Realm carrier rather than becoming a Realm hit. Supplied subject descriptions remain short previews.
+Continue rows use the existing human progress label and a distinct Continue action. The item title is a real
+level-two heading and the only stretched primary link; independent actions remain
 usable above its overlay. Home adds no resting border, divider or card background and does not label ordinary rows
 with discovery/Following/Continue protocol names.
 

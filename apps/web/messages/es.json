@@ -4491,6 +4491,7 @@
   "home_kinds_unavailable": "No se pudieron cargar los tipos. Se conserva tu selección del feed.",
   "home_kinds_retry": "Volver a cargar los tipos",
   "home_kinds_next": "Más tipos",
+  "home_feed_kind_review": "Reseña",
   "library_type_action": "Tipo: {type}",
   "library_types_heading": "Elegir un tipo",
   "library_types_description": "Explora los tipos de tu biblioteca, una página a la vez. El filtro se aplica a las entradas seguidas; «Continuar» no cambia.",

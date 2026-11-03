@@ -4539,6 +4539,7 @@
   "home_kinds_unavailable": "Types could not be loaded. Your feed choice is unchanged.",
   "home_kinds_retry": "Retry loading types",
   "home_kinds_next": "More types",
+  "home_feed_kind_review": "Review",
   "library_type_action": "Type: {type}",
   "library_types_heading": "Choose a Type",
   "library_types_description": "Choose from the Types in your Library, one page at a time. This filters tracked entries; Continue stays the same.",
