@@ -516,14 +516,12 @@ export function createLabelConsolidationCommands(deps: {
               ],
             );
           }
-          return {
-            value: {
-              confirmationId,
-              expiresAt,
-              status: 'active' as const,
-              itemCount: evidenceValue.items.length,
-            },
-          };
+          return noEffect({
+            confirmationId,
+            expiresAt,
+            status: 'active' as const,
+            itemCount: evidenceValue.items.length,
+          });
         },
       );
     } finally {
@@ -591,7 +589,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { updated: true } };
+        return noEffect({ updated: true });
       },
     );
   }
@@ -660,7 +658,7 @@ export function createLabelConsolidationCommands(deps: {
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3`,
           [route, owner.accountId, plan.confirmationId, nextItem, complete, now, command.transactionId],
         );
-        return { value: { status, nextItem, complete } };
+        return noEffect({ status, nextItem, complete });
       },
     );
   }
@@ -984,7 +982,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, item: current.itemNo } };
+        return noEffect({ confirmationId, item: current.itemNo });
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, operation.value.item) };
@@ -1024,7 +1022,7 @@ export function createLabelConsolidationCommands(deps: {
           ),
           item = (await readItems(tx, owner, sourceLabelId, confirmationId, true))[itemNo];
         if (!plan || !item || item.status !== 'applying') throw new LibraryConflictError();
-        return { value: { confirmationId, item: itemNo } };
+        return noEffect({ confirmationId, item: itemNo });
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, itemNo) };
@@ -1086,7 +1084,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, status: 'cancelled' as const } };
+        return noEffect({ confirmationId, status: 'cancelled' as const });
       },
     );
     return { operation, result: await result(owner, sourceLabelId, confirmationId) };
@@ -1264,7 +1262,7 @@ export async function purgeExpiredLabelConsolidations(
                RETURNING consolidation_id`,
               [row.route, row.accountId, row.confirmationId, authoritativeTimeValue(command.time)],
             );
-            return { value: { removed: deleted.rows.length > 0 } };
+            return noEffect({ removed: deleted.rows.length > 0 });
           },
         );
         if (outcome.value.removed) removed++;
