@@ -94,7 +94,7 @@ const space: DiscoveryUnionHit = {
 };
 
 test('native public summaries map to closed feed identities and canonical destinations without reads', () => {
-  const items = [subject, account, collection, review, space].map(feedDiscoveryItem);
+  const items = [subject, account, collection, review, space].map((hit) => feedDiscoveryItem(hit));
   expect(items.map((item) => item.key)).toEqual([
     subject.key,
     account.key,

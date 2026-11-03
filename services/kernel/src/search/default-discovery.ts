@@ -92,6 +92,7 @@ async function enrichDiscoveryPage(
   page: DiscoveryPage,
   context: DiscoveryReadContext,
 ): Promise<EnrichedDiscoveryPage> {
+  const languages = context.languages ?? ['en'];
   const subjects = page.hits.filter((hit): hit is SemanticDiscoveryHit => hit.summary.kind === 'subject');
   const originals = subjects.map(({ key }) => key.id);
   const presentation = await readListPresentationFacts(
@@ -103,7 +104,7 @@ async function enrichDiscoveryPage(
       deadline: context.deadline,
     },
     originals,
-    { languages: context.languages },
+    { languages },
   );
   const facts = subjects.map((hit) => {
     const value = presentation.get(hit.key.id);
@@ -595,7 +596,9 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   const open: RetainedDiscoverySearch = (principal, request, context) => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
     request = ownDiscoveryRequest(request);
-    context = { ...context, languages: request.languages };
+    const languages = request.languages ?? ['en'];
+    request = { ...request, languages };
+    context = { ...context, languages };
     const deadline = context.deadline;
     const actor =
       context.actor.kind === 'account'
@@ -608,7 +611,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
-        languages: request.languages ?? [],
+        languages,
         ownerAdapters,
       });
       const bound = () => {
@@ -730,8 +733,10 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   };
   const search: DiscoverySearch = (...args) => {
     const [principal, inputRequest, inputContext] = args;
-    const request = ownDiscoveryRequest(inputRequest);
-    const context = { ...inputContext, languages: request.languages };
+    const ownedRequest = ownDiscoveryRequest(inputRequest);
+    const languages = ownedRequest.languages ?? ['en'];
+    const request = { ...ownedRequest, languages };
+    const context = { ...inputContext, languages };
     const operation = (async () => {
       const read = await open(principal, request, context);
       try {
@@ -751,7 +756,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               deadline: context.deadline,
             },
             enriched.semanticOriginals,
-            { languages: context.languages },
+            { languages },
           );
           if (!isDeepStrictEqual(enriched.semanticPresentation, finalPresentation))
             throw new ProblemError('search_restart_required');

@@ -12,7 +12,7 @@ import { allocateDiscovery, discoveryConsumer, discoveryGenerations } from '../.
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { readFreshness } from '../../src/search/freshness.ts';
-import type { DiscoveryHit, DiscoveryPage } from '../../src/search/discovery.ts';
+import type { DiscoveryPage, DiscoveryUnionHit } from '../../src/search/discovery.ts';
 
 async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
   const deadline = Date.now() + 60_000;
@@ -112,7 +112,7 @@ test('ordinary configured server returns current mixed discovery through its def
     expect(Date.parse(first.as_of)).toBeLessThanOrEqual(after.asOf.getTime());
     expect(first.hits).toHaveLength(1);
     expect(typeof first.next).toBe('string');
-    const all: DiscoveryHit[] = [...first.hits];
+    const all: DiscoveryUnionHit[] = [...first.hits];
     let next = first.next;
     for (let n = 0; next !== null && n < 3; n++) {
       const continued = await page({ ...request, cursor: next });

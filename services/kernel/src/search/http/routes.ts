@@ -408,7 +408,9 @@ export function searchRoutes<App>(
                   deadline: job.deadline,
                   ...(body.languages === undefined ? {} : { languages: body.languages }),
                   descriptions: body.descriptions === true,
-                  ...(body.spoilerThreshold === undefined ? {} : { spoilerThreshold: body.spoilerThreshold }),
+                  ...(body.spoilerThreshold === undefined
+                    ? {}
+                    : { spoilerThreshold: body.spoilerThreshold as 0 | 1 | 2 }),
                   observeRelationRelease,
                 },
               ),

@@ -138,9 +138,19 @@ export type DiscoveryOwnerSummary =
   | { kind: 'collection'; value: PublicCollectionDiscoverySummary }
   | { kind: 'review'; value: PublicReviewDiscoverySummary }
   | { kind: 'space'; value: PublicSpaceDiscoverySummary };
-export type DiscoveryOwnerHit = { key: DiscoveryPublicOwnerKey; summary: DiscoveryOwnerSummary };
+type DiscoveryOwnerHitOf<K extends DiscoveryOwnerKind> = {
+  key: Extract<DiscoveryPublicOwnerKey, { kind: K }>;
+  summary: Extract<DiscoveryOwnerSummary, { kind: K }>;
+};
+export type DiscoveryOwnerHit =
+  | DiscoveryOwnerHitOf<'collection'>
+  | DiscoveryOwnerHitOf<'review'>
+  | DiscoveryOwnerHitOf<'space'>;
 export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
-export type DiscoveryUnionHit = DiscoveryHit | DiscoveryOwnerHit;
+type DiscoveryHitOf<K extends DiscoverySummary['kind']> = Omit<DiscoveryHit, 'summary'> & {
+  summary: Extract<DiscoverySummary, { kind: K }>;
+};
+export type DiscoveryUnionHit = DiscoveryHitOf<'subject'> | DiscoveryHitOf<'account'> | DiscoveryOwnerHit;
 export type KindCountEvidence =
   | { kind: string; value: number; exact: true }
   | { kind: string; value: number; exact: false } // strictly positive

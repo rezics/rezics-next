@@ -189,10 +189,15 @@ export async function hydrateOwnerDiscoveryHits(
     if (!value) return undefined;
     if (BigInt(candidate.sourcePosition) > BigInt(value.sourcePosition))
       throw new TypeError('Owner discovery source position exceeds its current observation');
-    if (key.kind === 'collection' || key.kind === 'space') {
-      if (value.revision !== candidate.revision) return undefined;
-    } else if (!candidate.sourceVersion || value.sourceVersion !== candidate.sourceVersion) return undefined;
-    if (key.kind === 'space' && value.address === null) return undefined;
+    if (key.kind === 'collection') {
+      if ((value as DiscoveryOwnerMetadataSummary<'collection'>).revision !== candidate.revision) return undefined;
+    } else if (key.kind === 'space') {
+      const space = value as DiscoveryOwnerMetadataSummary<'space'>;
+      if (space.revision !== candidate.revision || space.address === null) return undefined;
+    } else {
+      const review = value as DiscoveryOwnerMetadataSummary<'review'>;
+      if (!candidate.sourceVersion || review.sourceVersion !== candidate.sourceVersion) return undefined;
+    }
     return { candidate, value };
   });
 

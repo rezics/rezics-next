@@ -236,6 +236,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   context: DiscoveryReadContext,
 ): Promise<Map<Candidate, DiscoveryUnionHit>> {
   if (candidates.length > 200) unavailable();
+  const languages = context.languages ?? ['en'];
   const passed = new Map<Candidate, DiscoveryUnionHit>();
   for (const candidate of candidates) {
     requireCurrentOwner(registry, candidate.key);
@@ -286,6 +287,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       },
     };
     const selectedSemantic: Candidate[] = [];
+    const checkedSubjects = new Map<string, IndexedSubject>();
     for (const entry of registry.entries) {
       if (entry.owner !== 'semantic') continue;
       const group = semantic.filter(({ key }) => key.kind === entry.kind);
@@ -317,9 +319,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           ? {}
           : { observeRelationRelease: context.observeRelationRelease }),
       });
-      const checkedSubjects = new Map(
-        checked.passed.filter(({ subject }) => subject.type === entry.kind).map(({ subject }) => [subject.id, subject]),
-      );
+      for (const { subject } of checked.passed)
+        if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
       const accepted = new Set(checkedSubjects.keys());
       selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
     }
@@ -338,14 +339,14 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           Object.entries(
             chooseTexts(
               subject.labels,
-              context.languages,
+              languages,
               subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value,
             ),
           ).sort(([first], [second]) => first.localeCompare(second)),
         );
         const aliasesByLanguage = new Map<string, Set<string>>();
         for (const alias of subject.aliases) {
-          if (context.languages?.length && !context.languages.includes(alias.language)) continue;
+          if (languages.length && !languages.includes(alias.language)) continue;
           const values = aliasesByLanguage.get(alias.language) ?? new Set<string>();
           values.add(alias.value);
           aliasesByLanguage.set(alias.language, values);
@@ -360,12 +361,12 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           context.observeRelationRelease === undefined
             ? null
             : await projectCharacterPersonContexts(source, subject, filter, {
-                ...(context.languages === undefined ? {} : { languages: context.languages }),
+                languages,
                 ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
                 observeRelationRelease: context.observeRelationRelease,
               });
         const descriptions = context.descriptions
-          ? projectHit(subject, { descriptions: true, languages: context.languages }).descriptions
+          ? projectHit(subject, { descriptions: true, languages }).descriptions
           : undefined;
         if (
           context.observeRelationRelease !== undefined &&
@@ -373,6 +374,13 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           contexts === null
         )
           throw new ProblemError('search_restart_required');
+        const listPresentation = (
+          release.types[subject.type] as
+            | ((typeof release.types)[string] & {
+                listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: readonly string[] };
+              })
+            | undefined
+        )?.listPresentation;
         const hit = {
           key: candidate.key,
           summary: {
@@ -385,8 +393,13 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           labels,
           ...(Object.keys(aliases).length ? { aliases } : {}),
           ...(descriptions === undefined ? {} : { descriptions }),
-          ...(release.types[subject.type]?.listPresentation
-            ? { listPresentation: release.types[subject.type]!.listPresentation }
+          ...(listPresentation
+            ? {
+                listPresentation: {
+                  imageAspect: listPresentation.imageAspect,
+                  keyFacts: [...listPresentation.keyFacts],
+                },
+              }
             : {}),
           ...(contexts === null ? {} : { contexts }),
         };

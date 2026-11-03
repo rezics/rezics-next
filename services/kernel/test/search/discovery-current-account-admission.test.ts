@@ -10,6 +10,7 @@ import {
   type AccountDiscoverySummary,
   type AccountSnapshot,
   type DiscoveryEngineHit,
+  type DiscoveryUnionKey,
   type DiscoveryReadContext,
   type IndexedAccount,
 } from '../../src/search/discovery.ts';
@@ -140,7 +141,10 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
     },
   );
   expect([...passed.keys()]).toEqual([live]);
-  expect(passed.get(live)).toEqual({ key: live.key, summary: { kind: 'account', value: summary } });
+  expect(passed.get(live)).toEqual({
+    key: live.key as Extract<DiscoveryUnionKey, { owner: 'accounts' }>,
+    summary: { kind: 'account', value: summary },
+  });
   await expect(disclose([hit(nativeId, '7', '13')], () => observed)).rejects.toBeInstanceOf(SearchUnavailableError);
 });
 
