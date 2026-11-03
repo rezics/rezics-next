@@ -59,6 +59,7 @@ export async function createGrowthEditionInventoryFixture() {
       clientId: native.auth.ordinaryClient.id,
       scopes: native.auth.ordinaryScopes,
     });
+    let governanceBearer = governance.bearer;
     const suffix = randomUUID().replaceAll('-', '');
     const historyAccount = await registerNativeContentAccount(native, {
       key: suffix,
@@ -84,7 +85,7 @@ export async function createGrowthEditionInventoryFixture() {
     const access: Access = {
       authenticate: (token, context) => native.access.authenticate(token, { ...context, pool }),
       prepare: async (actor, action, resource, context) => {
-        if (action === 'edition:read') {
+        if (action === 'edition:read' && resource.id !== author.accountId) {
           expect(pool.totalCount - pool.idleCount).toBe(0);
           preparedIds.push(resource.id);
           await duringEditionPrepare?.();
@@ -119,7 +120,6 @@ export async function createGrowthEditionInventoryFixture() {
         body?: unknown;
         version?: string;
         key?: string;
-        setup?: boolean;
       } = {},
     ) {
       const method = options.method ?? 'GET';
@@ -147,7 +147,7 @@ export async function createGrowthEditionInventoryFixture() {
       person = author,
       key = randomUUID(),
     ): Promise<T> {
-      const result = await request(path, { body, method, version, person, key, setup: true });
+      const result = await request(path, { body, method, ...(version === undefined ? {} : { version }), person, key });
       expect(result.response.status, `${method} ${path}: ${result.text}`).toBe(status);
       return result.value as T;
     }
@@ -280,13 +280,22 @@ export async function createGrowthEditionInventoryFixture() {
         .getResult({ pollingIntervalMs: 10 });
     }
     const editions = new Map<string, ContentEditionView>();
-    async function renewAuthor() {
+    async function renewAuthor(includeGovernance = false) {
       const credential = await native.auth.issue({
         accountId: author.accountId,
         clientId: native.auth.ordinaryClient.id,
         scopes: native.auth.ordinaryScopes,
       });
       author.bearer = credential.bearer;
+      if (includeGovernance) {
+        governanceBearer = (
+          await native.auth.issue({
+            accountId: governanceId,
+            clientId: native.auth.ordinaryClient.id,
+            scopes: native.auth.ordinaryScopes,
+          })
+        ).bearer;
+      }
     }
     async function addEdition() {
       if (editions.size > 0 && editions.size % 128 === 0) await renewAuthor();
@@ -305,7 +314,7 @@ export async function createGrowthEditionInventoryFixture() {
         key,
       );
       await enroll(edition, key);
-      const metadata = await request(`/v1/contentEditions/${edition.editionId}`, { setup: true });
+      const metadata = await request(`/v1/contentEditions/${edition.editionId}`);
       expect(metadata.response.status, metadata.text).toBe(200);
       editions.set(edition.editionId, metadata.value as ContentEditionView);
       return edition;
@@ -313,7 +322,7 @@ export async function createGrowthEditionInventoryFixture() {
     async function transition(id: string, operation: 'publish' | 'unpublish') {
       const current = editions.get(id)!;
       await command(`/v1/contentEditions/${id}:${operation}`, {}, 200, 'POST', current.editionRevision);
-      const result = await request(`/v1/contentEditions/${id}`, { setup: true });
+      const result = await request(`/v1/contentEditions/${id}`);
       expect(result.response.status, result.text).toBe(200);
       editions.set(id, result.value as ContentEditionView);
     }
@@ -340,7 +349,7 @@ export async function createGrowthEditionInventoryFixture() {
     const historyPosts = [selectedSource.postId];
     async function grow(axis: InventoryAxis, shape: InventoryPage, scale: number, previous: number) {
       expect(previous).toBe(grown);
-      await renewAuthor();
+      await renewAuthor(axis === 'access-history');
       if (axis === 'creator-candidates') {
         if (hidden) selectedSource = await source();
         while (editions.size < scale) await addEdition();
@@ -363,7 +372,7 @@ export async function createGrowthEditionInventoryFixture() {
         );
       } else {
         for (let i = previous; i < scale; i++) {
-          if (i > previous && i % 128 === 0) await renewAuthor();
+          if (i > previous && i % 128 === 0) await renewAuthor(axis === 'access-history');
           if (axis === 'source-history') {
             const revised = await command<{ post: { revisionId: string } }>(
               `/v1/posts/${historySource.postId}/revisions`,
@@ -398,7 +407,7 @@ export async function createGrowthEditionInventoryFixture() {
               201,
               'POST',
               undefined,
-              { accountId: governanceId, bearer: governance.bearer },
+              { accountId: governanceId, bearer: governanceBearer },
             );
           }
         }
