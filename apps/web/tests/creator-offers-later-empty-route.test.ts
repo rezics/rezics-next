@@ -17,9 +17,7 @@ function asPage(response: unknown): { status: number; offers: unknown[]; next: s
 
 async function requestPage(url: URL) {
   if (!offersRoute?.story) throw new Error('Expected the story offer route');
-  return asPage(
-    await offersRoute.story({ request: new Request(url), recordings: {}, match: null }),
-  );
+  return asPage(await offersRoute.story({ request: new Request(url), recordings: {}, match: null }));
 }
 
 afterEach(() => setCreatorOffersStory());

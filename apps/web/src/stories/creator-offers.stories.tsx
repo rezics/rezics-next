@@ -103,10 +103,7 @@ export const LaterEmpty: Story = {
     await expect(await view.findByRole('button', { name: m.account_menu() })).toBeVisible();
 
     const firstPageNext = view.getByRole('link', { name: m.creator_offers_next() });
-    await expect(firstPageNext).toHaveAttribute(
-      'href',
-      creatorOffersHref(getLocale(), creatorOffersLaterEmptyCursor),
-    );
+    await expect(firstPageNext).toHaveAttribute('href', creatorOffersHref(getLocale(), creatorOffersLaterEmptyCursor));
     await userEvent.click(firstPageNext);
 
     await expect(await view.findByText(m.creator_offers_page_empty(), { exact: true })).toBeVisible();
