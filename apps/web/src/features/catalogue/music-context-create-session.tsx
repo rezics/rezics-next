@@ -121,7 +121,13 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
     [work],
   );
 
-  const fields = (type: string, disabled: boolean, canEdit: () => boolean, invalidate: () => void, discard?: () => void) => {
+  const fields = (
+    type: string,
+    disabled: boolean,
+    canEdit: () => boolean,
+    invalidate?: () => void,
+    discard?: () => void,
+  ) => {
     if (!release) return null;
     return (
         <MusicContextCreateFields
@@ -132,7 +138,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
         facts={factsByType[type] ?? []}
           disabled={disabled || metadata.pending}
         canEdit={canEdit}
-        invalidate={invalidate}
+        invalidate={invalidate ?? (() => undefined)}
         discardTypeDraft={discard ?? (() => undefined)}
         change={(next) => {
           setFactsByType((current) => {
