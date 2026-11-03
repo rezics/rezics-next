@@ -17,7 +17,7 @@ export type EpisodeSender = (input: {
 export function headersRecord(headers: HeadersInit): Record<string, string> {
   if (Array.isArray(headers)) return Object.fromEntries(headers);
   if (headers instanceof Headers) return Object.fromEntries(headers.entries());
-  return { ...headers };
+  return headers as Record<string, string>;
 }
 
 export function captureEpisodeCommand(

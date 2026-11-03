@@ -84,25 +84,27 @@ const counted = new Set(['get', 'post', '$recordEpisodes', 'relations', 'links']
 
 function wrap(value: unknown, onCall: (name: string) => void, name: string): unknown {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
+  if (value instanceof Promise) return value;
   return countPoint(value as object, onCall, name);
 }
 
 function countPoint(target: object, onCall: (name: string) => void, name: string): object {
   return new Proxy(target, {
-    get(target, key, receiver) {
-      const value = Reflect.get(target, key, receiver);
-      const label = String(key);
-      const next = `${name}.${label}`;
-      if (typeof value === 'function') {
-        return (...args: unknown[]) => {
-          if (counted.has(label)) onCall(next);
-          return wrap(value.apply(target, args), onCall, next);
-        };
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (key === 'then' || key === 'catch' || key === 'finally') {
+        return typeof value === 'function' ? (value as (...args: never[]) => unknown).bind(target) : value;
       }
-      return wrap(value, onCall, next);
+      return wrap(value, onCall, `${name}.${String(key)}`);
     },
     apply(target, thisArg, args) {
-      return wrap(Reflect.apply(target as (...args: unknown[]) => unknown, thisArg, args), onCall, name);
+      const label = name.split('.').pop() ?? name;
+      if (counted.has(label)) onCall(name);
+      return wrap(
+        Reflect.apply(target as (...args: unknown[]) => unknown, thisArg, args),
+        onCall,
+        name,
+      );
     },
   });
 }

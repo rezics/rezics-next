@@ -14,7 +14,6 @@ import {
   mapEpisodeStatus,
   matchingBinding,
   mutationIntent,
-  observeChecklistWork,
   preserveInspectOrder,
   projectMembership,
   quotedIdempotencyKey,
@@ -377,32 +376,28 @@ function linksBody() {
 
 test('loader visit is O(L+20) across 20, 200 and 2,000 retained completions', async () => {
   for (const history of [20, 200, 2000]) {
-    const calls: string[] = [];
     let inspectBytes = 0;
-    const client = observeChecklistWork(
-      createKernelClient('https://kernel.example.test', {
-        fetch: (async (input) => {
-          const url = new URL(input instanceof Request ? input.url : String(input));
-          if (url.pathname === `/v1/subjects/${parentId}`) return Response.json(subjectBody());
-          if (url.pathname === `/v1/subjects/${parentId}/links`) return Response.json(linksBody());
-          if (url.pathname === `/v1/progressSessions/${sessionId}/episodes`) {
-            expect(url.searchParams.get('ids')?.split(',').length).toBeLessThanOrEqual(20);
-            const body = {
-              revision: 3,
-              episodes: [episode1, episode2, episode3, special].map((id, index) =>
-                completion(id, index === 0 || index === 2, 'member', String(index + 1)),
-              ),
-              next: null,
-            };
-            inspectBytes = new TextEncoder().encode(JSON.stringify(body)).length;
-            void history;
-            return Response.json(body);
-          }
-          return new Response('missing', { status: 404 });
-        }) as typeof fetch,
-      }),
-      (name) => calls.push(name),
-    );
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === `/v1/subjects/${parentId}`) return Response.json(subjectBody());
+        if (url.pathname === `/v1/subjects/${parentId}/links`) return Response.json(linksBody());
+        if (url.pathname === `/v1/progressSessions/${sessionId}/episodes`) {
+          expect(url.searchParams.get('ids')?.split(',').length).toBeLessThanOrEqual(20);
+          const body = {
+            revision: 3,
+            episodes: [episode1, episode2, episode3, special].map((id, index) =>
+              completion(id, index === 0 || index === 2, 'member', String(index + 1)),
+            ),
+            next: null,
+          };
+          inspectBytes = new TextEncoder().encode(JSON.stringify(body)).length;
+          void history;
+          return Response.json(body);
+        }
+        return new Response('missing', { status: 404 });
+      }) as typeof fetch,
+    });
     const loaded = await loadEpisodeChecklist(
       client,
       new Request(`https://web.test/en/library/progress/${sessionId}`),
@@ -421,8 +416,9 @@ test('loader visit is O(L+20) across 20, 200 and 2,000 retained completions', as
     expect(workWithinBound(loaded.work, history)).toBe(true);
     expect(loaded.work.bytesRetained).toBeGreaterThan(0);
     expect(loaded.work.bytesRetained).toBeLessThan(inspectBytes + loaded.work.bytesRetained + 1);
-    expect(calls.some((name) => name.includes('episodes.get'))).toBe(true);
-    expect(calls.filter((name) => name.includes('episodes.get'))).toHaveLength(1);
+    expect(loaded.work.nativeCalls.some((name) => name.includes('episodes.get'))).toBe(true);
+    expect(loaded.work.nativeCalls.filter((name) => name.includes('episodes.get'))).toHaveLength(1);
+    expect(loaded.work.nativeCallCount).toBe(CHECKLIST_VISIT_READ_CALLS);
   }
 });
 
