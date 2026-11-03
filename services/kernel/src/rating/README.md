@@ -308,14 +308,17 @@ existing 15-minute expiry and 4,096-character cap. Default Global tokens retain 
 viewer binding. Tokens cannot cross viewers or
 selections. Unknown, duplicate or invalid query parameters fail rather than changing the selection.
 
-Each selected Realm page performs two native Realm readability observations, one before metadata and one before
-release. All rows share that Realm; no ownership or membership join replaces Access. One indexed seek consumes
-at most 20 raw rows plus one unconsumed lookahead and hydrates at most 20 definitions. Progress uses the last
-raw key, and no total or completeness claim accompanies an empty page. Each page is a fresh observation, not a
-snapshot of the catalogue across requests. The cursor resumes after the consumed raw key even if earlier rows
-are no longer present. Point reads perform one exact question-home metadata seek, one native home binding and
-one current authority observation after releasing the metadata snapshot. Page reads bind the selected Realm
-home. No operation holds a metadata checkout while preparing another native authority observation.
+Each selected Realm page checks current native readability, reads its lifecycle generation and bounded question
+snapshot, checks caller readability again with no question-home checkout held, and then rereads the native
+generation before release. Only matching source observations qualify the page. Global pages also recheck caller
+readability after their question snapshot. All rows share the explicitly selected Realm; no ownership or membership
+join replaces Access. One indexed seek consumes at most 20 raw rows plus one unconsumed lookahead and hydrates at
+most 20 definitions. Progress uses the last raw key, and no total or completeness claim accompanies an empty page.
+Each page is a fresh observation, not a snapshot of the catalogue across requests. The cursor resumes after the
+consumed raw key even if earlier rows are no longer present. Point reads perform one exact question-home metadata
+seek, one native home binding and one current authority observation after releasing the metadata snapshot. Page
+reads bind the selected Realm home. No operation holds a metadata checkout while preparing another native
+authority observation.
 
 Unknown or unreadable questions/Realm selections return `404`; missing manage returns `403`. Invalid definitions
 return `400`; changed idempotent inputs return `422`. Native authority, moved-home, admission or database failure
@@ -485,12 +488,20 @@ messaging.
 
 #### Selectable directory Cost
 
-- **Touches:** One Realm lifecycle-generation point read and one `(realm_id, id)` keyset seek joined to at most one
-  lifecycle head per raw question; current Realm readability is checked before and after the snapshot.
-- **Bound:** At most 21 raw rows, 20 returned active questions and two Realm generation reads. Retired rows consume
-  key progress but never fill the returned page; no count or history scan is added.
-- **Growth check:** `test/rating/growth-question-directory.test.ts` owns physical directory growth; the lifecycle
-  outcome test checks omission, raw-key continuation invalidation and restored selection.
+- **Touches:** One `(realm_id, id)` keyset query inside one question-home read transaction, joined to at most one
+  current caption head and one lifecycle head per raw question. A Realm selection reads its generation in that same
+  transaction and again after the final native Access check. Every selection performs current caller qualification
+  before and after the bounded question snapshot; Access preparation/evaluation and its foreign pools stay outside
+  the question-home transaction.
+- **Bound:** At most 21 raw question rows and 21 current caption/lifecycle head joins, 20 returned active definitions,
+  two Realm generation point reads and two caller qualifications. Retired rows consume raw-key progress but never
+  fill a page; empty pages still receive both caller qualifications. Global selection uses generation `0` and the
+  same two caller qualifications. Caption history, vote history and catalogue counts are not read.
+- **Growth check:** `test/rating/growth-question-directory.test.ts` measures the Global keyset path at its recorded
+  64/512/4096 scales; `test/rating/question-directory-currentness.test.ts` exercises current Access revocation,
+  retirement during final preparation, corrected captions and empty-page Global denial. Independent selected
+  identity/source/authority growth, 256/1024/4096 physical plans, serialized-byte and registered-runner accounting
+  remain part of the controller's original-journey acceptance.
 
 #### Own vote read and withdrawal Cost
 

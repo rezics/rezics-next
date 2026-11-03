@@ -187,6 +187,10 @@ export async function readSelectedQuestionDirectory(
       throw new ProblemError('invalid_cursor');
     return { ...(await readRatingQuestionDirectory(bounded, input)), lifecycleGeneration };
   });
+  // Requalify the caller after reading question metadata, including on Global pages.
+  // For Realm pages, observe the source again after that foreign authorization so a
+  // lifecycle change during Access preparation cannot release a stale definition.
+  await authorize();
   if (input.realmId !== undefined) {
     const latest = await withReadTransaction(deps.pool, async (client) => {
       const bounded = deadlineClient(client, deadline);
@@ -194,7 +198,6 @@ export async function readSelectedQuestionDirectory(
       return (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0';
     });
     if (latest !== page.lifecycleGeneration) throw new ProblemError('invalid_cursor');
-    await authorize();
   }
   return page;
 }
