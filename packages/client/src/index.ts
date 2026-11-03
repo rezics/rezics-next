@@ -1,4 +1,4 @@
-import { treaty, type Treaty } from '@elysia/eden';
+import { treaty } from '@elysia/eden';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
@@ -124,19 +124,10 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
   post(options: PersonalWriteOptions): PersonalEntryCall<LibraryExportStatus>;
 };
 
-type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
-type SubjectPath = ReturnType<SubjectsClient>;
-type SourceClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
-
-export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries' | 'libraryExports'> & {
+export type KernelClient = Omit<GeneratedKernelClient, 'libraryEntries' | 'libraryExports'> & {
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
-  subjects: KernelSubjectsClient;
 };
-export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
-  ((...args: Parameters<SubjectsClient>) => SubjectPath & {
-    'source-classifications': SourceClassificationsClient;
-  });
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
 /** Home and Following share the installed feedItems response declaration. */

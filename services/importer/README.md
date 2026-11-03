@@ -449,10 +449,9 @@ and the native reason. Resolution seals `expectedObservation` onto a successor i
 dates. Uncertain deliveries resume through the ordinary import command with the original body and key.
 
 Decision: classification heads live in `run_classification_heads` (`source,subject_id,association_key`);
-operations reuse `run_aggregate_operations` with `intended.family='classification'`. Native calls use the
-mounted generated client (`subjects({id})['source-classifications'].$read|$put|$clear`); official kernel
-declaration emit for these routes stays on the compiler database. Admitted facts are projected at
-staging without a native subject. An unchanged dump record still evaluates admitted classification when
+operations reuse `run_aggregate_operations` with `intended.family='classification'`. Native calls and DTOs come
+from the generated Kernel client: `subjects({id})['source-classifications'].$read|$put|$clear`. Admitted facts are
+projected at staging without a native subject. An unchanged dump record still evaluates admitted classification when
 `classificationAdmission` is configured. Ordinary import resumes sealed classification intents from the
 journal, including when admission is not reconfigured; the sealed intended carries the Semantic association.
 Only a mounted Content read returning `not_observed` admits an

@@ -37,8 +37,12 @@ test('importer classification digests are the mounted classificationObservation 
   expect(importedObservation(association, payload).digest).toBe(classificationObservation(association, payload).digest);
 });
 
-test('generated KernelClient mounts source-classifications read, put and clear', () => {
+test('generated KernelClient mounts source-classifications routes and DTOs', () => {
   type Client = ReturnType<KernelClient['subjects']>['source-classifications'];
+  type Put = Parameters<Client['$put']['post']>[0];
+  type Read = NonNullable<Awaited<ReturnType<Client['$read']['post']>>['data']>;
   expectTypeOf<keyof Client>().toEqualTypeOf<'$read' | '$put' | '$clear'>();
-  expectTypeOf<Parameters<Client['$put']['post']>[0]['expectedObservation']>().toEqualTypeOf<string | null>();
+  expectTypeOf<Put['expectedObservation']>().toEqualTypeOf<string | null>();
+  expectTypeOf<Put['association']['qualifiersDigest']>().toEqualTypeOf<string>();
+  expectTypeOf<Read['items'][number]['state']>().toEqualTypeOf<'available' | 'unavailable'>();
 });
