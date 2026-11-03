@@ -109,7 +109,10 @@ For a populated page (`GET /v1/reports/me`, 200):
   "entries": [
     {
       "id": "11111111-1111-8111-8111-123411111111",
-      "target": { "kind": "thread", "id": "22222222-2222-7222-8222-234522222222" },
+      "target": {
+        "kind": "thread",
+        "id": "22222222-2222-7222-8222-234522222222"
+      },
       "revisionId": null,
       "reason": "spam",
       "evidence": "My submission",
@@ -123,9 +126,18 @@ For a populated page (`GET /v1/reports/me`, 200):
       },
       "viewer": { "ownsReport": true },
       "actions": {
-        "open": { "method": "GET", "href": "/v1/reports/11111111-1111-8111-8111-123411111111" },
-        "follow": { "method": "GET", "href": "/v1/reports/11111111-1111-8111-8111-123411111111" },
-        "target": { "method": "GET", "href": "/v1/threads/22222222-2222-7222-8222-234522222222" }
+        "open": {
+          "method": "GET",
+          "href": "/v1/reports/11111111-1111-8111-8111-123411111111"
+        },
+        "follow": {
+          "method": "GET",
+          "href": "/v1/reports/11111111-1111-8111-8111-123411111111"
+        },
+        "target": {
+          "method": "GET",
+          "href": "/v1/threads/22222222-2222-7222-8222-234522222222"
+        }
       }
     }
   ],
@@ -801,15 +813,34 @@ Responses are private/no-store and the history is not a public feed or search so
 
 ### Cost: exact decision read
 
-- Touches: `readModerationDecision` reads one decision/optional appeal and one current target placement, then prepares
-  current target Access for a moderator and checks it in a fresh anchored snapshot. The author shortcut remains
-  thread/post-only. Statement expiry is one scalar condition inside the exact decision SQL.
-- Bound: at most two snapshots, each BEGIN + partition PK + COMMIT; two additional source statements read at most
-  two decision/appeal rows and two target/parent rows. Thus eight Content statements, four controls and six physical
-  relation rows, plus one Access preparation and final formula. SQL equality-join/UNION intermediates remain singleton;
-  no decider account lookup, old decision search or expiry range is added. Source absence needs only the first snapshot.
-- Growth check: the journey reads the original exact board decision as other decision history grows. Focused outcomes
-  separately cover author/stranger disclosure, removed authority, erased decider and reason expiry.
+- Touches: `readModerationDecision` selects one exact retained decision, its optional appeal and native target
+  placement through `decision-page-source.sql`. It releases that source checkout before moderator Access preparation,
+  then observes the same exact source and partition epoch and evaluates current authority in a second snapshot.
+  Authors retain their independent thread/post access. No target text, identity presentation or media is fetched.
+  The source witness stays private; the response remains the existing decision DTO. The author-only Inbox wrapper
+  adds two source observations and checks every retained response field against its final observation.
+- Bound: the exact reader uses at most two snapshots, each BEGIN + partition PK + exact source + COMMIT: eight Content
+  statements including four transaction controls. Missing source or anonymous/invalid selection stops earlier;
+  failed snapshots additionally attempt ROLLBACK and discard a connection if rollback fails. The source query binds
+  both `(route, decision_id)` columns, the appeal's unique `(route, decision_id)` prefix, and each target's full
+  `(route, id)` key; a post includes its exact containing thread. There are at most ten live relation keys across
+  the two observations, including partition keys. This is a key bound, not proof of physical scans through retained
+  versions; strict plans and independent retained-history growth remain required. The author-only wrapper has at
+  most four snapshots, sixteen Content statements, eight controls and twenty live relation keys. Moderator Access
+  adds one preparation and one final formula, including its nested identity, assignment, inverse-membership,
+  candidate and organization/Realm work described below. It is prepared outside checkout and has no cached positive
+  result. Author reads add none of that moderator work. Raw decision/appeal statements are capped by SQL at
+  1,024/2,000/2,000 Unicode characters: at most 20,096 UTF-8 bytes total. The fixed UUID, enum, timestamp and integer
+  witness fields fit within a further 4,096 bytes. JSON escaping is bounded by six times source UTF-8 bytes, so each
+  private witness is at most `6 × (20,096 + 4,096)` bytes; PostgreSQL constructs one JSON value and its text per
+  observation, the driver decodes it once, and JavaScript compares the two strings without JSON recopying. Only the
+  explicit DTO fields enter HTTP serialization; neither the witness nor internal author/decider/resolver IDs do.
+  Transport/authentication/session and response validation/serialization remain caller work, not zero-cost terms.
+- Growth check: focused native outcomes change an appeal and current moderator authority during initial selection,
+  reopen pending/resolved outcomes through the same exact GET, and withhold a failed final source observation.
+  They also assert the reader does not advance its source partition. Connected 256/1024/4096 independent population
+  and selected-history measurements, strict physical plans and all-pool nested Access accounting remain deferred;
+  the key and byte derivations above are not a claim of measured native evidence.
 
 ### Cost: scoped history page
 
@@ -817,8 +848,8 @@ Responses are private/no-store and the history is not a public feed or search so
   range, and hydrates each admitted raw key through current target Access, `moderation-history-target.sql` and the exact reader.
 - Bound: let L be the requested limit (1–100), B=L+1 (at most 101 raw keys), and H≤L the selected raw candidates.
   There are at most `3+3H` anchored snapshots, `12+12H` Content statements including `6+6H` controls, and
-  `5+B+9H` physical relation rows: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
-  and at most `4H` decision/appeal/target/parent rows. Board existence adds two PK statements/rows across initial/final checks;
+  `5+B+13H` live relation keys: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
+  and at most `8H` decision/appeal/target/parent keys across exact-reader selection and final observation. Board existence adds two PK statements/rows across initial/final checks;
   each selected target uses one placement statement with at most two PK relation rows for posts. Plan intermediates add only bounded scalar inputs and singleton equality joins;
   physical plan/tuple evidence, including withholding, is retained by the native growth harness.
   Access adds `1+2H` preparations and `2+2H` final formulas. Preparation calls the actual `permission.ts` callees:
@@ -852,6 +883,8 @@ inbox supplies the decision link. Its author can read the decision even though t
 the statement and appeal deadline, but not the decider identity. An unrelated account receives 404. A takedown
 marks the target's open reports `actioned`; a moderator can instead mark an open report `dismissed`. A report
 receives at most one outcome and one outcome notice. A later takedown does not replace an already dismissed outcome.
+
+Decision: a source change during an exact read retires that read; reopen the same decision ID to observe the current appeal or placement.
 
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
@@ -1673,7 +1706,11 @@ Every read that returns a subject for display (subject read, search hits, collec
     { "format": "webp", "width": 320 }
   ],
   "focalPoint": { "x": 0.5, "y": 0.5 },
-  "credit": { "rightsHolder": "…", "via": { "name": "…", "url": "https://…" }, "license": "…" }
+  "credit": {
+    "rightsHolder": "…",
+    "via": { "name": "…", "url": "https://…" },
+    "license": "…"
+  }
 }
 ```
 
