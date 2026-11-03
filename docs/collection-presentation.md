@@ -202,6 +202,7 @@ sources cannot report exact counts as zero. Existing dynamic DTO count omissions
 The current scope and dynamic owner docs defer user-saved runtime. This selected editor requirement introduces
 work before that execution is delivered; it does not amend scope gates, invent publication execution or relax
 Collection-source contracts. Broader scope activation remains a coordinating product decision.
+Decision: Web actual `/collections/$id/rule` stories compose the delivered GET rule schema and recorded release choices; they do not invent a successful saved-rule write or member-execution preview.
 
 ## Current source inventory
 

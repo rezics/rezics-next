@@ -48,12 +48,15 @@ test('canonical rule stories distinguish unavailable draft, actual create, priva
   expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
     'Draft',
     'ActualCreate',
+    'ActualReady',
     'PrivateUnavailable',
     'Denied',
   ]);
-  expect(story).toContain("admitted: ['collection.create', 'collection_rule.get', 'collection_rule.update']");
+  expect(story).toContain(
+    "admitted: ['collections', 'collection.create', 'collection_rule.get', 'collection_rule.update']",
+  );
   expect(story).toContain('choices: unavailableRuleChoices()');
-  expect(story).toContain('play: pageReady');
+  expect(story).toContain('pageReady');
   expect(story).not.toMatch(/viewport|maxWidth/);
 });
 
