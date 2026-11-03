@@ -1,4 +1,4 @@
-import { Compass, FolderPlus, Import } from 'lucide-react';
+import { Compass, Download, FolderPlus, Import } from 'lucide-react';
 import type { NavigationContribution } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 
@@ -35,6 +35,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     operation: 'library_entry.put',
     label: ({ locale }) => m.library_bangumi_nav({}, { locale }),
     icon: Import,
+  },
+  {
+    id: 'library.export',
+    kind: 'navigation',
+    group: 'personal',
+    order: 18,
+    href: '/library/export',
+    match: 'exact',
+    signedIn: true,
+    operation: 'library_entry.list',
+    label: ({ locale }) => m.library_export_nav({}, { locale }),
+    icon: Download,
   },
   {
     id: 'library.create-collection',

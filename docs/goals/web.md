@@ -133,6 +133,17 @@ where its scope or interface wording changes. Page stories cover only the brief'
 recordings when available; illustrative responses stay labelled as such. All launch locales and the current
 phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
+### Personal Library export
+
+Web owns the signed-in `/library/export` visit that consumes Commerce's private `libraryExports` capture. It is
+distinct from public Collection ItemList export and from personal-list import writers. The page reviews supported
+native coverage, creates only on explicit intent, traverses pages sequentially, assembles a local versioned JSON
+file after the final manifest, and offers download, save retry, replay of the original first cursor, cancellation and
+deliberate restart. Native storage, fences, expiry, limits and admission stay with Commerce. Missing typed methods
+render unavailable. Decision: bind the installed Eden `libraryExports` surface when present; do not add a second
+export engine or copy missing fields from other private reads. Details and Cost live in
+[personal Library export](../library-export.md).
+
 ## Ownership
 
 Owns `apps/web/**`, `apps/auth/**`, `packages/ui/**` and `packages/document/**`.

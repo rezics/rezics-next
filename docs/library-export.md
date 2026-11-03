@@ -29,6 +29,43 @@ Web fetches sequentially, keeps the original identity and cursors, and assembles
 Download uses those exact collected bytes; a local save failure can retry them. If local bytes were lost, replay
 `first` under this capture; a changed source returns `stale`, never a replacement under the completed identity.
 
+## Web visit
+
+Web owns `/library/export` as the signed-in Library portability visit. Commerce owns capture, paging, cancellation,
+fences, expiry and artifact semantics. The page binds `KernelClient.libraryExports` when post, status GET, pages GET
+and DELETE are present. The generated client snapshot may lag the kernel source; missing methods render unavailable
+rather than a local engine or successful fixture. Decision: use the create response's original `first` cursor on the
+happy path and call status GET only to replay lost bytes or reread a still-valid capture.
+
+Before capture, the page explains supported-native-facts coverage and `fullExport:false` in product language. Entries,
+labels, sessions, copies and permitted Collection metadata stay independent facts; stored rules are references;
+a copy is not a purchase; source, audit and consumption times stay distinct; source privacy does not publish.
+The visit never promises reimport, a full account archive or financial evidence, and never copies missing provider
+evidence as zero. Create starts only on explicit intent. Ambiguous retries keep the original sender, credentials,
+request key and operands. Progress reports collected records and returned pages without inventing a total. Empty
+intermediate pages continue. Local assembly stores each page as its own chunk and writes `{manifest,records}` once
+after the final manifest. Partial, stale, expired, cancelled or limit outcomes expose no downloadable file.
+Cancellation during traversal, viewer or session replacement, unmount and terminal failure clear private bytes.
+Return uses locale-aware `/library` with no shelf or filter operands.
+
+After an unassigned rich-entry native extension lands, bind the mounted version and omission meanings before
+presenting journal or annotation facts. Version 1 coverage stays unchanged until that delivery.
+
+## Cost
+
+- Operation: personal Library export create, sequential page reads, status reread, cancel and local artifact
+  finalization.
+- Touched neighbourhood: installed `libraryExports` methods, the mounted visit, bounded page chunks and one completed
+  local file. No subject embellishment, second export engine or unbounded prefix copy.
+- Formula: `K + C + R` native calls for K returned pages (including empty continuing pages), fixed create/status/cancel
+  component C and explicit retries R. K is the actual page count, not `ceil(N / 16)`, because parent transitions may
+  emit empty pages. Projection/serialization is `O(N + B)`; retained bytes are `O(B + manifest/framing + one page)`.
+- Installed caps: 16 fact rows and one parent key per page, 64 KiB per projected row, 120,000 encoded record bytes per
+  page, stream stop at 100,000 records or 32 MiB, fifteen-minute fixed expiry, 4096-character cursors
+  (`docs/library-export.md` and `library-export-routes.ts`).
+- Test reference: `apps/web/tests/private-library-export.test.tsx` growth cases at 16/128/1,024 records with empty
+  continuation pages.
+
 ## Stored field meanings
 
 Record keys use native snake_case. UUIDs retain their entire routable identity, never shortened IDs.
