@@ -84,9 +84,12 @@ export async function preparePresentationSelection(
   actor: Actor,
   selection: PresentationSelection,
   deadline: number,
+  reviewedReleaseDigest?: string,
 ): Promise<ProblemError | null> {
   if (selection.presentationKind != null) {
     const active = await activeRelease(dependencies.pool);
+    if (reviewedReleaseDigest !== undefined && active?.digest !== reviewedReleaseDigest)
+      return new ProblemError('conflict');
     if (!active || !Object.hasOwn(active.release.types, selection.presentationKind))
       return new ProblemError('invalid_request');
   }

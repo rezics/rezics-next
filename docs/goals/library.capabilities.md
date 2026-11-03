@@ -557,9 +557,14 @@ Focused native HTTP cases cover two owners, independent facts, paging, stale edi
 barriers. Full integration acceptance remains deferred. Installed Bangumi and unexpired MAL row evidence preserve stored provider identifiers;
 raw XML and review/apply capabilities are excluded; no Web export page or re-import compatibility is claimed.
 
-[Curated Collection recovery](../library-archive-collection-recovery.md) consumes completed v1 native exports through
+[Curated Collection recovery](../library-archive-collection-recovery.md) consumes completed V1/V2 native exports through
 owner-only upload, indexed preview, explicit canonical Subject review, bounded native apply and per-occurrence
 outcomes. The typed client exposes upload, status, Collection/occurrence pages, review, apply, outcomes and cancel.
+Explicit reviewed presentation now defaults to mixed or admits an actual current Type, preserving raw archived
+meaning and distinguishing alternatives. Immutable review digests bind the choice/current release and original native
+create operands/key; stale new creation is refused, exact receipts replay and later stored-choice fallback persists.
+The actual route schema/client producer exposes preview/review/confirmation/result additions with
+`fullRestoration:false`; native64/512/4096 and browser/full-kernel acceptance remains unexecuted by this change.
 Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
 and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. Dynamic and built-in
 Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
