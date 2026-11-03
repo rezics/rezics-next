@@ -51,6 +51,13 @@ const typed = [
   'POST /v1/libraryImports/anilist/:importId/$reviewLabels',
   'POST /v1/libraryImports/anilist/:importId/$applyLabels',
   'POST /v1/libraryImports/anilist/:importId/$cancel',
+  'POST /v1/libraryImports/vndb/$preview',
+  'GET /v1/libraryImports/vndb/:uploadId',
+  'GET /v1/libraryImports/vndb/:uploadId/source',
+  'POST /v1/libraryImports/vndb/:uploadId/$review',
+  'POST /v1/libraryImports/vndb/:uploadId/$apply',
+  'POST /v1/libraryImports/vndb/:uploadId/$cancel',
+  'DELETE /v1/libraryImports/vndb/:uploadId',
   'GET /health',
   'GET /v1/commerceMoney',
   'GET /v1/commerceSales',
@@ -438,8 +445,17 @@ type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
 test("the kernel app's type, which is the Eden contract, carries exactly the routes it serves and their responses", () => {
-  const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }).routes.map(
-    ({ method, path }) => `${method} ${path}`,
+  const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
+  const served = app.routes.map(({ method, path }) => `${method} ${path}`);
+  const paths = openApiDocument(app).paths;
+  const journal = paths['/v1/progressSessions/{sessionId}/journal'];
+  expect(journal?.get?.operationId).toBe('progress_session_journal.read');
+  expect(journal?.patch?.operationId).toBe('progress_session_journal.update');
+  expect(paths['/v1/libraryImports/anilist/{importId}:reviewLabels']?.post?.operationId).toBe(
+    'library_import_anilist.review_labels',
+  );
+  expect(paths['/v1/libraryImports/anilist/{importId}:applyLabels']?.post?.operationId).toBe(
+    'library_import_anilist.apply_labels',
   );
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());

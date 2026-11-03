@@ -170,7 +170,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.malEvidence?.[0]?.evidence.identifier.value).toBe('17');
   expect(sections.malEvidence?.[0]?.evidence.dates.started.precision).toBe('year');
   const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
-  expect(decoded.records).toEqual(records);
+  expect<unknown>(decoded.records).toEqual(records);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
     rows: 18,
     capture: 'present',

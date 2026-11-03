@@ -70,6 +70,11 @@ shape, mapping, retained losses, bounds and Web responses. Independent custom-li
 `test/library/list-import-anilist-labels.test.ts`; native64/512/4096 complete-caller growth remains deferred.
 The label methods are producer composition; Web325 remains the complete AniList interface; broader frozen acceptance remains an integration check.
 
+Personal VNDB XML upload now has mounted preview/page/source/review/apply/cancel/delete methods documented in
+[its owner contract](../library-import-vndb.md), with focused native HTTP scenarios in
+`services/kernel/test/library/list-import-vndb-http.test.ts`. This adds explicit released entry-state application
+and private loss retention; it does not establish broader frozen acceptance or support for live provider accounts.
+
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.
 

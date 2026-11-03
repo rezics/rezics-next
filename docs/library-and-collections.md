@@ -51,6 +51,11 @@ Selected private label consolidation is an explicit Labels action over supplied 
 native review, confirmation, one-item apply/retry, cancel and result boundary is owned by
 [the consolidation contract](library-label-consolidation.md); both labels reopen through the native assignment readers.
 
+The mounted [personal VNDB upload](library-import-vndb.md) supports private preview, identifier matching, explicit
+review and confirmed entry-state apply through existing native commands. Scores, dates, progress, notes and unmapped
+fields remain visible private evidence; broader personal-list migration remains second scope. Upload/review records
+are bounded Library-owned data included in terminal erasure; cancellation never reverses acknowledged native facts.
+
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.
