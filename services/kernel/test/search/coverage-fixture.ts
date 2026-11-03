@@ -8,6 +8,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
@@ -124,7 +125,13 @@ export async function createCoverageFixture(resources?: CoverageFixtureResources
     const access = await createRealAccess(runtimeAdmin, { editor: accountId }, actions);
     for (const action of actions) await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
     await bootstrapRelease(runtimePool, bundledRelease);
-    const kernel = createKernel({ pool: runtimePool, routeKey, access: access.access, writeRate: access.writeRate });
+    const kernel = createKernel({
+      pool: runtimePool,
+      routeKey,
+      access: access.access,
+      writeRate: access.writeRate,
+      receiptKeys: testReceiptKeys(),
+    });
     const filter = parseFilter({ type: { in: ['schema:Book'] } });
     const compiled = compileFilter(admitFilter(filter, (await activeRelease(runtimePool))!.release), {
       prefix: 'f',

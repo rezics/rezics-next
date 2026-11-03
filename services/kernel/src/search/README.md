@@ -15,6 +15,10 @@ substitute for the Source binding, capture and dependency keys.
 Decision: the exported native receiving statement catalogue is SearchNativeReceivingSql-indexed `{ sql: string }`;
 consumers use that SQL text, so reylo generator metadata stays off the declaration surface.
 
+Decision: discovery live inventory SQL uses overflow LIMIT 4 (three retained incarnations plus one corrupt-row
+probe) as a module-init literal, because circular import evaluation can observe generations.ts before
+`MAX_SUBJECT_GENERATIONS` initializes.
+
 `subjectConsumer` and `discoveryConsumer` construct native checkpoint names from the exact admitted prefix, a
 positive safe generation and an explicit family (`subjects` or `discovery`). Ordinary names that already fit the
 63-character native consumer domain stay byte-for-byte. Longer admitted identities use a deterministic hashed

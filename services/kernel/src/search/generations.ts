@@ -410,7 +410,8 @@ export function assertDiscoveryProducerCoverage(
     throw new DiscoveryProducerCoverageError({ missingKinds, unsupportedKinds, duplicateKinds });
 }
 
-const DISCOVERY_LIVE_LIMIT = MAX_SUBJECT_GENERATIONS + 1;
+// Circular import evaluation can observe this module before indices.ts initializes MAX_SUBJECT_GENERATIONS.
+const DISCOVERY_LIVE_LIMIT = 4;
 const LIVE_QUOTA_STATES = new Set(['active', 'retiring', 'quarantined']);
 
 /** Descending primary-key seek for the historical high water, independent of retired-row count. */
@@ -421,6 +422,8 @@ export const DISCOVERY_LIVE_GENERATIONS_SQL = `SELECT prefix,generation::float8 
     incarnation::text,state,kinds FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state <> 'retired' ORDER BY partition_no, prefix, generation LIMIT ${DISCOVERY_LIVE_LIMIT}`;
 
 function admitLiveDiscovery(rows: DiscoveryGeneration[]): DiscoveryGeneration[] {
+  if (DISCOVERY_LIVE_LIMIT !== MAX_SUBJECT_GENERATIONS + 1)
+    throw new Error('Discovery live overflow LIMIT must stay MAX_SUBJECT_GENERATIONS + 1');
   if (rows.length > MAX_SUBJECT_GENERATIONS)
     throw new SearchUnavailableError('Discovery live generation inventory is corrupt');
   return rows;
