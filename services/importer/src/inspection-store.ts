@@ -732,8 +732,8 @@ export class InspectionStore {
   ): NonNullable<InspectionDocument['page']> {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
     if (kind === 'pending') {
-      const afterRecord = cursor?.record ?? '';
-      const afterEnvelope = cursor?.envelope ?? -1;
+      const afterRecord = cursor ? (cursor.record as string) : '';
+      const afterEnvelope = cursor ? (cursor.envelope as number) : -1;
       // One run_envelope_pending seek returns at most P+1 envelope summaries. Each row's
       // JSON key list is bounded to 100 commands and joins run_commands by its full primary key.
       const fetched = this.database
@@ -800,7 +800,7 @@ export class InspectionStore {
       };
     }
 
-    const afterRecord = cursor?.record ?? '';
+    const afterRecord = cursor ? (cursor.record as string) : '';
     // One run_cover_pending seek returns at most P+1 record summaries. Each row has at most
     // 300 stored command keys, joined through run_commands' source/run/key primary key.
     const fetched = this.database
