@@ -1,3 +1,4 @@
+import { sourceClassificationRoutes } from './source-classification-routes.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -160,7 +161,7 @@ function voteView(vote: Vote) {
 export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   const config = () => ({ ...dependencies, access: dependencies.access() });
   const votes = () => createVoteCommands(config());
-  return app
+  return sourceClassificationRoutes(app, dependencies)
     .model('PublicFigure', PublicFigureSchema)
     .get(
       '/v1/me/rating-votes',

@@ -1196,7 +1196,7 @@ server compositions. Its methods are `put(PutSourceClassification)`, `clear(Clea
 before any authority or source lookup and never discovers classifications or refills withheld results.
 `SourceClassificationProducer`, `SourceClassificationFigure`, `SourceClassificationRead`, the mutation/input
 interfaces, closed ingestion schemas, digest helpers and the maximum batch constant are actual exports.
-These are internal producer methods; this slice introduces no HTTP routes, public fence endpoint or governed resource.
+These producer methods also back the mounted source classification transport below. There is no public fence endpoint or new governed resource.
 
 The finite VNDB profile is defined in [source-classification-contract.ts](source-classification-contract.ts).
 [VNDB's official Kana fields](https://api.vndb.org/kana#vn-fields) define tag confidence as the provider's
@@ -1299,3 +1299,72 @@ bounded repair operation. An association never migrates by Subject merge, label 
   the command/authority work. Clear payload contains only exact tuple/member, as-of and the literal clear marker.
 - Growth check: focused native tests clear after Subject denial, Context denial and source fencing, and reject
   older resurrection. Three-scale all-pool physical work remains deferred to integration acceptance.
+
+## Mounted source classification transport
+
+The production Kernel installs `sourceClassificationRoutes` through `ratingRoutes`, using its real Pool,
+Access and route key. `createSourceClassificationProducer` remains the only writer. No provider payload is
+admitted by installing these routes. Imports must supply an admitted aggregate, explicit licence and attribution,
+exact provider record/member identity, source version or payload digest, observation time and authentic current
+Semantic association. Ordinary Kana association payloads do not imply counts or denominators.
+
+Decision: use the existing Subject `:id` resource path with explicit `:read`, `:put` and `:clear` methods for
+supplied-association reads and immutable CAS commands.
+
+`POST /v1/subjects/:id/source-classifications:read` takes `{ associations: [...] }` (zero through 32).
+`SourceClassificationBatchInput` and `SourceClassificationBatch` are exported from `rating/register.ts`.
+Items preserve supplied order. Available items include provider, exact association, observation digest/version,
+source record/member, asOf, confidence and lie availability, optional explicitly supplied counts and provenance.
+Empty input returns `{ items: [], actions: [] }` without calling the producer or inspecting authority.
+Unknown or stale associations return unavailable items; no retained history or source-fence inspection is exposed.
+Anonymous readers receive no importer actions. Current Global writers receive `put` and `clear` actions.
+The response is private to the request (`Cache-Control: no-store`).
+
+`POST /v1/subjects/:id/source-classifications:put` takes `SourceClassificationPutInput`: association,
+value and required expectedObservation (digest or explicit null). It requires a structured Idempotency-Key.
+It returns observationDigest, published state and current figure. `:clear` takes `SourceClassificationClearInput`
+with the same CAS identity and a clear value, and returns observationDigest and cleared state. Both carry the
+registered command session component. A conflict requires inspecting current state and making an explicit new
+intent with that digest. An uncertain response retries the identical body and key; it does not create a new intent.
+
+Example states for Web: a confidence observation has `confidence: { state: "available", value: 2.5,
+unit: "vndb-tag-rating", minExclusive: 0, max: 3 }`; a lie-only observation has unavailable confidence with
+reason `not_supplied`. A supplied zero lieCount remains zero, and an absent confidenceCount is omitted.
+A cleared slot is unavailable with reason `not_observed`; a stale Semantic identity is `not_found`; a changed
+selection is `changed`. Transport failures use the existing Problem response and preserve the original intent
+for retry. These source observations remain separate from community classification ballots.
+
+### Read transport Cost
+
+- Touches: strict input validation and serialization, then two producer batch reads and current writer action
+  checks, plus bearer reauthentication between selection and final checks. Each producer read includes two
+  current Semantic/disclosure observations, two exact observation-head reads and two current source-fence reads.
+  Each Semantic observation resolves selected Subject/target anchors, Context access/defaults, releases,
+  current relation facts and candidate source references. All use their owning native adapters.
+- Bound: 32 supplied identities, one Subject, 65,536 serialized input bytes; empty input performs zero producer
+  or authority calls. Each selected relation/head uses the existing route and exact identity key. Duplicate
+  supplied identities preserve output order. No classification inventory, history scan or cross-partition join.
+  Response size is bounded by the admitted observation field limits and 32 supplied association identities.
+- Growth check: focused mounted tests pin empty input, 32/33 validation and public current output. Independent
+  native growth at 256/1024/4096, all-pool examined-work charging and physical-prefix plans remain continuation
+  work; these structural bounds are not measured ceilings.
+
+### Put transport Cost
+
+- Touches: strict association/payload/byte validation and structured key parsing, one existing producer put,
+  registered receipt/event/session handling and response serialization. The producer owns current writer
+  authority before receipt lookup, exact slot CAS and current Semantic/source-fence checks/readback.
+- Bound: one supplied association and one immutable observation intent; no additional writer or storage.
+  Existing command retry limits multiply the underlying work. Invalid payloads reach no producer call.
+- Growth check: focused mounted tests cover publication, exact retry, denial before replay, conflict and deliberate
+  replacement. Native physical-prefix and race measurement remains continuation work.
+
+### Clear transport Cost
+
+- Touches: strict association/clear/byte validation and structured key parsing, one existing producer clear,
+  registered receipt/event/session handling and serialization. The producer rechecks current writer authority
+  before receipt lookup and locks only its exact Subject observation slot.
+- Bound: one supplied association and explicit expected head; public Semantic disclosure is not required to
+  clear a retained slot after concealment. No retained payload is returned by this route.
+- Growth check: focused mounted tests clear an observation and verify anonymous reads cannot resurrect it.
+  Native growth and current-authority race injection remain continuation work.
