@@ -107,11 +107,7 @@ export function MalRowReview({
       {row.state ? <p>{m.library_mal_proposed({ state: row.state })}</p> : <p>{m.library_mal_unsupported_status()}</p>}
       {row.review?.conflict ? <p>{m.library_mal_conflict_entry()}</p> : null}
       {canTarget && !draft.skip ? (
-        <MalTargetSearch
-          disabled={busy}
-          value={draft.target}
-          onChange={(target) => setDraft({ ...draft, target })}
-        />
+        <MalTargetSearch disabled={busy} value={draft.target} onChange={(target) => setDraft({ ...draft, target })} />
       ) : null}
       <MalCheck
         id={`${base}-skip`}

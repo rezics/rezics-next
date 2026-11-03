@@ -4,8 +4,7 @@ export const MAL_PAGE = 20;
 export const MAL_ROWS = 500;
 export const MAL_FIELD_CAP = 64;
 export const MAL_UPLOADS = 3;
-export const SUBJECT_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type MalValue = {
   kind: 'missing' | 'unknown' | 'invalid' | 'zero' | 'value';

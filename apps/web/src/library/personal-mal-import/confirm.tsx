@@ -30,7 +30,9 @@ export function MalConfirmPage({
               </p>
               <p className="text-sm">
                 {m.library_mal_confirm_fields({
-                  fields: review.skip ? m.library_mal_match_skipped() : fields.join(', ') || m.library_mal_result_unsupported(),
+                  fields: review.skip
+                    ? m.library_mal_match_skipped()
+                    : fields.join(', ') || m.library_mal_result_unsupported(),
                 })}
               </p>
               {review.target ? <p className="text-sm [overflow-wrap:anywhere]">{review.target}</p> : null}

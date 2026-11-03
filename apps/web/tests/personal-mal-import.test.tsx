@@ -171,7 +171,9 @@ afterEach(async () => {
 });
 
 test('zero scores, unknown dates and independent chapter/volume measures stay distinct', () => {
-  expect(malScoreLabel(value('zero', { value: 0, scale: { min: 1, max: 10, step: 1 } }))).toBe(m.library_mal_score_none());
+  expect(malScoreLabel(value('zero', { value: 0, scale: { min: 1, max: 10, step: 1 } }))).toBe(
+    m.library_mal_score_none(),
+  );
   expect(malValueLabel(value('unknown', { raw: '0000-00-00' }))).toBe(m.library_mal_unknown());
   expect(malValueLabel(value('missing'))).toBe(m.library_mal_missing());
   expect(malValueLabel(value('value', { value: '2024', precision: 'year' }))).toBe(

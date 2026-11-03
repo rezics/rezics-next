@@ -29,13 +29,17 @@ type NativeResult = {
   status: number;
 };
 
-type PreviewResource = { post: (body: { xml: string }, options: { headers: Record<string, string> }) => Promise<NativeResult> };
+type PreviewResource = {
+  post: (body: { xml: string }, options: { headers: Record<string, string> }) => Promise<NativeResult>;
+};
 type IdResource = {
   get: (options: { query?: { after?: number }; headers: Record<string, string> }) => Promise<NativeResult>;
   source: { get: (options: { headers: Record<string, string> }) => Promise<NativeResult> };
   review: { post: (body: MalReviewInput, options: { headers: Record<string, string> }) => Promise<NativeResult> };
   apply: { post: (body: MalApplyBody, options: { headers: Record<string, string> }) => Promise<NativeResult> };
-  cancel: { post: (body: Record<string, never>, options: { headers: Record<string, string> }) => Promise<NativeResult> };
+  cancel: {
+    post: (body: Record<string, never>, options: { headers: Record<string, string> }) => Promise<NativeResult>;
+  };
   delete: (body: undefined, options: { headers: Record<string, string> }) => Promise<NativeResult>;
 };
 type MalSurface = ((params: { id: string }) => IdResource) & {
@@ -112,7 +116,8 @@ function isRow(value: unknown): value is MalPreviewRow {
 
 function isPage(value: unknown): value is MalPage {
   if (!record(value) || typeof value.id !== 'string' || !SUBJECT_ID.test(value.id)) return false;
-  if (typeof value.canceled !== 'boolean' || typeof value.total !== 'number' || !Array.isArray(value.rows)) return false;
+  if (typeof value.canceled !== 'boolean' || typeof value.total !== 'number' || !Array.isArray(value.rows))
+    return false;
   if (typeof value.sourcePath !== 'string') return false;
   if (value.next !== null && typeof value.next !== 'number') return false;
   if (!record(value.limits) || typeof value.limits.page !== 'number') return false;
@@ -120,7 +125,12 @@ function isPage(value: unknown): value is MalPage {
 }
 
 function isApply(value: unknown): value is MalApplyPage {
-  if (!record(value) || typeof value.id !== 'string' || !Array.isArray(value.outcomes) || !Array.isArray(value.remaining))
+  if (
+    !record(value) ||
+    typeof value.id !== 'string' ||
+    !Array.isArray(value.outcomes) ||
+    !Array.isArray(value.remaining)
+  )
     return false;
   return typeof value.stopped === 'boolean';
 }
@@ -241,7 +251,8 @@ export function kernelMalPort(
     async delete(command) {
       const result = await call(
         command,
-        (mal, authorization) => mal({ id: command.id }).delete(undefined, { headers: headers(authorization, command.key) }),
+        (mal, authorization) =>
+          mal({ id: command.id }).delete(undefined, { headers: headers(authorization, command.key) }),
         (data) => {
           const id = idOf(data);
           return id ? ({ kind: 'done', id } as const) : undefined;

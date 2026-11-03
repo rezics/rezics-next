@@ -8,7 +8,9 @@ function Outcome({ outcome, titles }: { outcome: MalOutcome; titles: Map<number,
     <li className="rounded-md border p-3" data-mal-outcome={outcome.status} data-mal-row={outcome.row}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.row) ?? `#${outcome.row + 1}`}</p>
       <p>{malOutcomeLabel(outcome.status)}</p>
-      {outcome.applied.length ? <p className="text-sm">{m.library_mal_applied_fields({ fields: outcome.applied.join(', ') })}</p> : null}
+      {outcome.applied.length ? (
+        <p className="text-sm">{m.library_mal_applied_fields({ fields: outcome.applied.join(', ') })}</p>
+      ) : null}
       {outcome.retained.length ? (
         <details>
           <summary className="min-h-11 cursor-pointer py-2">{m.library_mal_retained_summary()}</summary>
@@ -45,7 +47,12 @@ export function MalResultPage({
           <Outcome key={outcome.row} outcome={outcome} titles={titles} />
         ))}
         {result.remaining.map((row) => (
-          <li key={`remaining-${row}`} className="rounded-md border p-3" data-mal-outcome="unattempted" data-mal-row={row}>
+          <li
+            key={`remaining-${row}`}
+            className="rounded-md border p-3"
+            data-mal-outcome="unattempted"
+            data-mal-row={row}
+          >
             <p className="font-medium [overflow-wrap:anywhere]">{titles.get(row) ?? `#${row + 1}`}</p>
             <p>{m.library_mal_result_unattempted()}</p>
           </li>

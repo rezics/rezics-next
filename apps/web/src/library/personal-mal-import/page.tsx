@@ -79,7 +79,10 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     setNotice(null);
   }
 
-  async function run<T extends { kind: string }>(command: MalCommand, send: () => Promise<T | MalFailure | MalUnknown>) {
+  async function run<T extends { kind: string }>(
+    command: MalCommand,
+    send: () => Promise<T | MalFailure | MalUnknown>,
+  ) {
     if (!live() || busy) return;
     setBusy(true);
     const response = await send();
@@ -107,7 +110,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   }
 
   async function loadPage(id: string, cursor: number) {
-    const response = await run({ kind: 'page', id, after: cursor }, () => port.page({ kind: 'page', id, after: cursor }));
+    const response = await run({ kind: 'page', id, after: cursor }, () =>
+      port.page({ kind: 'page', id, after: cursor }),
+    );
     if (!response || response.kind !== 'page' || !live()) return;
     for (const row of response.page.rows) titles.current.set(row.index, row.title);
     setPage(response.page);
@@ -218,7 +223,12 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         />
       ) : null}
       {stage === 'confirm' && page ? (
-        <MalConfirmPage rows={page.rows} busy={busy} onBack={() => setStage('review')} onConfirm={() => void confirm()} />
+        <MalConfirmPage
+          rows={page.rows}
+          busy={busy}
+          onBack={() => setStage('review')}
+          onConfirm={() => void confirm()}
+        />
       ) : null}
       {stage === 'results' && result ? (
         <MalResultPage
