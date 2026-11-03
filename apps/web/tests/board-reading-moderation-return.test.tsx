@@ -42,7 +42,12 @@ const boardId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
 
 async function render(
   page: CommunityBoardPage,
-  extras: { pinProducer?: BoardPinProducer; pinSender?: BoardPinSender; cursor?: string; sort?: 'active' | 'hot' | 'new' } = {},
+  extras: {
+    pinProducer?: BoardPinProducer;
+    pinSender?: BoardPinSender;
+    cursor?: string;
+    sort?: 'active' | 'hot' | 'new';
+  } = {},
 ) {
   const root = createRootRoute({
     component: () =>
@@ -91,9 +96,9 @@ test('zero and five pins, concealed identities and duplicate cohorts keep ordina
   const page = await fixturePage();
   const source = page.threads.threads[0]!;
   expect(nativePinnedSection([]).state).toBe('empty');
-  expect(ordinaryBoardThreads({ ...page.threads, pinnedThreads: [], threads: [source] }).threads.map((row) => row.id)).toEqual([
-    source.id,
-  ]);
+  expect(
+    ordinaryBoardThreads({ ...page.threads, pinnedThreads: [], threads: [source] }).threads.map((row) => row.id),
+  ).toEqual([source.id]);
   const pins = [1, 2, 3, 4, 5].map((index) =>
     asThread(source, `01a17a3b-09b4-77bf-a24b-1234ebeab5d${index}`, `Pin ${index}`),
   );
@@ -140,9 +145,9 @@ test('every installed sort keeps native ordinary order and a same-origin return 
     expect(href).not.toContain('Readable title');
     expect(parseBoardReadingReturn({ ...captured, title: 'secret' })).toMatchObject({ boardId, sort });
   }
-  expect(parseBoardReadingReturn({ version: 1, boardId, sort: 'active', locale: 'en', cursor: 'x'.repeat(40_000) })).toBe(
-    null,
-  );
+  expect(
+    parseBoardReadingReturn({ version: 1, boardId, sort: 'active', locale: 'en', cursor: 'x'.repeat(40_000) }),
+  ).toBe(null);
   expect(
     captureBoardReadingReturn({ boardId, sort: 'hot', locale: 'en', cursor: 'x'.repeat(40_000) })?.cursor,
   ).toBeUndefined();
@@ -154,7 +159,9 @@ test('invalid_cursor restarts; malformed queries stay distinct from denied reads
   expect(isMalformedBoardQuery(400, { code: 'invalid_request' })).toBe(true);
   expect(isMalformedBoardQuery(400, { code: 'invalid_cursor' })).toBe(false);
   expect(boardProblemCode({ error: { value: { code: 'invalid_cursor' } } })).toBe('invalid_cursor');
-  expect(parseBoardPinBoard(boardId, { threads: [], pinnedThreads: [], next: null, rankRefreshedAt: null })).toMatchObject({
+  expect(
+    parseBoardPinBoard(boardId, { threads: [], pinnedThreads: [], next: null, rankRefreshedAt: null }),
+  ).toMatchObject({
     state: 'ready',
     authors: null,
   });
@@ -184,7 +191,11 @@ test('pin/unpin on a continuation does not replay the stale cursor and unknown r
       commands.push(command);
       return commands.length === 1
         ? { state: 'unknown' }
-        : { state: 'applied', boardId: command.boardId, thread: { threadId: command.threadId, pinned: true, actions: ['unpin'] } };
+        : {
+            state: 'applied',
+            boardId: command.boardId,
+            thread: { threadId: command.threadId, pinned: true, actions: ['unpin'] },
+          };
     },
   };
   const caller = new BoardPinCommandCaller(
@@ -292,9 +303,7 @@ test('page projection stays O(P+L) at board populations 32, 256 and 2048', () =>
     expect(restarted.next).toBeNull();
     expect(restarted.bytes).toBeLessThan(first.bytes);
     expect(empty.bytes).toBeLessThan(restarted.bytes);
-    expect(
-      projectBoardReading({ pinnedThreads: pinned, threads: ordinary, next: first.next }).bytes,
-    ).toBe(first.bytes);
+    expect(projectBoardReading({ pinnedThreads: pinned, threads: ordinary, next: first.next }).bytes).toBe(first.bytes);
     retained.push(first.bytes);
     requests.push(1 + first.authorBatches);
     expect(first.pinnedIds.length + first.ordinaryIds.length).toBeLessThan(population);

@@ -156,9 +156,7 @@ function SlowModeSettingForm({
 
   async function save(retry = false) {
     if (!visit.current() || pending || (needsReview && !retry)) return;
-    const command = retry
-      ? exact.current
-      : { interval: selected, key: commandKey.current };
+    const command = retry ? exact.current : { interval: selected, key: commandKey.current };
     if (!command) return;
     if (!retry) exact.current = command;
     setPending(true);

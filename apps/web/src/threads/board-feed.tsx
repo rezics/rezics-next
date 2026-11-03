@@ -295,7 +295,14 @@ function BoardFeedVisit({
       ? reading.rankRefreshedAt
       : null;
   const openReturnedThread = (event: MouseEvent) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
       return;
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -339,7 +346,7 @@ function BoardFeedVisit({
       />
     );
   };
-    return (
+  return (
     <section
       ref={list}
       className="min-w-0 space-y-3 [overflow-wrap:anywhere]"

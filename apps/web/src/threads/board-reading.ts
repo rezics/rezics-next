@@ -91,7 +91,10 @@ export function parseBoardReadingReturn(value: unknown): BoardReadingReturn | nu
   if (typeof value.boardId !== 'string' || !validBoardPinId(value.boardId)) return null;
   if (value.sort !== 'active' && value.sort !== 'hot' && value.sort !== 'new') return null;
   if (typeof value.locale !== 'string' || !value.locale || value.locale.length > 64) return null;
-  if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > BOARD_READING_CURSOR_LIMIT))
+  if (
+    value.cursor !== undefined &&
+    (typeof value.cursor !== 'string' || value.cursor.length > BOARD_READING_CURSOR_LIMIT)
+  )
     return null;
   return captureBoardReadingReturn({
     boardId: value.boardId,
@@ -175,14 +178,21 @@ export function projectBoardReading(page: {
   const displayedPinnedIds: string[] = [];
   const seenDisplayed = new Set<string>();
   for (const row of page.pinnedThreads ?? []) {
-    if (row.availability !== 'available' || seenDisplayed.has(row.id) || displayedPinnedIds.length >= BOARD_PINNED_SECTION_LIMIT)
+    if (
+      row.availability !== 'available' ||
+      seenDisplayed.has(row.id) ||
+      displayedPinnedIds.length >= BOARD_PINNED_SECTION_LIMIT
+    )
       continue;
     seenDisplayed.add(row.id);
     displayedPinnedIds.push(row.id);
   }
   const cohort = new Set(pinnedIds);
   const ordinaryIds = page.threads.filter((thread) => !cohort.has(thread.id)).map((thread) => thread.id);
-  const authorIds = disclosedBoardAuthorIds(page.pinnedThreads, page.threads.filter((thread) => !cohort.has(thread.id)));
+  const authorIds = disclosedBoardAuthorIds(
+    page.pinnedThreads,
+    page.threads.filter((thread) => !cohort.has(thread.id)),
+  );
   const retained = {
     pinnedIds,
     displayedPinnedIds,

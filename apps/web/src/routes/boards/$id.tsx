@@ -103,9 +103,7 @@ function BoardPage() {
           start={<BoardStartThread board={currentPage.board} realm={currentPage.realm} returnTo={returnTo} />}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={
-            session === 'signed-in' ? (
-              <SlowModeSetting boardId={id} onApplied={() => void router.invalidate()} />
-            ) : null
+            session === 'signed-in' ? <SlowModeSetting boardId={id} onApplied={() => void router.invalidate()} /> : null
           }
         />
       )}
