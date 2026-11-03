@@ -30,6 +30,16 @@ export type {
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
 export type { WatchManagementItem, WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
+export type {
+  RealmClaimReviewApprovalAdvice,
+  RealmClaimReviewClaimant,
+  RealmClaimReviewInspection,
+  RealmClaimReviewItem,
+  RealmClaimReviewOperation,
+  RealmClaimReviewPage,
+  RealmClaimReviewPresentation,
+  RealmClaimReviewQuery,
+} from './kernel/community/claim-review-page';
 
 type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
