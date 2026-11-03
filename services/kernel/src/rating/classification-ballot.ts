@@ -502,6 +502,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
       );
     const observed = await ownSnapshot();
     const slot = observed.slot;
+    if (slot && hashBytes(slot.binding_hash) !== association.bindingHash) throw new ClassificationBallotNotFoundError();
     const currentSlot = slot && hashBytes(slot.binding_hash) === association.bindingHash ? slot : null;
     const contribution = currentSlot
       ? await withReadTransaction(

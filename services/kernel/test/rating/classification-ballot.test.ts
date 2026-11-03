@@ -293,6 +293,26 @@ test('mounted classification ballots stay private and converge through the durab
     state: 'suppressed',
     pending: 'unknown',
   });
+  const binding = await database.admin.query<{ binding_hash: Buffer }>(
+    'SELECT binding_hash FROM rating.classification_ballot WHERE route=$1 AND actor_id=$2 AND subject_id=$3 AND association_id=$4',
+    [routeOf(accounts.voter5), accounts.voter5, moderatedSubject.id, moderatedAssociationId],
+  );
+  const replaceBinding = (hash: Buffer) =>
+    database.admin.query(
+      'UPDATE rating.classification_ballot SET binding_hash=$5 WHERE route=$1 AND actor_id=$2 AND subject_id=$3 AND association_id=$4',
+      [routeOf(accounts.voter5), accounts.voter5, moderatedSubject.id, moderatedAssociationId, hash],
+    );
+  await replaceBinding(Buffer.alloc(32, 0xab));
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const response = await request(
+      'voter5',
+      method,
+      ballotPath(moderatedSubject.id, moderatedAssociationId, 'assessment'),
+      method === 'PUT' ? { assessment: 'support', falsePositive: false } : undefined,
+    );
+    expect(response.status).toBe(404);
+  }
+  await replaceBinding(binding.rows[0]!.binding_hash);
   const ordinaryApp = app;
   app = createKernel({
     pool: interleaveClassificationRead(database.pool, 'rating.classification_contribution', () =>
