@@ -98,10 +98,11 @@ export function kernelArchiveCollectionRecoveryPort(
   }
 
   const readHeaders = (authorization: string) => ({ authorization });
-  const writeHeaders = (authorization: string, key?: string) => ({
+  const writeHeaders = (authorization: string, key: string) => ({
     authorization,
-    ...(key ? { 'idempotency-key': JSON.stringify(key) } : {}),
+    'idempotency-key': JSON.stringify(key),
   });
+  const effectHeaders = (authorization: string) => ({ authorization });
   const idOf = (uploadId: string) => (isId(uploadId) ? uploadId : '');
 
   return {
@@ -154,7 +155,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return call({
         mutation: command,
         send: (api, authorization) =>
-          api({ id: command.uploadId }).apply.post(command.body, { headers: writeHeaders(authorization) }),
+          api({ id: command.uploadId }).apply.post(command.body, { headers: effectHeaders(authorization) }),
       });
     },
     outcomes(uploadId, query) {
@@ -171,7 +172,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return call({
         mutation: command,
         send: (api, authorization) =>
-          api({ id: command.uploadId }).delete(undefined, { headers: writeHeaders(authorization) }),
+          api({ id: command.uploadId }).delete(undefined, { headers: effectHeaders(authorization) }),
       });
     },
   };

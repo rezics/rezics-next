@@ -7163,5 +7163,6 @@
   "library_archive_recovery_upload_title": "완료된 보관 파일 업로드",
   "library_archive_recovery_upload_too_large": "This file is larger than the native 34 MiB upload limit.",
   "library_archive_recovery_uploading": "비공개 업로드 중…",
-  "library_archive_recovery_open_review": "선택 항목 검토"
+  "library_archive_recovery_open_review": "선택 항목 검토",
+  "library_archive_recovery_nav": "컬렉션 복구"
 }

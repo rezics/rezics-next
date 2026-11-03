@@ -7163,5 +7163,6 @@
   "library_archive_recovery_upload_title": "Téléverser une archive terminée",
   "library_archive_recovery_upload_too_large": "This file is larger than the native 34 MiB upload limit.",
   "library_archive_recovery_uploading": "Téléversement privé…",
-  "library_archive_recovery_open_review": "Vérifier la sélection"
+  "library_archive_recovery_open_review": "Vérifier la sélection",
+  "library_archive_recovery_nav": "Récupérer une collection"
 }

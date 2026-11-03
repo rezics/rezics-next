@@ -80,7 +80,7 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     href: '/library/recover-collections',
     match: 'exact',
     signedIn: true,
-    operation: 'collection:read',
+    operation: 'collection.list',
     label: ({ locale }) => m.library_archive_recovery_nav({}, { locale }),
     icon: Import,
   },

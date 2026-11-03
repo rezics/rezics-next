@@ -10,7 +10,7 @@ import {
   RECOVERY_SELECTED_OCCURRENCES,
   RECOVERY_UPLOAD_BASE64_CHARS,
 } from './contract';
-import type { RecoveryApplyBody, RecoveryReviewBody, RecoveryUploadBody } from './contract';
+import type { RecoveryApplyBody, RecoveryPageQuery, RecoveryReviewBody, RecoveryUploadBody } from './contract';
 import { kernelArchiveCollectionRecoveryPort } from './native';
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -118,7 +118,10 @@ function port() {
   );
 }
 
-const pageQuery = (cursor?: string) => ({ limit: RECOVERY_PAGE_ROWS, ...(cursor ? { cursor } : {}) });
+const pageQuery = (cursor?: string): RecoveryPageQuery => ({
+  limit: RECOVERY_PAGE_ROWS,
+  ...(cursor ? { cursor } : {}),
+});
 
 export const uploadArchiveCollectionRecovery = createServerFn({ method: 'POST' })
   .validator((input: unknown) => validateUpload(input))

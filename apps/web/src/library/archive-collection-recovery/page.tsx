@@ -34,7 +34,7 @@ function terminal(stage: string): stage is 'expired' | 'denied' | 'unavailable' 
 export function PrivateArchiveCollectionRecoveryPage({ visit }: { visit?: RecoveryVisit | null }) {
   const observed = useRecoveryVisit();
   const current = visit === undefined ? observed : visit;
-  useOperation('collection:read');
+  useOperation('collection.list');
   if (!current) {
     return (
       <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
