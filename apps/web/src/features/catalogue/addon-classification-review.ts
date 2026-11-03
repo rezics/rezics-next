@@ -22,7 +22,7 @@ import {
   reuseTargetLimit,
   type ReuseSource,
 } from './reference-reuse';
-import type { SnakInput, StatementInput } from './statement-editor';
+import type { EditorRead, SnakInput, StatementInput } from './statement-editor';
 import {
   factHolder,
   factLocked,
@@ -60,9 +60,7 @@ export type AddonClassificationGrowth = {
 
 const citationUrl = 'schema:url';
 
-export function addonClassificationCurrent(
-  read: Extract<AddonRead, { ok: true }>,
-): FactsCurrent | { ok: false; reason: 'invalid' } {
+export function addonClassificationCurrent(read: Extract<AddonRead, { ok: true }>): EditorRead {
   return addonFacts(read);
 }
 
@@ -107,8 +105,8 @@ export function addonClassificationOmitsBaseRelation(draft: Pick<FactDraft, 'pro
 }
 
 export function addonClassificationLeavesBaseMembership(
-  before: readonly SubjectRead['subject']['statements'][string],
-  after: readonly SubjectRead['subject']['statements'][string],
+  before: SubjectRead['subject']['statements'][string],
+  after: SubjectRead['subject']['statements'][string],
 ): boolean {
   return JSON.stringify(before) === JSON.stringify(after);
 }

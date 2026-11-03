@@ -277,7 +277,7 @@ function AddonProfileLive({
                 locale={locale}
                 search={search}
                 transport={facts(read.public.subject.id)}
-                review={(field, token) => review(read.public.subject.id, field, token)}
+                review={(field, token) => review(read.public!.subject.id, field, token)}
                 visible={!!query.data?.ok && session === 'signed-in'}
                 revision={`${id}:${session}`}
               />
