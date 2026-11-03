@@ -373,6 +373,8 @@ export async function createGrowthAppealBoundariesFixture() {
       listAppeals,
       seedHistory,
       revokeTargetModeration,
+      completeRegisteredCommand,
+      moderationEffect: registered.find((effect) => effect.name === 'content_moderation_decision')!,
       async createBoard(label: string) {
         return (await base.createRealmTarget(label, 'public')).boardId;
       },
