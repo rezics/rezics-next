@@ -192,7 +192,9 @@ async function publishThroughNativeRealm(
         key: objectKey,
       })),
   );
-  expect(new Set(variants.rows.map(({ format, width }) => `${format}:${width}`)).size).toBe(variants.rows.length);
+  expect(
+    new Set(variants.rows.map((row: { format: string; width: number }) => `${row.format}:${row.width}`)).size,
+  ).toBe(variants.rows.length);
   expect(variants.rows.length).toBe(outcome.variants.length);
   expect(fixture.store.inspect(`m/${mediaId}/`)).toEqual(
     [
@@ -362,7 +364,7 @@ test('Registered Realm image publication stays within its Cost bounds across ind
   const sourceDigest = digest(sourceBytes);
   expect(sourceBytes.byteLength).toBeGreaterThan(0);
   expect(96 * 64).toBeLessThanOrEqual(sourcePixelsLimit);
-  let fixedVariants: readonly VariantShape[] | undefined;
+  let fixedVariants: VariantShape[] | undefined;
 
   async function checkAxis(
     name: string,
@@ -391,6 +393,7 @@ test('Registered Realm image publication stays within its Cost bounds across ind
         await drainSetupEvents(fixture);
       },
       async operation(_database, scale) {
+        if (!fixedVariants) throw new Error('Growth warmup did not establish the selected output shape');
         const outcome = await publishThroughNativeRealm(
           fixture,
           sourceBytes,

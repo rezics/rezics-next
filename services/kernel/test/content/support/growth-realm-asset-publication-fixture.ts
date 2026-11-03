@@ -1,11 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { testRouteKey } from '../../support/test-kernel.ts';
-import {
-  composeNativeCollectionRuntime,
-  createMediaObjectStore,
-  mediaRealmDownloadFixture,
-} from '../media-native-collection-fixture.ts';
+import { mediaRealmDownloadFixture } from '../media-realm-download-fixture.ts';
+import { composeNativeCollectionRuntime, createMediaObjectStore } from '../media-native-collection-fixture.ts';
 
 /** Native Realm HTTP and registered Content work share the isolated, observed database. */
 export async function growthRealmAssetPublicationFixture() {
