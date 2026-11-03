@@ -414,6 +414,18 @@ only current destination actions; unavailable, stale or inaccessible Space targe
 counts and History use their existing owner boundaries. Public discovery contains no private Library facts;
 publication is explicit, never inferred from payment, import mappings or personal edits.
 
+**Commerce Collection discovery contribution:** `publicCollectionDiscoverySource({pool})` supplies bounded current
+native candidates and `readPublicCollectionDiscoverySummaries(dependencies, ids, context)` supplies the final
+authorized card batch. Search's existing mixed reader admits 200 identities and preserves routed 100-key batches;
+Content must use the current summary union and canonical Collection destination. Current withdrawal, stale lifecycle
+crossing and absent selected-output authority fail closed. De-identified curated public headers use their retained
+native authority; retained dynamic output without its native witness and the Collection population census remain
+unavailable. The new persisted lifecycle and exact-100 summary cases live in
+`services/kernel/test/library/collection-discovery-summaries.test.ts`. Worker typechecking and focused discovery
+tests are separate from the deferred frozen/native acceptance, Search/Content Home acceptance, independent
+64/512/4096 retained-handle growth, browser review, root/full-Kernel and heavy placement checks; those remain
+unexecuted here and with the controller.
+
 **User job and fixtures:** A person follows/unfollows explicitly, reads only authorized private counts, and publishes
 a log only through the explicit owner action. The single Following page retains Subject and Collection behavior,
 resolves Space address or Realm navigation through Community, and returns caller-current viewer actions without

@@ -2496,6 +2496,16 @@ No Search registration, index, Home engine or hydration authorization is impleme
   There is no installed maintained native census producer. This performs no scan and certifies neither zero nor
   a query count.
 
+The raw-key limit also bounds the native publication probes: `read` and `page` use one read-only owner snapshot,
+one partition read and one key/page statement, then at most one installed selected-output point statement per
+eligible saved dynamic key (100 at the maximum). Returned candidate and publication rows remain input-bounded;
+publication join row visits and buffer blocks are not inferred from result cardinality. Search's installed mixed
+reader admits 200 identities total, groups by native partition and calls this source and card hydration in batches
+of at most 100 (two batches for a same-partition full lookahead). Each hydration repeats two current snapshots and
+two Access decision batches around presentation. Repeated caller retries repeat this work; the read-only discovery
+path creates no command, receipt, write lock, cleanup or background job. These are source-derived bounds, not
+measured growth results.
+
 One repeatable-read native transaction supplies the existing public-listing stamp and values; the position is
 Core's actual partition position serialized as decimal text, never a timestamp/revision substitute. Work is
 bounded by one partition read, one key/page statement and at most 100 installed Publication point probes.
@@ -2521,6 +2531,15 @@ No member count accompanies it. Current viewer hydration belongs to the separate
 `readPublicCollectionDiscoverySummaries(dependencies, ids, context)` delivery; no summary placeholder is exposed.
 `test/library/collection-discovery-source.test.ts` exercises native product-created curated/saved output,
 exclusions, selected A/pending B, replay/rebuild paging, bounds and delayed delivery after withdrawal.
+
+The receiving signatures are `publicCollectionDiscoverySource({pool}): CollectionDiscoverySource` and
+`readPublicCollectionDiscoverySummaries(dependencies, ids, context): Promise<PublicCollectionDiscoveryResult>`.
+Only a current `status:'indexable'` candidate is eligible for Search indexing, and even then its full key is a hint;
+Content obtains a current `state:'ready'` summary before card disclosure. A `state:'unavailable'` batch has no
+cards and must retain its reason. The summary fixture also covers a withdrawal/re-publication crossing two fresh
+snapshots, where final disclosure returns `changed`, then a fresh read resolves the still-selected A while its new
+episode is pending. Retained dynamic output without its native witness remains unavailable; no second Home writer
+or output engine is introduced.
 
 ### Collection sitemap candidate discovery
 

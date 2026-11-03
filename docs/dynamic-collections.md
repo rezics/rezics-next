@@ -310,6 +310,29 @@ Collection destination rather than recasting a Collection as a Subject. The nati
 `services/kernel/test/library/collection-discovery-summaries.test.ts`; their execution is separate from these
 constructed shapes. Broader mixed Home and rendering integration belong to Content and Web respectively.
 
+**Composed caller bound and cost derivation:** the installed Search owner adapter accepts at most 200 identities,
+groups them by native partition and calls Commerce in batches of at most 100. A same-partition 200-identity
+lookahead therefore makes two candidate reads and two hydration calls; each hydration performs two current
+Library snapshots, two Access preparations and two `collection:read` decision batches. Each snapshot reads the
+partition once, the requested Collection/curator rows in one bounded batch, and selected output in one bounded
+batch when dynamic rows are present. Candidate `read`/`page` uses one read-only Library transaction, one partition
+read and one key/page statement, plus at most one native selected-publication point statement per eligible dynamic
+key (at most 100); its returned rows and serialized items are bounded by the raw-key limit. Hydration result rows
+and output rows are each bounded by the distinct input count (at most 100). Existing cover presentation runs
+between snapshots and retains its per-cover native reference and media authorization checks; there is no per-card
+Collection Access lookup and no account/history scan. Repeated reads and retries pay these bounds again. Discovery
+creates no write locks, command dispatches, receipts, cleanup or background work. Physical SQL row visits and
+buffer blocks, including publication-join fanout, remain unmeasured until the controller's native growth run.
+
+At terminal account retention, an existing de-identified curated public header remains eligible through its native
+retention evidence. A retained dynamic output without the native retained-publication witness remains unavailable:
+the candidate source returns `selected_publication_witness_unavailable` and hydration returns
+`native_authority`. Discovery does not treat deleted-account absence, saved private capture, or an old selected
+head as that witness. The native population census also remains unavailable. Worker typechecking and focused
+discovery tests do not establish the deferred frozen/native acceptance, Search and Content Home acceptance,
+64/512/4096 retained-handle growth, browser review, root/full-Kernel checks or heavy placement checks; those remain
+with the controller.
+
 ### Account deletion and adopted public output
 
 Saved rule private-family admission follows native own-account reads: bearer scopes, current account standing and exposure, without synthetic account resource grants.

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
+import { publicCollectionDiscoverySource } from '../../src/library/collection-discovery-source.ts';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -111,6 +112,46 @@ test('completed A remains selected while a real whole-query B is pending; dynami
     expect(result.summaries[0]).not.toHaveProperty(key);
 }, 120000);
 
+test('a withdrawal and new public episode between candidate and disclosure require a fresh selected A check', async () => {
+  const a = await published();
+  const id = a.collection.id;
+  const episodes = createCollectionPublicationEpisodes(deps());
+  await episodes.begin(actor, { collectionId: id, revision: a.collection.revision, visibility: 'public' }, randomUUID());
+  const detail = await f.send('GET', `/v1/collections/${id}`);
+  expect(detail.status).toBe(200);
+  const revision = (await detail.json()).collection.revision;
+  const route = routeOf(id);
+  if (route === null) throw new Error('The native Collection key must retain its route');
+  const partition = partitionOf(route);
+  const source = publicCollectionDiscoverySource({ pool: f.database.pool });
+  const first = await source.read(partition, [{ route, id }]);
+  if (first.status !== 'available') throw new Error('The current public candidate must be available');
+  expect(first.items[0]).toMatchObject({
+    status: 'indexable',
+    value: { membershipKind: 'dynamic', output: { generation: a.publication.generation } },
+  });
+
+  const access = betweenRounds(async () => {
+    const withdrawn = await f.send('PATCH', `/v1/collections/${id}`, { revision, visibility: 'private' });
+    expect(withdrawn.status).toBe(200);
+    const current = (await withdrawn.json()).collection;
+    await episodes.begin(actor, { collectionId: id, revision: current.revision, visibility: 'public' }, randomUUID());
+  });
+  expect(await hydrate(deps(access), [id], context(id))).toEqual({ state: 'unavailable', reason: 'changed' });
+
+  const current = await source.read(partition, [{ route, id }]);
+  if (current.status !== 'available') throw new Error('The re-published current candidate must be available');
+  expect(BigInt(current.stamp.position)).toBeGreaterThan(BigInt(first.stamp.position));
+  expect(current.items[0]).toMatchObject({
+    status: 'indexable',
+    value: { membershipKind: 'dynamic', output: { generation: a.publication.generation } },
+  });
+  expect(await hydrate(deps(), [id], context(id))).toMatchObject({
+    state: 'ready',
+    summaries: [{ id, membershipKind: 'dynamic', outputGeneration: a.publication.generation }],
+  });
+}, 120000);
+
 test('unknown native output authority is unavailable, never a fabricated ready-empty output', async () => {
   const row = await saved();
   expect(
@@ -182,6 +223,14 @@ test('validation precedes native I/O, including full-key partition bounds and th
   for (const ids of [['bad-key'], [newId(0x0130)], Array(101).fill(id)])
     await expect(hydrate(dependencies, ids, context(id))).rejects.toBeInstanceOf(RangeError);
   expect(await hydrate(dependencies, [], context(id))).toEqual({ state: 'ready', summaries: [] });
+
+  const visible = await f.collection({ visibility: 'public' });
+  const route = routeOf(f.runtime.identity.ordinary.accountId)!;
+  const batch = [visible.id, ...Array.from({ length: 99 }, () => newId(route))];
+  expect(await hydrate(deps(), batch, context(visible.id, actor))).toMatchObject({
+    state: 'ready',
+    summaries: [{ id: visible.id, membershipKind: 'curated' }],
+  });
 });
 
 test('caller read times remain live and unrelated native infrastructure failures propagate', async () => {
