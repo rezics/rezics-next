@@ -38,7 +38,8 @@ export type ContinuationHarvest = {
 /** Read scope without imposing another Goal's ownership/parser configuration. */
 function scope(markdown: string): { paths: string[]; title: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
-  const front = match ? Bun.YAML.parse(match[1]!) : {};
+  const raw = match ? Bun.YAML.parse(match[1]!) : {};
+  const front = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const body = match ? markdown.slice(match[0].length) : markdown;
   const title = front?.title ?? /^#+\s+(.+)$/m.exec(body)?.[1] ?? body.trim().split('\n')[0] ?? '';
   return {
@@ -314,79 +315,81 @@ export function harvestContinuations(
   const lease = acquireDirectoryLeaseWaiting(join(settings.stateDirectory, 'leases', 'backlog'),
     (settings.policy ?? defaultPolicy).leases.dispatchWaitMs, settings.policy?.leases);
   try {
-  for (const name of names) {
-    const path = join(source, name);
-    const drop = (reason: string) => {
-      rmSync(path, { recursive: true, force: true });
-      result.dropped.push({ file: name, reason });
-      store.event(ref, 'continuation-dropped', { file: name, reason });
-      console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} dropped: ${reason}`);
-    };
-    const stat = lstatSync(path, { throwIfNoEntry: false });
-    if (!stat) continue;
-    if (!stat.isFile() || !name.endsWith('.md')) {
-      drop('a continuation must be a regular Markdown file');
-      continue;
-    }
-    // Creation time, rather than mtime, prevents a touched inherited file being attributed to this attempt.
-    if (!Number.isFinite(startedAt) || stat.birthtimeMs < startedAt) {
-      drop('file was not created during this attempt');
-      continue;
-    }
-    if (queuedBy !== undefined) {
-      drop(`attempt ${queuedBy} of this task already queued its continuation`);
-      continue;
-    }
-    const written = readFileSync(path, 'utf8');
-    const markdown = ownership ? completeContinuation(written, task, ownership, settings.policy?.brief) : written;
-    const reason = invalidReason(markdown, task, settings, known);
-    if (reason) {
-      drop(reason);
-      continue;
-    }
-    const basenames = continuationBacklogNames(task.id, ref.attempt, name);
-    const readyCandidates = basenames.map((basename) => join(target, basename));
-    const proposedCandidates = basenames.map((basename) => join(target, 'proposed', basename));
-    const overlap = continuationOverlap(store.db, settings.stateDirectory, task.brief.goal, markdown,
-      task.id, [...readyCandidates, ...proposedCandidates], settings.policy?.brief);
-    const proposalReason = overlap ?? (continuationReview(settings.stateDirectory, task.brief.goal, settings.policy,
-      [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, markdown) === 'match') ? 0 : 1)
-      ? 'Goal continuation review is enabled; release or retire this proposal' : undefined);
-    const directory = proposalReason ? join(target, 'proposed') : target;
-    const candidates = basenames.map((basename) => join(directory, basename));
-    let destination = candidates.find((candidate) => publicationState(candidate, markdown) === 'match');
-    if (!destination) {
-      for (const candidate of candidates) {
-        if (publicationState(candidate, markdown) !== 'absent') continue;
-        mkdirSync(directory, { recursive: true });
-        if (publishComplete(candidate, markdown) || publicationState(candidate, markdown) === 'match') {
-          destination = candidate;
-          break;
+    for (const name of names) {
+      const path = join(source, name);
+      const drop = (reason: string) => {
+        rmSync(path, { recursive: true, force: true });
+        result.dropped.push({ file: name, reason });
+        store.event(ref, 'continuation-dropped', { file: name, reason });
+        console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} dropped: ${reason}`);
+      };
+      const stat = lstatSync(path, { throwIfNoEntry: false });
+      if (!stat) continue;
+      if (!stat.isFile() || !name.endsWith('.md')) {
+        drop('a continuation must be a regular Markdown file');
+        continue;
+      }
+      // Creation time, rather than mtime, prevents a touched inherited file being attributed to this attempt.
+      if (!Number.isFinite(startedAt) || stat.birthtimeMs < startedAt) {
+        drop('file was not created during this attempt');
+        continue;
+      }
+      if (queuedBy !== undefined) {
+        drop(`attempt ${queuedBy} of this task already queued its continuation`);
+        continue;
+      }
+      const written = readFileSync(path, 'utf8');
+      const markdown = ownership ? completeContinuation(written, task, ownership, settings.policy?.brief) : written;
+      const reason = invalidReason(markdown, task, settings, known);
+      if (reason) {
+        drop(reason);
+        continue;
+      }
+      const basenames = continuationBacklogNames(task.id, ref.attempt, name);
+      const readyCandidates = basenames.map((basename) => join(target, basename));
+      const proposedCandidates = basenames.map((basename) => join(target, 'proposed', basename));
+      const overlap = continuationOverlap(store.db, settings.stateDirectory, task.brief.goal, markdown,
+        task.id, [...readyCandidates, ...proposedCandidates], settings.policy?.brief);
+      const proposalReason = overlap ?? (continuationReview(settings.stateDirectory, task.brief.goal, settings.policy,
+        [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, markdown) === 'match') ? 0 : 1)
+        ? 'Goal continuation review is enabled; release or retire this proposal' : undefined);
+      const directory = proposalReason ? join(target, 'proposed') : target;
+      const candidates = basenames.map((basename) => join(directory, basename));
+      let destination = candidates.find((candidate) => publicationState(candidate, markdown) === 'match');
+      if (!destination) {
+        for (const candidate of candidates) {
+          if (publicationState(candidate, markdown) !== 'absent') continue;
+          mkdirSync(directory, { recursive: true });
+          if (publishComplete(candidate, markdown) || publicationState(candidate, markdown) === 'match') {
+            destination = candidate;
+            break;
+          }
         }
       }
-    }
-    if (!destination) {
-      const reason = `kept at ${name}; ${basenames[0]} already holds a different brief and every distinct name is occupied`;
-      result.retained.push({ file: name, reason });
-      store.event(ref, 'continuation-retained', { file: name, reason });
-      console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept: ${reason}`);
-      continue;
-    }
-    if (proposalReason) {
-      proposeContinuation(destination, settings.stateDirectory, task.brief.goal, proposalReason);
+      if (!destination) {
+        const reason = `kept at ${name}; ${basenames[0]} already holds a different brief and every distinct name is occupied`;
+        result.retained.push({ file: name, reason });
+        store.event(ref, 'continuation-retained', { file: name, reason });
+        console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept: ${reason}`);
+        continue;
+      }
+      if (proposalReason) {
+        proposeContinuation(destination, settings.stateDirectory, task.brief.goal, proposalReason);
+        rmSync(path, { force: true });
+        result.proposed.push({ file: destination, reason: proposalReason });
+        store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
+        new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
+          managerId: task.brief.manager, goalId: task.brief.goal, kind: 'instruction',
+          summary: `Continuation proposed at ${destination}: ${proposalReason}`,
+        });
+        continue;
+      }
       rmSync(path, { force: true });
-      result.proposed.push({ file: destination, reason: proposalReason });
-      store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
-      new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
-        managerId: task.brief.manager, goalId: task.brief.goal, kind: 'instruction',
-        summary: `Continuation proposed at ${destination}: ${proposalReason}`,
-      });
-      continue;
+      result.queued.push(destination);
+      store.event(ref, 'continuation-queued', { file: name, path: destination });
     }
-    rmSync(path, { force: true });
-    result.queued.push(destination);
-    store.event(ref, 'continuation-queued', { file: name, path: destination });
+  } finally {
+    lease.release();
   }
-  } finally { lease.release(); }
   return result;
 }
