@@ -38,9 +38,9 @@ revision-history reads.
 ## Execution record
 
 - Base revision: `c968558f1f20e21ca88ac8e7b26754a3fd642d7a`.
-- Tested revision: pending the focused changed-file run.
+- Submitted revision: `fed78d538ccdce04db3ef9c3080cd2d27776419d` (test and fixture source; this record was added afterward).
 - Test: `services/kernel/test/content/growth-realm-media-reservation.test.ts`.
 - Command: `bun run --cwd services/kernel check test/content/growth-realm-media-reservation.test.ts`.
-- Reached assertions: pending the focused changed-file run.
-- Three-scale observations: pending the focused changed-file run.
-- Execution limit: the controller defers the frozen Content acceptance, native suite, and promotion checks to integration. This focused changed-file check is not Goal completion evidence.
+- Reached assertions: the check script stopped in `assertSchemaConsistency` before loading this test. Exact error: `Schema dump differs from db/library/schema.sql.` The expected dump contains `library.native_public_output_binding`; the actual dump contains `library.members_preparation` at that location. The schema inputs are unchanged from the base. The owning seam is Library schema generation/order, outside this reservation slice.
+- Three-scale observations: none were collected. The test declares separate admission, replay, and refusal captures on the same-home and retained-history axes at 256, 1024, and 4096; the schema preflight prevented all six captures from running.
+- Execution limits: `bun run --cwd services/kernel typecheck` used the remote check host but stopped during source artifact publication. The host's error began `remote-check: infrastructure failure` and reported `reason: absolute preparation deadline exceeded`, `elapsedMs: 899914`, and `stalledPhase: source-artifact-publication`. The focused check and kernel typecheck are therefore not passes. The controller defers frozen Content acceptance, native suite reruns, and promotion checks to integration; this record does not claim Goal completion evidence.
