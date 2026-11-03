@@ -701,8 +701,8 @@ success. Single-source stdout contracts are unchanged.
 Any non-success, cancellation, uncertain delivery, disappearance, incompatible input or observation-conflict
 exit 6 stops before the next job. Completed jobs stay completed. Later jobs are not started, not labelled failed
 and not rolled back. SIGINT or SIGTERM before a job begins starts no new coordinator. There is no
-continue-on-error, hidden retry, force disappearance, automatic CAS resolution or parallel worker. A dump or
-state replacement between local preview and execution is refused rather than followed.
+continue-on-error, hidden retry, force disappearance, automatic CAS resolution or parallel worker. A dump replacement or a different state inode between local preview and execution is refused rather
+than followed. Ordinary writes by an earlier job into a shared SQLite file are not a replacement.
 
 Rerunning the manifest uses ordinary per-source journals only. The report cannot resume a request, skip a job
 from an old summary or mint new keys for unresolved work. A stopped or uncertain job prints the established

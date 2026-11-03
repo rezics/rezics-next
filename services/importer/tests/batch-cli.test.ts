@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -84,7 +85,8 @@ function importFetch(options: { loseOpenLibrary?: boolean; requests?: string[]; 
     if (options.slow) await options.slow();
     if (url.pathname === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
     if (url.pathname === '/v1/source-records:setMetadata') {
-      return Response.json({ record: {}, metadata_revision: 1, effect: 'filled' }, { status: 201 });
+      const body = (await request.json()) as { metadata: Record<string, unknown> };
+      return Response.json({ record: body.metadata, metadata_revision: 1, effect: 'filled' }, { status: 201 });
     }
     if (url.pathname !== '/v1/subjects:batchWrite') return new Response('', { status: 404 });
     const body = (await request.json()) as BatchWriteRequest;
@@ -318,7 +320,7 @@ test('changed dump after earlier success is refused and credentials stay off the
   ]);
   const observer: ImportCliObserver = {
     onCoordinator() {
-      void writeFile(join(directory, 'openlibrary.tsv'), 'replaced\n', { mode: 0o600 });
+      writeFileSync(join(directory, 'openlibrary.tsv'), 'replaced\n', { mode: 0o600 });
     },
   };
   const result = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
