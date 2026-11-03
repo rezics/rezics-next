@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { projectSourceClassification } from '../src/index.ts';
+import {
+  classificationObservedInstant,
+  classificationSourceVersion,
+  projectSourceClassification,
+} from '../src/index.ts';
 
 const provenance = {
   sourceAlias: 'trusted-fixture',
@@ -7,7 +11,7 @@ const provenance = {
   sourceRevision: 'revision-4',
   converterRevision: 'fixture@1',
   observedAt: null,
-  coverage: { kind: 'unknown' },
+  coverage: { kind: 'unknown' as const },
   attribution: 'Example classification provider',
   licence: { id: 'Fixture-1.0', url: 'https://example.test/licence' },
 };
@@ -42,6 +46,15 @@ describe('source classification projection', () => {
       state: 'unavailable',
       reason: 'invalid-observation',
     });
+  });
+
+  test('maps admitted provenance onto native source version and observed instant', () => {
+    expect(classificationSourceVersion(provenance)).toEqual({ kind: 'revision', revision: 'revision-4' });
+    expect(
+      classificationSourceVersion({ ...provenance, sourceRevision: null, sourceDigest: 'a'.repeat(64) }),
+    ).toEqual({ kind: 'unversioned', digest: 'a'.repeat(64) });
+    expect(classificationObservedInstant(null)).toBeNull();
+    expect(classificationObservedInstant('2026-11-03T00:00:00Z')).toBe('2026-11-03T00:00:00.000Z');
   });
 
   test('requires truthful provenance for unversioned records and drops unsupported provider fields', () => {

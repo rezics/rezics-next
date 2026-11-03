@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { SourceClassificationProjection, SourceClassificationValue } from '@rezics/conversion';
+import {
+  classificationObservedInstant,
+  classificationSourceVersion,
+  type SourceClassificationProjection,
+  type SourceClassificationValue,
+} from '@rezics/conversion';
 import {
   classificationAssociationKey,
   classificationObservation,
@@ -223,10 +228,8 @@ export function headFromClassification(intended: IntendedClassification): Retain
 }
 
 export function normalizeClassificationAsOf(value: string): string | null {
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return null;
-  const iso = new Date(parsed).toISOString();
-  return AS_OF.test(iso) ? iso : null;
+  const iso = classificationObservedInstant(value);
+  return iso && AS_OF.test(iso) ? iso : null;
 }
 
 export function intendedFromProjection(
@@ -240,12 +243,7 @@ export function intendedFromProjection(
   if (provenance.observedAt === null) return null;
   const asOf = normalizeClassificationAsOf(provenance.observedAt);
   if (!asOf) return null;
-  const sourceVersion =
-    provenance.sourceRevision === null
-      ? provenance.sourceDigest
-        ? ({ kind: 'unversioned', digest: provenance.sourceDigest } as const)
-        : null
-      : ({ kind: 'revision', revision: provenance.sourceRevision } as const);
+  const sourceVersion = classificationSourceVersion(provenance);
   if (!sourceVersion && value.kind !== 'clear') return null;
   if (value.kind === 'clear') {
     return {

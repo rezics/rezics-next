@@ -617,6 +617,18 @@ export async function openApiRuntime(
                 ) => transport.writeSourceStatistic(input, signal ?? current?.abort.signal),
               }
             : {}),
+          writeSourceClassification: (
+            input: Parameters<typeof transport.writeSourceClassification>[0],
+            signal?: AbortSignal,
+          ) => transport.writeSourceClassification(input, signal ?? current?.abort.signal),
+          clearSourceClassification: (
+            input: Parameters<typeof transport.clearSourceClassification>[0],
+            signal?: AbortSignal,
+          ) => transport.clearSourceClassification(input, signal ?? current?.abort.signal),
+          readSourceClassifications: (
+            input: Parameters<typeof transport.readSourceClassifications>[0],
+            signal?: AbortSignal,
+          ) => transport.readSourceClassifications(input, signal ?? current?.abort.signal),
           readFence: (tuple) =>
             transport.fence(
               { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },

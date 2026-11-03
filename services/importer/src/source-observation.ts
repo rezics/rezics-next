@@ -13,6 +13,12 @@ export type IntendedWrite = Omit<ImportSourceStatistic, 'source' | 'expectedObse
 export type IntendedClear = Omit<ImportSourceStatisticClear, 'source' | 'expectedObservation'>;
 export type IntendedObservation = (IntendedWrite & { kind: 'write' }) | (IntendedClear & { kind: 'clear' });
 
+export function isIntendedObservation(value: unknown): value is IntendedObservation {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || 'association' in value) return false;
+  const kind = (value as { kind?: unknown }).kind;
+  return kind === 'write' || kind === 'clear';
+}
+
 export type RetainedObservationHead = Readonly<{
   provider: typeof SOURCE_OBSERVATION_PROVIDER;
   sourceAlias: string;

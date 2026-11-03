@@ -12,6 +12,7 @@ import {
 import {
   DIGEST,
   SOURCE_OBSERVATION_PAGE_MAX,
+  isIntendedObservation,
   nativeReason,
   parseObservationReason,
   safeObservationSummary,
@@ -255,7 +256,23 @@ export async function runObservationsCli(
           stderr: 'Unknown, obsolete, wrong-run or already-resolved observation operation.\n',
           openHandles: 0,
         };
-      return { code: 0, stdout: render(detail), stderr: '', openHandles: 0 };
+      if (!isIntendedObservation(detail.intended))
+        return {
+          code: 2,
+          stdout: '',
+          stderr: 'Unknown, obsolete, wrong-run or already-resolved observation operation.\n',
+          openHandles: 0,
+        };
+      return {
+        code: 0,
+        stdout: render({
+          ...detail,
+          intended: detail.intended,
+          reviewedHead: detail.reviewedHead as RetainedObservationHead | null,
+        }),
+        stderr: '',
+        openHandles: 0,
+      };
     }
     const page = session.store.pageUnresolvedAggregates(run, {
       ...(parsed.after ? { after: parsed.after } : {}),
@@ -378,7 +395,14 @@ async function runResolve(
     const detail = importer.observationDetail(parsed.source, result.operationId);
     return {
       code: 0,
-      stdout: detail ? render(detail) : `Resolved ${result.operationId}\n`,
+      stdout:
+        detail && isIntendedObservation(detail.intended)
+          ? render({
+              ...detail,
+              intended: detail.intended,
+              reviewedHead: detail.reviewedHead as RetainedObservationHead | null,
+            })
+          : `Resolved ${result.operationId}\n`,
       stderr: '',
       openHandles: 0,
     };
