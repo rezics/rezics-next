@@ -234,9 +234,11 @@ type PersonalEntryEndpoints = {
   };
 };
 type WatchManagementEndpoints = {
-  get(options: {
-    query: { kind: WatchManagementKind; limit?: number; cursor?: string };
-  } & PersonalReadOptions): PersonalEntryCall<WatchManagementPage>;
+  get(
+    options: {
+      query: { kind: WatchManagementKind; limit?: number; cursor?: string };
+    } & PersonalReadOptions,
+  ): PersonalEntryCall<WatchManagementPage>;
   (params: { watchId: string }): {
     delete(
       body: { expectedRevision: number },
@@ -245,8 +247,9 @@ type WatchManagementEndpoints = {
   };
 };
 type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
-  ((...args: Parameters<GeneratedKernelClient['accounts']>) =>
-    ReturnType<GeneratedKernelClient['accounts']> & { watches: WatchManagementEndpoints });
+  ((
+    ...args: Parameters<GeneratedKernelClient['accounts']>
+  ) => ReturnType<GeneratedKernelClient['accounts']> & { watches: WatchManagementEndpoints });
 export type {
   OwnCountedVoteAccountObservation,
   OwnCountedVoteIdentity,
