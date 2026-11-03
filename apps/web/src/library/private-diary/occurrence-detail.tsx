@@ -145,7 +145,18 @@ export function PrivateOccurrenceControls({
       return result;
     },
   });
-  const journal = currentJournal(query.data, session.id, currentViewer, csrfToken);
+  const [acceptedJournal, setAcceptedJournal] = useState<{
+    sessionId: string;
+    viewer: string;
+    csrfToken: string;
+    journal: PrivateJournal;
+  } | null>(null);
+  const journal =
+    acceptedJournal?.sessionId === session.id &&
+    acceptedJournal.viewer === currentViewer &&
+    acceptedJournal.csrfToken === csrfToken
+      ? acceptedJournal.journal
+      : currentJournal(query.data, session.id, currentViewer, csrfToken);
   const [draft, setDraft] = useState<JournalDraft | null>(null);
   const working = draft ?? (journal ? journalDraft(journal) : { startDate: '', finishDate: '', reflection: '' });
   const body = journal ? changedJournalBody(journal.revision, journalDraft(journal), working) : null;
@@ -186,8 +197,8 @@ export function PrivateOccurrenceControls({
     const result = await correctOccurrenceJournal({ data: command });
     if (!stillCurrent(command)) return;
     if (result.kind === 'saved') {
-      queryClient.setQueryData<JournalReadResult>(queryKey, {
-        kind: 'ready',
+      setAcceptedJournal({
+        sessionId: command.sessionId,
         viewer: command.viewer,
         csrfToken: command.csrfToken,
         journal: result.journal,
@@ -199,6 +210,7 @@ export function PrivateOccurrenceControls({
       return;
     }
     if (result.kind === 'conflict') {
+      setAcceptedJournal(null);
       setJournalCommand(null);
       setConflictRevision(command.body.revision);
       setReviewedRevision(null);

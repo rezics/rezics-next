@@ -29,7 +29,7 @@ export function PrivateDiaryPage({
 }: {
   loaded: PrivateDiaryLoadResult;
   session: ReaderSession;
-  returnTo?: string;
+  returnTo?: string | undefined;
 }) {
   const router = useRouter();
   const [closing, setClosing] = useState(false);

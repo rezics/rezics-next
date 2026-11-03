@@ -17,7 +17,7 @@ import {
   type PrivateEntryReadResult,
   type SourcePrivacyCommandResult,
 } from './server';
-import type { PersonalEntryObservation, PersonalEntryPrivacyValue } from '@rezics/client';
+import type { PersonalEntry, PersonalEntryObservation, PersonalEntryPrivacyValue } from '@rezics/client';
 
 type ReaderSession = ReturnType<typeof useSession>;
 
@@ -106,7 +106,17 @@ export function RichPrivateEntry({
     result.entry.subjectId === subject.id &&
     result.viewer === viewer &&
     result.csrfToken === csrfToken;
-  const entry = ready ? result.entry : null;
+  const [acceptedEntry, setAcceptedEntry] = useState<{
+    subjectId: string;
+    viewer: string;
+    csrfToken: string;
+    entry: PersonalEntry;
+  } | null>(null);
+  const entry = ready
+    ? acceptedEntry?.subjectId === subject.id && acceptedEntry.viewer === viewer && acceptedEntry.csrfToken === csrfToken
+      ? acceptedEntry.entry
+      : result.entry
+    : null;
   const [draft, setDraft] = useState<AnnotationDraft | null>(null);
   const [annotationCommand, setAnnotationCommand] = useState<AnnotationCommand | null>(null);
   const [annotationNotice, setAnnotationNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(null);
@@ -145,8 +155,8 @@ export function RichPrivateEntry({
     const outcome: PrivateEntryCommandResult = await savePrivateAnnotations({ data: command });
     if (!currentResult()) return;
     if (outcome.kind === 'saved') {
-      queryClient.setQueryData<PrivateEntryReadResult>(queryKey, {
-        kind: 'ready',
+      setAcceptedEntry({
+        subjectId: subject.id,
         viewer: command.viewer,
         csrfToken: command.csrfToken,
         entry: outcome.entry,
@@ -159,6 +169,7 @@ export function RichPrivateEntry({
       return;
     }
     if (outcome.kind === 'conflict') {
+      setAcceptedEntry(null);
       setAnnotationCommand(null);
       setAnnotationNotice('conflict');
       setAnnotationConflictRevision(command.body.revision);
@@ -211,8 +222,8 @@ export function RichPrivateEntry({
     const outcome: SourcePrivacyCommandResult = await savePrivateSourcePrivacy({ data: command });
     if (!currentResult()) return;
     if (outcome.kind === 'saved') {
-      queryClient.setQueryData<PrivateEntryReadResult>(queryKey, {
-        kind: 'ready',
+      setAcceptedEntry({
+        subjectId: subject.id,
         viewer: command.viewer,
         csrfToken: command.csrfToken,
         entry: outcome.entry,
@@ -225,6 +236,7 @@ export function RichPrivateEntry({
       return;
     }
     if (outcome.kind === 'conflict') {
+      setAcceptedEntry(null);
       setSourceCommand(null);
       setSourceNotice('conflict');
       setSourceConflictRevision(command.revision);
