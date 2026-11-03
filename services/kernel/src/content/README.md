@@ -1105,6 +1105,10 @@ This API handoff does not establish rendered acceptance or the all-pool physical
   deadline command agreement, independent reversal, current header presentation, removed-target context, empty and
   switched-account concealment, and source/authority withholding. A mounted author Inbox test projects the takedown
   notice, opens its exact decision and retires an in-flight Inbox read when native account erasure revokes the author.
+  `decision-page-lifetime-http.test.ts` adds same-client and changed-client credential replacement at initial and final
+  selection, delegated principal suspension/assignment revocation, exact-author erasure with a pending appeal and
+  sparse retained provenance with an erased decider before/after statement expiry. Delegation setup uses the native
+  assignment command with the installed self-management action because assignment creation has no mounted route.
   Full-prefix/residual-join plans and independent 256/1024/4096 decision versus retained target/appeal/identity/authority
   histories, every pool/registered runner phase and empty/denied/revoked/retry accounting remain continuation work.
 
