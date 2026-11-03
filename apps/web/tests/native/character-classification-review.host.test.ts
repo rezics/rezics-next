@@ -21,7 +21,10 @@ beforeAll(async () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
-        body: JSON.stringify({ type: 'wd:Q95074', labels: { en: `Native character classification ${crypto.randomUUID().slice(0, 8)}` } }),
+        body: JSON.stringify({
+          type: 'wd:Q95074',
+          labels: { en: `Native character classification ${crypto.randomUUID().slice(0, 8)}` },
+        }),
       },
       'editor',
     ),
@@ -106,10 +109,14 @@ test('Character classification correction reviews two changed fields, copies evi
   const response = await page.goto(new URL(character.path, fixture.stack.web).href, { waitUntil: 'domcontentloaded' });
   expect(response?.status()).toBe(200);
   await hydrate(page);
-  await page.getByRole('heading', { name: 'Character identity and credit editor', exact: true }).waitFor({ state: 'visible' });
+  await page
+    .getByRole('heading', { name: 'Character identity and credit editor', exact: true })
+    .waitFor({ state: 'visible' });
 
   async function edit(field: string, url: string) {
-    const section = page.locator('section').filter({ has: page.getByRole('heading', { name: field, exact: true, level: 3 }) });
+    const section = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: field, exact: true, level: 3 }) });
     await section.getByRole('button', { name: 'Edit this field', exact: true }).click();
     const box = section.getByRole('combobox', { name: field, exact: true });
     await box.fill(fixture.concept.label);

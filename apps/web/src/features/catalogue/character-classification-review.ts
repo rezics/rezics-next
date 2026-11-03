@@ -65,9 +65,9 @@ export function selectedClassificationTarget(
   related: FactsCurrent['public']['related'],
   locale: string,
 ): SelectedClassificationTarget {
-  const id = statement.value.type === 'value' && typeof statement.value.content === 'string' ? statement.value.content : '';
-  if (!id)
-    return { id: '', source: statement.id, label: '', state: 'hidden' };
+  const id =
+    statement.value.type === 'value' && typeof statement.value.content === 'string' ? statement.value.content : '';
+  if (!id) return { id: '', source: statement.id, label: '', state: 'hidden' };
   if (!Object.hasOwn(related, id)) return { id, source: statement.id, label: '', state: 'hidden' };
   const label = pageText(related[id]?.labels, locale);
   return {
@@ -79,13 +79,20 @@ export function selectedClassificationTarget(
   };
 }
 
-export function selectedClassificationTargets(read: FactsCurrent, property: string, locale: string): SelectedClassificationTarget[] {
+export function selectedClassificationTargets(
+  read: FactsCurrent,
+  property: string,
+  locale: string,
+): SelectedClassificationTarget[] {
   return (read.public.subject.statements[property] ?? []).map((statement) =>
     selectedClassificationTarget(statement, read.public.related, locale),
   );
 }
 
-export function retainedClassificationSiblings(read: FactsCurrent, draft: Pick<FactDraft, 'property' | 'source'>): string[] {
+export function retainedClassificationSiblings(
+  read: FactsCurrent,
+  draft: Pick<FactDraft, 'property' | 'source'>,
+): string[] {
   return (read.public.subject.statements[draft.property] ?? [])
     .map((statement) => statement.id)
     .filter((id) => id !== draft.source);
@@ -127,7 +134,9 @@ export function classificationReuseReason(
   if (!admitted) return 'retired';
   if (target.result?.ok) return 'succeeded';
   if (factLocked(target) || !factWritable(target))
-    return target.result && !target.result.ok && (target.result.reason === 'uncertain' || target.result.reason === 'unavailable')
+    return target.result &&
+      !target.result.ok &&
+      (target.result.reason === 'uncertain' || target.result.reason === 'unavailable')
       ? 'uncertain'
       : 'locked';
   const preview = previewReuse(target, group, release, sourceHolder);
@@ -153,7 +162,11 @@ export function retainOrphanedClassificationDiagnostic(
   const holder = factHolder(draft);
   return [
     ...previous.filter((item) => item.holder !== holder),
-    { holder, property: draft.property, errors: result.errors.map((error) => ({ pointer: error.pointer, code: error.code })) },
+    {
+      holder,
+      property: draft.property,
+      errors: result.errors.map((error) => ({ pointer: error.pointer, code: error.code })),
+    },
   ];
 }
 

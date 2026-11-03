@@ -239,7 +239,9 @@ function CharacterClassificationSetLive({
         },
         (property, result) =>
           lifetime.active() &&
-          setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
+          setDrafts((previous) =>
+            previous.map((draft) => (draft.property === property ? { ...draft, result } : draft)),
+          ),
       );
     } finally {
       if (!lifetime.active()) return;

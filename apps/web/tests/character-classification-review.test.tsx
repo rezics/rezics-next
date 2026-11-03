@@ -26,7 +26,8 @@ async function mounted(
     Object.defineProperty(globalThis, name, {
       configurable: true,
       writable: true,
-      value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[name as keyof typeof window],
+      value:
+        name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[name as keyof typeof window],
     });
   const { createRoot } = await import('react-dom/client');
   const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -225,7 +226,9 @@ test('Character classifications review the changed set, copy evidence, repair a 
       type: 'value',
       content: `${evidence}/repaired`,
     });
-    expect(keywordCommand.statement.qualifiers).toEqual(statementInput(read.public.subject.statements[keywords]![0]!).qualifiers);
+    expect(keywordCommand.statement.qualifiers).toEqual(
+      statementInput(read.public.subject.statements[keywords]![0]!).qualifiers,
+    );
     expect(root.querySelector('#candidate-review')).toBeNull();
     const original = commands.find((command) => command.statement.property.id === keywords)!;
     await enter(field(root, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/sibling-only`);
@@ -263,7 +266,9 @@ test('failed current read, stale copy review and a removed holder diagnostic sta
           references: [
             {
               hash: 'copy',
-              parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } }],
+              parts: [
+                { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } },
+              ],
             },
           ],
         },
@@ -272,7 +277,11 @@ test('failed current read, stale copy review and a removed holder diagnostic sta
     read.public.related[concept] = { type: 'skos:Concept', labels: { en: 'Concept' } };
     const transport = {
       ...fixture.props.facts(characterProfileId),
-      propose: async () => ({ ok: false as const, reason: 'invalid' as const, errors: [{ pointer: '/statement/value', code: 'required' }] }),
+      propose: async () => ({
+        ok: false as const,
+        reason: 'invalid' as const,
+        errors: [{ pointer: '/statement/value', code: 'required' }],
+      }),
       read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
     };
     await render(
@@ -338,7 +347,9 @@ test('unknown delivery keeps original bytes while a refused sibling is repaired,
           references: [
             {
               hash: 'unknown',
-              parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } }],
+              parts: [
+                { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } },
+              ],
             },
           ],
         },
@@ -366,7 +377,11 @@ test('unknown delivery keeps original bytes while a refused sibling is repaired,
       review: () => fixture.props.review(characterProfileId, keywords),
     };
     await render(
-      h(CatalogueCurrentReading, { visible: true, ready: true, revision: 'current' }, h(CharacterClassifications, props)),
+      h(
+        CatalogueCurrentReading,
+        { visible: true, ready: true, revision: 'current' },
+        h(CharacterClassifications, props),
+      ),
     );
     await act(async () => button(field(host, keywords), m.facts_edit_field()).click());
     await enter(field(host, keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/keywords`);

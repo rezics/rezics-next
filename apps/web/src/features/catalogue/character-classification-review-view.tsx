@@ -114,9 +114,7 @@ export function ClassificationChangedSet({
       <FactsChangedReview items={items} read={read} locale={locale} stale={stale} onJump={onJump} />
       <p className="text-sm text-muted-foreground">{m.classification_review_native({}, o)}</p>
       {readFailed && <p role="status">{m.classification_read_failed({}, o)}</p>}
-      {!!retained.length && (
-        <p className="text-sm text-muted-foreground">{m.classification_retained_locked({}, o)}</p>
-      )}
+      {!!retained.length && <p className="text-sm text-muted-foreground">{m.classification_retained_locked({}, o)}</p>}
       <ul className="min-w-0 space-y-2 text-sm">
         {items.map((item) => {
           const draft = drafts.find((entry) => factHolder(entry) === item.holder);
@@ -133,7 +131,9 @@ export function ClassificationChangedSet({
                       ? m.classification_read_failed({}, o)
                       : m.facts_review_current({}, o)}
               </p>
-              {!!siblings.length && <p className="text-muted-foreground">{m.classification_siblings_retained({}, o)}</p>}
+              {!!siblings.length && (
+                <p className="text-muted-foreground">{m.classification_siblings_retained({}, o)}</p>
+              )}
             </li>
           );
         })}
@@ -257,7 +257,13 @@ export function ClassificationReviewWorkspace({
         {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
         {busy && <p role="status">{m.correction_saving({}, o)}</p>}
         <div className="flex min-w-0 flex-wrap gap-2">
-          <Button type="button" variant="outline" className={wrap} disabled={busy || !changed.length} onClick={onReview}>
+          <Button
+            type="button"
+            variant="outline"
+            className={wrap}
+            disabled={busy || !changed.length}
+            onClick={onReview}
+          >
             {m.facts_review({}, o)}
           </Button>
           <Button type="button" className={wrap} disabled={busy || !confirmable} onClick={onConfirm}>
@@ -330,7 +336,13 @@ function ClassificationReuse({
         {drafts
           .filter((draft) => factHolder(draft) !== source.holder)
           .map((draft) => {
-            const reason = classificationReuseReason(draft, group, read.release, source.holder, admitted(draft.property));
+            const reason = classificationReuseReason(
+              draft,
+              group,
+              read.release,
+              source.holder,
+              admitted(draft.property),
+            );
             if (!reason || reason === 'self') return null;
             return (
               <li key={factHolder(draft)}>

@@ -154,7 +154,11 @@ test('confirm waits for a current review, blocks unread or withdrawn new intent,
   expect(sameSealedClassification(sealed, { ...sealed, statement: { ...sealed.statement } })).toBe(true);
   const invalid = {
     ...keywords,
-    result: { ok: false as const, reason: 'invalid' as const, errors: [{ pointer: '/statement/value', code: 'required' }] },
+    result: {
+      ok: false as const,
+      reason: 'invalid' as const,
+      errors: [{ pointer: '/statement/value', code: 'required' }],
+    },
   };
   const orphans = retainOrphanedClassificationDiagnostic(invalid, []);
   expect(focusableClassificationHolder(factHolder(invalid), [], orphans)).toBeNull();
@@ -167,7 +171,9 @@ test('confirm waits for a current review, blocks unread or withdrawn new intent,
     command: sealed.command,
     result: { ok: false as const, reason: 'uncertain' as const },
   };
-  expect(classificationReviewableDrafts([keywords, uncertain]).map((draft) => draft.property)).toEqual(['schema:keywords']);
+  expect(classificationReviewableDrafts([keywords, uncertain]).map((draft) => draft.property)).toEqual([
+    'schema:keywords',
+  ]);
 });
 
 test('native selection rereads the Character and never replays the proposal command', async () => {

@@ -892,7 +892,8 @@ for (const family of ['Character', 'StoryArc'] as const) {
         const holder = field()!;
         await settle(() => button(holder, m.facts_edit_field()).click());
         await enter(holder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/authored');
-        const submitControl = family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit());
+        const submitControl =
+          family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit());
         const oldSubmit = capture(submitControl);
         await reload(withdrawn);
         expect(field()).toBe(holder);
@@ -924,7 +925,10 @@ for (const family of ['Character', 'StoryArc'] as const) {
         await settle(() => button(sealedHolder, m.facts_edit_field()).click());
         await enter(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/sealed');
         await settle(() =>
-          button(family === 'Character' ? host : sealedHolder, family === 'Character' ? m.facts_submit() : m.correction_submit()).click(),
+          button(
+            family === 'Character' ? host : sealedHolder,
+            family === 'Character' ? m.facts_submit() : m.correction_submit(),
+          ).click(),
         );
         expect(commands).toHaveLength(1);
         const exact = structuredClone(commands[0]);
