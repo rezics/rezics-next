@@ -5,6 +5,10 @@ import { PartValue, type StatementFieldsRead } from './statement-editor-view';
 import type { SnakInput, StatementInput } from './statement-editor';
 import { gameUuid } from './game-profile';
 
+function asRank(rank: string | undefined): NonNullable<StatementInput['rank']> {
+  return rank === 'preferred' ? 'preferred' : 'normal';
+}
+
 function rankLabel(rank: string | undefined, locale: string) {
   const o = { locale: locale as never };
   return rank === 'preferred'
@@ -36,21 +40,23 @@ export function GameClassificationAssertion({
 }) {
   const o = { locale: locale as never };
   if (!statement) return <p className="text-sm text-muted-foreground">{missing}</p>;
+  const shownRank =
+    rank ?? ('rank' in statement ? (statement.rank as string | undefined) : undefined) ?? 'normal';
   const current: StatementInput =
     'references' in statement
       ? {
           property: { id: statement.property.id },
           value: statement.value,
           qualifiers: statement.qualifiers ?? [],
-          references: statement.references,
-          rank: rank ?? ('rank' in statement ? (statement.rank as StatementInput['rank']) : undefined) ?? 'normal',
+          references: statement.references.map((reference) => ({ parts: reference.parts })),
+          rank: asRank(shownRank),
         }
       : {
           property: { id: statement.property.id },
           value: statement.value,
           qualifiers: [],
           references: [],
-          rank: rank ?? 'normal',
+          rank: asRank(shownRank),
         };
   const target = itemId(current.value);
   const related = target ? read.public.related[target] : undefined;
@@ -71,7 +77,7 @@ export function GameClassificationAssertion({
         </p>
       )}
       <p className="text-sm">
-        {m.candidate_rank({}, o)}: {rankLabel(rank ?? current.rank, locale)}
+        {m.candidate_rank({}, o)}: {rankLabel(shownRank, locale)}
       </p>
       <dl className="min-w-0 space-y-2 text-sm">
         {(current.qualifiers ?? []).map((part, index) => {
