@@ -90,7 +90,7 @@ async function prove(state: 'deep' | 'empty', axis: 'selected history' | 'unrela
   let cursor: string | undefined;
   let visited = 0;
   for (;;) {
-    const page = await pageSubjects(db.pool, ring, { partition, size, cursor });
+    const page = await pageSubjects(db.pool, ring, { partition, size, ...(cursor ? { cursor } : {}) });
     expect(page?.subjects).toHaveLength(size);
     expect(page?.next).toBeString();
     visited += page!.subjects.length;
@@ -190,7 +190,6 @@ test(
 
     const limit = 100;
     const unit = 100;
-    const scales = [1, 2, 4] as const;
     const targetLabels = (prefix: string) =>
       [0, 1].map((ordinal) => `${prefix} target ${ordinal.toString().padStart(4, '0')}`);
     const label = (prefix: string, population: string, ordinal: number) =>
@@ -295,7 +294,7 @@ test(
 
       const report = await checkGrowth(db, {
         name: `${state} viewer/query-bound production continuation as ${axis} grows`,
-        scales,
+        scales: [1, 2, 4],
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         // The production directory admits at most 100 native candidate IDs plus fixed partition and owner anchors.
         indexProbes: 256,
@@ -313,7 +312,7 @@ test(
         operation: (_database, scale) => request(scale),
       });
 
-      expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+      expect(report.samples.map(({ scale }) => scale)).toEqual([1, 2, 4]);
       for (const sample of report.samples) {
         for (const cost of sample.repetitions) {
           expect(cost.statements).toBeGreaterThan(0);
