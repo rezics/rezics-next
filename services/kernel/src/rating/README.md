@@ -544,11 +544,12 @@ messaging.
   visited by native plans and all foreign work still require observation. Caption history, vote history and catalogue
   counts are not read. This bound makes no claim about invisible MVCC work.
 - **Growth check:** `test/rating/growth-question-directory.test.ts` measures the Global keyset path at its recorded
-  64/512/4096 scales; `test/rating/question-directory-currentness.test.ts` exercises current Access revocation,
-  retirement during final preparation, mounted client creation/caption commands, sparse empty continuations,
-  explicit restart, same-input operational retry and empty-page Global denial. Independent selected
-  identity/source/authority growth, 256/1024/4096 physical plans, serialized-byte and registered-runner accounting
-  remain part of the controller's original-journey acceptance.
+  256/1024/4096 scales while independently growing unrelated question rows, measurement identities and closed
+  Global authority history. It holds selected keys and page depth fixed and checks physical access paths, row and
+  block bounds, one-pool observations, database request/response bytes, serialized response bytes and read-only SQL.
+  `test/rating/question-directory-currentness.test.ts` exercises current Access revocation, retirement during final
+  preparation, mounted client creation/caption commands, sparse empty continuations, explicit restart, same-input
+  operational retry and empty-page Global denial.
 
 #### Own vote read and withdrawal Cost
 

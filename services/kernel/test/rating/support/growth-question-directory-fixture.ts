@@ -9,7 +9,7 @@ import { newId, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 
-export const QUESTION_DIRECTORY_SCALES = [64, 512, 4096] as const;
+export const QUESTION_DIRECTORY_SCALES = [256, 1024, 4096] as const;
 export const QUESTION_DIRECTORY_STANDARD_ID = '00000000-0000-7000-8000-000000000001';
 
 export type DirectoryPrincipal = 'reader' | 'outsider' | 'anonymous';
@@ -140,6 +140,25 @@ export async function createGrowthQuestionDirectoryFixture() {
     );
   }
 
+  async function seedMeasurementIdentityRange(prefix: string, first: number, last: number): Promise<void> {
+    if (first > last) return;
+    await seedQuestionRange(prefix, first, last, 'Unrelated identity question ');
+    const result = await database.admin.query(
+      `WITH identities AS (
+         SELECT ($1::text || lpad(to_hex(n), 12, '0'))::uuid AS id, n
+         FROM generate_series($2::int, $3::int) AS n
+       )
+       UPDATE rating.question q
+       SET revision = 2, label = 'Unrelated identity question ' || identities.n::text,
+           grain = 'release', minimum_units = 1, maximum_units = 19, step_units = 2
+       FROM identities
+       WHERE q.id = identities.id`,
+      [prefix, first, last],
+    );
+    if (result.rowCount !== last - first + 1)
+      throw new Error(`Expected to revise ${last - first + 1} rating question identities, updated ${result.rowCount}`);
+  }
+
   async function seedClosedDenialHistory(first: number, last: number): Promise<void> {
     if (first > last) return;
     const result = await database.admin.query(
@@ -188,6 +207,7 @@ export async function createGrowthQuestionDirectoryFixture() {
     request,
     issueCredential: credential,
     seedQuestionRange,
+    seedMeasurementIdentityRange,
     updateQuestion,
     seedClosedDenialHistory,
     seedCurrentDenial,
