@@ -345,7 +345,6 @@ export function WorkbenchView({
                 page={{
                   state: page.state,
                   appeals: page.appeals ?? [],
-                  selectedTarget: page.selectedTarget ?? null,
                   ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
                 }}
                 queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
