@@ -2069,6 +2069,13 @@ export class Importer {
         // A confirmed statistic-only refresh changes the input projection without
         // replacing any acknowledged semantic candidate or its immutable journal.
         store.acknowledgeStatisticRefresh(run, row.recordKey);
+      } else if (
+        this.options.vocabularyAdmission &&
+        conversion &&
+        retainedCandidates.size === candidates.length &&
+        conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
+      ) {
+        // Binding availability was re-read; the justified proposals are unchanged.
       } else throw new Error('Conversion has no justified final plan');
       this.acknowledged(row.recordKey);
       return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
