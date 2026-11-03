@@ -239,9 +239,11 @@ function tableExists(database: Database, name: string): boolean {
 export function retentionCatalog(database: Database): RetentionCatalog {
   return {
     tables: new Set(
-      (database.query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as {
-        name: string;
-      }[]).map((row) => row.name),
+      (
+        database.query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as {
+          name: string;
+        }[]
+      ).map((row) => row.name),
     ),
     diagnosticRecordsColumn: tableColumns(database, 'run_generations').has('diagnostic_records'),
     userVersion: userVersion(database),
@@ -250,7 +252,10 @@ export function retentionCatalog(database: Database): RetentionCatalog {
 
 function tableColumns(database: Database, name: string): Set<string> {
   return new Set(
-    database.query(`PRAGMA table_info(${name})`).all().map((row) => (row as { name: string }).name),
+    database
+      .query(`PRAGMA table_info(${name})`)
+      .all()
+      .map((row) => (row as { name: string }).name),
   );
 }
 
@@ -344,21 +349,21 @@ function ownershipRow(
   tables?: ReadonlySet<string>,
 ): 'present' | 'absent' | 'unavailable' {
   if (tables ? !tables.has('import_owners') : !tableExists(database, 'import_owners')) return 'unavailable';
-  return database.query('SELECT 1 AS found FROM import_owners WHERE source=? LIMIT 1').get(source) ? 'present' : 'absent';
+  return database.query('SELECT 1 AS found FROM import_owners WHERE source=? LIMIT 1').get(source)
+    ? 'present'
+    : 'absent';
 }
 
 function sourcePins(database: Database, source: string) {
   const row = database
     .query('SELECT source,sequence,lease_run,generation,present_count FROM run_sources WHERE source=?')
-    .get(source) as
-    | {
-        source: unknown;
-        sequence: unknown;
-        lease_run: unknown;
-        generation: unknown;
-        present_count: unknown;
-      }
-    | null;
+    .get(source) as {
+    source: unknown;
+    sequence: unknown;
+    lease_run: unknown;
+    generation: unknown;
+    present_count: unknown;
+  } | null;
   if (!row) {
     return {
       sourceState: 'absent' as const,
@@ -446,7 +451,8 @@ function classifyGeneration(
     explanation = 'This generation is a permanent retirement tombstone; its per-run captures are already gone.';
   } else if (row.status === 'retiring') {
     reason = 'retirement-in-progress';
-    explanation = 'Retirement of this generation is already in progress for a local plan; finish that plan instead of selecting it again.';
+    explanation =
+      'Retirement of this generation is already in progress for a local plan; finish that plan instead of selecting it again.';
   } else if (pin === 'active') {
     reason = 'active-generation';
     explanation = 'The live or recoverable generation stays pinned and cannot be retired.';
@@ -467,16 +473,16 @@ function classifyGeneration(
     explanation = 'A supposedly complete generation still has deferred covers; it is not repaired into eligibility.';
   } else if (work.remaining || counts.entries !== row.supplied) {
     reason = 'inconsistent-accounting';
-    explanation = 'Stored complete accounting disagrees with retained generation-local rows; it is not repaired into eligibility.';
-  } else if (
-    row.diagnosticRecords !== null &&
-    counts.diagnosticRecords !== row.diagnosticRecords
-  ) {
+    explanation =
+      'Stored complete accounting disagrees with retained generation-local rows; it is not repaired into eligibility.';
+  } else if (row.diagnosticRecords !== null && counts.diagnosticRecords !== row.diagnosticRecords) {
     reason = 'inconsistent-accounting';
-    explanation = 'Stored diagnostic-record counts disagree with the generation-local review keys; it is not repaired into eligibility.';
+    explanation =
+      'Stored diagnostic-record counts disagree with the generation-local review keys; it is not repaired into eligibility.';
   } else {
     reason = 'superseded-complete';
-    explanation = 'This complete generation is not the current baseline or recoverable run and may be deliberately retired.';
+    explanation =
+      'This complete generation is not the current baseline or recoverable run and may be deliberately retired.';
   }
   return {
     id: row.id,
@@ -509,7 +515,11 @@ function emptyCounts(): RetentionTableCounts {
 function mapInspectionFailure(error: unknown): never {
   if (error instanceof RetentionFailure) throw error;
   if (error instanceof InspectionFailure)
-    throw new RetentionFailure(error.message, error.code === 130 ? 'cancelled' : error.code === 1 ? 'failed' : 'unsafe-file', error.code);
+    throw new RetentionFailure(
+      error.message,
+      error.code === 130 ? 'cancelled' : error.code === 1 ? 'failed' : 'unsafe-file',
+      error.code,
+    );
   const code = (error as NodeJS.ErrnoException)?.code;
   if (code === 'ENOENT') throw new RetentionFailure('State file does not exist.', 'missing');
   if (code === 'ELOOP') throw new RetentionFailure('State path must not be a symbolic link.', 'unsafe-file');
@@ -640,9 +650,7 @@ function selectedRows(
     admitGenerationId(id);
     if (seen.has(id)) throw new RetentionFailure('A retention plan cannot repeat a generation ID.', 'usage');
     seen.add(id);
-    const row = database
-      .query(`${generationSelect(catalog)} WHERE source=? AND id=?`)
-      .get(source, id) as {
+    const row = database.query(`${generationSelect(catalog)} WHERE source=? AND id=?`).get(source, id) as {
       id: unknown;
       seq: unknown;
       status: unknown;
@@ -734,13 +742,15 @@ export async function buildRetentionPlan(
     };
     throwIfAborted(options.signal);
     const payload = `${JSON.stringify(document)}\n`;
-    if (bytes(payload) > MAX_PLAN_BYTES) throw new RetentionFailure('Retention plan exceeds its stored bound.', 'failed');
+    if (bytes(payload) > MAX_PLAN_BYTES)
+      throw new RetentionFailure('Retention plan exceeds its stored bound.', 'failed');
     const output = resolve(input.output);
     try {
       handle = await open(output, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL, 0o600);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST') throw new RetentionFailure('Plan path already exists and will not be replaced.', 'unsafe-file');
+      if (code === 'EEXIST')
+        throw new RetentionFailure('Plan path already exists and will not be replaced.', 'unsafe-file');
       if (code === 'ELOOP') throw new RetentionFailure('Plan path must not be a symbolic link.', 'unsafe-file');
       throw new RetentionFailure('Unable to create an exclusive owner-only plan file.', 'unsafe-file');
     }
@@ -759,7 +769,11 @@ export async function buildRetentionPlan(
 }
 
 function parseSelected(value: unknown): RetentionGenerationRow[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > RETENTION_MAX_SELECTED)
+  if (
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > RETENTION_MAX_SELECTED
+  )
     throw new RetentionFailure('Retention plan selected set is unsupported.', 'incompatible');
   return value.map((entry) => {
     const row = exactObject(
@@ -817,11 +831,14 @@ export async function readRetentionPlanFile(path: string): Promise<RetentionPlan
     handle = await open(resolved, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     const identity = await handle.stat();
     if (!identity.isFile()) throw new RetentionFailure('Plan path is not a regular file.', 'unsafe-file');
-    if ((identity.mode & 0o077) !== 0) throw new RetentionFailure('Plan file must be owner-only (mode 0600).', 'unsafe-file');
-    if (identity.size > MAX_PLAN_BYTES) throw new RetentionFailure('Plan file exceeds its stored bound.', 'incompatible');
+    if ((identity.mode & 0o077) !== 0)
+      throw new RetentionFailure('Plan file must be owner-only (mode 0600).', 'unsafe-file');
+    if (identity.size > MAX_PLAN_BYTES)
+      throw new RetentionFailure('Plan file exceeds its stored bound.', 'incompatible');
     const buffer = Buffer.alloc(Number(identity.size));
     const read = await handle.read(buffer, 0, buffer.byteLength, 0);
-    if (read.bytesRead !== buffer.byteLength) throw new RetentionFailure('Plan file could not be read completely.', 'incompatible');
+    if (read.bytesRead !== buffer.byteLength)
+      throw new RetentionFailure('Plan file could not be read completely.', 'incompatible');
     let parsed: unknown;
     try {
       parsed = JSON.parse(buffer.toString('utf8')) as unknown;
@@ -855,7 +872,11 @@ export async function readRetentionPlanFile(path: string): Promise<RetentionPlan
     admitSource(document.source);
     const state = exactObject(document.state, ['path', 'dev', 'ino', 'userVersion'], 'plan.state');
     const schema = exactObject(document.schema, ['compatibility', 'tables'], 'plan.schema');
-    const pins = exactObject(document.pins, ['baseline', 'active', 'presentCount', 'sequence', 'ownershipRow'], 'plan.pins');
+    const pins = exactObject(
+      document.pins,
+      ['baseline', 'active', 'presentCount', 'sequence', 'ownershipRow'],
+      'plan.pins',
+    );
     if (schema.compatibility !== RETENTION_SCHEMA)
       throw new RetentionFailure('Plan schema compatibility does not match this importer.', 'stale');
     if (!Array.isArray(schema.tables) || !Array.isArray(document.preserved) || !Array.isArray(document.unavailable))
@@ -899,7 +920,10 @@ export async function readRetentionPlanFile(path: string): Promise<RetentionPlan
   }
 }
 
-async function openWritable(statePath: string, options: RetentionOptions): Promise<{
+async function openWritable(
+  statePath: string,
+  options: RetentionOptions,
+): Promise<{
   path: string;
   database: Database;
   identity: { dev: number; ino: number };
@@ -1211,40 +1235,53 @@ function revalidatePins(
 ): void {
   const pins = sourcePins(database, source);
   if (pins.baseline !== plan.pins.baseline || pins.active !== plan.pins.active)
-    throw new RetentionFailure('Observed baseline or recoverable generation changed; build a fresh explicit plan.', 'stale');
+    throw new RetentionFailure(
+      'Observed baseline or recoverable generation changed; build a fresh explicit plan.',
+      'stale',
+    );
   if (pins.presentCount !== plan.pins.presentCount || pins.sequence !== plan.pins.sequence)
-    throw new RetentionFailure('Observed source sequence or present count changed; build a fresh explicit plan.', 'stale');
+    throw new RetentionFailure(
+      'Observed source sequence or present count changed; build a fresh explicit plan.',
+      'stale',
+    );
   if (catalog.userVersion !== plan.state.userVersion)
     throw new RetentionFailure('State schema version changed; build a fresh explicit plan.', 'stale');
 }
 
-function beginOrResumeWork(
-  database: Database,
-  plan: RetentionPlanDocument,
-  catalog: RetentionCatalog,
-): WorkRow {
+function beginOrResumeWork(database: Database, plan: RetentionPlanDocument, catalog: RetentionCatalog): WorkRow {
   const existing = workRow(database, plan.planId);
   const selected = plan.selected.map((row) => row.id);
   if (existing) {
     if (existing.source !== plan.source || existing.selected_json !== JSON.stringify(selected))
-      throw new RetentionFailure('Stored retention work does not match this plan; build a fresh explicit plan.', 'stale');
+      throw new RetentionFailure(
+        'Stored retention work does not match this plan; build a fresh explicit plan.',
+        'stale',
+      );
     return existing;
   }
   for (const row of plan.selected) {
-    const current = database
-      .query(`${generationSelect(catalog)} WHERE source=? AND id=?`)
-      .get(plan.source, row.id) as {
+    const current = database.query(`${generationSelect(catalog)} WHERE source=? AND id=?`).get(plan.source, row.id) as {
       status: string;
       supplied: unknown;
       diagnostic_records: unknown;
     } | null;
-    if (!current) throw new RetentionFailure(`Generation ${row.id} is no longer present; build a fresh explicit plan.`, 'stale');
+    if (!current)
+      throw new RetentionFailure(`Generation ${row.id} is no longer present; build a fresh explicit plan.`, 'stale');
     if (current.status === 'retired')
-      throw new RetentionFailure('A selected generation is already retired under a different outcome; build a fresh explicit plan.', 'stale');
+      throw new RetentionFailure(
+        'A selected generation is already retired under a different outcome; build a fresh explicit plan.',
+        'stale',
+      );
     if (current.status === 'retiring')
-      throw new RetentionFailure('A selected generation is already retiring under another local plan; finish that plan.', 'stale');
+      throw new RetentionFailure(
+        'A selected generation is already retiring under another local plan; finish that plan.',
+        'stale',
+      );
     if (current.status !== 'complete' || !row.eligible)
-      throw new RetentionFailure('A selected generation is no longer an eligible superseded complete capture.', 'ineligible');
+      throw new RetentionFailure(
+        'A selected generation is no longer an eligible superseded complete capture.',
+        'ineligible',
+      );
     const classified = classifyGeneration(
       database,
       plan.source,
@@ -1261,8 +1298,7 @@ function beginOrResumeWork(
       sourcePins(database, plan.source),
       catalog.tables,
     );
-    if (!classified.eligible)
-      throw new RetentionFailure(classified.explanation, 'ineligible');
+    if (!classified.eligible) throw new RetentionFailure(classified.explanation, 'ineligible');
   }
   const lease = randomBytes(24).toString('hex');
   for (const row of plan.selected) {
@@ -1296,9 +1332,15 @@ export async function applyRetentionPlan(
   admitPlanId(input.confirm);
   const plan = await readRetentionPlanFile(input.plan);
   if (plan.planId !== input.confirm)
-    throw new RetentionFailure('Apply requires the current plan identity as --confirm; the selected set is never expanded.', 'usage');
+    throw new RetentionFailure(
+      'Apply requires the current plan identity as --confirm; the selected set is never expanded.',
+      'usage',
+    );
   if (!plan.applyable)
-    throw new RetentionFailure('This plan includes ineligible generations; build a fresh explicit plan of eligible captures.', 'ineligible');
+    throw new RetentionFailure(
+      'This plan includes ineligible generations; build a fresh explicit plan of eligible captures.',
+      'ineligible',
+    );
   let opened: Awaited<ReturnType<typeof openWritable>> | undefined;
   let session: ImportSession | undefined;
   try {
@@ -1357,14 +1399,16 @@ export function applyRetentionOnDatabase(
   const pageSize = options.pageSize ?? RETENTION_DELETE_PAGE;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > RETENTION_MAX_PAGE)
     throw new RetentionFailure('Deletion page size must be an integer from 1 through 100.', 'usage');
-  const started = database.transaction(() => {
-    session.assertHeld(ownership);
-    if (!catalog.tables.has('run_retention_work')) ensureRetentionWork(database);
-    const existing = workRow(database, plan.planId);
-    if (existing?.status === 'complete') return existing;
-    revalidatePins(database, plan, plan.source, catalog);
-    return beginOrResumeWork(database, plan, catalog);
-  }).immediate();
+  const started = database
+    .transaction(() => {
+      session.assertHeld(ownership);
+      if (!catalog.tables.has('run_retention_work')) ensureRetentionWork(database);
+      const existing = workRow(database, plan.planId);
+      if (existing?.status === 'complete') return existing;
+      revalidatePins(database, plan, plan.source, catalog);
+      return beginOrResumeWork(database, plan, catalog);
+    })
+    .immediate();
   if (started.status === 'complete') {
     const retired = started.result_json
       ? (JSON.parse(started.result_json) as { retired: string[] }).retired
@@ -1389,45 +1433,47 @@ export function applyRetentionOnDatabase(
     throwIfAborted(options.signal);
     options.observer?.beforePage?.({ generation: generationId, phase });
     throwIfAborted(options.signal);
-    const advanced = database.transaction(() => {
-      session.assertHeld(ownership);
-      revalidatePins(database, plan, plan.source, catalog);
-      const current = workRow(database, plan.planId);
-      if (!current || current.status !== 'applying')
-        throw new RetentionFailure('Retention work is no longer the applying local plan.', 'stale');
-      const page = runPhasePage(database, plan.source, generationId, phase, cursor, pageSize, catalog.tables);
-      let nextGeneration = generationId;
-      let nextPhase = phase;
-      let nextCursor = page.cursor;
-      if (page.done) {
-        const nextIndex = phaseIndex(phase) + 1;
-        if (nextIndex < DELETE_PHASES.length) {
-          nextPhase = DELETE_PHASES[nextIndex]!;
-          nextCursor = '';
-        } else {
-          const position = selected.indexOf(generationId);
-          const following = selected[position + 1] ?? '';
-          nextGeneration = following;
-          nextPhase = DELETE_PHASES[0]!;
-          nextCursor = '';
+    const advanced = database
+      .transaction(() => {
+        session.assertHeld(ownership);
+        revalidatePins(database, plan, plan.source, catalog);
+        const current = workRow(database, plan.planId);
+        if (!current || current.status !== 'applying')
+          throw new RetentionFailure('Retention work is no longer the applying local plan.', 'stale');
+        const page = runPhasePage(database, plan.source, generationId, phase, cursor, pageSize, catalog.tables);
+        let nextGeneration = generationId;
+        let nextPhase = phase;
+        let nextCursor = page.cursor;
+        if (page.done) {
+          const nextIndex = phaseIndex(phase) + 1;
+          if (nextIndex < DELETE_PHASES.length) {
+            nextPhase = DELETE_PHASES[nextIndex]!;
+            nextCursor = '';
+          } else {
+            const position = selected.indexOf(generationId);
+            const following = selected[position + 1] ?? '';
+            nextGeneration = following;
+            nextPhase = DELETE_PHASES[0]!;
+            nextCursor = '';
+          }
         }
-      }
-      const complete = !nextGeneration;
-      database
-        .query(
-          `UPDATE run_retention_work SET generation_id=?, phase=?, cursor=?, status=?, result_json=? WHERE plan_id=? AND status=?`,
-        )
-        .run(
-          nextGeneration,
-          complete ? '' : nextPhase,
-          complete ? '' : nextCursor,
-          complete ? 'complete' : 'applying',
-          complete ? JSON.stringify({ retired: selected }) : null,
-          plan.planId,
-          'applying',
-        );
-      return { nextGeneration, nextPhase, nextCursor, complete };
-    }).immediate();
+        const complete = !nextGeneration;
+        database
+          .query(
+            `UPDATE run_retention_work SET generation_id=?, phase=?, cursor=?, status=?, result_json=? WHERE plan_id=? AND status=?`,
+          )
+          .run(
+            nextGeneration,
+            complete ? '' : nextPhase,
+            complete ? '' : nextCursor,
+            complete ? 'complete' : 'applying',
+            complete ? JSON.stringify({ retired: selected }) : null,
+            plan.planId,
+            'applying',
+          );
+        return { nextGeneration, nextPhase, nextCursor, complete };
+      })
+      .immediate();
     if (advanced.complete) {
       return {
         version: 1,

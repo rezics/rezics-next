@@ -5,11 +5,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { runImportCli } from '../src/cli.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { parseRetentionArgs } from '../src/retention-cli.ts';
-import {
-  RETENTION_DELETE_PHASES,
-  applyRetentionPlan,
-  type RetentionDeletePhase,
-} from '../src/retention.ts';
+import { RETENTION_DELETE_PHASES, applyRetentionPlan, type RetentionDeletePhase } from '../src/retention.ts';
 import { RunStore, type SourceProjection } from '../src/run-store.ts';
 
 const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
@@ -169,7 +165,18 @@ test('operator retires a superseded complete capture, keeps authority, and resum
     expect(list.generations.find((row) => row.id === seeded.baseline)?.reason).toBe('completed-baseline');
     expect(list.generations.find((row) => row.id === seeded.active)?.reason).toBe('active-generation');
     const planned = await runImportCli(
-      ['retention', '--state', state, '--source', source, '--generation', seeded.retired, '--output', planPath, '--json'],
+      [
+        'retention',
+        '--state',
+        state,
+        '--source',
+        source,
+        '--generation',
+        seeded.retired,
+        '--output',
+        planPath,
+        '--json',
+      ],
       { fetch: fetchBoundary },
     );
     expect(planned.code).toBe(0);
@@ -239,7 +246,9 @@ test('operator retires a superseded complete capture, keeps authority, and resum
       expect(ackAfter.filter((row) => row.record_key !== 'Q3')).toEqual(seeded.ack);
       expect(ackAfter.some((row) => row.record_key === 'Q3')).toBe(true);
       expect(
-        session.store.database.query('SELECT COUNT(*) AS n FROM run_entries WHERE source=? AND run_id=?').get(other, seeded.other),
+        session.store.database
+          .query('SELECT COUNT(*) AS n FROM run_entries WHERE source=? AND run_id=?')
+          .get(other, seeded.other),
       ).toEqual({ n: 1 });
     } finally {
       session.close();
@@ -262,7 +271,8 @@ test('apply refuses missing confirmation, stale pins, unsafe paths, live owners 
   const seeded = seedJourney(state);
   try {
     expect(
-      (await runImportCli(['retention', '--state', state, '--plan', join(dir, 'missing.json'), '--apply', '--json'])).code,
+      (await runImportCli(['retention', '--state', state, '--plan', join(dir, 'missing.json'), '--apply', '--json']))
+        .code,
     ).toBe(2);
     const planPath = join(dir, 'plan.json');
     const planned = await runImportCli([
@@ -278,13 +288,31 @@ test('apply refuses missing confirmation, stale pins, unsafe paths, live owners 
       '--json',
     ]);
     const plan = JSON.parse(planned.stdout) as { planId: string };
-    const stale = await runImportCli(['retention', '--state', join(dir, 'absent.sqlite'), '--source', source, '--json']);
+    const stale = await runImportCli([
+      'retention',
+      '--state',
+      join(dir, 'absent.sqlite'),
+      '--source',
+      source,
+      '--json',
+    ]);
     expect(stale.code).toBe(2);
     expect(JSON.parse(stale.stdout).error).toContain('does not exist');
     const link = join(dir, 'linked.sqlite');
     symlinkSync(state, link);
     expect((await runImportCli(['retention', '--state', link, '--source', source, '--json'])).code).toBe(2);
-    const unknown = await runImportCli(['retention', '--state', state, '--source', 'openlibrary', '--generation', '1', '--output', join(dir, 'missing-source.json'), '--json']);
+    const unknown = await runImportCli([
+      'retention',
+      '--state',
+      state,
+      '--source',
+      'openlibrary',
+      '--generation',
+      '1',
+      '--output',
+      join(dir, 'missing-source.json'),
+      '--json',
+    ]);
     expect(unknown.code).toBe(2);
     const later = new ImportSession(state);
     try {
@@ -300,9 +328,17 @@ test('apply refuses missing confirmation, stale pins, unsafe paths, live owners 
     } finally {
       later.close();
     }
-    const moved = await runImportCli(
-      ['retention', '--state', state, '--plan', planPath, '--confirm', plan.planId, '--apply', '--json'],
-    );
+    const moved = await runImportCli([
+      'retention',
+      '--state',
+      state,
+      '--plan',
+      planPath,
+      '--confirm',
+      plan.planId,
+      '--apply',
+      '--json',
+    ]);
     expect(moved.code).toBe(2);
     expect(JSON.parse(moved.stdout).error).toContain('fresh explicit plan');
     const owner = new ImportSession(state);
@@ -310,9 +346,9 @@ test('apply refuses missing confirmation, stale pins, unsafe paths, live owners 
       expect(owner.acquire(source) === 'busy' ? 'busy' : 'held').not.toBe('busy');
       const freshPlan = join(dir, 'fresh.json');
       const listed = await runImportCli(['retention', '--state', state, '--source', source, '--json']);
-      const eligible = (JSON.parse(listed.stdout) as { generations: { id: string; eligible: boolean }[] }).generations.find(
-        (row) => row.eligible,
-      );
+      const eligible = (
+        JSON.parse(listed.stdout) as { generations: { id: string; eligible: boolean }[] }
+      ).generations.find((row) => row.eligible);
       expect(eligible).toBeDefined();
       const rebuilt = await runImportCli([
         'retention',
@@ -380,8 +416,19 @@ test('tampered, ineligible and cancelled plans never expand the selected set', a
     expect(tampered.code).toBe(2);
     chmodSync(planPath, 0o644);
     expect(
-      (await runImportCli(['retention', '--state', state, '--plan', planPath, '--confirm', plan.planId as string, '--apply', '--json']))
-        .code,
+      (
+        await runImportCli([
+          'retention',
+          '--state',
+          state,
+          '--plan',
+          planPath,
+          '--confirm',
+          plan.planId as string,
+          '--apply',
+          '--json',
+        ])
+      ).code,
     ).toBe(2);
     chmodSync(planPath, 0o600);
     const accounting = new RunStore<SourceProjection>(state, { projectionMode: 'source-record' });
@@ -509,13 +556,19 @@ test('crash in every deletion phase resumes the same plan without restoring remo
       const store = new RunStore<SourceProjection>(state, { projectionMode: 'source-record' });
       try {
         expect(
-          store.database.query('SELECT status FROM run_generations WHERE source=? AND id=?').get(source, seeded.retired),
+          store.database
+            .query('SELECT status FROM run_generations WHERE source=? AND id=?')
+            .get(source, seeded.retired),
         ).toEqual({ status: 'retired' });
         expect(
-          store.database.query('SELECT COUNT(*) AS n FROM run_entries WHERE source=? AND run_id=?').get(source, seeded.retired),
+          store.database
+            .query('SELECT COUNT(*) AS n FROM run_entries WHERE source=? AND run_id=?')
+            .get(source, seeded.retired),
         ).toEqual({ n: 0 });
         expect(
-          store.database.query('SELECT COUNT(*) AS n FROM run_payloads WHERE source=? AND command_key=?').get(source, 'cmd-Q1'),
+          store.database
+            .query('SELECT COUNT(*) AS n FROM run_payloads WHERE source=? AND command_key=?')
+            .get(source, 'cmd-Q1'),
         ).toEqual({ n: 1 });
       } finally {
         store.close();

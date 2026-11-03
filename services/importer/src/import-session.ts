@@ -122,9 +122,10 @@ export class ImportSession {
 
   readOwner(source: string): { pid: number; birth: string } | null {
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
-    const row = this.store.database
-      .prepare('SELECT pid,birth FROM import_owners WHERE source=?')
-      .get(source) as { pid: number; birth: string } | null;
+    const row = this.store.database.prepare('SELECT pid,birth FROM import_owners WHERE source=?').get(source) as {
+      pid: number;
+      birth: string;
+    } | null;
     return row ? { pid: row.pid, birth: row.birth } : null;
   }
 

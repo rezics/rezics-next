@@ -62,8 +62,7 @@ function boundedArguments(argv: readonly string[]): void {
     if (typeof argument !== 'string' || argument.length > MAX_ARGUMENT_BYTES || argument.includes('\0'))
       throw new UsageFailure('Retention arguments exceed the supported size.');
     totalBytes += Buffer.byteLength(argument, 'utf8');
-    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES)
-      throw new UsageFailure('Retention arguments exceed the supported size.');
+    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES) throw new UsageFailure('Retention arguments exceed the supported size.');
   }
 }
 
@@ -107,10 +106,15 @@ export function parseRetentionArgs(argv: readonly string[]): Parsed {
     values.set(flag, value);
   }
   const state = values.get('--state');
-  if (!state || !state.trim() || state === '-')
-    throw new UsageFailure('Retention requires --state <sqlite-path>.');
+  if (!state || !state.trim() || state === '-') throw new UsageFailure('Retention requires --state <sqlite-path>.');
   if (apply) {
-    if (values.has('--source') || values.has('--after') || values.has('--limit') || values.has('--output') || generations.length)
+    if (
+      values.has('--source') ||
+      values.has('--after') ||
+      values.has('--limit') ||
+      values.has('--output') ||
+      generations.length
+    )
       throw new UsageFailure('Apply uses --state, --plan and --confirm.');
     const plan = values.get('--plan');
     const confirm = values.get('--confirm');
@@ -238,7 +242,12 @@ export async function runRetentionCli(
   } catch (error) {
     const detail = errorMessage(error);
     if (jsonRequested)
-      return { code: detail.code, stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`, stderr: '', openHandles: 0 };
+      return {
+        code: detail.code,
+        stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
     return { code: detail.code, stdout: '', stderr: `${terminalSafe(detail.message)}\n${USAGE}\n`, openHandles: 0 };
   }
 
@@ -261,26 +270,27 @@ export async function runRetentionCli(
         options,
       );
     else
-      document = await applyRetentionPlan(
-        { state: parsed.state, plan: parsed.plan, confirm: parsed.confirm },
-        options,
-      );
+      document = await applyRetentionPlan({ state: parsed.state, plan: parsed.plan, confirm: parsed.confirm }, options);
   } catch (error) {
     failure = errorMessage(error);
   }
   if (failure) {
     if (parsed.json)
-      return { code: failure.code, stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`, stderr: '', openHandles: 0 };
+      return {
+        code: failure.code,
+        stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
     return { code: failure.code, stdout: '', stderr: `${terminalSafe(failure.message)}\n`, openHandles: 0 };
   }
-  const body =
-    parsed.json
-      ? `${jsonSafe(document)}\n`
-      : parsed.command === 'list'
-        ? renderList(document as RetentionListDocument)
-        : parsed.command === 'plan'
-          ? renderPlan(document as RetentionPlanDocument)
-          : renderApply(document as RetentionApplyDocument);
+  const body = parsed.json
+    ? `${jsonSafe(document)}\n`
+    : parsed.command === 'list'
+      ? renderList(document as RetentionListDocument)
+      : parsed.command === 'plan'
+        ? renderPlan(document as RetentionPlanDocument)
+        : renderApply(document as RetentionApplyDocument);
   const cancelled = parsed.command === 'apply' && (document as RetentionApplyDocument).status === 'cancelled';
   return { code: cancelled ? 130 : 0, stdout: body, stderr: '', openHandles: 0 };
 }

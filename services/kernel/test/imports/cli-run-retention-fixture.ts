@@ -65,17 +65,24 @@ export async function runCliRunRetentionJourney() {
       const db = new Database(path, { readonly: true });
       try {
         return {
-          generations: db
-            .query('SELECT id,status FROM run_generations WHERE source=? ORDER BY seq')
-            .all('bangumi') as { id: string; status: string }[],
-          source: db.query('SELECT generation,lease_run,present_count,sequence FROM run_sources WHERE source=?').get('bangumi') as {
+          generations: db.query('SELECT id,status FROM run_generations WHERE source=? ORDER BY seq').all('bangumi') as {
+            id: string;
+            status: string;
+          }[],
+          source: db
+            .query('SELECT generation,lease_run,present_count,sequence FROM run_sources WHERE source=?')
+            .get('bangumi') as {
             generation: string | null;
             lease_run: string | null;
             present_count: number;
             sequence: number;
           },
-          ack: db.query('SELECT record_key,row_json FROM run_acknowledged WHERE source=? ORDER BY record_key').all('bangumi'),
-          payloads: db.query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key').all('bangumi'),
+          ack: db
+            .query('SELECT record_key,row_json FROM run_acknowledged WHERE source=? ORDER BY record_key')
+            .all('bangumi'),
+          payloads: db
+            .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
+            .all('bangumi'),
         };
       } finally {
         db.close();
@@ -157,7 +164,9 @@ export async function runCliRunRetentionJourney() {
     const interrupted = await invoke(jsonl(third), true);
     expect([1, 130]).toContain(interrupted.code);
     const before = facts(state);
-    const superseded = before.generations.find((row) => row.status === 'complete' && row.id !== before.source.generation);
+    const superseded = before.generations.find(
+      (row) => row.status === 'complete' && row.id !== before.source.generation,
+    );
     expect(superseded).toBeDefined();
     let network = 0;
     const fetchBoundary = (async () => {
@@ -177,7 +186,18 @@ export async function runCliRunRetentionJourney() {
     expect(list.active).toBe(before.source.lease_run);
     expect(list.generations.find((row) => row.id === superseded!.id)?.eligible).toBe(true);
     const planned = await runImportCli(
-      ['retention', '--state', state, '--source', 'bangumi', '--generation', superseded!.id, '--output', planPath, '--json'],
+      [
+        'retention',
+        '--state',
+        state,
+        '--source',
+        'bangumi',
+        '--generation',
+        superseded!.id,
+        '--output',
+        planPath,
+        '--json',
+      ],
       { fetch: fetchBoundary },
     );
     expect(planned.code).toBe(0);
