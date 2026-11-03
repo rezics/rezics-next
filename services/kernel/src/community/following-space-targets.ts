@@ -66,7 +66,7 @@ async function pageSnapshot(
   client: Parameters<ViewerActionResource['read']>[0],
   ids: readonly string[],
   at: string,
-): Promise<Map<string, Snapshot>> {
+): Promise<Map<string, LocatedSnapshot>> {
   const selected = ids.flatMap((id) => {
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
@@ -77,12 +77,12 @@ async function pageSnapshot(
     ids: selected.map(({ id }) => id),
     at,
   });
-  return new Map(rows.flatMap((row) => (row.space_id === null ? [] : [[row.space_id, row] as const])));
+  return new Map(rows.filter(isLocatedSnapshot).map((row) => [row.space_id, row]));
 }
 
 function spaceResource(
   base: ViewerActionResource,
-  expected: ReadonlyMap<string, Snapshot>,
+  expected: ReadonlyMap<string, LocatedSnapshot>,
   activeAddressClaims: Set<string>,
 ): ViewerActionResource {
   return {
@@ -90,9 +90,7 @@ function spaceResource(
     async prepare(input) {
       const selected = input.ids.flatMap((spaceId) => {
         const snapshot = expected.get(spaceId);
-        return snapshot?.address === null || snapshot?.address === undefined
-          ? []
-          : [{ spaceId, address: snapshot.address }];
+        return typeof snapshot?.address === 'string' ? [{ spaceId, address: snapshot.address }] : [];
       });
       const claims = await withConnection(input.pool, (connection) =>
         readActiveSpaceAddressClaims(deadlineClient(connection, input.deadline), selected),
