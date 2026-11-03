@@ -10,7 +10,7 @@ import memberRecording from '../kernel/recorded/library-collection-members.json'
 import subjectRecording from '../kernel/recorded/subject.json';
 import definitionsRecording from '../kernel/recorded/definitions-release.json';
 import { collectionStoryMembers, collectionStoryPaths } from '../kernel/fake/collection-stories';
-import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
+import { collectionLongNotesSparse, setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
 import { m } from '../paraglide/messages.js';
 
@@ -21,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Read page states. Review these same IDs at phone390 and desktop1280, all launch locale globals and light/dark theme globals. Web story review and Root screenshot review PENDING. Social actions await their native producers; rows render only supplied FULL facts.',
+          'Read page states. Review these same IDs at phone390 and desktop1280, all launch locale globals and light/dark theme globals. UnlistedVisitor is a required signed-out unlisted browse state. LongNotesSparseContinuation joins long mixed-script identity, document-derived notes, duplicate occurrences and continuable empty slices. Overflow, keyboard and target-size remain unmeasured until admitted capture; canonical IDs come from the admitted index. Web story review and Root screenshot review PENDING. Social actions await their native producers; rows render only supplied FULL facts.',
       },
     },
   },
@@ -588,7 +588,6 @@ export const UnknownNotFound: Story = {
 
 export const UnlistedVisitor: Story = {
   name: 'Signed out, unlisted collection',
-  tags: ['!dev'],
   render: () => render('unlisted', 'Signed Out'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -668,6 +667,27 @@ export const NotesAndDuplicates: Story = {
       exact: true,
     });
     await expect(view.getAllByRole('link', { name: 'Snow Country' })).toHaveLength(2);
+  },
+};
+
+export const LongNotesSparseContinuation: Story = {
+  name: 'Owner, long notes with sparse continuation',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Actual browse route. Duplicate occurrences keep distinct IDs for one mixed-script identity, document-derived notes, and a withheld member without invented facts. Continuation stays offered for empty slices. Overflow, keyboard and target-size are unmeasured until admitted capture; canonical ID comes from the admitted index.',
+      },
+    },
+  },
+  render: () => render('long-notes-sparse'),
+  play: async (context) => {
+    const view = await detailReady(context);
+    await expect(view.getAllByRole('link', { name: collectionLongNotesSparse.identity })).toHaveLength(2);
+    for (const note of collectionLongNotesSparse.notes) await view.findByText(note);
+    await view.findByRole('link', { name: m.library_collection_more() });
+    await expect(view.getByText(m.library_subject_unavailable())).toBeVisible();
+    await expect(view.queryByRole('link', { name: 'Snow Country', exact: true })).toBeNull();
   },
 };
 

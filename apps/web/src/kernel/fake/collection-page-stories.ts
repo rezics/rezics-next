@@ -1,3 +1,4 @@
+import { documentText, fromPlainText } from '@rezics/document';
 import type { KernelRecording } from '../fake';
 import type { FakeRoute } from '../fake-modules.ts';
 import collection from '../recorded/library-collection.json';
@@ -19,6 +20,7 @@ export type CollectionStoryMode =
   | 'one-page'
   | 'many-pages'
   | 'notes-duplicates'
+  | 'long-notes-sparse'
   | 'deep-page'
   | 'final-page'
   | 'preparing'
@@ -34,6 +36,37 @@ export type CollectionStoryMode =
   | 'boundary-unknown'
   | 'boundary-refresh-failed'
   | 'expired-undo';
+
+/** Contract-shaped member notes derived from structural documents; native notes remain strings. */
+export const collectionLongNotesSparse = {
+  identity:
+    '雪国 Snow Country — 川端康成 Yasunari Kawabata, a long attached identity that stays with this occurrence',
+  notes: [
+    documentText(
+      fromPlainText(
+        [
+          '雪国の長い読書メモ — Kawabata kept this occurrence on the shelf after the winter train.',
+          'The rooms stay quiet, and this note is the structural document for the first occurrence only.',
+          'この出現は主題と別の識別子を持ち、重複しても一つに畳み込まれない。',
+        ].join('\n'),
+      ),
+    ),
+    documentText(
+      fromPlainText(
+        [
+          '同じ雪国の第二の出現 — a second occurrence keeps its own long mixed-script document.',
+          'Continuation stays offered when this page shows no newly visible identity.',
+          '空の続きも打ち切りではない。',
+        ].join('\n'),
+      ),
+    ),
+  ],
+  occurrenceIds: ['01a17a3b-6e78-73b5-9efd-f4cc070cc9e3', '01a17a3b-6e78-73b5-9efd-f4cc070cc9e4'] as const,
+  withheldOccurrenceId: '01a17a3b-6e78-73b5-9efd-f4cc070cc9e5',
+  withheldSubjectId: '01a17a3b-6c01-77c8-94fd-810a3ae73368',
+  next: 'sparse-next',
+  emptyCursor: 'sparse-empty',
+} as const;
 
 export const collectionStoryDestinationId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd0';
 let destinationRevision = 3;
@@ -103,6 +136,10 @@ export function setCollectionStoryMode(next: CollectionStoryMode, editor = false
       note: 'A second occurrence with its own note.',
     });
     editedCollection.memberCount = 5;
+  }
+  if (next === 'long-notes-sparse') {
+    editedMembers = sparseVisibleMembers();
+    editedCollection.memberCount = 3;
   }
   if (next.startsWith('boundary-')) {
     editedMembers.unshift({ ...clone(members[3]!), id: '01a17a3b-6e78-73b5-9efd-f4cc070cc9e2' });
@@ -186,7 +223,41 @@ function listResponse(request: Request) {
   if (mode === 'empty') return { status: 200, members: [], next: null };
   if (mode === 'one-page') return { status: 200, members: members.slice(0, 1), next: null };
   if (mode === 'many-pages') return { status: 200, members, next: 'page-two' };
+  if (mode === 'long-notes-sparse') {
+    if (!cursor)
+      return {
+        status: 200,
+        members: [...members, sparseWithheldMember()],
+        next: collectionLongNotesSparse.next,
+      };
+    return {
+      status: 200,
+      members: [],
+      next: cursor === collectionLongNotesSparse.next ? collectionLongNotesSparse.emptyCursor : null,
+    };
+  }
   return { status: 200, members, next: null };
+}
+
+function sparseVisibleMembers(): typeof collectionStoryMembers {
+  const source = clone(members[0]!);
+  const label = { ...source.subject.label, value: collectionLongNotesSparse.identity };
+  return collectionLongNotesSparse.occurrenceIds.map((id, index) => ({
+    ...source,
+    id,
+    note: collectionLongNotesSparse.notes[index]!,
+    subject: { ...source.subject, label },
+  }));
+}
+
+function sparseWithheldMember() {
+  return {
+    id: collectionLongNotesSparse.withheldOccurrenceId,
+    subjectId: collectionLongNotesSparse.withheldSubjectId,
+    note: null,
+    addedAt: members[0]!.addedAt,
+    subject: null,
+  };
 }
 
 function destinationCollection() {
