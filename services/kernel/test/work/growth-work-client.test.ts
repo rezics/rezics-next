@@ -10,11 +10,13 @@ const scales = [64, 512, 4096] as const;
 const historyRowsPerUnit = 16;
 const pageLimit = 10;
 const seededStepCount = pageLimit + 2;
+const deepStepCount = pageLimit * 8;
 const repetitions = 1;
 // Keep checkGrowth's default one warm-up; every warm-up and measured run gets its own probe.
 const probesPerScale = repetitions + 1;
 const fallbackPrefix = `work-client-fallback-growth:${crypto.randomUUID()}:`;
 const readPrefix = `work-client-read-growth:${crypto.randomUUID()}:`;
+const boundedFallbackPrefix = `work-client-bounded-fallback:${crypto.randomUUID()}:`;
 const samePartition = `work-client-growth-partition:${crypto.randomUUID()}`;
 const otherPartitionPrefix = `work-client-growth-other:${crypto.randomUUID()}:`;
 const genericRealm = 'aaaaaaaa-0000-7000-8000-000000000001';
@@ -46,7 +48,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    for (const prefix of [fallbackPrefix, readPrefix]) await deleteFixture(prefix);
+    for (const prefix of [fallbackPrefix, readPrefix, boundedFallbackPrefix]) await deleteFixture(prefix);
   } finally {
     await client?.close();
     await db?.close();
@@ -354,4 +356,93 @@ test('Work client status and step reads stay within their bound as workflow hist
   expect(report.samples).toHaveLength(scales.length);
   logEvidence('work client reads', report, runs, () => false);
   await deleteFixture(readPrefix);
+}, 180_000);
+
+function childWorkflowIDForProbe(prefix: string, probe: Probe): string {
+  const repetition = Number(probe.parentWorkflowID.slice(probe.parentWorkflowID.lastIndexOf(':') + 1));
+  const scaleIndex = Math.floor(repetition / probesPerScale);
+  const scale = scales[scaleIndex];
+  if (scale === undefined) throw new RangeError(`Unexpected work-client probe ${probe.parentWorkflowID}`);
+  const probeIndex = repetition - scaleIndex * probesPerScale;
+  return `${prefix}probe:child:${scale}:${probeIndex}`;
+}
+
+async function runBoundedFallback(prefix: string, probe: Probe): Promise<void> {
+  const childWorkflowID = childWorkflowIDForProbe(prefix, probe);
+  const expectedName = `growth.work_client.step:${childWorkflowID}`;
+  expect(await client.getWorkflow(childWorkflowID)).toMatchObject({ workflowID: childWorkflowID, status: 'SUCCESS' });
+  const list = (offset: number) =>
+    client.listWorkflowSteps(probe.legacyWorkflowID, { limit: pageLimit, offset });
+  const first = await list(0);
+  expect(first).toHaveLength(pageLimit);
+  expect(first?.map(({ functionID }) => functionID)).toEqual(
+    Array.from({ length: pageLimit }, (_, index) => index + 1),
+  );
+  expect(first?.every(({ name }) => name === expectedName)).toBe(true);
+
+  const continuation = await list(pageLimit);
+  const continuationCount = Math.min(pageLimit, deepStepCount - pageLimit);
+  expect(continuation?.map(({ functionID }) => functionID)).toEqual(
+    Array.from({ length: continuationCount }, (_, index) => pageLimit + index + 1),
+  );
+  expect(continuation?.every(({ name }) => name === expectedName)).toBe(true);
+  expect(await list(pageLimit)).toEqual(continuation);
+
+  const deepOffset = pageLimit * 4;
+  const deep = await list(deepOffset);
+  const deepCount = Math.min(pageLimit, deepStepCount - deepOffset);
+  expect(deep?.map(({ functionID }) => functionID)).toEqual(
+    Array.from({ length: deepCount }, (_, index) => deepOffset + index + 1),
+  );
+  expect(deep?.every(({ name }) => name === expectedName)).toBe(true);
+  expect(await list(deepOffset)).toEqual(deep);
+  expect(await list(deepStepCount)).toEqual([]);
+
+  const absent = `realm:leave:${crypto.randomUUID()}:${crypto.randomUUID()}`;
+  expect(await client.getWorkflow(absent)).toBeNull();
+  expect(await client.listWorkflowSteps(absent, { limit: pageLimit, offset: 0 })).toEqual([]);
+}
+
+test('Legacy leave fallback discovery stays bounded as unrelated workflow history grows', async () => {
+  const runs: RunEvidence[] = [];
+  const report = await checkGrowth(db, {
+    name: 'legacy leave fallback bounded discovery',
+    scales,
+    repetitions,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(growth, scale, previous) {
+      const probes = probesForScale(boundedFallbackPrefix, scale);
+      await seedScale(growth, boundedFallbackPrefix, scale, previous, probes, true);
+      for (const probe of probes) {
+        const childWorkflowID = childWorkflowIDForProbe(boundedFallbackPrefix, probe);
+        const expectedName = `growth.work_client.step:${childWorkflowID}`;
+        await growth.admin.query(
+          'UPDATE dbos.operation_outputs SET function_name=$1 WHERE workflow_uuid=$2',
+          [expectedName, childWorkflowID],
+        );
+        await growth.admin.query(
+          `INSERT INTO dbos.operation_outputs (workflow_uuid, function_id, function_name, output, error)
+           SELECT $1, generated.step_id, $2, $3, NULL
+             FROM generate_series($4::int + 1, $5::int) AS generated(step_id)`,
+          [childWorkflowID, expectedName, serializedNull, seededStepCount, deepStepCount],
+        );
+        await growth.admin.query(
+          'UPDATE dbos.workflow_status SET step_count=$2 WHERE workflow_uuid=$1',
+          [childWorkflowID, deepStepCount],
+        );
+      }
+    },
+    async warmup(_growth, _scale, repetition) {
+      await runBoundedFallback(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition));
+    },
+    async operation(_growth, scale, repetition) {
+      const before = planDocuments.length;
+      await runBoundedFallback(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition));
+      runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
+    },
+  });
+
+  expect(report.samples).toHaveLength(scales.length);
+  logEvidence('legacy fallback bounded', report, runs, (sql) => sql.toLowerCase().includes('workflow'));
+  await deleteFixture(boundedFallbackPrefix);
 }, 180_000);
