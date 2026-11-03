@@ -39,7 +39,7 @@ test('root seeding owns the definition before awaiting storage', async () => {
   const store = createConceptBrowseStore(pool, `concept-${randomUUID().slice(0, 8)}-`, id, {
     expiresAt: Date.now() + 60000,
   });
-  const mutable = { ...selection };
+  const mutable = { ...selection, concept: String(selection.concept) };
   const creating = store.create(mutable, binding);
   mutable.concept = 'changed';
   const retained = await creating;
