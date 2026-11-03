@@ -85,7 +85,7 @@ test('inverse relations select released source facets independently of candidate
   expect(() => admitFilter(filter, release)).toThrow();
   expect(admitFilter(filter, release, { inverse: true, spoilerThreshold: 1 })).toEqual({
     and: [
-      input.and[0],
+      { type: { in: ['wd:Q95074'] } },
       {
         statement: {
           property: 'schema:character',
