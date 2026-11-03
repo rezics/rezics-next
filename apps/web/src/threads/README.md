@@ -1,5 +1,22 @@
 # Thread authoring
 
+## New-thread destination and community rules
+
+The signed-in new-thread route projects the posting destination only from the current board response through
+`boardCommunitySource`. It does not request community details again. Global boards have no community source;
+missing or unavailable producers, an explicit no-rules result and an unavailable rules revision remain separate
+states. The disclosed body keeps its own post, revision, hash and licence identity and grants no posting or membership
+authority.
+
+Ordinary route revalidation may replace the current board response while the existing editor keeps its original
+board intent, draft, Subject selection, review citation and idempotency key. A changed rules identity closes the old
+reading, retains only its compact identity and offers deliberate inspection of the current body. The reader is bound
+to the admitted thread-creation lifetime; retirement removes its private content and rejects old focus callbacks.
+Text-profile rules use the existing document renderer and same-response body, with no media, member or linked-rule
+reads.
+
+Decision: The expanded reader stays in page flow on phones and uses a bounded side panel beside writing on desktop.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in

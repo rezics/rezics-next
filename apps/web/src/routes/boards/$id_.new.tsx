@@ -17,6 +17,12 @@ import { PageHeading } from '../../shell/page-heading';
 import { canSubmitThread } from '../../threads/review-policy';
 import { DiscussionSubjects } from '../../threads/discussion-subjects';
 import { contentSubjectPreset } from '../../threads/content-subject-search';
+import {
+  compositionDestinationPanelKey,
+  createCompositionDestinationReader,
+  type CompositionDestinationProjection,
+} from '../../threads/composition-destination';
+import { CompositionDestinationPanel } from '../../threads/composition-destination-panel';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import {
   observeThreadCreationReader,
@@ -103,7 +109,7 @@ function NewThreadEditor({
 }: NewThreadCompositionProps) {
   // Loader refreshes and display-hint changes keep the original draft and immutable command key.
   const [origin] = useState(() => ({
-    board,
+    board: { id: board.id, title: board.title, purpose: board.purpose },
     boardId: board.id,
     purpose: board.purpose,
     idempotencyKey,
@@ -120,6 +126,27 @@ function NewThreadEditor({
     readerAdmission,
   );
   const { lifetime, ticket, current, bound } = visit;
+  const [destinationReader] = useState(() => createCompositionDestinationReader());
+  const destinationBinding = useRef<{ boardId: string; projection: CompositionDestinationProjection } | null>(null);
+  const destination =
+    current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
+  destinationBinding.current = destination ? { boardId: board.id, projection: destination } : null;
+  const destinationIsCurrent = useCallback(
+    (expected: CompositionDestinationProjection) => {
+      const active = destinationBinding.current;
+      return Boolean(
+        active?.projection === expected &&
+          active.boardId === origin.boardId &&
+          lifetime.isBound(ticket, false) &&
+          lifetime.isCurrent(ticket, false),
+      );
+    },
+    [lifetime, origin.boardId, ticket],
+  );
+  useLayoutEffect(() => {
+    if (!destination) destinationReader.clear();
+  }, [Boolean(destination), destinationReader]);
+  useLayoutEffect(() => () => destinationReader.clear(), [destinationReader]);
   const [initiallyAdmitted] = useState(() => bound);
   const review = origin.purpose === 'reviews';
   const [subjectId, setSubjectId] = useState<string | null>(origin.presetSubject);
@@ -187,70 +214,81 @@ function NewThreadEditor({
         navigationContext={threadCreationNavigationContext}
         onNavigationLeave={lifetime.depart}
       >
-        <article className="max-w-4xl space-y-8 text-foreground">
+        <article className="max-w-6xl space-y-8 text-foreground">
           <header className="space-y-3">
             {bound ? (
               <p className="text-sm font-medium text-muted-foreground">{origin.board.title ?? m.threads_untitled()}</p>
             ) : null}
             <PageHeading>{m.thread_new_heading()}</PageHeading>
           </header>
-          <div className="space-y-5" inert={!editable}>
-            {bound ? (
-              review ? (
-                <ReviewFields
-                  key={searchScope}
-                  {...(origin.presetSubject ? { initialSubjectId: origin.presetSubject } : {})}
-                  {...(origin.presetSubjectTitle ? { initialSubjectTitle: origin.presetSubjectTitle } : {})}
-                  onSubjectChange={handleSubjectChange}
-                  onVoteCitationChange={handleVoteCitationChange}
-                  disabled={!editable}
-                  searchScope={searchScope}
+          <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            {destination ? (
+              <aside className="min-w-0 lg:col-start-2 lg:row-start-1">
+                <CompositionDestinationPanel
+                  key={compositionDestinationPanelKey(destination)}
+                  destination={destination}
+                  isCurrent={destinationIsCurrent}
                 />
+              </aside>
+            ) : null}
+            <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1" inert={!editable}>
+              {bound ? (
+                review ? (
+                  <ReviewFields
+                    key={searchScope}
+                    {...(origin.presetSubject ? { initialSubjectId: origin.presetSubject } : {})}
+                    {...(origin.presetSubjectTitle ? { initialSubjectTitle: origin.presetSubjectTitle } : {})}
+                    onSubjectChange={handleSubjectChange}
+                    onVoteCitationChange={handleVoteCitationChange}
+                    disabled={!editable}
+                    searchScope={searchScope}
+                  />
+                ) : (
+                  <DiscussionSubjects
+                    key={searchScope}
+                    value={discussionSubjects}
+                    onValueChange={(items) => {
+                      if (lifetime.isEditable(ticket)) setDiscussionSubjects(items);
+                    }}
+                    disabled={!editable}
+                    searchScope={searchScope}
+                  />
+                )
               ) : (
-                <DiscussionSubjects
-                  key={searchScope}
-                  value={discussionSubjects}
-                  onValueChange={(items) => {
-                    if (lifetime.isEditable(ticket)) setDiscussionSubjects(items);
-                  }}
-                  disabled={!editable}
-                  searchScope={searchScope}
-                />
-              )
-            ) : (
-              <p role="status">{m.thread_authoring_session_changed()}</p>
-            )}
-            <PostComposer
-              initialKey={origin.idempotencyKey}
-              titleRequired
-              canSubmit={current && canSubmitThread(origin.purpose, subjectId)}
-              boardId={origin.boardId}
-              submissionContext={submissionContext}
-              onIntentLockChange={handleIntentLockChange}
-              onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
-                if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
-                const result = await startThread({
-                  data: {
-                    boardId: origin.boardId,
-                    title,
-                    body,
-                    idempotencyKey: key,
-                    ...originalContext!,
-                    ...(mediaIds.length > 0 ? { mediaIds } : {}),
-                  },
-                  headers: { 'X-CSRF-Token': lifetime.csrfToken },
-                  fetch: draftFetch(body),
-                });
-                if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
-                if (result.ok)
-                  document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
-                return result.ok ? { ok: true as const, value: result.thread } : result;
-              }}
-              onSuccess={(thread) => {
-                if (!lifetime.isCurrent(ticket)) return;
-                window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
-              }}
-            />
+                <p role="status">{m.thread_authoring_session_changed()}</p>
+              )}
+              <PostComposer
+                initialKey={origin.idempotencyKey}
+                titleRequired
+                canSubmit={current && canSubmitThread(origin.purpose, subjectId)}
+                boardId={origin.boardId}
+                submissionContext={submissionContext}
+                onIntentLockChange={handleIntentLockChange}
+                onSubmit={async ({ title, body, idempotencyKey: key, mediaIds, submissionContext: originalContext }) => {
+                  if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                  const result = await startThread({
+                    data: {
+                      boardId: origin.boardId,
+                      title,
+                      body,
+                      idempotencyKey: key,
+                      ...originalContext!,
+                      ...(mediaIds.length > 0 ? { mediaIds } : {}),
+                    },
+                    headers: { 'X-CSRF-Token': lifetime.csrfToken },
+                    fetch: draftFetch(body),
+                  });
+                  if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                  if (result.ok)
+                    document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
+                  return result.ok ? { ok: true as const, value: result.thread } : result;
+                }}
+                onSuccess={(thread) => {
+                  if (!lifetime.isCurrent(ticket)) return;
+                  window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
+                }}
+              />
+            </div>
           </div>
           {bound ? (
             <Link
