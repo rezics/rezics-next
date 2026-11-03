@@ -7,7 +7,13 @@ import type { InstalledRealmBanPage, RealmBanRow } from './realm-bans';
 type Identity = InstalledRealmBanPage['items'][number]['account'];
 
 /** Only the disclosed canonical account overview is a supported destination. */
-export function RealmBanIdentity({ accountId, identity }: { accountId: string; identity?: Identity | null }) {
+export function RealmBanIdentity({
+  accountId,
+  identity,
+}: {
+  accountId: string;
+  identity?: Identity | null | undefined;
+}) {
   if (!identity || identity.accountId !== accountId || identity.state !== 'available')
     return (
       <span>
