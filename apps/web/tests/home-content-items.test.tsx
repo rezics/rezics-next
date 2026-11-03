@@ -121,7 +121,7 @@ test('Home composes ordered ContentItems and keeps bounded filters accessible in
       expect(row.querySelector('a a, a button, button a')).toBeNull();
       const destination = homeFeedDestination(item, 'en');
       expect([...row.querySelectorAll('a')].filter((link) => link.getAttribute('href') === destination)).toHaveLength(
-        1,
+        'label' in item.summary || 'avatar' in item.summary ? 2 : 1,
       );
       const resume = homeFeedResume(item, 'en');
       if (resume) {

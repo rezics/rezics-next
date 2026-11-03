@@ -111,3 +111,50 @@ and at most its bounded readback; sharing owns no kernel reads. The focused acti
 mounted rows, session/source retirement, receipt settlement/refusal, exact unknown retry, Home Continue, sign-in and
 browser sharing recovery. Story responses are visibly prepared; inspect the signed-in/out, voted, refused, phone,
 dark, long-string and keyboard variants at 390 and 1280 through the normal verifier.
+
+## Reading a mixed Home card
+
+`homeFeedItemPresentation` composes `card-presentation` and `card-attribution` into the existing ContentItem slots.
+Kind and source precede the title; identity, disclosed related context and time follow it; the plain-text preview
+comes last. Work covers and account avatars have independent destination links, alongside the primary row/title
+link. Author, verified identity, reviewed Subject and image-credit links remain independent keyboard stops with
+44px minimum targets. Continue keeps its progress state and its separate progress-session destination. FeedResults
+and the reaction owner retain the actions slot; card reading adds no writes or action store.
+
+Decision: show absolute, locale-formatted UTC feed-occurrence time, explicitly separate from supplied creation time;
+null or invalid occurrence remains Unknown and never falls back to creation, progress or page `asOf`.
+
+The installed destination discriminant selects work/Subject, discussion, reply, review, Collection, account or Space
+presentation. A Subject is labelled Work only when `creativeWork` is supplied. Replies open their exact post query
+and fragment, reviews open their thread rather than their reviewed Subject, and Spaces open their own admitted
+address rather than a carrier Realm. An unreadable destination stays unlinked. Source copy names only Discover,
+Following or Continue; it does not invent a followed person, endorsement, publication event or recommendation cause.
+
+Only current supplied data is projected. Missing Content authors use Unknown account, not a claim of deletion;
+provided identity labels are preserved, including labels describing deleted identities. A missing title retains the
+owner's localized fallback. Missing cover/avatar renders the shared placeholder. No missing preview, author, count,
+rating or Collection rule is hydrated or guessed. Image credit remains alongside the image with its licence and
+HTTP(S) provider link; a non-web URL stays text. A suitability-withheld cover owns its reveal control and is not
+wrapped in another interactive control or accompanied by hidden image credit. Long text wraps and previews retain
+line breaks with a four-line visual bound. Title language remains the supplied label language.
+
+Projection is O(N) in admitted rows plus supplied image variants: one main image and at most one author avatar per
+row, no client, cache, effect, point read or scan. Replacing a row with withheld/missing data immediately removes its
+old identity, preview, image and destination. Reader/session/source retirement stays with the existing Home owner.
+
+### Native handoffs
+
+- Content supplies author and excerpt on its installed thread/post summary. The current FeedAuthor has no deletion
+  discriminator: web cannot distinguish deleted from unknown when no identity is delivered.
+- Semantic summaries supply kind, selected label and cover, but no work credits, publication time, excerpt, ratings
+  or endorsement counts. Those remain unavailable until supplied by the native feed contract.
+- Reviewed-Subject metadata remains the pre-existing optional Home receiving seam; the installed generated native
+  summary does not yet carry that field. No review target is inferred from title or fetched separately.
+- Public Collection/review/Space discovery registration remains with Search. Home's existing pending Collection and
+  Space seams do not make those branches natively available. Community must supply Space address/summary/carrier;
+  a Realm never substitutes for a missing Space address. Collections expose no private rule or invented cover strip.
+
+`10-feed-card-reading` stories use visibly prepared examples, including those pending seams, not native evidence.
+They exercise the same shared FeedResults projection at 390 and 1280, in light/dark, long text and keyboard states.
+The focused reading tests pin all installed branches, occurrence/creation meaning, independent destinations, missing
+metadata and 1/10/20-row read cost; existing Home lifetime tests retain ownership of request and session retirement.
