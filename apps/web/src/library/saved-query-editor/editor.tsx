@@ -25,7 +25,7 @@ export function SavedQueryEditor({
     <CollectionRuleCurrent
       page={page}
       collectionId={collectionId}
-      seed={collectionId === null && selection.state === 'admitted' ? selection.filter : undefined}
+      {...(collectionId === null && selection.state === 'admitted' ? { seed: selection.filter } : {})}
       {...(navigate ? { navigate } : {})}
     />
   );

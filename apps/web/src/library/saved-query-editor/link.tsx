@@ -20,7 +20,13 @@ export function SaveQueryLink({
   return (
     <a
       className="inline-flex min-h-11 items-center rounded-lg border border-border px-4"
-      href={savedQueryCreateHref(getLocale(), { document, type, state, label, from })}
+      href={savedQueryCreateHref(getLocale(), {
+        ...(document ? { document } : {}),
+        ...(type ? { type } : {}),
+        ...(state ? { state } : {}),
+        ...(label ? { label } : {}),
+        ...(from ? { from } : {}),
+      })}
     >
       {m.library_saved_query_create()}
     </a>
