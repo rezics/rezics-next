@@ -26,7 +26,12 @@ import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import sourceStatisticList from './source-statistic-list.sql';
 import sourceStatisticUpsert from './source-statistic-upsert.sql';
 import sourceStatisticClear from './source-statistic-clear.sql';
-import { validSourceFigures, SOURCE_OBSERVATION_MAX_BYTES, SOURCE_STATISTICS_MAX_BODY_BYTES, type SourceFigures } from './source-figures.ts';
+import {
+  validSourceFigures,
+  SOURCE_OBSERVATION_MAX_BYTES,
+  SOURCE_STATISTICS_MAX_BODY_BYTES,
+  type SourceFigures,
+} from './source-figures.ts';
 import { SOURCE_PROVIDER_IDS, sourceProvider, type SourceProvider } from './source-provider.ts';
 import { admitSourceObservation, lockSourceObservation, saveSourceObservation } from './source-provider-observation.ts';
 import {
@@ -132,8 +137,11 @@ export class SourceStatisticNotFoundError extends Error {
 function statistic(row: Row): SourceStatistic {
   // Storage and command admission share the same closed decoder. Corrupt or newer
   // encodings fail closed rather than appearing as missing figures or zero bins.
-  if (row.figures !== null && row.figures !== undefined &&
-      !validSourceFigures(row.source, row.figures, Number(row.count)))
+  if (
+    row.figures !== null &&
+    row.figures !== undefined &&
+    !validSourceFigures(row.source, row.figures, Number(row.count))
+  )
     throw new ProblemError('partition_unavailable');
   return {
     ...(row.figures == null ? {} : { figures: row.figures as SourceFigures }),

@@ -12,9 +12,17 @@ test('provider figures follow current Subject identity and exact alias facts fen
     const original = await fixture.createSubject();
     const survivor = await fixture.createSubject();
     const path = (id: string) => `/v1/subjects/${id}/source-statistics`;
-    const body = { sourceAlias: 'permitted-bangumi', sourceRecordId: '123', scale: { min: 0, max: 10 },
-      mean: 8, count: 17, asOf: '2026-11-01', licence: 'LicenseRef-Permitted-Test', attribution: 'Provider users',
-      figures: { schemaVersion: 1, rank: { unit: 'subjects', position: 3 } } };
+    const body = {
+      sourceAlias: 'permitted-bangumi',
+      sourceRecordId: '123',
+      scale: { min: 0, max: 10 },
+      mean: 8,
+      count: 17,
+      asOf: '2026-11-01',
+      licence: 'LicenseRef-Permitted-Test',
+      attribution: 'Provider users',
+      figures: { schemaVersion: 1, rank: { unit: 'subjects', position: 3 } },
+    };
     const key = crypto.randomUUID();
     const put = await fixture.request('PUT', `${path(original)}/bangumi`, { body, key });
     expect(put.status).toBe(200);
@@ -35,22 +43,39 @@ test('provider figures follow current Subject identity and exact alias facts fen
     // committed figure and its retry, without claiming that no write occurred.
     const racing = await fixture.createSubject();
     let record = 1000;
-    while (partitionOf(tupleRoute(fixture.routeKey, body.sourceAlias, String(record))) === partitionOf(routeOf(racing)!)) record++;
+    while (
+      partitionOf(tupleRoute(fixture.routeKey, body.sourceAlias, String(record))) === partitionOf(routeOf(racing)!)
+    )
+      record++;
     const fresh = { ...body, sourceRecordId: String(record) };
     const retryKey = crypto.randomUUID();
     const barrier = observer.hold({ statement: upsert.sql }, 'before');
     const pending = fixture.request('PUT', `${path(racing)}/bangumi`, { body: fresh, key: retryKey });
     await barrier.entered;
     try {
-      expect((await fixture.request('POST', '/v1/sourceFences:takedown', {
-        body: { source: fresh.sourceAlias, externalId: fresh.sourceRecordId, fieldGroup: 'facts', reason: 'Racing fence' },
-      })).status).toBe(200);
-    } finally { barrier.release(); }
+      expect(
+        (
+          await fixture.request('POST', '/v1/sourceFences:takedown', {
+            body: {
+              source: fresh.sourceAlias,
+              externalId: fresh.sourceRecordId,
+              fieldGroup: 'facts',
+              reason: 'Racing fence',
+            },
+          })
+        ).status,
+      ).toBe(200);
+    } finally {
+      barrier.release();
+    }
     const concealed = await pending;
     expect(concealed.status).toBe(404);
     expect((await concealed.json()).effect_status).toBe('not_applicable');
     const replay = await fixture.request('PUT', `${path(racing)}/bangumi`, { body: fresh, key: retryKey });
     expect(replay.status).toBe(403);
     expect((await replay.json()).effect_status).toBe('not_applicable');
-  } finally { await observer.close(); await fixture.close(); }
+  } finally {
+    await observer.close();
+    await fixture.close();
+  }
 }, 180_000);

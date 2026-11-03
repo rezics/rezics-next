@@ -43,6 +43,7 @@ export function sourceObservation(subjectId: string, source: string, value: Sour
   const { expectedObservation: _expected, sourceAlias, ...fields } = value;
   const payload = { ...fields, sourceAlias: sourceAlias ?? source };
   const canonical = canonicalize(['source-statistic-observation.v1', subjectId, source, payload]);
-  if (typeof canonical !== 'string' || Buffer.byteLength(canonical, 'utf8') > SOURCE_OBSERVATION_MAX_BYTES) throw new TypeError('Source observation must be canonical JSON');
+  if (typeof canonical !== 'string' || Buffer.byteLength(canonical, 'utf8') > SOURCE_OBSERVATION_MAX_BYTES)
+    throw new TypeError('Source observation must be canonical JSON');
   return { digest: createHash('sha256').update(canonical, 'utf8').digest('hex'), payload };
 }

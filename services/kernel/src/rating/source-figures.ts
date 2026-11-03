@@ -16,19 +16,35 @@ const safePositive = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
 export const SourceFiguresSchema = t.Object(
   {
     schemaVersion: t.Literal(1),
-    distribution: t.Optional(t.Object({
-      unit: t.Literal('ratings'),
-      completeness: t.Union([t.Literal('complete'), t.Literal('partial')]),
-      bins: t.Array(t.Object({
-        score: t.Integer({ minimum: 1, maximum: 10 }),
-        count: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
-      }, closed), { minItems: 1, maxItems: SOURCE_FIGURE_MAX_BINS }),
-    }, closed)),
-    rank: t.Optional(t.Object({
-      unit: t.Literal('subjects'),
-      position: safePositive,
-      population: t.Optional(safePositive),
-    }, closed)),
+    distribution: t.Optional(
+      t.Object(
+        {
+          unit: t.Literal('ratings'),
+          completeness: t.Union([t.Literal('complete'), t.Literal('partial')]),
+          bins: t.Array(
+            t.Object(
+              {
+                score: t.Integer({ minimum: 1, maximum: 10 }),
+                count: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+              },
+              closed,
+            ),
+            { minItems: 1, maxItems: SOURCE_FIGURE_MAX_BINS },
+          ),
+        },
+        closed,
+      ),
+    ),
+    rank: t.Optional(
+      t.Object(
+        {
+          unit: t.Literal('subjects'),
+          position: safePositive,
+          population: t.Optional(safePositive),
+        },
+        closed,
+      ),
+    ),
   },
   closed,
 );
@@ -53,8 +69,11 @@ export function validSourceFigures(source: string, figures: unknown, count: numb
       total += bin.count;
       if (!Number.isSafeInteger(total) || total > count) return false;
     }
-    if (distribution.completeness === 'complete' &&
-        (distribution.bins.length !== SOURCE_FIGURE_MAX_BINS || total !== count)) return false;
+    if (
+      distribution.completeness === 'complete' &&
+      (distribution.bins.length !== SOURCE_FIGURE_MAX_BINS || total !== count)
+    )
+      return false;
   }
   if (figures.rank?.population !== undefined && figures.rank.position > figures.rank.population) return false;
   return true;

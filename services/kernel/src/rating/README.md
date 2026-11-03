@@ -802,9 +802,9 @@ this exact optional object; their generated client declarations must be publishe
   "distribution": {
     "unit": "ratings",
     "completeness": "partial",
-    "bins": [{"score": 10, "count": 17}]
+    "bins": [{ "score": 10, "count": 17 }]
   },
-  "rank": {"unit": "subjects", "position": 3, "population": 100}
+  "rank": { "unit": "subjects", "position": 3, "population": 100 }
 }
 ```
 
