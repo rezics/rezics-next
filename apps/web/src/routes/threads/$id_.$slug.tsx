@@ -492,7 +492,7 @@ export function ThreadPage() {
           <ThreadReadingHeader
             page={visiblePage}
             title={title}
-            {...(boardReturn && boardReturn.boardId === visiblePage.board.id
+            {...(boardReturn && visiblePage.board && boardReturn.boardId === visiblePage.board.id
               ? { boardReturn: boardReadingHref(boardReturn) }
               : {})}
             watch={

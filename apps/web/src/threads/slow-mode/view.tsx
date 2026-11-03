@@ -123,7 +123,7 @@ export function SlowModeSetting({ boardId, onApplied }: { boardId: string; onApp
       read={read}
       preparing={preparing}
       reload={reload}
-      onApplied={onApplied}
+      {...(onApplied ? { onApplied } : {})}
     />
   );
 }
