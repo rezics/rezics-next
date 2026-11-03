@@ -7,12 +7,18 @@ import type {
 import { createLibraryDriver } from './outcome-driver.ts';
 import { mountCollectionInZone } from './native-zone-collection-fixture.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
-import { deleteAccount, grantSubjectRead, json, publish, setEntry, unavailable, write } from './native-conformance.ts';
+import {
+  deleteAccount, grantSubjectRead, json, publish, setEntry, unavailable, write,
+  type NativeConformanceWorld,
+} from './native-conformance.ts';
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
+import { inspectNativeDynamicCollections } from './native-dynamic-inspection.ts';
 
 /** Compile source declarations and use only the accepted release to describe a fixture's meaning. */
-export async function createDynamicCollectionsDriver(): Promise<DynamicCollectionsDriver> {
-  const world = await createLibraryDriver();
+export async function createDynamicCollectionsDriver(
+  installedWorld?: NativeConformanceWorld,
+): Promise<DynamicCollectionsDriver> {
+  const world = installedWorld ?? await createLibraryDriver();
   try {
     const input = profileSources('profile-v1');
     let release = await compileCatalogue(input);
@@ -146,9 +152,7 @@ export async function createDynamicCollectionsDriver(): Promise<DynamicCollectio
       async seedUnrelatedFacts() {
         return unavailable('native independently shaped dynamic population fixture');
       },
-      async inspect() {
-        return unavailable('native common Collection/source/Search complete inspection binding');
-      },
+      inspect: () => inspectNativeDynamicCollections(world),
       async measure(operation) {
         await world.native.capture(operation);
         return unavailable('native owner-plan, candidate and Search iterator observations');
