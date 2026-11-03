@@ -182,6 +182,9 @@ const measuredRun = new AsyncLocalStorage<RunCapture>();
 const clientWireQueue = new WeakMap<PoolClient, WireStatementQueue>();
 const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientExecutingStatement = new WeakMap<PoolClient, WireStatement | undefined>();
+// An extended-protocol SELECT keeps its executor until the unnamed portal is dropped. In an explicit
+// transaction that can happen during the next Bind or COMMIT, after its own ReadyForQuery.
+const clientPendingPortalPlan = new WeakMap<PoolClient, WireStatement>();
 let nextCaptureId = 1;
 const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
 const nativePlanCommands = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE']);
@@ -586,6 +589,8 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
       const tag = protocolMessage.text?.split(' ', 1)[0];
       const record = clientWireStatement.get(client)?.record ?? clientExecutingStatement.get(client)?.record;
       if (tag && nativePlanCommands.has(tag) && record) record.requiresNativePlan = true;
+      const wireStatement = clientWireStatement.get(client) ?? clientExecutingStatement.get(client);
+      if (tag === 'SELECT' && wireStatement?.bound) clientPendingPortalPlan.set(client, wireStatement);
       return;
     }
     if (protocolMessage.name === 'rowDescription') {
@@ -698,9 +703,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       const resetsSetting = mayResetCaptureSetting(text);
       if (!resetsSetting) {
         const wanted = state.active !== undefined;
-        // Reassert before every captured statement: transaction-local settings and queued controls must never
-        // leave a successful native occurrence without its plan. Outside a capture, keep explaining disabled.
-        if (wanted || explaining !== wanted || pendingQueries > 0) switchTo(wanted);
+        if (explaining !== wanted || pendingQueries > 0) switchTo(wanted);
       }
       // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
@@ -836,18 +839,16 @@ function instrument(client: PoolClient, state: CaptureState): void {
   instrumentBytes(client, state);
 
   client.on('notice', (notice) => {
-    const wireStatement = clientExecutingStatement.get(client);
-    const attribution = wireStatement?.attribution;
     const message = notice.message;
     const marker = 'plan:\n';
-    if (
-      !attribution ||
-      attribution.capture.error ||
-      typeof message !== 'string' ||
-      !message.startsWith('duration:') ||
-      !message.includes(marker)
-    )
-      return;
+    if (typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker)) return;
+    // Portal cleanup precedes the next statement's execution. Preserve that occurrence across wire dispatch;
+    // never find an owner by SQL text, which would conflate retries and identical queued statements.
+    const pendingPortal = clientPendingPortalPlan.get(client);
+    if (pendingPortal) clientPendingPortalPlan.delete(client);
+    const wireStatement = pendingPortal ?? clientExecutingStatement.get(client);
+    const attribution = wireStatement?.attribution;
+    if (!attribution || attribution.capture.error) return;
 
     try {
       const capture = attribution.capture;
