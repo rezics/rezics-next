@@ -152,7 +152,16 @@ test('help names checkpointed staging, and unsupported producers fail before net
       expect(result.stderr).toContain('Checkpointed staging is limited');
     }
     const missing = await runImportCli(
-      ['--source', 'wikidata', '--dump', join(directory, 'dump.json'), ...credentials, '--resume-staging', '--generation', '1'],
+      [
+        '--source',
+        'wikidata',
+        '--dump',
+        join(directory, 'dump.json'),
+        ...credentials,
+        '--resume-staging',
+        '--generation',
+        '1',
+      ],
       { fetch: blocked },
     );
     expect(missing.code).toBe(2);

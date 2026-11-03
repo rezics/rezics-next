@@ -211,7 +211,8 @@ export function evaluateResume(
   if (state.status === 'ready' || state.status === 'finalizing')
     return { ok: false, code: 'sealed', message: STAGING_SEALED_RESUME };
   if (state.status !== 'staging') return { ok: false, code: 'old-staging', message: STAGING_OLD_UNSUPPORTED };
-  if (state.prepared || state.pending || state.covers) return { ok: false, code: 'prepared', message: STAGING_SEALED_RESUME };
+  if (state.prepared || state.pending || state.covers)
+    return { ok: false, code: 'prepared', message: STAGING_SEALED_RESUME };
   if (!stored) return { ok: false, code: 'missing', message: STAGING_OLD_UNSUPPORTED };
   try {
     const expected = admitStagingIdentity(observed);

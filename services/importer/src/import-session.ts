@@ -59,7 +59,8 @@ export class ImportSession {
     options: { instrumentDatabase?: (database: Database) => Database; create?: boolean } = {},
   ) {
     if (options.create === false && typeof path === 'string') {
-      if (!existsSync(path) || !statSync(path).isFile()) throw new Error('No importer state database exists at the given path.');
+      if (!existsSync(path) || !statSync(path).isFile())
+        throw new Error('No importer state database exists at the given path.');
     }
     this.store = new RunStore<SourceProjection>(path, { ...options, projectionMode: 'source-record' });
     try {

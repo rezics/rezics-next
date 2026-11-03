@@ -3,11 +3,7 @@ import { constants } from 'node:fs';
 import { open, stat, type FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import {
-  admitStagingCheckpoint,
-  stagingResumeGuidance,
-  type StagingCheckpoint,
-} from './staging-checkpoint.ts';
+import { admitStagingCheckpoint, stagingResumeGuidance, type StagingCheckpoint } from './staging-checkpoint.ts';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
@@ -463,10 +459,8 @@ function resumeGuidance(
     return `The existing importer rechecks current authority and replays each retained request with its original command keys and bytes${activeWork.includes('deferred') ? '; deferred covers also remain pending' : ''}; unresolved authority or ownership failures remain in force.`;
   if (status === 'ready' && activeWork.includes('deferred'))
     return 'Deferred covers remain pending; the existing importer rechecks current authority, fences and source registration before continuing.';
-  if (status === 'ready')
-    return stagingResumeGuidance({ status, checkpoint: null, source, generation });
-  if (status === 'finalizing')
-    return stagingResumeGuidance({ status, checkpoint: null, source, generation });
+  if (status === 'ready') return stagingResumeGuidance({ status, checkpoint: null, source, generation });
+  if (status === 'finalizing') return stagingResumeGuidance({ status, checkpoint: null, source, generation });
   if (status === 'mass-disappearance')
     return 'This generation did not advance the baseline; ordinary resume needs a complete input and deliberate review of the existing disappearance threshold.';
   if (status === 'invalid-input')
@@ -878,21 +872,19 @@ export class InspectionStore {
           disappearance_threshold,committed_ordinal,skipped,rolling_digest
         FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
       )
-      .get(source, id) as
-      | {
-          version: number;
-          sha256: string;
-          bytes: number;
-          source_alias: string;
-          source_kind: string;
-          converter_revision: string;
-          decoder_id: string;
-          disappearance_threshold: number;
-          committed_ordinal: number;
-          skipped: number;
-          rolling_digest: string;
-        }
-      | null;
+      .get(source, id) as {
+      version: number;
+      sha256: string;
+      bytes: number;
+      source_alias: string;
+      source_kind: string;
+      converter_revision: string;
+      decoder_id: string;
+      disappearance_threshold: number;
+      committed_ordinal: number;
+      skipped: number;
+      rolling_digest: string;
+    } | null;
     if (!row) return null;
     try {
       return admitStagingCheckpoint({

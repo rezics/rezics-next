@@ -864,9 +864,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             : { disappearanceThreshold: config.disappearanceThreshold }),
           signal,
           ...(progressHooks ? { progress: progressHooks } : {}),
-          ...(checkpointRequest(config, capture)
-            ? { checkpoint: checkpointRequest(config, capture)! }
-            : {}),
+          ...(checkpointRequest(config, capture) ? { checkpoint: checkpointRequest(config, capture)! } : {}),
         });
         output = resultFor(run, lastHttpStatus, signal);
       } finally {
@@ -882,7 +880,10 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     output = {
       code: interrupted
         ? 130
-        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError || missingState
+        : error instanceof InputFailure ||
+            error instanceof VndbInputError ||
+            error instanceof DumpInputError ||
+            missingState
           ? 2
           : 1,
       stdout: '',
@@ -960,7 +961,10 @@ function progressTerminal(
   return { phase: 'failed', outcome: 'failed' };
 }
 
-function checkpointRequest(config: Config, capture: StagingCaptureIdentity | undefined): StagingCheckpointRequest | undefined {
+function checkpointRequest(
+  config: Config,
+  capture: StagingCaptureIdentity | undefined,
+): StagingCheckpointRequest | undefined {
   if (!capture || config.mode === 'ordinary') return undefined;
   return {
     action: config.mode === 'resume-staging' ? 'resume' : 'acquire',
@@ -976,8 +980,7 @@ function resultFor(
 ): ImportCliResult {
   const counts = run.counts;
   const summary = `new=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished} skipped=${run.skipped}`;
-  const prefix =
-    run.committedPrefix !== undefined ? ` committedPrefix=${run.committedPrefix}` : '';
+  const prefix = run.committedPrefix !== undefined ? ` committedPrefix=${run.committedPrefix}` : '';
   if (run.status === 'committed')
     return { code: 0, stdout: `Import complete: ${summary}${prefix}\n`, stderr: '', openHandles: 0 };
   if (run.status === 'invalid-dump')

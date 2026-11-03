@@ -358,8 +358,7 @@ export class RunStore<Projection = BatchStatement[]> {
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
     this.projectionMode = options.projectionMode;
-    const db =
-      typeof path === 'string' ? new Database(path, { create: options.create !== false, strict: true }) : path;
+    const db = typeof path === 'string' ? new Database(path, { create: options.create !== false, strict: true }) : path;
     try {
       this.database = options.instrumentDatabase?.(db) ?? db;
       this.database.exec('PRAGMA journal_mode=WAL');

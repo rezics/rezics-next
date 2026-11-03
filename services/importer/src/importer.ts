@@ -257,8 +257,7 @@ export class Importer {
     signal: AbortSignal,
     state: { resume: number; skipped: number; checkpointed: boolean; action: 'acquire' | 'resume' | 'ordinary' },
   ): Promise<
-    | { skipped: number; committedPrefix: number }
-    | { status: RunStatus; diagnostic: string; committedPrefix: number }
+    { skipped: number; committedPrefix: number } | { status: RunStatus; diagnostic: string; committedPrefix: number }
   > {
     const store = this.session.store;
     const pageSize = state.checkpointed ? 1 : 100;
@@ -379,9 +378,7 @@ export class Importer {
       if (error instanceof StagingCheckpointError)
         return { status: 'invalid-dump', diagnostic: error.message, committedPrefix: rolling };
       const member =
-        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
-          ? ` (member ${error.memberIndex})`
-          : '';
+        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null ? ` (member ${error.memberIndex})` : '';
       return {
         status: interrupted ? 'interrupted' : 'invalid-dump',
         diagnostic:
@@ -1684,11 +1681,7 @@ export class Importer {
         options.progress?.onRun?.(run.id, true);
         runId = run.id;
         const state = store.stagingResumeState(run);
-        const compatibility = evaluateResume(
-          store.stagingCheckpoint(run.source, run.id),
-          checkpoint.identity,
-          state,
-        );
+        const compatibility = evaluateResume(store.stagingCheckpoint(run.source, run.id), checkpoint.identity, state);
         if (!compatibility.ok) return finish('invalid-dump', compatibility.message);
         skipped = compatibility.checkpoint.skipped;
         committedPrefix = compatibility.checkpoint.committedOrdinal;
