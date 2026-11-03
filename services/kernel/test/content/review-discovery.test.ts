@@ -89,11 +89,19 @@ test('public review discovery refreshes the same thread and omits protected or r
     await create(hiddenAuthor, hiddenSubject, `Hidden target ${ordinal}`);
   }
   const hiddenPartition = partitionOf(routeOf(hiddenAuthor.accountId)!);
+  await fixture.reader.query(
+    "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+    [routeOf(subjectId), subjectId],
+  );
   const sparse = await source.page(hiddenPartition, null, 1);
   expect(sparse.reviews).toEqual([]);
   expect(sparse.next).not.toBeNull();
   const terminal = await source.page(hiddenPartition, sparse.next, 1);
   expect(terminal).toMatchObject({ reviews: [], next: null });
+  await fixture.reader.query(
+    "UPDATE semantic.subject SET visibility='visible',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+    [routeOf(subjectId), subjectId],
+  );
 
   await revisePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
