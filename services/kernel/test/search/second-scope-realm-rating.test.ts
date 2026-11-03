@@ -16,6 +16,7 @@ import {
   type RealmRatingSource,
 } from '../../src/search/realm-rating-order.ts';
 import { createFakeSource } from './support/fake-source.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 afterAll(() => pool.end());
@@ -224,7 +225,11 @@ test('denial, unavailable evidence, stale figures and mismatched anchors cannot 
     await expect(f.run()).rejects.toMatchObject({ code: 'index_not_ready' });
   }
   const f = fixture();
-  f.source.read = async () => ({ partition: 10, position: -1n, subjects: [] });
+  const read = f.source.read.bind(f.source);
+  f.source.read = async (partition, ids) => {
+    const snapshot = await read(partition, ids);
+    return { ...snapshot, position: snapshot.position + (ids.length ? 1n : 0n) };
+  };
   await expect(f.run()).rejects.toMatchObject({ code: 'index_not_ready' });
 });
 
@@ -288,6 +293,7 @@ test('service forwards text and filters to the native order; only Global figures
   });
   const kernel = createKernel({
     pool,
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(13),
     search: unavailable,
     access: {
