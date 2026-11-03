@@ -467,7 +467,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id }, closed),
         response: { 200: personalEntryResponse, ...failures },
-        detail: personalDetail('library_entry.personal.get', 'library_entry:read'),
+        detail: personalDetail('library_entry_personal.get', 'library_entry:read'),
       },
       async ({ actor, params, admission, job, set }) => {
         point(actor, params.subjectId, 'library_entry:read');
@@ -497,7 +497,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: { 200: personalEntryResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
-        detail: personalDetail('library_entry.annotations.put', 'library_entry:update'),
+        detail: personalDetail('library_entry_annotation.put', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
@@ -533,7 +533,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: { 201: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
-        detail: personalDetail('library_entry.source-observation.admit', 'library_entry:update'),
+        detail: personalDetail('library_entry_source_observation.post', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
@@ -568,7 +568,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: { 200: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
-        detail: personalDetail('library_entry.source-observation.correct', 'library_entry:update'),
+        detail: personalDetail('library_entry_source_observation.patch', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
