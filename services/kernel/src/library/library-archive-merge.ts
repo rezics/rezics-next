@@ -300,13 +300,21 @@ function parseArchiveTimestamp(value: unknown): { value?: TimestampFact; reason?
   }
 }
 
-function parseArchiveObservation(value: unknown):
-  | { value: ParsedArchiveObservation }
-  | { reason: string; field?: string } {
+function parseArchiveObservation(
+  value: unknown,
+): { value: ParsedArchiveObservation } | { reason: string; field?: string } {
   const record = object(value);
   if (
     !record ||
-    !exactKeys(record, ['provider', 'recordId', 'revision', 'privacy', 'sourceCreated', 'sourceUpdated', 'recordedAt']) ||
+    !exactKeys(record, [
+      'provider',
+      'recordId',
+      'revision',
+      'privacy',
+      'sourceCreated',
+      'sourceUpdated',
+      'recordedAt',
+    ]) ||
     !Number.isSafeInteger(record.revision) ||
     (record.revision as number) < 1 ||
     typeof record.recordedAt !== 'string'
@@ -346,10 +354,7 @@ function parseArchiveObservation(value: unknown):
 function observationChoices(value: unknown, action: 'admit' | 'correct') {
   const choices = selectedFields(value, observationFieldNames);
   if (action === 'admit') {
-    if (
-      !exactKeys(choices, observationFieldNames) ||
-      Object.values(choices).some((choice) => choice === 'preserve')
-    )
+    if (!exactKeys(choices, observationFieldNames) || Object.values(choices).some((choice) => choice === 'preserve'))
       throw new ProblemError('invalid_request');
   }
   return choices as Partial<Record<ObservationField, ArchiveFieldChoice>>;
@@ -817,8 +822,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           fields: choices,
           visibility: 'private',
         };
-        if (!observation)
-          return { status: 'unresolved', review: { ...base, reason: 'target-unavailable' } };
+        if (!observation) return { status: 'unresolved', review: { ...base, reason: 'target-unavailable' } };
         const { source, anchor } = observation;
         if (source.kind !== 'supported')
           return { status: 'unsupported', review: { ...base, reason: 'current-profile-unsupported' } };
@@ -853,9 +857,15 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             review: { ...base, current: currentBinding, reason: 'observation-already-exists' },
           };
         if (decision.action === 'correct' && !current)
-          return { status: 'unresolved', review: { ...base, current: currentBinding, reason: 'observation-unavailable' } };
+          return {
+            status: 'unresolved',
+            review: { ...base, current: currentBinding, reason: 'observation-unavailable' },
+          };
         if (decision.action === 'correct' && current!.revision !== decision.revision)
-          return { status: 'current_conflict', review: { ...base, current: currentBinding, reason: 'observation-revision-changed' } };
+          return {
+            status: 'current_conflict',
+            review: { ...base, current: currentBinding, reason: 'observation-revision-changed' },
+          };
 
         const changes =
           decision.action === 'admit' ||
@@ -1425,12 +1435,22 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             recordId: decision.recordId,
             confirmReviewed: true,
             privacy: admittedObservationValue(observation.privacy, choices.privacy as ArchiveFieldChoice),
-            sourceCreated: admittedObservationValue(observation.sourceCreated, choices.sourceCreated as ArchiveFieldChoice),
-            sourceUpdated: admittedObservationValue(observation.sourceUpdated, choices.sourceUpdated as ArchiveFieldChoice),
+            sourceCreated: admittedObservationValue(
+              observation.sourceCreated,
+              choices.sourceCreated as ArchiveFieldChoice,
+            ),
+            sourceUpdated: admittedObservationValue(
+              observation.sourceUpdated,
+              choices.sourceUpdated as ArchiveFieldChoice,
+            ),
           },
         };
       }
-      if (current.status !== 'present' || typeof decision.revision !== 'number' || current.revision !== decision.revision)
+      if (
+        current.status !== 'present' ||
+        typeof decision.revision !== 'number' ||
+        current.revision !== decision.revision
+      )
         return null;
       return {
         kind: 'observation',
@@ -1442,8 +1462,14 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           revision: decision.revision,
           confirmReviewed: true,
           privacy: observationChange(observation.privacy, choices.privacy as ArchiveFieldChoice | undefined),
-          sourceCreated: observationChange(observation.sourceCreated, choices.sourceCreated as ArchiveFieldChoice | undefined),
-          sourceUpdated: observationChange(observation.sourceUpdated, choices.sourceUpdated as ArchiveFieldChoice | undefined),
+          sourceCreated: observationChange(
+            observation.sourceCreated,
+            choices.sourceCreated as ArchiveFieldChoice | undefined,
+          ),
+          sourceUpdated: observationChange(
+            observation.sourceUpdated,
+            choices.sourceUpdated as ArchiveFieldChoice | undefined,
+          ),
         },
       };
     }

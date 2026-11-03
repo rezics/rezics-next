@@ -17,7 +17,11 @@ import {
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { EntryAnnotationReviewStoppedError, LibraryConflictError, SourceObservationCapacityError } from './entry-errors.ts';
+import {
+  EntryAnnotationReviewStoppedError,
+  LibraryConflictError,
+  SourceObservationCapacityError,
+} from './entry-errors.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   MAX_SOURCE_OBSERVATIONS,
@@ -200,7 +204,11 @@ function parseObservationInput(value: unknown, allowCleared = false) {
   };
 }
 
-function parseAdmissionValue<T>(value: unknown, parse: (input: unknown) => T, allowCleared: boolean): T | { status: 'cleared' } {
+function parseAdmissionValue<T>(
+  value: unknown,
+  parse: (input: unknown) => T,
+  allowCleared: boolean,
+): T | { status: 'cleared' } {
   if (allowCleared && typeof value === 'object' && value !== null && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
     if (record.op === 'clear' && Object.keys(record).length === 1) return { status: 'cleared' };
@@ -233,7 +241,16 @@ function parseObservationCorrection(value: unknown) {
 function parseArchiveObservationGuard(value: unknown): PersonalEntryArchiveObservationGuard {
   const guard = closed(
     value,
-    ['uploadId', 'ordinal', 'reviewRevision', 'sourceFingerprint', 'action', 'expectedRevision', 'fields', 'profileGuard'],
+    [
+      'uploadId',
+      'ordinal',
+      'reviewRevision',
+      'sourceFingerprint',
+      'action',
+      'expectedRevision',
+      'fields',
+      'profileGuard',
+    ],
     'archive observation guard',
   );
   if (
@@ -249,7 +266,11 @@ function parseArchiveObservationGuard(value: unknown): PersonalEntryArchiveObser
     throw new TypeError('Invalid archive observation guard');
   const reviewRevision = parsePersonalRevision(guard.reviewRevision, false);
   const expectedRevision =
-    guard.action === 'admit' ? guard.expectedRevision === null ? null : undefined : parsePersonalRevision(guard.expectedRevision, false);
+    guard.action === 'admit'
+      ? guard.expectedRevision === null
+        ? null
+        : undefined
+      : parsePersonalRevision(guard.expectedRevision, false);
   if (expectedRevision === undefined) throw new TypeError('Invalid archive observation revision');
 
   const fields = closed(guard.fields, ['privacy', 'sourceCreated', 'sourceUpdated'], 'archive observation fields');
@@ -444,8 +465,7 @@ async function verifyArchiveObservationGuard(
   guard: PersonalEntryArchiveObservationGuard,
 ): Promise<void> {
   const route = requireRoute(account.accountId);
-  if (routeOf(guard.uploadId) !== route || guard.profileGuard.subjectId !== subjectId)
-    throw new LibraryConflictError();
+  if (routeOf(guard.uploadId) !== route || guard.profileGuard.subjectId !== subjectId) throw new LibraryConflictError();
 
   const bound = await tx.query<{
     section: string;
@@ -472,20 +492,23 @@ async function verifyArchiveObservationGuard(
   );
   const item = bound.rows[0];
   const review = item?.review;
-  const current = review && typeof review.current === 'object' && review.current !== null && !Array.isArray(review.current)
-    ? (review.current as Record<string, unknown>)
-    : null;
+  const current =
+    review && typeof review.current === 'object' && review.current !== null && !Array.isArray(review.current)
+      ? (review.current as Record<string, unknown>)
+      : null;
   const choicesMatchInput = Object.entries(guard.fields).every(([field, choice]) => {
     const selected = requestInput[field];
     if (guard.action === 'admit') {
-      const value = selected && typeof selected === 'object' && !Array.isArray(selected)
-        ? (selected as Record<string, unknown>)
-        : null;
+      const value =
+        selected && typeof selected === 'object' && !Array.isArray(selected)
+          ? (selected as Record<string, unknown>)
+          : null;
       return choice === 'clear' ? value?.status === 'cleared' : choice === 'set' && value?.status !== 'cleared';
     }
-    const change = selected && typeof selected === 'object' && !Array.isArray(selected)
-      ? (selected as Record<string, unknown>)
-      : null;
+    const change =
+      selected && typeof selected === 'object' && !Array.isArray(selected)
+        ? (selected as Record<string, unknown>)
+        : null;
     return change?.op === (choice === 'preserve' ? 'unchanged' : choice);
   });
   if (
@@ -894,8 +917,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           'SELECT count(*)::text AS total FROM library.entry_source_observation WHERE route=$1 AND account_id=$2 AND subject_id=$3',
           [route, account.accountId, prepared.subjectId],
         );
-        if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS)
-          throw new SourceObservationCapacityError();
+        if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS) throw new SourceObservationCapacityError();
         const inserted = await tx.query(
           `INSERT INTO library.entry_source_observation
             (route,account_id,subject_id,provider,record_id,revision,privacy_status,privacy_meaning,privacy_source_value,
@@ -958,8 +980,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     const archiveGuard = internalGuard === undefined ? undefined : parseArchiveObservationGuard(internalGuard);
     if (archiveGuard && archiveGuard.action !== 'correct') throw new TypeError('Invalid archive observation action');
     const parsed = parseObservationCorrection(input);
-    if (archiveGuard && archiveGuard.expectedRevision !== parsed.revision)
-      throw new LibraryConflictError();
+    if (archiveGuard && archiveGuard.expectedRevision !== parsed.revision) throw new LibraryConflictError();
     const requestInput = {
       subjectId,
       ...parsed,

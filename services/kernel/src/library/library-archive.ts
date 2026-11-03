@@ -26,7 +26,14 @@ export const LIBRARY_ARCHIVE_RECOVERY_LIMITS = {
   applyCommands: 25,
   cleanupRows: 100,
 } as const;
-export const archiveMergeSections = ['entries', 'labels', 'assignments', 'annotations', 'journals', 'provenance'] as const;
+export const archiveMergeSections = [
+  'entries',
+  'labels',
+  'assignments',
+  'annotations',
+  'journals',
+  'provenance',
+] as const;
 type MergeSection = (typeof archiveMergeSections)[number];
 type ObjectValue = Record<string, unknown>;
 export type ArchiveRecord = ObjectValue & { section: LibraryExportSection };

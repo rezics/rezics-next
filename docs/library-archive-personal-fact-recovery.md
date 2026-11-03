@@ -19,10 +19,10 @@ The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET
 and preview are private and no-store. Canonical archive8bb/Web323 owns the only archive interface; Web318/142 continues to own the existing
 occurrence editor.
 
-| Retained row  | Explicit current target                         | Selected fields                         | Native operation                                |
-| ------------- | ----------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                      | `createEntryPersonalCommands().saveAnnotations` |
-| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate`, `reflection` | `createSessionCommands().patchSessionJournal`   |
+| Retained row  | Explicit current target                         | Selected fields                             | Native operation                                                                      |
+| ------------- | ----------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                          | `createEntryPersonalCommands().saveAnnotations`                                       |
+| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate`, `reflection`     | `createSessionCommands().patchSessionJournal`                                         |
 | `provenance`  | Explicitly mapped readable canonical Subject    | `privacy`, `sourceCreated`, `sourceUpdated` | `createEntryPersonalCommands().admitSourceObservation` or `.correctSourceObservation` |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
