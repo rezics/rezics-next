@@ -19,7 +19,6 @@ import type { WorkClient } from '../work/client.ts';
 import {
   bindNativeOwnerFilterRead,
   releaseNativeOwnerFilterRead,
-  revalidateNativeOwnerFilter,
   revalidateOwnerFilterDisclosure,
   nativeOwnerFilterBinding,
   withNativeOwnerFilterSource,
@@ -97,9 +96,10 @@ export async function readOwnerFilterCandidateClosure(
   source: PreparedCollectionSource,
   subjectId: string,
   work: NativeCollectionWork,
+  deferDisclosure = false,
 ): Promise<Unavailable | Readonly<{ status: 'complete'; closure: OwnerFilterCandidateClosure }>> {
   return withNativeOwnerFilterSource(binding, work, () =>
-    readNativeOwnerFilterClosure(binding, source, subjectId, work),
+    readNativeOwnerFilterClosure(binding, source, subjectId, work, deferDisclosure),
   );
 }
 
@@ -352,7 +352,7 @@ async function readWorkingOwnerFilterPage(
         throw unavailable();
       after = candidate.subjectId;
       if (!membership.result) continue;
-      const closure = await readOwnerFilterCandidateClosure(binding, current, candidate.subjectId, work);
+      const closure = await readOwnerFilterCandidateClosure(binding, current, candidate.subjectId, work, true);
       if (closure.status !== 'complete') throw unavailable();
       if (closure.closure.subjectId !== candidate.subjectId) throw new TypeError('Foreign native owner closure');
       const transaction = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });

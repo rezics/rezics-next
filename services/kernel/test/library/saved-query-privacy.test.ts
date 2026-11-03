@@ -34,7 +34,7 @@ test('a saved positive/negative owner rule sees native writes and parent deletio
       revision: f.written.body.libraryEntry.revision, state: other.id,
     }, discoveryKey()), 200);
     expect(await f.members(filter, 'alice', id)).toEqual([f.subjects.copyOnly.id]);
-    const copy = f.native.release.definition.libraryProfiles![f.profileId]!.copies!.kinds[0]!;
+    const copy = f.native.release.definition.libraryProfiles![f.profileId]!.copies!.kinds.find((kind) => kind.statuses.length > 0)!;
     ownerStatus(await f.native.request('alice', 'POST', '/v1/copies', {
       subjectId: f.subjects.noEntry.id, kind: copy.id, status: copy.statuses[0]!.id,
     }, discoveryKey()), 201);
@@ -69,12 +69,12 @@ test('saved reads refuse hidden originals/terminals and never turn missing query
     ownerStatus(await f.native.request('alice', 'GET', f.path(catalogue, undefined, id)), 503);
     await f.native.search!.indexing('running');
     ownerStatus(await f.native.request('alice', 'GET', f.path(catalogue, undefined, id)), 503);
-    ownerStatus(await f.native.request('acceptor', 'POST', `/v1/subjects/${original}:hide`, {
-      reason: 'Reauthorize independent saved-query support',
-    }, discoveryKey()), 200);
-    ownerStatus(await f.native.request('alice', 'GET', `/v1/collections/${id}/members`), 503);
     ownerStatus(await f.native.request('acceptor', 'POST', `/v1/subjects/${f.subjects.copyOnly.id}:hide`, {
       reason: 'Reauthorize terminal saved-query support',
+    }, discoveryKey()), 200);
+    expect(await f.members(filter, 'alice', id)).toEqual([terminal]);
+    ownerStatus(await f.native.request('acceptor', 'POST', `/v1/subjects/${original}:hide`, {
+      reason: 'Reauthorize independent saved-query support',
     }, discoveryKey()), 200);
     ownerStatus(await f.native.request('alice', 'GET', `/v1/collections/${id}/members`), 503);
   } finally { await f.close(); }

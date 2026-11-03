@@ -21,7 +21,6 @@ import {
 import {
   nativeOwnerFilterBinding,
   releaseNativeOwnerFilterRead,
-  revalidateNativeOwnerFilter,
   revalidateOwnerFilterDisclosure,
   withNativeOwnerFilterSource,
   sameOwnerFilterSource,
@@ -1055,7 +1054,7 @@ async function revalidatePreparationRead(
       if (!sameOwnerFilterSource(binding.source, membership.observation)) throw new ProblemError('stale_cursor');
       if (membership.result === 'not_proven') return { status: 'unavailable' };
       if (!membership.result) continue;
-      const closure = await readOwnerFilterCandidateClosure(native, prepared, subjectId, work);
+      const closure = await readOwnerFilterCandidateClosure(native, prepared, subjectId, work, true);
       if (closure.status !== 'complete') return { status: 'unavailable' };
       const control = work.reserve({
         candidateKeys: 0,

@@ -200,6 +200,7 @@ export async function readNativeOwnerFilterClosure(
   source: PreparedCollectionSource,
   subjectId: string,
   work: NativeCollectionWork,
+  deferDisclosure = false,
 ) {
   const saved = nativeOwnerFilterBinding(binding);
   if (
@@ -343,7 +344,9 @@ export async function readNativeOwnerFilterClosure(
   }
   const catalogue = await catalogueEvidence(binding, subjectId, work);
   if (catalogue === null) return { status: 'unavailable' } as const;
-  // The enclosing reader repeats ALL retained originals immediately before disclosure, including rejections.
+  // Ordinary enclosing readers repeat ALL retained originals at disclosure, including rejections.
+  // Existing point/command consumers retain their immediate closure checks.
+  if (!deferDisclosure) for (const original of originalIds) await disclose(original);
   await revalidateNativeOwnerFilter(binding, work);
   const closure: OwnerFilterCandidateClosure = { subjectId, originals, releases, catalogue };
   return { status: 'complete', closure } as const;
