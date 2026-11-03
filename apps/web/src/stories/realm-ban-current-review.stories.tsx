@@ -152,3 +152,15 @@ export const SelectedAccountAbsent: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_inspect_action() }));
   },
 };
+
+export const SelectedEpisodeUnbanReview: Story = {
+  ...CurrentSelectedEpisode,
+  play: async (context) => {
+    await CurrentSelectedEpisode.play!(context);
+    const canvas = within(context.canvasElement);
+    const actions = canvas.getAllByRole('button', { name: m.realm_bans_unban(), exact: true });
+    await userEvent.click(actions[0]!);
+    await expect(canvas.getByRole('group', { name: m.realm_bans_unban_confirm() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_bans_confirm(), exact: true })).toBeEnabled();
+  },
+};

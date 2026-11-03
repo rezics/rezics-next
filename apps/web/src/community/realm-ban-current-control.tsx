@@ -16,25 +16,35 @@ import {
 
 const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2';
 
-/** Selection is independent of the list frontier and can never submit a command. */
+/** Selection leaves the frontier unchanged; explicit unban uses the existing writer. */
 export function RealmBanCurrentControl({
   realmId,
   inspect,
   cursor,
   gate,
   disabled,
+  unban,
 }: {
   realmId: string;
   inspect: InspectRealmBanCurrent;
   cursor?: string | undefined;
   gate: RealmBanLifetime;
   disabled: boolean;
+  unban?: (
+    observation: Extract<RealmBanCurrentObservation, { state: 'current' }>,
+    trigger: HTMLButtonElement,
+    source: HTMLButtonElement,
+  ) => void;
 }) {
   const id = useId();
   const [draft, setDraft] = useState('');
   const [selection, setSelection] = useState<RealmBanCurrentInput | null>(null);
   const [result, setResult] = useState<RealmBanCurrentResult | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirmation, setConfirmation] = useState<Extract<RealmBanCurrentObservation, { state: 'current' }> | null>(
+    null,
+  );
+  const trigger = useRef<HTMLButtonElement | null>(null);
   const sequence = useRef(0);
   const draftNow = useRef('');
   const selectedNow = useRef<RealmBanCurrentInput | null>(null);
@@ -70,6 +80,7 @@ export function RealmBanCurrentControl({
     selectedNow.current = input;
     setSelection(input);
     setResult(null);
+    setConfirmation(null);
     setPending(true);
     let next: RealmBanCurrentResult;
     try {
@@ -116,6 +127,7 @@ export function RealmBanCurrentControl({
             selectedNow.current = null;
             setSelection(null);
             setResult(null);
+            setConfirmation(null);
           }}
         />
       </Field>
@@ -146,6 +158,7 @@ export function RealmBanCurrentControl({
               setDraft('');
               setSelection(null);
               setResult(null);
+              setConfirmation(null);
               field.current?.focus();
             }}
           >
@@ -174,6 +187,58 @@ export function RealmBanCurrentControl({
             m.realm_bans_inspect_unavailable()
           )}
         </div>
+      ) : null}
+      {result?.state === 'current' && unban ? (
+        <>
+          <Button
+            ref={trigger}
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={disabled || pending}
+            onClick={() => {
+              if (gate.current() && !disabled && !working.current) setConfirmation(result);
+            }}
+          >
+            {m.realm_bans_unban()}
+          </Button>
+          {confirmation === result ? (
+            <div role="group" aria-labelledby={`${id}-unban`} className="space-y-3">
+              <h4 id={`${id}-unban`} className="font-medium">
+                {m.realm_bans_unban_confirm()}
+              </h4>
+              <bdi>{confirmation.input.accountId}</bdi>
+              <RealmBanCurrentObservationView observation={confirmation} />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className={actionClass}
+                  disabled={disabled || pending}
+                  onClick={(event) => {
+                    if (!gate.current() || disabled || working.current || !trigger.current) return;
+                    unban(confirmation, trigger.current, event.currentTarget);
+                  }}
+                >
+                  {m.realm_bans_confirm()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={actionClass}
+                  disabled={disabled || pending}
+                  onClick={(event) => {
+                    if (!gate.current() || disabled || working.current) return;
+                    const focused = document.activeElement === event.currentTarget;
+                    setConfirmation(null);
+                    if (focused) trigger.current?.focus();
+                  }}
+                >
+                  {m.realm_bans_cancel()}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </section>
   );

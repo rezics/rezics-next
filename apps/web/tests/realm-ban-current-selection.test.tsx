@@ -152,6 +152,60 @@ test('inspection retry retains one frozen selection and leaves the list frontier
     expect(inspections.every((input) => input === inspections[0] && Object.isFrozen(input))).toBe(true);
     expect(reads).toEqual([undefined, 'next-window']);
 
+    const exactWrites: BanWriteInput[] = [];
+    let episode = { ...ban, accountId, reason: 'Beyond-page episode' };
+    let exactAccepted = false;
+    await act(async () => {
+      root.render(
+        createElement(RealmBansControl, {
+          realmId,
+          ready: true,
+          initial: { state: 'ready', page: { items: [], next: 'untouched-frontier' } },
+          read: async () => ({ state: 'ready', page: { items: [], next: null } }),
+          inspect: async (input) => ({ state: 'current', input, ban: episode }),
+          write: async (command) => {
+            exactWrites.push(command);
+            return exactAccepted ? { ok: true, action: 'unban', accountId } : { ok: false, reason: 'unavailable' };
+          },
+        }),
+      );
+      await tick();
+    });
+    await edit('input[maxlength="36"]', accountId);
+    await click(m.realm_bans_inspect_action());
+    await click(m.realm_bans_unban());
+    const confirmation = () => host.querySelector('[role="group"][aria-labelledby$="-unban"]');
+    expect(confirmation()?.textContent).toContain('Beyond-page episode');
+    episode.reason = 'Changed after inspection';
+    expect(confirmation()?.textContent).not.toContain(episode.reason);
+    await act(async () => {
+      const cancel = [...confirmation()!.querySelectorAll('button')].find(
+        (node) => node.textContent === m.realm_bans_cancel(),
+      )!;
+      cancel.focus();
+      cancel.click();
+      await tick();
+    });
+    expect(confirmation()).toBeNull();
+    expect(window.document.activeElement?.textContent).toBe(m.realm_bans_unban());
+    await click(m.realm_bans_unban());
+    episode = { ...episode, at: '2026-11-04T16:00:00Z' };
+    await click(m.realm_bans_inspect_retry());
+    expect(confirmation()).toBeNull();
+    expect(exactWrites).toHaveLength(0);
+    await click(m.realm_bans_unban());
+    expect(confirmation()?.querySelector('time')?.getAttribute('datetime')).toBe(episode.at);
+    await click(m.realm_bans_confirm());
+    expect(exactWrites).toHaveLength(1);
+    expect(exactWrites[0]?.accountId).toBe(accountId);
+    expect(exactWrites[0]?.action).toBe('unban');
+    exactAccepted = true;
+    await click(m.realm_bans_retry());
+    expect(exactWrites).toHaveLength(2);
+    expect(exactWrites[1]).toEqual(exactWrites[0]);
+    expect(exactWrites.every(Object.isFrozen)).toBe(true);
+    expect(host.querySelector('[data-slot="realm-ban-outcome"]')?.textContent).toContain(m.realm_bans_lifted());
+
     const writes: BanWriteInput[] = [];
     let accepted: BanWriteResult = { ok: true, action: 'unban', accountId };
     await act(async () => {

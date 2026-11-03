@@ -1185,6 +1185,29 @@ function RealmBansVisit({
             cursor={pageRead.current.cursor}
             gate={gate}
             disabled={disabled}
+            unban={(observation, trigger, source) => {
+              if (
+                !gate.current() ||
+                working.current ||
+                uncertain.current ||
+                renderGeneration !== generation.current ||
+                observation.input.realmId !== realmId ||
+                observation.input.cursor !== pageRead.current.cursor ||
+                observation.ban.accountId !== observation.input.accountId
+              )
+                return;
+              const review = makeReview('unban', observation.input.accountId, trigger);
+              void change(
+                {
+                  realmId,
+                  accountId: observation.input.accountId,
+                  action: 'unban',
+                  reason: '',
+                  idempotencyKey: crypto.randomUUID(),
+                },
+                { review, source },
+              );
+            }}
           />
           <h3 ref={currentListHeading} tabIndex={-1} className="font-semibold">
             {m.realm_bans_current()}

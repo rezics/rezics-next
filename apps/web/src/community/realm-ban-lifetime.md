@@ -151,3 +151,13 @@ Existing affected stories remain unchanged:
 Decision: publish the mounted composed ban contract through the normal native declaration generator before binding Web; derive every composed field from that generated delivery.
 
 Decision: keep exact observation rendering behind the injected inspection seam while generated composition is unavailable; never send an undeclared selected query or infer absence from list exhaustion.
+
+Decision: an admitted injected current episode may enter the existing unban writer through explicit confirmation; keep installed inspection unavailable until the generated route admits exact selection.
+
+The selected episode's confirmation retains its copied account, reason, moderator and effective time even when
+the source object changes. Editing, clearing or explicitly inspecting again retires that confirmation, including
+when the next observation is absent or unavailable. Cancel restores keyboard focus to its unban trigger. Confirm
+uses the original writer's admission, duplicate exclusion, immutable uncertain retry and independent receipts;
+the observation is neither an authorization token nor a conditional native command. A successful command still
+reauthorizes natively and refreshes the ordinary list. The inspection seam alone supplies no installed identity,
+advice or exact-read contract.
