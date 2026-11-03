@@ -5,6 +5,7 @@ import { eraseAccountNoticesPage } from '../../src/content/notices.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof replyNoticeFixture>>;
@@ -189,6 +190,20 @@ test('unwatch, erasure and late replay cannot recreate subscriptions or old noti
   expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 })).status).toBe(200);
   await effect().run(event);
   expect((await f.notices(opening.firstPost.id)).filter((notice) => notice.recipient_id === reader)).toHaveLength(0);
+  const suspendedOpening = await f.thread();
+  const suspendedEvent = await publication(suspendedOpening.firstPost.id);
+  await suspendAccount(f.db.admin, reader);
+  expect((await f.call(reader, 'GET', management(reader))).status).toBe(401);
+  await effect().run(suspendedEvent);
+  expect(
+    (
+      await f.db.admin.query(
+        `SELECT sent FROM content.notice_finalization
+    WHERE recipient_id=$1 AND source_id=$2 AND kind='board_activity'`,
+        [reader, suspendedOpening.firstPost.id],
+      )
+    ).rows,
+  ).toEqual([{ sent: false }]);
   let cursor: string | null = null;
   do {
     cursor = (await eraseAccountNoticesPage({ pool: f.db.pool }, reader, cursor)).next;

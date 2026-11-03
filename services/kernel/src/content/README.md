@@ -2114,6 +2114,9 @@ existing board notice; either worker order produces at most one notice. Refusals
 remain final across preference changes. Actor-home and inverse fanout indexes belong to the same original row and
 change atomically, so no asynchronous inverse can recreate an unwatched edge. Erasure includes board tombstones;
 retention includes board source progress.
+The finalizer's current native account point also fences suspension/authentication fencing committed after the
+released source Access checks. This is independent of the optional preference; required moderation remains on its
+existing mandatory path.
 
 ### Cost: board state and self-removal
 

@@ -219,7 +219,11 @@ export async function finalizeOptionalNotice(
                   [route, notice.recipientId, notice.sourceId],
                 )
               ).rowCount === 1;
-            const sent = readable && allowed && watching && !overlapping;
+            // Source Access observations precede this checkout. Fence an
+            // intervening suspension at the current native account point,
+            // without another Access checkout under the recipient transaction.
+            const sent =
+              readable && account.state === 'active' && !account.fenced && allowed && watching && !overlapping;
             const claimed = await recordFinalization.run(client, {
               ...key,
               sent,
