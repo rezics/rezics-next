@@ -22,19 +22,27 @@ const capability = {
  * never replaced by this authored-head capability.
  */
 export async function publishNativeSpaceDiscoveryWitness(pool: Pool): Promise<boolean> {
-  const registered = await withConnection(pool, async (client) =>
-    (await client.query<{ generation: string; cut: string }>(
-      'SELECT generation,cut FROM community.space_discovery_tuple_producer WHERE singleton=true',
-    )).rows[0],
+  const registered = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ generation: string; cut: string }>(
+          'SELECT generation,cut FROM community.space_discovery_tuple_producer WHERE singleton=true',
+        )
+      ).rows[0],
   );
   if (registered && (registered.generation !== capability.generation || registered.cut !== capability.cut))
     return false;
   await registerSpaceDiscoveryTupleProducer(pool, capability);
-  const locator = await withConnection(pool, async (client) =>
-    (await client.query<{ route: number; space_id: string }>(
-      `SELECT route,space_id FROM community.space_discovery_tuple_witness
+  const locator = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ route: number; space_id: string }>(
+          `SELECT route,space_id FROM community.space_discovery_tuple_witness
        WHERE state <> 'ready' ORDER BY route,space_id LIMIT 1`,
-    )).rows[0],
+        )
+      ).rows[0],
   );
   if (!locator) return false;
   const partition = partitionOf(locator.route);
@@ -43,12 +51,13 @@ export async function publishNativeSpaceDiscoveryWitness(pool: Pool): Promise<bo
     try {
       const anchor = await readPartition(client, partition);
       if (!anchor || anchor.writeState !== 'active') throw new Error('Native Space tuple owner is unavailable');
-      const row = (await client.query<{
-        space_revision: string;
-        realm_id: string | null;
-        realm_revision: string | null;
-      }>(
-        `SELECT s.head_revision_id AS space_revision,r.realm_id,r.head_revision_id AS realm_revision
+      const row = (
+        await client.query<{
+          space_revision: string;
+          realm_id: string | null;
+          realm_revision: string | null;
+        }>(
+          `SELECT s.head_revision_id AS space_revision,r.realm_id,r.head_revision_id AS realm_revision
          FROM community.space_discovery_tuple_witness w
          JOIN community.space s ON s.route=w.route AND s.space_id=w.space_id
          JOIN community.space_revision v
@@ -60,8 +69,9 @@ export async function publishNativeSpaceDiscoveryWitness(pool: Pool): Promise<bo
            AND (r.realm_id IS NULL OR h.revision_id IS NOT NULL)
            AND NOT EXISTS (SELECT 1 FROM community.space_discovery_tuple_work t
              WHERE t.route=w.route AND t.space_id=w.space_id)`,
-        [locator.route, locator.space_id],
-      )).rows[0];
+          [locator.route, locator.space_id],
+        )
+      ).rows[0];
       await client.query('COMMIT');
       if (!row) return null;
       return {
