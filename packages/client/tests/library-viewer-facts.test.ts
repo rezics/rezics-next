@@ -34,10 +34,14 @@ expectTypeOf<Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']>().toE
 expectTypeOf<typeof MAX_VIEWER_FACTS_ROWS>().toEqualTypeOf<100>();
 `,
     );
-    const result = spawnSync('bun', ['check', '--no-script', '-p', resolve(fixture, 'tsconfig.json')], {
-      cwd: root,
-      encoding: 'utf8',
-    });
+    const result = spawnSync(
+      resolve(root, 'node_modules/.bin/bun'),
+      ['check', '--no-script', '-p', resolve(fixture, 'tsconfig.json')],
+      {
+        cwd: root,
+        encoding: 'utf8',
+      },
+    );
     expect(result.error).toBeUndefined();
     expect(`${result.stdout}${result.stderr}`).toBe('');
     expect(result.status).toBe(0);
