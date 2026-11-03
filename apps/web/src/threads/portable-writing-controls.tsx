@@ -90,8 +90,9 @@ function usePrivateWritingRedaction(host: RefObject<HTMLDivElement | null>, sign
       const node = host.current;
       if (!node) return;
       node.hidden = true;
-      for (const preview of node.querySelectorAll<HTMLElement>('[data-private-writing]')) preview.textContent = '';
+      // Clear controls before detaching their section, including references retained by a late callback.
       for (const field of node.querySelectorAll('textarea')) field.value = '';
+      for (const preview of node.querySelectorAll<HTMLElement>('[data-private-writing]')) preview.textContent = '';
       for (const input of node.querySelectorAll('input[type="file"]')) (input as HTMLInputElement).value = '';
     };
     signal.addEventListener('abort', redact, { once: true });
