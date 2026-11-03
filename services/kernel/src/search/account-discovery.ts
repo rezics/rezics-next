@@ -7,12 +7,7 @@ import type { Release } from '@rezics/definitions';
 import { readAccountDiscoveryBindings } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
-import type {
-  DiscoveryIndexAction,
-  DiscoveryKey,
-  DiscoveryOwnerAdapterSlots,
-  DiscoveryRegistry,
-} from './discovery.ts';
+import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';

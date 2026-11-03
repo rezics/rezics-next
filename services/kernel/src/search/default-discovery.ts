@@ -89,7 +89,10 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
       ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
         const summaries = await space.hydrate(ids, ownerContext(context));
         return new Map(
-          [...summaries].map(([id, summary]) => [id, { id, title: summary.name, summary: summary.description || null }]),
+          [...summaries].map(([id, summary]) => [
+            id,
+            { id, title: summary.name, summary: summary.description || null },
+          ]),
         );
       },
     },
