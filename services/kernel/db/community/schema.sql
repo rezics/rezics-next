@@ -672,8 +672,6 @@ DECLARE dependencies jsonb[] := ARRAY[
   '{"kind":"exposure","group":"search_advanced"}'::jsonb
 ]; carried record;
 BEGIN
-  -- Serialize initialization and native changes on the retained owner, including
-  -- removed owners. An old seed cannot replace a concurrently committed head.
   PERFORM 1 FROM community.space WHERE route=r AND space_id=id FOR UPDATE;
   IF NOT FOUND THEN RETURN; END IF;
   SELECT h.context_id, v.presentation INTO carried
@@ -692,6 +690,77 @@ BEGIN
     WHERE route=r AND space_id=id AND NOT (dependency=ANY(dependencies));
   INSERT INTO community.space_discovery_dependency(dependency,route,space_id)
     SELECT d,r,id FROM unnest(dependencies) d ON CONFLICT DO NOTHING;
+  PERFORM community.refresh_space_discovery_tuple_witness(r,id);
+END;
+$$;
+
+
+--
+-- Name: refresh_space_discovery_tuple_witness(integer, uuid); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.refresh_space_discovery_tuple_witness(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE current_space_revision uuid; current_realm_id uuid; current_realm_revision uuid;
+        current_state text; p integer; next_generation bigint; producer_epoch numeric(20,0);
+        source_position numeric(20,0);
+BEGIN
+  SELECT s.head_revision_id, h.realm_id, h.head_revision_id
+    INTO current_space_revision, current_realm_id, current_realm_revision
+    FROM community.space s
+    LEFT JOIN community.realm h ON h.route=s.route AND h.space_id=s.space_id
+    WHERE s.route=r AND s.space_id=id;
+  IF NOT FOUND THEN RETURN; END IF;
+  p := r / 16;
+  SELECT state,producer_epoch,source_position INTO current_state,producer_epoch,source_position
+    FROM community.space_discovery_tuple_witness
+    WHERE route=r AND space_id=id FOR UPDATE;
+  IF NOT FOUND THEN
+    INSERT INTO community.space_discovery_tuple_witness
+      (route,space_id,space_revision,realm_id,realm_revision,state)
+    VALUES(r,id,current_space_revision,current_realm_id,current_realm_revision,'unavailable');
+    UPDATE community.space_discovery_tuple_capability
+      SET required=required+1,pending=pending+1,cut=cut+1 WHERE partition_no=p;
+    RETURN;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM community.space_discovery_tuple_witness
+    WHERE route=r AND space_id=id
+      AND (space_revision IS DISTINCT FROM current_space_revision
+        OR realm_id IS DISTINCT FROM current_realm_id
+        OR realm_revision IS DISTINCT FROM current_realm_revision)
+  ) THEN
+    next_generation := nextval('community.space_discovery_tuple_witness_key');
+    IF current_state='ready' THEN
+      UPDATE community.space_discovery_tuple_capability
+        SET witnessed=witnessed-1,pending=pending+1,cut=cut+1 WHERE partition_no=p;
+    ELSE
+      UPDATE community.space_discovery_tuple_capability
+        SET cut=cut+1 WHERE partition_no=p;
+    END IF;
+    UPDATE community.space_discovery_tuple_witness
+      SET witness_generation=next_generation,
+          space_revision=current_space_revision,realm_id=current_realm_id,
+          realm_revision=current_realm_revision,
+          tuple_count=0,state='unavailable'
+      WHERE route=r AND space_id=id;
+    DELETE FROM community.space_discovery_tuple_expected WHERE route=r AND space_id=id;
+    INSERT INTO community.space_discovery_tuple_work
+      (route,space_id,witness_generation,tuple_route,source,external_id,field_group,action,producer_epoch,source_position)
+    SELECT r,id,next_generation,old.tuple_route,old.source,old.external_id,old.field_group,'remove',
+           old.producer_epoch,old.source_position
+      FROM (
+        SELECT tuple_route,source,external_id,field_group,producer_epoch,source_position
+          FROM community.space_discovery_tuple_reference WHERE route=r AND space_id=id
+        UNION
+        SELECT tuple_route,source,external_id,field_group,producer_epoch,source_position
+          FROM community.space_discovery_tuple_work WHERE route=r AND space_id=id
+      ) old
+    ON CONFLICT DO NOTHING;
+    DELETE FROM community.space_discovery_tuple_work WHERE route=r AND space_id=id
+      AND witness_generation<>next_generation;
+  END IF;
 END;
 $$;
 
@@ -1531,6 +1600,181 @@ CREATE TABLE community.space_discovery_population (
 
 
 --
+-- Name: space_discovery_tuple_capability; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_capability (
+    partition_no integer NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    cut bigint DEFAULT 0 NOT NULL,
+    required bigint DEFAULT 0 NOT NULL,
+    witnessed bigint DEFAULT 0 NOT NULL,
+    pending bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT space_discovery_tuple_capability_check CHECK (((witnessed + pending) = required)),
+    CONSTRAINT space_discovery_tuple_capability_cut_check CHECK ((cut >= 0)),
+    CONSTRAINT space_discovery_tuple_capability_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT space_discovery_tuple_capability_pending_check CHECK ((pending >= 0)),
+    CONSTRAINT space_discovery_tuple_capability_required_check CHECK ((required >= 0)),
+    CONSTRAINT space_discovery_tuple_capability_witnessed_check CHECK ((witnessed >= 0))
+);
+
+
+--
+-- Name: space_discovery_tuple_expected; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_expected (
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    witness_generation bigint NOT NULL,
+    tuple_route integer NOT NULL,
+    source text NOT NULL COLLATE pg_catalog."C",
+    external_id text NOT NULL COLLATE pg_catalog."C",
+    field_group text NOT NULL COLLATE pg_catalog."C",
+    CONSTRAINT space_discovery_tuple_expected_external_id_check CHECK (((char_length(external_id) >= 1) AND (char_length(external_id) <= 1024))),
+    CONSTRAINT space_discovery_tuple_expected_field_group_check CHECK ((field_group = ANY (ARRAY['facts'::text, 'summary'::text, 'cover'::text]))),
+    CONSTRAINT space_discovery_tuple_expected_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT space_discovery_tuple_expected_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text)),
+    CONSTRAINT space_discovery_tuple_expected_tuple_route_check CHECK (((tuple_route >= 0) AND (tuple_route <= 65535)))
+);
+
+
+--
+-- Name: space_discovery_tuple_inverse_key; Type: SEQUENCE; Schema: community; Owner: -
+--
+
+CREATE SEQUENCE community.space_discovery_tuple_inverse_key
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: space_discovery_tuple_inverse; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_inverse (
+    tuple_route integer NOT NULL,
+    source text NOT NULL COLLATE pg_catalog."C",
+    external_id text NOT NULL COLLATE pg_catalog."C",
+    field_group text NOT NULL COLLATE pg_catalog."C",
+    space_route integer NOT NULL,
+    space_id uuid NOT NULL,
+    witness_generation bigint NOT NULL,
+    source_epoch numeric(20,0) NOT NULL,
+    source_position numeric(20,0) NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    ordinal bigint DEFAULT nextval('community.space_discovery_tuple_inverse_key'::regclass) NOT NULL,
+    CONSTRAINT space_discovery_tuple_inverse_ordinal_check CHECK ((ordinal > 0)),
+    CONSTRAINT space_discovery_tuple_inverse_source_epoch_check CHECK ((source_epoch >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_inverse_source_position_check CHECK ((source_position >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_inverse_space_route_check CHECK (((space_route >= 0) AND (space_route <= 65535))),
+    CONSTRAINT space_discovery_tuple_inverse_tuple_route_check CHECK (((tuple_route >= 0) AND (tuple_route <= 65535))),
+    CONSTRAINT space_discovery_tuple_inverse_witness_generation_check CHECK ((witness_generation > 0))
+);
+
+
+--
+-- Name: space_discovery_tuple_producer; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_producer (
+    singleton boolean DEFAULT true NOT NULL,
+    generation text NOT NULL,
+    cut text NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT space_discovery_tuple_producer_cut_check CHECK (((cut <> ''::text) AND (char_length(cut) <= 256))),
+    CONSTRAINT space_discovery_tuple_producer_generation_check CHECK (((generation <> ''::text) AND (char_length(generation) <= 128))),
+    CONSTRAINT space_discovery_tuple_producer_singleton_check CHECK (singleton)
+);
+
+
+--
+-- Name: space_discovery_tuple_reference; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_reference (
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    tuple_route integer NOT NULL,
+    source text NOT NULL COLLATE pg_catalog."C",
+    external_id text NOT NULL COLLATE pg_catalog."C",
+    field_group text NOT NULL COLLATE pg_catalog."C",
+    witness_generation bigint NOT NULL,
+    CONSTRAINT space_discovery_tuple_reference_external_id_check CHECK (((char_length(external_id) >= 1) AND (char_length(external_id) <= 1024))),
+    CONSTRAINT space_discovery_tuple_reference_field_group_check CHECK ((field_group = ANY (ARRAY['facts'::text, 'summary'::text, 'cover'::text]))),
+    CONSTRAINT space_discovery_tuple_reference_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT space_discovery_tuple_reference_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text)),
+    CONSTRAINT space_discovery_tuple_reference_tuple_route_check CHECK (((tuple_route >= 0) AND (tuple_route <= 65535)))
+);
+
+
+--
+-- Name: space_discovery_tuple_witness_key; Type: SEQUENCE; Schema: community; Owner: -
+--
+
+CREATE SEQUENCE community.space_discovery_tuple_witness_key
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: space_discovery_tuple_witness; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_witness (
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    witness_generation bigint DEFAULT nextval('community.space_discovery_tuple_witness_key'::regclass) NOT NULL,
+    space_revision uuid,
+    realm_id uuid,
+    realm_revision uuid,
+    producer_generation text,
+    producer_epoch numeric(20,0) DEFAULT 0 NOT NULL,
+    source_position numeric(20,0) DEFAULT 0 NOT NULL,
+    tuple_count smallint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'unavailable'::text NOT NULL,
+    CONSTRAINT space_discovery_tuple_witness_check CHECK (((state <> 'ready'::text) OR ((space_revision IS NOT NULL) AND (producer_generation IS NOT NULL)))),
+    CONSTRAINT space_discovery_tuple_witness_producer_epoch_check CHECK ((producer_epoch >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_witness_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT space_discovery_tuple_witness_source_position_check CHECK ((source_position >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_witness_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'unavailable'::text, 'ready'::text]))),
+    CONSTRAINT space_discovery_tuple_witness_tuple_count_check CHECK (((tuple_count >= 0) AND (tuple_count <= 50)))
+);
+
+
+--
+-- Name: space_discovery_tuple_work; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_tuple_work (
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    witness_generation bigint NOT NULL,
+    tuple_route integer NOT NULL,
+    source text NOT NULL COLLATE pg_catalog."C",
+    external_id text NOT NULL COLLATE pg_catalog."C",
+    field_group text NOT NULL COLLATE pg_catalog."C",
+    action text NOT NULL,
+    producer_epoch numeric(20,0) NOT NULL,
+    source_position numeric(20,0) NOT NULL,
+    CONSTRAINT space_discovery_tuple_work_action_check CHECK ((action = ANY (ARRAY['upsert'::text, 'remove'::text]))),
+    CONSTRAINT space_discovery_tuple_work_external_id_check CHECK (((char_length(external_id) >= 1) AND (char_length(external_id) <= 1024))),
+    CONSTRAINT space_discovery_tuple_work_field_group_check CHECK ((field_group = ANY (ARRAY['facts'::text, 'summary'::text, 'cover'::text]))),
+    CONSTRAINT space_discovery_tuple_work_producer_epoch_check CHECK ((producer_epoch >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT space_discovery_tuple_work_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text)),
+    CONSTRAINT space_discovery_tuple_work_source_position_check CHECK ((source_position >= (0)::numeric)),
+    CONSTRAINT space_discovery_tuple_work_tuple_route_check CHECK (((tuple_route >= 0) AND (tuple_route <= 65535)))
+);
+
+
+--
 -- Name: space_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -1891,6 +2135,62 @@ ALTER TABLE ONLY community.space_discovery_population
 
 
 --
+-- Name: space_discovery_tuple_capability space_discovery_tuple_capability_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_capability
+    ADD CONSTRAINT space_discovery_tuple_capability_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: space_discovery_tuple_expected space_discovery_tuple_expected_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_expected
+    ADD CONSTRAINT space_discovery_tuple_expected_pkey PRIMARY KEY (route, space_id, witness_generation, tuple_route, source, external_id, field_group);
+
+
+--
+-- Name: space_discovery_tuple_inverse space_discovery_tuple_inverse_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_inverse
+    ADD CONSTRAINT space_discovery_tuple_inverse_pkey PRIMARY KEY (tuple_route, source, external_id, field_group, space_route, space_id);
+
+
+--
+-- Name: space_discovery_tuple_producer space_discovery_tuple_producer_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_producer
+    ADD CONSTRAINT space_discovery_tuple_producer_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: space_discovery_tuple_reference space_discovery_tuple_reference_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_reference
+    ADD CONSTRAINT space_discovery_tuple_reference_pkey PRIMARY KEY (route, space_id, tuple_route, source, external_id, field_group);
+
+
+--
+-- Name: space_discovery_tuple_witness space_discovery_tuple_witness_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_witness
+    ADD CONSTRAINT space_discovery_tuple_witness_pkey PRIMARY KEY (route, space_id);
+
+
+--
+-- Name: space_discovery_tuple_work space_discovery_tuple_work_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_work
+    ADD CONSTRAINT space_discovery_tuple_work_pkey PRIMARY KEY (route, space_id, witness_generation, tuple_route, source, external_id, field_group, action);
+
+
+--
 -- Name: space space_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -2052,6 +2352,34 @@ CREATE UNIQUE INDEX space_discovery_dependency_page ON community.space_discovery
 --
 
 CREATE INDEX space_discovery_frontier_pending ON community.space_discovery_frontier USING btree (partition_no, obligation) WHERE (state = ANY (ARRAY['preparing'::text, 'draining'::text]));
+
+
+--
+-- Name: space_discovery_tuple_inverse_page; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_tuple_inverse_page ON community.space_discovery_tuple_inverse USING btree (tuple_route, source, external_id, field_group, ordinal) INCLUDE (space_route, space_id) WHERE active;
+
+
+--
+-- Name: space_discovery_tuple_reference_owner; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_tuple_reference_owner ON community.space_discovery_tuple_reference USING btree (route, space_id);
+
+
+--
+-- Name: space_discovery_tuple_witness_pending; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_tuple_witness_pending ON community.space_discovery_tuple_witness USING btree (route, space_id) WHERE (state <> 'ready'::text);
+
+
+--
+-- Name: space_discovery_tuple_work_pending; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_tuple_work_pending ON community.space_discovery_tuple_work USING btree (route, space_id, witness_generation);
 
 
 --
@@ -2387,6 +2715,38 @@ ALTER TABLE ONLY community.space_discovery_dependency
 
 ALTER TABLE ONLY community.space_discovery_frontier_wake
     ADD CONSTRAINT space_discovery_frontier_wake_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
+
+
+--
+-- Name: space_discovery_tuple_expected space_discovery_tuple_expected_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_expected
+    ADD CONSTRAINT space_discovery_tuple_expected_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
+
+
+--
+-- Name: space_discovery_tuple_reference space_discovery_tuple_reference_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_reference
+    ADD CONSTRAINT space_discovery_tuple_reference_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
+
+
+--
+-- Name: space_discovery_tuple_witness space_discovery_tuple_witness_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_witness
+    ADD CONSTRAINT space_discovery_tuple_witness_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
+
+
+--
+-- Name: space_discovery_tuple_work space_discovery_tuple_work_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_tuple_work
+    ADD CONSTRAINT space_discovery_tuple_work_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
 
 
 --
