@@ -189,16 +189,20 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     (await fixture.reader.query('SELECT position::text FROM core.partition WHERE partition_no=$1', [partition]))
       .rows[0]!.position;
   for (const repair of [
-    ['UPDATE content.thread SET security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
-      [routeOf(written.value.threadId), written.value.threadId]],
-    ['UPDATE content.post SET security_revision=security_revision+1 WHERE route=$1 AND post_id=$2',
-      [routeOf(written.value.itemId), written.value.itemId]],
-    ["UPDATE content.board SET visibility='protected' WHERE route=$1 AND board_id=$2",
-      [board.route, board.board_id]],
-    ["UPDATE content.board SET visibility='published' WHERE route=$1 AND board_id=$2",
-      [board.route, board.board_id]],
-    ["DELETE FROM content.review_discovery_dependency WHERE route=$1 AND thread_id=$2 AND gate_kind='context'",
-      [routeOf(written.value.threadId), written.value.threadId]],
+    [
+      'UPDATE content.thread SET security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
+      [routeOf(written.value.threadId), written.value.threadId],
+    ],
+    [
+      'UPDATE content.post SET security_revision=security_revision+1 WHERE route=$1 AND post_id=$2',
+      [routeOf(written.value.itemId), written.value.itemId],
+    ],
+    ["UPDATE content.board SET visibility='protected' WHERE route=$1 AND board_id=$2", [board.route, board.board_id]],
+    ["UPDATE content.board SET visibility='published' WHERE route=$1 AND board_id=$2", [board.route, board.board_id]],
+    [
+      "DELETE FROM content.review_discovery_dependency WHERE route=$1 AND thread_id=$2 AND gate_kind='context'",
+      [routeOf(written.value.threadId), written.value.threadId],
+    ],
   ] as const) {
     const previous = await source.censusCoverage(partition);
     const at = await nativePosition();
@@ -229,7 +233,12 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     } finally {
       barrier.release();
     }
-    expect(await pending).toMatchObject({ state: 'changed', missing: 'eligibility-dependency', reviews: [], next: null });
+    expect(await pending).toMatchObject({
+      state: 'changed',
+      missing: 'eligibility-dependency',
+      reviews: [],
+      next: null,
+    });
   } finally {
     await observer.close();
   }
