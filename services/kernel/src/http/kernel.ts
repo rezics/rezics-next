@@ -494,11 +494,19 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
-  const journalCommands = createSessionCommands({
-    pool: dependencies.pool,
-    tokens,
-    clock,
-    access: resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
+  let journalCommands: ReturnType<typeof createSessionCommands> | undefined;
+  const deferredJournalCommands = new Proxy({} as ReturnType<typeof createSessionCommands>, {
+    get(_target, property) {
+      const commands =
+        (journalCommands ??= createSessionCommands({
+          pool: dependencies.pool,
+          tokens,
+          clock,
+          access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+        }));
+      const value = Reflect.get(commands, property, commands);
+      return typeof value === 'function' ? value.bind(commands) : value;
+    },
   });
   const diary = diaryRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
@@ -697,7 +705,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
-    journal: journalCommands,
+    journal: deferredJournalCommands,
     access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
   });
   const aniList = aniListImportRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {
