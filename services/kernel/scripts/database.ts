@@ -127,24 +127,47 @@ export function moduleExtensionFiles(root = directory): string[] {
   });
 }
 
-export function migrate(url: string, root = directory): void {
-  const migrationDirectories = ['db/migrations', ...modules(root).map((name) => `db/${name}/migrations`)];
-  command(
-    resolve(directory, 'node_modules/.bin/dbmate'),
-    [
-      '--url',
-      url,
-      ...migrationDirectories.flatMap((path) => ['--migrations-dir', path]),
-      '--no-dump-schema',
-      '--migration-lock',
-      '--wait',
-      'up',
-    ],
-    { cwd: root },
-  );
+function dbmateBin(): string {
+  return resolve(directory, 'node_modules/.bin/dbmate');
+}
+
+function migrationDirectories(root: string): string[] {
+  return ['db/migrations', ...modules(root).map((name) => `db/${name}/migrations`)];
+}
+
+function dbmate(url: string, args: string[], root: string): string {
+  return command(dbmateBin(), ['--url', url, '--no-dump-schema', ...args], { cwd: root });
+}
+
+/** Install or advance the SDK system schema. Extra repository indexes on those tables are left in place. */
+export function installDbosSchema(url: string, root = directory): void {
   command(process.execPath, [resolve(directory, 'node_modules/.bin/dbos'), 'schema', url, '--schema', DBOS_SCHEMA], {
     cwd: root,
   });
+}
+
+function ensureDatabase(url: string, root: string): void {
+  dbmate(url, ['wait'], root);
+  try {
+    dbmate(url, ['create'], root);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/already exists/i.test(message)) throw error;
+  }
+}
+
+export function migrate(url: string, root = directory): void {
+  ensureDatabase(url, root);
+  installDbosSchema(url, root);
+  dbmate(
+    url,
+    [
+      ...migrationDirectories(root).flatMap((path) => ['--migrations-dir', path]),
+      '--migration-lock',
+      'up',
+    ],
+    root,
+  );
 }
 
 function schemaDumpWith(url: string, options: string[] = [], root = directory): string {
