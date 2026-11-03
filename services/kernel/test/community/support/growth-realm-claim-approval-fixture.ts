@@ -440,16 +440,18 @@ export async function createClaimApprovalFixture() {
         else await seed(growth, { realms, requests, grants }[axis], { from, to: scale });
       }
       const actual = await count();
-      const expected = Object.fromEntries(
-        (['realms', 'requests', 'grants', 'history'] as const).map((name) => [
-          name,
-          name === axis
-            ? scale
-            : claimApprovalGrowthAxes.indexOf(name) < claimApprovalGrowthAxes.indexOf(axis)
-              ? claimApprovalGrowthScales[2]
-              : baseline,
-        ]),
-      );
+      const expectedCount = (name: ClaimApprovalGrowthAxis) =>
+        name === axis
+          ? scale
+          : claimApprovalGrowthAxes.indexOf(name) < claimApprovalGrowthAxes.indexOf(axis)
+            ? claimApprovalGrowthScales[2]
+            : baseline;
+      const expected = {
+        realms: expectedCount('realms'),
+        requests: expectedCount('requests'),
+        grants: expectedCount('grants'),
+        history: expectedCount('history'),
+      };
       expect(actual).toEqual(expected);
     }
 

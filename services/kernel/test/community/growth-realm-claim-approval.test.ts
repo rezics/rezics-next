@@ -19,7 +19,7 @@ afterAll(async () => {
   await f?.close();
 });
 
-const context = (idempotencyKey = crypto.randomUUID()) => ({ idempotencyKey, deadline: Date.now() + 30_000 });
+const context = (idempotencyKey: string = crypto.randomUUID()) => ({ idempotencyKey, deadline: Date.now() + 30_000 });
 const statementWork = (
   entries: readonly { readonly rows: number; readonly blocks: number; readonly count: number }[],
 ) =>
@@ -72,7 +72,7 @@ test('native orphan succession binds the original episode before real claim appr
 
   const rollbackBefore = await f.state(input.realmId, input.requestId);
   const rollbackError = new Error('forced stale Content conditional update');
-  f.growthObserver.armFault({ match: { statement: ownRealm }, boundary: 'after', error: rollbackError });
+  f.growthObserver.armFault({ match: { statement: ownRealm.sql }, boundary: 'after', error: rollbackError });
   await expect(
     approveRealmClaim(
       { pool: f.growth.pool, access: f.system.access, clock: () => at },
@@ -81,7 +81,7 @@ test('native orphan succession binds the original episode before real claim appr
       context(),
     ),
   ).rejects.toThrow(rollbackError.message);
-  expect(f.growthObserver.records.some(({ statement }) => statement === ownRealm)).toBe(true);
+  expect(f.growthObserver.records.some(({ statement }) => statement === ownRealm.sql)).toBe(true);
   expect(await f.state(input.realmId, input.requestId)).toEqual(rollbackBefore);
 
   const first = await approveRealmClaim(deps, f.approver.actor, input, context(key));
