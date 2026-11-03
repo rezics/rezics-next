@@ -2706,6 +2706,57 @@ CREATE TABLE library.copy (
 
 
 --
+-- Name: copy_archive_progress_apply; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_archive_progress_apply (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    review_id uuid NOT NULL,
+    request_key_hash bytea NOT NULL,
+    state text NOT NULL,
+    next_step integer DEFAULT 0 NOT NULL,
+    active_step integer,
+    session_id uuid,
+    error_code text,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT copy_archive_progress_apply_active_step_check CHECK (((active_step >= 0) AND (active_step <= 9))),
+    CONSTRAINT copy_archive_progress_apply_next_step_check CHECK (((next_step >= 0) AND (next_step <= 10))),
+    CONSTRAINT copy_archive_progress_apply_request_key_hash_check CHECK ((octet_length(request_key_hash) = 32)),
+    CONSTRAINT copy_archive_progress_apply_state_check CHECK ((state = ANY (ARRAY['applying'::text, 'partial'::text, 'applied'::text, 'stale'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: copy_archive_progress_review; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_archive_progress_review (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    review_id uuid NOT NULL,
+    source_session_id uuid NOT NULL,
+    source_ordinal integer NOT NULL,
+    subject_id uuid NOT NULL,
+    binding jsonb NOT NULL,
+    request_key_hash bytea NOT NULL,
+    input_digest bytea NOT NULL,
+    evidence jsonb NOT NULL,
+    evidence_bytes integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT copy_archive_progress_review_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
+    CONSTRAINT copy_archive_progress_review_evidence_bytes_check CHECK (((evidence_bytes >= 0) AND (evidence_bytes <= 32768))),
+    CONSTRAINT copy_archive_progress_review_evidence_check CHECK ((octet_length((evidence)::text) <= 32768)),
+    CONSTRAINT copy_archive_progress_review_input_digest_check CHECK ((octet_length(input_digest) = 32)),
+    CONSTRAINT copy_archive_progress_review_request_key_hash_check CHECK ((octet_length(request_key_hash) = 32)),
+    CONSTRAINT copy_archive_progress_review_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT copy_archive_progress_review_source_ordinal_check CHECK (((source_ordinal >= 0) AND (source_ordinal <= 99999)))
+);
+
+
+--
 -- Name: copy_archive_row; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -2715,8 +2766,13 @@ CREATE TABLE library.copy_archive_row (
     upload_id uuid NOT NULL,
     ordinal integer NOT NULL,
     evidence jsonb NOT NULL,
+    section text DEFAULT 'holdings'::text NOT NULL,
+    source_session_id uuid,
+    source_unit_id text,
     CONSTRAINT copy_archive_row_evidence_check CHECK ((octet_length((evidence)::text) <= 131072)),
-    CONSTRAINT copy_archive_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99999)))
+    CONSTRAINT copy_archive_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99999))),
+    CONSTRAINT copy_archive_row_section_check CHECK ((section = ANY (ARRAY['holdings'::text, 'sessions'::text, 'units'::text]))),
+    CONSTRAINT copy_archive_row_source_check CHECK ((((section = 'holdings'::text) AND (source_session_id IS NULL) AND (source_unit_id IS NULL)) OR ((section = 'sessions'::text) AND (source_session_id IS NOT NULL) AND (source_unit_id IS NULL)) OR ((section = 'units'::text) AND (source_session_id IS NOT NULL) AND (source_unit_id IS NOT NULL))))
 );
 
 
@@ -2734,9 +2790,15 @@ CREATE TABLE library.copy_archive_upload (
     expires_at timestamp with time zone NOT NULL,
     cancelled boolean DEFAULT false NOT NULL,
     removing boolean DEFAULT false NOT NULL,
+    progress_count integer DEFAULT 0 NOT NULL,
+    review_count integer DEFAULT 0 NOT NULL,
+    review_bytes integer DEFAULT 0 NOT NULL,
     CONSTRAINT copy_archive_upload_coverage_check CHECK ((octet_length((coverage)::text) <= 8192)),
     CONSTRAINT copy_archive_upload_holding_count_check CHECK (((holding_count >= 0) AND (holding_count <= 4096))),
     CONSTRAINT copy_archive_upload_manifest_check CHECK ((octet_length((manifest)::text) <= 131072)),
+    CONSTRAINT copy_archive_upload_progress_count_check CHECK (((progress_count >= 0) AND (progress_count <= 100000))),
+    CONSTRAINT copy_archive_upload_review_bytes_check CHECK (((review_bytes >= 0) AND (review_bytes <= 33554432))),
+    CONSTRAINT copy_archive_upload_review_count_check CHECK (((review_count >= 0) AND (review_count <= 4096))),
     CONSTRAINT copy_archive_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -5183,6 +5245,38 @@ ALTER TABLE ONLY library.consumption_statistics_subject
 
 
 --
+-- Name: copy_archive_progress_apply copy_archive_progress_apply_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_apply
+    ADD CONSTRAINT copy_archive_progress_apply_pkey PRIMARY KEY (route, account_id, upload_id, review_id);
+
+
+--
+-- Name: copy_archive_progress_apply copy_archive_progress_apply_route_account_id_upload_id_requ_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_apply
+    ADD CONSTRAINT copy_archive_progress_apply_route_account_id_upload_id_requ_key UNIQUE (route, account_id, upload_id, request_key_hash);
+
+
+--
+-- Name: copy_archive_progress_review copy_archive_progress_review_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_review
+    ADD CONSTRAINT copy_archive_progress_review_pkey PRIMARY KEY (route, account_id, upload_id, review_id);
+
+
+--
+-- Name: copy_archive_progress_review copy_archive_progress_review_route_account_id_upload_id_req_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_review
+    ADD CONSTRAINT copy_archive_progress_review_route_account_id_upload_id_req_key UNIQUE (route, account_id, upload_id, request_key_hash);
+
+
+--
 -- Name: copy_archive_row copy_archive_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6397,6 +6491,34 @@ CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id
 --
 
 CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id);
+
+
+--
+-- Name: copy_archive_progress_review_occurrence; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_progress_review_occurrence ON library.copy_archive_progress_review USING btree (route, account_id, upload_id, source_session_id, created_at DESC);
+
+
+--
+-- Name: copy_archive_row_section_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_row_section_page ON library.copy_archive_row USING btree (route, account_id, upload_id, section, ordinal);
+
+
+--
+-- Name: copy_archive_row_session_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_row_session_page ON library.copy_archive_row USING btree (route, account_id, upload_id, source_session_id, section, ordinal);
+
+
+--
+-- Name: copy_archive_row_unit_lookup; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_row_unit_lookup ON library.copy_archive_row USING btree (route, account_id, upload_id, source_session_id, source_unit_id) WHERE (section = 'units'::text);
 
 
 --
@@ -8209,6 +8331,22 @@ ALTER TABLE ONLY library.collection_source_output_publication
 
 ALTER TABLE ONLY library.collection_source_output
     ADD CONSTRAINT collection_source_output_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: copy_archive_progress_apply copy_archive_progress_apply_route_account_id_upload_id_rev_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_apply
+    ADD CONSTRAINT copy_archive_progress_apply_route_account_id_upload_id_rev_fkey FOREIGN KEY (route, account_id, upload_id, review_id) REFERENCES library.copy_archive_progress_review(route, account_id, upload_id, review_id);
+
+
+--
+-- Name: copy_archive_progress_review copy_archive_progress_review_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_progress_review
+    ADD CONSTRAINT copy_archive_progress_review_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.copy_archive_upload(route, account_id, upload_id);
 
 
 --

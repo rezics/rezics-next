@@ -36,7 +36,8 @@ import type {
   ProgressSessionUpdate,
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
-import { readLibraryProfileSource } from './profile-source.ts';
+import { readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
+import type { LibraryProfilePin } from './profile.ts';
 import {
   compatibleProgressUnits,
   nativeProgressUnit,
@@ -61,6 +62,36 @@ export type ProgressSessionJournalAdmission = {
   identity: unknown;
   assert: (tx: CommandTransaction) => Promise<void>;
 };
+type ExpectedProgressBinding = {
+  subjectId: string;
+  requestedSubjectId: string | null;
+  acceptingType: string;
+  identityEpoch: string;
+  component: { partition: number; epoch: number; position: string };
+  profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }>;
+};
+
+function assertExpectedBinding(
+  observation: Awaited<ReturnType<typeof readLibraryProfileSourceObservation>>,
+  expected?: ExpectedProgressBinding,
+) {
+  const source = observation?.source;
+  if (
+    expected &&
+    (!observation ||
+      !source ||
+      source.kind !== 'supported' ||
+      source.subjectId !== expected.subjectId ||
+      JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
+      observation.anchor.requestedSubjectId !== expected.requestedSubjectId ||
+      observation.anchor.acceptingType !== expected.acceptingType ||
+      observation.anchor.identityEpoch.toString() !== expected.identityEpoch ||
+      observation.anchor.component.partition !== expected.component.partition ||
+      observation.anchor.component.epoch !== expected.component.epoch ||
+      observation.anchor.component.position.toString() !== expected.component.position)
+  )
+    throw new ProblemError('conflict');
+}
 
 export class ProgressInvalidError extends Error {
   constructor(readonly field: string) {
@@ -152,7 +183,7 @@ export function createSessionCommands(config: Dependencies) {
     return session;
   }
 
-  async function startSession(actor: Actor, input: unknown, requestKey: string) {
+  async function startSession(actor: Actor, input: unknown, requestKey: string, expected?: ExpectedProgressBinding) {
     const owner = account(actor, 'progress_session:create');
     // Syntax normalization is the existing receipt input; trusted metadata never enters its digest.
     const parsed = valid(parseSessionCreate(input, 'syntax'));
@@ -167,13 +198,15 @@ export function createSessionCommands(config: Dependencies) {
         async prepare(attempt) {
           try {
             const deps = { pool, access, actor: owner, at: attempt.time, deadline };
-            const source = await readLibraryProfileSource(deps, parsed.subjectId);
+            const observation = await readLibraryProfileSourceObservation(deps, parsed.subjectId),
+              source = observation?.source ?? null;
             const version =
               parsed.versionSubjectId === null
                 ? null
                 : parsed.versionSubjectId === parsed.subjectId
                   ? source
                   : await readLibraryProfileSource(deps, parsed.versionSubjectId);
+            assertExpectedBinding(observation, expected);
             return { source, version };
           } catch (error) {
             return { error };
@@ -220,6 +253,7 @@ export function createSessionCommands(config: Dependencies) {
     input: unknown,
     requestKey: string,
     action: ProgressAction | 'record' | 'reopen' | 'retire',
+    expected?: ExpectedProgressBinding,
   ) {
     const owner = account(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId);
@@ -242,14 +276,14 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
           try {
-            if (action === 'reopen' || action === 'retire') {
+            if (action === 'reopen' || action === 'retire' || (expected && action !== 'record')) {
               const session = await snapshot(owner, 'progress_session:update', (client) =>
                 load(client, owner, sessionId),
               );
-              const source = await readLibraryProfileSource(
-                { pool, access, actor: owner, at: attempt.time, deadline },
-                session.subjectId,
-              );
+              const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
+                observation = await readLibraryProfileSourceObservation(sourceDeps, session.subjectId),
+                source = observation?.source ?? null;
+              assertExpectedBinding(observation, expected);
               if (!source) throw new LibraryNotFoundError();
               // No new value is admitted. The original session identity and meaning stay intact,
               // including when the current profile no longer offers its unit.
@@ -274,10 +308,14 @@ export function createSessionCommands(config: Dependencies) {
             const release = await readRelease(pool, fact.pin.releaseDigest, { composed: false });
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');
-            const source = await readLibraryProfileSource(
-              { pool, access, actor: owner, at: attempt.time, deadline },
-              fact.session.subjectId,
-            );
+            const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
+              observation = expected
+                ? await readLibraryProfileSourceObservation(sourceDeps, fact.session.subjectId)
+                : null,
+              source = expected
+                ? observation?.source ?? null
+                : await readLibraryProfileSource(sourceDeps, fact.session.subjectId);
+            assertExpectedBinding(observation, expected);
             return { original, source, pin: fact.pin };
           } catch (error) {
             return { error };
@@ -296,6 +334,11 @@ export function createSessionCommands(config: Dependencies) {
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
         if (current.state === 'retired') throw new LibraryNotFoundError();
+        if (expected) {
+          // Prepared profile and identity were checked against the reviewed binding before effects.
+          // Record's original compatibility check remains below.
+          if (!prepared.source || prepared.source.subjectId !== expected.subjectId) throw new ProblemError('conflict');
+        }
         if (
           measureId !== undefined &&
           (current.mode !== 'scalar_amount' ||
@@ -375,12 +418,27 @@ export function createSessionCommands(config: Dependencies) {
     );
   }
 
-  const recordProgress = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'record');
-  const completeSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'complete');
-  const abandonSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'abandon');
+  const recordProgress = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'record', expected);
+  const completeSession = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'complete', expected);
+  const abandonSession = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'abandon', expected);
   const reopenSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
     update(actor, sessionId, input, requestKey, 'reopen');
   const retireSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>

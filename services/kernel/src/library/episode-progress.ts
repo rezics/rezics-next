@@ -25,7 +25,8 @@ import {
 } from './command-support.ts';
 import { readEpisodeSources, type EpisodeSourceDependencies } from './episode-source.ts';
 import { compatibleProgressUnits, nativeProgressUnit, resolveLibraryProfilePin } from './profile.ts';
-import { readLibraryProfileSource } from './profile-source.ts';
+import { readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
+import type { LibraryProfilePin } from './profile.ts';
 import * as store from './progress-store.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
@@ -46,6 +47,14 @@ export type EpisodeCompletion = {
 };
 export type EpisodeProgressView = { revision: number; episodes: EpisodeCompletion[]; next: string | null };
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
+type ExpectedProgressBinding = {
+  subjectId: string;
+  requestedSubjectId: string | null;
+  acceptingType: string;
+  identityEpoch: string;
+  component: { partition: number; epoch: number; position: string };
+  profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }>;
+};
 
 /** Lowercase canonical UUIDs only; ordinals and legacy sparse tokens never enter this set. */
 export function episodeIds(value: unknown): string[] {
@@ -137,7 +146,13 @@ export function createEpisodeProgressCommands(config: Dependencies) {
     });
   }
 
-  async function recordEpisodes(actor: Actor, sessionId: string, input: unknown, requestKey: string) {
+  async function recordEpisodes(
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) {
     const owner = ownerOf(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId),
       intent = episodeIntent(input);
@@ -159,7 +174,24 @@ export function createEpisodeProgressCommands(config: Dependencies) {
             const profile = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             const original = profile && nativeProgressUnit(profile, fact.session);
             const deps = { pool, access, actor: owner, at: attempt.time, deadline, routeKey };
-            const source = await readLibraryProfileSource(deps, fact.session.subjectId);
+            const observation = expected
+                ? await readLibraryProfileSourceObservation(deps, fact.session.subjectId)
+                : null,
+              source = expected ? observation?.source ?? null : await readLibraryProfileSource(deps, fact.session.subjectId);
+            if (
+              expected &&
+              (!observation ||
+                source?.kind !== 'supported' ||
+                source.subjectId !== expected.subjectId ||
+                JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
+                observation.anchor.requestedSubjectId !== expected.requestedSubjectId ||
+                observation.anchor.acceptingType !== expected.acceptingType ||
+                observation.anchor.identityEpoch.toString() !== expected.identityEpoch ||
+                observation.anchor.component.partition !== expected.component.partition ||
+                observation.anchor.component.epoch !== expected.component.epoch ||
+                observation.anchor.component.position.toString() !== expected.component.position)
+            )
+              throw new ProblemError('conflict');
             const current = source?.kind === 'supported' ? nativeProgressUnit(source.profile, fact.session) : null;
             if (!original || !current || !compatibleProgressUnits(original, current))
               throw new ProblemError('unsupported_library_profile');
