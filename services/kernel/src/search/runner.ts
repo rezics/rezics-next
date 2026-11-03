@@ -1,3 +1,5 @@
+import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
+import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { withConnection } from '../database/pool.ts';
 import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
 import {
@@ -48,7 +50,7 @@ export async function startSearchIndexing(options: {
   discoverMs?: number;
   concurrency?: number;
   retireAfterMs?: number;
-  discovery?: { routeKey: Uint8Array; requiredKinds?: readonly string[] };
+  discovery?: { routeKey: Uint8Array; requiredKinds?: readonly string[]; reviewSource?: ReviewDiscoverySource };
   publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
@@ -60,6 +62,7 @@ export async function startSearchIndexing(options: {
     ? startDiscoveryIndexing({
         ...options,
         routeKey: options.discovery.routeKey,
+        reviewSource: options.discovery.reviewSource,
         requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
       })
     : undefined;
@@ -305,7 +308,9 @@ export function startDiscoveryIndexing(options: {
   intervalMs?: number;
   concurrency?: number;
   requiredKinds?: readonly string[];
+  reviewSource?: ReviewDiscoverySource;
 }) {
+  const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
   const relays = new Map<number, ReturnType<typeof startRelays>>();
   let stopped = false,
     paused = false,
@@ -338,6 +343,9 @@ export function startDiscoveryIndexing(options: {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
       if (!relays.has(target.generation)) {
         const projection = createDiscoveryProjection({ ...options, target, registry });
+        if (options.reviewSource) receivers.set(target.generation, createReviewDiscoveryReceiving({
+          ...options, projection, source: options.reviewSource,
+        }));
         relays.set(
           target.generation,
           startRelays(
@@ -352,9 +360,15 @@ export function startDiscoveryIndexing(options: {
         );
       }
     }
+    // One finite current-review page per live target, sharing this supervisor's lifecycle and transport.
+    for (const target of generations) {
+      if (target.uuid && !['allocated','retiring','retired','quarantined'].includes(target.state))
+        await receivers.get(target.generation)?.next();
+    }
     for (const target of generations.filter((row) => row.state === 'retiring')) {
       await relays.get(target.generation)?.stop();
       relays.delete(target.generation);
+      receivers.delete(target.generation);
       await retireDiscovery(
         options.pool,
         options.search,
@@ -366,6 +380,7 @@ export function startDiscoveryIndexing(options: {
       if (!generations.some((row) => row.generation === generation && row.state !== 'quarantined')) {
         await relay.stop();
         relays.delete(generation);
+        receivers.delete(generation);
       }
     if (readiness) throw readiness;
   };
@@ -429,6 +444,7 @@ export function startDiscoveryIndexing(options: {
       return (closing = running.then(async () => {
         await Promise.all([...relays.values()].map((relay) => relay.stop()));
         relays.clear();
+        receivers.clear();
       }));
     },
   };

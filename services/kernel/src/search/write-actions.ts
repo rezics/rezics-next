@@ -1,8 +1,8 @@
 import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { isDeepStrictEqual } from 'node:util';
-import type { DiscoveryIndexAction, DiscoveryRegistry } from './discovery.ts';
-import { discoveryBulkBody, validateDiscoveryDocument } from './discovery-documents.ts';
+import type { DiscoveryRegistry } from './discovery.ts';
+import { discoveryBulkBody, validateDiscoveryDocumentFormat, type AnyDiscoveryIndexAction } from './discovery-documents.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 
 /** A bulk write did not establish its required index visibility guarantee. */
@@ -130,7 +130,7 @@ export function validateIndexWriteReceipt(response: unknown, target: string, act
 export function validateDiscoveryWriteReceipt(
   response: unknown,
   target: string,
-  actions: readonly DiscoveryIndexAction[],
+  actions: readonly AnyDiscoveryIndexAction[],
 ): void {
   if (validateBulkResponse(response, target, actions, true)) throw new IndexWriteError([response]);
 }
@@ -140,7 +140,7 @@ export async function writeDiscoveryActions(
   search: OpenSearch,
   registry: DiscoveryRegistry,
   index: string,
-  actions: readonly DiscoveryIndexAction[],
+  actions: readonly AnyDiscoveryIndexAction[],
 ): Promise<void> {
   if (actions.length === 0) return;
   if (!search.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
@@ -183,7 +183,7 @@ export async function writeDiscoveryActions(
       action.op !== 'index' ||
       !winner ||
       String(winner._version) !== action.version.toString() ||
-      !isDeepStrictEqual(validateDiscoveryDocument(registry, winner._source), action.document)
+      !isDeepStrictEqual(validateDiscoveryDocumentFormat(registry, winner._source), action.document)
     )
       return writeError([winner]);
   }

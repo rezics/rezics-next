@@ -11,7 +11,7 @@ import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './di
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
-import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId } from './discovery-documents.ts';
+import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId, parseDiscoveryDocumentKey, secondScopeDiscoveryDocumentActions, type AnyDiscoveryIndexAction, type SecondScopeDiscoveryIndexAction } from './discovery-documents.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse, validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
@@ -26,6 +26,8 @@ import {
   type AccountSnapshot,
   type IndexedAccount,
 } from './discovery.ts';
+import { reviewDiscoveryDocument } from './review-discovery.ts';
+import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';
 import type { SubjectSource } from './source.ts';
@@ -308,7 +310,7 @@ export type DiscoveryRepairEffect = Readonly<{
 }>;
 
 /** Search visibility belongs to the exact keyed winner; copy settlement is insufficient. */
-export async function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: DiscoveryIndexAction) {
+export async function readDiscoveryRepairWinner(search: OpenSearch, index: string, action: AnyDiscoveryIndexAction) {
   const response = await search.request(
     'POST',
     `/${index}/_search`,
@@ -326,7 +328,7 @@ export async function readDiscoveryRepairWinner(search: OpenSearch, index: strin
 }
 
 /** The original search-visible winner remains part of the retained native repair provenance. */
-export function validateDiscoveryRepairWinner(index: string, action: DiscoveryIndexAction, body: unknown) {
+export function validateDiscoveryRepairWinner(index: string, action: AnyDiscoveryIndexAction, body: unknown) {
   assertCompleteSearch(body);
   const hits = record(body) && record(body.hits) ? body.hits.hits : undefined;
   if (
@@ -495,12 +497,15 @@ export function createDiscoveryProjection(options: {
     // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
   }
-  async function applyActions(actions: readonly DiscoveryIndexAction[], repair: boolean, capture: boolean) {
+  async function applyActions(
+    actions: readonly AnyDiscoveryIndexAction[], repair: boolean, capture: boolean,
+    held?: { client: PoolClient; index: string; acknowledge(): Promise<void> },
+  ) {
     const effects: DiscoveryRepairEffect[] = [];
-    await withDiscoveryTarget(pool, search, target, async (client, index) => {
-      const pending: DiscoveryIndexAction[] = [];
+    const apply = async (client: PoolClient, index: string) => {
+      const pending: AnyDiscoveryIndexAction[] = [];
       for (const action of actions) {
-        const key = parseDiscoveryDocumentId(registry, action.id),
+        const key = parseDiscoveryDocumentKey(registry, action.id),
           values = [key.route, key.id, target.prefix, target.generation, key.kind];
         // Erasure can commit after source/locator reads; session custody excludes its physical purge.
         if (key.owner === 'accounts' && (await readErasureStatus(client, key.id)))
@@ -521,7 +526,7 @@ export function createDiscoveryProjection(options: {
           old &&
           (BigInt(old.position) > action.version || (BigInt(old.position) === action.version && old.settled && !repair))
         )
-          if (capture) throw new Error('Discovery repair Source version is behind its permanent copy high water');
+          if (capture || held) throw new Error('Discovery source version is behind its permanent copy high water');
           else continue;
         await client.query(
           `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
@@ -563,17 +568,31 @@ export function createDiscoveryProjection(options: {
             evidence = { kind: 'bulk', bulk: response };
           }
           const winner = await readDiscoveryRepairWinner(search, index, action);
-          effects.push({ key: parseDiscoveryDocumentId(registry, action.id), action, evidence, winner });
+          effects.push({ key: parseDiscoveryDocumentId(registry, action.id), action: action as DiscoveryIndexAction, evidence, winner });
         }
       }
+      if (held) {
+        for (const action of pending) await readDiscoveryRepairWinner(search, index, action);
+        if ((await discoveryIndexUuid(search, index)) !== target.uuid)
+          throw new Error('Discovery physical incarnation changed during receiving');
+        await client.query('BEGIN');
+      }
+      try {
       for (const action of pending) {
-        const key = parseDiscoveryDocumentId(registry, action.id);
+        const key = parseDiscoveryDocumentKey(registry, action.id);
         await client.query(
           `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
           [key.route, key.id, target.prefix, target.generation, key.kind, action.version.toString()],
         );
       }
-    });
+      if (held) { await held.acknowledge(); await client.query('COMMIT'); }
+      } catch (error) {
+        if (held) await client.query('ROLLBACK');
+        throw error;
+      }
+    };
+    if (held) await apply(held.client, held.index);
+    else await withDiscoveryTarget(pool, search, target, apply);
     return effects;
   }
   async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n, repair = false) {
@@ -652,7 +671,50 @@ export function createDiscoveryProjection(options: {
     if (actions.length < 1 || actions.length > 100) throw new RangeError('Invalid retained mixed repair window');
     return applyActions(actions, true, true);
   }
-  return { project, prepareRepair, applyRepair, registry, target, listing };
+  /** Translate the existing Content refresh; no alternate native read or eligibility owner. */
+  async function prepareReviews(refresh: ReviewDiscoveryRefresh, ids: readonly string[]) {
+    if (ids.length > 100 || new Set(ids).size !== ids.length) throw new RangeError('Invalid review receiving batch');
+    const requested = new Set(ids);
+    const seen = new Set<string>();
+    const records = refresh.reviews.map((row) => {
+      if (!requested.has(row.id) || seen.has(row.id)) throw new TypeError('Unrequested review receiving row');
+      seen.add(row.id);
+      const route = routeOf(row.id);
+      if (route === null || discoveryPartition(row.id) !== refresh.partition || routeOf(row.subjectId) === null)
+        throw new TypeError('Foreign review receiving row');
+      // Reuse the leaf's native field validation and excerpt cap.
+      const doc = reviewDiscoveryDocument(refresh.partition, refresh.nativePosition, {
+        id: row.id, route, openingRevisionId: row.revisionId, title: row.title, text: row.excerpt ?? '',
+      });
+      return {
+        key: { owner: 'content' as const, kind: 'review' as const, id: row.id, route },
+        revision: refresh.nativePosition,
+        names: doc.title === null ? [] : [doc.title], descriptions: [doc.text], nameSort: doc.title,
+      };
+    });
+    for (const id of refresh.removed) {
+      if (!requested.has(id) || seen.has(id)) throw new TypeError('Invalid review receiving removal');
+      seen.add(id);
+    }
+    if (seen.size !== requested.size) throw new TypeError('Review receiving refresh is incomplete');
+    const actions = secondScopeDiscoveryDocumentActions(registry, {
+      owner: 'content', snapshot: {
+        partition: refresh.partition, position: refresh.nativePosition, complete: true, records,
+      },
+    }, ids.map((id) => ({ owner: 'content', kind: 'review', id, route: routeOf(id)! })));
+    return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
+  }
+  async function applyReviews(
+    actions: readonly SecondScopeDiscoveryIndexAction[],
+    held: { client: PoolClient; index: string; acknowledge(): Promise<void> },
+  ) {
+    if (actions.length > 100 || actions.some((action) => {
+      const key = parseDiscoveryDocumentKey(registry, action.id);
+      return key.owner !== 'content' || key.kind !== 'review';
+    })) throw new TypeError('Invalid review receiving actions');
+    await applyActions(actions, true, false, held);
+  }
+  return { project, prepareRepair, applyRepair, prepareReviews, applyReviews, registry, target, listing };
 }
 
 /** Terminal work is located from Search's own copy inventory, never inferred from a missing source. */
