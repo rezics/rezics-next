@@ -128,7 +128,7 @@ test('native scope-bound continuation rejects changed viewer/source/Context/stat
 test('contributor proposals preserve native decisions and pending abstentions', async () => {
   const reviewSource = `queue_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const reviewEndpoint = `/v1/review-candidates?source=${reviewSource}`;
-  const proposals = [];
+  const proposals: { id: string; candidate: string }[] = [];
   for (let index = 0; index < 4; index++) {
     const origin = source(crypto.randomUUID(), reviewSource);
     const book = await f.create(origin);
