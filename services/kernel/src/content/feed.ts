@@ -203,6 +203,10 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               },
               destination: { kind: 'post', id: object.id, threadId: thread.id, postId: object.id, title: thread.title },
             };
+      contextSources.set(activity.id, {
+        thread,
+        ...(object.kind === 'post' ? { post: entry } : {}),
+      });
     } else if (object.owner === 'semantic') {
       if (space && object.realmId !== space.realmId) return null;
       const publication = await readPublication(deps, object.realmId, object.id, { actor, deadline });
@@ -232,11 +236,6 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         destination: { kind: 'collection', id: collection.id, title: collection.title },
       };
     }
-    if (item && object.owner === 'content')
-      contextSources.set(activity.id, {
-        thread,
-        ...(object.kind === 'post' ? { post: entry } : {}),
-      });
     return item;
   }
 

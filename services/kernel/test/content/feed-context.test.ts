@@ -58,6 +58,7 @@ test('native Home context retains a review target, zero citation and only the im
 
     const dependencies = {
       pool: fixture.system.database.pool,
+      routeKey: fixture.system.routeKey,
       access: fixture.system.access,
       tokens: fixture.system.tokenKeys,
     };

@@ -418,14 +418,22 @@ The mounted method is `KernelClient.feedItems.get` (`GET /v1/feedItems`). Its re
 `FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem` and `FeedContentItem`
 from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
 `list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
-`prepareFeedContentContext(dependencies: ContentReadDependencies, references: readonly FeedContentContextReference[],
+`prepareFeedContentContext(dependencies: FeedContentContextDependencies, references: readonly FeedContentContextReference[],
 context: ReadContext, languages: readonly string[] = [], options: { observeThreads?: FeedThreadObserver } = {})`
 returns a single-use `FeedContentContextComposition.finish(): Promise<FeedContentContextFinished>`.
+`FeedContentContextDependencies` adds the required trusted service `routeKey` to `ContentReadDependencies`;
+both native Home and Subject-thread callers carry it into Semantic and Accounts summary reads.
 
 The composition admits at most 20 selected references, 20 Subject keys, 20 question keys and 60 author keys.
 Posts and their immediate parents use distinct `(threadId, postId)` keys; parent previews are capped at
 160 characters and 640 UTF-8 bytes. It does not emit an ancestor list. These output limits do not bound
 the native post reader's internal ancestry, revision or authority work.
+
+Repeated selected post/parent and author keys share native lookups within each composition pass. Conflicting
+initial observations are rejected before reads; a final observer returning a different thread, post or physical
+home fails the source as unavailable. Unavailable/erased post payloads supply no public author projection.
+An erased immediate parent contributes only its admitted ID and removed state. A taken-down ancestor may
+withhold the selected child under the ordinary native reader; context hydration does not bypass ancestry.
 
 Decision: Home displays recorded rating units without normalizing a nonstandard question to ten, and keeps
 spoiler-marked parent text behind an explicit reveal that retires with the page, target or account.
