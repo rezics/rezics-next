@@ -26,7 +26,7 @@ export type ReviewDiscoveryResult<T> =
   | { status: 'unavailable' };
 
 export type ReviewDiscoveryFrontier = { route: number; id: string };
-/** Content has no exact cardinality census yet; preserve its unavailable marker. */
+/** Content publishes a total only with current complete anonymous eligibility coverage. */
 export type ReviewDiscoveryCensus = NativeReviewDiscoveryCount;
 
 /** Public opening projection from Content. The excerpt cap remains Content-owned. */
@@ -181,15 +181,28 @@ function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord
 }
 
 function nativeCount(value: unknown, partition: number): ReviewDiscoveryCensus {
+  if (!object(value) || value.partition !== partition) throw new TypeError('Invalid Content review discovery count');
+  position(value.position);
+  if (value.unavailable === true && exactKeys(value, ['partition', 'position', 'unavailable']))
+    return { partition, position: value.position, unavailable: true };
   if (
-    !object(value) ||
-    !exactKeys(value, ['partition', 'position', 'unavailable']) ||
-    value.partition !== partition ||
-    value.unavailable !== true
+    !exactKeys(value, ['partition', 'position', 'total', 'coverage', 'generation']) ||
+    !Number.isSafeInteger(value.total) ||
+    (value.total as number) < 0 ||
+    value.coverage !== 'complete' ||
+    typeof value.generation !== 'string' ||
+    value.generation.length === 0 ||
+    value.generation.length > 128 ||
+    !value.generation.isWellFormed()
   )
     throw new TypeError('Invalid Content review discovery count');
-  position(value.position);
-  return { partition, position: value.position, unavailable: true };
+  return {
+    partition,
+    position: value.position,
+    total: value.total as number,
+    coverage: 'complete',
+    generation: value.generation,
+  };
 }
 
 function document(value: unknown): ReviewDiscoveryDocument {

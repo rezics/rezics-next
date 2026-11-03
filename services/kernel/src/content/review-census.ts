@@ -34,14 +34,23 @@ export type ReviewCensusPage =
     }>
   | Exclude<ReviewCensusObservation, { state: 'ready' }>;
 /** Candidate installation is intentionally weaker than anonymous eligibility coverage. */
-export type ReviewCensusCoverage = Readonly<{
-  state: 'preparing' | 'unavailable';
-  partition: number;
-  position: bigint | null;
-  generation: string | null;
-  installed: boolean;
-  missing: string;
-}>;
+export type ReviewCensusCoverage =
+  | Readonly<{
+      state: 'ready';
+      partition: number;
+      position: bigint;
+      generation: string;
+      installed: true;
+      total: number;
+    }>
+  | Readonly<{
+      state: 'preparing' | 'unavailable';
+      partition: number;
+      position: bigint | null;
+      generation: string | null;
+      installed: boolean;
+      missing: string;
+    }>;
 export type ReviewCensusStep = Readonly<{
   state: 'progress' | 'exhausted' | 'changed' | 'preparing' | 'unavailable';
   generation: string;
@@ -64,8 +73,9 @@ type Installation = {
   after_token: string | null;
   cut: ReviewCensusCut | null;
   exhausted: boolean;
+  observed_public: string;
 };
-const fields = 'generation::text,revision::text,after_route,after_id::text,after_token,cut,exhausted';
+const fields = 'generation::text,revision::text,after_route,after_id::text,after_token,cut,exhausted,observed_public::text';
 
 function assertPartition(partition: number): void {
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095)
@@ -92,7 +102,7 @@ export function sameReviewCensusCut(left: ReviewCensusCut, right: ReviewCensusCu
 /** Durable native projection maintenance. Like the existing Realm Subject candidate
  * store, projection writes do not invent a domain log position. Owner observations
  * happen before writes, and only core home metadata is rechecked during the CAS.
- * This store cannot mint an anonymous-eligibility certificate.
+ * Readiness still depends on the reader's current anonymous authority observations.
  */
 export function createReviewCensus(pool: Pool, reader: Reader) {
   async function load(client: Pick<PoolClient, 'query'>, partition: number, lock = false) {
@@ -140,6 +150,18 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
           if (state?.cut && !sameReviewCensusCut(state.cut, current.cut))
             return { ...common, state: 'preparing', installed: false, missing: 'population-cut' };
           const installed = !!state?.exhausted;
+          if (installed && state) {
+            const total = Number(state.observed_public);
+            if (Number.isSafeInteger(total) && total >= 0)
+              return {
+                ...common,
+                state: 'ready',
+                generation: state.generation,
+                installed: true,
+                total,
+              };
+            return { ...common, state: 'preparing', installed: false, missing: 'public-count-range' };
+          }
           return {
             ...common,
             state: 'preparing',

@@ -7,8 +7,8 @@ and maps incomplete population cuts to `preparing` while retaining the native fu
 count, current-summary and registry-reader calls. `createReviewDiscoveryAdapter` accepts that exact Content source
 contract (or its factory provider); it does not own a second eligibility or storage path. Without a source, readiness
 and operations are `unavailable`. With the installed source, keyset discovery and current public hydration are
-available. Exact population cardinality remains unavailable as reported by Content; Search returns the native
-`unavailable: true` marker and never manufactures a count.
+available. Count returns Content's public total only when its anonymous eligibility coverage is complete for the
+current census generation; otherwise Search preserves Content's `unavailable: true` marker.
 
 ## Native projection and continuation
 

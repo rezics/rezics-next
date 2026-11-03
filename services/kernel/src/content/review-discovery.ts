@@ -88,7 +88,15 @@ export type ReviewDiscoveryPopulationPage =
       next: null;
       missing: string;
     }>;
-export type ReviewDiscoveryCount = Readonly<{ partition: number; position: bigint; unavailable: true }>;
+export type ReviewDiscoveryCount =
+  | Readonly<{ partition: number; position: bigint; unavailable: true }>
+  | Readonly<{
+      partition: number;
+      position: bigint;
+      total: number;
+      coverage: 'complete';
+      generation: string;
+    }>;
 
 export type ReviewDiscoverySource = Readonly<{
   read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
@@ -976,12 +984,17 @@ export function createReviewDiscoverySource(
     async count(partition) {
       assertPartition(partition);
       const context = checkedContext(makeAnonymousContext);
-      const at = await withReadTransaction(
-        dependencies.pool,
-        async (client) => position(client, partition),
-        context.deadline,
-      );
-      return { partition, position: at, unavailable: true };
+      const coverage = await census.coverage(partition, context.deadline);
+      if (coverage.position === null) throw new CommandUnavailableError('fenced', partition);
+      if (coverage.state === 'ready')
+        return {
+          partition,
+          position: coverage.position,
+          total: coverage.total,
+          coverage: 'complete',
+          generation: coverage.generation,
+        };
+      return { partition, position: coverage.position, unavailable: true };
     },
     async page(partition, after, limit, cut) {
       assertPartition(partition);

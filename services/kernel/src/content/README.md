@@ -1248,20 +1248,22 @@ Each current candidate comes from native thread, board, opening-post and lifecyc
 `readSubjectThread` checks the current containing board, Realm/Space placement, source fence, review lifecycle,
 author standing and opening post. The separate Semantic subject read checks the pinned subject and anonymous
 `subject:read`. Protected or stale candidates are omitted; only current hydration determines whether a Search refresh
-adds or removes the document. Count remains explicitly unavailable until a bounded native census can prove every
-anonymous gate without exposing a protected population. Realm discussion-popularity counts continue to exclude
-reviews.
+adds or removes the document. Count remains unavailable until a bounded native census has examined the complete
+candidate frontier and every anonymous authority and source dependency still matches its native cut. A ready count
+contains the public total and its census generation; stale or partial coverage stays unavailable. Realm
+discussion-popularity counts continue to exclude reviews.
 
 #### Retained census installation
 
-Decision: retain candidate installation as a private native projection; exhausting it remains `preparing` until
-complete native eligibility authority and physical work have been established.
+Decision: expose a public total only after complete anonymous eligibility coverage for the current generation;
+every incomplete or stale witness keeps count unavailable.
 
 `createReviewDiscoverySource` additionally returns `NativeReviewDiscoverySource`, with
 `maintainCensus(partition): Promise<ReviewCensusStep>` and
 `censusCoverage(partition): Promise<ReviewCensusCoverage>`. The types and `createReviewCensus` are exported from
-`review-census.ts`. This is installation groundwork, not the completed public-total capability. Search's existing
-`count`, page, query-count adapter and final hydration retain their contracts. Web remains the owner of the existing
+`review-census.ts`. Candidate installation is private groundwork; its exhausted frontier becomes count-ready only
+after current Access, ancestry, Semantic, citation and source dependency observations close over the full population.
+Search's existing `count`, page, query-count adapter and final hydration retain their contracts. Web remains the owner of the existing
 review reader, personal score/write-review controls and action/recovery experience; that experience is pending.
 
 Each maintenance call consumes at most one existing coherent native page. It commits the signed continuation, cut,
@@ -1275,10 +1277,10 @@ author presentation is copied into this store. Normal producer pages never inclu
 Installation writes follow the existing native candidate projection transaction: they fence the owning home and
 do not allocate a domain publication position. They release the checkout before native owner hydration. The final
 CAS reobserves core home metadata and native lifecycle progress; it cannot certify missing authority coverage.
-`installed: true` means the candidate keyset was exhausted at its captured cut. It never means a complete anonymous
-count, including for an empty partition. Ongoing invalidation repair, complete
-Access/citation/Semantic/source proof, ready total/current equality and three-scale physical acceptance remain to be
-delivered together before this installation may back a public total.
+`installed: true` means the candidate keyset was exhausted at its captured cut. A current matching cut and durable
+eligibility contribution total are also required before `coverage` reports `ready`; an empty partition may then
+report a complete zero. Ongoing source repair invalidates the generation without advancing the domain position.
+Three-scale physical acceptance remains a separate verification obligation.
 
 Decision: maintain the retained census hourly in bounded resumable partition turns; keep coverage preparing until native authority closure is complete.
 

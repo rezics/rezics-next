@@ -81,6 +81,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   }
   const partition = partitionOf(routeOf(written.value.threadId)!);
   expect(await source.censusCoverage(partition)).toMatchObject({ state: 'preparing', installed: false });
+  expect(await source.count(partition)).toMatchObject({ unavailable: true });
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'progress', examined: 25 });
   const beforeRepair = await source.censusCoverage(partition);
   const commitObserver = observeSql(fixture.pool);
@@ -114,8 +115,13 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   }));
   expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 1 });
   const installed = await source.censusCoverage(partition);
-  expect(installed).toMatchObject({ state: 'preparing', installed: true, missing: 'native-eligibility-coverage' });
-  expect(await source.count(partition)).toMatchObject({ unavailable: true });
+  expect(installed).toMatchObject({ state: 'ready', installed: true, total: 26 });
+  expect(await source.count(partition)).toMatchObject({
+    position: installed.position,
+    total: 26,
+    coverage: 'complete',
+    generation: installed.generation,
+  });
   const replay = await source.maintainCensus(partition);
   expect(replay).toMatchObject({ state: 'exhausted', examined: 0, generation: installed.generation });
   const retained = await fixture.reader.query(
@@ -209,6 +215,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     await fixture.reader.query(repair[0], [...repair[1]]);
     expect(await nativePosition()).toBe(at);
     expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+    expect(await source.count(partition)).toMatchObject({ unavailable: true });
     expect(await source.maintainCensus(partition)).toMatchObject({ state: 'changed', examined: 0 });
     expect((await source.censusCoverage(partition)).generation).not.toBe(previous.generation);
     expect(await maintainReviewCensusBatch(partition, source.maintainCensus)).toMatchObject({ state: 'exhausted' });
@@ -249,7 +256,8 @@ test('an empty census and a stale cut remain distinguishable from a complete zer
   const partition = 0xfed;
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   const before = await source.censusCoverage(partition);
-  expect(before).toMatchObject({ state: 'preparing', installed: true });
+  expect(before).toMatchObject({ state: 'ready', installed: true, total: 0 });
+  expect(await source.count(partition)).toMatchObject({ total: 0, coverage: 'complete' });
   await fixture.reader.query(
     `UPDATE content.review_census_installation SET cut=jsonb_set(cut,'{homes}',
       (SELECT jsonb_agg(home-'projection') FROM jsonb_array_elements(cut->'homes') home)) WHERE route=$1`,
