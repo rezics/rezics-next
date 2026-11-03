@@ -1,3 +1,9 @@
+import type { KernelClient } from '@rezics/client';
+
+type UploadedVndb = ReturnType<KernelClient['libraryImports']['vndb']>;
+export type GeneratedVndbReview = Parameters<UploadedVndb['$review']['post']>[0];
+export type GeneratedVndbApply = Parameters<UploadedVndb['$apply']['post']>[0];
+
 export const VNDB_XML_BYTES = 2 * 1024 * 1024;
 export const VNDB_JSON_WIRE_BYTES = 12 * 1024 * 1024 + 64;
 export const VNDB_ROWS = 5_000;
@@ -83,16 +89,18 @@ export type VndbApplyResult = {
   stopped: 'cancelled' | 'deadline' | null;
 };
 
-export type VndbReviewInput =
-  | { ordinal: number; action: 'state'; targetId: string; state: string; replace: boolean }
-  | { ordinal: number; action: 'skip' | 'retain' };
+export type VndbReviewInput = GeneratedVndbReview &
+  (
+    | { ordinal: number; action: 'state'; targetId: string; state: string; replace: boolean }
+    | { ordinal: number; action: 'skip' | 'retain' }
+  );
 
 export type VndbCommand =
   | { kind: 'preview'; key: string; xml: string }
   | { kind: 'page'; uploadId: string; offset: number }
   | { kind: 'source'; uploadId: string }
   | { kind: 'review'; key: string; uploadId: string; body: VndbReviewInput }
-  | { kind: 'apply'; uploadId: string; body: { rows: { ordinal: number; reviewId: string }[] } }
+  | { kind: 'apply'; uploadId: string; body: GeneratedVndbApply }
   | { kind: 'cancel'; key: string; uploadId: string }
   | { kind: 'delete'; key: string; uploadId: string };
 
@@ -131,6 +139,19 @@ export type VndbPort = {
 
 export function newVndbKey(): string {
   return crypto.randomUUID();
+}
+
+/** Detach mutable form inputs before retaining retry authority for this visit. */
+export function freezeVndbCommand<T extends VndbCommand>(command: T): T {
+  const copy = structuredClone(command);
+  function freeze(value: unknown): void {
+    if (value && typeof value === 'object') {
+      Object.values(value).forEach(freeze);
+      Object.freeze(value);
+    }
+  }
+  freeze(copy);
+  return copy;
 }
 
 export function quotedVndbKey(key: string): string {

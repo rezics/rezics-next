@@ -1,5 +1,6 @@
 import {
   chunkVndbRows,
+  freezeVndbCommand,
   newVndbKey,
   VNDB_ID,
   type VndbCommand,
@@ -160,9 +161,9 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     pending -= 1;
     if (!live()) return undefined;
     if (isVndbUnknown(response)) {
-      unknown = response.command;
-      notice = response;
-      return response;
+      unknown = command;
+      notice = { kind: 'unknown', command };
+      return notice;
     }
     if ('status' in response) {
       if (unknown && !sameCommand(unknown, command)) {
@@ -192,8 +193,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     page = response.value;
     total = response.value.total;
     for (const row of response.value.rows) {
-      const previous = rows.get(row.ordinal);
-      rows.set(row.ordinal, previous ? { ...previous, ...row, decision: row.decision ?? previous.decision } : row);
+      rows.set(row.ordinal, row);
     }
     cancelled = response.value.state === 'cancelled';
     if (cancelled) stage = 'results';
@@ -271,12 +271,13 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const row = rows.get(body.ordinal);
     if (!row || (row.kind === 'retained' && body.action === 'state')) return snapshot();
     if (body.action === 'state' && (!VNDB_ID.test(body.targetId) || !body.state)) return snapshot();
-    const command = retryCommand ?? { kind: 'review' as const, uploadId, key: newVndbKey(), body };
+    const command = retryCommand ?? freezeVndbCommand({ kind: 'review', uploadId, key: newVndbKey(), body });
     const response = await run(command, () => port.review(command), { retry: !!retryCommand });
     if (response?.kind !== 'reviewed' || !live()) return snapshot();
     const updated: VndbRow = { ...row, decision: response.value };
     rows.set(row.ordinal, updated);
     if (page) page = { ...page, rows: page.rows.map((item) => (item.ordinal === row.ordinal ? updated : item)) };
+    stage = 'review';
     return snapshot();
   }
 
@@ -325,7 +326,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   function openConfirm(): VndbJourneySnapshot {
-    if (stage !== 'review' || cancelled || selection().length === 0) return snapshot();
+    if (stage !== 'review' || cancelled || pending > 0 || unknown || selection().length === 0) return snapshot();
     stage = 'confirm';
     return snapshot();
   }
@@ -337,15 +338,13 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function confirm(): Promise<VndbJourneySnapshot> {
-    if (!uploadId || cancelled || !live() || stage !== 'confirm' || pending > 0) return snapshot();
+    if (!uploadId || cancelled || !live() || stage !== 'confirm' || pending > 0 || unknown) return snapshot();
     const selected = selection();
     if (!selected.length) return snapshot();
     const bodyRows = selected.map((row) => ({ ordinal: row.ordinal, reviewId: row.decision!.reviewId }));
-    applyQueue = chunkVndbRows(bodyRows).map((batch) => ({
-      kind: 'apply',
-      uploadId: uploadId!,
-      body: { rows: batch },
-    }));
+    applyQueue = chunkVndbRows(bodyRows).map((batch) =>
+      freezeVndbCommand({ kind: 'apply', uploadId: uploadId!, body: { rows: batch } }),
+    );
     currentApply = applyQueue[0] ?? null;
     stopApply = false;
     stopped = null;

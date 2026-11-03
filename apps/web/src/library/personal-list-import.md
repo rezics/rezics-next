@@ -13,6 +13,13 @@ apply, cancel, and deletion. Its current page and review types do not publish sc
 has not admitted the score effect. Web keeps score actions unavailable until both boundaries are available; state
 import and source inspection remain usable.
 
+Decision: display native `fields.score` with its exact raw spelling, retaining `fields.vote` compatibility; keep the
+installed generated request types as the boundary and defer score commands until those types are published.
+
+Review inputs and selected apply commands are copied and frozen before sending, so a lost acknowledgement retries
+the original operands and key even if the form changes. A new review returns to review before confirmation, and an
+authoritative page without a decision removes the previous local selection.
+
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
 public facts. VN and release identifiers remain distinct. Titles can assist display and explicit catalogue search;

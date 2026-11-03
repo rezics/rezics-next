@@ -9,7 +9,7 @@ function valueText(value: VndbSourceValue): string {
 }
 
 function fieldLabel(name: string): string {
-  if (name === 'vote') return m.library_vndb_field_score();
+  if (name === 'score' || name === 'vote') return m.library_vndb_field_score();
   if (name === 'started' || name === 'finished')
     return name === 'started' ? m.library_vndb_field_started() : m.library_vndb_field_finished();
   if (name === 'notes') return m.library_vndb_field_notes();
@@ -21,10 +21,13 @@ function fieldLabel(name: string): string {
 
 function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
   const privateNote = name === 'notes';
+  const sourceScore = name === 'score' || name === 'vote';
   return (
     <li className="min-w-0 [overflow-wrap:anywhere]" data-vndb-field={name}>
       <span className="font-medium">{fieldLabel(name)}: </span>
-      <span className={privateNote ? 'whitespace-pre-wrap' : 'whitespace-normal'}>{valueText(value)}</span>
+      <span className={privateNote ? 'whitespace-pre-wrap' : 'whitespace-normal'}>
+        {sourceScore && value.kind === 'value' ? (value.raw ?? valueText(value)) : valueText(value)}
+      </span>
       {value.raw !== null && value.kind !== 'value' ? (
         <span className="block text-sm text-muted-foreground [overflow-wrap:anywhere]">
           {m.library_vndb_raw({ value: value.raw })}
@@ -47,7 +50,7 @@ function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
 export function VndbEvidence({ row }: { row: VndbRow }) {
   const notes = Object.entries(row.fields).filter(([name]) => name === 'notes');
   const ordinary = Object.entries(row.fields).filter(([name]) => name !== 'notes');
-  const score = row.fields.vote;
+  const score = row.fields.score ?? row.fields.vote;
   const evidence = JSON.stringify(row.evidence, null, 2);
   return (
     <div className="space-y-3">

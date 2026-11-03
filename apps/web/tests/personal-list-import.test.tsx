@@ -7,6 +7,7 @@ import {
   VNDB_XML_BYTES,
   type VndbCommand,
   type VndbPort,
+  type VndbReviewInput,
   type VndbRow,
 } from '../src/library/personal-list-import/contract';
 import { nativeVndbImport } from '../src/library/personal-list-import/native';
@@ -105,9 +106,10 @@ test('binds generated libraryImports.vndb and keeps the visit discoverable', () 
 
 test('keeps VNDB score precision visible without implying native vote consent or effects', () => {
   const scored = row(0);
-  scored.fields.vote = { kind: 'value', raw: '7.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } };
+  scored.fields.score = { kind: 'value', raw: '07.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } };
   const html = renderToStaticMarkup(<VndbEvidence row={scored} />);
-  expect(html).toContain('7.3');
+  expect(html).toContain('07.3');
+  expect(html).toContain('Source score');
   expect(html).toContain('step 0.1');
   expect(html).toContain('no exact match on a native half-step scale');
   expect(html).toContain('separate explicit consent');
@@ -115,10 +117,12 @@ test('keeps VNDB score precision visible without implying native vote consent or
   expect(html).not.toContain('<input');
 
   const zero = row(1);
-  zero.fields.vote = { kind: 'invalid', raw: '0' };
+  zero.fields.score = { kind: 'invalid', raw: '0' };
   const zeroHtml = renderToStaticMarkup(<VndbEvidence row={zero} />);
   expect(zeroHtml).toContain('source score of 0 is invalid');
   expect(zeroHtml).toContain('native vote of 0 is valid');
+  zero.fields = { vote: zero.fields.score! };
+  expect(renderToStaticMarkup(<VndbEvidence row={zero} />)).toContain('data-vndb-score-review="unavailable"');
 });
 
 test('sends XML to native admission without a browser size guard or local preview effects', async () => {
@@ -200,6 +204,7 @@ test('confirms only reviewed rows and retries an unknown apply with the identica
   await journey.retryUnknown();
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
+  expect(Object.isFrozen(commands[0]?.body.rows[0])).toBe(true);
   expect(journey.snapshot().outcomes.map(({ ordinal, status }) => [ordinal, status])).toEqual([[0, 'applied']]);
   expect(journey.snapshot().selection).toEqual([]);
 });
@@ -244,27 +249,106 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
   expect(snap.unattempted).toEqual([1]);
 });
 
-test('viewer replacement retires late page reads', async () => {
+test('viewer replacement retires private source and late page reads', async () => {
   const current = visit();
   let pages = 0;
+  const late = Promise.withResolvers<{ kind: 'page'; value: ReturnType<typeof pageValue> }>();
   const journey = createVndbJourney({
     visit: current,
     port: makePort({
       preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
       page: async () => {
         pages += 1;
+        if (pages === 2) return late.promise;
         return { kind: 'page', value: pageValue([row(0)]) };
       },
+      source: async () => ({ kind: 'source', xml: '<private-source/>' }),
     }),
   });
 
   await journey.preview('<vndb-export version="1.0"/>');
   expect(pages).toBe(1);
   expect(journey.snapshot().rows.map((item) => item.title)).toEqual(['Novel 1']);
+  await journey.source();
+  const loading = journey.loadPage(0);
   current.retire();
   journey.retire();
+  late.resolve({ kind: 'page', value: pageValue([row(1)]) });
+  await loading;
   await journey.loadPage(0);
-  expect(pages).toBe(1);
+  expect(pages).toBe(2);
   expect(journey.live()).toBe(false);
   expect(journey.snapshot()).toMatchObject({ uploadId: null, rows: [], selection: [], page: null, sourceXML: null });
+});
+
+test('a lost review acknowledgement freezes its body and key and a new review needs confirmation again', async () => {
+  const commands: Extract<VndbCommand, { kind: 'review' }>[] = [];
+  const journey = createVndbJourney({
+    visit: visit(),
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
+      review: async (command) => {
+        commands.push(command);
+        return commands.length === 1
+          ? { kind: 'unknown', command }
+          : {
+              kind: 'reviewed',
+              value: {
+                reviewId: reviewIds[0]!,
+                status: 'reviewed',
+                targetId: subject,
+                state: command.body.action === 'state' ? command.body.state : null,
+                baseline: null,
+                replace: false,
+              },
+            };
+      },
+    }),
+  });
+  await journey.preview('<vndb-export version="1.0"/>');
+  const body: VndbReviewInput = { ordinal: 0, action: 'state', targetId: subject, state: 'reading', replace: false };
+  await journey.review(body);
+  body.state = 'completed';
+  journey.openConfirm();
+  expect(journey.snapshot().stage).toBe('review');
+  await journey.retryUnknown();
+  expect(commands[1]).toBe(commands[0]);
+  expect(commands[1]?.body).toMatchObject({ state: 'reading' });
+  journey.openConfirm();
+  await journey.review(body);
+  expect(commands[2]?.key).not.toBe(commands[0]?.key);
+  expect(journey.snapshot().stage).toBe('review');
+  await journey.confirm();
+  expect(journey.snapshot().outcomes).toEqual([]);
+  await journey.loadPage(0);
+  expect(journey.snapshot().selection).toEqual([]);
+});
+
+test('the installed generated VNDB methods send state review and apply without vote operands', async () => {
+  const sent: { path: string; body: unknown }[] = [];
+  const route = nativeVndbImport(
+    createKernelClient('http://example.invalid', {
+      fetch: Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          sent.push({ path: new URL(request.url).pathname, body: await request.json() });
+          return Response.json({});
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    }),
+  );
+  await route!({ uploadId }).$review.post(
+    { ordinal: 0, action: 'state', targetId: subject, state: 'reading', replace: false },
+    { headers: { 'idempotency-key': JSON.stringify(reviewIds[0]) } },
+  );
+  await route!({ uploadId }).$apply.post({ rows: [{ ordinal: 0, reviewId: reviewIds[0]! }] });
+  expect(sent).toEqual([
+    {
+      path: `/v1/libraryImports/vndb/${uploadId}:review`,
+      body: { ordinal: 0, action: 'state', targetId: subject, state: 'reading', replace: false },
+    },
+    { path: `/v1/libraryImports/vndb/${uploadId}:apply`, body: { rows: [{ ordinal: 0, reviewId: reviewIds[0] }] } },
+  ]);
 });
