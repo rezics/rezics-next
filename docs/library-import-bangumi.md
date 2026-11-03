@@ -99,7 +99,8 @@ beside the MyAnimeList importer; the two sources keep separate controllers. Uplo
 partial results, cancel and discard stay in the mounted visit. JSON, comments and private rows never enter the URL
 or persistent browser storage. A replacement upload deletes the previous native document first. Viewer or CSRF
 replacement retires retry authority. Web binds the generated `libraryImports.bangumi` methods when present and
-otherwise shows unavailable.
+otherwise shows unavailable. Score action/result declarations and Web rendering remain continuation work; this
+slice does not claim a completed score UI.
 
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.target` is identity. Apply defaults to preserving local facts. Ambiguous match
