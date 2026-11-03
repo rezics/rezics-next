@@ -49,14 +49,22 @@ export function createBangumiLabelReview(
       return host.row(tx, a, id, ordinal);
     });
   }
+  async function subjectObservation(actor: Actor, target: string) {
+    const at = await mintReadTime(deps.pool, deps.clock);
+    try {
+      return await readLibraryProfileSourceObservation({ ...deps, actor, at, deadline: deadlineFor(5000) }, target);
+    } finally { releaseOperationalTime(at); }
+  }
   async function tags(actor: Actor, id: string, ordinal: number, after: number) {
     const r = await retained(actor, id, ordinal);
     const raw = r.evidence.fields.find((f) => f.field === 'tags')?.value;
     const count = Array.isArray(raw) ? raw.length : 0;
     const end = Math.min(count, after + 1 + BANGUMI_LABEL_LIMITS.page);
+    const visibleLabels = !r.labels?.review.subject || await subjectObservation(actor, r.labels.review.subject.subjectId)
+      ? r.labels : null;
     return { ordinal, rowRevision: r.review?.token ?? null, evidence: bangumiTagEvidence(r.evidence),
       tags: Array.from({ length: Math.max(0, end - after - 1) }, (_, n) => bangumiTag(r.evidence, after + n + 1)!),
-      next: end < count ? end - 1 : null, labels: r.labels };
+      next: end < count ? end - 1 : null, labels: visibleLabels };
   }
   async function reviewLabels(actor: Actor, id: string, ordinal: number, rowRevision: string,
     mappings: BangumiTagMapping[], key: string) {
@@ -93,8 +101,13 @@ export function createBangumiLabelReview(
       }
       return items;
     });
+    const current = r.review.target ? await subjectObservation(actor, r.review.target) : null;
+    if (r.review.target && (!current || current.source.subjectId !== r.review.target || current.source.kind !== 'supported'))
+      throw conflict();
+    const subject = current?.source.kind === 'supported' ? { subjectId: current.source.subjectId,
+      identityEpoch: String(current.anchor.identityEpoch), releaseDigest: current.source.pin.releaseDigest } : null;
     const review: BangumiLabelReview = { token: randomUUID(), rowRevision,
-      subject: r.review.guard, evidence: bangumiTagEvidence(r.evidence), items };
+      subject, evidence: bangumiTagEvidence(r.evidence), items };
     const state: BangumiLabelState = { review, confirmed: false, outcomes: [] };
     if (Buffer.byteLength(JSON.stringify(state)) > BANGUMI_LABEL_LIMITS.reviewBytes)
       throw new ProblemError('invalid_request');
@@ -229,11 +242,7 @@ export function createBangumiLabelReview(
       outcomes.push(result);
     }
     // Recheck disclosure after the complete caller, including a cached original replay.
-    const at = await mintReadTime(deps.pool, deps.clock);
-    try {
-      if (review.subject && !await readLibraryProfileSourceObservation({ ...deps, actor, at, deadline: deadlineFor(5000) },
-        review.subject.subjectId)) throw new LibraryNotFoundError();
-    } finally { releaseOperationalTime(at); }
+    if (review.subject && !await subjectObservation(actor, review.subject.subjectId)) throw new LibraryNotFoundError();
     return { uploadId: id, ordinal, outcomes,
       remaining: review.items.filter((i) => !outcomes.some((o) => o.index === i.index)).map((i) => i.index) };
   }
