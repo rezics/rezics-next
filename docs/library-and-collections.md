@@ -50,6 +50,7 @@ review within that producer; default display groups and unsupported tags never i
 Selected private label consolidation is an explicit Labels action over supplied assignment identities. Its installed
 native review, confirmation, one-item apply/retry, cancel and result boundary is owned by
 [the consolidation contract](library-label-consolidation.md); both labels reopen through the native assignment readers.
+Immutable Subject security-evidence binding, generated client declarations and full caller growth remain a continuation.
 
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in

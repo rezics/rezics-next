@@ -71,6 +71,9 @@ Web's existing Labels interface owns the single consolidation flow and can use t
 `movable` or the `selection` hash as permission or immutable confirmation. No competing label editor, list engine or
 bulk job is introduced.
 
+Decision: extend the installed confirmation/apply/retry contract, retaining its eight unexpired plans per owner and
+15-minute lifetime, rather than retaining a second selection store or transport.
+
 The stored plan binds both parent revisions, assignment incarnation/revision and current Subject exposure. Refresh
 requires new explicit confirmation. Native target assign and addressed source unassign retain their receipts,
 History, events and export fences exactly once. Source removal follows only definite accepted/current target
@@ -110,6 +113,11 @@ revision/incarnation, source delete/recreate, target rename, changed Subject aut
 confirmation, capacity refusal, successful selected moves, already-on-target, lost acknowledgement replay,
 cancellation, finite undo and terminal erasure/expiry cleanup. Complete-caller statements, rows, buffers, bytes and
 effects at native64/512/4096 remain deferred to integration. Native setup failure stays failed/unmeasured.
+
+The landing entry point `test/library/label-consolidation.test.ts` reuses the installed native outcome scenarios.
+Current Subject admission is repeated before effects; retained evidence does not yet include an immutable Subject
+security-revision stamp. Binding still-readable authority/exposure changes, typed-client generation and complete
+growth coverage remain in `.temp/continuation/label-consolidation-client-growth.md`.
 
 Sources read: `docs/library-labels.md`, native metadata/assignment commands and storage, reservation/parent/tuple SQL
 and migrations, native Subject and family admission, shared cursor codec and existing native label fixtures. No
