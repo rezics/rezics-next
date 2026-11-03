@@ -86,6 +86,21 @@ resource references remain rejected, without recursion. No query-time account se
   Content checks current thread, opening post, board, place, subject reference and Access disclosure. Every Realm
   leaf requires current Realm read and ban checks, including under NOT. Ban is not a public-index predicate or
   public privacy-head fanout. A known-candidate batch alone is not a Realm-to-subject enumeration anchor.
+
+  The installed `search/realm-scope.ts:RealmSubjectSource` is the single native Content owner port:
+  `resolve` and `current` check Realm read/ban and bind every disclosure dependency; `prefix` enumerates
+  the complete linked discussion/review subject population; `match` distinguishes discussed, complete
+  not-published, withheld and unknown. All operations share the caller's independent work ledger.
+  Search's service-bound Scope exposes `realm.prepare`, `realm.sourcePrefix` and `realm.evaluate`;
+  catalogue leaves use the existing native current matcher and the same three-valued Boolean planner.
+  The closed operand is admitted only by the request discovery parser; saved/dynamic filters reject it.
+  Realm scope applies to Subject candidates only. Mixed-kind public index compilation still rejects it.
+  Content has not delivered this native enumeration/disclosure producer. The installed default seam checks
+  ordinary Realm metadata authority and then returns unavailable; it supplies no population or negative.
+  A ready port observation means population readiness only: canonical retained name-order preparation,
+  text refinement and useful first/next/final Search page integration remain undelivered. No Home Space
+  publication membership, raw `subject_thread` read or known-candidate batch substitutes for that dependency.
+
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under
   NOT or true OR. A Semantic Subject, including a catalogue Agent, requires a live readable review of that

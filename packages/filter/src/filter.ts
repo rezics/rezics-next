@@ -27,6 +27,7 @@ export type FilterDocument =
 
 /** An exact native question identity. Definition revisions are resolved by the server. */
 export type RatingQuestionLeaf = { readonly ratingQuestion: { readonly id: string } };
+export type RealmLeaf = { readonly realm: { readonly id: string } };
 
 /** Opt-in discovery grammar. Catalogue/saved consumers retain FilterDocument. */
 export type DiscoveryFilterDocument =
@@ -35,11 +36,13 @@ export type DiscoveryFilterDocument =
   | { readonly not: DiscoveryFilterDocument }
   | { readonly kind: { readonly in: readonly string[] } }
   | RatingQuestionLeaf
+  | RealmLeaf
   | Exclude<FilterDocument, { readonly and: unknown } | { readonly or: unknown } | { readonly not: unknown }>;
 
 function catalogueOnly(filter: DiscoveryFilterDocument): FilterDocument {
   if ('kind' in filter) throw new FilterError('invalid_request', '/kind', 'unknown_field');
   if ('ratingQuestion' in filter) throw new FilterError('invalid_request', '/ratingQuestion', 'unknown_field');
+  if ('realm' in filter) throw new FilterError('invalid_request', '/realm', 'unknown_field');
   if ('and' in filter) return { and: filter.and.map(catalogueOnly) };
   if ('or' in filter) return { or: filter.or.map(catalogueOnly) };
   if ('not' in filter) return { not: catalogueOnly(filter.not) };
@@ -229,6 +232,10 @@ function requiredValue(fields: object, key: string, pointer: string): unknown {
 }
 
 function parseRatingQuestion(input: unknown, pointer: string): RatingQuestionLeaf {
+  return { ratingQuestion: parseResourceId(input, pointer) };
+}
+
+function parseResourceId(input: unknown, pointer: string): { readonly id: string } {
   const fields = record(input, pointer);
   for (const key of Object.getOwnPropertyNames(fields))
     if (key !== 'id') fail(appendPointer(pointer, key), 'unknown_field');
@@ -236,7 +243,7 @@ function parseRatingQuestion(input: unknown, pointer: string): RatingQuestionLea
   const id = requiredValue(fields, 'id', idPointer);
   if (typeof id !== 'string') fail(idPointer, 'invalid_type');
   if (uuidPattern.exec(id)?.[0] !== id) fail(idPointer, 'invalid_format');
-  return { ratingQuestion: { id } };
+  return { id };
 }
 
 function parseOwner(input: unknown, pointer: string): OwnerLeaf {
@@ -363,6 +370,10 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         if (!discovery) return fail(fieldPointer, 'unknown_field');
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return parseRatingQuestion(ownValue(fields, key, fieldPointer), fieldPointer);
+      case 'realm':
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return { realm: parseResourceId(ownValue(fields, key, fieldPointer), fieldPointer) };
       case 'type': {
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { type: { in: parseFacet(ownValue(fields, key, fieldPointer), fieldPointer, false).in } };
@@ -892,6 +903,12 @@ function admitConstructed(
         if (!options.kinds.has(kind))
           reject(appendPointer(inPointer, index), source, 'unsupported', 'unsupported_query');
       return { kind: { in: [...node.kind.in] } };
+    }
+
+    if ('realm' in node) {
+      if (!options.kinds || source !== undefined)
+        reject(appendPointer(pointer, 'realm'), source, 'unsupported', 'unsupported_query');
+      return { realm: parseResourceId(node.realm, appendPointer(pointer, 'realm')) };
     }
 
     if ('ratingQuestion' in node) {

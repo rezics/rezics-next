@@ -1,4 +1,4 @@
-import type { FilterDocument, FilterQualifier, OwnerLeaf } from '@rezics/filter';
+import type { DiscoveryFilterDocument, FilterDocument, FilterQualifier, OwnerLeaf } from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
 import type { RelationFacetMatch } from './source.ts';
 
@@ -19,6 +19,18 @@ export type CurrentNativeLeaf =
   | Readonly<{ kind: 'owner'; leaf: OwnerLeaf }>;
 
 export type CurrentOwnerFilterPlan = CurrentPlan<CurrentNativeLeaf>;
+export type CurrentRealmLeaf = CurrentNativeLeaf | Readonly<{ kind: 'realm'; id: string }>;
+export type CurrentRealmFilterPlan = CurrentPlan<CurrentRealmLeaf>;
+
+/** Request-only Realm leaves share the current three-valued Boolean interpreter. */
+export function compileCurrentRealmFilter(filter: DiscoveryFilterDocument): CurrentRealmFilterPlan {
+  return compileCurrentPlan<CurrentRealmLeaf>(
+    filter,
+    (leaf) => leaf,
+    (leaf) => (leaf.kind === 'realm' ? JSON.stringify(['realm', leaf.id]) : currentOwnerClauseKey(leaf)),
+    (id) => ({ kind: 'realm', id }),
+  );
+}
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
@@ -92,15 +104,16 @@ export function compileCurrentOwnerFilter(filter: FilterDocument): CurrentOwnerF
 
 /** One interpreter for already admitted, expanded filters. */
 function compileCurrentPlan<Leaf>(
-  filter: FilterDocument,
+  filter: DiscoveryFilterDocument,
   select: (leaf: CurrentNativeLeaf) => Leaf,
   keyOf: (leaf: Leaf) => string,
+  realm?: (id: string) => Leaf,
 ): CurrentPlan<Leaf> {
   const leaves: Leaf[] = [];
   const indices = new Map<string, number>();
   const positive = new Set<number>();
   type Evaluate = (values: readonly RelationFacetMatch[]) => RelationFacetMatch;
-  function visit(node: FilterDocument, negated = false): Evaluate {
+  function visit(node: DiscoveryFilterDocument, negated = false): Evaluate {
     if ('and' in node) {
       const children = node.and.map((child) => visit(child, negated));
       return (values) => allMatch(children.map((child) => child(values)));
@@ -117,22 +130,26 @@ function compileCurrentPlan<Leaf>(
       };
     }
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
-    const native: CurrentNativeLeaf =
-      'owner' in node
-        ? { kind: 'owner', leaf: node }
-        : {
-            kind: 'catalogue',
-            clause:
-              'type' in node
-                ? { facet: 'type', values: node.type.in }
-                : {
-                    facet: 'statement',
-                    property: node.statement.property,
-                    ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
-                    ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
-                  },
-          };
-    const leaf = select(native);
+    if ('kind' in node || 'ratingQuestion' in node) throw new Error('Not a Subject scope condition');
+    if ('realm' in node && !realm) throw new Error('Realm requires native resource resolution');
+    const native: CurrentNativeLeaf | null =
+      'realm' in node
+        ? null
+        : 'owner' in node
+          ? { kind: 'owner', leaf: node }
+          : {
+              kind: 'catalogue',
+              clause:
+                'type' in node
+                  ? { facet: 'type', values: node.type.in }
+                  : {
+                      facet: 'statement',
+                      property: node.statement.property,
+                      ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
+                      ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
+                    },
+            };
+    const leaf = native ? select(native) : realm!((node as { realm: { id: string } }).realm.id);
     const key = keyOf(leaf);
     let index = indices.get(key);
     if (index === undefined) {

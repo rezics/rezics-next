@@ -52,6 +52,7 @@ export function compileDiscoveryFilter(
       const yes = { terms: { kind: [...node.kind.in] } };
       return { yes, no: not(yes), condition: { domain: 'kind', value: node.kind.in } };
     }
+    if ('realm' in node) throw new FilterError('unsupported_query', '/realm', 'unsupported');
     if ('ratingQuestion' in node) throw new FilterError('unsupported_query', '/ratingQuestion', 'unsupported');
     if ('saved' in node || 'owner' in node)
       throw new FilterError('unsupported_query', 'owner' in node ? '/owner' : '/saved', 'unsupported');
@@ -130,6 +131,7 @@ export function currentDiscoveryFilter(
       const yes = node.kind.in.includes(kind);
       return { yes, no: !yes };
     }
+    if ('realm' in node) throw new FilterError('unsupported_query', '/realm', 'unsupported');
     if ('ratingQuestion' in node) throw new FilterError('unsupported_query', '/ratingQuestion', 'unsupported');
     if ('saved' in node || 'owner' in node)
       throw new FilterError('unsupported_query', 'owner' in node ? '/owner' : '/saved', 'unsupported');
@@ -210,6 +212,7 @@ export function compileDiscoveryConsumerCapture(
     else if ('or' in node) node.or.forEach((child) => visit(child, dependencies));
     else if ('not' in node) visit(node.not, dependencies);
     else if ('kind' in node) node.kind.in.forEach((kind) => kinds.add(kind));
+    else if ('realm' in node) throw new FilterError('unsupported_query', '/realm', 'unsupported');
     else if ('ratingQuestion' in node) throw new FilterError('unsupported_query', '/ratingQuestion', 'unsupported');
     else {
       if ('owner' in node || 'saved' in node) throw new TypeError('Mixed public capture requires expanded leaves');

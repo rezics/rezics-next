@@ -49,6 +49,7 @@ import { isOrdinalKey } from '../library/ordinal.ts';
 import { routeOf } from '../route/route.ts';
 import type { SearchHit } from './query.ts';
 import { readSearchScopeRelease } from './scope-release.ts';
+import { createRealmScopeSource, type RealmSubjectSource } from './realm-scope.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
 import {
   readCollectionKindPreparationWorkDefinition,
@@ -229,6 +230,7 @@ export function createSearchScopeSource({
   source: _source,
   release,
   evidence,
+  realmSubjects,
   clock = systemClock,
 }: {
   pool: Pool;
@@ -237,6 +239,7 @@ export function createSearchScopeSource({
   source: SubjectSource;
   release?: () => Promise<FilterRelease | null>;
   evidence?: LeafOptions;
+  realmSubjects?: RealmSubjectSource;
   clock?: KernelClock;
 }) {
   const states = new WeakMap<PreparedSearchScope, ScopeState>();
@@ -404,6 +407,12 @@ export function createSearchScopeSource({
     return { admission, binding: bound.binding, source: collection.source };
   }
   return {
+    realm: createRealmScopeSource({
+      pool,
+      reader: evidence,
+      source: realmSubjects,
+      release: (digest) => readSearchScopeRelease(pool, digest),
+    }),
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
     work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt {
       const receipt = receipts.get(result);

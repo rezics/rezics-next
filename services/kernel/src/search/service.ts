@@ -43,6 +43,7 @@ import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rati
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
 import { registerSearchScopeRuntime } from './service-scope.ts';
+import type { RealmSubjectSource } from './realm-scope.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
@@ -212,6 +213,7 @@ export function createSearchService({
   prefix,
   source,
   ratings,
+  realmSubjects,
   cursors,
   clock = systemClock,
   facetSample = 10_000,
@@ -226,6 +228,7 @@ export function createSearchService({
   prefix: string;
   source: SubjectSource;
   ratings?: PublicRatingSource;
+  realmSubjects?: RealmSubjectSource;
   cursors: KeyRing;
   clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
@@ -844,7 +847,7 @@ export function createSearchService({
       return response;
     },
   };
-  registerSearchScopeRuntime(service, { pool, client, prefix, source, release, clock });
+  registerSearchScopeRuntime(service, { pool, client, prefix, source, release, clock, realmSubjects });
   return service;
 }
 
