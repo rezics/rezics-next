@@ -146,6 +146,7 @@ export async function createProfileEntryFixture(
     singleConnection?: boolean;
     projectLinks?: boolean;
     gameUnits?: readonly string[];
+    ownerScopes?: readonly string[];
   } = {},
 ) {
   const url = process.env.DATABASE_URL;
@@ -265,7 +266,7 @@ export async function createProfileEntryFixture(
       'exposure:close',
       'gate:any',
     ]);
-    const owner = await identity(entryScopes);
+    const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])]);
     const other = await identity(entryScopes);
     await bootstrapGovernance(pool, steward.actor.accountId);
     const grants = createGrantCommands({ pool, access, managementAction: 'access:grant', ...options });

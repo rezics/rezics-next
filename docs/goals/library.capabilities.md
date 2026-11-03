@@ -581,7 +581,12 @@ bounded partial outcomes, cancellation and owner deletion. [Retained tag adoptio
 adds separate owner review/confirmation and native private create/assign commands with original receipts, explicit
 unchanged/invalid/stale/capacity/partial outcomes and bounded same-row review cleanup. Other fields remain private
 loss-aware evidence. Scheduled source expiry, complete terminal erasure execution and native64/512/4096 whole-caller
-growth measurement remain continuation work. The complete Web324 interface consumes generated delivery.
+growth measurement remain continuation work. Score review now retains and displays Bangumi's source score and scale
+beside the selected Content question and owner-entered units; zero, absence, unsupported values and explicit clear
+remain distinct. Set/clear confirmation is separate, but score outcomes are typed unavailable until Content provides
+an atomic reviewed question/current-vote/counting-identity guard for `createVoteCommands.putVoteOutcome`; no native
+vote or aggregate write is claimed. The focused HTTP test covers source distinctions, consent omission, changed
+selection and preservation of an existing vote. The complete Web324 interface consumes generated delivery.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
 remains an integration responsibility, and source delivery does not assert its result.
 

@@ -1,7 +1,20 @@
 import { ProblemError } from '../http/problem.ts';
 import type { EntryImportMetadataReview } from './list-import-entry-metadata.ts';
 
-export const BANGUMI_LIMITS = { bytes: 262144, rows: 100, rowBytes: 8192, page: 10, apply: 5, depth: 16 } as const;
+export const BANGUMI_LIMITS = {
+  bytes: 262144,
+  rows: 100,
+  rowBytes: 8192,
+  evidenceBytes: 32768,
+  reviewBytes: 71680,
+  choiceBytes: 8192,
+  outcomeBytes: 16384,
+  page: 10,
+  pageResponseBytes: 10 * (32768 + 71680 + 16384) + 4096,
+  apply: 5,
+  applyRequestBytes: 4096,
+  depth: 16,
+} as const;
 export type BangumiRecord = Record<string, unknown>;
 export type RetainedField = { field: string; value: unknown; meaning: 'known' | 'unknown' | 'invalid'; reason: string };
 export type BangumiEvidence = {
@@ -11,6 +24,48 @@ export type BangumiEvidence = {
   stateRole: string | null;
 };
 export type BangumiGuard = { subjectId: string; releaseDigest: string; identityEpoch: string };
+export type BangumiScoreSource = {
+  state: 'score' | 'unrated' | 'absent' | 'unsupported';
+  value?: number | string | boolean | null;
+  scale: { minimum: 1; maximum: 10 };
+  reason: string;
+};
+export type BangumiScoreCurrentVote =
+  | { state: 'absent' }
+  | { state: 'cleared' }
+  | { state: 'set'; units: number; revision: number; at: string };
+export type BangumiScoreQuestion = {
+  id: string;
+  revision: number;
+  meaning: string | null;
+  label: string;
+  grain: 'work' | 'release' | 'episode' | 'character';
+  lifecycleState: 'active' | 'retired';
+  scale: { minimum: number; maximum: number; step: number };
+};
+export type BangumiScoreSelection =
+  | { action: 'preserve' }
+  | { action: 'set'; units: number }
+  | { action: 'clear' };
+export type BangumiScoreReview = {
+  source: BangumiScoreSource;
+  native: {
+    questionId: string;
+    question: BangumiScoreQuestion | null;
+    currentVote: BangumiScoreCurrentVote | null;
+    selection: BangumiScoreSelection;
+    admission: {
+      status: 'unavailable';
+      reason:
+        | 'native_vote_scope_required'
+        | 'target_not_selected'
+        | 'question_unavailable'
+        | 'question_revision_unsupported'
+        | 'question_scale_unsupported'
+        | 'conditional_admission_unavailable';
+    };
+  };
+};
 export type BangumiReview = {
   token: string;
   match: 'matched' | 'already_matched' | 'ambiguous' | 'unmatched' | 'unavailable' | 'chosen';
@@ -20,19 +75,32 @@ export type BangumiReview = {
   proposedState: string | null;
   current: { state: string; revision: number; incarnationId?: string | null } | null;
   conflict: boolean;
+  score?: BangumiScoreReview;
   metadata?: EntryImportMetadataReview[];
+};
+export type BangumiScoreChoice =
+  | { action: 'preserve' }
+  | { action: 'set'; units: number; consent: true }
+  | { action: 'clear'; consent: true };
+export type BangumiScoreOutcome = {
+  action: 'preserve' | 'set' | 'clear';
+  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed' | 'unavailable';
+  reason?: string;
+  vote?: { units: number; revision: number; at: string };
 };
 export type BangumiChoice = {
   ordinal: number;
   reviewToken: string;
   state: 'preserve' | 'replace' | 'omit';
   skip: boolean;
+  score?: BangumiScoreChoice;
 };
 export type BangumiOutcome = {
   ordinal: number;
   status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
   applied: string[];
   retained: string[];
+  score?: BangumiScoreOutcome;
 };
 export type BangumiRow = {
   ordinal: number;
@@ -111,7 +179,9 @@ export function parseBangumiUpload(upload: string): BangumiEvidence[] {
         reason =
           value === 0
             ? 'Bangumi zero means unrated; no native vote'
-            : 'Bangumi 1–10 scale; no native vote or aggregate';
+            : meaning === 'invalid'
+              ? 'Unsupported Bangumi rate; expected an integer on the source 1–10 scale; value retained privately'
+              : 'Bangumi source score on a 1–10 scale; native meaning and units require a separate owner choice';
       } else if (field === 'ep_status' || field === 'vol_status') {
         if (!integer(value)) meaning = 'invalid';
         reason = `${field === 'vol_status' ? 'volumes' : medium === 'book' ? 'chapters' : medium === 'anime' || medium === 'live_action' ? 'episodes' : 'source ep_status (measure unverified)'}; no historical session inferred`;
@@ -132,7 +202,8 @@ export function parseBangumiUpload(upload: string): BangumiEvidence[] {
       return { field, value, meaning, reason };
     });
     const evidence = { source, fields, medium, stateRole };
-    if (Buffer.byteLength(JSON.stringify(evidence)) > 32768) throw new ProblemError('invalid_request');
+    if (Buffer.byteLength(JSON.stringify(evidence)) > BANGUMI_LIMITS.evidenceBytes)
+      throw new ProblemError('invalid_request');
     return evidence;
   });
 }

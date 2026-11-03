@@ -6,6 +6,7 @@ import { createPersonalLabelCommands } from '../../src/library/label-commands.ts
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
 import { bangumiTagEvidence, bangumiTag } from '../../src/library/list-import-bangumi-label-model.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
+import { createVoteCommands } from '../../src/rating/votes.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 let f: NativeProfileFixture;
@@ -17,7 +18,13 @@ async function json(r: Response) {
   expect(r.status).toBe(200);
   return r.json();
 }
-const native = () => ({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+const native = () => ({
+  pool: f.pool,
+  access: f.access,
+  tokens: f.tokens,
+  routeKey: testRouteKey(),
+  votes: createVoteCommands({ pool: f.pool, access: f.access }),
+});
 const catalogue = () => createPersonalLabelCommands(native());
 const assignments = () => createLabelAssignmentCommands(native());
 async function label(name = randomUUID()) {

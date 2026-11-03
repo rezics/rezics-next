@@ -8,6 +8,7 @@ import { globalContextAnchor } from '../../src/semantic/context.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf } from '../../src/route/route.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture;
 let matched: string;
@@ -116,6 +117,7 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
   expect(await facts()).toEqual(before);
   const a = await review(uploadId, 0);
   expect(a).toMatchObject({ match: 'matched', candidates: [matched], target: matched, proposedState: 'planned' });
+  expect(a.score.native.admission).toEqual({ status: 'unavailable', reason: 'native_vote_scope_required' });
   expect((await review(uploadId, 1)).match).toBe('unmatched');
   const selected = await f.createSubject('game');
   const b = await review(uploadId, 1, selected),
@@ -158,6 +160,114 @@ test('conflict preservation, guarded replacement, stale review refresh and origi
   await f.activate(f.replacementDigest);
   expect((await apply(release, [choice(0, old, 'replace')])).outcomes[0].status).toBe('stale');
   await f.activate(f.originalDigest);
+});
+test('score review retains source scale and native vote while requiring separate consent', async () => {
+  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  try {
+    const target = await score.createSubject('game');
+    const votes = createVoteCommands({ pool: score.pool, access: score.access });
+    await votes.putVoteOutcome(
+      score.owner.actor,
+      { questionId: STANDARD_QUESTION_ID, targetId: target, units: 7 },
+      randomUUID(),
+    );
+    const rows = [
+      { ...record(900001), subject_type: 4, rate: 8 },
+      { ...record(900002), subject_type: 4, rate: 0 },
+      Object.fromEntries(Object.entries({ ...record(900003), subject_type: 4 }).filter(([field]) => field !== 'rate')),
+      { ...record(900004), subject_type: 4, rate: 10.5 },
+    ];
+    const created = await score.send('owner', 'POST', `${root}:preview`, upload(rows));
+    const { uploadId } = await ok(created);
+    const reviews = [];
+    for (let ordinal = 0; ordinal < rows.length; ordinal++) {
+      const response = await score.send('owner', 'POST', `/${uploadId}:review`, {
+        ordinal,
+        target,
+        score:
+          ordinal === 0 || ordinal === 3
+            ? { action: 'set', units: 13 }
+            : ordinal === 1
+              ? { action: 'clear' }
+              : { action: 'preserve' },
+      });
+      reviews.push((await ok(response)).review);
+    }
+    expect(reviews.map((review) => review.score.source.state)).toEqual([
+      'score',
+      'unrated',
+      'absent',
+      'unsupported',
+    ]);
+    expect(reviews[0].score).toMatchObject({
+      source: { state: 'score', value: 8, scale: { minimum: 1, maximum: 10 } },
+      native: {
+        questionId: STANDARD_QUESTION_ID,
+        question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimum: 0, maximum: 20, step: 1 } },
+        currentVote: { state: 'set', units: 7 },
+        selection: { action: 'set', units: 13 },
+        admission: { status: 'unavailable', reason: 'conditional_admission_unavailable' },
+      },
+    });
+    expect(typeof reviews[0].score.native.question.meaning).toBe('string');
+    expect(reviews[3].score.source.reason).toContain('integer');
+
+    const missingConsent = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [{ ordinal: 0, reviewToken: reviews[0].token, state: 'preserve', skip: false, score: { action: 'set', units: 13 } }],
+    });
+    expect(missingConsent.status).toBe(400);
+    const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'preserve', skip: false }],
+    });
+    expect((await ok(preserved)).outcomes[0].score).toMatchObject({ action: 'preserve', status: 'skipped' });
+    const changedChoice = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [
+        {
+          ordinal: 0,
+          reviewToken: reviews[0].token,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'set', units: 12, consent: true },
+        },
+      ],
+    });
+    expect(changedChoice.status).toBe(409);
+    const applied = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [
+        {
+          ordinal: 0,
+          reviewToken: reviews[0].token,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'set', units: 13, consent: true },
+        },
+      ],
+    });
+    expect((await ok(applied)).outcomes[0].score).toMatchObject({
+      action: 'set',
+      status: 'unavailable',
+      reason: 'conditional_admission_unavailable',
+    });
+    const clear = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [
+        {
+          ordinal: 1,
+          reviewToken: reviews[1].token,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'clear', consent: true },
+        },
+      ],
+    });
+    expect((await ok(clear)).outcomes[0].score).toMatchObject({
+      action: 'clear',
+      status: 'unavailable',
+      reason: 'conditional_admission_unavailable',
+    });
+    expect(await votes.readOwnVote(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({ units: 7 });
+  } finally {
+    await score.close();
+  }
 });
 test('bounds, invalid values, cancellation, deletion and terminal authority denial', async () => {
   for (const body of [

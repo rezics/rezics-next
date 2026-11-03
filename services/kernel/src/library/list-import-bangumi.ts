@@ -9,6 +9,8 @@ import { mintReadTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { ProblemError } from '../http/problem.ts';
+import { RatingQuestionNotFoundError, STANDARD_QUESTION_ID, VOTE_SCOPE } from '../rating/votes.ts';
+import type { Vote, createVoteCommands } from '../rating/votes.ts';
 import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
@@ -37,14 +39,121 @@ import {
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   parseBangumiUpload,
+  BANGUMI_LIMITS,
   type BangumiChoice,
   type BangumiOutcome,
   type BangumiReview,
   type BangumiRow,
+  type BangumiScoreCurrentVote,
+  type BangumiScoreQuestion,
+  type BangumiScoreReview,
+  type BangumiScoreSelection,
 } from './list-import-bangumi-model.ts';
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
-type StoredRow = BangumiRow & { choice: BangumiChoice | null; labels: BangumiLabelState | null };
+type NativeVotes = Pick<ReturnType<typeof createVoteCommands>, 'readOwnVote' | 'readRatingQuestion'>;
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  routeKey: Uint8Array;
+  votes: NativeVotes;
+  clock?: KernelClock;
+};
+type BangumiScorePlan = {
+  action: 'set' | 'clear';
+  units: number | null;
+  consent: true;
+  sourceState: BangumiScoreReview['source']['state'];
+  sourceDigest: string;
+  question: BangumiScoreQuestion | null;
+  target: BangumiReview['guard'];
+  baseline: NativeVoteGuard | null;
+  commandKey: string;
+  attribution: { provider: 'bangumi'; uploadId: string; ordinal: number; reviewToken: string };
+};
+type NativeVoteGuard =
+  | { state: 'absent' }
+  | { state: 'cleared'; revision: number }
+  | { state: 'set'; units: number; revision: number };
+type StoredReview = BangumiReview & { scoreGuard: NativeVoteGuard | null };
+type StoredChoice = BangumiChoice & { scorePlan?: BangumiScorePlan };
+type StoredRow = Omit<BangumiRow, 'review'> & {
+  review: StoredReview | null;
+  choice: StoredChoice | null;
+  labels: BangumiLabelState | null;
+};
+
+function scoreSource(evidence: BangumiRow['evidence']): BangumiScoreReview['source'] {
+  const field = evidence.fields.find((candidate) => candidate.field === 'rate');
+  const scale = { minimum: 1 as const, maximum: 10 as const };
+  if (!field) return { state: 'absent', scale, reason: 'Bangumi rate is absent; no source score is inferred.' };
+  if (field.value === 0) return { state: 'unrated', value: 0, scale, reason: field.reason };
+  if (field.meaning === 'known' && typeof field.value === 'number' && Number.isSafeInteger(field.value))
+    return { state: 'score', value: field.value, scale, reason: field.reason };
+  return {
+    state: 'unsupported',
+    ...(field.value === null || typeof field.value === 'string' || typeof field.value === 'number' || typeof field.value === 'boolean'
+      ? { value: field.value }
+      : {}),
+    scale,
+    reason: field.reason,
+  };
+}
+
+function scoreQuestion(question: Awaited<ReturnType<NativeVotes['readRatingQuestion']>>): BangumiScoreQuestion {
+  return {
+    id: question.id,
+    revision: question.revision,
+    meaning: question.meaning,
+    label: question.label,
+    grain: question.grain,
+    lifecycleState: question.lifecycleState,
+    scale: {
+      minimum: question.minimumUnits,
+      maximum: question.maximumUnits,
+      step: question.stepUnits,
+    },
+  };
+}
+
+function currentScoreVote(vote: Awaited<ReturnType<NativeVotes['readOwnVote']>>): BangumiScoreCurrentVote {
+  if (!vote) return { state: 'absent' };
+  if (vote.units === null) return { state: 'cleared' };
+  return { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
+}
+
+function currentVoteGuard(vote: Vote | null): NativeVoteGuard {
+  if (!vote) return { state: 'absent' };
+  if (vote.units === null) return { state: 'cleared', revision: vote.revision };
+  return { state: 'set', units: vote.units, revision: vote.revision };
+}
+
+function reviewView(review: StoredReview | null): BangumiReview | null {
+  if (!review) return null;
+  const { scoreGuard: _scoreGuard, ...visible } = review;
+  return visible;
+}
+
+function assertJsonBytes(value: unknown, maximum: number): void {
+  if (Buffer.byteLength(JSON.stringify(value)) > maximum) throw new ProblemError('invalid_request');
+}
+
+function assertReviewBytes(review: StoredReview | null): void {
+  if (review) assertJsonBytes(review, BANGUMI_LIMITS.reviewBytes);
+}
+
+function choiceRequest(choice: StoredChoice): BangumiChoice {
+  const { scorePlan: _scorePlan, ...request } = choice;
+  return request;
+}
+
+function choiceMatches(stored: StoredChoice | null, requested: BangumiChoice): boolean {
+  return stored !== null && canonicalize(choiceRequest(stored)) === canonicalize(requested);
+}
+function scoreSelection(choice: BangumiScoreChoice): BangumiScoreSelection {
+  if (choice.action === 'set') return { action: 'set', units: choice.units };
+  return { action: choice.action };
+}
 export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): EntryImportMetadataProposals {
   const source = evidence.source;
   const noteField = ['comment', 'notes'].find((field) => Object.hasOwn(source, field)) ?? null;
@@ -154,7 +263,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
   };
 }
 export function createBangumiImport(deps: Dependencies) {
-  const { pool, access } = deps;
+  const { pool, access, votes } = deps;
   const runner = createLibraryCommandRunner(deps);
   const entries = createEntryCommands(deps);
   const personalEntries = createEntryPersonalCommands(deps);
@@ -272,18 +381,26 @@ export function createBangumiImport(deps: Dependencies) {
     return read(actor, async (tx, a) => {
       const h = await header(tx, a, id);
       const rows = (
-        await tx.query<BangumiRow>(
+        await tx.query<StoredRow>(
           `SELECT ordinal,evidence,review,outcome FROM library.bangumi_upload_row
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal>$4 ORDER BY ordinal LIMIT 11`,
           [...args(a, id), after],
         )
       ).rows;
-      return {
+      const visibleRows = rows.slice(0, BANGUMI_LIMITS.page).map((stored) => ({
+        ordinal: stored.ordinal,
+        evidence: stored.evidence,
+        review: reviewView(stored.review),
+        outcome: stored.outcome,
+      }));
+      const response = {
         uploadId: id,
         cancelled: h.cancelled,
-        rows: rows.slice(0, 10),
-        next: rows.length > 10 ? rows[9]!.ordinal : null,
+        rows: visibleRows,
+        next: rows.length > BANGUMI_LIMITS.page ? rows[BANGUMI_LIMITS.page - 1]!.ordinal : null,
       };
+      assertJsonBytes(response, BANGUMI_LIMITS.pageResponseBytes);
+      return response;
     });
   }
   async function observation(actor: Actor, target: string) {
@@ -313,12 +430,84 @@ export function createBangumiImport(deps: Dependencies) {
       current,
     };
   }
-  async function review(actor: Actor, id: string, ordinal: number, target: string | undefined, key: string) {
+  async function scoreReview(
+    actor: Actor,
+    evidence: BangumiRow['evidence'],
+    target: string | null,
+    guard: BangumiReview['guard'],
+    selection: BangumiScoreSelection,
+  ): Promise<{ score: BangumiScoreReview; guard: NativeVoteGuard | null }> {
+    const source = scoreSource(evidence);
+    const unavailable = (
+      reason: BangumiScoreReview['native']['admission']['reason'],
+      question: BangumiScoreQuestion | null = null,
+      currentVote: BangumiScoreCurrentVote | null = null,
+      voteGuard: NativeVoteGuard | null = null,
+    ): { score: BangumiScoreReview; guard: NativeVoteGuard | null } => ({
+      score: {
+        source,
+        native: {
+          questionId: STANDARD_QUESTION_ID,
+          question,
+          currentVote,
+          selection,
+          admission: { status: 'unavailable', reason },
+        },
+      },
+      guard: voteGuard,
+    });
+    if (!owner(actor).scopes.includes(VOTE_SCOPE)) return unavailable('native_vote_scope_required');
+
+    let question: Awaited<ReturnType<NativeVotes['readRatingQuestion']>>;
+    try {
+      question = await votes.readRatingQuestion(actor, STANDARD_QUESTION_ID);
+    } catch (error) {
+      if (error instanceof RatingQuestionNotFoundError) return unavailable('question_unavailable');
+      throw error;
+    }
+    if (
+      selection.action === 'set' &&
+      (!Number.isSafeInteger(selection.units) ||
+        selection.units < question.minimumUnits ||
+        selection.units > question.maximumUnits ||
+        question.stepUnits < 1 ||
+        (selection.units - question.minimumUnits) % question.stepUnits !== 0)
+    )
+      throw new ProblemError('invalid_request');
+    const visibleQuestion = scoreQuestion(question);
+    if (!target || !guard) return unavailable('target_not_selected', visibleQuestion);
+
+    let vote: Awaited<ReturnType<NativeVotes['readOwnVote']>>;
+    try {
+      vote = await votes.readOwnVote(actor, STANDARD_QUESTION_ID, target);
+    } catch (error) {
+      if (error instanceof LibraryNotFoundError) return unavailable('target_not_selected', visibleQuestion);
+      if (error instanceof RatingQuestionNotFoundError) return unavailable('question_unavailable');
+      throw error;
+    }
+    const currentVote = currentScoreVote(vote);
+    if (question.revision !== 1 || question.lifecycleState !== 'active')
+      return unavailable('question_revision_unsupported', visibleQuestion, currentVote, currentVoteGuard(vote));
+    if (question.minimumUnits !== 0 || question.maximumUnits !== 20 || question.stepUnits !== 1)
+      return unavailable('question_scale_unsupported', visibleQuestion, currentVote, currentVoteGuard(vote));
+    return unavailable('conditional_admission_unavailable', visibleQuestion, currentVote, currentVoteGuard(vote));
+  }
+  async function review(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    target: string | undefined,
+    selection: BangumiScoreSelection,
+    key: string,
+  ) {
     const original = await read(actor, async (tx, a) => {
       if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
       return row(tx, a, id, ordinal);
     });
-    if (original.choice || original.review?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
+    if (
+      (original.choice && !original.outcome) ||
+      original.review?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome)
+    )
       throw new ProblemError('conflict');
     const e = original.evidence;
     const candidates: string[] = [];
@@ -365,7 +554,16 @@ export function createBangumiImport(deps: Dependencies) {
         if (!(error instanceof LibraryNotFoundError)) throw error;
       }
     }
-    const review: BangumiReview = {
+    const guard: BangumiReview['guard'] =
+      source?.kind === 'supported'
+        ? {
+            subjectId: source.subjectId,
+            releaseDigest: source.pin.releaseDigest,
+            identityEpoch: String(observed!.anchor.identityEpoch),
+          }
+        : null;
+    const score = await scoreReview(actor, e, source?.subjectId ?? null, guard, selection);
+    const review: StoredReview = {
       token: randomUUID(),
       candidates,
       target: source?.subjectId ?? null,
@@ -380,29 +578,32 @@ export function createBangumiImport(deps: Dependencies) {
             : unavailable
               ? 'unavailable'
               : 'unmatched',
-      guard:
-        source?.kind === 'supported'
-          ? {
-              subjectId: source.subjectId,
-              releaseDigest: source.pin.releaseDigest,
-              identityEpoch: String(observed!.anchor.identityEpoch),
-            }
-          : null,
+      guard,
       proposedState,
       current,
       conflict: current !== null && proposedState !== null && current.state !== proposedState,
+      score: score.score,
+      scoreGuard: score.guard,
       metadata: original.review?.metadata ?? [],
     };
-    const saved = await change(actor, 'review', key, { id, ordinal, target: target ?? null }, async (tx, a) => {
-      if ((await header(tx, a, id, true)).cancelled || (await row(tx, a, id, ordinal)).choice)
-        throw new ProblemError('conflict');
-      await tx.query(
-        `UPDATE library.bangumi_upload_row SET review=$5::jsonb,outcome=NULL,labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-        [...args(a, id), ordinal, JSON.stringify(review)],
-      );
-      return { ordinal, review };
-    });
-    return saved.value;
+    assertReviewBytes(review);
+    const saved = await change(
+      actor,
+      'review',
+      key,
+      { id, ordinal, target: target ?? null, score: selection },
+      async (tx, a) => {
+        const h = await header(tx, a, id, true);
+        const locked = await row(tx, a, id, ordinal, true);
+        if (h.cancelled || (locked.choice && !locked.outcome)) throw new ProblemError('conflict');
+        await tx.query(
+          `UPDATE library.bangumi_upload_row SET review=$5::jsonb,choice=NULL,outcome=NULL,labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+          [...args(a, id), ordinal, JSON.stringify(review)],
+        );
+        return { ordinal, review };
+      },
+    );
+    return { ...saved.value, review: reviewView(saved.value.review) };
   }
   async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
     const original = await read(actor, async (tx, a) => {
@@ -455,6 +656,7 @@ export function createBangumiImport(deps: Dependencies) {
       history.push(next);
       assertEntryImportMetadataHistorySize(history);
       locked.review.metadata = history;
+      assertReviewBytes(locked.review);
       await tx.query(
         `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
         [...args(a, id), ordinal, JSON.stringify(locked.review)],
@@ -541,6 +743,7 @@ export function createBangumiImport(deps: Dependencies) {
           throw new ProblemError('conflict');
         record.confirmation = confirmation;
         assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
+        assertReviewBytes(locked.review);
         await tx.query(
           `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
           [...args(a, id), ordinal, JSON.stringify(locked.review)],
@@ -595,6 +798,7 @@ export function createBangumiImport(deps: Dependencies) {
           if (h.cancelled) throw new ProblemError('conflict');
           record.confirmation = confirmation;
           assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
+          assertReviewBytes(locked.review);
           await tx.query(
             `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
             [...args(a, id), ordinal, JSON.stringify(locked.review)],
@@ -675,6 +879,14 @@ export function createBangumiImport(deps: Dependencies) {
     for (const choice of choices) {
       if (signal.aborted || Date.now() >= deadline) break;
       const { ordinal } = choice;
+      const scoreChoice = choice.score ?? { action: 'preserve' as const };
+      if (
+        (scoreChoice.action !== 'preserve' && scoreChoice.consent !== true) ||
+        (scoreChoice.action === 'set' &&
+          (!Number.isSafeInteger(scoreChoice.units) || scoreChoice.units < 0 || scoreChoice.units > 20)) ||
+        (choice.skip && scoreChoice.action !== 'preserve')
+      )
+        throw new ProblemError('invalid_request');
       // The immutable submitted review and operands survive a crash between the native effect and acknowledgment.
       const claim = await change(
         actor,
@@ -683,13 +895,37 @@ export function createBangumiImport(deps: Dependencies) {
         { id, choice },
         async (tx, a) => {
           const h = await header(tx, a, id, true),
-            r = await row(tx, a, id, ordinal);
+            r = await row(tx, a, id, ordinal, true);
           if (h.cancelled) throw new ProblemError('conflict');
           if (!r.review || r.review.token !== choice.reviewToken) throw new ProblemError('conflict');
-          if (r.choice && canonicalize(r.choice) !== canonicalize(choice)) throw new ProblemError('conflict');
+          if (scoreChoice.action !== 'preserve' && !r.review.score) throw new ProblemError('conflict');
+          const reviewedSelection = r.review.score?.native.selection ?? { action: 'preserve' as const };
+          if (canonicalize(scoreSelection(scoreChoice)) !== canonicalize(reviewedSelection))
+            throw new ProblemError('conflict');
+          if (r.choice && !choiceMatches(r.choice, choice)) throw new ProblemError('conflict');
+          const scorePlan: BangumiScorePlan | undefined =
+            scoreChoice.action === 'preserve'
+              ? undefined
+              : {
+                  action: scoreChoice.action,
+                  units: scoreChoice.action === 'set' ? scoreChoice.units : null,
+                  consent: true,
+                  sourceState: r.review.score!.source.state,
+                  sourceDigest: entryImportMetadataDigest(r.evidence),
+                  question: r.review.score!.native.question,
+                  target: r.review.guard,
+                  baseline: r.review.scoreGuard,
+                  commandKey: `bangumi:${id}:${ordinal}:${choice.reviewToken}:rating`,
+                  attribution: { provider: 'bangumi', uploadId: id, ordinal, reviewToken: choice.reviewToken },
+                };
+          const storedChoice: StoredChoice = r.choice ?? {
+            ...choice,
+            ...(scorePlan === undefined ? {} : { scorePlan }),
+          };
+          assertJsonBytes(storedChoice, BANGUMI_LIMITS.choiceBytes);
           await tx.query(
             `UPDATE library.bangumi_upload_row SET choice=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-            [...args(a, id), ordinal, JSON.stringify(choice)],
+            [...args(a, id), ordinal, JSON.stringify(storedChoice)],
           );
           // Private evidence stays out of durable command receipts.
           return { confirmed: true };
@@ -706,8 +942,9 @@ export function createBangumiImport(deps: Dependencies) {
         outcomes.push(r.outcome);
         continue;
       }
-      if (canonicalize(r.choice) !== canonicalize(choice)) throw new ProblemError('conflict');
+      if (!choiceMatches(r.choice, choice)) throw new ProblemError('conflict');
       const v = r.review;
+      if (!v) throw new ProblemError('conflict');
       const outcome: BangumiOutcome = {
         ordinal,
         status: 'unsupported',
@@ -745,7 +982,19 @@ export function createBangumiImport(deps: Dependencies) {
               : 'failed';
         }
       }
-      // Stale/failed rows can be refreshed; successful native effects always retain their original command.
+      const sourceState = v.score?.source.state;
+      outcome.score =
+        scoreChoice.action === 'preserve'
+          ? { action: 'preserve', status: 'skipped', reason: 'existing_native_vote_preserved' }
+          : scoreChoice.action === 'set' && (sourceState === 'absent' || sourceState === 'unrated')
+            ? { action: 'set', status: 'unsupported', reason: `source_${sourceState}` }
+            : {
+                action: scoreChoice.action,
+                status: 'unavailable',
+                reason: v.score?.native.admission.reason ?? 'conditional_admission_unavailable',
+              };
+      assertJsonBytes(outcome, BANGUMI_LIMITS.outcomeBytes);
+      // An acknowledged row can be refreshed under a new token; an uncertain command keeps its original choice.
       await change(actor, 'ack', randomUUID(), { id, ordinal, outcome }, async (tx, a) => {
         await header(tx, a, id, true);
         await tx.query(

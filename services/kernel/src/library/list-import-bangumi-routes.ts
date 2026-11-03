@@ -7,6 +7,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
+import { createVoteCommands } from '../rating/votes.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -46,6 +47,16 @@ const metadataSelection = t.Object(
   },
   closed,
 );
+const scoreChoice = t.Union([
+  t.Object({ action: t.Literal('preserve') }, closed),
+  t.Object({ action: t.Literal('set'), units: t.Integer({ minimum: 0, maximum: 20 }), consent: t.Literal(true) }, closed),
+  t.Object({ action: t.Literal('clear'), consent: t.Literal(true) }, closed),
+]);
+const scoreSelection = t.Union([
+  t.Object({ action: t.Literal('preserve') }, closed),
+  t.Object({ action: t.Literal('set'), units: t.Integer({ minimum: 0, maximum: 20 }) }, closed),
+  t.Object({ action: t.Literal('clear') }, closed),
+]);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const result = <T>() => t.Unsafe<T>(t.Any());
 const failures = {
@@ -89,7 +100,14 @@ export function bangumiImportRoutes(
     clock: KernelClock;
   },
 ) {
-  const engine = () => createBangumiImport({ ...deps, access: deps.access() });
+  const engine = () => {
+    const access = deps.access();
+    return createBangumiImport({
+      ...deps,
+      access,
+      votes: createVoteCommands({ pool: deps.pool, access, clock: deps.clock }),
+    });
+  };
   return app
     .post(
       customMethod('/v1/libraryImports/bangumi', 'preview'),
@@ -129,7 +147,7 @@ export function bangumiImportRoutes(
       {
         params,
         headers,
-        body: t.Object({ ordinal, target: t.Optional(id) }, closed),
+        body: t.Object({ ordinal, target: t.Optional(id), score: t.Optional(scoreSelection) }, closed),
         response: { 200: result<{ ordinal: number; review: BangumiReview }>(), ...failures },
         detail: detail('library_bangumi.review'),
       },
@@ -142,6 +160,7 @@ export function bangumiImportRoutes(
               params.uploadId,
               body.ordinal,
               body.target,
+              body.score ?? { action: 'preserve' },
               idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
             ),
           ),
@@ -232,6 +251,7 @@ export function bangumiImportRoutes(
                   reviewToken: id,
                   state: t.Union([t.Literal('preserve'), t.Literal('replace'), t.Literal('omit')]),
                   skip: t.Boolean(),
+                  score: t.Optional(scoreChoice),
                 },
                 closed,
               ),
@@ -241,7 +261,7 @@ export function bangumiImportRoutes(
           closed,
         ),
         response: { 200: result<{ uploadId: string; outcomes: BangumiOutcome[]; remaining: number[] }>(), ...failures },
-        detail: detail('library_bangumi.apply'),
+        detail: { ...detail('library_bangumi.apply'), 'x-body-limit': BANGUMI_LIMITS.applyRequestBytes },
       },
       ({ actor, params, body, request, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
