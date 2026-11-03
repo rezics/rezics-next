@@ -188,27 +188,29 @@ export async function createGrowthRealmRankSourceFixture() {
     }
 
     async function planEvidence() {
-      const generation = (
-        await database.admin.query<{ generation: string }>(
-          `SELECT generation::text
+      const { generation: prior, identity } = (
+        await database.admin.query<{ generation: string; identity: string }>(
+          `SELECT generation::text,question_identity AS identity
         FROM rating.population_prior_epoch WHERE route=$1 AND question_id=$2 AND population_id=$3`,
           [routeOf(fixture.realmId), STANDARD_QUESTION_ID, fixture.realmId],
         )
-      ).rows[0]!.generation;
+      ).rows[0]!;
       const after = ordered.at(-129)!;
       const plans = [];
       for (const deep of [false, true]) {
         const result = await database.admin.query(
           `EXPLAIN (FORMAT JSON) SELECT subject_id::text AS "subjectId",
           count::text,mean::text,score::text,prior_epoch AS "priorEpoch",revision::text,as_of AS "asOf"
-          FROM rating.realm_rank WHERE partition_no=$1 AND question_id=$2 AND population_id=$3 AND prior_generation=$4
-          ${deep ? 'AND (score,subject_id)<($6::numeric,$7::uuid)' : ''}
-          ORDER BY score DESC,subject_id DESC LIMIT $5`,
+          FROM rating.realm_rank WHERE partition_no=$1 AND question_id=$2 AND population_id=$3
+          AND question_identity=$4 AND prior_generation=$5
+          ${deep ? 'AND (score,subject_id)<($7::numeric,$8::uuid)' : ''}
+          ORDER BY score DESC,subject_id DESC LIMIT $6`,
           [
             partition,
             STANDARD_QUESTION_ID,
             fixture.realmId,
-            generation,
+            identity,
+            prior,
             RANK_PAGE_SIZE,
             ...(deep ? [after.score, after.id] : []),
           ],

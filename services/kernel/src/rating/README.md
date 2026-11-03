@@ -406,10 +406,29 @@ Unavailable authority, data or moved homes fail closed. Search owns selection co
 cross-partition composition; Web owns the remaining Content interfaces. This port
 installs no additional search route or service.
 
-Decision: Search remains the selection-control owner. Content's scored-only `page` is a compatibility port and
-cannot activate complete Realm rating order until a bounded, current Semantic canonical population and `name_sort`
-seek is available. The current Semantic Subject source exposes ID-key traversal for rebuilds, not that request-time
-ordered capability; Search must keep returning `index_not_ready` while it is absent.
+Search's complete Realm ordering uses the separately composed `createRealmRatingNativeSource` in
+`search/realm-rating-native.ts`; the scored-only `page` remains a compatibility port. The native producer reads
+bounded scored frontiers from private `rating.realm_rank` partitions and seeks the current Search population by
+`name_sort` then subject ID for the unscored phase. It proves each unscored candidate against the exact current
+question, prior, figure and rank rows before release. Search retains request parsing, text/analyzer and Boolean
+semantics, filter admission, cross-partition merge, useful-page accounting, public response and the signed outer
+cursor. Realm scope stays separate from the rating population. Missing native composition, partial Search shards,
+incomplete figure proofs and unavailable authority return `index_not_ready`; they never become empty success.
+
+Decision: scored rows tie by subject UUID descending, matching the compatibility rank contract. The unscored phase
+uses canonical `name_sort` ascending, missing names last, then subject UUID ascending. Search's physical index
+remains the only name catalogue; private Realm figures never enter it. Semantic's canonical-generation sequence
+changes with subject, redirect, selected-fact, selection-state and page-publication writes. The producer captures
+that generation with the active Search generation and reobserves both around each seek, so a canonical change
+restarts a continuation without putting a consumed subject key in its public cursor.
+
+Each Search page captures and reobserves the selected standard-question identity, revision and provenance, current
+Realm read authority, same-Realm prior generation and eligibility, pending state, rank-publication generation,
+active definition meaning, Semantic canonical generation and active Search generation. Current Realm authority is
+checked even for an empty page; current Subject disclosure and redirect checks remain mandatory for every consumed
+hit. A complete native figure read alone proves unscored. Score zero remains scored, below-threshold figures are
+withheld, and an inactive prior is all-unscored only after its population work is settled. A change to any captured
+observation invalidates or restarts the continuation.
 
 Decision: eligible selected questions use the released integer vote range (0–20 inclusive); custom means and
 scores use that question's stored units, while the standard question retains its 0–10 display units.
@@ -422,7 +441,7 @@ its same-question, same-Realm prior, included in the ordered index prefix and cu
 measurement requires a new question ID: mutating an existing definition with retained votes withholds its old
 ranking rather than reinterpreting those votes or borrowing another scale's prior.
 
-The result is `{ question, candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
+The compatibility result is `{ question, candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
 revision, asOf, updating }`, in the selected question’s units described above. Only threshold-ready, actively scored figures in
 the selected population's current prior generation qualify. No unscored tail, suppressed counts, histogram,
 total, scanned count, raw position or readiness estimate is returned. Zero mean and score remain valid values.
@@ -492,6 +511,10 @@ reauthorizes the Realm, observes the current prior, reads one candidate batch, c
 Realm and reobserves prior and rank generation in fresh physical observations before release. Changed generations
 return `invalid_cursor`, including on the first page if publication races it. The reader does not claim an atomic
 snapshot of independently homed Access and rating data.
+
+Complete Search row, statement, transaction-control, memory and ordered-index bounds are derived in
+[cost-realm-order.md](cost-realm-order.md). The following Operation Cost applies only to the scored-only
+compatibility `createRealmRankSource.page`.
 
 Operation Cost:
 
