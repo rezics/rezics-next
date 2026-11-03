@@ -1148,7 +1148,7 @@ async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOp
             statement: Statement;
             release: string;
             revision: number;
-            decision: 'accepted' | 'rejected' | null;
+            decision: 'accepted' | 'rejected' | 'abstained' | null;
             head: number | null;
             rank: 'normal' | 'preferred' | 'deprecated' | null;
           }
@@ -1208,7 +1208,13 @@ async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOp
           release: row.release,
           revision: row.revision,
           decision:
-            row.verdict === 'accept' ? ('accepted' as const) : row.verdict === 'reject' ? ('rejected' as const) : null,
+            row.verdict === 'accept'
+              ? 'accepted'
+              : row.verdict === 'reject'
+                ? 'rejected'
+                : row.verdict === 'abstain'
+                  ? 'abstained'
+                  : null,
           head: row.head,
           rank: ranks.get(row.candidate_id) ?? null,
         });

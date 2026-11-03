@@ -19,7 +19,7 @@ import readChange from './revision-detail-change.sql';
 import readCandidate from './revision-detail-candidate.sql';
 
 type Check = (client: PoolClient) => Promise<boolean>;
-type Selection = { candidate: string; rank: 'normal' | 'preferred' };
+type Selection = { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' };
 type Reading = {
   decision: { head: number; verdict: 'accept' | 'reject' | 'abstain'; revision: number } | null;
   selected: boolean;

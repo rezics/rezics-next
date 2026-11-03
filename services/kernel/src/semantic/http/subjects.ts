@@ -160,7 +160,7 @@ export const TermsResultSchema = t.Object(
 const revisionSelection = t.Object(
   {
     candidate: t.String({ format: 'uuid' }),
-    rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
+    rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
   },
   { additionalProperties: false },
 );
@@ -426,7 +426,7 @@ const adoptionResponse = t.Object(
           t.Object(
             {
               candidate: t.String({ format: 'uuid' }),
-              rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
+              rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
             },
             { additionalProperties: false },
           ),
@@ -2016,7 +2016,12 @@ function subjectRoutes(
                       statement: StatementSchema,
                       release: t.String(),
                       revision: t.Integer(),
-                      decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
+                      decision: t.Union([
+                        t.Literal('accepted'),
+                        t.Literal('rejected'),
+                        t.Literal('abstained'),
+                        t.Null(),
+                      ]),
                       head: t.Union([t.Integer(), t.Null()]),
                       rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
                     },

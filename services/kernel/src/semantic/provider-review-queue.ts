@@ -397,10 +397,12 @@ async function hydrate(pool: Pool, keys: Key[], options: ReadOptions): Promise<P
                 ? 'accepted'
                 : accepted?.verdict === 'reject'
                   ? 'rejected'
-                  : null;
+                  : accepted?.verdict === 'abstain'
+                    ? 'abstained'
+                    : null;
             if (
               options.status === 'pending'
-                ? decision !== null
+                ? decision !== null && decision !== 'abstained'
                 : decision !== 'accepted' || rank === 'normal' || rank === 'preferred'
             )
               continue;

@@ -31,7 +31,7 @@ export type Candidate = {
 export type Adoption = {
   mode: 'inherit' | 'replace' | 'suppress';
   head: number;
-  selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+  selection: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
   revision: number;
 };
 export function slotId(subject: string, property: string): string {

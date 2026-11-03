@@ -4,6 +4,8 @@ This module owns subject facts and their item projections, partition paging, and
 
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
+Native candidate reads preserve `abstained` separately from no decision (`null`); both remain pending review,
+and statement/adoption DTOs retain `normal`, `preferred` and `deprecated` ranks without changing write admission.
 The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
 minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
 `TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.

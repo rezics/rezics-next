@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { insertAcceptance, slotId } from '../../src/semantic/slots.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { providerReviewProjection, registerProviderReviewWork } from '../../src/semantic/provider-review-queue.ts';
@@ -123,11 +125,11 @@ test('native scope-bound continuation rejects changed viewer/source/Context/stat
   status(await f.call('GET', endpoint, undefined, 'ordinary'), 403);
 });
 
-test('contributor proposals remain visible to reviewers after native accept and reject decisions', async () => {
+test('contributor proposals preserve native decisions and pending abstentions', async () => {
   const reviewSource = `queue_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const reviewEndpoint = `/v1/review-candidates?source=${reviewSource}`;
   const proposals = [];
-  for (let index = 0; index < 3; index++) {
+  for (let index = 0; index < 4; index++) {
     const origin = source(crypto.randomUUID(), reviewSource);
     const book = await f.create(origin);
     proposals.push({ id: book.id, candidate: await f.propose(book.id, origin, cited()) });
@@ -169,6 +171,16 @@ test('contributor proposals remain visible to reviewers after native accept and 
   );
   expect(accepted.acceptance.decision).toBe('accept');
   expect(rejected.acceptance.decision).toBe('reject');
+  const abstained = proposals[3]!;
+  await runCommand(db.pool, { partition: partitionOf(routeOf(abstained.id)!) }, async (tx) => {
+    const slot = slotId(abstained.id, 'schema:inLanguage');
+    await insertAcceptance(tx, abstained.id, abstained.candidate, GLOBAL_CONTEXT, null, 'abstain', 2, slot);
+    return { value: null, events: [] };
+  });
+  const native = status(await f.call('GET', `/v1/subjects/${abstained.id}/candidates?property=schema:inLanguage`), 200);
+  expect(native.candidates[0]).toMatchObject({ id: abstained.candidate, decision: 'abstained', head: 1, rank: null });
+  const rejectedSubject = status(await f.call('GET', `/v1/subjects/${proposals[1]!.id}`), 200);
+  expect(rejectedSubject.statements['schema:inLanguage'][0].rank).toBe('deprecated');
 
   const acceptedPage = status(
     await f.call('GET', `${reviewEndpoint}&status=accepted_unselected`, undefined, 'editor'),
@@ -179,8 +191,11 @@ test('contributor proposals remain visible to reviewers after native accept and 
     candidate: { id: proposals[0]!.candidate, decision: 'accepted', rank: null },
   });
   const pendingPage = status(await f.call('GET', reviewEndpoint, undefined, 'editor'), 200);
-  expect(pendingPage.candidates).toHaveLength(1);
-  expect(pendingPage.candidates[0]).toMatchObject({
+  expect(pendingPage.candidates).toHaveLength(2);
+  expect(pendingPage.candidates.find((row: any) => row.candidate.id === abstained.candidate).candidate).toEqual(
+    native.candidates[0],
+  );
+  expect(pendingPage.candidates.find((row: any) => row.candidate.id === proposals[2]!.candidate)).toMatchObject({
     candidate: { id: proposals[2]!.candidate, decision: null, head: null, rank: null },
   });
 });
