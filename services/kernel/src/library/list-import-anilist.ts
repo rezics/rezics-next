@@ -93,34 +93,75 @@ export function anilistMetadataProposals(row: AniListRow): EntryImportMetadataPr
   const note: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'notes')
     ? { state: 'absent', sourceField: null }
     : typeof evidence.notes !== 'string'
-      ? { state: evidence.notes === null ? 'unknown' : 'invalid', sourceField: 'notes', sourceValue: typeof evidence.notes === 'number' || typeof evidence.notes === 'boolean' ? evidence.notes : null }
+      ? {
+          state: evidence.notes === null ? 'unknown' : 'invalid',
+          sourceField: 'notes',
+          sourceValue:
+            typeof evidence.notes === 'number' || typeof evidence.notes === 'boolean' ? evidence.notes : null,
+        }
       : evidence.notes === ''
         ? { state: 'empty', sourceField: 'notes', sourceValue: '' }
         : !evidence.notes.isWellFormed() || evidence.notes.includes('\0')
           ? { state: 'invalid', sourceField: 'notes', reason: 'The retained note is not valid text.' }
           : Buffer.byteLength(evidence.notes) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-            ? { state: 'unsupported', sourceField: 'notes', reason: 'The retained note exceeds the native 4,096-byte limit.' }
+            ? {
+                state: 'unsupported',
+                sourceField: 'notes',
+                reason: 'The retained note exceeds the native 4,096-byte limit.',
+              }
             : { state: 'value', sourceField: 'notes', value: evidence.notes };
   const priorityValue = evidence.priority;
   const priority: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'priority')
     ? { state: 'absent', sourceField: null }
-    : { state: 'unsupported', sourceField: 'priority', ...(typeof priorityValue === 'number' || typeof priorityValue === 'string' ? { sourceValue: priorityValue } : {}), reason: 'AniList priority has no installed, confirmed conversion to owner-local 1–100 positions.' };
+    : {
+        state: 'unsupported',
+        sourceField: 'priority',
+        ...(typeof priorityValue === 'number' || typeof priorityValue === 'string'
+          ? { sourceValue: priorityValue }
+          : {}),
+        reason: 'AniList priority has no installed, confirmed conversion to owner-local 1–100 positions.',
+      };
   const privacy: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'private')
     ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
     : typeof evidence.private === 'boolean'
-      ? { state: 'value', sourceField: 'private', sourceValue: evidence.private, value: { status: 'known', meaning: evidence.private ? 'private' : 'source_visible' } }
+      ? {
+          state: 'value',
+          sourceField: 'private',
+          sourceValue: evidence.private,
+          value: { status: 'known', meaning: evidence.private ? 'private' : 'source_visible' },
+        }
       : evidence.private === null
         ? { state: 'unknown', sourceField: 'private', sourceValue: null, value: { status: 'unknown' } }
         : { state: 'invalid', sourceField: 'private', reason: 'AniList private must be a retained boolean.' };
   const timestamp = (field: 'createdAt' | 'updatedAt'): EntryImportMetadataProposal => {
     if (!Object.hasOwn(evidence, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
     const value = evidence[field];
-    if (value === null) return { state: 'unknown', sourceField: field, sourceValue: null, value: { status: 'unknown' } };
+    if (value === null)
+      return { state: 'unknown', sourceField: field, sourceValue: null, value: { status: 'unknown' } };
     if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
-      return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: String(value) } };
-    if (typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(value))
-      return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: value } };
-    return { state: 'unsupported', sourceField: field, reason: 'Only retained integer AniList timestamps fit the current native unknown-time contract.' };
+      return {
+        state: 'unknown',
+        sourceField: field,
+        sourceValue: value,
+        value: { status: 'unknown', sourceValue: String(value) },
+      };
+    if (
+      typeof value === 'string' &&
+      value.length > 0 &&
+      Buffer.byteLength(value) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+      !/[\u0000-\u001f\u007f]/.test(value)
+    )
+      return {
+        state: 'unknown',
+        sourceField: field,
+        sourceValue: value,
+        value: { status: 'unknown', sourceValue: value },
+      };
+    return {
+      state: 'unsupported',
+      sourceField: field,
+      reason: 'Only retained integer AniList timestamps fit the current native unknown-time contract.',
+    };
   };
   return { note, priority, privacy, sourceCreated: timestamp('createdAt'), sourceUpdated: timestamp('updatedAt') };
 }
@@ -301,9 +342,11 @@ export function createAniListImport(deps: Dependencies) {
         if (kind === 'metadata-progress') {
           const started = (next.metadataReviews ?? []).some((item, index) => {
             const prior = row.payload.metadataReviews?.[index]?.confirmation;
-            return !!item.confirmation &&
+            return (
+              !!item.confirmation &&
               ((item.confirmation.annotationStarted && !prior?.annotationStarted) ||
-                (item.confirmation.provenanceStarted && !prior?.provenanceStarted));
+                (item.confirmation.provenanceStarted && !prior?.provenanceStarted))
+            );
           });
           if (started) {
             const header = (
@@ -428,7 +471,8 @@ export function createAniListImport(deps: Dependencies) {
     };
     const saved = await save(actor, id, ordinal, 'review', key, input, (current) => {
       if (current.started) throw new LibraryConflictError();
-      if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome)) throw new LibraryConflictError();
+      if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
+        throw new LibraryConflictError();
       return { ...current, review: value, outcome: undefined };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
@@ -436,30 +480,61 @@ export function createAniListImport(deps: Dependencies) {
     if (current.review?.id !== saved.value.reviewId) throw new LibraryConflictError();
     return { ordinal, review: current.review };
   }
-  async function currentMetadataProfileDigest(actor: Actor, stored: Stored, sourceReviewToken: string, subjectId: string) {
-    const review = stored.review, reviewed = review?.observation;
+  async function currentMetadataProfileDigest(
+    actor: Actor,
+    stored: Stored,
+    sourceReviewToken: string,
+    subjectId: string,
+  ) {
+    const review = stored.review,
+      reviewed = review?.observation;
     if (!review || !reviewed || review.id !== sourceReviewToken || reviewed.subjectId !== subjectId) return null;
-    const matching = await match(actor, stored.source), current = await observe(actor, subjectId);
-    if (!current || matching.fingerprint !== review.match.fingerprint || !matching.candidates.includes(subjectId) ||
-      current.subjectId !== reviewed.subjectId || current.epoch !== reviewed.epoch ||
-      hash(current.pin) !== hash(reviewed.pin) || hash(current.current) !== hash(reviewed.current)) return null;
+    const matching = await match(actor, stored.source),
+      current = await observe(actor, subjectId);
+    if (
+      !current ||
+      matching.fingerprint !== review.match.fingerprint ||
+      !matching.candidates.includes(subjectId) ||
+      current.subjectId !== reviewed.subjectId ||
+      current.epoch !== reviewed.epoch ||
+      hash(current.pin) !== hash(reviewed.pin) ||
+      hash(current.current) !== hash(reviewed.current)
+    )
+      return null;
     return entryImportMetadataDigest({
-        match: matching.fingerprint,
-        subjectId: current.subjectId,
-        epoch: current.epoch,
-        pin: current.pin,
-        current: current.current,
-      });
+      match: matching.fingerprint,
+      subjectId: current.subjectId,
+      epoch: current.epoch,
+      pin: current.pin,
+      current: current.current,
+    });
   }
   async function metadataCurrent(actor: Actor, stored: Stored, metadata: EntryImportMetadataReview) {
-    return (await currentMetadataProfileDigest(actor, stored, metadata.sourceReviewToken, metadata.subjectId)) === metadata.profileDigest;
+    return (
+      (await currentMetadataProfileDigest(actor, stored, metadata.sourceReviewToken, metadata.subjectId)) ===
+      metadata.profileDigest
+    );
   }
   async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
-    const account = owner(actor), stored = await load(actor, id, ordinal), review = stored.review;
-    if (!review || sourceReviewToken.length > 128 || review.id !== sourceReviewToken || review.input.skip || !review.observation?.current?.incarnationId)
+    const account = owner(actor),
+      stored = await load(actor, id, ordinal),
+      review = stored.review;
+    if (
+      !review ||
+      sourceReviewToken.length > 128 ||
+      review.id !== sourceReviewToken ||
+      review.input.skip ||
+      !review.observation?.current?.incarnationId
+    )
       throw new LibraryConflictError();
-    if (stored.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome)) throw new LibraryConflictError();
-    const profileDigest = await currentMetadataProfileDigest(actor, stored, sourceReviewToken, review.observation.subjectId);
+    if (stored.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
+      throw new LibraryConflictError();
+    const profileDigest = await currentMetadataProfileDigest(
+      actor,
+      stored,
+      sourceReviewToken,
+      review.observation.subjectId,
+    );
     if (!profileDigest) throw new LibraryConflictError();
     const personal = await personalEntries.readPersonalEntry(actor, review.observation.subjectId),
       next: EntryImportMetadataReview = {
@@ -476,27 +551,42 @@ export function createAniListImport(deps: Dependencies) {
         incarnationId: review.observation.current.incarnationId,
       };
     const saved = await save(actor, id, ordinal, 'metadata-review', key, { sourceReviewToken }, (current) => {
-      if (current.review?.id !== sourceReviewToken || current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
+      if (
+        current.review?.id !== sourceReviewToken ||
+        current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome)
+      )
         throw new LibraryConflictError();
-      const history = [...(current.metadataReviews ?? [])], existing = history.find((item) => item.requestDigest === next.requestDigest);
+      const history = [...(current.metadataReviews ?? [])],
+        existing = history.find((item) => item.requestDigest === next.requestDigest);
       if (existing) return current;
       if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new LibraryConflictError();
       history.push(next);
       assertEntryImportMetadataHistorySize(history);
       return { ...current, metadataReviews: history };
     });
-    const current = await load(actor, id, ordinal), record = current.metadataReviews?.find((item) => item.requestDigest === next.requestDigest);
+    const current = await load(actor, id, ordinal),
+      record = current.metadataReviews?.find((item) => item.requestDigest === next.requestDigest);
     if (!record || saved.value.reviewId !== sourceReviewToken) throw new LibraryConflictError();
     return { ordinal, reviewToken: record.token };
   }
-  async function metadataView(actor: Actor, id: string, ordinal: number, reviewToken: string): Promise<EntryImportMetadataView> {
-    const stored = await load(actor, id, ordinal), metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+  ): Promise<EntryImportMetadataView> {
+    const stored = await load(actor, id, ordinal),
+      metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
     if (!metadata || !stored.review) throw new LibraryConflictError();
-    const account = owner(actor), personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+    const account = owner(actor),
+      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
       current = await metadataCurrent(actor, stored, metadata),
-      unchanged = account.clientId === metadata.clientId && (account.requestedBy ?? null) === metadata.requestedBy &&
+      unchanged =
+        account.clientId === metadata.clientId &&
+        (account.requestedBy ?? null) === metadata.requestedBy &&
         entryImportMetadataDigest(stored.source.evidence) === metadata.sourceDigest &&
-        entryPersonalMetadataDigest(personal) === metadata.personalDigest && personal.annotationRevision === metadata.annotationRevision &&
+        entryPersonalMetadataDigest(personal) === metadata.personalDigest &&
+        personal.annotationRevision === metadata.annotationRevision &&
         (stored.review.observation?.current?.incarnationId ?? null) === metadata.incarnationId,
       view: EntryImportMetadataView = {
         status: current && unchanged ? 'current' : 'stale',
@@ -507,7 +597,8 @@ export function createAniListImport(deps: Dependencies) {
         proposals: anilistMetadataProposals(stored.source),
         outcome: metadata.confirmation?.outcome ?? null,
       };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes) throw new AniListInputError();
+    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
+      throw new AniListInputError();
     return view;
   }
   async function applyMetadata(
@@ -518,10 +609,13 @@ export function createAniListImport(deps: Dependencies) {
     fields: unknown,
     signal?: AbortSignal,
   ): Promise<EntryImportMetadataOutcome> {
-    const selections = parseEntryImportMetadataSelections(fields), selectionDigest = entryImportMetadataDigest(selections);
-    let stored = await load(actor, id, ordinal), metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
+    const selections = parseEntryImportMetadataSelections(fields),
+      selectionDigest = entryImportMetadataDigest(selections);
+    let stored = await load(actor, id, ordinal),
+      metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
     if (!metadata) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
-    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest) throw new LibraryConflictError();
+    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest)
+      throw new LibraryConflictError();
     if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
     if (!metadata.confirmation) {
       const confirmation = {
@@ -532,19 +626,30 @@ export function createAniListImport(deps: Dependencies) {
         annotationStarted: false,
         provenanceStarted: false,
       };
-      const saved = await save(actor, id, ordinal, 'metadata-confirm', `${id}:${ordinal}:${reviewToken}:confirm`,
-        { reviewToken, selectionDigest }, (current) => {
+      const saved = await save(
+        actor,
+        id,
+        ordinal,
+        'metadata-confirm',
+        `${id}:${ordinal}:${reviewToken}:confirm`,
+        { reviewToken, selectionDigest },
+        (current) => {
           const record = current.metadataReviews?.find((item) => item.token === reviewToken);
           if (!record || current.review?.id !== record.sourceReviewToken) throw new LibraryConflictError();
           if (record.confirmation) {
             if (record.confirmation.selectionDigest !== selectionDigest) throw new LibraryConflictError();
             return current;
           }
-          const next = { ...current, metadataReviews: current.metadataReviews!.map((item) =>
-            item.token === reviewToken ? { ...item, confirmation } : item) };
+          const next = {
+            ...current,
+            metadataReviews: current.metadataReviews!.map((item) =>
+              item.token === reviewToken ? { ...item, confirmation } : item,
+            ),
+          };
           assertEntryImportMetadataHistorySize(next.metadataReviews ?? []);
           return next;
-        });
+        },
+      );
       if (saved.value.reviewId === null) throw new LibraryConflictError();
       stored = await load(actor, id, ordinal);
       metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
@@ -552,52 +657,88 @@ export function createAniListImport(deps: Dependencies) {
     if (!metadata?.confirmation) throw new LibraryConflictError();
     if (metadata.confirmation.outcome) return metadata.confirmation.outcome;
     const view = await metadataView(actor, id, ordinal, reviewToken);
-    if (view.status !== 'current' && !metadata.confirmation.annotationStarted && !metadata.confirmation.provenanceStarted) {
-      const outcome: EntryImportMetadataOutcome = { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
+    if (
+      view.status !== 'current' &&
+      !metadata.confirmation.annotationStarted &&
+      !metadata.confirmation.provenanceStarted
+    ) {
+      const outcome: EntryImportMetadataOutcome = {
+        reviewToken,
+        fields: selections.map(({ field }) => ({ field, status: 'stale' })),
+      };
       metadata.confirmation.outcome = outcome;
       await persistMetadataConfirmation(actor, id, ordinal, reviewToken, metadata.confirmation);
       return outcome;
     }
     const row = stored.source;
-    const stableRecord = typeof row.evidence.id === 'number' && Number.isSafeInteger(row.evidence.id) && row.evidence.id > 0
-      ? String(row.evidence.id)
-      : `${id}/${ordinal}`;
-    return (await applyEntryImportMetadataCommands({
-      actor,
-      subjectId: metadata.subjectId,
-      provider: 'anilist',
-      recordId: stableRecord,
-      reviewToken,
-      personal: view.personal,
-      proposals: view.proposals,
-      selections,
-      baselineAnnotationRevision: metadata.annotationRevision,
-      confirmation: metadata.confirmation,
-      native: personalEntries,
-      persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
-      isCurrent: async () => {
-        try { return await metadataCurrent(actor, await load(actor, id, ordinal), metadata!); }
-        catch (error) { if (error instanceof LibraryNotFoundError) return false; throw error; }
-      },
-      isCancelled: async () => {
-        try { return (await load<Header>(actor, id, -1)).cancelled; }
-        catch (error) { if (error instanceof LibraryNotFoundError) return true; throw error; }
-      },
-      ...(signal ? { signal } : {}),
-    })).outcome;
+    const stableRecord =
+      typeof row.evidence.id === 'number' && Number.isSafeInteger(row.evidence.id) && row.evidence.id > 0
+        ? String(row.evidence.id)
+        : `${id}/${ordinal}`;
+    return (
+      await applyEntryImportMetadataCommands({
+        actor,
+        subjectId: metadata.subjectId,
+        provider: 'anilist',
+        recordId: stableRecord,
+        reviewToken,
+        personal: view.personal,
+        proposals: view.proposals,
+        selections,
+        baselineAnnotationRevision: metadata.annotationRevision,
+        confirmation: metadata.confirmation,
+        native: personalEntries,
+        persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
+        isCurrent: async () => {
+          try {
+            return await metadataCurrent(actor, await load(actor, id, ordinal), metadata!);
+          } catch (error) {
+            if (error instanceof LibraryNotFoundError) return false;
+            throw error;
+          }
+        },
+        isCancelled: async () => {
+          try {
+            return (await load<Header>(actor, id, -1)).cancelled;
+          } catch (error) {
+            if (error instanceof LibraryNotFoundError) return true;
+            throw error;
+          }
+        },
+        ...(signal ? { signal } : {}),
+      })
+    ).outcome;
   }
-  async function persistMetadataConfirmation(actor: Actor, id: string, ordinal: number, token: string, confirmation: EntryImportMetadataReview['confirmation']) {
+  async function persistMetadataConfirmation(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    token: string,
+    confirmation: EntryImportMetadataReview['confirmation'],
+  ) {
     if (!confirmation) return;
     const stateDigest = entryImportMetadataDigest(confirmation);
-    await save(actor, id, ordinal, 'metadata-progress', `${id}:${ordinal}:${token}:progress:${stateDigest}`,
-      { reviewToken: token, stateDigest }, (current) => {
+    await save(
+      actor,
+      id,
+      ordinal,
+      'metadata-progress',
+      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
+      { reviewToken: token, stateDigest },
+      (current) => {
         const record = current.metadataReviews?.find((item) => item.token === token);
-        if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest) throw new LibraryConflictError();
-        const next = { ...current, metadataReviews: current.metadataReviews!.map((item) =>
-          item.token === token ? { ...item, confirmation } : item) };
+        if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+          throw new LibraryConflictError();
+        const next = {
+          ...current,
+          metadataReviews: current.metadataReviews!.map((item) =>
+            item.token === token ? { ...item, confirmation } : item,
+          ),
+        };
         assertEntryImportMetadataHistorySize(next.metadataReviews ?? []);
         return next;
-      });
+      },
+    );
   }
   async function apply(
     actor: Actor,
@@ -737,5 +878,15 @@ export function createAniListImport(deps: Dependencies) {
     return { cancelled: true };
   }
   const labelAdoption = createAniListLabelAdoption({ ...deps, load, snapshot, match, observe });
-  return { preview, page, review, reviewMetadata, metadata: metadataView, applyMetadata, apply, cancel, ...labelAdoption };
+  return {
+    preview,
+    page,
+    review,
+    reviewMetadata,
+    metadata: metadataView,
+    applyMetadata,
+    apply,
+    cancel,
+    ...labelAdoption,
+  };
 }

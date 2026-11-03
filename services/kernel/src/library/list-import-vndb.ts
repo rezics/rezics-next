@@ -59,7 +59,12 @@ export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposal
   else if (noteField.kind === 'unknown')
     note = { state: noteField.raw === '' ? 'empty' : 'unknown', sourceField: 'notes', sourceValue: noteField.raw };
   else if (noteField.kind !== 'value' || typeof noteField.value !== 'string')
-    note = { state: 'invalid', sourceField: 'notes', sourceValue: noteField.raw, reason: 'The retained note is not valid text.' };
+    note = {
+      state: 'invalid',
+      sourceField: 'notes',
+      sourceValue: noteField.raw,
+      reason: 'The retained note is not valid text.',
+    };
   else if (
     noteField.value.length === 0 ||
     !noteField.value.isWellFormed() ||
@@ -78,11 +83,22 @@ export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposal
   if (!privacyField || privacyField.kind === 'missing')
     privacy = { state: 'absent', sourceField: privacyField ? 'private' : null, value: { status: 'absent' } };
   else if (privacyField.raw === '')
-    privacy = { state: 'empty', sourceField: 'private', sourceValue: '', reason: 'An empty privacy token is not an absence.' };
+    privacy = {
+      state: 'empty',
+      sourceField: 'private',
+      sourceValue: '',
+      reason: 'An empty privacy token is not an absence.',
+    };
   else if (privacyField.kind === 'invalid')
-    privacy = { state: 'invalid', sourceField: 'private', sourceValue: privacyField.raw, reason: 'The retained privacy token is invalid.' };
+    privacy = {
+      state: 'invalid',
+      sourceField: 'private',
+      sourceValue: privacyField.raw,
+      reason: 'The retained privacy token is invalid.',
+    };
   else {
-    const raw = privacyField.raw ?? String(privacyField.value ?? ''), token = raw.trim().toLowerCase();
+    const raw = privacyField.raw ?? String(privacyField.value ?? ''),
+      token = raw.trim().toLowerCase();
     const meaning = ['1', 'true', 'yes', 'private'].includes(token)
       ? 'private'
       : ['0', 'false', 'no', 'public', 'visible'].includes(token)
@@ -92,10 +108,16 @@ export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposal
       ? { state: 'value', sourceField: 'private', sourceValue: raw, value: { status: 'known', meaning } }
       : token.length <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(raw)
         ? { state: 'unknown', sourceField: 'private', sourceValue: raw, value: { status: 'unknown', sourceValue: raw } }
-        : { state: 'unsupported', sourceField: 'private', reason: 'The privacy token cannot fit the native provenance bound.' };
+        : {
+            state: 'unsupported',
+            sourceField: 'private',
+            reason: 'The privacy token cannot fit the native provenance bound.',
+          };
   }
   const unsupported = (field: string): EntryImportMetadataProposal => ({
-    state: 'unsupported', sourceField: null, reason: `VNDB does not retain ${field} as an original entry field.`,
+    state: 'unsupported',
+    sourceField: null,
+    reason: `VNDB does not retain ${field} as an original entry field.`,
   });
   return {
     note,
@@ -354,13 +376,22 @@ export function createVndbImport(config: Config) {
       return publicDecision(decision);
     });
   }
-  async function metadataView(actor: Actor, id: string, ordinal: number, token: string): Promise<EntryImportMetadataView> {
-    const upload = await load(actor, id), row = upload.rows[ordinal], decision = upload.decisions[ordinal];
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    token: string,
+  ): Promise<EntryImportMetadataView> {
+    const upload = await load(actor, id),
+      row = upload.rows[ordinal],
+      decision = upload.decisions[ordinal];
     if (!row || !decision) throw new ProblemError('not_found');
     const record = decision.metadata?.find((item) => item.token === token);
     if (!record) throw new ProblemError('conflict');
-    const account = owner(actor), personal = await personalEntries.readPersonalEntry(actor, record.subjectId);
-    const profile = await metadataProfile(actor, decision), matching = await match(actor, row);
+    const account = owner(actor),
+      personal = await personalEntries.readPersonalEntry(actor, record.subjectId);
+    const profile = await metadataProfile(actor, decision),
+      matching = await match(actor, row);
     const status =
       decision.reviewId === record.sourceReviewToken &&
       account.clientId === record.clientId &&
@@ -386,21 +417,26 @@ export function createVndbImport(config: Config) {
       throw new ProblemError('invalid_request');
     return view;
   }
-  async function reviewMetadata(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    sourceReviewToken: string,
-    key: string,
-  ) {
-    const upload = await load(actor, id), row = upload.rows[ordinal], decision = upload.decisions[ordinal];
-    if (!row || !decision || row.kind !== 'vn' || decision.reviewId !== sourceReviewToken || !decision.targetId || !decision.guard)
+  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
+    const upload = await load(actor, id),
+      row = upload.rows[ordinal],
+      decision = upload.decisions[ordinal];
+    if (
+      !row ||
+      !decision ||
+      row.kind !== 'vn' ||
+      decision.reviewId !== sourceReviewToken ||
+      !decision.targetId ||
+      !decision.guard
+    )
       throw new ProblemError('conflict');
     if (decision.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
       throw new ProblemError('conflict');
-    const matching = await match(actor, row), profile = await metadataProfile(actor, decision);
+    const matching = await match(actor, row),
+      profile = await metadataProfile(actor, decision);
     if (!profile || entryImportMetadataDigest(matching) !== decision.matchDigest) throw new ProblemError('conflict');
-    const account = owner(actor), personal = await personalEntries.readPersonalEntry(actor, decision.targetId);
+    const account = owner(actor),
+      personal = await personalEntries.readPersonalEntry(actor, decision.targetId);
     const requestDigest = entryImportMetadataDigest({ key });
     const next: EntryImportMetadataReview = {
       token: randomUUID(),
@@ -421,9 +457,11 @@ export function createVndbImport(config: Config) {
           AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
         [requireRoute(a.accountId), a.accountId, id],
       );
-      const found = locked.rows[0], current = found?.decisions[ordinal];
+      const found = locked.rows[0],
+        current = found?.decisions[ordinal];
       if (!found || !current || current.reviewId !== sourceReviewToken) throw new ProblemError('conflict');
-      const history = [...(current.metadata ?? [])], existing = history.find((item) => item.requestDigest === requestDigest);
+      const history = [...(current.metadata ?? [])],
+        existing = history.find((item) => item.requestDigest === requestDigest);
       if (existing) return { ordinal, reviewToken: existing.token };
       if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw new ProblemError('conflict');
       if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new ProblemError('conflict');
@@ -453,7 +491,9 @@ export function createVndbImport(config: Config) {
           'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
           [requireRoute(a.accountId), a.accountId, id],
         );
-        const found = locked.rows[0], decision = found?.decisions[ordinal], record = decision?.metadata?.find((item) => item.token === token);
+        const found = locked.rows[0],
+          decision = found?.decisions[ordinal],
+          record = decision?.metadata?.find((item) => item.token === token);
         if (!found || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
           throw new ProblemError('conflict');
         const starting =
@@ -461,7 +501,8 @@ export function createVndbImport(config: Config) {
           (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
         if (
           starting &&
-          (found.state !== 'active' || decision?.reviewId !== record.sourceReviewToken ||
+          (found.state !== 'active' ||
+            decision?.reviewId !== record.sourceReviewToken ||
             entryImportMetadataDigest(found.rows[ordinal]) !== record.sourceDigest)
         )
           throw new ProblemError('conflict');
@@ -480,10 +521,15 @@ export function createVndbImport(config: Config) {
     recordCommand?: (outcome: CommandOutcome<unknown>) => void,
     signal?: AbortSignal,
   ) {
-    const selections = parseEntryImportMetadataSelections(fields), selectionDigest = entryImportMetadataDigest(selections);
-    let upload = await load(actor, id), decision = upload.decisions[ordinal], record = decision?.metadata?.find((item) => item.token === reviewToken);
-    if (!record) return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
-    if (record.confirmation && record.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+    const selections = parseEntryImportMetadataSelections(fields),
+      selectionDigest = entryImportMetadataDigest(selections);
+    let upload = await load(actor, id),
+      decision = upload.decisions[ordinal],
+      record = decision?.metadata?.find((item) => item.token === reviewToken);
+    if (!record)
+      return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
+    if (record.confirmation && record.confirmation.selectionDigest !== selectionDigest)
+      throw new ProblemError('conflict');
     if (record.confirmation?.outcome) return record.confirmation.outcome;
     if (!record.confirmation) {
       const confirmation = {
@@ -494,23 +540,31 @@ export function createVndbImport(config: Config) {
         annotationStarted: false,
         provenanceStarted: false,
       };
-      await mutation(actor, 'metadata-confirm', `${id}:${ordinal}:${reviewToken}`, { id, ordinal, reviewToken, fields: selections }, async (tx, a) => {
-        const locked = await tx.query<Upload>(
-          'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
-          [requireRoute(a.accountId), a.accountId, id],
-        );
-        const found = locked.rows[0], current = found?.decisions[ordinal], metadata = current?.metadata?.find((item) => item.token === reviewToken);
-        if (!found || !metadata) throw new ProblemError('conflict');
-        if (metadata.confirmation) {
-          if (metadata.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+      await mutation(
+        actor,
+        'metadata-confirm',
+        `${id}:${ordinal}:${reviewToken}`,
+        { id, ordinal, reviewToken, fields: selections },
+        async (tx, a) => {
+          const locked = await tx.query<Upload>(
+            'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+            [requireRoute(a.accountId), a.accountId, id],
+          );
+          const found = locked.rows[0],
+            current = found?.decisions[ordinal],
+            metadata = current?.metadata?.find((item) => item.token === reviewToken);
+          if (!found || !metadata) throw new ProblemError('conflict');
+          if (metadata.confirmation) {
+            if (metadata.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+            return { ordinal, reviewToken };
+          }
+          if (found.state !== 'active' || found.expires_at.getTime() <= Date.now()) throw new ProblemError('conflict');
+          metadata.confirmation = confirmation;
+          assertEntryImportMetadataHistorySize(current!.metadata ?? []);
+          await save(tx, a, id, ordinal, current!);
           return { ordinal, reviewToken };
-        }
-        if (found.state !== 'active' || found.expires_at.getTime() <= Date.now()) throw new ProblemError('conflict');
-        metadata.confirmation = confirmation;
-        assertEntryImportMetadataHistorySize(current!.metadata ?? []);
-        await save(tx, a, id, ordinal, current!);
-        return { ordinal, reviewToken };
-      });
+        },
+      );
       upload = await load(actor, id);
       decision = upload.decisions[ordinal];
       record = decision?.metadata?.find((item) => item.token === reviewToken);
@@ -543,12 +597,23 @@ export function createVndbImport(config: Config) {
       native: personalEntries,
       persist: (confirmation) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, confirmation),
       isCurrent: async () => {
-        const latest = await load(actor, id), currentDecision = latest.decisions[ordinal], currentRow = latest.rows[ordinal];
-        if (!currentDecision || !currentRow || currentDecision.reviewId !== record!.sourceReviewToken ||
-          entryImportMetadataDigest(currentRow) !== record!.sourceDigest) return false;
-        const profile = await metadataProfile(actor, currentDecision), matching = await match(actor, currentRow);
-        return entryImportMetadataDigest(matching) === currentDecision.matchDigest &&
-          profile?.digest === record!.profileDigest && profile.incarnationId === record!.incarnationId;
+        const latest = await load(actor, id),
+          currentDecision = latest.decisions[ordinal],
+          currentRow = latest.rows[ordinal];
+        if (
+          !currentDecision ||
+          !currentRow ||
+          currentDecision.reviewId !== record!.sourceReviewToken ||
+          entryImportMetadataDigest(currentRow) !== record!.sourceDigest
+        )
+          return false;
+        const profile = await metadataProfile(actor, currentDecision),
+          matching = await match(actor, currentRow);
+        return (
+          entryImportMetadataDigest(matching) === currentDecision.matchDigest &&
+          profile?.digest === record!.profileDigest &&
+          profile.incarnationId === record!.incarnationId
+        );
       },
       ...(recordCommand === undefined ? {} : { record: recordCommand }),
       isCancelled: async () => {
@@ -575,7 +640,14 @@ export function createVndbImport(config: Config) {
       SET decisions=jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)
       WHERE route=$1 AND account_id=$2 AND upload_id=$3
         AND octet_length(jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)::text)<=$6`,
-      [requireRoute(account.accountId), account.accountId, id, String(ordinal), JSON.stringify(decision), VNDB_DECISIONS_BYTES],
+      [
+        requireRoute(account.accountId),
+        account.accountId,
+        id,
+        String(ordinal),
+        JSON.stringify(decision),
+        VNDB_DECISIONS_BYTES,
+      ],
     );
     if (saved.rowCount !== 1) throw new ProblemError('conflict');
   }

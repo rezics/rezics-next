@@ -155,7 +155,10 @@ export function bangumiImportRoutes(
         headers,
         body: t.Object({ ordinal, sourceReviewToken: id }, closed),
         response: { 200: result<{ ordinal: number; reviewToken: string }>(), ...failures },
-        detail: { ...detail('library_bangumi.review_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: {
+          ...detail('library_bangumi.review_metadata'),
+          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes,
+        },
       },
       ({ actor, params, body, headers, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
@@ -202,7 +205,10 @@ export function bangumiImportRoutes(
           closed,
         ),
         response: { 200: result<Output<'applyMetadata'>>(), ...failures },
-        detail: { ...detail('library_bangumi.apply_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: {
+          ...detail('library_bangumi.apply_metadata'),
+          'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes,
+        },
       },
       ({ actor, params, body, request, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';

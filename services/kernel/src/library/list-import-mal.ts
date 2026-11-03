@@ -253,65 +253,123 @@ function sameReviewContext(
 
 export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
   const noteRaw = row.fields.my_comments;
-  const note = noteRaw === undefined
-    ? { state: 'absent' as const, sourceField: null }
-    : noteRaw === ''
-      ? { state: 'empty' as const, sourceField: 'my_comments', sourceValue: '' }
-      : !noteRaw.isWellFormed() || noteRaw.includes('\0')
-        ? { state: 'invalid' as const, sourceField: 'my_comments', sourceValue: noteRaw, reason: 'The retained note is not valid text.' }
-        : Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-          ? { state: 'unsupported' as const, sourceField: 'my_comments', reason: 'The retained note exceeds the native 4,096-byte limit.' }
-          : { state: 'value' as const, sourceField: 'my_comments', value: noteRaw };
+  const note =
+    noteRaw === undefined
+      ? { state: 'absent' as const, sourceField: null }
+      : noteRaw === ''
+        ? { state: 'empty' as const, sourceField: 'my_comments', sourceValue: '' }
+        : !noteRaw.isWellFormed() || noteRaw.includes('\0')
+          ? {
+              state: 'invalid' as const,
+              sourceField: 'my_comments',
+              sourceValue: noteRaw,
+              reason: 'The retained note is not valid text.',
+            }
+          : Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+            ? {
+                state: 'unsupported' as const,
+                sourceField: 'my_comments',
+                reason: 'The retained note exceeds the native 4,096-byte limit.',
+              }
+            : { state: 'value' as const, sourceField: 'my_comments', value: noteRaw };
   const priorityRaw = row.fields.my_priority;
   const priorities: Record<string, number> = { '0': 100, '1': 50, '2': 1 };
-  const priority = priorityRaw === undefined
-    ? { state: 'absent' as const, sourceField: null }
-    : Object.hasOwn(priorities, priorityRaw)
-      ? {
-          state: 'value' as const,
-          sourceField: 'my_priority',
-          sourceValue: Number(priorityRaw),
-          value: priorities[priorityRaw]!,
-          mapping: { id: 'mal-priority-position-v1', label: 'Low 0 → 100; Medium 1 → 50; High 2 → 1' },
-        }
-      : { state: 'unsupported' as const, sourceField: 'my_priority', sourceValue: priorityRaw, reason: 'Only retained MAL priorities 0, 1 and 2 have an explicitly confirmed native mapping.' };
+  const priority =
+    priorityRaw === undefined
+      ? { state: 'absent' as const, sourceField: null }
+      : Object.hasOwn(priorities, priorityRaw)
+        ? {
+            state: 'value' as const,
+            sourceField: 'my_priority',
+            sourceValue: Number(priorityRaw),
+            value: priorities[priorityRaw]!,
+            mapping: { id: 'mal-priority-position-v1', label: 'Low 0 → 100; Medium 1 → 50; High 2 → 1' },
+          }
+        : {
+            state: 'unsupported' as const,
+            sourceField: 'my_priority',
+            sourceValue: priorityRaw,
+            reason: 'Only retained MAL priorities 0, 1 and 2 have an explicitly confirmed native mapping.',
+          };
   const privacyRaw = row.fields.my_privacy;
   const privacyToken = privacyRaw?.trim().toLowerCase();
-  const privacyMeaning = privacyToken === 'private' || privacyToken === 'true'
-    ? 'private'
-    : privacyToken === 'public' || privacyToken === 'false'
-      ? 'source_visible'
-      : null;
-  const privacy = privacyRaw === undefined
-    ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
-    : privacyRaw === ''
-      ? { state: 'empty' as const, sourceField: 'my_privacy', sourceValue: '' }
-      : privacyMeaning
-        ? { state: 'value' as const, sourceField: 'my_privacy', sourceValue: privacyRaw, value: { status: 'known' as const, meaning: privacyMeaning } }
-        : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(privacyRaw)
-          ? { state: 'unknown' as const, sourceField: 'my_privacy', sourceValue: privacyRaw, value: { status: 'unknown' as const, sourceValue: privacyRaw } }
-          : { state: 'unsupported' as const, sourceField: 'my_privacy', reason: 'The source privacy token exceeds the native evidence bound.' };
+  const privacyMeaning =
+    privacyToken === 'private' || privacyToken === 'true'
+      ? 'private'
+      : privacyToken === 'public' || privacyToken === 'false'
+        ? 'source_visible'
+        : null;
+  const privacy =
+    privacyRaw === undefined
+      ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
+      : privacyRaw === ''
+        ? { state: 'empty' as const, sourceField: 'my_privacy', sourceValue: '' }
+        : privacyMeaning
+          ? {
+              state: 'value' as const,
+              sourceField: 'my_privacy',
+              sourceValue: privacyRaw,
+              value: { status: 'known' as const, meaning: privacyMeaning },
+            }
+          : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes &&
+              !/[\u0000-\u001f\u007f]/.test(privacyRaw)
+            ? {
+                state: 'unknown' as const,
+                sourceField: 'my_privacy',
+                sourceValue: privacyRaw,
+                value: { status: 'unknown' as const, sourceValue: privacyRaw },
+              }
+            : {
+                state: 'unsupported' as const,
+                sourceField: 'my_privacy',
+                reason: 'The source privacy token exceeds the native evidence bound.',
+              };
   const updateFields = Object.keys(row.fields).filter((field) => /updated|timestamp|last_updated/i.test(field));
-  const sourceUpdated = updateFields.length === 0
-    ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
-    : updateFields.length !== 1
-      ? { state: 'unsupported' as const, sourceField: null, reason: 'MAL retains multiple update-time fields; their source meanings are not interchangeable.' }
-      : (() => {
-          const field = updateFields[0]!, raw = row.fields[field]!;
-          if (raw === '') return { state: 'empty' as const, sourceField: field, sourceValue: '' };
-          try {
-            return { state: 'value' as const, sourceField: field, sourceValue: raw, value: parseSourceTimestamp(raw) };
-          } catch {
-            return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(raw)
-              ? { state: 'unknown' as const, sourceField: field, sourceValue: raw, value: { status: 'unknown' as const, sourceValue: raw } }
-              : { state: 'invalid' as const, sourceField: field, reason: 'The retained update time cannot fit the native timestamp evidence bound.' };
+  const sourceUpdated =
+    updateFields.length === 0
+      ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
+      : updateFields.length !== 1
+        ? {
+            state: 'unsupported' as const,
+            sourceField: null,
+            reason: 'MAL retains multiple update-time fields; their source meanings are not interchangeable.',
           }
-        })();
+        : (() => {
+            const field = updateFields[0]!,
+              raw = row.fields[field]!;
+            if (raw === '') return { state: 'empty' as const, sourceField: field, sourceValue: '' };
+            try {
+              return {
+                state: 'value' as const,
+                sourceField: field,
+                sourceValue: raw,
+                value: parseSourceTimestamp(raw),
+              };
+            } catch {
+              return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+                !/[\u0000-\u001f\u007f]/.test(raw)
+                ? {
+                    state: 'unknown' as const,
+                    sourceField: field,
+                    sourceValue: raw,
+                    value: { status: 'unknown' as const, sourceValue: raw },
+                  }
+                : {
+                    state: 'invalid' as const,
+                    sourceField: field,
+                    reason: 'The retained update time cannot fit the native timestamp evidence bound.',
+                  };
+            }
+          })();
   return {
     note,
     priority,
     privacy,
-    sourceCreated: { state: 'unsupported', sourceField: null, reason: 'MAL does not retain an original entry-created time.' },
+    sourceCreated: {
+      state: 'unsupported',
+      sourceField: null,
+      reason: 'MAL does not retain an original entry-created time.',
+    },
     sourceUpdated,
   };
 }
@@ -363,7 +421,7 @@ export function createMalImport(deps: Dependencies) {
     if (!doc) throw missing();
     doc.dateReviews ??= {};
     doc.dateIntents ??= {};
-      doc.metadataReviews ??= {};
+    doc.metadataReviews ??= {};
     return { ...a, doc };
   }
   async function mutate(
@@ -540,7 +598,8 @@ export function createMalImport(deps: Dependencies) {
     const { doc } = await load(actor, id, deadline),
       row = doc.rows[input.row];
     if (!row) throw missing();
-    if (doc.metadataReviews?.[input.row]?.some((item) => item.confirmation && !item.confirmation.outcome)) throw stale();
+    if (doc.metadataReviews?.[input.row]?.some((item) => item.confirmation && !item.confirmation.outcome))
+      throw stale();
     const observed = await observe(actor, row, input.target, deadline);
     if (!input.skip && (!observed.source || !observed.target)) throw missing();
     const proposed: MalReview = {
@@ -1176,10 +1235,26 @@ export function createMalImport(deps: Dependencies) {
       stopped: outcomes.length < input.rows.length,
     };
   }
-  async function reviewMetadata(actor: Actor, id: string, input: MalMetadataReviewInput, key: string, deadline: number) {
-    const account = owner(actor), { doc } = await load(actor, id, deadline),
-      row = doc.rows[input.row], review = doc.reviews[input.row];
-    if (!row || !review || input.sourceReviewToken.length > 128 || review.version !== input.sourceReviewToken || review.skip || !review.target || !review.source)
+  async function reviewMetadata(
+    actor: Actor,
+    id: string,
+    input: MalMetadataReviewInput,
+    key: string,
+    deadline: number,
+  ) {
+    const account = owner(actor),
+      { doc } = await load(actor, id, deadline),
+      row = doc.rows[input.row],
+      review = doc.reviews[input.row];
+    if (
+      !row ||
+      !review ||
+      input.sourceReviewToken.length > 128 ||
+      review.version !== input.sourceReviewToken ||
+      review.skip ||
+      !review.target ||
+      !review.source
+    )
       throw stale();
     if (review.current?.incarnationId == null) throw stale();
     const observation = await observe(actor, row, review.binding ? null : review.target, deadline);
@@ -1196,11 +1271,16 @@ export function createMalImport(deps: Dependencies) {
         annotationRevision: personal.annotationRevision,
         personalDigest: entryPersonalMetadataDigest(personal),
         sourceDigest: entryImportMetadataDigest(row),
-        profileDigest: entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }),
+        profileDigest: entryImportMetadataDigest({
+          source: review.source,
+          binding: review.binding,
+          current: review.current,
+        }),
         incarnationId: review.current.incarnationId,
       };
     const result = await mutate(actor, id, key, 'metadata-review', input, (doc) => {
-      const current = doc.reviews[input.row], history = doc.metadataReviews![input.row] ?? [];
+      const current = doc.reviews[input.row],
+        history = doc.metadataReviews![input.row] ?? [];
       if (!current || current.version !== input.sourceReviewToken || doc.canceled) throw stale();
       if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw stale();
       const existing = history.find((item) => item.requestDigest === requestDigest);
@@ -1214,18 +1294,34 @@ export function createMalImport(deps: Dependencies) {
     if (!stored) throw stale();
     return { ...result.value, reviewToken: stored.token };
   }
-  async function metadataView(actor: Actor, id: string, ordinal: number, reviewToken: string, deadline: number): Promise<EntryImportMetadataView> {
-    const { doc } = await load(actor, id, deadline), row = doc.rows[ordinal], review = doc.reviews[ordinal],
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+    deadline: number,
+  ): Promise<EntryImportMetadataView> {
+    const { doc } = await load(actor, id, deadline),
+      row = doc.rows[ordinal],
+      review = doc.reviews[ordinal],
       metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
     if (!row || !review || !metadata) throw stale();
-    const account = owner(actor), personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+    const account = owner(actor),
+      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
       observation = await observe(actor, row, review.binding ? null : review.target, deadline),
-      unchanged = account.clientId === metadata.clientId && (account.requestedBy ?? null) === metadata.requestedBy &&
+      unchanged =
+        account.clientId === metadata.clientId &&
+        (account.requestedBy ?? null) === metadata.requestedBy &&
         entryImportMetadataDigest(row) === metadata.sourceDigest &&
-        entryPersonalMetadataDigest(personal) === metadata.personalDigest && personal.annotationRevision === metadata.annotationRevision,
-      matches = review.version === metadata.sourceReviewToken && review.target === metadata.subjectId &&
-        review.current?.incarnationId === metadata.incarnationId && sameReviewContext(review, observation) &&
-        entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }) === metadata.profileDigest,
+        entryPersonalMetadataDigest(personal) === metadata.personalDigest &&
+        personal.annotationRevision === metadata.annotationRevision,
+      matches =
+        review.version === metadata.sourceReviewToken &&
+        review.target === metadata.subjectId &&
+        review.current?.incarnationId === metadata.incarnationId &&
+        sameReviewContext(review, observation) &&
+        entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }) ===
+          metadata.profileDigest,
       view: EntryImportMetadataView = {
         status: matches && unchanged ? 'current' : 'stale',
         reviewToken,
@@ -1235,7 +1331,8 @@ export function createMalImport(deps: Dependencies) {
         proposals: malMetadataProposals(row),
         outcome: metadata.confirmation?.outcome ?? null,
       };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes) throw new ProblemError('invalid_request');
+    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
+      throw new ProblemError('invalid_request');
     return view;
   }
   async function persistMetadataConfirmation(
@@ -1247,18 +1344,32 @@ export function createMalImport(deps: Dependencies) {
   ) {
     if (!confirmation) return;
     const stateDigest = entryImportMetadataDigest(confirmation);
-    await mutate(actor, id, `${id}:${ordinal}:${token}:progress:${stateDigest}`, 'metadata-progress',
-      { row: ordinal, reviewToken: token, stateDigest }, (doc) => {
-        const row = doc.rows[ordinal], review = doc.reviews[ordinal],
+    await mutate(
+      actor,
+      id,
+      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
+      'metadata-progress',
+      { row: ordinal, reviewToken: token, stateDigest },
+      (doc) => {
+        const row = doc.rows[ordinal],
+          review = doc.reviews[ordinal],
           record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
-        if (!row || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest) throw stale();
-        const starting = (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
+        if (!row || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+          throw stale();
+        const starting =
+          (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
           (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-        if (starting && (doc.canceled || review?.version !== record.sourceReviewToken ||
-          entryImportMetadataDigest(row) !== record.sourceDigest)) throw stale();
+        if (
+          starting &&
+          (doc.canceled ||
+            review?.version !== record.sourceReviewToken ||
+            entryImportMetadataDigest(row) !== record.sourceDigest)
+        )
+          throw stale();
         record.confirmation = confirmation;
         assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
-      });
+      },
+    );
   }
   async function applyMetadata(
     actor: Actor,
@@ -1270,8 +1381,10 @@ export function createMalImport(deps: Dependencies) {
     signal?: AbortSignal,
     recordCommand?: (command: CommandOutcome<unknown>) => void,
   ): Promise<EntryImportMetadataOutcome> {
-    const selections = parseEntryImportMetadataSelections(fields), selectionDigest = entryImportMetadataDigest(selections);
-    let { doc } = await load(actor, id, deadline), metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+    const selections = parseEntryImportMetadataSelections(fields),
+      selectionDigest = entryImportMetadataDigest(selections);
+    let { doc } = await load(actor, id, deadline),
+      metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
     if (!metadata) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
     if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest) throw stale();
     if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
@@ -1284,9 +1397,15 @@ export function createMalImport(deps: Dependencies) {
         annotationStarted: false,
         provenanceStarted: false,
       };
-      await mutate(actor, id, `${id}:${ordinal}:${reviewToken}:confirm`, 'metadata-confirm',
-        { row: ordinal, reviewToken, selectionDigest }, (current) => {
-          const review = current.reviews[ordinal], record = current.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+      await mutate(
+        actor,
+        id,
+        `${id}:${ordinal}:${reviewToken}:confirm`,
+        'metadata-confirm',
+        { row: ordinal, reviewToken, selectionDigest },
+        (current) => {
+          const review = current.reviews[ordinal],
+            record = current.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
           if (current.canceled || !record || review?.version !== record.sourceReviewToken) throw stale();
           if (record.confirmation) {
             if (record.confirmation.selectionDigest !== selectionDigest) throw stale();
@@ -1294,47 +1413,68 @@ export function createMalImport(deps: Dependencies) {
           }
           record.confirmation = confirmation;
           assertEntryImportMetadataHistorySize(current.metadataReviews?.[ordinal] ?? []);
-        });
+        },
+      );
       doc = (await load(actor, id, deadline)).doc;
       metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
     }
     if (!metadata?.confirmation) throw stale();
     if (metadata.confirmation.outcome) return metadata.confirmation.outcome;
     const view = await metadataView(actor, id, ordinal, reviewToken, deadline);
-    if (view.status !== 'current' && !metadata.confirmation.annotationStarted && !metadata.confirmation.provenanceStarted) {
-      const outcome: EntryImportMetadataOutcome = { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
+    if (
+      view.status !== 'current' &&
+      !metadata.confirmation.annotationStarted &&
+      !metadata.confirmation.provenanceStarted
+    ) {
+      const outcome: EntryImportMetadataOutcome = {
+        reviewToken,
+        fields: selections.map(({ field }) => ({ field, status: 'stale' })),
+      };
       metadata.confirmation.outcome = outcome;
       await persistMetadataConfirmation(actor, id, ordinal, reviewToken, metadata.confirmation);
       return outcome;
     }
     const row = doc.rows[ordinal]!;
-    return (await applyEntryImportMetadataCommands({
-      actor,
-      subjectId: metadata.subjectId,
-      provider: 'mal',
-      recordId: `${row.kind}/${row.identifier.value}`,
-      reviewToken,
-      personal: view.personal,
-      proposals: view.proposals,
-      selections,
-      baselineAnnotationRevision: metadata.annotationRevision,
-      confirmation: metadata.confirmation,
-      native: personalEntries,
-      persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
-      isCurrent: async () => {
-        const latest = (await load(actor, id, deadline)).doc, source = latest.reviews[ordinal], currentRow = latest.rows[ordinal];
-        if (!source || !currentRow || source.version !== metadata.sourceReviewToken ||
-          entryImportMetadataDigest(currentRow) !== metadata.sourceDigest) return false;
-        const current = await observe(actor, currentRow, source.binding ? null : source.target, deadline);
-        return sameReviewContext(source, current);
-      },
-      ...(recordCommand ? { record: recordCommand } : {}),
-      isCancelled: async () => {
-        try { return (await load(actor, id, deadline)).doc.canceled; }
-        catch (error) { if (error instanceof ProblemError && error.code === 'not_found') return true; throw error; }
-      },
-      ...(signal ? { signal } : {}),
-    })).outcome;
+    return (
+      await applyEntryImportMetadataCommands({
+        actor,
+        subjectId: metadata.subjectId,
+        provider: 'mal',
+        recordId: `${row.kind}/${row.identifier.value}`,
+        reviewToken,
+        personal: view.personal,
+        proposals: view.proposals,
+        selections,
+        baselineAnnotationRevision: metadata.annotationRevision,
+        confirmation: metadata.confirmation,
+        native: personalEntries,
+        persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
+        isCurrent: async () => {
+          const latest = (await load(actor, id, deadline)).doc,
+            source = latest.reviews[ordinal],
+            currentRow = latest.rows[ordinal];
+          if (
+            !source ||
+            !currentRow ||
+            source.version !== metadata.sourceReviewToken ||
+            entryImportMetadataDigest(currentRow) !== metadata.sourceDigest
+          )
+            return false;
+          const current = await observe(actor, currentRow, source.binding ? null : source.target, deadline);
+          return sameReviewContext(source, current);
+        },
+        ...(recordCommand ? { record: recordCommand } : {}),
+        isCancelled: async () => {
+          try {
+            return (await load(actor, id, deadline)).doc.canceled;
+          } catch (error) {
+            if (error instanceof ProblemError && error.code === 'not_found') return true;
+            throw error;
+          }
+        },
+        ...(signal ? { signal } : {}),
+      })
+    ).outcome;
   }
   async function source(actor: Actor, id: string, deadline: number) {
     const { doc } = await load(actor, id, deadline);
@@ -1346,7 +1486,8 @@ export function createMalImport(deps: Dependencies) {
     page,
     review,
     reviewMetadata,
-    metadata: (actor: Actor, id: string, ordinal: number, token: string, deadline: number) => metadataView(actor, id, ordinal, token, deadline),
+    metadata: (actor: Actor, id: string, ordinal: number, token: string, deadline: number) =>
+      metadataView(actor, id, ordinal, token, deadline),
     applyMetadata,
     reviewDates,
     apply,

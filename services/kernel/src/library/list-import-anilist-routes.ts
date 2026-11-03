@@ -168,61 +168,89 @@ export function aniListImportRoutes(
     .post(
       customMethod(path, 'reviewMetadata'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         headers,
         body: t.Object({ ordinal, sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewMetadata']>>>(t.Object({}, { additionalProperties: true })),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewMetadata']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
           ...failures,
         },
         detail: { ...detail('metadata.review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, headers }) =>
-        command(() => imports().reviewMetadata(actor, params.importId, body.ordinal, body.sourceReviewToken, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]))),
+        command(() =>
+          imports().reviewMetadata(
+            actor,
+            params.importId,
+            body.ordinal,
+            body.sourceReviewToken,
+            idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+          ),
+        ),
     )
     .get(
       `${path}/metadata/:ordinal`,
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params: t.Object({ importId: id, ordinal }, closed),
         query: t.Object({ reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['metadata']>>>(t.Object({}, { additionalProperties: true })),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['metadata']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
           ...failures,
         },
         detail: detail('metadata'),
       },
-      ({ actor, params, query }) => command(() => imports().metadata(actor, params.importId, params.ordinal, query.reviewToken)),
+      ({ actor, params, query }) =>
+        command(() => imports().metadata(actor, params.importId, params.ordinal, query.reviewToken)),
     )
     .post(
       customMethod(path, 'applyMetadata'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         body: t.Object(
           {
             ordinal,
             reviewToken: t.String({ minLength: 1, maxLength: 128 }),
             fields: t.Array(
-              t.Object({
-                field: t.Union(['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated'].map((v) => t.Literal(v))),
-                action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
-                mapping: t.Optional(t.String({ maxLength: 64 })),
-              }, closed),
+              t.Object(
+                {
+                  field: t.Union(
+                    ['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated'].map((v) => t.Literal(v)),
+                  ),
+                  action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+                  mapping: t.Optional(t.String({ maxLength: 64 })),
+                },
+                closed,
+              ),
               { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields },
             ),
           },
           closed,
         ),
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyMetadata']>>>(t.Object({}, { additionalProperties: true })),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyMetadata']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
           ...failures,
         },
         detail: { ...detail('metadata.apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, request }) =>
-        command(() => imports().applyMetadata(actor, params.importId, body.ordinal, body.reviewToken, body.fields, request.signal)),
+        command(() =>
+          imports().applyMetadata(actor, params.importId, body.ordinal, body.reviewToken, body.fields, request.signal),
+        ),
     )
     .post(
       customMethod(path, 'reviewLabels'),

@@ -55,9 +55,20 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
       : typeof noteRaw !== 'string'
         ? { state: 'invalid', sourceField: noteField, sourceValue: null, reason: 'The retained note is not text.' }
         : noteRaw.length === 0
-          ? { state: 'empty', sourceField: noteField, sourceValue: '', reason: 'An empty source comment is not a native clear.' }
-          : !noteRaw.isWellFormed() || noteRaw.includes('\u0000') || Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-            ? { state: 'unsupported', sourceField: noteField, reason: 'The retained note is outside the native 4,096-byte text limit.' }
+          ? {
+              state: 'empty',
+              sourceField: noteField,
+              sourceValue: '',
+              reason: 'An empty source comment is not a native clear.',
+            }
+          : !noteRaw.isWellFormed() ||
+              noteRaw.includes('\u0000') ||
+              Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+            ? {
+                state: 'unsupported',
+                sourceField: noteField,
+                reason: 'The retained note is outside the native 4,096-byte text limit.',
+              }
             : { state: 'value', sourceField: noteField, value: noteRaw };
   const privacyField = Object.hasOwn(source, 'private') ? 'private' : null;
   const privacyRaw = privacyField === null ? undefined : source.private;
@@ -66,34 +77,77 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
       ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
       : typeof privacyRaw === 'boolean'
         ? {
-            state: 'value', sourceField: privacyField,
+            state: 'value',
+            sourceField: privacyField,
             value: { status: 'known', meaning: privacyRaw ? 'private' : 'source_visible' },
             sourceValue: privacyRaw,
           }
-        : typeof privacyRaw === 'string' && privacyRaw.length > 0 && Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(privacyRaw)
-          ? { state: 'unknown', sourceField: privacyField, sourceValue: privacyRaw, value: { status: 'unknown', sourceValue: privacyRaw } }
+        : typeof privacyRaw === 'string' &&
+            privacyRaw.length > 0 &&
+            Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes &&
+            !/[\u0000-\u001f\u007f]/.test(privacyRaw)
+          ? {
+              state: 'unknown',
+              sourceField: privacyField,
+              sourceValue: privacyRaw,
+              value: { status: 'unknown', sourceValue: privacyRaw },
+            }
           : privacyRaw === null
             ? { state: 'unknown', sourceField: privacyField, value: { status: 'unknown' } }
             : typeof privacyRaw === 'number' && Number.isFinite(privacyRaw)
-              ? { state: 'unknown', sourceField: privacyField, sourceValue: privacyRaw, value: { status: 'unknown', sourceValue: String(privacyRaw) } }
-              : { state: 'unsupported', sourceField: privacyField, reason: 'The retained private value cannot fit the native provenance evidence bound.' };
+              ? {
+                  state: 'unknown',
+                  sourceField: privacyField,
+                  sourceValue: privacyRaw,
+                  value: { status: 'unknown', sourceValue: String(privacyRaw) },
+                }
+              : {
+                  state: 'unsupported',
+                  sourceField: privacyField,
+                  reason: 'The retained private value cannot fit the native provenance evidence bound.',
+                };
   const timestamp = (field: 'created_at' | 'updated_at'): EntryImportMetadataProposal => {
     if (!Object.hasOwn(source, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
     const raw = source[field];
-    if (typeof raw !== 'string') return { state: 'invalid', sourceField: field, sourceValue: null, reason: 'The retained timestamp is not text.' };
-    if (raw.length === 0) return { state: 'empty', sourceField: field, sourceValue: '', reason: 'An empty timestamp is not an absent timestamp.' };
+    if (typeof raw !== 'string')
+      return { state: 'invalid', sourceField: field, sourceValue: null, reason: 'The retained timestamp is not text.' };
+    if (raw.length === 0)
+      return {
+        state: 'empty',
+        sourceField: field,
+        sourceValue: '',
+        reason: 'An empty timestamp is not an absent timestamp.',
+      };
     try {
       parseSourceTimestamp(raw);
       return { state: 'value', sourceField: field, value: { status: 'known', value: raw }, sourceValue: raw };
     } catch {
-      if (Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(raw) && !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw))
-        return { state: 'unknown', sourceField: field, sourceValue: raw, value: { status: 'unknown', sourceValue: raw } };
-      return { state: 'invalid', sourceField: field, sourceValue: raw.slice(0, 64), reason: 'The retained timestamp is not representable with its original precision.' };
+      if (
+        Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+        !/[\u0000-\u001f\u007f]/.test(raw) &&
+        !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw)
+      )
+        return {
+          state: 'unknown',
+          sourceField: field,
+          sourceValue: raw,
+          value: { status: 'unknown', sourceValue: raw },
+        };
+      return {
+        state: 'invalid',
+        sourceField: field,
+        sourceValue: raw.slice(0, 64),
+        reason: 'The retained timestamp is not representable with its original precision.',
+      };
     }
   };
   return {
     note,
-    priority: { state: 'unsupported', sourceField: null, reason: 'Bangumi has no retained personal-list priority field.' },
+    priority: {
+      state: 'unsupported',
+      sourceField: null,
+      reason: 'Bangumi has no retained personal-list priority field.',
+    },
     privacy,
     sourceCreated: timestamp('created_at'),
     sourceUpdated: timestamp('updated_at'),
@@ -148,7 +202,13 @@ export function createBangumiImport(deps: Dependencies) {
     if (!h) throw new LibraryNotFoundError();
     return h;
   }
-  async function row(tx: CommandTransaction, a: AccountActor, id: string, ordinal: number, lock = false): Promise<StoredRow> {
+  async function row(
+    tx: CommandTransaction,
+    a: AccountActor,
+    id: string,
+    ordinal: number,
+    lock = false,
+  ): Promise<StoredRow> {
     const r = (
       await tx.query<StoredRow>(
         `SELECT ordinal,evidence,review,choice,outcome,labels FROM library.bangumi_upload_row
@@ -344,13 +404,7 @@ export function createBangumiImport(deps: Dependencies) {
     });
     return saved.value;
   }
-  async function reviewMetadata(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    sourceReviewToken: string,
-    key: string,
-  ) {
+  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
     const original = await read(actor, async (tx, a) => {
       if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
       return row(tx, a, id, ordinal);
@@ -360,8 +414,13 @@ export function createBangumiImport(deps: Dependencies) {
       throw new ProblemError('conflict');
     if (review.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
       throw new ProblemError('conflict');
-    const account = owner(actor), profile = await profileMetadata(actor, review.target);
-    if (!profile || profile.current.source.kind !== 'supported' || profile.incarnationId !== (review.current?.incarnationId ?? null))
+    const account = owner(actor),
+      profile = await profileMetadata(actor, review.target);
+    if (
+      !profile ||
+      profile.current.source.kind !== 'supported' ||
+      profile.incarnationId !== (review.current?.incarnationId ?? null)
+    )
       throw new ProblemError('conflict');
     const currentSource = profile.current.source;
     if (
@@ -404,7 +463,12 @@ export function createBangumiImport(deps: Dependencies) {
     });
     return saved.value;
   }
-  async function metadataView(actor: Actor, id: string, ordinal: number, reviewToken: string): Promise<EntryImportMetadataView> {
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+  ): Promise<EntryImportMetadataView> {
     const current = await read(actor, async (tx, a) => {
       const h = await header(tx, a, id);
       return { cancelled: h.cancelled, row: await row(tx, a, id, ordinal) };
@@ -412,7 +476,8 @@ export function createBangumiImport(deps: Dependencies) {
     const review = current.row.review,
       metadata = review?.metadata?.find((item) => item.token === reviewToken);
     if (!review || !metadata) throw new ProblemError('conflict');
-    const account = owner(actor), personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId);
+    const account = owner(actor),
+      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId);
     const profile = await profileMetadata(actor, metadata.subjectId);
     const sourceCurrent = review.token === metadata.sourceReviewToken;
     const matches =
@@ -459,7 +524,8 @@ export function createBangumiImport(deps: Dependencies) {
       `${id}:${ordinal}:${token}:progress:${stateDigest}`,
       { id, ordinal, reviewToken: token, stateDigest },
       async (tx, a) => {
-        const h = await header(tx, a, id, true), locked = await row(tx, a, id, ordinal, true),
+        const h = await header(tx, a, id, true),
+          locked = await row(tx, a, id, ordinal, true),
           record = locked.review?.metadata?.find((item) => item.token === token);
         if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
           throw new ProblemError('conflict');
@@ -468,7 +534,8 @@ export function createBangumiImport(deps: Dependencies) {
           (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
         if (
           starting &&
-          (h.cancelled || locked.review?.token !== record.sourceReviewToken ||
+          (h.cancelled ||
+            locked.review?.token !== record.sourceReviewToken ||
             entryImportMetadataDigest(locked.evidence) !== record.sourceDigest)
         )
           throw new ProblemError('conflict');
@@ -492,10 +559,15 @@ export function createBangumiImport(deps: Dependencies) {
   ) {
     const selections = parseEntryImportMetadataSelections(fields),
       selectionDigest = entryImportMetadataDigest(selections);
-    let initial = await read(actor, async (tx, a) => ({ cancelled: (await header(tx, a, id)).cancelled, row: await row(tx, a, id, ordinal) }));
+    let initial = await read(actor, async (tx, a) => ({
+      cancelled: (await header(tx, a, id)).cancelled,
+      row: await row(tx, a, id, ordinal),
+    }));
     const metadata = initial.row.review?.metadata?.find((item) => item.token === reviewToken);
-    if (!metadata) return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
-    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+    if (!metadata)
+      return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
+    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest)
+      throw new ProblemError('conflict');
     if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
     if (!metadata.confirmation) {
       const confirmation = {
@@ -506,26 +578,37 @@ export function createBangumiImport(deps: Dependencies) {
         annotationStarted: false,
         provenanceStarted: false,
       };
-      await change(actor, 'metadata-confirm', `${id}:${ordinal}:${reviewToken}`, { id, ordinal, reviewToken, selectionDigest }, async (tx, a) => {
-        const h = await header(tx, a, id, true), locked = await row(tx, a, id, ordinal, true);
-        const record = locked.review?.metadata?.find((item) => item.token === reviewToken);
-        if (!record) throw new ProblemError('conflict');
-        if (record.confirmation) {
-          if (record.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+      await change(
+        actor,
+        'metadata-confirm',
+        `${id}:${ordinal}:${reviewToken}`,
+        { id, ordinal, reviewToken, selectionDigest },
+        async (tx, a) => {
+          const h = await header(tx, a, id, true),
+            locked = await row(tx, a, id, ordinal, true);
+          const record = locked.review?.metadata?.find((item) => item.token === reviewToken);
+          if (!record) throw new ProblemError('conflict');
+          if (record.confirmation) {
+            if (record.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
+            return { ordinal, reviewToken };
+          }
+          if (h.cancelled) throw new ProblemError('conflict');
+          record.confirmation = confirmation;
+          assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
+          await tx.query(
+            `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+            [...args(a, id), ordinal, JSON.stringify(locked.review)],
+          );
           return { ordinal, reviewToken };
-        }
-        if (h.cancelled) throw new ProblemError('conflict');
-        record.confirmation = confirmation;
-        assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
-        await tx.query(
-          `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-          [...args(a, id), ordinal, JSON.stringify(locked.review)],
-        );
-        return { ordinal, reviewToken };
-      });
-      initial = await read(actor, async (tx, a) => ({ cancelled: (await header(tx, a, id)).cancelled, row: await row(tx, a, id, ordinal) }));
+        },
+      );
+      initial = await read(actor, async (tx, a) => ({
+        cancelled: (await header(tx, a, id)).cancelled,
+        row: await row(tx, a, id, ordinal),
+      }));
     }
-    const rowValue = initial.row, review = rowValue.review,
+    const rowValue = initial.row,
+      review = rowValue.review,
       state = review?.metadata?.find((item) => item.token === reviewToken);
     if (!state?.confirmation) throw new ProblemError('conflict');
     if (state.confirmation.outcome) return state.confirmation.outcome;
@@ -554,18 +637,33 @@ export function createBangumiImport(deps: Dependencies) {
       persist: (confirmation) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, confirmation),
       isCurrent: async () => {
         const latest = await read(actor, async (tx, a) => ({ row: await row(tx, a, id, ordinal) })),
-          latestReview = latest.row.review, latestMetadata = latestReview?.metadata?.find((item) => item.token === reviewToken);
-        if (!latestReview || !latestMetadata || latestReview.token !== latestMetadata.sourceReviewToken ||
-          entryImportMetadataDigest(latest.row.evidence) !== latestMetadata.sourceDigest || !latestReview.guard) return false;
+          latestReview = latest.row.review,
+          latestMetadata = latestReview?.metadata?.find((item) => item.token === reviewToken);
+        if (
+          !latestReview ||
+          !latestMetadata ||
+          latestReview.token !== latestMetadata.sourceReviewToken ||
+          entryImportMetadataDigest(latest.row.evidence) !== latestMetadata.sourceDigest ||
+          !latestReview.guard
+        )
+          return false;
         const profile = await profileMetadata(actor, latestMetadata.subjectId);
-        return !!profile && profile.current.source.kind === 'supported' &&
+        return (
+          !!profile &&
+          profile.current.source.kind === 'supported' &&
           profile.current.source.pin.releaseDigest === latestReview.guard.releaseDigest &&
           String(profile.current.anchor.identityEpoch) === latestReview.guard.identityEpoch &&
-          profile.incarnationId === latestMetadata.incarnationId && profile.digest === latestMetadata.profileDigest;
+          profile.incarnationId === latestMetadata.incarnationId &&
+          profile.digest === latestMetadata.profileDigest
+        );
       },
       isCancelled: async () => {
-        try { return (await read(actor, async (tx, a) => (await header(tx, a, id)).cancelled)); }
-        catch (error) { if (error instanceof ProblemError && error.code === 'not_found') return true; throw error; }
+        try {
+          return await read(actor, async (tx, a) => (await header(tx, a, id)).cancelled);
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'not_found') return true;
+          throw error;
+        }
       },
       ...(signal === undefined ? {} : { signal }),
     });

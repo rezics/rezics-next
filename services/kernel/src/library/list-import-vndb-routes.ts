@@ -188,7 +188,9 @@ export function vndbImportRoutes(
       },
       ({ actor, params, query, admission, job, set }) =>
         run(set, () =>
-          admission.run('normal', job, () => service().metadata(actor, params.uploadId, params.ordinal, query.reviewToken)),
+          admission.run('normal', job, () =>
+            service().metadata(actor, params.uploadId, params.ordinal, query.reviewToken),
+          ),
         ),
     )
     .post(

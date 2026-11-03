@@ -14,12 +14,12 @@ never converted to a clear. `clear` is an explicit native operation. Priority cl
 
 ## Provider and field support
 
-| Provider | Personal note | Personal priority | Source privacy | Source created | Source updated |
-|---|---|---|---|---|---|
-| VNDB | `notes` / `note`, nonempty UTF-8 up to 4,096 bytes | unsupported | `private` when a recognized boolean value is retained | unsupported; `started` and `finished` are consumption dates | unsupported |
-| MyAnimeList | `my_comments`, nonempty UTF-8 up to 4,096 bytes | `my_priority` values 0/1/2 with the confirmed mapping below | `my_privacy` when a recognized boolean value is retained | unsupported | retained `my_updated_at` or another recognized updated timestamp |
-| Bangumi | `comment` or `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported | retained `private` when a recognized boolean value is present | retained `created_at` | retained `updated_at` |
-| AniList | `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported; retained numeric priority has no adopted mapping | a retained boolean `private` field only | retained `createdAt` | retained `updatedAt` |
+| Provider    | Personal note                                          | Personal priority                                             | Source privacy                                                | Source created                                              | Source updated                                                   |
+| ----------- | ------------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| VNDB        | `notes` / `note`, nonempty UTF-8 up to 4,096 bytes     | unsupported                                                   | `private` when a recognized boolean value is retained         | unsupported; `started` and `finished` are consumption dates | unsupported                                                      |
+| MyAnimeList | `my_comments`, nonempty UTF-8 up to 4,096 bytes        | `my_priority` values 0/1/2 with the confirmed mapping below   | `my_privacy` when a recognized boolean value is retained      | unsupported                                                 | retained `my_updated_at` or another recognized updated timestamp |
+| Bangumi     | `comment` or `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported                                                   | retained `private` when a recognized boolean value is present | retained `created_at`                                       | retained `updated_at`                                            |
+| AniList     | `notes`, nonempty UTF-8 up to 4,096 bytes              | unsupported; retained numeric priority has no adopted mapping | a retained boolean `private` field only                       | retained `createdAt`                                        | retained `updatedAt`                                             |
 
 Recognized boolean privacy values are provider-specific true/false tokens. **Decision:** MAL `my_privacy` maps only
 the retained strings `private`/`true` and `public`/`false`; numeric `0` and `1` remain unknown because the retained

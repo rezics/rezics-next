@@ -195,14 +195,23 @@ export function malImportRoutes(
         params,
         headers,
         body: t.Object({ row, sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
-        response: { 200: t.Object({ id, reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed), ...failures },
+        response: {
+          200: t.Object({ id, reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
+          ...failures,
+        },
         detail: { ...detail('metadata.review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
           set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
-            service().reviewMetadata(actor, params.id, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
+            service().reviewMetadata(
+              actor,
+              params.id,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              job.deadline,
+            ),
           );
           session.record(command);
           return command.value;
@@ -213,13 +222,18 @@ export function malImportRoutes(
       {
         params: t.Object({ id, row }, closed),
         query: t.Object({ reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
-        response: { 200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['metadata']>>>(t.Any()), ...failures },
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['metadata']>>>(t.Any()),
+          ...failures,
+        },
         detail: detail('metadata'),
       },
       async ({ actor, params, query, job, admission, set }) =>
         safe(async () => {
           set.headers['Cache-Control'] = 'private, no-store';
-          return admission.run('normal', job, () => service().metadata(actor, params.id, params.row, query.reviewToken, job.deadline));
+          return admission.run('normal', job, () =>
+            service().metadata(actor, params.id, params.row, query.reviewToken, job.deadline),
+          );
         }),
     )
     .post(
@@ -231,25 +245,41 @@ export function malImportRoutes(
             row,
             reviewToken: t.String({ minLength: 1, maxLength: 128 }),
             fields: t.Array(
-              t.Object({
-                field: t.Union(['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated'].map((v) => t.Literal(v))),
-                action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
-                mapping: t.Optional(t.String({ maxLength: 64 })),
-              }, closed),
+              t.Object(
+                {
+                  field: t.Union(
+                    ['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated'].map((v) => t.Literal(v)),
+                  ),
+                  action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+                  mapping: t.Optional(t.String({ maxLength: 64 })),
+                },
+                closed,
+              ),
               { minItems: 1, maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields },
             ),
           },
           closed,
         ),
-        response: { 200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['applyMetadata']>>>(t.Any()), ...failures },
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['applyMetadata']>>>(t.Any()),
+          ...failures,
+        },
         detail: { ...detail('metadata.apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
         safe(async () => {
           set.headers['Cache-Control'] = 'private, no-store';
           return admission.run('normal', job, () =>
-            service().applyMetadata(actor, params.id, body.row, body.reviewToken, body.fields, job.deadline, request.signal,
-              (value) => session.record(value)),
+            service().applyMetadata(
+              actor,
+              params.id,
+              body.row,
+              body.reviewToken,
+              body.fields,
+              job.deadline,
+              request.signal,
+              (value) => session.record(value),
+            ),
           );
         }),
     )
