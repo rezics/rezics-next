@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import type { Task } from './types.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from './tasks.ts';
@@ -16,6 +18,32 @@ async function unchangedClaim(
   const task = h.dispatch('retained.txt', [], command, 'fixture', target);
   await h.start(task);
   return { source, task };
+}
+
+function reportAcceptance(
+  h: ReturnType<typeof integrationHarness>,
+  task: Task,
+  command: string[],
+  overrides: Record<string, unknown> = {},
+) {
+  h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+    attempt.result = JSON.stringify({
+      status: 'success',
+      checks: [],
+      approaches: [
+        {
+          approach: 'unchanged-source-acceptance',
+          result: JSON.stringify({
+            command,
+            sourceCommit: h.head(task.branch),
+            contractHash: createHash('sha256').update(h.store.task(task.id).brief.markdown).digest('hex'),
+            status: 'passed',
+            ...overrides,
+          }),
+        },
+      ],
+    });
+  });
 }
 
 test('an unchanged claim runs its original acceptance on the retained source without an artificial commit', async () => {
@@ -42,7 +70,7 @@ test('an unchanged claim runs its original acceptance on the retained source wit
   }
 });
 
-test('an unchanged claim without an acceptance command integrates on its represented source', async () => {
+test('an unchanged claim without an acceptance command or worker report stays non-green', async () => {
   const h = integrationHarness();
   try {
     const { source, task } = await unchangedClaim(h, null);
@@ -51,34 +79,74 @@ test('an unchanged claim without an acceptance command integrates on its represe
     await h.train();
 
     const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(true);
-    expect(outcome.mergedCommit).toBe(source);
+    expect(outcome.passed).toBe(false);
     expect(outcome.retainedSourceAcceptance).toEqual({ sourceCommit: source, command: [], status: 'unavailable' });
-    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(outcome.firstFailure?.excerpt).toContain('Unmeasured clause:');
+    expect(h.store.task(task.id).state).not.toBe('integrated');
     expect(h.head()).toBe(dev);
   } finally {
     h.dispose();
   }
 });
 
-test('an unchanged dev claim integrates on its represented source without rerunning acceptance', async () => {
-  const h = integrationHarness();
-  // Only a run prints 42-ran; the logged command line does not contain it.
-  const command = ['sh', '-c', 'echo $((40 + 2))-ran; exit 1'];
-  try {
-    const { source, task } = await unchangedClaim(h, command);
+test.each([false, true])(
+  'an unchanged dev claim consumes passing worker acceptance without a train rerun (worker-owned: %s)',
+  async (workerOwned) => {
+    const h = integrationHarness();
+    // Only a run prints 42-ran; the logged command line does not contain it.
+    const command = ['sh', '-c', 'echo $((40 + 2))-ran; exit 1'];
+    try {
+      const { source, task } = await unchangedClaim(h, workerOwned ? null : command);
+      reportAcceptance(h, task, command);
+      let runs = 0;
+      await h.train(async () => {
+        runs++;
+        return { passed: false, output: 'unexpected train rerun', timedOut: false };
+      });
+      expect(runs).toBe(0);
 
-    await h.train();
+      const outcome = h.outcomes[0]!;
+      expect(outcome.passed).toBe(true);
+      expect(outcome.retainedSourceAcceptance).toEqual({ sourceCommit: source, command, status: 'passed' });
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(readFileSync(outcome.logPath, 'utf8')).not.toContain('42-ran');
+    } finally {
+      h.dispose();
+    }
+  },
+);
 
-    const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(true);
-    expect(outcome.retainedSourceAcceptance).toEqual({ sourceCommit: source, command, status: 'unavailable' });
-    expect(h.store.task(task.id).state).toBe('integrated');
-    expect(readFileSync(outcome.logPath, 'utf8')).not.toContain('42-ran');
-  } finally {
-    h.dispose();
-  }
-});
+test.each(['missing', 'failed', 'unavailable', 'sourceCommit', 'contractHash', 'command', 'malformed'])(
+  'an unchanged dev claim with a %s worker report names its unmeasured clause',
+  async (change) => {
+    const h = integrationHarness();
+    try {
+      const { task } = await unchangedClaim(h, ['true']);
+      if (change !== 'missing')
+        reportAcceptance(
+          h,
+          task,
+          ['true'],
+          change === 'failed' || change === 'unavailable'
+            ? { status: change }
+            : change === 'command'
+              ? { command: ['false'] }
+              : change === 'malformed'
+                ? { command: [] }
+                : { [change]: 'mismatched' },
+        );
+      await h.train();
+      expect(h.outcomes[0]?.passed).toBe(false);
+      expect(h.outcomes[0]?.firstFailure?.excerpt).toContain(
+        `Unmeasured clause: ${task.brief.acceptance.tests.join('; ')}`,
+      );
+      expect(h.store.task(task.id).state).not.toBe('integrated');
+      expect(h.head()).toBe(h.head(task.branch));
+    } finally {
+      h.dispose();
+    }
+  },
+);
 
 test('a failed retained-source acceptance stays non-green and records its exact result', async () => {
   const h = integrationHarness();
@@ -145,13 +213,14 @@ test.each([false, true])(
       git(task.worktree, ['commit', '--allow-empty', '-m', 'Retained historical controller commit']);
       await h.start(task);
       const source = h.head(task.branch);
+      reportAcceptance(h, task, task.brief.acceptance.command);
       await h.train();
 
       expect(h.outcomes[0]?.firstFailure).toBeUndefined();
       expect(h.outcomes[0]?.retainedSourceAcceptance).toEqual({
         sourceCommit: source,
         command: task.brief.acceptance.command,
-        status: 'unavailable',
+        status: 'passed',
       });
       expect(h.outcomes[0]?.mergedCommit).toBe(ancestor);
       expect(h.store.task(task.id).state).toBe('integrated');
