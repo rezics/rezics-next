@@ -27,8 +27,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/own-drafts-page.test.tsx
@@ -36,11 +36,11 @@ acceptance:
     - tests/own-drafts-commands.test.tsx
   placement: default
   tests:
-    - "A signed-in person opens the localized private /drafts destination from existing account navigation using the installed generated list and exact selected-read methods; no-store data stays out of persistent browser state."
-    - "The selected exact native post resumes in InlinePostEditor with its thread, post, revision, language, licence, Subjects and media intact; independently named browser-local writing requires an explicit body choice."
-    - "Native-permitted save, publish and erase preserve exact uncertain intents for explicit retry, support known-conflict inspection, and distinguish command acknowledgement from supported current readback."
-    - "Account, credential/CSRF epoch, locale, source, cursor and revision replacement synchronously retire composer context, command advice, retry material and delayed effects; retain distinct preparing, sparse, concealed, unavailable, denied and empty states."
-    - "Connected phone/desktop light/dark stories cover ready, preparing, selected, conflict, uncertain command, erase review, denied and long-localized states, with keyboard focus and eight-locale copy. Keep one 20-row page and one native selected body without polling or refill."
+    - 'A signed-in person opens the localized private /drafts destination from existing account navigation using the installed generated list and exact selected-read methods; no-store data stays out of persistent browser state.'
+    - 'The selected exact native post resumes in InlinePostEditor with its thread, post, revision, language, licence, Subjects and media intact; independently named browser-local writing requires an explicit body choice.'
+    - 'Native-permitted save, publish and erase preserve exact uncertain intents for explicit retry, support known-conflict inspection, and distinguish command acknowledgement from supported current readback.'
+    - 'Account, credential/CSRF epoch, locale, source, cursor and revision replacement synchronously retire composer context, command advice, retry material and delayed effects; retain distinct preparing, sparse, concealed, unavailable, denied and empty states.'
+    - 'Connected phone/desktop light/dark stories cover ready, preparing, selected, conflict, uncertain command, erase review, denied and long-localized states, with keyboard focus and eight-locale copy. Keep one 20-row page and one native selected body without polling or refill.'
   failing: true
 estimate:
   lines: 1400
