@@ -36,17 +36,17 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/realm-ban-current-review.test.tsx
   placement: default
   tests:
-    - "Installed composed page renders disclosed target/moderator identities, safe concealed/erased fallbacks, supported destination, actual reason/time and native advice without suppressing rows."
-    - "Exact selected-account inspection binds Realm/account/current episode without moving the cursor; absence, denial and unavailable remain distinct; unban absence and reban new episode preserve independent command receipts."
-    - "Writers retain immutable uncertain intent, original credentials, native reauthorization, protected-role refusal, accepted-removal meaning and Stay/Leave/focus recovery across replacement and late results."
-    - "Consumer 1/10/20 growth covers installed composed adapters, exact inspection, retry, unban/reban and retirement with no per-row lookup; producer evidence stays separate."
+    - 'Installed composed page renders disclosed target/moderator identities, safe concealed/erased fallbacks, supported destination, actual reason/time and native advice without suppressing rows.'
+    - 'Exact selected-account inspection binds Realm/account/current episode without moving the cursor; absence, denial and unavailable remain distinct; unban absence and reban new episode preserve independent command receipts.'
+    - 'Writers retain immutable uncertain intent, original credentials, native reauthorization, protected-role refusal, accepted-removal meaning and Stay/Leave/focus recovery across replacement and late results.'
+    - 'Consumer 1/10/20 growth covers installed composed adapters, exact inspection, retry, unban/reban and retirement with no per-row lookup; producer evidence stays separate.'
   failing: true
 estimate:
   lines: 1300
