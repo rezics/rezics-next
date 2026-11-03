@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
@@ -78,7 +78,7 @@ function SearchFailed() {
 
 function SearchRoute() {
   const search = Route.useSearch();
-  const location = Route.useLocation();
+  const location = useLocation();
   const deps = searchLoaderDeps(search);
   const navigate = Route.useNavigate();
   const locale = getLocale();
