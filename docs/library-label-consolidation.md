@@ -77,7 +77,8 @@ Tuple predicates use `(route,account_id,subject_id,label_id)` on the assignment 
 `label_assignment_reserved_source` with `(route,account_id,subject_id)` and `slot_no IS NOT NULL`, ordered by
 `assignment_id`, limited to 32. The partial unique reserved-slot index bounds this source even with arbitrary
 deleted history. Parents use `personal_label(route,account_id,label_id)`. Neither LIMIT alone nor the live-label cap
-bounds deleted-parent scans; this implementation performs none. Only an actual deleted parent at these points is
+bounds deleted-parent scans; the lateral OFFSET 0 barrier preserves parameterized parent points rather than an
+owner-history join. Only an actual deleted parent at these points is
 a reclaim witness. Review does not pay for native reclamation or extend any deadline.
 
 Focused native cases cover conflicts, negative target probes, deep/final pages, maximum names, stale assignment
