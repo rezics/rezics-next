@@ -402,4 +402,11 @@ test('an unavailable ownership journal falls back without publishing or releasin
   const manifest = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/no-journal' });
   expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+  rmSync(join(source, '.temp/check-git-publications'));
+  const owned = await stageCheckGit(source, join(root, 'owned'), { ref: 'refs/checks/existing' });
+  const candidate = git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/existing');
+  const fallback = await stageCheckGit(source, join(root, 'duplicate'), { ref: 'refs/checks/existing' });
+  expect(existsSync(join(dirname(fallback), 'snapshot.pack'))).toBe(true);
+  expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/existing')).toBe(candidate);
+  await releaseCheckGit(source, owned);
 });
