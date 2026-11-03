@@ -15,12 +15,14 @@ test('native canonical names seek across ties and missing names and bind committ
     const partition = partitionOf(routeOf(ids[0]!)!);
     const context = () => ({ deadline: Date.now() + 30_000 });
     const source = subjectSource(fixture.database.pool);
-    const rename = (id: string, name: string) => fixture.database.admin.query(
-      `INSERT INTO semantic.fact(route,subject_id,slot_id,log_seq,operation,kind,language,body,recorded_transaction_id)
+    const rename = (id: string, name: string) =>
+      fixture.database.admin.query(
+        `INSERT INTO semantic.fact(route,subject_id,slot_id,log_seq,operation,kind,language,body,recorded_transaction_id)
        SELECT f.route,f.subject_id,f.slot_id,f.log_seq+1,'assert','label',f.language,to_jsonb($2::text),f.recorded_transaction_id
        FROM semantic.current_term_fact f WHERE f.route=$3 AND f.subject_id=$1 AND f.kind='label' AND f.language='en'
-       ORDER BY f.log_seq DESC LIMIT 1`, [id, name, routeOf(id)],
-    );
+       ORDER BY f.log_seq DESC LIMIT 1`,
+        [id, name, routeOf(id)],
+      );
     await rename(ids[0]!, 'Zeta');
     await rename(ids[1]!, 'Alpha');
     await rename(ids[2]!, 'Alpha');
@@ -54,34 +56,56 @@ test('native canonical names seek across ties and missing names and bind committ
         [routeOf(ids[1]!), ids[1]],
       );
       // A sequence increment is visible before commit; the native population generation must not be.
-      expect((await source.canonicalNames.observe(context())).homes.find((home) => home.partition === partition))
-        .toEqual(owner);
+      expect(
+        (await source.canonicalNames.observe(context())).homes.find((home) => home.partition === partition),
+      ).toEqual(owner);
       await writer.query('COMMIT');
     } finally {
       await writer.query('ROLLBACK');
       writer.release();
     }
-    await expect(source.canonicalNames.read({ partition, after, limit: 2 }, observed, context()))
-      .rejects.toMatchObject({ code: 'search_restart_required' });
+    await expect(source.canonicalNames.read({ partition, after, limit: 2 }, observed, context())).rejects.toMatchObject(
+      { code: 'search_restart_required' },
+    );
 
     const { system } = communityFixtureRuntime();
     const actor = await system.access.authenticate(fixture.realmMembers[0]!.bearer, {
-      pool: fixture.database.pool, deadline: context().deadline,
+      pool: fixture.database.pool,
+      deadline: context().deadline,
     });
-    const rank = createRealmRankOrderSource({ pool: fixture.database.pool, access: system.access, tokens: system.tokenKeys });
+    const rank = createRealmRankOrderSource({
+      pool: fixture.database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+    });
     const selected = { realmId: fixture.realmId, questionId: STANDARD_QUESTION_ID };
     const rankObservation = await rank.observe(actor, selected, context());
     expect(rankObservation.priorActive).toBe(false);
-    const page = await rank.readCanonicalPartition(actor, { ...selected, partition, after: null, limit: 200 }, rankObservation, context());
+    const page = await rank.readCanonicalPartition(
+      actor,
+      { ...selected, partition, after: null, limit: 200 },
+      rankObservation,
+      context(),
+    );
     expect(page.candidates.filter(({ id }) => ids.includes(id))).toHaveLength(4);
     expect(page.candidates.every(({ proof }) => !proof.scored && proof.figure === null)).toBe(true);
-    await expect(rank.readCanonicalPartition({ ...actor, scopes: [] }, {
-      ...selected, partition, after: keys.at(-1)!, limit: 2,
-    }, rankObservation, context())).rejects.toMatchObject({ code: 'not_found' });
+    await expect(
+      rank.readCanonicalPartition(
+        { ...actor, scopes: [] },
+        {
+          ...selected,
+          partition,
+          after: keys.at(-1)!,
+          limit: 2,
+        },
+        rankObservation,
+        context(),
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' });
     await rename(ids[0]!, 'Aardvark');
-    await expect(rank.proveFigures(actor, { ...selected, partition, subjectIds: [] }, rankObservation, context()))
-      .rejects.toMatchObject({ code: 'search_restart_required' });
-
+    await expect(
+      rank.proveFigures(actor, { ...selected, partition, subjectIds: [] }, rankObservation, context()),
+    ).rejects.toMatchObject({ code: 'search_restart_required' });
   } finally {
     await fixture.close();
   }

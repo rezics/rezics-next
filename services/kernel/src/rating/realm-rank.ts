@@ -110,15 +110,18 @@ export interface RealmRankOrderSource {
     }>,
     observation: RealmRankOrderObservation,
     context: { deadline: number },
-  ): Promise<Readonly<{
-    partition: number;
-    epoch: number;
-    position: bigint;
-    candidates: readonly (SubjectCanonicalNameKey & Readonly<{
-      securityRevision: number;
-      proof: RealmRankFigureProof;
-    }>)[];
-  }>>;
+  ): Promise<
+    Readonly<{
+      partition: number;
+      epoch: number;
+      position: bigint;
+      candidates: readonly (SubjectCanonicalNameKey &
+        Readonly<{
+          securityRevision: number;
+          proof: RealmRankFigureProof;
+        }>)[];
+    }>
+  >;
   listScoredPartitions(
     actor: Actor,
     input: Readonly<{ realmId: string; questionId: string }>,
@@ -597,20 +600,33 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
     async readCanonicalPartition(actor, input, observation, { deadline }) {
       if (input.realmId !== observation.populationId || input.questionId !== observation.question.id)
         throw new ProblemError('invalid_request');
-      const request = { partition: input.partition, after: input.after === null ? null : { ...input.after }, limit: input.limit };
+      const request = {
+        partition: input.partition,
+        after: input.after === null ? null : { ...input.after },
+        limit: input.limit,
+      };
       const selected = { realmId: input.realmId, questionId: input.questionId };
       await reobserve(actor, selected, observation, deadline);
       const page = await canonicalNames.read(request, observation.canonicalPopulation, { deadline });
-      const proof = await source.proveFigures(actor, {
-        ...selected, partition: request.partition, subjectIds: page.candidates.map(({ id }) => id),
-      }, observation, { deadline });
+      const proof = await source.proveFigures(
+        actor,
+        {
+          ...selected,
+          partition: request.partition,
+          subjectIds: page.candidates.map(({ id }) => id),
+        },
+        observation,
+        { deadline },
+      );
       if (proof.epoch !== page.home.epoch || proof.position.toString() !== page.home.position)
         throw new ProblemError('search_restart_required');
       const figures = new Map(proof.figures.map((figure) => [figure.subjectId, figure]));
       if (figures.size !== page.candidates.length) throw new ProblemError('index_not_ready');
       await reobserve(actor, selected, observation, deadline);
       return {
-        partition: request.partition, epoch: page.home.epoch, position: proof.position,
+        partition: request.partition,
+        epoch: page.home.epoch,
+        position: proof.position,
         candidates: page.candidates.map((candidate) => {
           const proof = figures.get(candidate.id);
           if (!proof) throw new ProblemError('index_not_ready');
