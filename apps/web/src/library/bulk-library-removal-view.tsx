@@ -2,6 +2,9 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { BulkLibraryRemovalController, BulkLibraryRemovalReview } from './bulk-library-removal-controller';
 import type { BulkLibraryRemovalTargetOutcome } from './bulk-library-removal';
+import { SelectionReviewList } from './selection-review-view';
+import { selectionResultState } from './selection-review';
+import { SelectionResultView } from './selection-result-view';
 
 function outcomeText(outcome: BulkLibraryRemovalTargetOutcome): string {
   if (outcome.state === 'applied') return m.library_bulk_entry_remove_removed();
@@ -75,8 +78,17 @@ function BulkLibraryRemovalReview({
   controller: BulkLibraryRemovalController;
   pending: boolean;
 }) {
-  const titleOf = (subjectId: string) =>
-    review.targets.find((target) => target.subjectId === subjectId)?.title ?? subjectId;
+  const targetTitles = new Map(review.targets.map((target) => [target.subjectId, target.title]));
+  const targets = review.targets.map((target) => ({ ...target }));
+  const results = review.outcomes.map((outcome) => ({
+    key: `${outcome.ordinal}:${outcome.subjectId}`,
+    subjectId: outcome.subjectId,
+    title: targetTitles.get(outcome.subjectId) ?? outcome.subjectId,
+    state: selectionResultState(outcome.state),
+    detail: outcomeText(outcome),
+    source: 'bulk-removal' as const,
+    sourceState: outcome.state,
+  }));
   return (
     <section
       aria-label={m.library_bulk_entry_remove_journey()}
@@ -88,6 +100,7 @@ function BulkLibraryRemovalReview({
         <>
           <p>{m.library_bulk_entry_remove_review_summary({ count: review.targets.length })}</p>
           <p>{m.library_bulk_entry_remove_kept()}</p>
+          <SelectionReviewList items={targets} labelledBy={m.library_selection_heading()} />
         </>
       ) : null}
       {review.phase === 'previewing' ? <p role="status">{m.library_bulk_entry_remove_previewing()}</p> : null}
@@ -126,18 +139,7 @@ function BulkLibraryRemovalReview({
           {m.library_bulk_entry_remove_recover()}
         </Button>
       ) : null}
-      {review.outcomes.length ? (
-        <div className="space-y-2" aria-label={m.library_bulk_entry_remove_results()}>
-          <h3 className="font-medium">{m.library_bulk_entry_remove_results()}</h3>
-          <ul className="max-h-48 space-y-1 overflow-y-auto">
-            {review.outcomes.map((outcome) => (
-              <li key={`${outcome.ordinal}:${outcome.subjectId}`} data-bulk-library-removal-outcome={outcome.state}>
-                {titleOf(outcome.subjectId)}: {outcomeText(outcome)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : review.phase === 'complete' && !review.readError ? (
+      {review.outcomes.length ? <SelectionResultView results={results} /> : review.phase === 'complete' && !review.readError ? (
         <p>{m.library_bulk_entry_remove_empty()}</p>
       ) : null}
     </section>

@@ -8,6 +8,16 @@ Library and Collections stay visible as unavailable destinations while session o
 
 Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges.
 
+## Phone navigation clearance
+
+`PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes only its own phone
+navigation. It uses a 5rem SSR fallback plus the safe-area inset; the measured navigation box includes that inset,
+so fixed selection surfaces use the measured value directly. Resize and phone/desktop transitions update the value
+only when it changes. Unmount disconnects the observer, removes media listeners and clears the inline value. Desktop
+and standalone displays use zero clearance, and standalone hides phone navigation.
+
+Decision: Standalone display mode hides phone navigation and uses zero selection clearance; ordinary phone pages use measured navigation height with a 5rem SSR fallback.
+
 Decision: Create uses the primary color in both bars, phone destination selection uses ink blue, and followed-community
 groups start expanded with independent collapsible headings; group folding lasts for the mounted rail or drawer only.
 Unknown sessions reserve account-control space with reduced-motion-aware skeletons; failed sessions show a visible

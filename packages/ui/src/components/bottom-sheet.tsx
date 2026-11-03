@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import { Button } from '../shadcn/button.tsx';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from '../shadcn/drawer.tsx';
 
@@ -21,6 +22,7 @@ export function BottomSheet({
   closeLabel,
   before,
   className,
+  finalFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,12 +31,13 @@ export function BottomSheet({
   closeLabel?: string;
   before?: ReactNode;
   className?: string;
+  finalFocus?: DrawerPrimitive.Popup.Props['finalFocus'];
 }) {
   const locale = typeof document === 'undefined' ? 'en' : document.documentElement.lang;
   const label = closeLabel ?? doneLabels[locale] ?? doneLabels[locale.split('-')[0]!] ?? 'Done';
   return (
     <Drawer open={open} onOpenChange={onOpenChange} showSwipeHandle>
-      <DrawerContent className="max-h-[85dvh]">
+      <DrawerContent className="max-h-[85dvh]" finalFocus={finalFocus}>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             {before}

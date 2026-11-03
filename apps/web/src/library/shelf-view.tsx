@@ -18,9 +18,10 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
+import { SelectionBar as SharedSelectionBar } from '@rezics/ui/components/selection-bar';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -47,13 +48,15 @@ import {
   type ShelfMutationLease,
 } from './shelf-rows';
 import { ShelfLabelAction, ShelfLabelOutcomes } from './shelf-labels';
-import { groupBulkStatusOutcomes } from './bulk-status';
 import { useBulkLibraryRemoval } from './bulk-library-removal-controller';
 import { BulkLibraryRemovalAction, BulkLibraryRemovalReviewView } from './bulk-library-removal-view';
 import { useSession } from '../session/query';
-import { selectableEntry, type ShelfRemovalIdentity } from './shelf-selection';
+import { selectableEntry, shelfSelectionLimit, type ShelfRemovalIdentity } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
+import { SelectionReviewView, SelectionReviewList, type SelectionReviewItem } from './selection-review-view';
+import { appendSelectionWithinLimit, selectionReviewSignature, selectionResultState } from './selection-review';
+import { SelectionResultView } from './selection-result-view';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;
@@ -98,6 +101,7 @@ function coverOf(entry: PersonalLibraryEntry) {
 type Controls = ReturnType<typeof useShelfRows> & {
   locale: string;
   hydrated: boolean;
+  selectionLimitReached: boolean;
   sort?: ShelfSort;
   filterSort?: ShelfSort;
   type?: string;
@@ -255,15 +259,43 @@ function matchesRemovedShelfEntry(entry: PersonalLibraryEntry, landed: ShelfRemo
   );
 }
 
-function SelectionBar({
+function ShelfSelectionBar({
   controls,
   bulkRemoval,
+  selectionLimitReached,
 }: {
   controls: Controls;
   bulkRemoval: ReturnType<typeof useBulkLibraryRemoval>;
+  selectionLimitReached: boolean;
 }) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
+  const launcher = useRef<HTMLButtonElement>(null);
+  const [reviewSnapshot, setReviewSnapshot] = useState<string | null>(null);
+  const reviewTargets: SelectionReviewItem[] = controls.selectedEntries.map((entry) => ({
+    subjectId: entry.subjectId,
+    title: titleOf(entry, controls.locale).text,
+    ...(stateLabel(entry.state, entry.stateLabel) ? { stateLabel: stateLabel(entry.state, entry.stateLabel)! } : {}),
+  }));
+  const signature = selectionReviewSignature(controls.selectedEntries);
+  const reviewOpen = !!reviewSnapshot && reviewSnapshot === signature && controls.isCurrent();
+  const openReview = () => {
+    if (controls.selected.length && controls.isCurrent()) setReviewSnapshot(signature);
+  };
+  const closeReview = () => {
+    setReviewSnapshot(null);
+    if (controls.isCurrent()) requestAnimationFrame(() => launcher.current?.isConnected && launcher.current.focus());
+  };
+  useEffect(() => {
+    if (!reviewSnapshot || reviewSnapshot === signature) return;
+    setReviewSnapshot(null);
+    if (controls.isCurrent()) requestAnimationFrame(() => launcher.current?.isConnected && launcher.current.focus());
+  }, [reviewSnapshot, signature, controls.isCurrent]);
+  const reviewSelectedState = () => {
+    if (!selectedState || !controls.isCurrent() || reviewSnapshot !== signature) return;
+    closeReview();
+    void controls.previewSelectedState(selectedState);
+  };
   if (!controls.bulkStatusWriteAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
@@ -282,76 +314,83 @@ function SelectionBar({
       </>
     );
   return (
-    <div
-      role="region"
-      aria-label={m.library_selection_heading()}
-      className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-lg border bg-background p-3 shadow-sm"
-    >
-      <p role="status" className="text-sm">
-        {m.library_selection_count({ count: controls.selected.length })}
-      </p>
-      <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.selectPage}>
-        {m.library_selection_page()}
-      </Button>
-      <Button variant="ghost" disabled={controls.selectionPending} onClick={controls.clearSelection}>
-        {m.library_selection_clear()}
-      </Button>
-      {controls.bulkStatusWriteAdmitted && controls.commonStates.length ? (
-        <>
-          <label className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-            {m.library_menu_status()}
-            <select
-              aria-label={m.library_selection_state()}
-              className="h-11 max-w-full rounded-md border bg-background px-2"
-              value={selectedState}
-              disabled={controls.pending || controls.selectionBlocked}
-              onChange={(event) => {
-                if (event.target.value !== selectedState) controls.invalidateBulkStatusReview();
-                setChosen(event.target.value);
-              }}
+    <>
+      <div className="[&_[data-slot=button]]:min-h-11">
+        <SharedSelectionBar
+          count={controls.selected.length}
+          label={m.library_selection_count}
+          ariaLabel={m.library_selection_heading()}
+          bottomOffset="var(--bottom-nav-height, 5rem)"
+          statusMessage={selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined}
+          primaryAction={
+            <Button
+              ref={launcher}
+              variant="outline"
+              className="min-h-11"
+              disabled={controls.selectionPending || !controls.isCurrent()}
+              onClick={openReview}
             >
-              <option value="">{m.library_selection_choose()}</option>
-              {controls.commonStates.map((option) => (
-                <option key={option.id} value={option.id} lang={option.label.lang}>
-                  {option.label.text}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            disabled={
-              controls.pending || controls.selectionBlocked || !selectedState || !controls.bulkStatusWriteAdmitted
-            }
-            onClick={() => void controls.previewSelectedState(selectedState)}
-          >
-            {controls.pending ? m.library_bulk_status_previewing() : m.library_bulk_status_review()}
-          </Button>
-        </>
-      ) : controls.bulkStatusWriteAdmitted ? (
-        <p className="text-sm">{m.library_selection_no_common()}</p>
-      ) : null}
-      <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
-      <ShelfLabelAction controls={controls} />
-      <ShelfLabelAction controls={controls} kind="unassign" />
-      {controls.selectionBlocked ? <p className="text-sm">{m.library_selection_unknown()}</p> : null}
-    </div>
+              {m.library_selection_review()}
+            </Button>
+          }
+          actions={
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Button variant="ghost" className="min-h-11" disabled={controls.selectionPending} onClick={controls.selectPage}>
+                {m.library_selection_page()}
+              </Button>
+              <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
+              <ShelfLabelAction controls={controls} />
+              <ShelfLabelAction controls={controls} kind="unassign" />
+            </div>
+          }
+          onCancel={controls.clearSelection}
+          cancelLabel={m.library_selection_clear()}
+          moreLabel={m.library_selection_more()}
+        />
+      </div>
+      <SelectionReviewView
+        open={reviewOpen}
+        onOpenChange={(open) => (open ? openReview() : closeReview())}
+        items={reviewTargets}
+        actionMeaning={
+          selectedState
+            ? m.library_bulk_status_review_summary({
+                count: reviewTargets.length,
+                status: controls.commonStates.find((option) => option.id === selectedState)?.label.text ?? selectedState,
+              })
+            : undefined
+        }
+        statusChoices={controls.commonStates}
+        statusValue={selectedState}
+        statusAllowed={controls.bulkStatusWriteAdmitted}
+        statusBlocked={controls.selectionBlocked}
+        pending={controls.pending}
+        hydrated={controls.hydrated}
+        onStatusChange={(value) => {
+          if (value !== selectedState) controls.invalidateBulkStatusReview();
+          setChosen(value);
+        }}
+        onReviewStatus={reviewSelectedState}
+        launcher={launcher}
+        isCurrent={controls.isCurrent}
+      />
+    </>
   );
 }
 
 function BulkStatusReview({ controls }: { controls: Controls }) {
   const review = controls.bulkStatusReview;
   if (!review) return null;
-  const label = (state: string) => {
-    if (state === 'applied') return m.library_bulk_status_applied();
-    if (state === 'no_effect') return m.library_bulk_status_no_change();
-    if (state === 'conflict') return m.library_bulk_status_conflict();
-    if (state === 'denied' || state === 'cancelled') return m.library_bulk_status_skipped();
-    if (state === 'pending' || state === 'reconciling') return m.library_bulk_status_pending();
-    return m.library_bulk_status_failed();
-  };
-  const groups = Object.entries(groupBulkStatusOutcomes(review.outcomes));
-  const targetTitle = (subjectId: string) =>
-    review.targets.find((target) => target.subjectId === subjectId)?.title ?? subjectId;
+  const targetTitles = new Map(review.targets.map((target) => [target.subjectId, target.title]));
+  const targets = review.targets.map((target) => ({ ...target }));
+  const results = review.outcomes.map((outcome) => ({
+    key: `${outcome.ordinal}:${outcome.subjectId}`,
+    subjectId: outcome.subjectId,
+    title: targetTitles.get(outcome.subjectId) ?? outcome.subjectId,
+    state: selectionResultState(outcome.state),
+    source: 'bulk-status' as const,
+    sourceState: outcome.state,
+  }));
   return (
     <section
       aria-label={m.library_bulk_status_journey()}
@@ -362,6 +401,7 @@ function BulkStatusReview({ controls }: { controls: Controls }) {
       {review.phase === 'ready' ? (
         <p>{m.library_bulk_status_review_summary({ count: review.targets.length, status: review.stateLabel })}</p>
       ) : null}
+      {review.targets.length ? <SelectionReviewList items={targets} labelledBy={m.library_selection_heading()} /> : null}
       {review.phase === 'preview-uncertain' ? (
         <Button
           variant="outline"
@@ -392,37 +432,7 @@ function BulkStatusReview({ controls }: { controls: Controls }) {
           {m.library_bulk_status_recover()}
         </Button>
       ) : null}
-      {review.outcomes.length ? (
-        <div className="space-y-3" aria-label={m.library_bulk_status_results()}>
-          {groups.map(([group, outcomes]) =>
-            outcomes.length ? (
-              <section key={group}>
-                <h3 className="font-medium">
-                  {m.library_bulk_status_result_count({
-                    status: label(
-                      group === 'noChange'
-                        ? 'no_effect'
-                        : group === 'conflicts'
-                          ? 'conflict'
-                          : group === 'skipped'
-                            ? 'denied'
-                            : group,
-                    ),
-                    count: outcomes.length,
-                  })}
-                </h3>
-                <ul className="max-h-48 space-y-1 overflow-y-auto">
-                  {outcomes.map((outcome) => (
-                    <li key={`${outcome.ordinal}:${outcome.subjectId}`} data-bulk-status-outcome={outcome.state}>
-                      {targetTitle(outcome.subjectId)}: {label(outcome.state)}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null,
-          )}
-        </div>
-      ) : null}
+      <SelectionResultView results={results} />
     </section>
   );
 }
@@ -722,10 +732,31 @@ function ShelfEntriesPage({
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries, locale, mutationLease, isCurrent);
+  const [selectionLimitReached, setSelectionLimitReached] = useState(false);
   const controls: Controls = {
     ...shelfRows,
     locale,
     hydrated,
+    selectionLimitReached,
+    select: (subjectId, value) => {
+      if (!value) {
+        setSelectionLimitReached(false);
+        shelfRows.select(subjectId, false);
+        return;
+      }
+      const addition = appendSelectionWithinLimit(shelfRows.selected, subjectId, shelfSelectionLimit);
+      setSelectionLimitReached(addition.overflow);
+      if (!addition.overflow) shelfRows.select(subjectId, true);
+    },
+    selectPage: () => {
+      const eligible = shelfRows.rows.reduce((count, row) => count + Number(shelfRows.selectable(row.entry)), 0);
+      shelfRows.selectPage();
+      setSelectionLimitReached(eligible > shelfSelectionLimit);
+    },
+    clearSelection: () => {
+      setSelectionLimitReached(false);
+      shelfRows.clearSelection();
+    },
     layout,
     size,
     ...(columns ? { columns } : {}),
@@ -768,7 +799,7 @@ function ShelfEntriesPage({
           {m.library_bulk_status_preview_error()}
         </p>
       ) : null}
-      <SelectionBar controls={controls} bulkRemoval={bulkRemoval} />
+      <ShelfSelectionBar controls={controls} bulkRemoval={bulkRemoval} selectionLimitReached={selectionLimitReached} />
       <BulkStatusReview controls={controls} />
       <BulkLibraryRemovalReviewView controller={bulkRemoval} pending={shelfRows.pending} />
       <ShelfLabelOutcomes controls={controls} />
@@ -835,6 +866,7 @@ function ShelfEntriesPage({
           </>
         ) : null}
       </fieldset>
+      {shelfRows.selected.length ? <div aria-hidden="true" className="h-40 md:hidden" /> : null}
       <Exposure operation="library_entry.delete">
         <AlertDialog open={leaving !== undefined} onOpenChange={(open) => !open && shelfRows.cancelRemove()}>
           <AlertDialogContent size="sm">

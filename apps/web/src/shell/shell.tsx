@@ -49,6 +49,7 @@ import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
 import manropeFontUrl from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
 import { resolveAccountSecurity } from './account-menu-security';
+import { PhoneNavigationClearance } from './phone-navigation-clearance';
 type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
@@ -498,19 +499,20 @@ function ShellContent({
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <PhoneCreationProvider>
-      <HeaderSearchFilterProvider>
-        <SidebarProvider
-          className="flex-col"
-          open={!railCollapsed}
-          onOpenChange={(open) => {
-            setCollapsed(!open);
-            // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
-            setTimeout(() => {
-              document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
-            });
-          }}
-        >
+    <PhoneNavigationClearance>
+      <PhoneCreationProvider>
+        <HeaderSearchFilterProvider>
+          <SidebarProvider
+            className="flex-col"
+            open={!railCollapsed}
+            onOpenChange={(open) => {
+              setCollapsed(!open);
+              // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+              setTimeout(() => {
+                document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+              });
+            }}
+          >
           <a href="#main-content" className={skipLink}>
             {m.shell_skip_to_content()}
           </a>
@@ -553,9 +555,10 @@ function ShellContent({
             pathname={location.pathname}
             account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
           />
-        </SidebarProvider>
-      </HeaderSearchFilterProvider>
-    </PhoneCreationProvider>
+          </SidebarProvider>
+        </HeaderSearchFilterProvider>
+      </PhoneCreationProvider>
+    </PhoneNavigationClearance>
   );
 }
 export function StatusPage({

@@ -1010,6 +1010,7 @@ export function useShelfRows(
     retryRestore,
     canRetryRestore: !!restoreIntent.current?.alive() && restoreCurrent() && !restoreIntent.current.running,
     removing,
+    selectedEntries: selectedRows.map((row) => row.entry),
     selected: selectedRows.map((row) => row.entry.subjectId),
     commonStates,
     outcomes,

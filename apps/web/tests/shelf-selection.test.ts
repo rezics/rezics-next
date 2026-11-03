@@ -367,7 +367,7 @@ test('the selected shelf reviews a persisted native status operation, confirms i
       m.library_bulk_status_result_count({ status: m.library_bulk_status_conflict(), count: 1 }),
     );
     expect(host.textContent).toContain(
-      m.library_bulk_status_result_count({ status: m.library_bulk_status_skipped(), count: 1 }),
+      m.library_bulk_status_result_count({ status: m.library_bulk_status_denied(), count: 1 }),
     );
     expect(stateCalls).toHaveLength(0);
     expect(initial.map(({ state }) => state)).toEqual([before, before, before, chosen, before, before]);
@@ -418,6 +418,18 @@ test('the selected shelf reviews a persisted native status operation, confirms i
     expect(nativeCalls.filter(({ request }) => request.url.includes(':confirm'))).toHaveLength(confirmationCount);
     authorityCurrent = true;
     await render();
+    entries = Array.from({ length: 20 }, (_, index) => ({
+      ...initial[0]!,
+      subjectId: id(1900 + index),
+      subject: {
+        ...initial[0]!.subject!,
+        id: id(1900 + index),
+        label: { value: `Twenty work ${index}`, language: 'en' },
+      },
+    }));
+    await render();
+    await act(async () => button(m.library_selection_page()).click());
+    expect(host.textContent).toContain(m.library_selection_count({ count: 20 }));
     // Selection is capped independently of the loaded input size and never discovers another page.
     entries = Array.from({ length: 101 }, (_, index) => ({
       ...initial[0]!,
@@ -437,6 +449,7 @@ test('the selected shelf reviews a persisted native status operation, confirms i
       host.querySelector<HTMLButtonElement>('[aria-label="Bounded work 100"][aria-pressed]')!.click();
     });
     expect(host.textContent).toContain(m.library_selection_count({ count: 100 }));
+    expect(host.textContent).toContain(m.library_selection_limit_reached({ limit: 100 }));
     expect(reads).toEqual(['/v1/libraryEntries']);
   } finally {
     await act(async () => root.unmount());

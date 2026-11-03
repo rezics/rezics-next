@@ -1,3 +1,22 @@
+# Library selection review
+
+The private shelf selects only the currently supplied rows, in visible selection order, up to the native UI cap of
+100. The shared SelectionBar shows the exact count, keeps Review and Clear reachable, and places secondary actions in
+its phone menu. The review lists each selected title and exact subject identity, explains unavailable status access,
+and offers only status choices shared by the current selected profiles. Opening or returning from review retains the
+still-current selection and returns focus to its live launcher; a changed row identity, state, selection, session or
+route invalidates the review and suppresses focus restoration into a retired visit.
+
+Status and removal reviews remain presentation adapters over their existing native preview, confirmation, retry,
+recovery and Undo owners. Results group each supplied per-item outcome as applied, no effect, conflict, denied,
+cancelled, failed, pending or uncertain. Uncertain results remain distinct and retain the existing exact-key retry;
+presentation does not resubmit, infer atomicity or call producers when a review or result is opened. Selection is
+bounded by 100 loaded entries; it never enumerates matching rows or hydrates extra row details.
+
+The shell's measured phone navigation clearance offsets the fixed selection bar. Its SSR fallback includes safe-area
+inset once; the measured navigation height already includes that inset. Desktop and standalone modes use zero
+clearance. See [the shell clearance contract](../shell/README.md#phone-navigation-clearance).
+
 # Collection filters
 
 A Collection page supplies its released supported facet roster to `CollectionFilters`. The property picker

@@ -121,6 +121,7 @@ export function PhoneNavigationView({
   const signIn = `/auth/sign-in?return_to=${encodeURIComponent(`/${locale}${pathname === '/' ? '' : pathname}`)}`;
   return (
     <nav
+      data-phone-navigation
       aria-label={m.shell_phone_tabs()}
       className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-center gap-1 border-t border-border/60 bg-background/95 px-2 pt-2 pb-[max(.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
     >
