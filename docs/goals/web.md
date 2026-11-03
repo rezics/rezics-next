@@ -295,12 +295,24 @@ producer contract remains the authority for its HTTP methods, caps and expiry.
 
 ### Personal list import
 
-Web owns the signed-in visit for a person's own uploaded list. VNDB remains a separate Commerce producer, not a
-provider-catalogue import or a second parser. The Kernel routes and native contract exist, but the installed
-`@rezics/client` composition does not expose typed `libraryImports.vndb` methods. Decision: keep the VNDB visit
-unavailable until those generated methods are delivered; Web will not infer or hand-author native calls. Details,
-source-field limits, private evidence and retry boundaries live in
-[personal list import](../../apps/web/src/library/personal-list-import.md) and
+Web provides a signed-in visit for uploading a person's own VNDB XML export. The route uses the installed generated
+`@rezics/client` methods for the mounted native `libraryImports.vndb` API; native admission owns parsing, bounds,
+preview, review, apply, cancellation and deletion. Web adds no parser, synchronizer or import endpoint. The visit
+reads at most eight rows per page, displays native match states and private source evidence, and requires an explicit
+catalogue target and released Library state before a row can enter the confirmed selection. Skip and retain remain
+explicit choices. Confirmation names only the displayed selection, and unknown commands can retry only with their
+captured operands and current signed-in visit.
+
+Decision: A row enters apply selection only after explicit target and released Library-state review; confirmation
+applies only the displayed admitted selection.
+
+VNDB score scale, source state, progress, dates and precision, notes, privacy, release records and unmapped values
+remain private source evidence. Notes do not become public reviews or local ratings, existing facts remain unless
+the person explicitly reviews a native replacement, and cancellation never promises rollback of acknowledged rows.
+Native admission enforces the independent 2 MiB XML bound and 12 MiB + 64-byte escaped JSON wire bound; invalid XML
+or XML overflow returns HTTP 400, and wire overflow returns HTTP 413. Browser file size is not the wire size. Native
+support does not include alternate VNDB namespaces or provider-catalogue/MAL imports. Details and field limits live
+in [personal list import](../../apps/web/src/library/personal-list-import.md) and
 [Personal VNDB list import](../library-import-vndb.md). MAL keeps its existing format and journey owner.
 
 ## Ownership
