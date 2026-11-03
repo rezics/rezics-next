@@ -302,8 +302,7 @@ The exported feed types are `FeedReactionTarget = { targetKind: 'thread' | 'post
 installed seven reaction kinds, positive sparse counts, a current native target and the native freshness fields.
 
 `@rezics/client` exports `FeedPage` from the mounted `feedItems.get` response, `FeedItem`, and its Content-only
-`FeedContentItem` union. `FeedContentSummary`, `FeedReactionTarget` and `FeedReactionCounts` come from the generated
-native contract. Consumers use these exports instead of declaring another feed DTO. The native factory exports
+`FeedContentItem` union. Consumers use these exports instead of declaring another feed DTO. The native factory exports
 `FeedReadQuery` and `FeedReads`; its `list` method returns the same closed `FeedPage`.
 The controller's `derivedFiles` rules generate the declaration closure and OpenAPI from `services/kernel/**`
 with `bun run --cwd services/kernel derived`; declaration emission can also share the Kernel compiler database

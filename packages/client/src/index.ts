@@ -46,7 +46,6 @@ export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
-export type { FeedContentSummary, FeedReactionCounts, FeedReactionTarget } from './kernel/content/feed-contract.ts';
 
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
