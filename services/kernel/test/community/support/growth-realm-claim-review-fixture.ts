@@ -337,7 +337,8 @@ export async function claimReviewGrowthFixture() {
         new Date(Date.parse(erasedAt) - 86_400_000).toISOString(),
         episodeRequestIds,
       );
-      const population = axis === 'realms' ? unrelatedRealms : axis === 'requests' ? unrelatedRequests : retainedEpisodes;
+      const population =
+        axis === 'realms' ? unrelatedRealms : axis === 'requests' ? unrelatedRequests : retainedEpisodes;
       await seed({ pool: growth!.pool, admin: growth!.admin }, population, { from: previous, to: scale });
       const ids = axis === 'realms' ? realmIds : axis === 'requests' ? unrelatedRequestIds : episodeRequestIds;
       const table = axis === 'realms' ? 'community.realm' : 'community.realm_claim_request';
@@ -359,8 +360,13 @@ export async function claimReviewGrowthFixture() {
           route,
           realmKeys,
         ]);
-        await client.query('DELETE FROM community.realm WHERE route=$1 AND realm_id=ANY($2::uuid[])', [route, realmKeys]);
-        const spaces = realmKeys.map((realmKey) => realmSpaceIds.get(realmKey)).filter((value): value is string => !!value);
+        await client.query('DELETE FROM community.realm WHERE route=$1 AND realm_id=ANY($2::uuid[])', [
+          route,
+          realmKeys,
+        ]);
+        const spaces = realmKeys
+          .map((realmKey) => realmSpaceIds.get(realmKey))
+          .filter((value): value is string => !!value);
         await client.query('DELETE FROM community.space_revision WHERE route=$1 AND space_id=ANY($2::uuid[])', [
           route,
           spaces,
@@ -391,10 +397,10 @@ export async function claimReviewGrowthFixture() {
       }
       const ids = (axis === 'requests' ? unrelatedRequestIds : episodeRequestIds).filter(Boolean);
       if (ids.length)
-        await growth!.admin.query('DELETE FROM community.realm_claim_request WHERE route=$1 AND request_id=ANY($2::uuid[])', [
-          route,
-          ids,
-        ]);
+        await growth!.admin.query(
+          'DELETE FROM community.realm_claim_request WHERE route=$1 AND request_id=ANY($2::uuid[])',
+          [route, ids],
+        );
       (axis === 'requests' ? unrelatedRequestIds : episodeRequestIds).length = 0;
       if (axis === 'requests' && requestHostSeeded) {
         await clearPressureRealms([unrelatedRealmId]);
@@ -423,11 +429,17 @@ export async function claimReviewGrowthFixture() {
       );
       const epoch = before.rows[0]?.epoch;
       if (epoch === undefined) throw new Error('Claim review partition is missing');
-      await system.database.pool.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [partition, epoch + 1]);
+      await system.database.pool.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [
+        partition,
+        epoch + 1,
+      ]);
       try {
         await rejectListAt('stale_cursor', 'reviewer', 1, cursor, system.kernel);
       } finally {
-        await system.database.pool.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [partition, epoch]);
+        await system.database.pool.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [
+          partition,
+          epoch,
+        ]);
       }
     }
     async function listAt(
