@@ -1,8 +1,16 @@
 import { expect, expectTypeOf, test } from 'bun:test';
-import { createKernelClient, type KernelClient, type WatchManagementPage } from '../src/index.ts';
+import {
+  createKernelClient,
+  type KernelClient,
+  type WatchManagementItem,
+  type WatchManagementKind,
+  type WatchManagementPage,
+} from '../src/index.ts';
 
 type Inventory = ReturnType<KernelClient['accounts']>['watches'];
 expectTypeOf<Awaited<ReturnType<Inventory['get']>>['data']>().toEqualTypeOf<WatchManagementPage | null>();
+expectTypeOf<WatchManagementPage['items'][number]>().toEqualTypeOf<WatchManagementItem>();
+expectTypeOf<WatchManagementKind>().toEqualTypeOf<'thread' | 'board'>();
 
 test('installed watch inventory preserves sparse cursors, unavailable retry and private removal metadata', async () => {
   const accountId = '019a1b2c-3d4e-7f00-8a00-000000000001';
