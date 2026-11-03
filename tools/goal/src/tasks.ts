@@ -11,6 +11,7 @@ import {
   nativeCheckId,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
+import { defaultPolicy } from './policy.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
