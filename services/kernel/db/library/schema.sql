@@ -4721,6 +4721,44 @@ CREATE TABLE library.vndb_import (
 
 
 --
+-- Name: vndb_label_adoption; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.vndb_label_adoption (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    preview_id uuid NOT NULL,
+    state text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    mappings jsonb NOT NULL,
+    item_count integer NOT NULL,
+    CONSTRAINT vndb_label_adoption_item_count_check CHECK (((item_count >= 1) AND (item_count <= 64))),
+    CONSTRAINT vndb_label_adoption_mappings_check CHECK (((jsonb_typeof(mappings) = 'array'::text) AND ((jsonb_array_length(mappings) >= 1) AND (jsonb_array_length(mappings) <= 8)) AND (octet_length((mappings)::text) <= 16384))),
+    CONSTRAINT vndb_label_adoption_state_check CHECK ((state = ANY (ARRAY['reviewed'::text, 'applying'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: vndb_label_adoption_item; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.vndb_label_adoption_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    item_no integer NOT NULL,
+    operand jsonb NOT NULL,
+    status text NOT NULL,
+    result jsonb,
+    CONSTRAINT vndb_label_adoption_item_item_no_check CHECK (((item_no >= 0) AND (item_no <= 63))),
+    CONSTRAINT vndb_label_adoption_item_operand_check CHECK ((octet_length((operand)::text) <= 4096)),
+    CONSTRAINT vndb_label_adoption_item_result_check CHECK (((result IS NULL) OR (octet_length((result)::text) <= 1024))),
+    CONSTRAINT vndb_label_adoption_item_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'applied'::text, 'already_present'::text, 'stale'::text, 'unsupported'::text, 'refused'::text])))
+);
+
+
+--
 -- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5958,6 +5996,22 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 ALTER TABLE ONLY library.vndb_import
     ADD CONSTRAINT vndb_import_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: vndb_label_adoption_item vndb_label_adoption_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption_item
+    ADD CONSTRAINT vndb_label_adoption_item_pkey PRIMARY KEY (route, account_id, upload_id, item_no);
 
 
 --
@@ -8395,6 +8449,22 @@ ALTER TABLE ONLY library.type_preparation_progress
 
 ALTER TABLE ONLY library.type_preparation_slot
     ADD CONSTRAINT type_preparation_slot_route_account_id_binding_digest_prep_fkey FOREIGN KEY (route, account_id, binding_digest, preparation_id) REFERENCES library.type_preparation_header(route, account_id, binding_digest, preparation_id);
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: vndb_label_adoption_item vndb_label_adoption_item_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption_item
+    ADD CONSTRAINT vndb_label_adoption_item_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_label_adoption(route, account_id, upload_id) ON DELETE CASCADE;
 
 
 --
