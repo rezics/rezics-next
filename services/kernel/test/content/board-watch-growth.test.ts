@@ -186,6 +186,15 @@ test('native watch commands, both management selections and durable sparse openi
           )
         ).rows;
         expect(progress).toEqual([{ advanced: true, done: false }]);
+        // Withdrawal must close a started page before restoration, without draining its remaining recipients.
+        await f.db.admin.query("UPDATE content.thread SET visibility='draft' WHERE thread_id=$1", [
+          (source!.data as { threadId: string }).threadId,
+        ]);
+        expect(await processBoardWatchNoticePage(f.db.pool, access, source!)).toEqual({ done: true, scanned: 0 });
+        await f.db.admin.query("UPDATE content.thread SET visibility='published' WHERE thread_id=$1", [
+          (source!.data as { threadId: string }).threadId,
+        ]);
+        expect(await processBoardWatchNoticePage(f.db.pool, access, source!)).toEqual({ done: true, scanned: 0 });
       }
     } finally {
       await f.close();

@@ -131,6 +131,14 @@ async function loadPage(pool: Pool, input: Input, opening: Opening, deadline: nu
       )
         throw new TypeError('Board-watch progress does not match its original publication');
       if (work.done) return { done: true, rows: [] as Recipient[] };
+      if (!opening.active) {
+        // A withdrawn source closes already-started work too; restore cannot resume its old opening.
+        await client.query('UPDATE content.board_watch_notice_work SET done=true WHERE route=$1 AND post_id=$2', [
+          input.route,
+          input.source.itemId,
+        ]);
+        return { done: true, rows: [] as Recipient[] };
+      }
       const rows = await client.query<Recipient>(
         `SELECT route,watch_id::text,watcher_account_id::text,created_at::text FROM content.board_watch
        WHERE board_id=$1 AND watching AND created_at<$2::timestamptz

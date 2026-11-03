@@ -2190,6 +2190,8 @@ existing mandatory path.
   fixed/load/advance, raw candidate/active point, exact source/native disclosure and remaining finalization expansions
   above. No suppressed path is charged zero or assigned a fitted allowance. Memory is O(B+D), with one fixed
   30-second deadline per page. Persisted exact raw keys keep progress monotone across unavailable/removed rows.
+  A withdrawn source closes an existing work row with one additional point UPDATE in the load transaction and
+  skips its recipient range and advance transaction; restoration cannot resume the old partially processed opening.
 - Growth check: the same journey executes two native pages per fresh original publication at 256/1024/4096 with
   unchanged B/P/D, positive, preference-suppressed, self-suppressed and missing recipients. It captures physical
   rows/blocks/statements/bytes and transaction controls, rejects large watch-table sequential scans and checks sparse
