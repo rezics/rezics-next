@@ -20,6 +20,13 @@ The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET
 and preview are private and no-store. The canonical archive consumer8bb owns the only archive interface; manual
 Entry and journal editing retain their existing interface owners.
 
+The retained generated client exposes `libraryArchiveMerges.post(body: unknown)` and owner `.preview.get`,
+`.review.patch`, and `.apply.post({ordinals: number[]})`. Preview records and review results currently omit the
+native `reviewRevision`; this generated surface cannot confirm personal fact recovery. The required installed
+upload operand is `string | {manifest: Record<string, unknown>; records: Record<string, unknown>[]}`, and apply
+must take `{items: {ordinal: number; reviewRevision: number}[]}` from the returned review. Canonical Web file
+admission remains unavailable until that complete generated handoff is delivered.
+
 | Retained row  | Explicit current target                         | Selected fields           | Native operation                                |
 | ------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------- |
 | `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`        | `createEntryPersonalCommands().saveAnnotations` |

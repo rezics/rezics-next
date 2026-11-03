@@ -694,7 +694,10 @@ whole-caller native64/512/4096 growth remain deferred to integration.
 Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
-`services/kernel/test/library/library-archive-merge.test.ts`. Regenerating the retained client declarations and
-installing their typed transport journey remain required before Web file admission; see
-[the generated transport continuation](../../.temp/continuation/archive-reviewed-client.md). The canonical Web archive
+`services/kernel/test/library/library-archive-merge.test.ts`. Client transport coverage in
+`packages/client/tests/library-archive-merge.test.ts` preserves original JSON text and envelope upload through preview.
+The retained generated upload body is `unknown`, preview/review omit `reviewRevision`, and apply accepts
+`{ordinals: number[]}`. Regeneration and the typed `{items: {ordinal: number; reviewRevision: number}[]}` confirmation
+journey remain required before Web file admission; see
+[the generated transport continuation](../../.temp/continuation/archive-client-delivery.md). The canonical Web archive
 consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
