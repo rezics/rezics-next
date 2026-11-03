@@ -119,7 +119,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
-      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(27)]]) },
       writeRate: createWriteRateLimiter({
         secret: 'source-statistic-lifecycle-write-rate-secret-at-least-32-bytes',
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 10000, seconds: 60 } } }),
