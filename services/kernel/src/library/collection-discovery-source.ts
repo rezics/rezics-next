@@ -17,15 +17,14 @@ export type CollectionDiscoveryIndexableValue = Readonly<{
   description: string | null;
   presentationKind: string | null;
   coverMediaId: string | null;
-}> & (
-  | { membershipKind: 'curated'; output: null }
-  | { membershipKind: 'dynamic'; output: CollectionOutputRef }
-);
-export type CollectionDiscoveryItem = Readonly<{ key: CollectionDiscoveryKey }> & (
-  | { status: 'indexable'; value: CollectionDiscoveryIndexableValue }
-  | { status: 'withdrawn' }
-  | { status: 'unavailable'; reason: 'selected_publication_witness_unavailable' }
-);
+}> &
+  ({ membershipKind: 'curated'; output: null } | { membershipKind: 'dynamic'; output: CollectionOutputRef });
+export type CollectionDiscoveryItem = Readonly<{ key: CollectionDiscoveryKey }> &
+  (
+    | { status: 'indexable'; value: CollectionDiscoveryIndexableValue }
+    | { status: 'withdrawn' }
+    | { status: 'unavailable'; reason: 'selected_publication_witness_unavailable' }
+  );
 export type CollectionDiscoverySnapshot =
   | Readonly<{ status: 'available'; stamp: CollectionDiscoveryPosition; items: readonly CollectionDiscoveryItem[] }>
   | Readonly<{ status: 'unavailable'; reason: 'native_partition_unavailable' }>;
