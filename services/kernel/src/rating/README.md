@@ -756,7 +756,7 @@ reads, review-context selection and citation disclosure.
   as-of date, licence and attribution. Figures never enter native votes, means, priors, rankings or ballots.
 - `PUT /v1/subjects/{id}/source-statistics/{source}` publishes one positive observation. The strict JSON body
   contains `sourceRecordId`, `scale`, `mean`, positive `count`, `asOf`, `licence`, `attribution`, optional
-  `sourceAlias` and optional `expectedObservation`. It requires `Idempotency-Key` and the shared
+  `sourceAlias`, optional `figures` and optional `expectedObservation`. It requires `Idempotency-Key` and the shared
   `source_statistic:write` authorization on Global Context, checked before every receipt lookup, including replay.
 - `POST /v1/subjects/{id}/source-statistics/{source}:clear` accepts only `sourceRecordId`, `count: 0`, `asOf`,
   optional `sourceAlias` and optional `expectedObservation`, returning 204. Missing aggregates do nothing;
@@ -782,6 +782,73 @@ Omission and the explicit provider ID bind the same tuple and preserve existing 
 select the facts-fence home, never a provider profile. A custom alias is retained in responses. There is one
 current slot per `(route, subject, provider)`, so independently eligible Bangumi and VNDB rows cannot overwrite
 one another. Different record/alias bindings require explicit CAS provenance before replacing that slot.
+
+#### Provider distribution and rank figures
+
+Decision: Bangumi figure encoding v1 uses ascending original 1–10 bins with explicit complete/partial coverage
+and optional subject-rank population; omitted figures or denominators remain absent. Scalar DTOs and hashes
+stay compatible. This is a native encoding version, never a provider revision.
+
+The existing positive body and response accept optional `figures: SourceFigures`, exported by
+[source-figures.ts](source-figures.ts). `createSourceStatisticCommands({pool, routeKey, clock?})` still exports
+`write`, `writeCommand`, `clear`, and `read`; `SourceStatistic` is now an exported additive DTO. The mounted
+GET/PUT/clear routes, registered change event and default Kernel composition remain the same producer. The
+existing generated `rating.source_statistics_get` and `rating.source_statistic_put` contracts carry this exact
+optional object. Neither source requests nor native vote commands acquire another endpoint.
+
+```json
+{
+  "schemaVersion": 1,
+  "distribution": {
+    "unit": "ratings",
+    "completeness": "partial",
+    "bins": [{"score": 10, "count": 17}]
+  },
+  "rank": {"unit": "subjects", "position": 3, "population": 100}
+}
+```
+
+The object is closed, requires at least one supplied figure, and is admitted only for the Bangumi provider,
+regardless of its fence alias. `distribution` and `rank` are independently optional. Bins use original integer
+keys 1–10, strictly increasing and unique; their counts are nonnegative safe integers. A complete distribution
+has all ten keys and sums exactly to the included rating count. A partial distribution supplies one to ten
+known bins, whose sum must not exceed that count. A present zero is a supplied zero; a missing bin is unknown.
+Even ten supplied keys do not upgrade partial coverage. No means are reconstructed or checked against a
+weighted sum: the importer contract does not promise the rounding precision needed for that comparison.
+
+Rank position is a positive safe integer; a supplied population is a positive safe integer at least as large
+as position. Its unit is subjects, independently of the aggregate's rating count and the distribution's ratings.
+Population omission means no denominator is known. No percentile, popularity score, inferred population,
+normalized bins or cross-provider ordering is returned. An omitted figure stays omitted on read, including for
+old VNDB and scalar-only Bangumi observations. The containing provider row supplies each figure's provider,
+original record, effective alias, as-of date, observation digest, licence and attribution. Age is computed from
+that source date by the existing Web consumer; no server clock is presented as source freshness.
+
+Figures are immutable payload fields in the existing canonical observation hash and receipt digest. Same-time
+figure corrections, record replacement, stale writes and clear tombstones use the same locked provider head and
+CAS as scalars. A scalar-only refresh intentionally replaces prior figures with absence; historical payloads
+retain the supplied original figures. Removing a current row removes all its figures atomically. Hydration reads
+only current slots, never the immutable history. Before/final Subject and tuple-fence disclosure checks cover
+the entire containing row, including replay. A changed figure between the local binding reads fails closed.
+
+There are at most ten bins, 4,096 serialized figure bytes, 32,768 observation bytes and 65,536 list-body bytes.
+The command validates closed cardinality before serializing; database constraints bound stored JSONB bytes
+(including JSONB whitespace), and the reader repeats the closed semantic decoder and body-byte check.
+Unknown versions or corrupt figures fail unavailable rather than becoming a scalar-only success. The current
+row stores the optional object next to the scalar fields so no per-bin query or head/history hydration is needed.
+The existing primary-key prefix `(route, subject_id, source)` covers exactly the two admitted source slots;
+immutable head lookup uses all four observation primary-key columns.
+
+Web owns the existing **Bangumi source-figure reader**: named provider, accessible bin counts/shares, partial
+coverage, rank with unavailable denominator, provenance, phone/desktop review and one action/recovery. That
+visual experience remains pending its owner; this producer does not assert it has passed. Imports owns the
+permitted converter, fetching and licence admission; no adapter is admitted by this encoding. The scalar
+converter remains compatible. Performance must review inherited nested authority/identity costs before the
+controller's broader acceptance; measured statements and bytes are not inferred from the output row count.
+
+References inspected: the Content product-experience decision named by the brief; the reference INDEX;
+`legacy-final:apps/web/features/work-page/ratings.tsx` (accessible bin counts/shares and withheld figures).
+These establish display semantics, without copying a frontend into this producer.
 
 #### Observation and repair contract for Imports
 
@@ -835,16 +902,21 @@ Imports owns **Source observation CAS refresh** using this exact positive/clear 
 
 #### Operation Cost: source-statistic list
 
-- Touches: at most two current statistic rows, each provider's two anchored tuple-fact snapshots, a second local
+- Touches: at most two current statistic rows including their bounded figure JSON, each provider's two anchored tuple-fact snapshots, a second local
   binding read and before/final Subject identity/availability checks.
-- Bound: finite admitted-provider count (two); no totals, history scan, source fetch or cross-partition join.
+- Bound: finite admitted-provider count (two), at most 20 bins/8,192 figure bytes, 65,536 response bytes; no totals,
+  history scan, source fetch or cross-partition join. Both local reads use the fixed primary-key prefix; tuple,
+  Subject, Access and runner work retain their existing bounds and participate in the native growth capture.
 - Growth check: existing lifecycle/isolation growth suites retain their indexed current-row/fence scope; the
-  connected provider tests cover independent hydration and concealment. Broad growth measurement is deferred.
+  connected provider/figure tests cover independent hydration and concealment. The figure growth suite fixes
+  the maximum ten-bin payload while native heads/history grow at 256/1024/4096, captures participating pools,
+  accounts actual response bytes and asserts physical prefix plans. Execution remains controller acceptance.
 
 #### Operation Cost: source-statistic publish
 
 - Touches: one locked subject, one provider head/observation, optional legacy current row adoption, one immutable
-  observation insert, one current upsert, one event/receipt and anchored tuple/Subject observations.
+  observation insert (at most 32,768 bytes), one current upsert (at most ten bins/4,096 figure bytes),
+  one event/receipt and anchored tuple/Subject observations.
 - Bound: constant rows/statements per command, one current head lookup by primary key, logarithmic index work
   as retained observations grow. Two providers share no head or statistic slot. Identical digests have no new effect.
 - Growth check: existing source-statistic growth suites plus connected provider ordering cases; full measurement

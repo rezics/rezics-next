@@ -1,5 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
+import { SOURCE_OBSERVATION_MAX_BYTES, type SourceFigures } from './source-figures.ts';
 
 /** Admission is provider policy; a configured fence alias never selects a profile. */
 export const SOURCE_PROVIDERS = {
@@ -24,6 +25,7 @@ export type SourceObservation = Readonly<{
   sourceAlias?: string;
   sourceRecordId: string;
   count: number;
+  figures?: SourceFigures;
   asOf: string;
   scale?: { min: number; max: number };
   mean?: number;
@@ -32,7 +34,8 @@ export type SourceObservation = Readonly<{
   expectedObservation?: string | null;
 }>;
 
-/** An observation is unversioned: no native revision is inferred from its date or digest.
+/** An observation has no provider revision inferred from its date or digest.
+ * Optional figures carry their own native encoding version; scalar digests stay unchanged.
  * CAS provenance is command input, not part of the immutable observed payload.
  * Explicit default aliases and omitted aliases identify the same source observation.
  */
@@ -40,6 +43,6 @@ export function sourceObservation(subjectId: string, source: string, value: Sour
   const { expectedObservation: _expected, sourceAlias, ...fields } = value;
   const payload = { ...fields, sourceAlias: sourceAlias ?? source };
   const canonical = canonicalize(['source-statistic-observation.v1', subjectId, source, payload]);
-  if (typeof canonical !== 'string') throw new TypeError('Source observation must be canonical JSON');
+  if (typeof canonical !== 'string' || Buffer.byteLength(canonical, 'utf8') > SOURCE_OBSERVATION_MAX_BYTES) throw new TypeError('Source observation must be canonical JSON');
   return { digest: createHash('sha256').update(canonical, 'utf8').digest('hex'), payload };
 }

@@ -26,6 +26,7 @@ import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import sourceStatisticList from './source-statistic-list.sql';
 import sourceStatisticUpsert from './source-statistic-upsert.sql';
 import sourceStatisticClear from './source-statistic-clear.sql';
+import { validSourceFigures, SOURCE_OBSERVATION_MAX_BYTES, SOURCE_STATISTICS_MAX_BODY_BYTES, type SourceFigures } from './source-figures.ts';
 import { SOURCE_PROVIDER_IDS, sourceProvider, type SourceProvider } from './source-provider.ts';
 import { admitSourceObservation, lockSourceObservation, saveSourceObservation } from './source-provider-observation.ts';
 import {
@@ -43,12 +44,13 @@ const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 const sourceAliasValidator = Compile(SourceFenceQuerySchema.properties.source);
 const sourceRecordControls = /[\u0000-\u001f\u007f-\u009f]/u;
 
-type SourceStatistic = {
+export type SourceStatistic = {
   source: SourceProvider;
   sourceAlias?: string;
   sourceRecordId: string;
   scale: { min: number; max: number };
   mean: number;
+  figures?: SourceFigures;
   count: number;
   asOf: string;
   licence: string;
@@ -76,6 +78,7 @@ type Row = {
   licence: string;
   attribution: string;
   observationDigest: string | null;
+  figures: unknown;
 };
 type Dependencies = { pool: Pool; access: () => Access; routeKey: Uint8Array; clock?: KernelClock };
 type CommandDependencies = { pool: Pool; routeKey: Uint8Array; clock?: KernelClock };
@@ -127,7 +130,13 @@ export class SourceStatisticNotFoundError extends Error {
 }
 
 function statistic(row: Row): SourceStatistic {
+  // Storage and command admission share the same closed decoder. Corrupt or newer
+  // encodings fail closed rather than appearing as missing figures or zero bins.
+  if (row.figures !== null && row.figures !== undefined &&
+      !validSourceFigures(row.source, row.figures, Number(row.count)))
+    throw new ProblemError('partition_unavailable');
   return {
+    ...(row.figures == null ? {} : { figures: row.figures as SourceFigures }),
     source: row.source,
     ...(row.sourceAlias === row.source ? {} : { sourceAlias: row.sourceAlias }),
     sourceRecordId: row.sourceRecordId,
@@ -210,6 +219,10 @@ function validate(source: string, subjectId: string, value: Input, authorization
     throw new SourceStatisticInvalidError('mean');
   if (!Number.isSafeInteger(value.count) || value.count < 1 || value.count > 2_147_483_647)
     throw new SourceStatisticInvalidError('count');
+  if (value.figures !== undefined && !validSourceFigures(source, value.figures, value.count))
+    throw new SourceStatisticInvalidError('figures');
+  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > SOURCE_OBSERVATION_MAX_BYTES - 256)
+    throw new SourceStatisticInvalidError('statistic');
   if (!validateAsOf(value.asOf)) throw new SourceStatisticInvalidError('asOf');
   if (
     !validateSourceRecordId(value.sourceRecordId) ||
@@ -349,6 +362,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           scale_min: input.value.scale.min,
           scale_max: input.value.scale.max,
           mean: String(input.value.mean),
+          figures: input.value.figures === undefined ? null : JSON.stringify(input.value.figures),
           count: input.value.count,
           as_of: input.value.asOf,
           licence: input.value.licence,
@@ -455,7 +469,10 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         sourceStatisticList.run(deadlineClient(connection, deadline), { route, subject_id: subjectId }),
       ),
     );
-    return rows.map((row) => statistic(row as Row));
+    const result = rows.map((row) => statistic(row as Row));
+    if (Buffer.byteLength(JSON.stringify(result), 'utf8') > SOURCE_STATISTICS_MAX_BODY_BYTES)
+      throw new ProblemError('partition_unavailable');
+    return result;
   }
 
   async function read(
