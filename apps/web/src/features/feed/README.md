@@ -96,9 +96,10 @@ Content's generated `feedItems.get` summaries currently pick thread/post identit
 they supply neither reaction counts nor the viewer slot. Home deliberately renders unavailable voting until Content
 delivers those fields in the same bounded page, with source privacy and current-reader admission. No browser DTO or
 per-row read fills that gap. Content also needs typed mute-author/hide commands before those menu entries can act.
-Home's report ceremony needs the installed verification configuration from its page owner before it can reuse
-`PostActions`; it remains explicitly unavailable meanwhile. The continuation in `.temp/continuation/feed-actions.md`
-names the remaining user journey and producer interfaces.
+Home receives the existing public verification configuration with its page result and reuses `PostActions` for
+reporting. The row's canonical destination also feeds that owner's copy/recovery flow. Missing verification
+configuration keeps reporting explicitly unavailable. The remaining Home vote projection and feedback commands
+are described in `.temp/continuation/feed-actions.md`.
 
 The board owner keeps board-feed, pin and slow-mode files. Import `FeedActionBar`, pass each existing thread's actual
 reaction counts/value and current-source origin, keep its existing localized destination and reply route, and pass

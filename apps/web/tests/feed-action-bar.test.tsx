@@ -298,6 +298,7 @@ test('Home uses actual FeedResults action slots, retains Continue and never inve
     <HomeFeed
       locale="en"
       signedIn
+      verification={{ sitekey: 'prepared-key', scriptUrl: 'https://verify.example/script' }}
       result={{
         state: 'ready',
         page: {
@@ -320,4 +321,22 @@ test('Home uses actual FeedResults action slots, retains Continue and never inve
   ).toBe(true);
   expect(writes).toHaveLength(0);
   expect(reads).toHaveLength(0);
+  // The installed report/copy owner receives the row address, not Home's current pathname.
+  const copied: string[] = [];
+  Object.defineProperty(browser.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async (url: string) => {
+        copied.push(url);
+      },
+    },
+  });
+  expect(button(m.report_action())).toBeNull();
+  await click(button(m.report_more()));
+  const menuItems = [...browser.document.querySelectorAll('[role="menuitem"]')];
+  expect(menuItems.some((node) => node.textContent?.includes(m.report_action()))).toBe(true);
+  await click(menuItems.find((node) => node.textContent?.includes(m.report_copy())) ?? null);
+  expect(copied).toHaveLength(1);
+  expect(copied[0]).toContain('/en/threads/thread/');
+  expect(copied[0]).not.toBe('https://site.test/en/');
 });

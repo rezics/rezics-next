@@ -20,6 +20,8 @@ import { observeReactionSession } from '../../threads/thread-reactions';
 import { VoteControl, type FeedReaction } from './vote-control';
 import type { FeedItem } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
+import { PostActions } from '../../report/content-actions';
+import type { VerificationConfig } from '../../report/turnstile';
 
 export type FeedActionBarProps = {
   locale: string;
@@ -62,16 +64,27 @@ export function HomeFeedActions({
   locale,
   signedIn,
   children,
+  verification,
+  origin,
 }: {
   item: FeedItem;
   locale: string;
   signedIn: boolean;
   children?: ReactNode;
+  verification?: VerificationConfig | undefined;
+  origin?: FeedActionBarProps['origin'];
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const isWork = kind === 'subject' && 'creativeWork' in item.summary && item.summary.creativeWork;
+  const destination = item.destination;
+  const target =
+    destination.kind === 'thread' || destination.kind === 'subject'
+      ? { kind: destination.kind, id: destination.id }
+      : destination.kind === 'post'
+        ? { kind: 'post' as const, id: destination.postId }
+        : undefined;
   return (
     <FeedActionBar
       locale={locale}
@@ -79,6 +92,17 @@ export function HomeFeedActions({
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
       plain={kind === 'post'}
+      origin={origin}
+      overflow={
+        target && verification && href ? (
+          <PostActions
+            target={target}
+            verification={verification}
+            canonicalHref={href}
+            extraEntries={feedFeedbackEntries(locale, signedIn, href)}
+          />
+        ) : undefined
+      }
       reply={
         (kind === 'thread' || kind === 'post') && href
           ? { href: `${href}${href.includes('#') ? '' : '#reply'}` }
@@ -330,7 +354,7 @@ function ActionVisit({
                   ref={menuButton}
                   variant="ghost"
                   size="icon"
-                  className={actionClass}
+                  className={`${actionClass} min-w-11 sm:min-w-8 pointer-coarse:min-w-11`}
                   aria-label={m.report_more({}, options)}
                 >
                   <EllipsisIcon aria-hidden />

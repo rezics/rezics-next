@@ -53,7 +53,16 @@ const readHomePage = createServerFn({ method: 'GET' })
       loadRoutePage(client, '/', locale).catch(() => ({ kind: 'missing' as const })),
     ]);
     const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
-    return { feed, origin, catalogue };
+    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+    const verification = config.TURNSTILE_SITE_KEY
+      ? {
+          sitekey: config.TURNSTILE_SITE_KEY,
+          scriptUrl:
+            (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+            'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+        }
+      : undefined;
+    return { feed, origin, catalogue, verification };
   });
 
 /** Only this anonymous result enters the reusable page query cache or hydration payload. */

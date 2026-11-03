@@ -5,6 +5,7 @@ import type { Locale } from '../../paraglide/runtime.js';
 import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
+import type { VerificationConfig } from '../../report/turnstile';
 import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
 import { HomeFeedSpaceControl } from './home-feed-space-control';
@@ -50,6 +51,7 @@ export function HomeFeed({
   spaceControl,
   questionControl,
   catalogue,
+  verification,
   suppressResultMessage = false,
   onRetry,
   onNext,
@@ -69,6 +71,7 @@ export function HomeFeed({
   questionControl?: ReactNode;
   /** Native route TypeLists; the feed and Search retain their own adapters. */
   catalogue?: ReactNode;
+  verification?: VerificationConfig | undefined;
   /** The selected metadata control already explains and recovers its own blocked selection. */
   suppressResultMessage?: boolean;
   onRetry?: () => void;
@@ -93,6 +96,10 @@ export function HomeFeed({
   }, [busy, result, requestKey]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const page = result.state === 'ready' ? result.page : undefined;
+  const [actionSource, setActionSource] = useState({ result, key: 0 });
+  if (actionSource.result !== result) setActionSource({ result, key: actionSource.key + 1 });
+  const currentActionResult = useRef(result);
+  currentActionResult.current = result;
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
   const results: FeedResultsResult<FeedItem> =
@@ -213,7 +220,14 @@ export function HomeFeed({
           return {
             ...presentation,
             actions: (
-              <HomeFeedActions key={item.id} item={item} locale={locale} signedIn={signedIn}>
+              <HomeFeedActions
+                key={item.id}
+                item={item}
+                locale={locale}
+                signedIn={signedIn}
+                verification={verification}
+                origin={{ key: String(actionSource.key), isCurrent: () => currentActionResult.current === result }}
+              >
                 {presentation.actions}
               </HomeFeedActions>
             ),
@@ -266,6 +280,7 @@ export function HomeFeedConsumer({
   readQuestion,
   origin,
   catalogue,
+  verification,
 }: {
   initial: HomeFeedResult;
   locale: string;
@@ -277,6 +292,7 @@ export function HomeFeedConsumer({
   readQuestion: HomeQuestionReader;
   origin: string;
   catalogue?: ReactNode;
+  verification?: VerificationConfig | undefined;
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
@@ -521,6 +537,7 @@ export function HomeFeedConsumer({
     <HomeFeed
       result={snapshot.result}
       catalogue={catalogue}
+      verification={verification}
       locale={locale}
       signedIn={signedIn}
       stream={snapshot.input.stream}

@@ -155,11 +155,14 @@ export function PostActions({
   revisionId,
   verification,
   extraEntries,
+  canonicalHref,
 }: {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
   verification: VerificationConfig;
   extraEntries?: MenuEntry[];
+  /** An admitted feed-row destination; detail callers keep their existing local target anchor. */
+  canonicalHref?: string;
 }) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => observeSession(client), [client]);
@@ -172,6 +175,7 @@ export function PostActions({
     target.kind,
     target.id,
     revisionId ?? null,
+    canonicalHref ?? null,
   ]);
   const ownerRef = useRef<OwnerToken | null>(null);
   if (!ownerRef.current || ownerRef.current.key !== ownerKey) ownerRef.current = { key: ownerKey, value: {} };
@@ -189,6 +193,7 @@ export function PostActions({
       {...(revisionId !== undefined ? { revisionId } : {})}
       verification={verification}
       {...(extraEntries ? { extraEntries } : {})}
+      {...(canonicalHref ? { canonicalHref } : {})}
     />
   );
 }
@@ -203,6 +208,7 @@ function ReportActionsVisit({
   revisionId,
   verification,
   extraEntries,
+  canonicalHref,
 }: {
   activeOwner: MutableRefObject<OwnerToken | null>;
   owner: object;
@@ -213,6 +219,7 @@ function ReportActionsVisit({
   revisionId?: string;
   verification: VerificationConfig;
   extraEntries?: MenuEntry[];
+  canonicalHref?: string;
 }) {
   const [reportOpen, setReportOpen] = useState(false);
   // A new open also retires retained shared form handlers from the previous ceremony.
@@ -461,7 +468,9 @@ function ReportActionsVisit({
     if (focusIntent) focusIntent.claimed = true;
     else cancelCopyFocusIntent();
 
-    const url = `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`;
+    const url = canonicalHref
+      ? new URL(canonicalHref, location.origin).href
+      : `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`;
     const attempt = ++copyAttempt.current;
     const admittedCeremony = ceremony;
     const admittedRender = renderIncarnation;

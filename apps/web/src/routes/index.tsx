@@ -96,6 +96,7 @@ export function Home() {
       readQuestions={readQuestions}
       readQuestion={readQuestion}
       origin={loaded.origin}
+      verification={loaded.verification}
     />
   );
 }
