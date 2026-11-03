@@ -168,6 +168,29 @@ where its scope or interface wording changes. Page stories cover only the brief'
 recordings when available; illustrative responses stay labelled as such. All launch locales and the current
 phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
+### My Realms current-entry boundary
+
+The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
+installed `GET /v1/me/realms` response currently contains only `realmId`, `name`, `role: 'member'` and `next`;
+it does not admit a current destination, readability, presentation, media, membership episode or action advice.
+Web does not infer management or leave authority from `role: 'member'`. The loader and fake route now pass through
+only the installed fields. The view's optional description slot remains useful for supplied-page examples, not proof
+that the native endpoint supplies a description.
+
+Decision: retain the current caller and route ownership until Content installs its expanded generated response and
+recorded examples; do not treat the existing ID-based link as native evidence of current readability. The current-entry
+continuation will bind the admitted destination and selected action to that response, then document the delivered
+pending/readback and retry meanings here.
+
+#### Current native cost
+
+- Touches: one existing `/v1/me/realms` page read with its normal session preparation; Web formats the returned rows
+  once and performs no row-by-row membership or media read.
+- Bound: native page size 20, raw scan budget 80, one current page and its opaque continuation. The installed page has
+  no selected action or current-entry envelope.
+- Growth check: 1/10/20 rendering, sparse continuation, selected-action count and retirement remain owed with the
+  expanded native response. Existing supplied-page stories do not establish those native facts.
+
 ### Canonical episode checklist
 
 Web owns the signed-in progress-session canonical checklist. It consumes Commerce's private episode inspect/command

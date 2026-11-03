@@ -32,3 +32,9 @@ request, cursor recovery and continuation, order, private disclosure and null-CS
 No extra session read, authentication preflight, polling, per-row hydration or native request is added.
 
 Decision: offer first-page recovery only for cursor failures without an HTTP status or with status 408 or 5xx; other HTTP failures, including admission denial and platform-closed, keep their existing retry or closed handling. The localized action targets `/realms` with empty search so the route guard and a fresh caller own the visit.
+
+## Current-entry envelope boundary
+
+The installed `GET /v1/me/realms` response is a closed page of `items` containing `realmId`, `name`, and the literal `role: 'member'`, plus `next`. It supplies no current Realm address, readability state, presentation, media grant, membership episode, or management/leave advice. The Web view can render a description supplied to it, but the native response and generated client do not provide one; supplied-page descriptions are presentation examples only. The loader and fake response now preserve the installed shape rather than adding an undeclared description.
+
+Decision: Until Content publishes the expanded generated response and examples, Web consumes only the installed fields and does not treat `role: 'member'` as entry, management, or leave authority. The existing ID-based route behavior is not evidence that the current page admitted a readable destination; the current-entry continuation owns replacing it with native entry state.
