@@ -122,7 +122,7 @@ function ObservationStory({ mode }: { mode: Mode }) {
   const inspect = useCallback<SourceObservationInspect>(
     async (request) => {
       if (mode === 'replacement' && request.source === 'bangumi')
-        return new Promise((resolve) => {
+        return new Promise<SourceObservationOutcome>((resolve) => {
           pending.current = resolve;
         });
       const operation: SourceObservationOperation = async (input) => {
@@ -139,7 +139,13 @@ function ObservationStory({ mode }: { mode: Mode }) {
   );
   useEffect(() => {
     if (selection.source === 'vndb' && pending.current) {
-      pending.current({ kind: 'ready', inspection: { source: 'bangumi', head: { digest: current.digest, state: 'published', observation: current } } });
+      pending.current({
+        kind: 'ready',
+        inspection: {
+          source: 'bangumi',
+          head: { digest: current.digest, state: 'published', observation: current },
+        },
+      });
       pending.current = null;
     }
   }, [selection.source]);
@@ -155,7 +161,10 @@ function ObservationStory({ mode }: { mode: Mode }) {
       <AppShell>
         <main className="mx-auto min-w-0 max-w-4xl p-4 sm:p-8">
           {mode === 'replacement' && selection.source === 'bangumi' && (
-            <Button className="mb-4 min-h-11" onClick={() => setSelection({ source: 'vndb', digest: clearDigest })}>
+            <Button
+              className="mb-4 min-h-11"
+              onClick={() => setSelection({ source: 'vndb', digest: clearDigest })}
+            >
               Replace provider while the read is pending
             </Button>
           )}
