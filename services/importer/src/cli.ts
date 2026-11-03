@@ -1136,11 +1136,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
               ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
             })
           : undefined;
-        const records = stream
-          ? capture
-            ? stream.frames
-            : stream.records
-          : (async function* () {})();
+        const records = stream ? (capture ? stream.frames : stream.records) : (async function* () {})();
         const run = await importer.runDumpSet(registration, records, {
           ...(config.disappearanceThreshold === undefined
             ? {}

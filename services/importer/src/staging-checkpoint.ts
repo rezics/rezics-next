@@ -118,7 +118,11 @@ export function emptyPrefixDigest(): string {
   return ZERO_DIGEST;
 }
 
-export function extendPrefixDigest(prior: string, record: StagingPrefixRecord, version = STAGING_CHECKPOINT_VERSION): string {
+export function extendPrefixDigest(
+  prior: string,
+  record: StagingPrefixRecord,
+  version = STAGING_CHECKPOINT_VERSION,
+): string {
   if (!SHA256.test(prior) || !SHA256.test(record.digest))
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1)
@@ -155,10 +159,9 @@ function admitMember(value: StagingMemberIdentity, index: number): StagingMember
   };
 }
 
-function admitV2Extras(value: StagingCaptureIdentity): Pick<
-  StagingCaptureIdentity,
-  'decodeBudget' | 'inputKind' | 'manifestVersion' | 'members'
-> {
+function admitV2Extras(
+  value: StagingCaptureIdentity,
+): Pick<StagingCaptureIdentity, 'decodeBudget' | 'inputKind' | 'manifestVersion' | 'members'> {
   if (!V2_DECODERS.has(value.decoderId)) throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
   const budget = value.decodeBudget ?? DEFAULT_DECODED_DUMP_BYTES;
   if (!Number.isSafeInteger(budget) || budget <= 0)
@@ -175,7 +178,11 @@ function admitV2Extras(value: StagingCaptureIdentity): Pick<
     throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
   if (value.decoderId === STAGING_DECODER_ZSTD_ID && value.sourceKind !== 'wikidata')
     throw new StagingCheckpointError('unsupported-format', STAGING_UNSUPPORTED_INPUT);
-  if (value.decoderId === STAGING_DECODER_GZIP_ID && value.sourceKind !== 'openlibrary' && value.sourceKind !== 'wikidata')
+  if (
+    value.decoderId === STAGING_DECODER_GZIP_ID &&
+    value.sourceKind !== 'openlibrary' &&
+    value.sourceKind !== 'wikidata'
+  )
     throw new StagingCheckpointError('unsupported-format', STAGING_UNSUPPORTED_INPUT);
   if (!Array.isArray(value.members) || value.members.length === 0 || value.members.length > 64)
     throw new StagingCheckpointError('identity', STAGING_INCOMPATIBLE);
@@ -385,10 +392,9 @@ export function encodeStagingIdentityJson(identity: StagingCaptureIdentity): str
   });
 }
 
-export function parseStagingIdentityJson(raw: string | null | undefined): Pick<
-  StagingCaptureIdentity,
-  'decodeBudget' | 'inputKind' | 'manifestVersion' | 'members'
-> {
+export function parseStagingIdentityJson(
+  raw: string | null | undefined,
+): Pick<StagingCaptureIdentity, 'decodeBudget' | 'inputKind' | 'manifestVersion' | 'members'> {
   if (typeof raw !== 'string' || raw.length === 0 || raw.length > 65536)
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   let parsed: unknown;
@@ -442,8 +448,7 @@ export function admitStagingCheckpoint(row: {
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
   if (row.committedOrdinal === 0 ? row.rollingDigest !== ZERO_DIGEST : !SHA256.test(row.rollingDigest))
     throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-  const extras =
-    row.version === STAGING_CHECKPOINT_VERSION_V2 ? parseStagingIdentityJson(row.identityJson) : {};
+  const extras = row.version === STAGING_CHECKPOINT_VERSION_V2 ? parseStagingIdentityJson(row.identityJson) : {};
   if (row.version === STAGING_CHECKPOINT_VERSION && row.identityJson)
     throw new StagingCheckpointError('version', STAGING_INCOMPATIBLE);
   const identity = admitStagingIdentity({
@@ -512,11 +517,7 @@ export function checkpointProgress(source: string, generation: string, committed
   return `Source ${source} generation ${generation}: verified committed prefix ${committed} of ${observed} decoded records. ${STAGING_COST}`;
 }
 
-export function resumeStagingInvocation(
-  source: string,
-  generation: string,
-  identity?: StagingCaptureIdentity,
-): string {
+export function resumeStagingInvocation(source: string, generation: string, identity?: StagingCaptureIdentity): string {
   const credentials =
     '--state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>';
   if (identity?.inputKind === 'dump-set')
@@ -550,9 +551,7 @@ export function stagingResumeGuidance(input: {
   const committed = input.committed ?? input.checkpoint.committedOrdinal;
   const members = input.checkpoint.identity.members?.length;
   const memberText =
-    members && members > 1
-      ? `, ${input.checkpoint.completedMembers} of ${members} members complete`
-      : '';
+    members && members > 1 ? `, ${input.checkpoint.completedMembers} of ${members} members complete` : '';
   return `Compatible checkpoint for ${input.source} generation ${input.generation}: committed prefix ${committed} records${memberText}, ${input.checkpoint.identity.bytes} hashed bytes. ${STAGING_COST} Next: ${resumeStagingInvocation(input.source, input.generation, input.checkpoint.identity)}`;
 }
 

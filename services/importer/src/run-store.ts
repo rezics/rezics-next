@@ -902,9 +902,7 @@ export class RunStore<Projection = BatchStatement[]> {
       run.id,
       ordinal,
     );
-    return row
-      ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index ?? 0 }
-      : null;
+    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index ?? 0 } : null;
   }
   stagedIdentity(run: Run, recordKey: string): { digest: string; projection: string } | null {
     validateRun(run);

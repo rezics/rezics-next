@@ -95,11 +95,7 @@ const blocked = (async () => {
   throw new Error('checkpointed compressed staging reached network');
 }) as unknown as typeof fetch;
 
-function argv(
-  root: string,
-  key: string,
-  extra: string[],
-) {
+function argv(root: string, key: string, extra: string[]) {
   return [
     ...extra,
     '--state',
@@ -129,7 +125,15 @@ test('help names dump-set checkpointing and gzip dump-set files are admitted bef
     await writeFile(join(root, 'dump.json.gz'), gzipSync(Buffer.from(wikiDump([wiki(1)]))), { mode: 0o600 });
     const host = fake();
     const gzip = await runImportCli(
-      argv(root, key, ['--source', 'wikidata', '--dump', join(root, 'dump.json.gz'), '--compression', 'gzip', '--checkpoint-staging']),
+      argv(root, key, [
+        '--source',
+        'wikidata',
+        '--dump',
+        join(root, 'dump.json.gz'),
+        '--compression',
+        'gzip',
+        '--checkpoint-staging',
+      ]),
       {
         fetch: blocked,
         createImporter: (options) => new Importer(Object.assign(options, { transport: host.transport })),
@@ -149,9 +153,31 @@ test('gzip Open Library and Wikidata CLI resume convert only the suffix', async 
     for (const source of ['openlibrary', 'wikidata'] as const) {
       const dumpPath = join(root, `${source}.gz`);
       const state = join(root, `${source}.sqlite`);
-      const plain = source === 'openlibrary' ? olLine(1, 'A') + olLine(2, 'B') + olLine(3, 'C') + olLine(4, 'D') : wikiDump([wiki(21), wiki(22), wiki(23), wiki(24)]);
+      const plain =
+        source === 'openlibrary'
+          ? olLine(1, 'A') + olLine(2, 'B') + olLine(3, 'C') + olLine(4, 'D')
+          : wikiDump([wiki(21), wiki(22), wiki(23), wiki(24)]);
       await writeFile(dumpPath, gzipSync(Buffer.from(plain)), { mode: 0o600 });
-      const flags = ['--source', source, '--dump', dumpPath, '--compression', 'gzip', '--state', state, '--api', 'https://api.test', '--auth', 'https://auth.test', '--account-key', key, '--account', randomUUID(), '--client', 'local'];
+      const flags = [
+        '--source',
+        source,
+        '--dump',
+        dumpPath,
+        '--compression',
+        'gzip',
+        '--state',
+        state,
+        '--api',
+        'https://api.test',
+        '--auth',
+        'https://auth.test',
+        '--account-key',
+        key,
+        '--account',
+        randomUUID(),
+        '--client',
+        'local',
+      ];
       const f = fake();
       const stop = new AbortController();
       const first = wrap(source, (n) => {
@@ -163,7 +189,8 @@ test('gzip Open Library and Wikidata CLI resume convert only the suffix', async 
       const interrupted = await runImportCli([...flags, '--checkpoint-staging'], {
         signal: stop.signal,
         fetch: blocked,
-        createImporter: (options) => new Importer(Object.assign(options, { transport: f.transport, observer: first.observer })),
+        createImporter: (options) =>
+          new Importer(Object.assign(options, { transport: f.transport, observer: first.observer })),
       });
       expect(interrupted.code).toBe(130);
       expect(interrupted.stderr).toContain('--resume-staging');
@@ -179,7 +206,8 @@ test('gzip Open Library and Wikidata CLI resume convert only the suffix', async 
       const second = wrap(source, () => {});
       const resumed = await runImportCli([...flags, '--resume-staging', '--generation', '1'], {
         fetch: blocked,
-        createImporter: (options) => new Importer(Object.assign(options, { transport: f.transport, observer: second.observer })),
+        createImporter: (options) =>
+          new Importer(Object.assign(options, { transport: f.transport, observer: second.observer })),
       });
       expect(resumed.code).toBe(0);
       expect(second.conversions()).toBe(2);
@@ -215,7 +243,9 @@ test('dump-set CLI resumes the same generation and a changed budget keeps the ch
     ];
     await writeFile(join(root, 'authors.txt.gz'), gzipSync(Buffer.from(row(author))), { mode: 0o600 });
     await writeFile(join(root, 'works.txt'), works.map(row).join(''), { mode: 0o600 });
-    await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row({ ...editionSource, covers: [] }))), { mode: 0o600 });
+    await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row({ ...editionSource, covers: [] }))), {
+      mode: 0o600,
+    });
     const manifest = join(root, 'manifest.json');
     await writeFile(
       manifest,
@@ -242,7 +272,8 @@ test('dump-set CLI resumes the same generation and a changed budget keeps the ch
     const interrupted = await runImportCli([...flags, '--checkpoint-staging'], {
       signal: stop.signal,
       fetch: blocked,
-      createImporter: (options) => new Importer(Object.assign(options, { transport: f.transport, observer: first.observer })),
+      createImporter: (options) =>
+        new Importer(Object.assign(options, { transport: f.transport, observer: first.observer })),
     });
     expect(interrupted.code).toBe(130);
     const stored = new ImportSession(join(root, 'state.sqlite'), { create: false });
@@ -269,7 +300,8 @@ test('dump-set CLI resumes the same generation and a changed budget keeps the ch
     const second = wrap('openlibrary', () => {});
     const resumed = await runImportCli([...flags, '--resume-staging', '--generation', '1'], {
       fetch: blocked,
-      createImporter: (options) => new Importer(Object.assign(options, { transport: f.transport, observer: second.observer })),
+      createImporter: (options) =>
+        new Importer(Object.assign(options, { transport: f.transport, observer: second.observer })),
     });
     expect(resumed.code).toBe(0);
     expect(second.conversions()).toBe(3);

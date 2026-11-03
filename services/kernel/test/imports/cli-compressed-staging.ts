@@ -18,7 +18,9 @@ function openLibraryDump() {
     const key = `/works/OL${id}W`;
     return `/type/work\t${key}\t1\t2020-01-01T00:00:00.000000\t${JSON.stringify({ type: { key: '/type/work' }, key, revision: 1, title })}\n`;
   };
-  return encoder.encode(`${row(900001, 'Harbor Work')}${row(900002, 'Second Work')}${row(900003, 'Third Work')}${row(900004, 'Fourth Work')}`);
+  return encoder.encode(
+    `${row(900001, 'Harbor Work')}${row(900002, 'Second Work')}${row(900003, 'Third Work')}${row(900004, 'Fourth Work')}`,
+  );
 }
 
 function wikidataDump() {

@@ -114,7 +114,10 @@ const author = {
 };
 
 function row(
-  record: { type: { key: string }; key: string; revision: number; last_modified?: { value: string } } & Record<string, unknown>,
+  record: { type: { key: string }; key: string; revision: number; last_modified?: { value: string } } & Record<
+    string,
+    unknown
+  >,
 ) {
   const date = record.last_modified?.value ?? '2025-01-01T00:00:00Z';
   return `${[record.type.key, record.key, record.revision, date, JSON.stringify(record)].join('\t')}\n`;
@@ -140,7 +143,9 @@ function rejectMedia() {
 async function mixedSet(root: string, works = [{ ...workSource, covers: [] }, extraWork(1), extraWork(2)]) {
   await writeFile(join(root, 'authors.txt.gz'), gzipSync(Buffer.from(row(author))), { mode: 0o600 });
   await writeFile(join(root, 'works.txt'), works.map(row).join(''), { mode: 0o600 });
-  await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row({ ...editionSource, covers: [] }))), { mode: 0o600 });
+  await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row({ ...editionSource, covers: [] }))), {
+    mode: 0o600,
+  });
   const path = join(root, 'manifest.json');
   await writeFile(
     path,
@@ -221,12 +226,14 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
   expect(resumeStagingInvocation('wikidata', '1', zstd)).toContain('--compression zstd');
   expect(resumeStagingInvocation('openlibrary', '1', set)).toContain('--dump-set');
   const v1 = extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64) });
-  expect(extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 7 })).toBe(
-    v1,
-  );
+  expect(
+    extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 7 }),
+  ).toBe(v1);
   expect(
     extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 1 }, 2),
-  ).not.toBe(extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 0 }, 2));
+  ).not.toBe(
+    extendPrefixDigest(emptyPrefixDigest(), { ordinal: 1, recordKey: 'Q1', digest: 'a'.repeat(64), memberIndex: 0 }, 2),
+  );
   expect(() =>
     captureDumpSetIdentity({
       members: [{ index: 0, family: 'author', compression: 'zstd', sha256: 'd'.repeat(64), bytes: 1 }],
@@ -236,7 +243,16 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
       manifestVersion: 2,
     }),
   ).toThrow(/Checkpointed staging admits/);
-  expect(captureIdentity({ sha256: 'e'.repeat(64), bytes: 1, sourceAlias: 'wikidata', sourceKind: 'wikidata', converterRevision: 'wd@1', disappearanceThreshold: 0.2 }).checkpointVersion).toBe(1);
+  expect(
+    captureIdentity({
+      sha256: 'e'.repeat(64),
+      bytes: 1,
+      sourceAlias: 'wikidata',
+      sourceKind: 'wikidata',
+      converterRevision: 'wd@1',
+      disappearanceThreshold: 0.2,
+    }).checkpointVersion,
+  ).toBe(1);
 });
 
 test('gzip Wikidata resume converts only the uncommitted suffix and a same-size unread rewrite stays incompatible', async () => {
@@ -330,7 +346,11 @@ test('dump-set frames complete authors without records, resume skips the prefix,
       signal: new AbortController().signal,
       handleCount: handles,
     }).frames)
-      frames.push(event.kind === 'member-end' ? event : { kind: event.kind, memberIndex: event.memberIndex, key: event.record.key });
+      frames.push(
+        event.kind === 'member-end'
+          ? event
+          : { kind: event.kind, memberIndex: event.memberIndex, key: event.record.key },
+      );
     expect(frames.filter((event) => event.kind === 'member-end').map((event) => event.memberIndex)).toEqual([0, 1, 2]);
     expect(frames.filter((event) => event.kind === 'record' && event.memberIndex === 0)).toEqual([]);
 
@@ -357,7 +377,9 @@ test('dump-set frames complete authors without records, resume skips the prefix,
       expect(interrupted.status).toBe('interrupted');
       expect(interrupted.committedPrefix).toBe(0);
       expect(interrupted.runId).toBe('1');
-      expect(edge.session.store.stagingCheckpoint(edgeWrap.registration.source, interrupted.runId!)?.completedMembers).toBe(1);
+      expect(
+        edge.session.store.stagingCheckpoint(edgeWrap.registration.source, interrupted.runId!)?.completedMembers,
+      ).toBe(1);
       expect(edgeHost.requests).toHaveLength(0);
     } finally {
       await edge.close();
@@ -410,7 +432,9 @@ test('dump-set frames complete authors without records, resume skips the prefix,
       await resumed.close();
     }
 
-    await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row(editionSource))).subarray(0, 8), { mode: 0o600 });
+    await writeFile(join(root, 'editions.txt.gz'), gzipSync(Buffer.from(row(editionSource))).subarray(0, 8), {
+      mode: 0o600,
+    });
     const broken = await admitOpenLibraryDumpSet(manifest);
     const brokenMembers = await fingerprintOpenLibraryDumpSet(broken, {
       signal: new AbortController().signal,
@@ -442,7 +466,9 @@ test('dump-set frames complete authors without records, resume skips the prefix,
       expect(result.status).toBe('invalid-dump');
       expect(result.committedPrefix).toBeGreaterThan(0);
       expect(late.requests).toHaveLength(0);
-      expect(failing.session.store.peekActive(createSourceRegistration('openlibrary').source)?.status).not.toBe('ready');
+      expect(failing.session.store.peekActive(createSourceRegistration('openlibrary').source)?.status).not.toBe(
+        'ready',
+      );
     } finally {
       await failing.close();
     }

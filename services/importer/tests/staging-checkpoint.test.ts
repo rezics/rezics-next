@@ -146,7 +146,15 @@ test('help names checkpointed staging, and unsupported producers fail before net
     const refused = [
       ['--source', 'vndb', '--dump', join(directory, 'dump.json'), '--checkpoint-staging'],
       ['--source', 'bangumi', '--dump', join(directory, 'dump.json'), '--compression', 'gzip', '--checkpoint-staging'],
-      ['--source', 'openlibrary', '--dump', join(directory, 'dump.json'), '--compression', 'zstd', '--checkpoint-staging'],
+      [
+        '--source',
+        'openlibrary',
+        '--dump',
+        join(directory, 'dump.json'),
+        '--compression',
+        'zstd',
+        '--checkpoint-staging',
+      ],
       ['--source', 'bangumi', '--dump', '-', '--checkpoint-staging'],
       ['--source', 'wikidata', '--dump', '-', '--checkpoint-staging'],
     ];
@@ -156,7 +164,14 @@ test('help names checkpointed staging, and unsupported producers fail before net
       expect(result.stderr).toContain('Checkpointed staging admits');
     }
     const missingSet = await runImportCli(
-      ['--source', 'openlibrary', '--dump-set', join(directory, 'manifest.json'), '--checkpoint-staging', ...credentials],
+      [
+        '--source',
+        'openlibrary',
+        '--dump-set',
+        join(directory, 'manifest.json'),
+        '--checkpoint-staging',
+        ...credentials,
+      ],
       { fetch: blocked },
     );
     expect(missingSet.code).toBe(2);

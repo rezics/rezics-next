@@ -842,9 +842,7 @@ export class InspectionStore {
         .all()
         .map((entry) => (entry as { name: string }).name),
     );
-    const extras = columns.has('identity_json')
-      ? ',identity_json,completed_members'
-      : '';
+    const extras = columns.has('identity_json') ? ',identity_json,completed_members' : '';
     const row = this.database
       .query(
         `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
