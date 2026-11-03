@@ -348,10 +348,7 @@ export const MediaImages: Story = {
 
 const readerAccount = '11111111-1111-4111-8111-111111111111';
 
-const wiredSnapshot = (
-  profile: 'text' | 'blocks',
-  content: DocumentSnapshot['doc']['content'],
-): DocumentSnapshot =>
+const wiredSnapshot = (profile: 'text' | 'blocks', content: DocumentSnapshot['doc']['content']): DocumentSnapshot =>
   parseDocument(
     JSON.parse(
       serializeDocument({
