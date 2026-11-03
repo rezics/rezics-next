@@ -1,3 +1,4 @@
+import { isCalendarDate } from '@rezics/filter';
 import { SearchUnavailableError } from './opensearch.ts';
 import { subjectPartition, type IndexedSubject } from './source.ts';
 
@@ -97,4 +98,3 @@ export function validateRequestSourceSnapshot(
     throw new SearchUnavailableError('Invalid current Source observation', { cause });
   }
 }
-import { isCalendarDate } from '@rezics/filter';

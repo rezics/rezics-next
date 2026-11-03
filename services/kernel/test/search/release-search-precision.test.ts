@@ -46,7 +46,7 @@ test('native dates retain distinct year/month/day precision through current hit 
   for (const facet of [
     { kind: 'time', year: 2024, day: 29 },
     { kind: 'time', year: 2023, month: 2, day: 29 },
-  ]) {
+  ] as const) {
     const invalid = structuredClone(snapshot);
     invalid.subjects[0]!.statements[0]!.facet = facet;
     expect(() => validateIndexObservation(invalid, partition, [subject.id], 1n)).toThrow();

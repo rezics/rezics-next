@@ -1,3 +1,4 @@
+import { isCalendarDate } from '@rezics/filter';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
@@ -322,4 +323,3 @@ export function validateIndexObservation(
   }
   return subjects;
 }
-import { isCalendarDate } from '@rezics/filter';
