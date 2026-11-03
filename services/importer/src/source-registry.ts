@@ -172,19 +172,22 @@ function addAliases(
       };
     }
   }
-  const vocabulary = context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
-    ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary)
-    : undefined;
+  const vocabulary =
+    context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
+      ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary)
+      : undefined;
   return {
     ...result,
-    ...(vocabulary === undefined ? {} : {
-      proposals: [...result.proposals, ...vocabulary.proposals],
-      diagnostics: [
-        ...result.diagnostics,
-        ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
-      ],
-      sourceVocabularyGaps: vocabulary.gaps,
-    }),
+    ...(vocabulary === undefined
+      ? {}
+      : {
+          proposals: [...result.proposals, ...vocabulary.proposals],
+          diagnostics: [
+            ...result.diagnostics,
+            ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
+          ],
+          sourceVocabularyGaps: vocabulary.gaps,
+        }),
     normalized: result.normalizedRecord,
     coverAssets,
     mediaImportIntents,
@@ -200,9 +203,10 @@ function sourceVocabularyResult(
   request: NonNullable<ConversionContext['sourceVocabulary']>,
 ) {
   const metadata = describeSourceRecord(sourceKind, result.external_id);
-  const recordUrl = sourceKind === 'bangumi'
-    ? (result as BangumiConversion).sourceMetadata.recordUrl
-    : `https://vndb.org/${result.external_id}.${result.record_revision}`;
+  const recordUrl =
+    sourceKind === 'bangumi'
+      ? (result as BangumiConversion).sourceMetadata.recordUrl
+      : `https://vndb.org/${result.external_id}.${result.record_revision}`;
   const input: SourceVocabularyInput = {
     metadata: {
       provider: sourceKind,

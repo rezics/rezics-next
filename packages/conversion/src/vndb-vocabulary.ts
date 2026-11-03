@@ -52,7 +52,14 @@ function dateValue(value: string): { time: string; precision: 9 | 10 | 11; calen
   }
   return null;
 }
-function rowGap(environment: MappingEnvironment, row: VndbVocabularyRow, reason: Parameters<MappingEnvironment['pushGap']>[0]['reason'], property?: string, code?: string, endpoint?: string) {
+function rowGap(
+  environment: MappingEnvironment,
+  row: VndbVocabularyRow,
+  reason: Parameters<MappingEnvironment['pushGap']>[0]['reason'],
+  property?: string,
+  code?: string,
+  endpoint?: string,
+) {
   environment.pushGap({
     path: environment.sourcePath(row.path) ?? '/sourceVocabulary/rows',
     reason,
@@ -61,7 +68,12 @@ function rowGap(environment: MappingEnvironment, row: VndbVocabularyRow, reason:
     ...(property === undefined ? {} : { property }),
   });
 }
-function exactConcept(environment: MappingEnvironment, taxonomy: string, code: string, path: string): ResolvedConcept | null {
+function exactConcept(
+  environment: MappingEnvironment,
+  taxonomy: string,
+  code: string,
+  path: string,
+): ResolvedConcept | null {
   return environment.concept(taxonomy, code, path);
 }
 
@@ -81,10 +93,15 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         const code = row.value;
         if (!environment.admit(row.release, 'schema:keywords', path, code)) return;
         const resolved = exactConcept(environment, 'vndb.releases.released', code, path);
-        if (resolved) environment.propose({
-          row, subject: row.release, property: 'schema:keywords', content: resolved.id,
-          target: conceptIdentity(resolved), mappingRevision: 'release-state@1',
-        });
+        if (resolved)
+          environment.propose({
+            row,
+            subject: row.release,
+            property: 'schema:keywords',
+            content: resolved.id,
+            target: conceptIdentity(resolved),
+            mappingRevision: 'release-state@1',
+          });
         return;
       }
       if (typeof row.value !== 'string') {
@@ -96,7 +113,13 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         rowGap(environment, row, 'invalid_source_value', 'schema:datePublished');
         return;
       }
-      environment.propose({ row, subject: row.release, property: 'schema:datePublished', content: date, mappingRevision: 'release-date@1' });
+      environment.propose({
+        row,
+        subject: row.release,
+        property: 'schema:datePublished',
+        content: date,
+        mappingRevision: 'release-date@1',
+      });
       return;
     }
     case 'development-status': {
@@ -106,10 +129,15 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       const resolved = exactConcept(environment, 'vndb.development-status', code, path);
-      if (resolved) environment.propose({
-        row, subject: row.subject, property: 'schema:keywords', content: resolved.id,
-        target: conceptIdentity(resolved), mappingRevision: 'development-status@1',
-      });
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.subject,
+          property: 'schema:keywords',
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          mappingRevision: 'development-status@1',
+        });
       return;
     }
     case 'release-supersedes': {
@@ -119,21 +147,39 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       environment.propose({
-        row, subject: row.release, property: 'wdt:P155', content: '', target: row.endpoint, sourceEndpoint: row.endpointCode,
+        row,
+        subject: row.release,
+        property: 'wdt:P155',
+        content: '',
+        target: row.endpoint,
+        sourceEndpoint: row.endpointCode,
         mappingRevision: 'release-supersedes@1',
       });
       return;
     }
     case 'release-work': {
       const code = environment.sourceCode(row.completenessCode);
-      if (!code || !releaseTypes.has(code)) rowGap(environment, row, 'unknown_code', 'releases_vn.rtype', code ?? undefined);
+      if (!code || !releaseTypes.has(code))
+        rowGap(environment, row, 'unknown_code', 'releases_vn.rtype', code ?? undefined);
       else rowGap(environment, row, 'qualifier_not_admitted', 'wdt:P31', code);
       if (!row.work) {
-        rowGap(environment, row, 'missing_identity', 'schema:exampleOfWork', environment.sourceCode(row.workCode) ?? undefined, environment.sourceCode(row.workCode) ?? undefined);
+        rowGap(
+          environment,
+          row,
+          'missing_identity',
+          'schema:exampleOfWork',
+          environment.sourceCode(row.workCode) ?? undefined,
+          environment.sourceCode(row.workCode) ?? undefined,
+        );
         return;
       }
       environment.propose({
-        row, subject: row.release, property: 'schema:exampleOfWork', content: '', target: row.work, sourceEndpoint: row.workCode,
+        row,
+        subject: row.release,
+        property: 'schema:exampleOfWork',
+        content: '',
+        target: row.work,
+        sourceEndpoint: row.workCode,
         mappingRevision: 'release-work@1',
       });
       return;
@@ -146,7 +192,14 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       if (!row.holder) {
-        rowGap(environment, row, 'missing_identity', property, environment.sourceCode(row.holderCode) ?? undefined, environment.sourceCode(row.holderCode) ?? undefined);
+        rowGap(
+          environment,
+          row,
+          'missing_identity',
+          property,
+          environment.sourceCode(row.holderCode) ?? undefined,
+          environment.sourceCode(row.holderCode) ?? undefined,
+        );
         return;
       }
       const resolved = exactConcept(environment, 'vndb.credit_type', code, path);
@@ -155,13 +208,27 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         { property: 'wdt:P3831', content: resolved.id, identity: conceptIdentity(resolved) },
       ];
       if (row.creditedAs !== undefined) {
-        if (typeof row.creditedAs !== 'string' || !row.creditedAs.isWellFormed() || !row.creditedAs.trim() || row.creditedAs.length > 1500) {
+        if (
+          typeof row.creditedAs !== 'string' ||
+          !row.creditedAs.isWellFormed() ||
+          !row.creditedAs.trim() ||
+          row.creditedAs.length > 1500
+        ) {
           rowGap(environment, row, 'invalid_source_value', 'wdt:P1932', code);
           return;
         }
         qualifiers.push({ property: 'wdt:P1932', content: row.creditedAs });
       }
-      environment.propose({ row, subject: row.subject, property, content: '', target: row.holder, sourceEndpoint: row.holderCode, qualifiers, mappingRevision: 'staff-role@1' });
+      environment.propose({
+        row,
+        subject: row.subject,
+        property,
+        content: '',
+        target: row.holder,
+        sourceEndpoint: row.holderCode,
+        qualifiers,
+        mappingRevision: 'staff-role@1',
+      });
       return;
     }
     case 'tag': {
@@ -179,10 +246,16 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       const resolved = exactConcept(environment, `vndb.tag.${row.category}`, code, path);
-      if (resolved) environment.propose({
-        row, subject: row.subject, property: 'schema:genre', content: resolved.id,
-        target: conceptIdentity(resolved), qualifiers: [spoilerQualifier(row.spoiler)], mappingRevision: 'tag@1',
-      });
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.subject,
+          property: 'schema:genre',
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          qualifiers: [spoilerQualifier(row.spoiler)],
+          mappingRevision: 'tag@1',
+        });
       return;
     }
     case 'character-trait': {
@@ -196,10 +269,16 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       const resolved = exactConcept(environment, 'vndb.character-trait', code, path);
-      if (resolved) environment.propose({
-        row, subject: row.character, property: 'schema:keywords', content: resolved.id,
-        target: conceptIdentity(resolved), qualifiers: [spoilerQualifier(row.spoiler)], mappingRevision: 'character-trait@1',
-      });
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.character,
+          property: 'schema:keywords',
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          qualifiers: [spoilerQualifier(row.spoiler)],
+          mappingRevision: 'character-trait@1',
+        });
       return;
     }
   }
@@ -212,14 +291,25 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
     environment.pushGap({ path: '/sourceVocabulary/provider', reason: 'invalid_row' });
     return finishMapping(environment);
   }
-  const kinds = ['release-date', 'development-status', 'release-supersedes', 'release-work', 'staff', 'tag', 'character-trait'];
+  const kinds = [
+    'release-date',
+    'development-status',
+    'release-supersedes',
+    'release-work',
+    'staff',
+    'tag',
+    'character-trait',
+  ];
   for (const row of environment.rows) {
     if (!environment.isRow(row, kinds)) {
       environment.pushGap({ path: '/sourceVocabulary/rows', reason: 'invalid_row' });
       continue;
     }
-    try { mapRow(environment, row as VndbVocabularyRow); }
-    catch { environment.pushGap({ path: '/sourceVocabulary/rows', reason: 'invalid_row' }); }
+    try {
+      mapRow(environment, row as VndbVocabularyRow);
+    } catch {
+      environment.pushGap({ path: '/sourceVocabulary/rows', reason: 'invalid_row' });
+    }
   }
   return finishMapping(environment);
 }

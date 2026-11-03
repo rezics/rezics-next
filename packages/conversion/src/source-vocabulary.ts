@@ -11,7 +11,13 @@ import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { commandKey, safeSourceUrl, sourceEnvelope } from './support.ts';
 
 export const sourceVocabularyRevision = 'source-vocabulary@1';
-export const sourceVocabularyLimits = Object.freeze({ rows: 64, commands: BATCH_LIMIT, gaps: 64, schemes: 64, concepts: 512 });
+export const sourceVocabularyLimits = Object.freeze({
+  rows: 64,
+  commands: BATCH_LIMIT,
+  gaps: 64,
+  schemes: 64,
+  concepts: 512,
+});
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const digestPattern = /^[0-9a-f]{64}$/u;
 
@@ -55,28 +61,67 @@ export type BangumiVocabularyRow =
   | (RowBase & { kind: 'episode-kind'; episode: NativeIdentity; code: string | number })
   | (RowBase & { kind: 'character-kind'; character: NativeIdentity; code: string | number })
   | (RowBase & {
-      kind: 'staff'; subject: NativeIdentity; holder?: NativeIdentity; holderCode: string; subjectType: 1 | 2 | 4;
-      roleCode: number; creditedAs?: string; order?: number;
+      kind: 'staff';
+      subject: NativeIdentity;
+      holder?: NativeIdentity;
+      holderCode: string;
+      subjectType: 1 | 2 | 4;
+      roleCode: number;
+      creditedAs?: string;
+      order?: number;
     })
   | (RowBase & {
-      kind: 'character-appearance'; subject: NativeIdentity; character?: NativeIdentity; characterCode: string; roleCode: number;
+      kind: 'character-appearance';
+      subject: NativeIdentity;
+      character?: NativeIdentity;
+      characterCode: string;
+      roleCode: number;
     })
   | (RowBase & {
-      kind: 'voice-credit'; subject: NativeIdentity; performer?: NativeIdentity; performerCode: string;
-      character?: NativeIdentity; characterCode: string; creditedAs?: string;
+      kind: 'voice-credit';
+      subject: NativeIdentity;
+      performer?: NativeIdentity;
+      performerCode: string;
+      character?: NativeIdentity;
+      characterCode: string;
+      creditedAs?: string;
     })
   | (RowBase & {
-      kind: 'relation'; subject: NativeIdentity; endpoint?: NativeIdentity; endpointCode: string; family: 1 | 2 | 4;
-      code: number; reciprocalCode?: number | null;
+      kind: 'relation';
+      subject: NativeIdentity;
+      endpoint?: NativeIdentity;
+      endpointCode: string;
+      family: 1 | 2 | 4;
+      code: number;
+      reciprocalCode?: number | null;
     });
 
 export type VndbVocabularyRow =
   | (RowBase & { kind: 'release-date'; release: NativeIdentity; value: string | null })
   | (RowBase & { kind: 'development-status'; subject: NativeIdentity; code: number })
   | (RowBase & { kind: 'release-supersedes'; release: NativeIdentity; endpoint?: NativeIdentity; endpointCode: string })
-  | (RowBase & { kind: 'release-work'; release: NativeIdentity; work?: NativeIdentity; workCode: string; completenessCode: string })
-  | (RowBase & { kind: 'staff'; subject: NativeIdentity; holder?: NativeIdentity; holderCode: string; roleCode: string; creditedAs?: string })
-  | (RowBase & { kind: 'tag'; subject: NativeIdentity; category: 'cont' | 'ero' | 'tech'; code: string; spoiler: number })
+  | (RowBase & {
+      kind: 'release-work';
+      release: NativeIdentity;
+      work?: NativeIdentity;
+      workCode: string;
+      completenessCode: string;
+    })
+  | (RowBase & {
+      kind: 'staff';
+      subject: NativeIdentity;
+      holder?: NativeIdentity;
+      holderCode: string;
+      roleCode: string;
+      creditedAs?: string;
+    })
+  | (RowBase & {
+      kind: 'tag';
+      subject: NativeIdentity;
+      category: 'cont' | 'ero' | 'tech';
+      code: string;
+      spoiler: number;
+    })
   | (RowBase & { kind: 'character-trait'; character: NativeIdentity; code: string; spoiler: number });
 
 export type SourceVocabularyRow = BangumiVocabularyRow | VndbVocabularyRow;
@@ -127,7 +172,10 @@ export type SourceVocabularyResult = Readonly<{
   proposals: readonly BatchCommand[];
   gaps: readonly SourceVocabularyGap[];
 }>;
-type SourceVocabularyGapInput = Omit<SourceVocabularyGap, 'provider' | 'code' | 'endpoint' | 'requiredProfile' | 'property'> & {
+type SourceVocabularyGapInput = Omit<
+  SourceVocabularyGap,
+  'provider' | 'code' | 'endpoint' | 'requiredProfile' | 'property'
+> & {
   provider?: SourceVocabularyProvider;
   code?: string | undefined;
   endpoint?: string | undefined;
@@ -176,8 +224,13 @@ function record(value: unknown): value is Record<string, unknown> {
   }
 }
 function sourceText(value: unknown, maximum = 500): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum && value.isWellFormed() &&
-    !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    value.isWellFormed() &&
+    !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
+  );
 }
 function profileBases(release: Release, type: string): Set<string> {
   const found = new Set<string>();
@@ -191,8 +244,14 @@ function profileBases(release: Release, type: string): Set<string> {
   return found;
 }
 function identityCompatible(identity: NativeIdentity, release: Release, digest: string): boolean {
-  return record(identity) && typeof identity.id === 'string' && uuidPattern.test(identity.id) && identity.releaseDigest === digest &&
-    typeof identity.type === 'string' && Object.hasOwn(release.types, identity.type);
+  return (
+    record(identity) &&
+    typeof identity.id === 'string' &&
+    uuidPattern.test(identity.id) &&
+    identity.releaseDigest === digest &&
+    typeof identity.type === 'string' &&
+    Object.hasOwn(release.types, identity.type)
+  );
 }
 function propertyDefinition(release: Release, id: string): PropertyDefinition | undefined {
   return release.properties[id];
@@ -256,11 +315,19 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
   const gaps: SourceVocabularyGap[] = [];
   const sourceDigestValid = digestPattern.test(metadata.digest);
   const revisionValid = rawRevision === null || sourceText(rawRevision, 64);
-  const sourceMetadataValid = !!rawInput && !!rawMetadata && !!rawBindings &&
+  const sourceMetadataValid =
+    !!rawInput &&
+    !!rawMetadata &&
+    !!rawBindings &&
     (rawMetadata.provider === 'bangumi' || rawMetadata.provider === 'vndb') &&
-    /^[a-z][a-z0-9_-]{0,31}$/u.test(metadata.sourceAlias) && sourceText(metadata.externalId, 255) && revisionValid &&
-    sourceDigestValid && sourceText(metadata.converterRevision, 64) && sourceText(metadata.recordUrl, 2048) &&
-    sourceText(metadata.license, 128) && sourceText(metadata.attribution, 500);
+    /^[a-z][a-z0-9_-]{0,31}$/u.test(metadata.sourceAlias) &&
+    sourceText(metadata.externalId, 255) &&
+    revisionValid &&
+    sourceDigestValid &&
+    sourceText(metadata.converterRevision, 64) &&
+    sourceText(metadata.recordUrl, 2048) &&
+    sourceText(metadata.license, 128) &&
+    sourceText(metadata.attribution, 500);
   const releaseDigest = rawBindings?.releaseDigest;
   const releaseMatches = typeof releaseDigest === 'string' && releaseDigest === bundledDigest;
   const release = bundledRelease;
@@ -269,10 +336,13 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
   const rawRows = readArray(rawInput?.rows, sourceVocabularyLimits.rows);
   const rowsPresent = !!rawInput && Object.hasOwn(rawInput, 'rows');
   const requestedCommandLimit = rawInput?.commandLimit;
-  const commandLimitValid = requestedCommandLimit === undefined ||
-    Number.isSafeInteger(requestedCommandLimit) && requestedCommandLimit >= 0 && requestedCommandLimit <= BATCH_LIMIT;
+  const commandLimitValid =
+    requestedCommandLimit === undefined ||
+    (Number.isSafeInteger(requestedCommandLimit) && requestedCommandLimit >= 0 && requestedCommandLimit <= BATCH_LIMIT);
   const commandLimit = commandLimitValid
-    ? typeof requestedCommandLimit === 'number' ? requestedCommandLimit : BATCH_LIMIT
+    ? typeof requestedCommandLimit === 'number'
+      ? requestedCommandLimit
+      : BATCH_LIMIT
     : 0;
   const schemes = rawSchemes.values.filter((entry): entry is ResolvedScheme => record(entry));
   const concepts = rawConcepts.values.filter((entry): entry is ResolvedConcept => record(entry));
@@ -286,7 +356,8 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
 
   const pushGap = (gap: SourceVocabularyGapInput) => {
     if (gaps.length >= sourceVocabularyLimits.gaps) return;
-    const path = typeof gap.path === 'string' && /^\/[A-Za-z0-9_./~\-]{1,180}$/u.test(gap.path) ? gap.path : '/sourceVocabulary';
+    const path =
+      typeof gap.path === 'string' && /^\/[A-Za-z0-9_./~\-]{1,180}$/u.test(gap.path) ? gap.path : '/sourceVocabulary';
     const code = sourceText(gap.code, 64) ? gap.code : undefined;
     const endpoint = sourceText(gap.endpoint, 128) ? gap.endpoint : undefined;
     const requiredProfile = sourceText(gap.requiredProfile, 64) ? gap.requiredProfile : undefined;
@@ -320,32 +391,89 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       return null;
     }
     const scheme = schemes.find((entry) => record(entry) && entry.taxonomy === taxonomy);
-    if (!scheme || typeof scheme.id !== 'string' || !uuidPattern.test(scheme.id) || scheme.type !== 'skos:ConceptScheme' ||
-      scheme.releaseDigest !== bundledDigest || !sourceText(scheme.uri, 512) || !release.types[scheme.type]) {
-      pushGap({ path, code, endpoint, reason: 'missing_scheme', property: 'skos:ConceptScheme', requiredProfile: 'skos:ConceptScheme' });
+    if (
+      !scheme ||
+      typeof scheme.id !== 'string' ||
+      !uuidPattern.test(scheme.id) ||
+      scheme.type !== 'skos:ConceptScheme' ||
+      scheme.releaseDigest !== bundledDigest ||
+      !sourceText(scheme.uri, 512) ||
+      !release.types[scheme.type]
+    ) {
+      pushGap({
+        path,
+        code,
+        endpoint,
+        reason: 'missing_scheme',
+        property: 'skos:ConceptScheme',
+        requiredProfile: 'skos:ConceptScheme',
+      });
       return null;
     }
     const binding = concepts.find((entry) => record(entry) && entry.taxonomy === taxonomy && entry.code === code);
-    if (!binding || typeof binding.id !== 'string' || !uuidPattern.test(binding.id) || binding.type !== 'skos:Concept' ||
-      binding.schemeId !== scheme.id || binding.releaseDigest !== bundledDigest || !release.types[binding.type]) {
-      pushGap({ path, code, endpoint, reason: 'missing_concept', property: 'skos:Concept', requiredProfile: 'skos:Concept' });
+    if (
+      !binding ||
+      typeof binding.id !== 'string' ||
+      !uuidPattern.test(binding.id) ||
+      binding.type !== 'skos:Concept' ||
+      binding.schemeId !== scheme.id ||
+      binding.releaseDigest !== bundledDigest ||
+      !release.types[binding.type]
+    ) {
+      pushGap({
+        path,
+        code,
+        endpoint,
+        reason: 'missing_concept',
+        property: 'skos:Concept',
+        requiredProfile: 'skos:Concept',
+      });
       return null;
     }
     return binding;
   };
-  const admit = (subject: NativeIdentity, property: string, path: string, code?: string, endpoint?: string): boolean => {
+  const admit = (
+    subject: NativeIdentity,
+    property: string,
+    path: string,
+    code?: string,
+    endpoint?: string,
+  ): boolean => {
     if (!releaseMatches || !identityCompatible(subject, release, bundledDigest)) {
       const requiredProfile = identityId(subject) ? subject.type : undefined;
-      pushGap({ path, ...(code ? { code } : {}), ...(endpoint ? { endpoint } : {}), reason: 'incompatible_identity', property, requiredProfile });
+      pushGap({
+        path,
+        ...(code ? { code } : {}),
+        ...(endpoint ? { endpoint } : {}),
+        reason: 'incompatible_identity',
+        property,
+        requiredProfile,
+      });
       return false;
     }
     if (!propertyAllowed(subject, property, release)) {
-      pushGap({ path, ...(code ? { code } : {}), ...(endpoint ? { endpoint } : {}), reason: 'property_not_admitted', property, requiredProfile: subject.type });
+      pushGap({
+        path,
+        ...(code ? { code } : {}),
+        ...(endpoint ? { endpoint } : {}),
+        reason: 'property_not_admitted',
+        property,
+        requiredProfile: subject.type,
+      });
       return false;
     }
     return true;
   };
-  const propose: MappingEnvironment['propose'] = ({ row, subject, property, content, qualifiers, target, sourceEndpoint, mappingRevision }) => {
+  const propose: MappingEnvironment['propose'] = ({
+    row,
+    subject,
+    property,
+    content,
+    qualifiers,
+    target,
+    sourceEndpoint,
+    mappingRevision,
+  }) => {
     const path = sourcePath(row.path) ?? '/sourceVocabulary';
     const rowCode = 'code' in row ? sourceCode(row.code) : 'roleCode' in row ? sourceCode(row.roleCode) : null;
     if (!sourceMetadataValid || !sourceDigestValid) {
@@ -356,22 +484,42 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       return;
     }
     const definition = propertyAllowed(subject, property, release)!;
-    if (target && (!identityCompatible(target, release, bundledDigest) || !valueTargetAllowed(definition, target, release))) {
+    if (
+      target &&
+      (!identityCompatible(target, release, bundledDigest) || !valueTargetAllowed(definition, target, release))
+    ) {
       const targetValid = identityCompatible(target, release, bundledDigest);
       const endpoint = sourceCode(sourceEndpoint) ?? (targetValid ? target.id : undefined);
-      pushGap({ path, ...(rowCode ? { code: rowCode } : {}), ...(endpoint ? { endpoint } : {}), reason: 'incompatible_identity', property,
-        ...(targetValid ? { requiredProfile: target.type } : {}) });
+      pushGap({
+        path,
+        ...(rowCode ? { code: rowCode } : {}),
+        ...(endpoint ? { endpoint } : {}),
+        reason: 'incompatible_identity',
+        property,
+        ...(targetValid ? { requiredProfile: target.type } : {}),
+      });
       return;
     }
     const terms = qualifiers ?? [];
     for (const term of terms) {
       const qualifier = propertyDefinition(release, term.property);
-      if (!definition.qualifiers.includes(term.property) || !qualifier ||
+      if (
+        !definition.qualifiers.includes(term.property) ||
+        !qualifier ||
         (qualifier.datatype === 'wikibase-item' &&
-          (!term.identity || !identityCompatible(term.identity, release, bundledDigest) ||
-            !valueTargetAllowed(qualifier, term.identity, release) || term.identity.id !== term.content))) {
+          (!term.identity ||
+            !identityCompatible(term.identity, release, bundledDigest) ||
+            !valueTargetAllowed(qualifier, term.identity, release) ||
+            term.identity.id !== term.content))
+      ) {
         const requiredProfile = term.identity && identityId(term.identity) ? term.identity.type : undefined;
-        pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'qualifier_not_admitted', property: term.property, requiredProfile });
+        pushGap({
+          path,
+          ...(rowCode ? { code: rowCode } : {}),
+          reason: 'qualifier_not_admitted',
+          property: term.property,
+          requiredProfile,
+        });
         return;
       }
     }
@@ -380,44 +528,54 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'invalid_row' });
       return;
     }
-    if (origin && ((origin.externalId !== undefined && !sourceText(origin.externalId, 255)) ||
-      (origin.revision !== undefined && origin.revision !== null && !sourceText(origin.revision, 64)) ||
-      (origin.digest !== undefined && (typeof origin.digest !== 'string' || !digestPattern.test(origin.digest))) ||
-      (origin.url !== undefined && !sourceText(origin.url, 2048)))) {
+    if (
+      origin &&
+      ((origin.externalId !== undefined && !sourceText(origin.externalId, 255)) ||
+        (origin.revision !== undefined && origin.revision !== null && !sourceText(origin.revision, 64)) ||
+        (origin.digest !== undefined && (typeof origin.digest !== 'string' || !digestPattern.test(origin.digest))) ||
+        (origin.url !== undefined && !sourceText(origin.url, 2048)))
+    ) {
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'invalid_row' });
       return;
     }
     const externalId = origin && sourceText(origin.externalId, 255) ? origin.externalId : metadata.externalId;
     const revision = origin && origin.revision !== undefined ? origin.revision : metadata.recordRevision;
-    const digest = origin && typeof origin.digest === 'string' && digestPattern.test(origin.digest) ? origin.digest : metadata.digest;
+    const digest =
+      origin && typeof origin.digest === 'string' && digestPattern.test(origin.digest)
+        ? origin.digest
+        : metadata.digest;
     const sourceUrl = origin && sourceText(origin.url, 2048) ? origin.url : metadata.recordUrl;
     let url: string;
     try {
-      const parsed = new URL(safeSourceUrl(sourceUrl, metadata.provider === 'bangumi'
-        ? ['bgm.tv', 'bangumi.tv', 'chii.in']
-        : ['vndb.org']));
+      const parsed = new URL(
+        safeSourceUrl(sourceUrl, metadata.provider === 'bangumi' ? ['bgm.tv', 'bangumi.tv', 'chii.in'] : ['vndb.org']),
+      );
       parsed.hash = path;
       url = parsed.href;
     } catch {
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'invalid_row' });
       return;
     }
-    if (!sourceText(externalId, 255) || (revision !== null && !sourceText(revision, 64)) || !digestPattern.test(digest)) {
+    if (
+      !sourceText(externalId, 255) ||
+      (revision !== null && !sourceText(revision, 64)) ||
+      !digestPattern.test(digest)
+    ) {
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'invalid_row' });
       return;
     }
-    const rowSource = sourceEnvelope({
-      source: metadata.sourceAlias,
-      external_id: externalId,
-      record_revision: revision,
-      converter_revision: metadata.converterRevision,
-      digest,
-    }, 'facts');
+    const rowSource = sourceEnvelope(
+      {
+        source: metadata.sourceAlias,
+        external_id: externalId,
+        record_revision: revision,
+        converter_revision: metadata.converterRevision,
+        digest,
+      },
+      'facts',
+    );
     const reference: BatchReference = {
-      parts: [
-        textQualifier('schema:url', url),
-        textQualifier('schema:version', revision ?? 'unversioned'),
-      ],
+      parts: [textQualifier('schema:url', url), textQualifier('schema:version', revision ?? 'unversioned')],
     };
     const statement: BatchStatement = {
       property: { id: property },
@@ -440,14 +598,24 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       proposalDigest,
     ]);
     const command: BatchCommand = {
-      op: 'propose', source: rowSource, key, subject: subject.id, statement,
+      op: 'propose',
+      source: rowSource,
+      key,
+      subject: subject.id,
+      statement,
     };
     if (proposals.length >= commandLimit) {
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'command_limit' });
       return;
     }
     if (checkBatchWrite({ commands: [command] }, release).length) {
-      pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'property_not_admitted', property, requiredProfile: subject.type });
+      pushGap({
+        path,
+        ...(rowCode ? { code: rowCode } : {}),
+        reason: 'property_not_admitted',
+        property,
+        requiredProfile: subject.type,
+      });
       return;
     }
     proposals.push(command);
@@ -463,8 +631,28 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
   if (!rawSchemes.valid || !rawConcepts.valid) {
     pushGap({ path: '/sourceVocabulary/bindings', reason: 'invalid_row' });
   }
-  if (!releaseMatches) pushGap({ path: '/sourceVocabulary/bindings/releaseDigest', reason: 'missing_release', requiredProfile: bundledDigest });
-  return { input: safeInput, rows, commandLimit, release, proposals, gaps, admit, pushGap, propose, concept, sourcePath, sourceCode, isRow, identityId };
+  if (!releaseMatches)
+    pushGap({
+      path: '/sourceVocabulary/bindings/releaseDigest',
+      reason: 'missing_release',
+      requiredProfile: bundledDigest,
+    });
+  return {
+    input: safeInput,
+    rows,
+    commandLimit,
+    release,
+    proposals,
+    gaps,
+    admit,
+    pushGap,
+    propose,
+    concept,
+    sourcePath,
+    sourceCode,
+    isRow,
+    identityId,
+  };
 }
 
 export function finishMapping(environment: MappingEnvironment): SourceVocabularyResult {
