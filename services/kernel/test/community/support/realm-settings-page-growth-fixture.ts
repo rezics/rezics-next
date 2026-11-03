@@ -148,9 +148,10 @@ export function assertSettingsSourcePrefixes(capture: Capture, axis: Axis) {
       for (const { node } of walkPlanTree(plan)) {
         if (node.Schema !== schema || !relations.includes(String(node['Relation Name']))) continue;
         checked++;
-        const condition = String(node['Index Cond'] ?? '');
-        expect(condition).toMatch(/\broute\s*=/);
-        expect(condition).toMatch(/\brevision_id\s*=/);
+        // Bitmap heap scans retain the routed equality on their index child.
+        // Residual Filter/Recheck Cond expressions alone never satisfy this proof.
+        const conditions = [...walkPlanTree(node)].map(({ node: index }) => String(index['Index Cond'] ?? ''));
+        expect(conditions.some((condition) => /\broute\s*=/.test(condition) && /\brevision_id\s*=/.test(condition))).toBe(true);
       }
     }
   expect(checked).toBeGreaterThan(0);
