@@ -1,6 +1,7 @@
 # Realm claim approval operation binding
 
-The bound source is `c968558f1f20e21ca88ac8e7b26754a3fd642d7a`. This acceptance extends
+The bound base source is `4de743f07ffdb50deec3f995df253cc0c4b3ca10`; the authored test and private
+fixture are committed at `999c789875a7c8b08d0245f19d4199b384100fb1`. This acceptance extends
 [Content Done-when 3 and Acceptance](../goals/content.md) and the community
 [Approve Realm claim source/state Cost row](../../services/kernel/src/community/README.md#cost).
 It does not establish measured growth or promotion.
@@ -38,7 +39,7 @@ locator, retaining the locator and cursor for pending succession. Accounts must 
 erasure root before Realm checkout; grant changes and Content continuity must share the writer.
 Production and shared fixtures remain read-only in this acceptance slice.
 
-## Measurement continuation
+## Measurement plan
 
 Keep native succession as a hard prerequisite; never substitute the stored-state orphan helper.
 After the owning seam is delivered, use the shared growth observer/classifier on the real
@@ -50,12 +51,32 @@ point read and two conditional updates; Accounts' authorization/grant/receipt/hi
 must be attributed separately. Include stale-source rollback and denied/empty branches without
 requester, member or history enumeration. Existing claim-review listing costs are separate.
 
-Three-scale observations for every axis are unavailable: no measured operation or assertion has
-been executed in this attempt. `bun run --cwd services/kernel typecheck` checked the authored
-source at `3236753758` and exited 2 with diagnostics exclusively in files unchanged from the
-bound base, including `src/access/shared-history.ts(247,35): error TS2304: Cannot find name 'commandHistoryKind'.`
-There were no diagnostics in the added test or private fixture. The eventual native command is
-`bun run --cwd services/kernel check test/community/growth-realm-claim-approval.test.ts`.
-Native, browser and acceptance launches are deferred by the current controller instruction;
-type checking does not substitute for that command. The remaining measurement work is specified
-in `.temp/continuation/realm-claim-approval-growth.md`.
+Decision: implement the growth proof against the documented native succession contract; keep registered Auth erasure as a hard prerequisite and defer runtime acceptance until the controller admits it after integration.
+
+## Attempt record
+
+Fixture binding is `test/community/growth-realm-claim-approval.test.ts` to
+`test/community/support/growth-realm-claim-approval-fixture.ts` at revision
+`999c789875a7c8b08d0245f19d4199b384100fb1`. The fixture creates the selected Realm through the
+registered Community runtime and Auth deletion worker, then measures the real
+`approveRealmClaim` with the production Access instance and shared `checkGrowth` capture. Growth
+pressure is seeded through the separate growth database connection.
+
+No runtime assertion was reached: the current controller deferred the native acceptance launch.
+In particular, the registered orphan prerequisite, rollback, denied/empty, approval/replay, and
+all measured-operation assertions remain unexecuted. The requested scale observations are:
+
+| Independent axis | 256 | 1024 | 4096 |
+| --- | --- | --- | --- |
+| Unrelated Realms and revisions | Not observed | Not observed | Not observed |
+| Unrelated claim requests | Not observed | Not observed | Not observed |
+| Native resource-role grants | Not observed | Not observed | Not observed |
+| Retained receipt/outbox/write-basis history | Not observed | Not observed | Not observed |
+
+`bun run --cwd services/kernel typecheck` ran at `999c789875a7c8b08d0245f19d4199b384100fb1`
+and exited 2 on diagnostics in unchanged base files; it reported none in the authored test or
+fixture. One base diagnostic is `src/access/shared-history.ts(247,35): error TS2304: Cannot find
+name 'commandHistoryKind'.` The native acceptance command
+`bun run --cwd services/kernel check test/community/growth-realm-claim-approval.test.ts` was not
+launched because the current controller defers native, browser and acceptance checks until after
+integration. Type checking does not substitute for that command.
