@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import {
   CommandUnavailableError,
@@ -410,4 +410,42 @@ test('Write wait probe stays within its bound as partition and receipt history g
   expect(deadlinePhases).toEqual({ prepared: 1, authorized: 1, finalized: 1 });
   expect(deadlineProbes).toBeGreaterThan(0);
   expect(deadlineCost.statements).toBe(deadlineProbes + 4);
+}, 180_000);
+
+test('Write wait deadline refusal stays bounded at three receipt history scales', async () => {
+  await reset();
+  await setPartitionState('fenced');
+  const phases = { prepared: 0, authorized: 0, finalized: 0 };
+  const auth = authorization(phases);
+  const now = Date.now.bind(Date);
+
+  await checkedGrowth('Write wait deadline refusal', async (_growthDb, scale, repetition) => {
+    const deadline = now() + 5_000;
+    let expired = false;
+    // Expire only after two native fenced probes, keeping the poll term independent of history and host speed.
+    const clock = spyOn(Date, 'now').mockImplementation(() => (expired ? Math.max(now(), deadline) : now()));
+    try {
+      const observed = await observePartitionReads(
+        (reads) => {
+          if (reads === 3) expired = true;
+        },
+        () => waitingCommand(scale, repetition, auth, deadline).catch((error: unknown) => error),
+      );
+      expect(observed.value).toBeInstanceOf(CommandUnavailableError);
+      expect(observed.value).toMatchObject({ reason: 'fenced', partition: anchorPartition });
+      expect(observed.reads).toBe(3);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  expect(phases).toEqual({ prepared: 18, authorized: 18, finalized: 18 });
+  const receipts = await db.admin.query(
+    'SELECT count(*)::int AS count FROM core.receipt WHERE command_kind = $1 AND idempotency_key LIKE $2',
+    [kind, `${prefix}wait-%`],
+  );
+  expect(receipts.rows).toEqual([{ count: 0 }]);
+  const outbox = await db.admin.query('SELECT count(*)::int AS count FROM core.outbox WHERE subject = $1', [
+    `${prefix}command`,
+  ]);
+  expect(outbox.rows).toEqual([{ count: 0 }]);
 }, 180_000);

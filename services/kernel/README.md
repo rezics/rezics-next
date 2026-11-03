@@ -1023,6 +1023,8 @@ Measure native SQL statement aborts alongside thrown callback failures.
   bodies and failed finalizers seek a fresh receipt key, update one `core.partition` row by `partition_pkey`, then roll
   back. The finalizer-failure fixture updates that same row twice. No failed attempt advances the partition or stores a receipt.
   The SQL-aborted fixture adds one relation-free division-by-zero statement and preserves PostgreSQL error `22012`.
+  Separate account and anonymous sequences retry the aborted key successfully and replay that committed result;
+  the failed mutation, rollback, successful retry and replay all remain inside the measured operation.
 - Bound: constant statements and examined rows, logarithmic receipt-index buffers. The fixtures grow 512, 4,096 and
   32,768 same-principal receipts distributed across the anchor and unrelated partitions, holding the replay key,
   response bytes and callback work fixed. Rollback work includes the attempted updates; application callback work
@@ -1035,6 +1037,23 @@ Measure native SQL statement aborts alongside thrown callback failures.
   bounded as receipt history grows”; “anonymous sql-aborted command stays bounded as receipt history grows”;
   “account finalizer-failed command
   stays bounded as receipt history grows”; “anonymous finalizer-failed command stays bounded as receipt history grows”.
+  Same-key retry checks in that file: “account SQL-aborted key accepts a fresh retry as receipt history grows”;
+  “anonymous SQL-aborted key accepts a fresh retry as receipt history grows”. Each fixes one abort, one successful
+  one-event command and one replay, adding their constant rows/statements and logarithmic index buffers.
+
+### Write wait deadline refusal
+
+Decision: the three-scale deadline-refusal fixture advances the test clock after two native fenced probes so the
+poll count stays fixed while history grows; the existing real-time deadline outcome remains covered separately.
+
+- Touches: one time mint, receipt miss, failed fence and partition-state read, followed by two native bounded
+  partition reads. The partition stays fenced; no receipt or outbox event is retained. Seed receipt, outbox and
+  write-basis histories at 2,048, 8,192 and 32,768 rows, holding the command key width and authorization fixed.
+- Bound: four fixed application statements plus two probe statements; constant examined rows and statements,
+  logarithmic index buffers. Transaction control and the failed fence remain captured. In production the probe
+  term is linear in the independent deadline budget, as derived in Write wait probe above.
+- Growth check: `test/growth-command-wait.test.ts`: “Write wait deadline refusal stays bounded at three receipt
+  history scales”.
 
 ## Write rate deployment configuration
 

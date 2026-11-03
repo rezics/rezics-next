@@ -145,3 +145,86 @@ for (const principalKind of ['account', 'anonymous'] as const) {
     }, 180_000);
   }
 }
+
+for (const principalKind of ['account', 'anonymous'] as const) {
+  test(`${principalKind} SQL-aborted key accepts a fresh retry as receipt history grows`, async () => {
+    const db = await openGrowthDatabase();
+    const kind = `growth-command-sql-retry-${principalKind}`;
+    const identity = principalCommandIdentity(
+      principalKind === 'anonymous'
+        ? { kind: 'anonymous' }
+        : { kind: 'account', accountId, clientId: kind, requestedBy: null, scopes: [], authnEpoch: 1 },
+    );
+    const authorization: CommandAuthorization = {
+      action: 'growth:command',
+      resource: { route, id: newId(route) },
+      authorize: async () => 'execute',
+      denied: () => new Error('denied'),
+    };
+    const population: Population = {
+      name: kind,
+      hotPartition: partition,
+      rows: ({ ordinal, route: rowRoute, partition: rowPartition }) => ({
+        'core.receipt': [
+          {
+            partition_no: rowPartition,
+            principal_kind: identity.principal.kind,
+            principal_id: identity.principal.id,
+            command_kind: kind,
+            idempotency_key: `seed-${ordinal}`,
+            request_digest: digest,
+            epoch: 1,
+            position: (principalKind === 'account' ? 2_000_000 : 3_000_000) + ordinal + 1,
+            transaction_id: newId(rowRoute),
+            response: { accepted: true },
+          },
+        ],
+      }),
+    };
+    try {
+      const initial = await db.admin.query('SELECT epoch, position::text FROM core.partition WHERE partition_no = $1', [
+        partition,
+      ]);
+      const epoch = initial.rows[0].epoch;
+      let position = BigInt(initial.rows[0].position);
+      const report = await checkGrowth(db, {
+        name: `${principalKind} SQL-aborted key retry`,
+        scales: [1, 8, 64],
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        grow: async (database, scale, previous) => {
+          await seed(database, population, { from: previous * 512, to: scale * 512 });
+        },
+        operation: async () => {
+          const options = { ...identity, partition, authorization, receipt: { kind, key: crypto.randomUUID(), digest } };
+          await expect(
+            runCommand(db.pool, options, async (tx) => {
+              await tx.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [partition]);
+              await tx.query('SELECT 1 / 0');
+              return { value: { accepted: false }, events: [event] };
+            }),
+          ).rejects.toMatchObject({ code: '22012' });
+          const retry = await runCommand(db.pool, options, async () => ({
+            value: { accepted: true },
+            events: [event],
+          }));
+          expect(retry.replayed).toBe(false);
+          expect(retry.value).toEqual({ accepted: true });
+          expect(retry.epoch).toBe(epoch);
+          expect(BigInt(retry.position)).toBe(++position);
+          expect(
+            await runCommand(db.pool, options, async () => {
+              throw new Error('Retry replay ran the body');
+            }),
+          ).toEqual({ ...retry, replayed: true });
+        },
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+      for (const { cost } of report.samples) {
+        expect(cost.relations['core.receipt']?.rows).toBeGreaterThan(0);
+        expect(cost.relations['core.receipt']?.sequentialScans ?? 0).toBe(0);
+      }
+    } finally {
+      await db.close();
+    }
+  }, 180_000);
+}
