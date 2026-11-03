@@ -206,10 +206,10 @@ test('Current hide and takedown suppress stale rating hits and refill pages with
   }
 });
 
-test('Ordinary Global rating search rejects population and question body overrides as unknown fields', async () => {
+test('Global rating search rejects internal population and question overrides as unknown fields', async () => {
   for (const persona of ['anonymous', 'editor'] as const) {
     for (const [key, value] of [
-      ['population', { realm: randomUUID() }],
+      ['populationId', randomUUID()],
       ['question', randomUUID()],
     ] as const) {
       field(await search({ ...query(), [key]: value }, persona), `/${key}`);

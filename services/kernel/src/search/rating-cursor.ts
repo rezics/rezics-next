@@ -1,9 +1,15 @@
 import { routeOf } from '../route/route.ts';
+import { createHash } from 'node:crypto';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding, type SearchSortValue } from './cursor.ts';
 
-/** Supplied from current native Global standard-question metadata, never the request or a cached cursor. */
-export type RatingCursorContext = { questionId: string; populationId: string; priorEpoch: number | null };
+/** Supplied from current native standard-question metadata, never request or cursor evidence. */
+export type RatingCursorContext = {
+  questionId: string;
+  populationId: string;
+  priorEpoch: number | null;
+  realm?: { authority: string; revision: string };
+};
 export type RatingPhase = 'scored' | 'unscored';
 export type RatingCursorResult =
   | { ok: true; generation: number; phase: RatingPhase; after: SearchSortValue[] }
@@ -16,14 +22,31 @@ const MAX_NAME_LENGTH = 512;
 
 function validContext(context: unknown): context is RatingCursorContext {
   if (context === null || typeof context !== 'object' || Array.isArray(context)) return false;
-  const { questionId, populationId, priorEpoch } = context as Record<string, unknown>;
+  const { questionId, populationId, priorEpoch, realm } = context as RatingCursorContext;
   return (
     typeof questionId === 'string' &&
     questionId.length === 36 &&
     routeOf(questionId) !== null &&
-    populationId === GLOBAL_CONTEXT &&
+    (realm === undefined
+      ? populationId === GLOBAL_CONTEXT
+      : typeof populationId === 'string' &&
+        populationId !== GLOBAL_CONTEXT &&
+        routeOf(populationId) !== null &&
+        realm !== null &&
+        typeof realm === 'object' &&
+        [realm.authority, realm.revision].every(
+          (value) => typeof value === 'string' && value.length > 0 && value.length <= 256,
+        )) &&
     (priorEpoch === null || (typeof priorEpoch === 'number' && Number.isSafeInteger(priorEpoch) && priorEpoch > 0))
   );
+}
+
+function prefix(context: RatingCursorContext): string {
+  return context.realm
+    ? `rating-realm-v1:${createHash('sha256')
+        .update(JSON.stringify([context.realm.authority, context.realm.revision]))
+        .digest('hex')}`
+    : PREFIX;
 }
 
 function validPosition(epoch: number | null, phase: unknown, after: unknown): after is SearchSortValue[] {
@@ -60,7 +83,7 @@ export async function encodeRatingCursor(
     binding,
     {
       generation: cursor.generation,
-      after: [PREFIX, context.questionId, context.populationId, context.priorEpoch, cursor.phase, ...cursor.after],
+      after: [prefix(context), context.questionId, context.populationId, context.priorEpoch, cursor.phase, ...cursor.after],
     },
     now,
   );
@@ -76,15 +99,27 @@ export async function decodeRatingCursor(
   // Authenticate the original request/viewer/operation before inspecting eligibility metadata.
   const decoded = await decodeSearchCursor(ring, binding, token, now);
   if (!decoded.ok) return decoded;
-  const [prefix, questionId, populationId, priorEpoch, phase, ...after] = decoded.after;
-  const signedContext = { questionId, populationId, priorEpoch };
+  if (!validContext(context)) return { ok: false, reason: 'invalid' };
+  const [signedPrefix, questionId, populationId, priorEpoch, phase, ...after] = decoded.after;
+  const realmToken = typeof signedPrefix === 'string' && /^rating-realm-v1:[0-9a-f]{64}$/.test(signedPrefix);
+  const signedContext = {
+    questionId,
+    populationId,
+    priorEpoch,
+    ...(realmToken ? { realm: context.realm } : {}),
+  };
   if (
-    prefix !== PREFIX ||
+    (signedPrefix !== PREFIX && !realmToken) ||
     !validContext(signedContext) ||
-    !validPosition(signedContext.priorEpoch, phase, after) ||
-    !validContext(context)
+    !validPosition(signedContext.priorEpoch, phase, after)
   )
     return { ok: false, reason: 'invalid' };
-  if (questionId !== context.questionId || priorEpoch !== context.priorEpoch) return { ok: false, reason: 'restart' };
+  if (
+    signedPrefix !== prefix(context) ||
+    questionId !== context.questionId ||
+    populationId !== context.populationId ||
+    priorEpoch !== context.priorEpoch
+  )
+    return { ok: false, reason: 'restart' };
   return { ok: true, generation: decoded.generation, phase: phase as RatingPhase, after };
 }

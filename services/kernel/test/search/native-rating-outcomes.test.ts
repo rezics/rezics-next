@@ -205,8 +205,8 @@ test('real native votes publish Global scores through the default worker, relay 
     for (const persona of ['anonymous', 'editor'] as const) {
       for (const [key, value] of [
         ['question', question],
-        ['population', driver.globalContext],
-        ['population', { realm: randomUUID() }],
+        ['populationId', driver.globalContext],
+        ['questionId', question],
       ] as const) {
         const response = await search({ [key]: value }, persona);
         problem(response, 400, 'invalid_request');

@@ -305,6 +305,7 @@ export function searchRoutes<App>(
             kindCountLeaf: t.Optional(t.Integer({ minimum: 0 })),
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
+            population: t.Optional(t.Object({ realm: t.String({ format: 'uuid' }) }, object)),
             sort: t.Optional(
               t.Union([
                 t.Literal('relevance'),
@@ -339,7 +340,10 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      ({ body, authorize, admission, job, actor }) => {
+      ({ body, authorize, admission, job, actor, set }) => {
+        if (body.population !== undefined) set.headers['cache-control'] = 'private, no-store';
+        if (body.representation === 'discovery-v1' && body.population !== undefined)
+          throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
         async function prepare(): Promise<AccessCheck> {
           if (
             body.representation === 'discovery-v1'
@@ -388,6 +392,11 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'invalid_format' }],
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const realmAccess = body.population
+              ? gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access)
+              : undefined;
+            if (body.population && !realmAccess)
+              throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             const scopeAccess: Access | undefined =
               gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
@@ -403,6 +412,7 @@ export function searchRoutes<App>(
               {
                 deadline: job.deadline,
                 ...(scopeOptions ? { scope: scopeOptions } : {}),
+                ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
                 async complete(page) {
                   completed = publicBases(
                     await fill(page, authorize, body.languages, active),

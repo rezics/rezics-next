@@ -71,11 +71,14 @@ import {
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
 import { ownSubjectRequest } from './service-request.ts';
+import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
+import { routeOf } from '../route/route.ts';
 
 export type SearchRequest = {
   text?: string;
   filter?: unknown;
   sort?: SearchPlan['sort'];
+  population?: { realm: string };
   limit?: number;
   cursor?: string;
   kindCursor?: string;
@@ -95,6 +98,7 @@ export type PublicSearchReadContext = Readonly<{
   deadline: number;
   /** The verified request context used only by the service-bound native Scope. */
   scope?: LeafOptions;
+  realmAuthority?: RealmRatingQuery['authority'];
   complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 
@@ -246,6 +250,20 @@ function validate(request: SearchRequest) {
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
+  if (request.population !== undefined) {
+    const population = request.population;
+    if (
+      !population ||
+      typeof population !== 'object' ||
+      Array.isArray(population) ||
+      Object.keys(population).length !== 1 ||
+      typeof population.realm !== 'string' ||
+      routeOf(population.realm) === null ||
+      population.realm === GLOBAL_CONTEXT.id
+    )
+      invalid('/population', 'invalid_format');
+    if (sort !== 'rating') unsupported('/population');
+  }
   const limit = validateSearchLimit(request.limit);
   const hitOptions = validateHitOptions(request);
 
@@ -260,6 +278,7 @@ function validate(request: SearchRequest) {
       ...(text ? { text: request.text } : {}),
       ...(filter ? { filter } : {}),
       sort,
+      ...(request.population ? { population: request.population } : {}),
       limit,
       ...(hitOptions.descriptions ? { descriptions: true } : {}),
       ...(hitOptions.languages ? { languages: hitOptions.languages } : {}),
@@ -292,6 +311,7 @@ export function createSearchService({
   source,
   ratings,
   realmSubjects,
+  realmRatings,
   cursors,
   clock = systemClock,
   facetSample = 10_000,
@@ -307,6 +327,7 @@ export function createSearchService({
   source: SubjectSource;
   ratings?: PublicRatingSource;
   realmSubjects?: RealmSubjectSource;
+  realmRatings?: RealmRatingSource;
   cursors: KeyRing;
   clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
@@ -448,6 +469,7 @@ export function createSearchService({
     text: ReturnType<typeof parseText> | undefined,
     filter: ReturnType<typeof parseFilter> | undefined,
     current?: FilterRelease,
+    nativeOrder = false,
   ) {
     let admitted;
     if (filter) {
@@ -465,6 +487,7 @@ export function createSearchService({
     }
     if (
       !publicFilters &&
+      !nativeOrder &&
       (text || admitted) &&
       !(text && positiveText(text)) &&
       !(admitted && positiveFilter(admitted))
@@ -492,10 +515,61 @@ export function createSearchService({
         : undefined;
       if ((filter || hitOptions.properties) && !current)
         throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-      const admitted = await admitQuery(text, filter, current ?? undefined);
+      const admitted = await admitQuery(text, filter, current ?? undefined, request.population !== undefined);
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
         invalid('/kindCursor', 'invalid_type');
+      if (request.population) {
+        // Selected populations never query public rating fields or acquire a public result cache.
+        if (request.kindCursor !== undefined) unsupported('/kindCursor');
+        const binding = {
+          operation: 'subjects.search.realm_rating',
+          principal,
+          request: { ...bindingRequest, meaningDigest: kinds?.digest ?? null },
+        };
+        // Authenticate before native authority/evidence reads, including malformed continuations.
+        if (request.cursor !== undefined) {
+          const decoded = await decodeSearchCursor(cursors, binding, request.cursor, now);
+          if (!decoded.ok) {
+            if (decoded.reason === 'expired') throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+        }
+        const ordered = await readRealmRatingOrder({
+          ratings: realmRatings,
+          source,
+          cursors,
+          binding,
+          limit,
+          now,
+          ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+          query: {
+            principal,
+            populationId: request.population.realm,
+            release: current ?? undefined,
+            meaningDigest: kinds?.digest,
+            text,
+            filter: admitted,
+            deadline: readContext?.deadline ?? Date.now() + 10_000,
+            ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
+          },
+        });
+        const results = ordered.subjects.map((subject) => projectHit(subject, hitOptions));
+        if (hitOptions.properties) {
+          const facts = await sourceRequest(() =>
+            projectFacts(source, ordered.subjects, hitOptions.properties!, hitOptions.languages),
+          );
+          results.forEach((hit, index) => (hit.facts = facts[index]!));
+        }
+        const response: PublicSearchPage = {
+          subjects: await sourceRequest(() => publicHitFigures(pool, results)),
+          next: ordered.next,
+          as_of: ordered.as_of,
+        };
+        await readContext?.complete(response);
+        await ordered.finalize();
+        return response;
+      }
       const scopedRequest = admitted !== undefined && containsOwnerPredicate(admitted);
       let scope: ReturnType<typeof createSearchScopeForService> | undefined;
       let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
