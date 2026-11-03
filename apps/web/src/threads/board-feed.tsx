@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { MessageSquareIcon, HeartIcon } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -10,6 +10,21 @@ import { Byline, fullDateTime, timeText } from './byline';
 import { threadLocation, threadTitle } from './thread-href';
 import { threadActivity } from './activity';
 import { CopyDiscussionLink } from './copy-discussion-link';
+import {
+  BoardPinBadge,
+  BoardPinPageStatus,
+  BoardPinThreadControls,
+  boardPinVisitKey,
+  unavailableBoardPinProducer,
+  useBoardPinPage,
+  useBoardPinVisit,
+} from './board-pins/controller';
+import type {
+  BoardPinProducer,
+  BoardPinReadResult,
+  BoardPinSender,
+  BoardPinThread,
+} from './board-pins/contract';
 import {
   boardThreadPreview,
   boardThreadReactionCount,
@@ -24,10 +39,14 @@ function ThreadCard({
   thread,
   authors,
   now,
+  pin,
+  pinControl,
 }: {
   thread: BoardFeedThread;
   authors: CommunityBoardPage['authors'];
   now: string;
+  pin?: BoardPinThread;
+  pinControl?: ReactNode;
 }) {
   const locale = getLocale();
   const available = thread.availability === 'available';
@@ -58,19 +77,23 @@ function ThreadCard({
       titleDataSlot="board-feed-card"
       metadata={
         available ? (
-          <Byline
-            author={authors?.[thread.authorId]}
-            createdAt={thread.createdAt}
-            now={now}
-            size="sm"
-            className="w-full [&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
-          />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {pin?.pinned ? <BoardPinBadge pinned /> : null}
+            <Byline
+              author={authors?.[thread.authorId]}
+              createdAt={thread.createdAt}
+              now={now}
+              size="sm"
+              className="w-full [&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
+            />
+          </div>
         ) : null
       }
       preview={previewContent}
       actions={
         <>
           <CopyDiscussionLink href={href} />
+          {pinControl}
           {available && reactions !== null ? (
             <a
               href={href}
@@ -107,25 +130,60 @@ function ThreadCard({
 }
 
 /** A community feed composes shared rows, menus and buttons; shadcn has no domain feed or signed continuation. */
-export function BoardFeed({
-  boardId,
-  sort,
-  page,
-  authors,
-  now,
-  actions,
-}: {
+type BoardFeedProps = {
   boardId: string;
   sort: BoardSort;
   page: CommunityBoardPage['threads'];
   authors: CommunityBoardPage['authors'];
   now: string;
   actions?: ReactNode;
+  /** Native-format seam inputs for a future Content binding and its focused stories. */
+  initialPinRead?: BoardPinReadResult;
+  pinProducer?: BoardPinProducer;
+  pinSender?: BoardPinSender;
+};
+
+export function BoardFeed(props: BoardFeedProps) {
+  const threadIds = useMemo(() => props.page.threads.map((thread) => thread.id), [props.page.threads]);
+  const pinProducer = props.pinProducer ?? unavailableBoardPinProducer;
+  const visit = useBoardPinVisit(props.pinSender);
+  const key = boardPinVisitKey({
+    boardId: props.boardId,
+    threadIds,
+    ...(props.initialPinRead === undefined ? {} : { initial: props.initialPinRead }),
+    producer: pinProducer,
+    visit,
+  });
+  return <BoardFeedVisit key={key} {...props} pinProducer={pinProducer} threadIds={threadIds} visit={visit} />;
+}
+
+function BoardFeedVisit({
+  boardId,
+  sort,
+  page,
+  authors,
+  now,
+  actions,
+  initialPinRead,
+  pinProducer,
+  threadIds,
+  visit,
+}: BoardFeedProps & {
+  pinProducer: BoardPinProducer;
+  threadIds: readonly string[];
+  visit: ReturnType<typeof useBoardPinVisit>;
 }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const locale = getLocale();
   const location = useLocation();
+  const pins = useBoardPinPage({
+    boardId,
+    threadIds,
+    ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
+    producer: pinProducer,
+    visit,
+  });
   useLayoutEffect(() => {
     const state = location.state;
     const continuationState = state as unknown as Record<string, unknown>;
@@ -170,16 +228,38 @@ export function BoardFeed({
           </details>
         ) : null}
       </div>
+      <BoardPinPageStatus state={pins.state} onRetry={pins.refresh} />
       {page.threads.length ? (
         <ul className="space-y-2">
-          {page.threads.map((thread) => (
-            <ThreadCard
-              key={`${boardId}:${thread.id}:${thread.availability}`}
-              thread={thread}
-              authors={authors}
-              now={now}
-            />
-          ))}
+          {page.threads.map((thread) => {
+            const row =
+              thread.availability === 'available' && pins.state === 'ready'
+                ? pins.state.byThreadId.get(thread.id)
+                : undefined;
+            const rowStatus = pins.rowStatuses[thread.id];
+            const pinControl = row || rowStatus ? (
+              <BoardPinThreadControls
+                discussionTitle={thread.title ?? m.threads_untitled()}
+                row={row}
+                management={pins.state.state === 'ready' ? pins.state.management : null}
+                sender={pins.sender}
+                status={rowStatus}
+                onChange={(action) => pins.start(thread.id, action)}
+                onRetry={() => pins.retry(thread.id)}
+                onRefresh={pins.refresh}
+              />
+            ) : null;
+            return (
+              <ThreadCard
+                key={`${boardId}:${thread.id}:${thread.availability}`}
+                thread={thread}
+                authors={authors}
+                now={now}
+                pin={row}
+                pinControl={pinControl}
+              />
+            );
+          })}
         </ul>
       ) : (
         <div className="rounded-2xl bg-muted/50 px-5 py-10 text-center">

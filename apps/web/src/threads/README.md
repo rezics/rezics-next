@@ -1,5 +1,10 @@
 # Thread authoring
 
+## Board pins
+
+The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
+[Board pins](board-pins.md).
+
 ## Board row sharing
 
 Clipboard failures reveal an inline read-only URL field, focus/select it after menu dismissal, and return focus to

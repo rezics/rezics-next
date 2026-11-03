@@ -14,6 +14,7 @@ import {
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardFeed } from '../src/threads/board-feed';
+import type { BoardPinProducer, BoardPinReadResult, BoardPinSender } from '../src/threads/board-pins/contract';
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
 import type { BoardSort } from '../src/threads/board-sort';
 import { fullDateTime } from '../src/threads/byline';
@@ -21,7 +22,13 @@ import { threadLocation } from '../src/threads/thread-href';
 
 // Authored consumer regressions, UNRUN at delivery. These supplied DTOs establish no native disclosure or signing proof.
 const now = '2026-11-01T00:00:00.000Z';
-type Feed = { page: CommunityBoardPage; sort: BoardSort };
+type Feed = {
+  page: CommunityBoardPage;
+  sort: BoardSort;
+  pinRead?: BoardPinReadResult;
+  pinProducer?: BoardPinProducer;
+  pinSender?: BoardPinSender;
+};
 
 async function render(feeds: Feed[]) {
   const root = createRootRoute({
@@ -29,7 +36,7 @@ async function render(feeds: Feed[]) {
       createElement(
         Fragment,
         null,
-        feeds.map(({ page, sort }, index) =>
+        feeds.map(({ page, sort, pinRead, pinProducer, pinSender }, index) =>
           createElement(BoardFeed, {
             key: index,
             boardId: page.board.id,
@@ -37,6 +44,9 @@ async function render(feeds: Feed[]) {
             page: page.threads,
             authors: page.authors,
             now,
+            ...(pinRead === undefined ? {} : { initialPinRead: pinRead }),
+            ...(pinProducer === undefined ? {} : { pinProducer }),
+            ...(pinSender === undefined ? {} : { pinSender }),
           }),
         ),
       ),
@@ -248,4 +258,62 @@ test('rank explanation requires a supplied valid ranked date, never a fabricated
   expect(markup).toContain(`dateTime="${rankRefreshedAt}"`);
   expect(markup).toContain(`title="${fullDateTime(rankRefreshedAt, 'en')}"`);
   expect(markup).toContain(m.board_feed_order_help());
+});
+
+test('native pin states decorate the ordinary feed in its supplied order with only explicit row actions', async () => {
+  setLocale('en', { reload: false });
+  const { page } = await fixture();
+  const first = page.threads.threads[0]!;
+  const second: BoardFeedThread = {
+    ...first,
+    id: '01a17a3b-09b4-77bf-a24b-1234ebeab5b3',
+    title: 'Second native row',
+  };
+  const orderedPage: CommunityBoardPage = {
+    ...page,
+    threads: { ...page.threads, threads: [first, second] },
+  };
+  const pinRead: BoardPinReadResult = {
+    state: 'ready',
+    boardId: page.board.id,
+    management: 'allowed',
+    // Reverse order on purpose. These statuses decorate rows and never order them.
+    threads: [
+      { threadId: second.id, pinned: false, actions: ['pin'] },
+      { threadId: first.id, pinned: true, actions: ['unpin'] },
+    ],
+  };
+  const markup = await render([
+    {
+      page: orderedPage,
+      sort: 'active',
+      pinRead,
+      pinSender: { subject: 'moderator', csrfToken: 'private-csrf' },
+    },
+  ]);
+  const titles = [...markup.matchAll(/<h3\b[^>]*data-slot="board-feed-card"[^>]*>([\s\S]*?)<\/h3>/gu)].map(
+    (match) => match[1],
+  );
+  expect(titles).toEqual([first.title, second.title]);
+  expect(markup.match(new RegExp(m.board_pin_badge(), 'gu'))).toHaveLength(1);
+  expect(markup).toContain(m.board_pin_unpin());
+  expect(markup).toContain(m.board_pin_pin());
+  expect(markup.match(/<ul\b/gu)).toHaveLength(1);
+  expect(markup).not.toContain('private-csrf');
+  expect(markup).not.toContain('moderator');
+});
+
+test('denied and unavailable pin reads keep ordinary discussions visible and never invent pin badges', async () => {
+  setLocale('en', { reload: false });
+  const { page } = await fixture();
+  for (const pinRead of [{ state: 'denied' }, { state: 'unavailable' }] as const) {
+    const markup = await render([{ page, sort: 'active', pinRead }]);
+    expect(markup).toContain(page.threads.threads[0]!.title!);
+    expect(markup).toContain(
+      pinRead.state === 'denied' ? m.board_pin_read_denied() : m.board_pin_unavailable(),
+    );
+    expect(markup).not.toContain(m.board_pin_badge());
+    expect(markup).not.toContain(m.board_pin_pin());
+    expect(markup).toContain(m.board_community_retry());
+  }
 });
