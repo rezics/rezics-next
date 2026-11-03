@@ -30,11 +30,15 @@ export type WorkPartsScenario =
   | 'no-position'
   | 'missing-assertion'
   | 'uncertain'
-  | 'pending';
+  | 'pending'
+  | 'positions';
 export const workPartsId = '00000000-0000-4000-8000-000000000801';
 export const workPartId = '00000000-0000-4000-8000-000000000802';
-const otherPart = '00000000-0000-4000-8000-000000000803';
+export const workPartsSecondId = '00000000-0000-4000-8000-000000000803';
+const otherPart = workPartsSecondId;
 const candidateId = '00000000-0000-4000-8000-000000000804';
+const secondStatementId = '00000000-0000-4000-8000-000000000806';
+const secondCandidateId = '00000000-0000-4000-8000-000000000807';
 
 /** Typed HTTP seam only: these fixtures exercise the same emitted definitions and native client as the page. */
 export function workPartsFixture(initialScenario: WorkPartsScenario = 'current', locale = 'en') {
@@ -80,7 +84,30 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
     },
     related: { [workPartsId]: { type: anchor.subject.type, labels: anchor.subject.labels } },
   };
+  const secondOriginal: Candidate['statement'] = {
+    ...snak(property, workPartsId, 'wikibase-item'),
+    id: secondStatementId,
+    rank: 'normal',
+    qualifiers: noPosition ? [] : [snak('schema:position', 'S2.5')],
+    references: [
+      { hash: 'second-one', parts: [snak('schema:url', 'https://example.org/contents/two', 'url')] },
+      { hash: 'second-two', parts: [snak('schema:url', 'https://example.org/contents/two/b', 'url')] },
+    ],
+    rezics: { release: anchor.subject.release, revision: 1 },
+  };
+  const secondHolder: SubjectRead = {
+    ...structuredClone(anchor),
+    subject: {
+      ...structuredClone(anchor.subject),
+      id: otherPart,
+      type: noPosition ? 'schema:Episode' : 'schema:Book',
+      labels: { en: 'Volume Special' },
+      statements: { [property]: [structuredClone(secondOriginal)] },
+    },
+    related: { [workPartsId]: { type: anchor.subject.type, labels: anchor.subject.labels } },
+  };
   let candidate: Candidate | undefined;
+  const candidatesByHolder = new Map<string, Candidate>();
   let adoptionHead = 3;
   let lost = false;
   const receipts = new Map<string, unknown>();
@@ -103,6 +130,23 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
   });
   function rows(second = false): PartRow[] {
     if (scenario === 'empty') return [];
+    if (scenario === 'positions' && !second)
+      return [
+        {
+          holder: workPartId,
+          statementId: holder.subject.statements[property]![0]!.id,
+          statement: holder.subject.statements[property]![0]!,
+          summary: summary(workPartId, 'Volume Two'),
+          related: holder.related,
+        },
+        {
+          holder: otherPart,
+          statementId: secondHolder.subject.statements[property]![0]!.id,
+          statement: secondHolder.subject.statements[property]![0]!,
+          summary: summary(otherPart, 'Volume Special'),
+          related: secondHolder.related,
+        },
+      ];
     return [
       {
         holder: second ? otherPart : workPartId,
@@ -155,6 +199,7 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
       if (scenario === 'unavailable') return json({ code: 'semantic_not_ready' }, 503);
       if (request.method === 'GET' && url.pathname === `/v1/subjects/${workPartsId}`) return json(anchor);
       if (request.method === 'GET' && url.pathname === `/v1/subjects/${workPartId}`) return json(holder);
+      if (request.method === 'GET' && url.pathname === `/v1/subjects/${otherPart}`) return json(secondHolder);
       if (url.pathname.endsWith('/links')) {
         if (url.searchParams.get('property') !== property)
           return json({
@@ -185,24 +230,29 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
           freshness: { consistency: 'eventual', target_seconds: 10, caught_up: scenario !== 'pending' },
         });
       }
-      if (url.pathname.endsWith('/candidates') && request.method === 'GET')
+      if (url.pathname.endsWith('/candidates') && request.method === 'GET') {
+        const holderId = url.pathname.split('/')[3]!;
+        const current = candidatesByHolder.get(holderId) ?? candidate;
         return json({
-          candidates: candidate ? [candidate] : [],
+          candidates: current ? [current] : [],
           adoption: { mode: 'replace', head: adoptionHead },
           next: null,
         });
+      }
       if (request.method !== 'POST' || !body) return json({ code: 'not_found' }, 404);
       if (!request.headers.has('authorization')) return json({ code: 'authentication_required' }, 401);
       if (key && receipts.has(key)) return json(receipts.get(key), url.pathname.endsWith('/candidates') ? 201 : 200);
       if (scenario === 'stale') return json({ code: 'stale_editorial_head' }, 409);
       if (url.pathname.endsWith('/candidates')) {
+        const holderId = url.pathname.split('/')[3]!;
         const statement = body.statement as RelationStatementInput;
         const readSnak = (part: RelationStatementInput['qualifiers'][number]) => ({
           ...part,
           property: { ...part.property, data_type: release.properties[part.property.id]!.datatype },
         });
+        const id = holderId === otherPart ? secondCandidateId : candidateId;
         candidate = {
-          id: candidateId,
+          id,
           source: null,
           retracted: null,
           retraction: null,
@@ -213,7 +263,7 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
           rank: null,
           statement: {
             ...readSnak(statement),
-            id: candidateId,
+            id,
             qualifiers: statement.qualifiers.map(readSnak),
             references: statement.references.map(({ parts }) => ({
               hash: 'native-reference',
@@ -223,7 +273,8 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
             rezics: { release: anchor.subject.release, revision: 2 },
           },
         };
-        const receipt = { candidate: candidateId, revision: 2 };
+        candidatesByHolder.set(holderId, candidate);
+        const receipt = { candidate: id, revision: 2 };
         if (key) receipts.set(key, receipt);
         if (scenario === 'uncertain' && !lost) {
           lost = true;

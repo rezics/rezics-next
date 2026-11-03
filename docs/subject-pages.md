@@ -855,7 +855,7 @@ A subject page is a set of views, each with its own URL under the subject's addr
 | ---------- | ------------- | ------------------------------------------------------------------------------- |
 | Overview   | `/`           | Always                                                                          |
 | Editions   | `/editions`   | The type has editions or releases, and at least one exists                      |
-| Contents   | `/contents`   | The type has ordered parts (volumes, episodes, chapters, routes) and one exists |
+| Contents   | `/contents`   | The type has ordered parts (volumes, episodes, chapters, routes) and one exists. The work-parts editor can review explicit native-string positions for memberships on the loaded page; each change is an independent proposal. |
 | Characters | `/characters` | At least one appearance exists                                                  |
 | Credits    | `/credits`    | At least one credit exists (staff and cast)                                     |
 | Relations  | `/relations`  | At least one relation exists in either direction                                |

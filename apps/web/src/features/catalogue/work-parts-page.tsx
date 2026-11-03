@@ -18,6 +18,25 @@ import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from './relation-editor';
 import { useConsentFocus } from './statement-consent-focus';
 import { partCorrection, type WorkPartsRead, type PartStream, type PartRow } from './work-parts';
+import {
+  admitOrderingDrafts,
+  advanceOrderingReview,
+  concealOrderingCommands,
+  discardUnsentOrdering,
+  includedOrderingChanges,
+  markOrderingPresence,
+  orderingFingerprint,
+  orderingKey,
+  orderingLimit,
+  pageOrderingDrafts,
+  recordOrderingResult,
+  sealOrdering,
+  sendOrdering,
+  stageOrderingSelection,
+  type OrderingDraft,
+  type OrderingReview,
+} from './work-parts-ordering';
+import { WorkPartsOrderingBoard, WorkPartsOrderingSelect } from './work-parts-ordering-view';
 
 export type WorkPartsTransport = {
   read: (stream?: string, cursor?: string, session?: string) => Promise<WorkPartsRead>;
@@ -88,6 +107,9 @@ function WorkPartsPageLive({
   const sliceStatus = useRef<HTMLParagraphElement>(null);
   const readFailure = useRef<HTMLParagraphElement>(null);
   const [part, setPart] = useState<EntityPickerSubject[]>([]);
+  const [ordering, setOrdering] = useState<OrderingDraft[]>([]);
+  const [orderingReview, setOrderingReview] = useState<OrderingReview>({ status: 'closed' });
+  const [reviewing, setReviewing] = useState<OrderingDraft>();
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
   const cursor = useRef<string | undefined>(undefined);
@@ -144,6 +166,7 @@ function WorkPartsPageLive({
       if (!value.ok) {
         outcome = 'failure';
         setFailure(value);
+        setOrdering((previous) => concealOrderingCommands(previous));
         return;
       }
       setPage(value);
@@ -151,10 +174,14 @@ function WorkPartsPageLive({
       cursor.current = next;
       setFailure(undefined);
       setPart([]);
+      setOrdering((previous) =>
+        markOrderingPresence(admitOrderingDrafts(previous, value.stream, value.rows, next), value.rows),
+      );
     } catch {
       if (!lifetime.active()) return;
       outcome = 'failure';
       setFailure({ ok: false, reason: 'unavailable' });
+      setOrdering((previous) => concealOrderingCommands(previous));
     } finally {
       if (!lifetime.active()) return;
       complete = true;
@@ -240,6 +267,62 @@ function WorkPartsPageLive({
       return previous.filter((draft) => draft.instance !== instance);
     });
   }
+  const admittedOrdering = admitOrderingDrafts(ordering, stream, read?.rows ?? [], cursor.current);
+  const fingerprint = orderingFingerprint(admittedOrdering);
+  const nextOrderingReview = advanceOrderingReview(orderingReview, fingerprint);
+  if (
+    nextOrderingReview.status !== orderingReview.status ||
+    (nextOrderingReview.status !== 'closed' &&
+      orderingReview.status !== 'closed' &&
+      nextOrderingReview.fingerprint !== orderingReview.fingerprint)
+  )
+    setOrderingReview(nextOrderingReview);
+  const pageOrdering = stream ? pageOrderingDrafts(admittedOrdering, stream.key, cursor.current) : [];
+  const selectedOrdering = new Set(pageOrdering.filter((draft) => draft.included).map((draft) => draft.key));
+  function toggleOrdering(row: PartRow, checked: boolean) {
+    if (!slice.active() || !stream) return;
+    const next = new Set(selectedOrdering);
+    if (checked) next.add(orderingKey(row));
+    else next.delete(orderingKey(row));
+    setOrdering(stageOrderingSelection(ordering, read?.rows ?? [], stream, next, cursor.current));
+  }
+  function changeOrdering(draft: OrderingDraft) {
+    if (!lifetime.active()) return;
+    setOrdering((previous) => previous.map((item) => (item.key === draft.key ? draft : item)));
+  }
+  function jumpOrdering(key: string) {
+    if (!lifetime.active()) return;
+    setOrderingReview(advanceOrderingReview(orderingReview, fingerprint, true));
+    const heading = document.querySelector<HTMLElement>(`[data-ordering-holder="${CSS.escape(key)}"]`);
+    heading?.focus();
+    heading?.scrollIntoView?.({ block: 'center' });
+  }
+  async function submitOrdering() {
+    if (!lifetime.active() || running.current) return;
+    const changed = includedOrderingChanges(admittedOrdering);
+    if (!changed.length) return;
+    if (changed.some((draft) => !draft.command) && orderingReview.status !== 'current') return;
+    running.current = true;
+    const sealed = sealOrdering(admittedOrdering);
+    setOrdering(sealed);
+    setBusy(true);
+    try {
+      await sendOrdering(
+        sealed,
+        (input) => {
+          if (!lifetime.active()) throw new Error('Retired catalogue editor');
+          return transport.relation(input.id).propose(input);
+        },
+        (key, result) =>
+          lifetime.active() &&
+          setOrdering((previous) => previous.map((draft) => (draft.key === key ? recordOrderingResult(draft, result) : draft))),
+      );
+    } finally {
+      if (!lifetime.active()) return;
+      running.current = false;
+      setBusy(false);
+    }
+  }
   const failed =
     error?.reason === 'denied'
       ? m.candidate_denied({}, o)
@@ -260,6 +343,9 @@ function WorkPartsPageLive({
         <p ref={readFailure} role="alert" tabIndex={-1}>
           {failed}
         </p>
+      )}
+      {concealed && ordering.some((draft) => draft.command) && (
+        <p role="status">{m.work_parts_order_retained({}, o)}</p>
       )}
       <div hidden={concealed} className="space-y-6">
         {read && (
@@ -399,6 +485,18 @@ function WorkPartsPageLive({
                                   {m.work_parts_correct({}, o)}
                                 </Button>
                               )}
+                              {stream.positionEditable && partCorrection(row, stream) && (
+                                <WorkPartsOrderingSelect
+                                  selected={selectedOrdering.has(orderingKey(row))}
+                                  busy={busy}
+                                  disabled={
+                                    !selectedOrdering.has(orderingKey(row)) && pageOrdering.length >= orderingLimit
+                                  }
+                                  locale={locale}
+                                  controlId={`${streamId}-order-${row.holder}-${row.statementId}`}
+                                  onToggle={(checked) => toggleOrdering(row, checked)}
+                                />
+                              )}
                             </div>
                           ) : (
                             <p>{m.work_parts_assertion_unavailable({}, o)}</p>
@@ -430,6 +528,27 @@ function WorkPartsPageLive({
                     </li>
                   ))}
                 </ul>
+                {stream.positionEditable && (
+                  <WorkPartsOrderingBoard
+                    stream={stream}
+                    cursor={cursor.current}
+                    labels={read.labels}
+                    locale={locale}
+                    drafts={admittedOrdering}
+                    review={orderingReview}
+                    busy={busy}
+                    onChange={changeOrdering}
+                    onReview={() => setOrderingReview({ status: 'current', fingerprint })}
+                    onSubmit={() => void submitOrdering()}
+                    onJump={jumpOrdering}
+                    onDiscard={() =>
+                      setOrdering(
+                        stream ? discardUnsentOrdering(ordering, stream.key, cursor.current) : discardUnsentOrdering(ordering),
+                      )
+                    }
+                    onOpenCandidate={(draft) => setReviewing(draft)}
+                  />
+                )}
                 <div className="flex flex-wrap gap-2">
                   {read.next && (
                     <Button
@@ -512,6 +631,24 @@ function WorkPartsPageLive({
             />
           </section>
         ))}
+        {reviewing && (
+          <section className="space-y-3 border-t border-border pt-6">
+            <RelationEditor
+              id={reviewing.holder}
+              locale={locale}
+              transport={transport.relation(reviewing.holder)}
+              search={search}
+              composition={{
+                statement: reviewing.statement,
+                slot: reviewing.slot,
+                positionEditable: stream?.positionEditable ?? false,
+                session: read?.session,
+              }}
+              onClose={() => setReviewing(undefined)}
+              onSelected={() => load(stream?.key, cursor.current)}
+            />
+          </section>
+        )}
       </div>
       {(read || concealed) && (
         <Button

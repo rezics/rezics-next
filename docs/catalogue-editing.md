@@ -187,6 +187,20 @@ admitted `schema:position` on a relation declaring position order is editable; a
 An emitted relation without that qualifier remains readable without an invented order field. Choosing a new
 containment target opens its separate slot and does not remove the original assertion.
 
+When that emitted membership admits `schema:position` and position order, the loaded page also offers a bounded
+position workspace. Contributors stage at most sixteen readable assertions already present on the current page;
+selecting does not fetch another page or imply missing members. Positions stay native strings: the contributor
+enters each replacement, and the workspace clones the original assertion through the existing relation draft,
+replacing only the admitted position part. Other qualifiers, citations, rank and source meaning survive. A
+forward relation is written on the container; an inverse relation is written on the actual member holder. If
+position is itself the native slot key, the review shows the original slot and the new-slot proposal separately.
+The changed-set review lists only actual changes and explains that each membership is an independent native
+proposal. Confirmation reuses the existing relation writer, sealed body and idempotency key per holder. A later
+failure does not resubmit a successful sibling or abandon an uncertain command; refused rows need a new explicit
+review. After candidate selection, a current reread of the original stream highlights holders still present and
+explains absent ones without scanning another page. Decision: the workspace composes `RelationTransport.propose`
+per holder and mounts the existing relation editor only for explicit candidate review.
+
 Relation fields and qualifiers come from one exact descriptor for the authorized Subject Type, with its release
 digest retained. Missing or incomplete descriptors stay unavailable and recover in place with drafts intact; stored
 candidates keep their own immutable release pins. An uncertain proposal retries with its original command key and
