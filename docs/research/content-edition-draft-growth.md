@@ -47,11 +47,11 @@ warmup/repetition policy. Setup and incremental growth run outside the measured 
 Native Auth reissues the same ordinary scopes outside observation during long history setup and before measured
 repetitions; each observed HTTP request still authenticates its real issued credential.
 
-| Axis | Population at scale N | Fixed selection |
-| --- | --- | --- |
-| Unrelated editions and source posts | N unrelated threads, posts, revisions and pointer-only editions in the source route, cloned from native template row shapes by admitted `seed` | Original source history has two revisions; ancestry has two posts |
-| Retained selected-source revisions | N native conditional revision commands after the original, retaining N+1 source revisions and their genuine write bases/receipts/events | Old revision, body, licence, subject and two-post chain |
-| Unrelated subject and Access grant history | N unrelated subjects, N retained revisions of the unrelated Scheme, and N expired grant intervals on an unrelated parent-creation resource | Selected Concept, source history, current grants, scopes and ancestry |
+| Axis                                       | Population at scale N                                                                                                                          | Fixed selection                                                       |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Unrelated editions and source posts        | N unrelated threads, posts, revisions and pointer-only editions in the source route, cloned from native template row shapes by admitted `seed` | Original source history has two revisions; ancestry has two posts     |
+| Retained selected-source revisions         | N native conditional revision commands after the original, retaining N+1 source revisions and their genuine write bases/receipts/events        | Old revision, body, licence, subject and two-post chain               |
+| Unrelated subject and Access grant history | N unrelated subjects, N retained revisions of the unrelated Scheme, and N expired grant intervals on an unrelated parent-creation resource     | Selected Concept, source history, current grants, scopes and ancestry |
 
 Noise grants retain the complete shape of a native parent-creation grant and use disjoint historical intervals;
 they confer no current read permission. Unrelated edition rows remain in `content.edition` and unrelated canonical
