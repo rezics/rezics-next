@@ -3,11 +3,18 @@ import { publicationNoticesFixture } from './support/publication-notices-fixture
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof publicationNoticesFixture>>;
-beforeAll(async () => { f = await publicationNoticesFixture(); });
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await publicationNoticesFixture();
+});
+afterAll(async () => {
+  await f?.close();
+});
 
 test('delayed draft creation mentions A, first publication mentions B, and a newer head cannot replace B', async () => {
-  const { mentioned: a, readers: [b, c] } = f.people;
+  const {
+    mentioned: a,
+    readers: [b, c],
+  } = f.people;
   const thread = await f.thread();
   const draft = await f.reply(thread, [a], 'draft');
   const edited = await f.revise(draft, [a]);
@@ -20,16 +27,24 @@ test('delayed draft creation mentions A, first publication mentions B, and a new
   expect(await f.inbox(a, draft)).toEqual([]);
   expect(await f.inbox(b!, draft)).toEqual([expect.objectContaining({ kind: 'mention' })]);
   expect(await f.inbox(c!, draft)).toEqual([]);
-  expect(await f.notices(draft)).toEqual(expect.arrayContaining([
-    { recipient_id: b!.id, kind: 'mention' }, { recipient_id: f.people.author.id, kind: 'reply' },
-  ]));
+  expect(await f.notices(draft)).toEqual(
+    expect.arrayContaining([
+      { recipient_id: b!.id, kind: 'mention' },
+      { recipient_id: f.people.author.id, kind: 'reply' },
+    ]),
+  );
   expect(await f.notices(draft)).toHaveLength(2);
   await f.deliver(true);
   expect(await f.notices(draft)).toHaveLength(2);
 });
 
 test('draft creation and edits stay silent; opening publication and immediate replies notify once with reply precedence', async () => {
-  const { mentioned, author, replier, readers: [later] } = f.people;
+  const {
+    mentioned,
+    author,
+    replier,
+    readers: [later],
+  } = f.people;
   const draft = await f.thread([mentioned], 'draft');
   const edited = await f.revise(draft.firstPost, [mentioned], 'draft', author);
   await f.deliver();
@@ -51,7 +66,11 @@ test('draft creation and edits stay silent; opening publication and immediate re
 });
 
 test('current recipient authority, preferences and ancestor disclosure govern publication sends', async () => {
-  const { mentioned, author, readers: [controlRecipient, preferenceRecipient] } = f.people;
+  const {
+    mentioned,
+    author,
+    readers: [controlRecipient, preferenceRecipient],
+  } = f.people;
   const protectedThread = await f.thread([], 'published', f.people.protectedBoardId);
   const denied = await f.reply(protectedThread, [mentioned]);
   await f.call(mentioned, 'GET', `/v1/posts/${denied.id}`);

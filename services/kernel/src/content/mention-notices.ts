@@ -111,10 +111,7 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
     name: 'content_mention_notice',
     types: [postPublished],
     async run(event: CloudEvent) {
-      if (
-        event.type !== postPublished ||
-        !Value.Check(CONTENT_EVENTS[postPublished], event.data)
-      )
+      if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS[postPublished], event.data))
         throw new TypeError('Invalid mention source event');
       const data = event.data as {
         threadId: string;
