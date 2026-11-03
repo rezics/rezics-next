@@ -57,6 +57,9 @@ export const OWNED_PHASES = [
   'collection_kind_observation',
   'collection_kind_retired',
   'collection_kind_consent_consumer',
+  'members_preparation_result',
+  'members_preparation',
+  'members_preparation_owner',
 ] as const;
 const childQueries: {
   units: typeof units;

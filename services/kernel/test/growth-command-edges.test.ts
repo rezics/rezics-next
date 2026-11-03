@@ -91,7 +91,7 @@ for (const principalKind of ['account', 'anonymous'] as const) {
               },
             };
             const replay = scenario === 'revoked' || scenario === 'receipt-only' || scenario === 'conflict';
-            const attempt = runCommand(
+            const attempt = runCommand<{ accepted: boolean } | { repetition: number }>(
               db.pool,
               {
                 ...options,

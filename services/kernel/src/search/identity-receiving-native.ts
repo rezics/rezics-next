@@ -213,7 +213,7 @@ export function createSearchIdentityReceivingNative(
     const own = await definition(plan.references.definition, plan.references.release, work);
     const directory = await sourceSupport.readPage({
       job: plan.selection.job,
-      definition: own,
+      definition: work.fail('unavailable', 'Original Source directory definition binding is unavailable'),
       frontier: supportFrontier,
       inputLimit: 1000,
       context: { deadline: work.context.deadline },

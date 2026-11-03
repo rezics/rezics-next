@@ -2701,7 +2701,7 @@ CREATE TABLE library.members_preparation (
     workflow_id text NOT NULL,
     progress_version bigint DEFAULT 0 NOT NULL,
     checkpoint text,
-    observation jsonb,
+    observation text,
     source_incarnation text,
     source_generation text,
     reserved_incarnation text NOT NULL,
@@ -2709,6 +2709,15 @@ CREATE TABLE library.members_preparation (
     complete boolean DEFAULT false NOT NULL,
     result_count integer DEFAULT 0 NOT NULL,
     failure_code text,
+    next_position bigint DEFAULT 0 NOT NULL,
+    source_exhausted boolean DEFAULT false NOT NULL,
+    original_custody_id uuid,
+    original_transaction_id uuid,
+    original_epoch integer,
+    original_generation bigint,
+    original_position bigint,
+    selected_workflow_id text,
+    selected_function_id integer,
     CONSTRAINT members_preparation_basis_digest_check CHECK ((octet_length(basis_digest) = 32)),
     CONSTRAINT members_preparation_canonical_basis_check CHECK ((octet_length(canonical_basis) <= 196608)),
     CONSTRAINT members_preparation_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
@@ -2722,6 +2731,15 @@ CREATE TABLE library.members_preparation (
     CONSTRAINT members_preparation_reserved_incarnation_check1 CHECK ((octet_length(reserved_incarnation) <= 256)),
     CONSTRAINT members_preparation_result_count_check CHECK ((result_count >= 0)),
     CONSTRAINT members_preparation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT members_preparation_runtime_checkpoint_check CHECK ((octet_length(checkpoint) <= 4096)),
+    CONSTRAINT members_preparation_runtime_failure_check CHECK ((failure_code = ANY (ARRAY['dependency_unavailable'::text, 'failed'::text]))),
+    CONSTRAINT members_preparation_runtime_function_check CHECK (((selected_function_id >= 0) AND (selected_function_id <= 63))),
+    CONSTRAINT members_preparation_runtime_observation_check CHECK ((octet_length(observation) <= 4096)),
+    CONSTRAINT members_preparation_runtime_original_check CHECK ((((original_custody_id IS NULL) AND (original_transaction_id IS NULL) AND (original_epoch IS NULL) AND (original_generation IS NULL) AND (original_position IS NULL)) OR ((original_custody_id IS NOT NULL) AND (original_transaction_id IS NOT NULL) AND (original_epoch IS NOT NULL) AND (original_generation IS NOT NULL) AND (original_position IS NOT NULL) AND (original_generation > 0) AND (original_position > 0)))),
+    CONSTRAINT members_preparation_runtime_position_check CHECK ((next_position >= 0)),
+    CONSTRAINT members_preparation_runtime_selected_check CHECK (((selected_workflow_id IS NULL) = (selected_function_id IS NULL))),
+    CONSTRAINT members_preparation_runtime_source_check CHECK (((source_incarnation IS NULL) = (source_generation IS NULL))),
+    CONSTRAINT members_preparation_runtime_workflow_check CHECK ((octet_length(selected_workflow_id) <= 256)),
     CONSTRAINT members_preparation_source_incarnation_check CHECK (((source_incarnation IS NULL) OR (octet_length(source_incarnation) <= 256))),
     CONSTRAINT members_preparation_state_check CHECK ((state = ANY (ARRAY['live'::text, 'retired'::text])))
 );
@@ -2766,11 +2784,13 @@ CREATE TABLE library.members_preparation_result (
     episode_id uuid NOT NULL,
     subject_id uuid NOT NULL,
     sort_key text NOT NULL,
+    "position" bigint,
     CONSTRAINT members_preparation_result_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
     CONSTRAINT members_preparation_result_check1 CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT members_preparation_result_check2 CHECK ((route = ((get_byte(uuid_send(episode_id), 10) * 256) + get_byte(uuid_send(episode_id), 11)))),
     CONSTRAINT members_preparation_result_check3 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
-    CONSTRAINT members_preparation_result_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT members_preparation_result_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT members_preparation_result_runtime_position_check CHECK (("position" > 0))
 );
 
 
@@ -5464,6 +5484,20 @@ CREATE INDEX members_preparation_expiry ON library.members_preparation USING btr
 
 
 --
+-- Name: members_preparation_idle; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_idle ON library.members_preparation USING btree (((route >> 4)), last_read_at, route, owner_account_id, collection_id, episode_id) WHERE (state = 'live'::text);
+
+
+--
+-- Name: members_preparation_idle_retired; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_idle_retired ON library.members_preparation USING btree (((route >> 4)), last_read_at, route, owner_account_id, collection_id, episode_id) WHERE (state = 'retired'::text);
+
+
+--
 -- Name: members_preparation_live_digest; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -5482,6 +5516,13 @@ CREATE INDEX members_preparation_live_lru ON library.members_preparation USING b
 --
 
 CREATE INDEX members_preparation_result_page ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, sort_key, subject_id);
+
+
+--
+-- Name: members_preparation_result_runtime_position; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX members_preparation_result_runtime_position ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, "position") WHERE ("position" IS NOT NULL);
 
 
 --

@@ -8,6 +8,7 @@ import { minimizeHistoryOutbox } from '../history/outbox.ts';
 import { minimizeHistoryWork } from '../history/durable.ts';
 import { recordHistoryReceivingProof, type HistoryReceivingContext } from '../history/receiving.ts';
 import { decodeLocator } from '../history/locator.ts';
+import { commandHistoryKind } from '../history/record.ts';
 import { historyArtifact, type HistoryArtifactType } from '../history/contracts.ts';
 import type { HistoryBarrier, HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -476,7 +477,7 @@ async function continueRecoveryReceiving(
   if (selected.inspection.state === 'sealed') {
     const event = selected.inspection.recoveryEvent;
     if (event.locator.artifactType !== 'outbox-event/v1' || event.locator.eventSeq !== 0) {
-      searchObservation = { state: 'pending', gap: 'agent-identity-recovery-event-cut-unavailable' };
+      return result('pending', 'agent-identity-recovery-event-cut-unavailable');
     } else {
       try {
         await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
@@ -489,13 +490,13 @@ async function continueRecoveryReceiving(
             accountId: selected.inspection.proof.key.accountId,
             accountPartition: event.partition,
             eventPosition: event.locator.position,
-            prefix: deps.env?.KERNEL_SEARCH_PREFIX,
+            ...(deps.env?.KERNEL_SEARCH_PREFIX === undefined ? {} : { prefix: deps.env.KERNEL_SEARCH_PREFIX }),
           },
           selected.deadline,
         );
       } catch (error) {
         if (!(error instanceof IdentityHistoryWorkUnavailable)) throw error;
-        searchObservation = { state: 'pending', gap: error.message };
+        return result('pending', error.message);
       }
     }
   }

@@ -31,6 +31,7 @@ import {
   createProfileHistoricalNativeFixture,
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -138,6 +139,7 @@ export async function createProfileEntryFixture(
       pool,
       tokens,
       routeKey,
+      receiptKeys: testReceiptKeys(),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       requestDeadlineMs: 30_000,
       access(config) {

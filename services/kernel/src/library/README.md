@@ -2370,10 +2370,79 @@ The exact producer declarations include `id | ordinal`. Native reservation, touc
 private episodes and locator-only intents. `readRetainedDefinition` recovers their exact canonical meaning and
 immutable accepted release only on the same live, fenced client; it does not establish current Source authority.
 Default `library.membersPreparation` work remains explicitly unavailable and produces no ready result or custody
-acknowledgment. The authoritative bounded producer and cleanup must still be integrated.
-`MembersPreparation` declares no retained ordered-result reader
-on this base; prepared result consumption and finite native sparse-source completion remain deferred with the
-actual ordered/scoped source binding. Successful direct previews never establish those wider capabilities.
+acknowledgment. Retained runtime and ordered-result bodies are installed below; useful prepared consumption and finite sparse-source completion require the full funded Source/physical binding.
+Native metadata reservations retain route-leading owner controls, exact-basis live uniqueness and indexed
+LRU/idle retirement. `createMembersPreparation` uses Core request admission and current `collection:read`;
+duplicate admission neither touches nor enqueues. An explicitly funded History child registers the actual
+reservation original and locator-only intent on the same transaction. The returned private transfers retain their
+original deadline and Pool and can be consumed only after successful COMMIT; a locator grants no transfer authority.
+Runtime admission (`runtime: true`) separately requires the complete C3 parent before first I/O. The native runtime
+association, selected apply/completion and bounded cleanup bodies are retained for that integration. Metadata-only
+reservation does not install an original association or capture current Source/physical authority.
+
+The default `library.membersPreparation` consumer registers through `SelectedRuntime.registerMembersStep`.
+Each selected invocation obtains a fresh executor-issued original with one absolute deadline. Selection commits and
+releases its client before Source; apply and reached failure use the producer's held native association and the same
+balance/deadline. Committed replay returns its stored outcome without dispatching Source or renewing admission.
+Actual SDK workflow/step coordinates are private indexed lookup data, never authority. Members binds those coordinates
+to the producer's exact selected native tuple inside apply/failure and retains them on its own header.
+
+The installed Search `members-preparation` work context uses `sourcePrefix`/`evaluate` for id order and
+`ordinalPrefix` for curated order. The Source body opens a genuine new operational transaction under the selected
+invocation's unchanged deadline; no closed transaction or expired request transfer crosses the handoff. It retains
+at most a 4096-byte frontier and advances at most 100 raw keys per step. Later native getters use the actual client's
+immutable captured release and Source/Scope metadata. Apply rechecks the current owner, episode, incarnation,
+generation and complete observation. A generation repair drains at most 100 results, advances the exact version and
+retains a private repair checkpoint until child-first removal finishes; its next step has the native version's
+deterministic continuation ID. Every successful continuation is enqueued on the apply transaction.
+
+Prepared-result reads independently require a committed native selected completion with the exact header version,
+original digest, restore generation and reserved tuple, then current Source/Scope and disclosure. Missing native
+completion is unavailable, never ready empty. Index rows, raw exhaustion and SDK workflow success confer no access.
+The retained-result reader is installed for integration. Mounted filtered reads retain the existing direct reader
+and its cursor format until the complete C3 parent and prepared/direct dispatch are installed. The page retains
+canonical subjects without inventing occurrence IDs, notes or times.
+Its session query retries preparing pages only while the same viewer/navigation lifetime remains current.
+A failed Members read preserves the authorized Collection shell and original cursor/filter address; recovery is an
+explicit read. HTTP 202 alone means preparing, 503 means unavailable, other read failures mean failed, and only a
+successful native page means ready. Status recovery cannot run during editing, move/removal work or frozen drafts. Existing
+Collection note reading, Dynamic recovery, locale, mutation and uncertain-intent behavior remain in place.
+
+### Members costs and unavailable authority
+
+- Touches: [named local SQL ceilings](members-preparation-cost.ts) cover owner lock/insert, bounded definition and LRU
+  reads, native reservation/association, step/header/result/original reads, touch/apply/reset/failure and idle/drain
+  operations. Every ceiling names all eight axes. Empty, failed and rolled-back dispatches retain their price;
+  repeated attempts add it again. Core/Access, immutable releases and Source/Search work are separate producer costs.
+- Bound: existing filtered-list budgets and the stronger 100-raw-key Members bound remain authoritative. Named-field
+  composition avoids Accounts/Source tuple-order differences. [Approved C3](members-preparation-contract.md#approved-c3-composition)
+  keeps 16 statements for the Members body and separately charges constant History registration (464), receiving/readback
+  (429), every transfer, Core/Access, executor controls, retries and cleanup to one finite parent before first I/O.
+  Production Source and native authority declarations remain absent; unbound runtime reservations refuse with `whole-members-reservation-cost-unavailable`
+  before native creation/registration. Metadata reservations, duplicate and actual-read touch paths remain independent. A complete whole-call
+  Source/Library quote is also required for native product acceptance.
+- Growth check: the focused reservation/concurrency/rollback, real-default-consumer, stale/terminal and mounted
+  recovery cases are authored but unrun. Compiler status establishes no native budget, finite useful page or erasure
+  acceptance. The controller owns those deferred checks.
+
+The selected producer now supplies lifetime-safe later selection, apply, reached failure and committed replay.
+`MEMBERS_SELECTED_CHILDREN` declares each owned native SQL dispatch by literal text, bound and named cost. Its
+complete Source child declaration remains absent: the inner Search receipts do not price the whole released
+Source transaction, currentness, owner checks and closure. Therefore `SelectedInvocation.source` refuses with
+`selected-runtime-source-declaration-unavailable` before invoking that body; the authentic reached-failure phase
+can record the failed episode without advancing its version. No guessed zero, renewed allowance or second payer
+replaces that missing operand.
+
+Final completion independently remains refused by the installed producer with
+`selected-runtime-final-source-physical-authority-unavailable`. Members preserves that exact operand and never
+sets a successful complete header from exhaustion. Required foreign authority must cover the actual current Source,
+SDK inventory restoration/retirement and independent physical closure, under the selected original's real funding
+and lifetime. Local association and native version progress prove none of those facts. The missing-parent runtime-admission
+refusal remains in place even though the selected interface is installed; its local subtotal is not a whole-parent
+quote or permission to dispatch the runtime.
+Library A5's existing participant probes and drains added results, headers (including bases/frontiers/original
+associations and selected lookup coordinates) and owner controls in child-first order. This local inventory is not shared-history minimization,
+all-copy absence or a blanket erasure/restore acknowledgement.
 
 `members-preparation-budget.ts` supplies the finite parent accounting seam: Members, History registration,
 receiving/readback, Core, Access, Source resolve/verify, executor, retry, rollback and cleanup must all have
@@ -2850,3 +2919,6 @@ non-History owner prices explicit and retain the request's original payer and de
 This is the request composition seam. The default Members reader and selected-runtime worker still require
 current Source/physical binding, bounded execution, final publication and prepared-page readback before they can
 return a useful retained page. The callback, locator and allocation declaration confer none of those authorities.
+
+
+Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.

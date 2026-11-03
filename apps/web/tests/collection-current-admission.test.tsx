@@ -271,6 +271,33 @@ async function selectOccurrence(ui: UI) {
 }
 
 describe('Actual scoped Collection authority enables owning editor and occurrence workflows while retaining exact uncertain operations across healthy renewal and retiring replaced callbacks', () => {
+  test('Members recovery settles during an admission gap without publishing its stale response or disabling the next retry', async () => {
+    const ui = await mounted();
+    const read = deferred<EditableCollectionPage>();
+    try {
+      await ui.expose();
+      await ui.show({ page: { ...page(), memberState: 'failed' } });
+      ui.refresh.mockImplementationOnce(() => read.promise);
+      const reload = () => [...ui.host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === m.library_collection_reload(),
+      )!;
+      await settle(() => reload().click());
+      expect(reload().disabled).toBe(true);
+      await settle(() => ui.client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!
+        .setState({ status: 'error', error: new Error('temporarily unavailable') }));
+      await settle(() => read.resolve(page()));
+      expect(ui.invalidate).not.toHaveBeenCalled();
+      await ui.renew();
+      await ui.expose();
+      expect(reload().disabled).toBe(false);
+      await settle(() => reload().click());
+      expect(ui.refresh).toHaveBeenCalledTimes(2);
+      expect(ui.invalidate).toHaveBeenCalledTimes(1);
+    } finally {
+      await ui.close();
+    }
+  });
+
   test('a null-token owner can inspect duplicate occurrences and refresh the editor while every save remains gated', async () => {
     const ui = await mounted();
     const update = spyOn(edits, 'updateCollection');

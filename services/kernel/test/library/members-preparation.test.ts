@@ -1,3 +1,6 @@
+import { ProblemError } from '../../src/http/problem.ts';
+import { newId } from '../../src/route/route.ts';
+import { preparationBasis } from '../../src/library/members-preparation.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -68,7 +71,7 @@ test('a positive native reservation and admitted step supply no unbound Source d
   const f = await native.fixture();
   const { episodes } = await f.store.reserve(f.actor, f.collectionId, [definition()]);
   const locator = episodes[0]!.locator;
-  const result = await runOperationalTransaction(
+  const result = runOperationalTransaction(
     native.db.pool,
     {
       mode: 'work-step',
@@ -82,7 +85,7 @@ test('a positive native reservation and admitted step supply no unbound Source d
       return f.store.readWorkDefinition(tx, locator);
     },
   );
-  expect(result).toBeNull();
+  await expect(result).rejects.toMatchObject({ code: 'dependency_unavailable' });
 });
 
 test('preparation keys deduplicate only identical accepted owner definitions', () => {
@@ -136,4 +139,25 @@ test('retained definitions recover exact immutable meaning and reject invalid by
   await expect(
     restorePreparationDefinition(owner, collection, retained!, async () => ({ ...selected.release.value, types: {} })),
   ).rejects.toMatchObject({ code: 'unsupported_query' });
+});
+
+test('preparation identity uses the expanded immutable release meaning and distinguishes internal curated order', () => {
+  const owner = newId(16);
+  const collection = newId(16);
+  const admitted = definition();
+  expect(preparationBasis(owner, collection, admitted)).toBe(
+    canonicalize([1, owner, collection, admitted.filter, 'id', admitted.release.digest])!,
+  );
+  expect(preparationBasis(owner, collection, { ...admitted, sort: 'ordinal' })).toBe(
+    canonicalize([1, owner, collection, admitted.filter, 'ordinal', admitted.release.digest])!,
+  );
+  expect(preparationBasis(owner, collection, admitted)).not.toBe(
+    preparationBasis(owner, collection, { ...admitted, sort: 'ordinal' }),
+  );
+});
+
+test('preparation identity refuses a release whose bytes do not match its immutable digest', () => {
+  const admitted = definition();
+  const invalid = { ...admitted, release: { ...admitted.release, digest: 'sha256:' + '0'.repeat(64) } };
+  expect(() => preparationBasis(newId(16), newId(16), invalid)).toThrow(new ProblemError('unsupported_query'));
 });

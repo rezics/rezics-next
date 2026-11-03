@@ -19,10 +19,15 @@ execution, readiness or disclosure authority.
 
 # Members preparation
 
-The native reservation schema, request operations and exact step-admission boundary are present. The registered
-producer's worker body and prepared-result readback remain unavailable; reservation metadata never establishes a
-ready member result.
+The native reservation schema, request operations and exact step-admission boundary are present. The registered producer and prepared-result readback require their actual released Source and physical authority; reservation metadata never establishes a ready member result.
 Contract review and native fixture evidence precede the independent bounded producer.
+[The interface](members-preparation.ts) implements private native episode reservation, read touch and exact step
+admission. The [runtime inventory](README.md#members-costs-and-unavailable-authority) distinguishes installed owned
+bodies from missing foreign authority. Funded runtime admission currently refuses before native episode creation because
+production Source and native authority declarations remain unavailable; native metadata reservation and the explicitly funded request seam remain available. Duplicate admission, actual-read touch,
+selected native association, bounded repair and independently fenced result reads retain their own native bodies.
+Neither source presence nor a compiler result is native product acceptance or a freeze. Existing positive native
+outcomes remain required when the complete producer topology fits the contract.
 
 The authorities are [owner predicates](../../../../docs/library-owner-queries.md), the [Members GET
 exception](../../../../docs/dynamic-collections.md#model-and-identity), [filtered lists](../../../../docs/filtered-lists.md)
@@ -60,7 +65,7 @@ and optionally the trusted KernelClock. It returns:
   work-step operational transaction. No Actor, disclosure authorization or retained permission is accepted.
   True is usable only until that transaction ends. It is not permission for an apply in another transaction.
 
-Definitions carry the actual FilterDocument, fixed `id` order and an immutable accepted release digest/value.
+Definitions carry the actual FilterDocument, admitted `id` or internal curated `ordinal` order and an immutable accepted release digest/value.
 Validate and expand with shared parse/admit rules; no private interpreter or alternative DTO is selected.
 The exact canonical basis is `canonicalize([1, principal.id, collectionId, expandedFilter, sort, releaseDigest])`.
 Preserve its bytes alongside SHA-256. Digest equality alone never establishes definition equality. The indexed digest hit must compare
@@ -141,14 +146,18 @@ new episode UUID: `library:members-preparation:${route}:${ownerAccountId}:${epis
 exactly one committed owning intent; batches may share one intent. Recreated episodes always allocate a new UUID and
 therefore a new workflow id. A terminal old DBOS id can never suppress work or retain old inputs for its successor.
 
-Call exactly `enqueueIntent(tx, {queue:'workflows',workflowName:'library.membersPreparation',workflowId,input})`
-INSIDE that same body. `input` has exactly `{accounts:[owner],route,episodes:[{collectionId,episodeId}],
-cleanup:[{collectionId,episodeId}]}`; deduplicate and sort both locator lists. Existing common-page read limits bound
-the admission list; eviction cleanup is bounded by those new admissions. This intent contains no filter, title,
-fact, result, cursor, bearer, pin payload or cached allow. All SQL, including both SDK enqueue statements, uses the
-same actual client; no relay/intent table, SDK deduplication option or second held connection is permitted.
-The new workflow name is reserved for the later producer; this specification does not register or launch it. The
-native tests inspect real ENQUEUED status/input with the real WorkClient and existing workflows queue.
+After actual native reservation, call `registerPositionedOperationalHistoryWork(tx, binding, intent)` exactly
+once INSIDE that same transaction. It owns the SDK enqueue; no separate `enqueueIntent` follows it. Bind only
+NEW native returned episodes, their exact reserved incarnation/generation and canonical basis/digest, plus bounded
+retired locators. `intent:null` performs neither registration nor enqueue. `input` has exactly
+`{accounts:[owner],route,episodes:[{collectionId,episodeId}],cleanup:[{collectionId,episodeId}]}`; deduplicate and
+sort both locator lists. The locator-only input is at most 4096 bytes; binding plus intent is at most 196608 bytes.
+It contains no filter, title, fact, result, cursor, bearer, pin payload or cached allow. All registration and enqueue
+SQL uses the same actual client; no relay table, SDK deduplication option or second held connection is permitted.
+Reserve genuine resolve/verify/receive transfers while the original transaction is live, and consume them only
+after successful source COMMIT/release under their unchanged deadline. A registration locator proves no commit.
+The default WorkModule registers this workflow through the installed selected runtime for later steps; original
+request transfers are never serialized, renewed or reconstructed for it. Native tests inspect real SDK status/input.
 Auth's process-global runtime stays separate; there is no second Auth/kernel executor or fake actor.
 
 A step locks only the exact selected header under its current active account fence. Missing, retired, expired,
@@ -166,8 +175,8 @@ then headers and control, through indexed bounded work. No retention exception o
 adopted. Existing read/command/receipt/outbox/grant/write-basis/partition positions remain unchanged by reservation.
 DBOS status/input/output/step/message copies belong to Accounts shared-history. Record exact workflow/payload
 locators atomically with their actual durable copy; its registered minimizer erases owner attribution/locators
-when required while preserving only permitted completion skeletons. Registration and final producer handoff are
-required runtime dependencies, not implemented here. An enqueue alone is not the copy inventory or ACK. Library's
+when required while preserving only permitted completion skeletons. Registration and same-original postcommit handoff have owned bindings; independent final producer authority
+remains required. An enqueue alone is not the copy inventory or ACK. Library's
 own drained inventory/ACK is not whole-role NoData, overall erasure completion or backup expiry.
 
 ## Cost and required native evidence
@@ -185,8 +194,24 @@ This composition is a private allocation seam, not native integration or a relea
 
 Decision: use the shared native child-transfer allocator, require explicit Source and native authority, and preserve
 the existing request retry policy rather than adding a retry-count cap.
+### Approved C3 composition
+
+The 16 statements are the Members-owned body allowance per preparation step. They are not the whole request cap.
+Before first I/O the preparation original must prepay one finite parent containing that body, the separately
+constant History registration (464 statements), receiving/readback (429), every resolve/verify transfer,
+Core time and Access preparation/finalization, transaction controls, selected executor controls, retry/rollback
+prefixes and cleanup. Include every work dimension in the same parent; no catalogue, owner or history-size term
+may enter it. Transfer each child before checkout, register once per preparation key, never refill and never
+introduce a second payer. Local subtotals do not create this parent. Until the full declaration is installed,
+new runtime admission returns typed unavailable; retained locators and expired request transfers grant no authority.
+Source kinds lacking declarations or final physical authority retain their typed unavailable outcome.
 
 ### First preparation admission and duplicate
+
+Native result application includes all four retained result indexes, duplicate probes and parent FK checks.
+Retirement uses the retained subject primary key. Its local declaration covers up to 100 key
+reads and deletes, primary lookups, all four result indexes, the bounded prefix seek and failed/empty paths,
+within the existing Members body allowance; it does not borrow a foreign child or add a payer.
 
 - Touches: existing ready lookup/direct prepare decision and its released snapshot; then Core time, all Access
   preparation/finalization, SERIALIZABLE partition/account fences, owner control/LRU/uniqueness, retained intent and
@@ -258,3 +283,5 @@ Library A5 cleanup and Accounts actual-copy minimizer handoff; full Members adap
 admission and HTTP 202 behavior; shared common-page cross-resource Access composition; full owner query/index,
 logical Everything/state, Continue/Liked, publication, source eligibility, canonical identity and readiness.
 This metadata contract closes none of those followups and guesses no pending epoch vector, control partition or P.
+
+Decision: metadata-only reservation preserves its native contract; `runtime: true` requires the complete C3 parent before first I/O and does not inherit authority from a locator.

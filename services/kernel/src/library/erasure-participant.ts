@@ -31,6 +31,7 @@ const BLOCKERS = Object.freeze([
   'shared receipt/outbox/write_basis/work payloads: no exact Library producer custody/minimizer handoff',
   'listing effects: no account-home locator fence or committed late-item disposition',
   'collection_publication_operation: foreign operator/principal locators, receiving SDK and shared Core history minimizer custody remain pending',
+  'members_preparation: native headers/results/original associations drain locally; later Source currentness, SDK restoration/retirement and independent physical closure have no completion authority',
   'logs/caches/exports/replicas/backups: no complete Library custody inventory',
 ]);
 

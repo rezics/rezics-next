@@ -100,6 +100,13 @@ binds actual accepted meaning; this policy introduces no runtime ABI or replacem
 A meaning change requires an explicit bounded profile migration or a distinct state identity. Existing fixed-key state values map without semantic loss to the canonical compatibility profile by explicit migration in pages of at most `P`; labels never choose or rewrite state identities.
 A retired profile is not rebound: retained facts and their state Collections keep their old pin and identity, and a profile with no retained facts creates no state views. If a pinned release is unavailable, reads fail closed for restart or repair; activation or retirement invalidates affected cursors without synchronously rewriting every account.
 
+The Collection page retains its authorized header when a Members read fails and retries the same Collection,
+validated filter and cursor. It distinguishes native preparing (202), unavailable admission (503), failed reads
+and successful ready pages; no pending or unavailable result becomes empty success. Status recovery is disabled
+while editing, moving or removing members or retaining a frozen draft. See the
+[Members C3 composition](../services/kernel/src/library/members-preparation-contract.md#approved-c3-composition)
+for the finite parent required before new preparation admission.
+
 ## One Collection page
 
 The existing Collection resource and `GET /v1/collections/{collectionId}/members` remain the canonical page for both membership

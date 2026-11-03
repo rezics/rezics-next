@@ -8,6 +8,9 @@ closed behind `search` platform grants. Advanced filters/scopes, facets and rati
 `search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
 deferred; this closed slice does not complete the Search Goal.
 
+Decision: native identity receiving refuses a missing complete Source directory definition with typed unavailable;
+immutable projection meaning alone cannot substitute for the Source binding, capture and dependency keys.
+
 `subjectConsumer` and `discoveryConsumer` construct native checkpoint names from the exact admitted prefix, a
 positive safe generation and an explicit family (`subjects` or `discovery`). Ordinary names that already fit the
 63-character native consumer domain stay byte-for-byte. Longer admitted identities use a deterministic hashed

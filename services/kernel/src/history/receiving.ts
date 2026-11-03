@@ -254,8 +254,12 @@ export async function historyReceivingGap(
       resources.pool,
       {
         deadline: resources.deadline,
-        searchObservation: context?.accountErasureSearchObservation,
-        recoveryReceivingReserved: context?.recoveryReceivingReserved,
+        ...(context?.accountErasureSearchObservation === undefined
+          ? {}
+          : { searchObservation: context.accountErasureSearchObservation }),
+        ...(context?.recoveryReceivingReserved === undefined
+          ? {}
+          : { recoveryReceivingReserved: context.recoveryReceivingReserved }),
       },
     );
     if (recovery.state === 'pending') return recovery.gap;

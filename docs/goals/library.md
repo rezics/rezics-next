@@ -136,8 +136,50 @@ single-line progress bar/number, Menu Escape/focus return and cover treatment. U
 invented viewport-suffix IDs. Native/acceptance/browser execution remains deferred to integration; there are no
 current measured exits, screenshots, visual defects, growth passes or promotion proof from these reports.
 
+## Durable Members source decisions
+
+The owned Members consumer uses the installed selected-runtime interface, not a retained request transfer.
+Selection releases before a new live Source transaction, while apply/failure stay on the selected original's
+unchanged deadline and balance. Native header lookup coordinates point to the exact committed selected result;
+the reader also revalidates current original, Source/Scope, owner and disclosure. A header complete flag, SDK success
+or exhausted raw prefix cannot establish readiness. Bounded generation repair uses an explicit repair checkpoint,
+child-first pages of at most 100 results and one new native version per continuation.
+Completed headers missing original provenance return unavailable rather than polling; internal worker errors retain
+the failed outcome instead of being classified as missing dependencies.
+
+Approved C3 assigns 16 statements to the Members body, with constant History registration (464), receiving/readback
+(429), Core/Access, transfers, executor controls, retries and cleanup prepaid by one finite parent before first I/O.
+Production Source and native authority declarations remain absent, so unbound runtime admission retains the pre-episode
+`whole-members-reservation-cost-unavailable` refusal. The released Source body remains gated by the missing complete Source
+child declaration (`selected-runtime-source-declaration-unavailable`); final completion separately lacks the
+producer's current Source and physical authority (`selected-runtime-final-source-physical-authority-unavailable`).
+The selected producer's local prices and Search's inner receipts do not fund or price those whole calls.
+
+Focused [budget](../../services/kernel/test/library/members-preparation-budget.test.ts) and
+[native refusal/provenance](../../services/kernel/test/library/members-preparation-durable-native.test.ts) cases
+preserve those distinctions using the existing fixture and default worker. They supplement existing reservation,
+consumer, stale/terminal and mounted recovery acceptance without replacing or weakening it. Native, browser,
+privacy/growth, integration and promoted-main verification remain deferred to the controller.
+
 ## External conditions
 
 Applicable retention schedules and external source licensing follow their owners. No live payment setup is needed
 for Library acceptance. Local deterministic outcomes and existing public scope remain obligations while shared
 producer work completes.
+
+
+Mounted filtered reads keep the existing direct-reader cursor protocol until C3 funding and prepared/direct
+dispatch are installed; retained reader presence alone does not replace a working direct page. The status journey
+preserves the Collection header, filter and cursor across read errors and only polls genuine preparing responses.
+An in-flight status read settles its busy indicator during a temporary admission gap while its response stays fenced;
+renewed admission can retry without retaining a stale busy state.
+Members retry keeps its own physical read lifetime alongside save and removal confirmation; neither confirmation
+is cleared by a status read, and an active editor or writer keeps the status retry disabled.
+
+Retained Members integration preserves native immutable-release byte validation and empty/stale caller semantics alongside selected-runtime provenance.
+
+Runtime integration extends the existing native Members tables; unpositioned retained candidates remain disposable and are drained by subject identity during retirement and erasure without granting completion authority.
+
+Collection command writer pools inherit the caller's trusted receipt key ring; native fixtures supply dedicated test receipt keys independently of token sealing keys.
+
+Decision: preserve native metadata reservation and immutable-definition recovery; explicit runtime admission requires the complete C3 parent and list previews stay read-only.

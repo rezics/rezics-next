@@ -34,9 +34,13 @@ export const sharedHistoryWorkModule: WorkModule = {
       version: 1,
       async readiness(tx, artifact, barrier, receiving) {
         const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool, {
-          deadline: receiving?.deadline,
-          searchObservation: receiving?.accountErasureSearchObservation,
-          recoveryReceivingReserved: receiving?.recoveryReceivingReserved,
+          ...(receiving?.deadline === undefined ? {} : { deadline: receiving.deadline }),
+          ...(receiving?.accountErasureSearchObservation === undefined
+            ? {}
+            : { searchObservation: receiving.accountErasureSearchObservation }),
+          ...(receiving?.recoveryReceivingReserved === undefined
+            ? {}
+            : { recoveryReceivingReserved: receiving.recoveryReceivingReserved }),
         });
         if (recovery.state === 'ready') return { ready: true };
         return {
@@ -61,9 +65,13 @@ export const sharedHistoryWorkModule: WorkModule = {
       version: 1,
       async readiness(tx, artifact, barrier, receiving: HistoryReceivingContext | undefined) {
         const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool, {
-          deadline: receiving?.deadline,
-          searchObservation: receiving?.accountErasureSearchObservation,
-          recoveryReceivingReserved: receiving?.recoveryReceivingReserved,
+          ...(receiving?.deadline === undefined ? {} : { deadline: receiving.deadline }),
+          ...(receiving?.accountErasureSearchObservation === undefined
+            ? {}
+            : { searchObservation: receiving.accountErasureSearchObservation }),
+          ...(receiving?.recoveryReceivingReserved === undefined
+            ? {}
+            : { recoveryReceivingReserved: receiving.recoveryReceivingReserved }),
         });
         if (recovery.state === 'ready') return { ready: true };
         if (recovery.state === 'pending') return { ready: false, gap: recovery.gap };

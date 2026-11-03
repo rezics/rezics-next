@@ -422,3 +422,16 @@ test('a native receiver refuses foreign resources and cannot replace exported pr
   );
   expect(original.receipt().used).toEqual(OPERATIONAL_WORK_REGISTRATION);
 });
+
+import {
+  MEMBERS_PREPARATION_RESERVATION_SUBTOTAL,
+  MEMBERS_PREPARATION_STEP_CEILING,
+  requireMembersReservationBudget,
+} from '../../src/library/members-preparation-cost.ts';
+
+test('C3 preserves the Members body allowance and refuses an undeclared whole parent', () => {
+  expect(MEMBERS_PREPARATION_STEP_CEILING.statements).toBe(16);
+  expect(OPERATIONAL_WORK_REGISTRATION.statements).toBe(464);
+  expect(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL.statements).toBeGreaterThan(464 + 429);
+  expect(requireMembersReservationBudget).toThrow('whole-members-reservation-cost-unavailable');
+});

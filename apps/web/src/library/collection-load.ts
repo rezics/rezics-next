@@ -229,7 +229,9 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     presentationTypes?: CollectionTypeOption[] | null;
     listPresentations?: CollectionListPresentations;
     viewerActions?: CollectionViewerActions;
-    memberState?: 'ready' | 'preparing' | 'unavailable';
+    memberState?: 'ready' | 'preparing' | 'unavailable' | 'failed';
+    retryAfterMs?: number;
+    filteredMembers?: DynamicCollectionPage['members'];
     /** An authorized known total; null when the current viewer's read cannot disclose one. */
     memberCount: number | null;
     /** The requested page, retained for its indexing policy. */
@@ -347,7 +349,7 @@ export async function loadEditableCollectionPage(
   // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
   const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
   if (collection.id !== input.id) throw notFound();
-  // Public browsing always uses the anonymous member/facet population, including for its curator.
+  // Unfiltered public browsing uses the anonymous member/facet population.
   const publicMembership = 'visibility' in collection && collection.visibility !== 'private';
   const editor =
     input.editor === true &&
@@ -356,14 +358,26 @@ export async function loadEditableCollectionPage(
     'curatorAccountId' in collection &&
     viewer === collection.curatorAccountId;
   if (input.editor && !editor) throw notFound();
-  const memberHeaders = publicMembership && !editor ? {} : headers;
+  const ownerFilter = Boolean(
+    input.filter && viewer && 'curatorAccountId' in collection && viewer === collection.curatorAccountId,
+  );
+  const memberHeaders = publicMembership && !editor && !ownerFilter ? {} : headers;
   const filterState: { status: EditableCollectionPage['filterStatus'] } = {
     status: input.filterStatus === 'preparing' ? undefined : input.filterStatus,
   };
   const readAddress = collectionMembersReader(client, input.id, memberHeaders, input.filter);
   const readMembers = async (cursor?: string) => {
     if (filterState.status === 'failed') return { status: 200, data: { members: [], next: null } };
-    const result = await readAddress(cursor);
+    let result: unknown;
+    try {
+      result = await readAddress(cursor);
+    } catch (error) {
+      const status = resultStatus(error);
+      // Keep the authorized Collection shell when only its Members read failed.
+      // Credentials and concealment errors still propagate through the route boundary.
+      if (status === undefined || status >= 500) return { status: status ?? 500 };
+      throw error;
+    }
     const status = resultStatus(result);
     if (input.filter && (status === 400 || status === 422)) {
       filterState.status = 'unsupported';
@@ -429,6 +443,7 @@ export async function loadEditableCollectionPage(
         preparing: false,
         retryAfterMs: 1000,
         unavailable: true,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
         ...filterFields,
       };
     }
@@ -458,13 +473,17 @@ export async function loadEditableCollectionPage(
   }
   const curatedCollection = collection as CuratedCollectionRead;
   const memberStatus = resultStatus(membersResult);
-  const memberState = memberStatus === 202 ? 'preparing' : memberStatus === 503 ? 'unavailable' : 'ready';
+  const memberState = memberStatus === 202 ? 'preparing' : memberStatus === 503 ? 'unavailable' :
+    memberStatus !== undefined && memberStatus >= 500 ? 'failed' : 'ready';
   const members =
     memberState === 'ready'
       ? generatedClientDTO<CuratedMemberPage>(
           readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
         )
       : { members: [], next: null };
+  const canonical = input.filter ? generatedClientDTO<DynamicMembersPage>(
+    memberState === 'ready' ? readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]) :
+      { members: [], next: null }) : null;
   const owner = viewer !== undefined && viewer === curatedCollection.curatorAccountId;
   const following =
     authorization && !owner && curatedCollection.visibility !== 'private'
@@ -475,7 +494,7 @@ export async function loadEditableCollectionPage(
       ? members.members
       : members.members.filter((member) => member.subject != null);
   const memberCount =
-    memberState !== 'ready' || filterStatus
+    memberState !== 'ready' || filterStatus || input.filter
       ? null
       : owner
         ? typeof curatedCollection.memberCount === 'number' &&
@@ -508,19 +527,24 @@ export async function loadEditableCollectionPage(
     ...(!owner && curatedCollection.visibility !== 'private'
       ? { disclosedVisibility: curatedCollection.visibility }
       : {}),
-    members: visibleMembers.map((member) => ({
+    members: (canonical ? [] : visibleMembers).map((member) => ({
       id: member.id,
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
       ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
-    next: members.next,
+    ...(canonical ? { filteredMembers: canonical.members.map(member => ({
+      subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
+      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
+    })) } : {}),
+    next: canonical?.next ?? members.next,
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,
     following,
     ...(viewerActions ? { viewerActions } : {}),
     memberState,
+    ...(memberState === 'preparing' ? { retryAfterMs: retryAfterMs(membersResult) } : {}),
     ...(input.filter ? { filter: input.filter } : {}),
     ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
     ...(input.filterType ? { filterType: input.filterType } : {}),

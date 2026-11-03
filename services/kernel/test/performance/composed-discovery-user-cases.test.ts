@@ -62,10 +62,9 @@ let classification: Awaited<ReturnType<ReleasedDiscoveryFixture['classification'
 const unrelated: CreatedSubject[] = [];
 
 function sumCosts(costs: readonly PublicFilterCost[]): PublicFilterCost {
-  return costs.reduce((sum, cost) => {
-    for (const key of costKeys) sum[key] += cost[key];
-    return sum;
-  }, zeroCost());
+  const total = { ...zeroCost() };
+  for (const cost of costs) for (const key of costKeys) total[key] += cost[key];
+  return total;
 }
 
 function expectCost(cost: PublicFilterCost) {
@@ -216,7 +215,7 @@ afterAll(async () => {
 test('released long-harem book plan keeps native work bounded as sparse Books grow at 64/512/4096', async () => {
   const report = await checkGrowth(database!, {
     name: 'Released long-harem book direct plan with sparse nonmatching Books',
-    scales,
+    scales: [...scales],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     repetitions: 1,
@@ -262,7 +261,7 @@ test('released long-harem book plan keeps native work bounded as sparse Books gr
       },
     },
   });
-  expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(unrelated).toHaveLength(4096);
   for (const sample of report.samples) {
     const candidates = sample.counted?.candidates?.value;

@@ -407,13 +407,13 @@ test('counted-unit-ceilings-at-three-scales', async () => {
     for (const sample of report!.samples) {
       expect(sample.counted?.slots).toBeDefined();
       expect(sample.counted?.connections).toBeDefined();
-      expect(sample.counted!.slots.repetitions).toHaveLength(3);
-      expect(sample.counted!.connections.repetitions).toHaveLength(3);
+      expect(sample.counted!.slots!.repetitions).toHaveLength(3);
+      expect(sample.counted!.connections!.repetitions).toHaveLength(3);
       expect(sample.backendRepetitions).toHaveLength(3);
       for (const [index, cost] of sample.repetitions.entries()) {
         const repetition = index + 1;
         expect(cost.rows, `examined rows at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(
-          sample.counted!.slots.repetitions[index]!,
+          sample.counted!.slots!.repetitions[index]!,
         );
         expect(cost.blocks, `shared blocks at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(0);
         expect(cost.sharedHit + cost.sharedRead).toBe(cost.blocks);
@@ -422,8 +422,8 @@ test('counted-unit-ceilings-at-three-scales', async () => {
         expect(cost.responseBytes, `response bytes at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(
           0,
         );
-        expect(sample.counted!.slots.repetitions[index]).toBe(keepSlots);
-        expect(sample.counted!.connections.repetitions[index]).toBe(1);
+        expect(sample.counted!.slots!.repetitions[index]).toBe(keepSlots);
+        expect(sample.counted!.connections!.repetitions[index]).toBe(1);
         expect(sample.backendRepetitions[index]).toHaveLength(1);
         expect(
           cost.backgroundStatements,
