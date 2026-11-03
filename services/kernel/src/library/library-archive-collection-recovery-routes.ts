@@ -173,7 +173,8 @@ function detail(operationId: string, write = false) {
     'x-exposure': 'gate:collections',
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': exportAuthorityTypes,
-    security: [{ bearerAuth: [] }],
+    // collection:read is shared with optionally anonymous collection reads; the owner gate rejects anonymous actors.
+    security: [{ bearerAuth: [] }, {}],
     ...(operationId === 'create' ? { 'x-body-limit': Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4 + 128 } : {}),
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
