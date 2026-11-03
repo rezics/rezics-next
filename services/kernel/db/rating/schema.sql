@@ -52,6 +52,46 @@ $$;
 
 
 --
+-- Name: publish_realm_rank(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.publish_realm_rank() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE changed integer;
+BEGIN
+  IF TG_OP <> 'DELETE' AND NEW.population_id <> '00000000-0000-8000-8000-000000000000'::uuid
+     AND NEW.score IS NOT NULL AND NEW.as_of IS NOT NULL THEN
+    INSERT INTO rating.realm_rank
+      (partition_no,question_id,population_id,subject_id,count,mean,score,prior_epoch,prior_generation,revision,as_of)
+    VALUES (NEW.partition_no,NEW.question_id,NEW.population_id,NEW.subject_id,NEW.count,NEW.mean,NEW.score,
+            NEW.prior_epoch,NEW.published_prior_generation,NEW.revision,NEW.as_of)
+    ON CONFLICT (partition_no,question_id,population_id,subject_id) DO UPDATE
+      SET count=EXCLUDED.count,mean=EXCLUDED.mean,score=EXCLUDED.score,prior_epoch=EXCLUDED.prior_epoch,
+          prior_generation=EXCLUDED.prior_generation,revision=EXCLUDED.revision,as_of=EXCLUDED.as_of
+      WHERE (realm_rank.count,realm_rank.mean,realm_rank.score,realm_rank.prior_epoch,
+             realm_rank.prior_generation,realm_rank.revision,realm_rank.as_of)
+        IS DISTINCT FROM (EXCLUDED.count,EXCLUDED.mean,EXCLUDED.score,EXCLUDED.prior_epoch,
+                          EXCLUDED.prior_generation,EXCLUDED.revision,EXCLUDED.as_of);
+  ELSE
+    DELETE FROM rating.realm_rank
+      WHERE partition_no=OLD.partition_no AND question_id=OLD.question_id
+        AND population_id=OLD.population_id AND subject_id=OLD.subject_id;
+  END IF;
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  IF changed > 0 THEN
+    INSERT INTO rating.realm_rank_generation(partition_no,question_id,population_id,generation)
+    VALUES (COALESCE(NEW.partition_no,OLD.partition_no),COALESCE(NEW.question_id,OLD.question_id),
+            COALESCE(NEW.population_id,OLD.population_id),1)
+    ON CONFLICT (partition_no,question_id,population_id) DO UPDATE
+      SET generation=realm_rank_generation.generation+1;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: require_population_total_delivery(); Type: FUNCTION; Schema: rating; Owner: -
 --
 
@@ -399,6 +439,41 @@ CREATE TABLE rating.question (
 
 
 --
+-- Name: realm_rank; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.realm_rank (
+    partition_no integer NOT NULL,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    count bigint NOT NULL,
+    mean numeric(12,4) NOT NULL,
+    score numeric(12,4) NOT NULL,
+    prior_epoch integer NOT NULL,
+    prior_generation bigint NOT NULL,
+    revision bigint NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    CONSTRAINT realm_rank_check CHECK ((partition_no = (((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)) >> 4))),
+    CONSTRAINT realm_rank_count_check CHECK ((count >= 5)),
+    CONSTRAINT realm_rank_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: realm_rank_generation; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.realm_rank_generation (
+    partition_no integer NOT NULL,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT realm_rank_generation_generation_check CHECK ((generation > 0))
+);
+
+
+--
 -- Name: source_statistic; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -658,6 +733,22 @@ ALTER TABLE ONLY rating.question
 
 
 --
+-- Name: realm_rank_generation realm_rank_generation_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.realm_rank_generation
+    ADD CONSTRAINT realm_rank_generation_pkey PRIMARY KEY (partition_no, question_id, population_id);
+
+
+--
+-- Name: realm_rank realm_rank_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.realm_rank
+    ADD CONSTRAINT realm_rank_pkey PRIMARY KEY (partition_no, question_id, population_id, subject_id);
+
+
+--
 -- Name: source_statistic source_statistic_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -775,6 +866,13 @@ CREATE INDEX public_figure_prior_pending_idx ON rating.public_figure USING btree
 
 
 --
+-- Name: realm_rank_score_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no, question_id, population_id, prior_generation, score DESC, subject_id DESC);
+
+
+--
 -- Name: vote_counted_target_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -802,6 +900,13 @@ CREATE INDEX voter_realm_waiting_idx ON rating.voter_realm USING btree (route, v
 CREATE TRIGGER population_total_delivery_writer BEFORE INSERT OR UPDATE ON rating.population_total_component FOR EACH ROW EXECUTE FUNCTION rating.require_population_total_delivery();
 
 ALTER TABLE rating.population_total_component ENABLE ALWAYS TRIGGER population_total_delivery_writer;
+
+
+--
+-- Name: public_figure public_figure_realm_rank; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER public_figure_realm_rank AFTER INSERT OR DELETE OR UPDATE ON rating.public_figure FOR EACH ROW EXECUTE FUNCTION rating.publish_realm_rank();
 
 
 --
