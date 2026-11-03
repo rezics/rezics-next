@@ -31,7 +31,7 @@ const moderationFiles = [
   'tests/moderation-decision.test.tsx',
 ];
 
-type TestCounts = { pass: number | null; fail: number | null; skip: number | null };
+type TestCounts = { pass: number | null; fail: number | null; skip: number | null; diagnostic: string | null };
 type ProcSample = { start: string; rss: number; highWater: number };
 type ProcessPeak = { sampledRssBytes: number; highWaterBoundBytes: number; processCount: number };
 type CgroupMetrics = { currentBytes: number; oomEvents: number };
@@ -170,11 +170,13 @@ function readCgroupMetrics(): CgroupMetrics | null {
 }
 
 function counts(): TestCounts {
-  return { pass: null, fail: null, skip: null };
+  return { pass: null, fail: null, skip: null, diagnostic: null };
 }
 
 function parseSummaryLine(line: string, result: TestCounts): void {
   const clean = line.replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '');
+  const diagnostic = clean.match(/DIAGNOSTIC_RENDER_BUDGET:([a-z-]+):(\d+)/u);
+  if (diagnostic) result.diagnostic = `${diagnostic[1]}:${diagnostic[2]}`;
   for (const [key, pattern] of [
     ['pass', /\b(\d+)\s+pass(?:ed)?\b/iu],
     ['fail', /\b(\d+)\s+fail(?:ed)?\b/iu],
@@ -216,6 +218,7 @@ function printResult(result: RunResult): void {
     `tests=${result.counts.pass === null ? 'unknown' : result.counts.pass}`,
     `failed=${result.counts.fail === null ? 'unknown' : result.counts.fail}`,
     `skipped=${result.counts.skip === null ? 'unknown' : result.counts.skip}`,
+    ...(result.counts.diagnostic ? [`diagnostic=${result.counts.diagnostic}`] : []),
     `result=${result.failure ? 'FAIL' : 'PASS'}`,
   ];
   console.log(`moderation-memory-regression: ${fields.join(' ')}`);

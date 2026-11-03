@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, Profiler, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Appeal } from '../src/moderation/appeals-read';
@@ -447,6 +447,12 @@ test('report and appeal sparse, loading, denied, stale, unavailable and closed s
 test('loaded bulk reports keep the page bound, restore review and cancel focus, and retry only the exact uncertain item', async () => {
   await withDom(async ({ host, render, flush, window }) => {
     const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
+    let stage = 'mount';
+    let commits = 0;
+    const onRender = () => {
+      commits++;
+      if (commits >= 80) throw new Error(`DIAGNOSTIC_RENDER_BUDGET:${stage}:${commits}`);
+    };
     const rows = Array.from({ length: 22 }, (_, index): Report => ({
       ...reportRows[0]!,
       id: reportId(300 + index),
@@ -465,19 +471,25 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       return { ok: true };
     };
     await render(
-      createElement(BoardReportQueue, {
-        reports: rows,
-        targets: [],
-        next: 'opaque/next/page==',
-        onAction,
-        onRefresh: async () => {
-          refreshes++;
-        },
-      }),
+      createElement(
+        Profiler,
+        { id: 'moderation-bulk', onRender },
+        createElement(BoardReportQueue, {
+          reports: rows,
+          targets: [],
+          next: 'opaque/next/page==',
+          onAction,
+          onRefresh: async () => {
+            refreshes++;
+          },
+        }),
+      ),
     );
     expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(20);
+    stage = 'select-loaded';
     await clickButton(host, m.moderation_bulk_select_loaded(), flush);
     expect(host.textContent).toContain(m.moderation_bulk_selected({ count: 20 }));
+    stage = 'clear';
     await clickButton(host, m.moderation_bulk_clear(), flush);
 
     const select = async (number: number) => {
@@ -488,17 +500,23 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       const checkbox = host.querySelector(`[id="${label!.htmlFor}"]`) as unknown as HTMLElement;
       await act(async () => checkbox.click());
     };
+    stage = 'select-one';
     await select(1);
+    stage = 'select-two';
     await select(2);
+    stage = 'select-three';
     await select(3);
+    stage = 'review';
     await clickButton(host, m.moderation_bulk_review(), flush);
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
     expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
     expect(window.document.activeElement).toBe(reviewGroup);
+    stage = 'cancel';
     await clickButton(host, m.moderation_bulk_cancel(), flush);
     expect(window.document.activeElement).toBe(buttonByText(host, m.moderation_bulk_review()));
     expect(calls).toHaveLength(0);
 
+    stage = 'confirm';
     await clickButton(host, m.moderation_bulk_review(), flush);
     await clickButton(host, m.moderation_bulk_confirm({ count: 3 }), flush);
     expect(host.textContent).toContain(m.moderation_bulk_dismissed());
@@ -509,6 +527,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(calls[1]!.reportId).toBe(rows[1]!.id);
     expect(refreshes).toBe(0);
 
+    stage = 'exact-retry';
     await clickButton(host, m.moderation_bulk_retry(), flush);
     expect(calls).toHaveLength(3);
     expect(calls[2]).toEqual(calls[1]);
@@ -517,6 +536,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(refreshes).toBe(1);
     expect(host.textContent).toContain(m.moderation_bulk_unattempted());
     expect(host.textContent).not.toContain('Bulk row 1');
+    expect(commits).toBeLessThan(80);
   });
 });
 
