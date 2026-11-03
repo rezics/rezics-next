@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { registerContent } from '../../../src/content/register.ts';
-import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
@@ -25,7 +24,6 @@ type QueueRecord = Readonly<{
 }>;
 export type AppealHistoryAxis = 'unrelated-pending' | 'retained-history';
 
-const fixtureSecret = 'growth-appeal-boundaries-fixture-secret-at-least-32-bytes';
 const retentionTimestamp = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
 /** A private native HTTP, Access and registered-Content runtime for appeal queue growth acceptance. */
@@ -48,10 +46,6 @@ export async function createGrowthAppealBoundariesFixture() {
       access: system.access,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
-      writeRate: createWriteRateLimiter({
-        secret: fixtureSecret,
-        overrides: JSON.stringify({ 'new-account': { write: { maximum: 100_000, seconds: 86_400 } } }),
-      }),
     });
 
     const suffix = randomUUID().replaceAll('-', '');
@@ -140,10 +134,10 @@ export async function createGrowthAppealBoundariesFixture() {
       options: { bearer: string; key?: string; expectedStatus: number },
     ) {
       const key = options.key ?? randomUUID();
-      const result = await call(method, path, { bearer: options.bearer, key, body });
+      const result = await base.call(method, path, { bearer: options.bearer, key, body });
       if (result.response.status !== options.expectedStatus)
         throw new Error(`${method} ${path}: ${result.response.status} ${result.text}`);
-      return { body: result.body as T, key, response: result.response };
+      return { body: result.value as T, key, response: result.response };
     }
 
     async function completeRegisteredCommand(principalId: string, key: string): Promise<void> {
