@@ -467,7 +467,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           personalCommand(() => entries().readPersonalEntry(actor, params.subjectId)),
         );
         set.headers['cache-control'] = 'private, no-store';
-        return { personalEntry };
+        return {
+          personalEntry: {
+            ...personalEntry,
+            sourceObservations: personalEntry.sourceObservations.map((observation) => ({ ...observation })),
+          },
+        };
       },
     )
     .put(
@@ -495,7 +500,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
-        return { personalEntry: result.value };
+        return {
+          personalEntry: {
+            ...result.value,
+            sourceObservations: result.value.sourceObservations.map((observation) => ({ ...observation })),
+          },
+        };
       },
     )
     .post(
@@ -527,7 +537,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         session.record(result);
         set.status = 201;
         set.headers['cache-control'] = 'private, no-store';
-        return { sourceObservation: result.value.sourceObservation };
+        return { sourceObservation: { ...result.value.sourceObservation } };
       },
     )
     .patch(
@@ -564,7 +574,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
-        return { sourceObservation: result.value.sourceObservation };
+        return { sourceObservation: { ...result.value.sourceObservation } };
       },
     )
     .put(
