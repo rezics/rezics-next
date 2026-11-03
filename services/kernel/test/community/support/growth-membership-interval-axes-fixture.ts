@@ -44,15 +44,17 @@ export async function membershipIntervalAxesFixture() {
     hotPartition: partitionOf(route),
     hotShare: 1,
     rows: ({ ordinal }) => ({
-      'community.realm_member': [{
-        route,
-        realm_id: realmId,
-        account_id: accountId,
-        role: 'member',
-        valid: `[${new Date(historyStart + ordinal * 2000).toISOString()},${new Date(historyStart + ordinal * 2000 + 1000).toISOString()})`,
-        reservation_id: newId(route),
-        transaction_id: newId(route),
-      }],
+      'community.realm_member': [
+        {
+          route,
+          realm_id: realmId,
+          account_id: accountId,
+          role: 'member',
+          valid: `[${new Date(historyStart + ordinal * 2000).toISOString()},${new Date(historyStart + ordinal * 2000 + 1000).toISOString()})`,
+          reservation_id: newId(route),
+          transaction_id: newId(route),
+        },
+      ],
     }),
   };
   const unrelated: Population = {
@@ -61,24 +63,27 @@ export async function membershipIntervalAxesFixture() {
     hotShare: 1,
     // All pressure stays on the selected route, so partition pruning cannot hide its growth.
     rows: () => ({
-      'community.realm_member': [{
-        route,
-        realm_id: unrelatedRealmId,
-        account_id: newId(route),
-        role: 'member',
-        valid: `[${since},)`,
-        reservation_id: newId(route),
-        transaction_id: newId(route),
-      }],
+      'community.realm_member': [
+        {
+          route,
+          realm_id: unrelatedRealmId,
+          account_id: newId(route),
+          role: 'member',
+          valid: `[${since},)`,
+          reservation_id: newId(route),
+          transaction_id: newId(route),
+        },
+      ],
     }),
   };
 
   async function reset(axis: Axis, outcome: Outcome) {
     // Delete only this fixture's rows. IDs, reservation, interval endpoints and read time remain fixed.
-    await db.admin.query(
-      'DELETE FROM community.realm_member WHERE route=$1 AND realm_id IN ($2,$3)',
-      [route, realmId, unrelatedRealmId],
-    );
+    await db.admin.query('DELETE FROM community.realm_member WHERE route=$1 AND realm_id IN ($2,$3)', [
+      route,
+      realmId,
+      unrelatedRealmId,
+    ]);
     await db.admin.query(
       `INSERT INTO community.realm_member
          (route, realm_id, account_id, role, valid, reservation_id, transaction_id)
@@ -104,19 +109,23 @@ export async function membershipIntervalAxesFixture() {
        FROM community.realm_member WHERE route=$1 AND realm_id IN ($2,$4)`,
       [route, realmId, accountId, unrelatedRealmId, since],
     );
-    expect(counts.rows).toEqual([{
-      history: axis === 'closed history' ? scale : baseline,
-      unrelated: axis === 'unrelated keys' ? scale : baseline,
-      selected: 1,
-    }]);
+    expect(counts.rows).toEqual([
+      {
+        history: axis === 'closed history' ? scale : baseline,
+        unrelated: axis === 'unrelated keys' ? scale : baseline,
+        selected: 1,
+      },
+    ]);
     await db.admin.query('ANALYZE community.realm_member');
     await operation(outcome); // Initialize the SQL reader outside plan observation.
     const observed = await capture(db, () => operation(outcome));
-    expect(planNodes(observed.capture.plans).map((node) => ({
-      type: node['Node Type'],
-      relation: node['Relation Name'],
-      index: node['Index Name'],
-    }))).toEqual([{ type: 'Index Scan', relation: 'realm_member', index: 'realm_member_open' }]);
+    expect(
+      planNodes(observed.capture.plans).map((node) => ({
+        type: node['Node Type'],
+        relation: node['Relation Name'],
+        index: node['Index Name'],
+      })),
+    ).toEqual([{ type: 'Index Scan', relation: 'realm_member', index: 'realm_member_open' }]);
   }
 
   return {
@@ -125,7 +134,11 @@ export async function membershipIntervalAxesFixture() {
     grow,
     operation,
     async close() {
-      try { await db.close(); } finally { await system.close(); }
+      try {
+        await db.close();
+      } finally {
+        await system.close();
+      }
     },
   };
 }

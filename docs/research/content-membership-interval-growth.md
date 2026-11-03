@@ -30,10 +30,10 @@ All reads use `2030-01-01T00:00:00.000Z`. Older closed intervals are disjoint on
 Each series retains exactly one selected current/expired anchor. SQL counts outside observation verify both
 axes at every scale:
 
-| Series axis | Same-key older closed intervals | Unrelated open membership keys |
-| --- | --- | --- |
-| Unrelated keys | 256 | 256 / 1024 / 4096 |
-| Closed history | 256 / 1024 / 4096 | 256 |
+| Series axis    | Same-key older closed intervals | Unrelated open membership keys |
+| -------------- | ------------------------------- | ------------------------------ |
+| Unrelated keys | 256                             | 256 / 1024 / 4096              |
+| Closed history | 256 / 1024 / 4096               | 256                            |
 
 Setup explicitly overrides the common selected-command instruction for these temporal membership rows.
 Administrative insertion, private-row reset, population counts and statistics maintenance occur outside observation;

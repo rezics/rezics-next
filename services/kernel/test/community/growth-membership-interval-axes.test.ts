@@ -1,9 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkGrowth } from '../support/growth.ts';
-import { axes, membershipIntervalAxesFixture, outcomes, scales } from './support/growth-membership-interval-axes-fixture.ts';
+import {
+  axes,
+  membershipIntervalAxesFixture,
+  outcomes,
+  scales,
+} from './support/growth-membership-interval-axes-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof membershipIntervalAxesFixture>>;
-beforeAll(async () => { fixture = await membershipIntervalAxesFixture(); }, 120_000);
+beforeAll(async () => {
+  fixture = await membershipIntervalAxesFixture();
+}, 120_000);
 afterAll(async () => fixture?.close());
 
 for (const axis of axes) {
