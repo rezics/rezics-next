@@ -30,6 +30,8 @@ export const Self: Story = {
     await expect(name).toHaveValue('Avery Updated');
     await selectSettingsCategory(context.canvasElement, m.settings_public_activity_heading());
     await expect(activity.getByRole('switch', { name: m.settings_public_reviews() })).not.toBeChecked();
+    await selectSettingsCategory(context.canvasElement, m.settings_profile_heading());
+    await expect(name).toBeVisible();
   },
 };
 export const Handleless: Story = {
