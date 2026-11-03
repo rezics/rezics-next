@@ -447,3 +447,7 @@ Native lifecycle and three-scale acceptance, and the Performance review of compl
 (rows, statements, body/serialization bytes, physical homes, transaction/pool/runner phases and retry),
 remain required. In particular, two Content/owner passes plus the selected post/parent readers are not
 a constant physical-row cost claim. The current native fixed-size regression remains in place.
+
+OpenAPI now publishes these closed native context shapes. Generated client declaration receiving and
+Home rendering remain unfinished; the declaration generator currently cannot complete on the retained Kernel
+source. No prepared Web card establishes native lifecycle, growth or experience acceptance.
