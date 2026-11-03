@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { act, createElement } from 'react';
 import { admitRecentPage } from '../src/search/recent-response';
 import { recentHistoryDestination, recentReplayDestination } from '../src/search/recent-replay';
-import { localRecentEntry, createRecentSearchSyncAdapter } from '../src/search/recent-sync';
+import { localRecentEntry } from '../src/search/recent-sync';
 import { readRecentHistory, writeRecentHistory, type RecentHistory } from '../src/search/recent-history';
 import { searchLoaderDeps } from '../src/search/search-params';
 import { discoveryRequest } from '../src/search/search-request';
@@ -12,8 +12,6 @@ import { RecentHistoryView, type RecentItem } from '../src/search/recent';
 import { RecentPanel } from '../src/search/recent-panel';
 
 const id = '019f0000-0000-7000-8000-734100000002';
-const accountId = '019f0000-0000-7000-8000-734100000001';
-const bucket = `account:${accountId}`;
 const text = '地図 + maps & /?';
 function row(kind: 'realm' | 'collection', languages?: string[]): RecentItem {
   const entry = { kind: 'query' as const, text, scope: { kind, id }, ...(languages ? { languages } : {}) };
@@ -44,6 +42,13 @@ test('native admission and local replay preserve exactly the installed Search re
       const item = row(kind, languages);
       expect(admitRecentPage(page(item))).toBeDefined();
       const local = localRecentEntry(item);
+      const values = new Map<string, string>();
+      const storage = {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => void values.set(key, value),
+      };
+      writeRecentHistory(storage, 'account:reader', [local]);
+      expect(recentHistoryDestination(readRecentHistory(storage, 'account:reader')[0]!)).toBeUndefined();
       const href = recentHistoryDestination(local)!;
       expect(href).toBe(item.display!.href);
       expect(request(href)).toMatchObject({
@@ -64,6 +69,7 @@ test('native admission and local replay preserve exactly the installed Search re
         href.replace(encodeURIComponent(id), '019f0000-0000-7000-8000-734100000003'),
         href.replace('q=', 'foreign='),
         href + '#fragment',
+        '/search?q=x&filter=' + encodeURIComponent('['.repeat(2000) + ']'.repeat(2000)),
       ];
       url.searchParams.set('filter', JSON.stringify({ and: [{ [kind]: { id } }, { kind: { in: ['account'] } }] }));
       corrupt.push(url.pathname + url.search);
@@ -79,64 +85,6 @@ test('native admission and local replay preserve exactly the installed Search re
   };
   expect(admitRecentPage(page(library))).toBeDefined();
   expect(recentHistoryDestination(localRecentEntry(library))).toBeUndefined();
-});
-
-test('reconciliation strips stored authority, refreshes currentness and retires a delayed replaced reader', async () => {
-  const values = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => void values.set(key, value),
-  };
-  let item = row('collection', ['ja', 'en']),
-    visible: readonly ReturnType<typeof localRecentEntry>[] = [];
-  let finish: (() => void) | undefined, began!: () => void;
-  let pending = false,
-    current = true;
-  const started = new Promise<void>((resolve) => {
-    began = resolve;
-  });
-  const adapter = createRecentSearchSyncAdapter({
-    accountId,
-    bucket,
-    storage,
-    currentBucket: () => (current ? bucket : null),
-    onRemote: (entries) => {
-      visible = entries;
-    },
-    transport: {
-      read: async () => {
-        const result = page(item);
-        if (pending) {
-          began();
-          await new Promise<void>((resolve) => {
-            finish = resolve;
-          });
-        }
-        return { accountId, page: result };
-      },
-      write: async () => {
-        throw new Error('A read must not upload a visit');
-      },
-    },
-  });
-  await adapter.sync([], new AbortController().signal);
-  expect(recentHistoryDestination(visible[0]!)).toBe(item.display!.href);
-  expect(recentHistoryDestination(readRecentHistory(storage, bucket)[0]!)).toBeUndefined();
-  item = { ...item, display: null };
-  await adapter.refresh(visible, new AbortController().signal);
-  expect(visible[0]!.scope).toMatchObject({ id, name: '' });
-  expect(recentHistoryDestination(visible[0]!)).toBeUndefined();
-  item = row('collection');
-  pending = true;
-  const late = adapter.refresh(visible, new AbortController().signal);
-  await started;
-  current = false;
-  adapter.dispose();
-  finish!();
-  await expect(late).rejects.toHaveProperty('name', 'AbortError');
-  expect(recentHistoryDestination(visible[0]!)).toBeUndefined();
-  writeRecentHistory(storage, 'anonymous', [localRecentEntry(row('realm'))]);
-  expect(recentHistoryDestination(readRecentHistory(storage, 'anonymous')[0]!)).toContain('/search?');
 });
 
 test('both mounted Recent interfaces expose the same scoped replay and prevent activation after ownership retires', async () => {

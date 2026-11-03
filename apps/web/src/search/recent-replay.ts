@@ -30,12 +30,19 @@ function localURL(href: string): URL | undefined {
 
 function sameScopeFilter(filter: string | null, scope: NonNullable<RecentEntry['scope']>): boolean {
   if (filter === null || scope.kind === 'route') return false;
-  const parsed = parseSearchResourceScope(filter);
-  if (parsed.invalidInput || parsed.scope?.kind !== scope.kind || parsed.scope.id !== scope.id.toLowerCase())
+  let document: Record<string, unknown>;
+  try {
+    document = JSON.parse(filter);
+  } catch {
     return false;
-  const document = JSON.parse(filter);
-  // A general predicate or conjunction is not retained history meaning.
-  return Object.keys(document).length === 1 && Object.keys(document[scope.kind]).length === 1;
+  }
+  if (!document || typeof document !== 'object' || Array.isArray(document) || Object.keys(document).length !== 1)
+    return false;
+  const operand = document[scope.kind];
+  if (!operand || typeof operand !== 'object' || Array.isArray(operand) || Object.keys(operand).length !== 1)
+    return false;
+  const parsed = parseSearchResourceScope(filter);
+  return !parsed.invalidInput && parsed.scope?.kind === scope.kind && parsed.scope.id === scope.id.toLowerCase();
 }
 
 /** Compare decoded meaning, permitting equivalent URL escaping and field order only. */
