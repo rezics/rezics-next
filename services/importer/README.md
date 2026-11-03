@@ -617,6 +617,68 @@ its session-backed media resolver after construction. This boundary adds no comm
 alternative writer. The [verification note](../../docs/research/imports-audit/cli-native-backpressure.md) describes
 the captured evidence and its limits; local protocol tests alone do not establish this native journey.
 
+## Explicit local batch of independent source imports
+
+Catalogue operators can preview and deliberately run a bounded local JSON manifest of independent launch-source
+jobs instead of assembling separate invocations. This is a product command, not a Goal-controller scheduler.
+
+```sh
+bun services/importer/src/cli.ts batch --manifest /srv/imports/launch.json --json
+bun services/importer/src/cli.ts batch --manifest /srv/imports/launch.json --run \
+  --api https://api.rezics.example --account-key /run/secrets/rezics-importer-account.jwk \
+  --account 6b147e8d-1762-4717-9a65-aeb435cb843e --client rezics-importer --auth https://auth.rezics.example \
+  --progress jsonl --json
+```
+
+The manifest is version `1`, at most 16 jobs and 64 KiB. Each job names one of `bangumi`, `vndb`, `openlibrary` or
+`wikidata`, an exact configured `--source-alias` when used, a local complete dump path and an existing ordinary
+state path. Relative paths resolve against the manifest directory under the existing regular-file, no-follow
+descriptor policy. Credentials, API origins and account keys stay on the invocation; they are never embedded in
+the manifest or report. Default invocation parses, validates and displays ordered aliases and input modes. It does
+not acquire credentials, open state for mutation, decode dumps or send network requests. `--run` is the only
+execution switch; there is no hidden approval loop or cached plan token.
+
+Successful preflight is local shape and path validation. It does not prove dump integrity, current authority or
+that every job will succeed. Preflight refuses unknown fields, stdin, URLs, environment interpolation, include
+files, globs, duplicate configured sources, and two path spellings of the same state file for one source. Shared
+SQLite is allowed only for distinct aliases under existing ownership rules. Jobs are not merged because names
+resemble each other. Decision: Open Library dump-set manifests remain one job's complete `--dump` input; batch
+jobs cannot declare `dumpSet` because the ordinary single-source CLI has not delivered that flag.
+
+`--run` revalidates every ordinary input at each job, then calls the exported single-source CLI serially in
+manifest order. At most one importer, input and state owner is active. Handles close before the next job.
+Progress keeps the existing stderr protocol with a bounded job index/name context; underlying source/run IDs and
+invocation identity stay intact. JSON output lists at most 16 summaries, the actual stopping job and explicit
+not-started jobs. Human output keeps a concise final result on stdout. Native errors are never rewritten as
+success. Single-source stdout contracts are unchanged.
+
+Any non-success, cancellation, uncertain delivery, disappearance, incompatible input or observation-conflict
+exit 6 stops before the next job. Completed jobs stay completed. Later jobs are not started, not labelled failed
+and not rolled back. SIGINT or SIGTERM before a job begins starts no new coordinator. There is no
+continue-on-error, hidden retry, force disappearance, automatic CAS resolution or parallel worker. A dump or
+state replacement between local preview and execution is refused rather than followed.
+
+Rerunning the manifest uses ordinary per-source journals only. The report cannot resume a request, skip a job
+from an old summary or mint new keys for unresolved work. A stopped or uncertain job prints the established
+ordinary importer command, and observation conflicts also point at `rezics-import observations`, without
+executing either automatically.
+
+```json
+{
+  "version": 1,
+  "jobs": [
+    { "source": "bangumi", "dump": "bangumi.jsonl", "state": "importer.sqlite" },
+    {
+      "source": "openlibrary",
+      "sourceAlias": "catalogue-ol",
+      "dump": "works.tsv",
+      "state": "importer.sqlite",
+      "compression": "none"
+    }
+  ]
+}
+```
+
 ## Known own references
 
 Imports owns the default handoff of successful local claims to conversion, including ordinary
