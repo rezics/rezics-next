@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
+import { sourceObservation } from '../../src/rating/source-provider.ts';
 import { createHash } from 'node:crypto';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
@@ -20,7 +21,7 @@ const baseStatistic = (sourceRecordId: string, mean = 8.4) => ({
   licence: 'CC BY 4.0',
   attribution: 'VNDB users',
 });
-const baseClear = (sourceRecordId: string, date = asOf) => ({ sourceRecordId, count: 0, asOf: date });
+const baseClear = (sourceRecordId: string, date = '2026-10-21') => ({ sourceRecordId, count: 0, asOf: date });
 
 let fixture: Awaited<ReturnType<typeof createSourceStatisticLifecycleFixture>>;
 let observer: ReturnType<typeof observeSql>;
@@ -51,7 +52,19 @@ async function problem(response: Response, status: number) {
 async function sourceStatistics(subjectId: string, anonymous = true) {
   const response = await fixture.request('GET', statisticPath(subjectId), { anonymous });
   expect(response.status).toBe(200);
-  return response.json();
+  const rows = await response.json();
+  return rows.map(({ observation, ...row }: any) => {
+    if (observation) expect(observation).toEqual({ kind: 'unversioned', digest: sourceObservation(subjectId, source, rowPayload(row)).digest });
+    return row;
+  });
+}
+function rowPayload({ source: _provider, ...value }: any) { return value; }
+function expected(subjectId: string, value: any) {
+  const { expectedObservation: _expected, ...payload } = value;
+  return { source, ...payload, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, source, payload).digest } };
+}
+function compare(subjectId: string, previous: any, next: any) {
+  return { ...next, expectedObservation: sourceObservation(subjectId, source, previous).digest };
 }
 
 async function takedown(sourceRecordId: string, fieldGroup: 'facts' | 'summary' | 'cover') {
@@ -227,7 +240,7 @@ test('an unavailable tuple home fails closed for reads and publication', async (
 });
 
 test('explicit zero clears the exact current binding with strict replay and current authorization', async () => {
-  const [fencedSubject, subjectId] = subjects;
+  const [fencedSubject, subjectId] = await Promise.all([fixture.createSubject(), fixture.createSubject()]);
   expect(fencedSubject).toBeDefined();
   expect(subjectId).toBeDefined();
 
@@ -246,7 +259,7 @@ test('explicit zero clears the exact current binding with strict replay and curr
   expect(
     (
       await fixture.request('PUT', writePath(subjectId!), {
-        body: baseStatistic(currentRecord, 9.3),
+        body: compare(subjectId!, baseStatistic(firstRecord), baseStatistic(currentRecord, 9.3)),
       })
     ).status,
   ).toBe(200);
@@ -397,7 +410,7 @@ test('alias rebind isolates clear, no-op receipts and committed replay from the 
   expect(firstReplay.status).toBe(200);
   expect(await firstReplay.json()).toEqual({ source, ...first });
   await problem(await fixture.request('PUT', writePath(subjectId), { body: second, key: writeKey }), 422);
-  expect((await fixture.request('PUT', writePath(subjectId), { body: second })).status).toBe(200);
+  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, first, second) })).status).toBe(200);
   const replacedReplay = await problem(
     await fixture.request('PUT', writePath(subjectId), { body: first, key: writeKey }),
     404,
@@ -423,9 +436,10 @@ test('alias rebind isolates clear, no-op receipts and committed replay from the 
   expect(await sourceStatistics(subjectId)).toEqual([]);
   expect(await aliasEffects(subjectId)).toBe(before + 1);
   // A receipt that recorded no removal must never become a later deletion.
-  expect((await fixture.request('PUT', writePath(subjectId), { body: first })).status).toBe(200);
+  const restored = { ...first, asOf: '2026-10-22' };
+  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, correctClear, restored) })).status).toBe(200);
   expect((await fixture.request('POST', clearPath(subjectId), { body: staleClear, key: staleKey })).status).toBe(204);
-  expect(await sourceStatistics(subjectId)).toEqual([{ source, ...first }]);
+  expect(await sourceStatistics(subjectId)).toEqual([{ source, ...restored }]);
   await fixture.revokeWriter();
   try {
     await problem(await fixture.request('PUT', writePath(subjectId), { body: first, key: writeKey }), 403);
@@ -555,11 +569,11 @@ test('default alias normalization retains original positive and clear receipt di
   const maximumAlias = 'a'.repeat(32);
   const custom = { ...value, sourceAlias: maximumAlias };
   const customKey = crypto.randomUUID();
-  const customWrite = await fixture.request('PUT', writePath(subjectId), { body: custom, key: customKey });
+  const customWrite = await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, value, custom), key: customKey });
   expect(customWrite.status).toBe(200);
-  expect(await customWrite.json()).toEqual({ source, ...custom });
+  expect(await customWrite.json()).toEqual(expected(subjectId, custom));
   await problem(await fixture.request('PUT', writePath(subjectId), { body: value, key: customKey }), 422);
-  expect((await fixture.request('PUT', writePath(subjectId), { body: value })).status).toBe(200);
+  expect((await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, custom, value) })).status).toBe(200);
   const clearKey = crypto.randomUUID();
   const clear = baseClear(value.sourceRecordId);
   expect((await fixture.request('POST', clearPath(subjectId), { body: clear, key: clearKey })).status).toBe(204);
@@ -638,9 +652,9 @@ test('a rebind during GET cannot serialize either alias under the earlier bindin
   const pending = fixture.request('GET', statisticPath(subjectId), { anonymous: true });
   await barrier.entered;
   try {
-    const replaced = await fixture.request('PUT', writePath(subjectId), { body: second });
+    const replaced = await fixture.request('PUT', writePath(subjectId), { body: compare(subjectId, first, second) });
     expect(replaced.status).toBe(200);
-    expect(await replaced.json()).toEqual({ source, ...second });
+    expect(await replaced.json()).toEqual(expected(subjectId, second));
   } finally {
     barrier.release();
   }

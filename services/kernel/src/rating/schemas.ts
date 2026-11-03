@@ -141,6 +141,7 @@ const sourceScale = t.Object(
 export const SourceStatisticInputSchema = strictContentSchema(
   t.Object(
     {
+      expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
       sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
       sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
       scale: sourceScale,
@@ -157,6 +158,7 @@ export const SourceStatisticInputSchema = strictContentSchema(
 export const SourceStatisticClearInputSchema = strictContentSchema(
   t.Object(
     {
+      expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
       sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
       sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
       count: t.Literal(0),
@@ -168,7 +170,8 @@ export const SourceStatisticClearInputSchema = strictContentSchema(
 
 export const SourceStatisticResponseSchema = t.Object(
   {
-    source: t.Literal('vndb'),
+    source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
+    observation: t.Optional(t.Object({ kind: t.Literal('unversioned'), digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed)),
     sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
     sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
     scale: sourceScale,
@@ -181,7 +184,7 @@ export const SourceStatisticResponseSchema = t.Object(
   closed,
 );
 
-export const SourceStatisticListResponseSchema = t.Array(SourceStatisticResponseSchema);
+export const SourceStatisticListResponseSchema = t.Array(SourceStatisticResponseSchema, { maxItems: 2 });
 
 export const RatingQuestionLabelInputSchema = strictContentSchema(
   t.Object(

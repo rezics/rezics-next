@@ -1,5 +1,6 @@
-// Cost: no growth check is needed beyond a primary-key read, at most one row per source (currently VNDB only).
+// Cost: at most one current row per admitted provider; observation/fence work is indexed.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { sourceObservation } from '../../src/rating/source-provider.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -187,9 +188,9 @@ test('the importer writes and refreshes a labelled statistic without creating na
   expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual(expected);
 
   const refreshed = { ...first, sourceRecordId: 'v18', mean: 9.1, count: 1500, asOf: '2026-10-15' };
-  await json(await request('PUT', path, refreshed, 'importer'));
+  await json(await request('PUT', path, { ...refreshed, expectedObservation: sourceObservation(subjectId, 'vndb', first).digest }, 'importer')); 
   expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual([
-    { source: 'vndb', ...refreshed },
+    { source: 'vndb', ...refreshed, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshed).digest } },
   ]);
   const counts = await database.admin.query(
     `SELECT

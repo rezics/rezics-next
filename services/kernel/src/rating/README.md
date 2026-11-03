@@ -740,31 +740,113 @@ reads, review-context selection and citation disclosure.
   as its ETag (zero before publication) and `Cache-Control: no-cache`, matching other public subject reads.
   The route never reads votes, shard totals or Realm populations. `subject.get` continues to follow the subject's
   head revision and carries no figure; search can reuse `PublicFigure` unchanged.
-- `GET /v1/subjects/{id}/source-statistics` is public under the subject's read rules. It returns each imported source
-  statistic with its source, source record id, source scale, mean, count, as-of date, licence and attribution.
-- `PUT /v1/subjects/{id}/source-statistics/{source}` replaces that source's statistic using a strict JSON body
-  containing the source record id, scale, mean, count, as-of date, licence and attribution. It requires an
-  `Idempotency-Key` and `source_statistic:write` on Global Context, held by the importer governance role.
-- `POST /v1/subjects/{id}/source-statistics/{source}:clear` accepts only
-  `{ "sourceRecordId", "count": 0, "asOf", "sourceAlias"?: string }` and returns `204 No Content`. It uses the same Global Context writer
-  authority, personal-library gate and idempotency rules as `PUT`. The zero is authoritative for that exact source
-  record binding: it removes a matching stale statistic, while an absent or different binding is an idempotent no-op.
-  Missing counts and partial averages are unknown and never clear a row. A clear can remove a row after its imported
-  facts tuple has been fenced; it does not alter votes or published figures.
+- `GET /v1/subjects/{id}/source-statistics` returns an array of at most two independent current figures,
+  ordered by provider, under the Subject's read rules. An absent, cleared or fenced provider has no row and no
+  invented total. Each row retains provider, exact source record, effective fence alias, scale, mean, count,
+  as-of date, licence and attribution. Figures never enter native votes, means, priors, rankings or ballots.
+- `PUT /v1/subjects/{id}/source-statistics/{source}` publishes one positive observation. The strict JSON body
+  contains `sourceRecordId`, `scale`, `mean`, positive `count`, `asOf`, `licence`, `attribution`, optional
+  `sourceAlias` and optional `expectedObservation`. It requires `Idempotency-Key` and the shared
+  `source_statistic:write` authorization on Global Context, checked before every receipt lookup, including replay.
+- `POST /v1/subjects/{id}/source-statistics/{source}:clear` accepts only `sourceRecordId`, `count: 0`, `asOf`,
+  optional `sourceAlias` and optional `expectedObservation`, returning 204. Missing aggregates do nothing;
+  zero count is an explicit empty observation, never a mean of zero. A clear can remove a fenced figure.
+  A different tuple binding is a receipt-backed no-op. A clear of an empty slot retains a tombstone so delayed
+  positive refreshes cannot resurrect it; an identical repeated clear has no additional effect.
 
-Both positive PUT and clear accept optional `sourceAlias`, using the source-fence identifier grammar
-(`^[a-z][a-z0-9_-]{0,31}$`, at most 32 ASCII bytes). Omission and explicit provider id (`vndb`) bind the
-provider tuple and preserve legacy request digests and response shapes. A custom alias participates in request
-identity and appears as optional `sourceAlias` in GET/PUT responses. The effective alias is persisted on the one
-current `(route, subject, provider)` slot; changing aliases replaces that slot rather than adding a statistic.
-Clear removes only a matching provider, effective alias and record id, including after rebind or subject merge.
-A stale or absent binding is a receipt-backed no-op with no change event. No as-of ordering is imposed.
+The closed profiles live in [source-provider.ts](source-provider.ts). `vndb` retains its existing record-key and
+caller-supplied scale contract (integer endpoints within 0–4096); the current converter sends `v123` and 1–10.
+`bangumi` admits only canonical positive safe-integer subject IDs (`123`, never `00123`, `v123` or a URL), and
+exactly the provider's 0–10 aggregate scale. Zero means within scale are valid with positive counts.
+No normalization or native source revision is inferred. The Bangumi inventory's 1–10 score buckets and official
+aggregate score field inform that profile; an aggregate zero remains representable on its own source scale.
+The source inventory explicitly omits Bangumi ratings from current imports: this capability grants neither
+licence nor adapter approval. Imports still omits `score`, `score_details` and `rank` until separately admitted.
+Profile policy does not depend on alias spelling. Other providers remain rejected in mounted strict parameters,
+response/event schemas, native types and database constraints.
 
-Imported source statistics are disclosed only while their exact `(effective alias, sourceRecordId, facts)` tuple remains
-current. A facts takedown hides the matching row from public lists and blocks later publication for that tuple.
-Summary and cover fences are independent. The tuple home is read through its own anchored snapshot before writes and
-again at final disclosure; an unavailable tuple home fails closed. Clearing is an exact selected-subject partition
-command and never consults or removes another tuple.
+Decision: keep legacy VNDB response shapes unless a writer opts into observation metadata with
+`expectedObservation`; Bangumi responses always identify their unversioned observation.
+Both write operations accept `sourceAlias` using the existing fence grammar (`^[a-z][a-z0-9_-]{0,31}$`).
+Omission and the explicit provider ID bind the same tuple and preserve existing VNDB receipt digests. Aliases
+select the facts-fence home, never a provider profile. A custom alias is retained in responses. There is one
+current slot per `(route, subject, provider)`, so independently eligible Bangumi and VNDB rows cannot overwrite
+one another. Different record/alias bindings require explicit CAS provenance before replacing that slot.
+
+#### Observation and repair contract for Imports
+
+`source_statistic_observation` retains each accepted immutable payload, and `source_statistic_head` indexes one
+current digest per subject/provider, including clears. Neither read hydration nor refresh scans this history.
+`sourceObservation(subjectId, provider, value)` defines the content address: SHA-256 of RFC 8785 canonical JSON
+`["source-statistic-observation.v1", subjectId, provider, payload]`. Payload is the exact supplied positive or
+empty observation, with effective `sourceAlias` present and `expectedObservation` excluded. The date is an
+observation date, not a native revision. Metadata is `{kind: "unversioned", digest: <64 lowercase hex>}` in the
+optional response `observation`; licence and attribution remain caller-supplied provenance, not profile defaults.
+Legacy VNDB receipts keep their existing request-digest algorithm. A legacy current row is adopted with its
+original payload when first changed; migration invents neither time nor revision. Its expected digest can be
+computed from its current GET row using the same helper (exclude response `source` and `observation`).
+
+An older `asOf` conflicts (409), including against a cleared head. An equal-date identical digest is harmless.
+An equal-date different observation, or a different alias/record, requires `expectedObservation` equal to the
+current digest; otherwise it conflicts. A supplied expectation always compares with the head (`null` means
+no head/current statistic), except an identical digest is already satisfied. A newer observation of the same
+binding can omit the expectation, preserving ordinary legacy VNDB refreshes. CAS does not override date order.
+A matching clear obeys the same date/CAS rules; a delayed empty refresh cannot remove a newer positive row.
+After a clear, the importer knows the new head digest from the exact clear payload even though HTTP returns 204.
+Corrections with no provider revision use CAS plus content digest; they must not invent a revision or average
+conflicting records. A receipt replay returns its original effect and must still pass current disclosure.
+
+#### Current disclosure and actual consumers
+
+The producer and mounted binding remain [source-statistics.ts](source-statistics.ts) and
+[http/kernel.ts](../http/kernel.ts). Both commands use the actual shared Global writer helper. Mounted publication
+and read resolve the current Subject before/final disclosure; original redirected records are never copied or
+combined into a terminal statistic. Pending identity mappings are unavailable. Existing
+[merge-job.ts](merge-job.ts) and [identity-repair.ts](identity-repair.ts) reconcile votes, not statistics; this
+slice installs no statistics merge adapter. Their source files require no change. Original observation records
+stay on their original subject; only independently published terminal records can be read at a terminal identity.
+
+Every positive publication and list read checks the exact `(effective alias, sourceRecordId, facts)` fence in
+released anchored before/final observations. A VNDB facts takedown hides only its row; a Bangumi alias cannot
+bypass that provider's ID/scale rules. Summary and cover fences are independent. Local current binding is reread
+before serializing. Unavailable tuple homes fail closed, without a stale-fact fallback or cross-partition join.
+Clear checks tuple-home availability before/final publication but remains permitted behind a facts takedown.
+Committed responses concealed later retain `effect_status: not_applicable`, including receipt replay.
+
+The existing VNDB callers are `services/importer/src/import-client.ts` (`writeSourceStatistic`,
+`clearSourceStatistic`), bound by `services/importer/src/importer.ts` and `cli.ts`. Their ordinary newer same-record
+writes retain wire compatibility; equal-date corrections and record rebinding now require the additive expectation.
+Imports owns that follow-on adapter/refresh integration, credential scope admission and licence decisions. No
+successful Bangumi import is inferred. The real typed client is regenerated through the Kernel compiler database.
+Web's `apps/web/src/features/pages/subject-ratings.ts` and `subject-ratings-view.tsx` already load/render the array
+separately from native figures. Their optional provenance fields remain source-compatible. Web owns the named
+**Bangumi source-figure reader** follow-on: provider label, exact alias/record provenance, scale/asOf and UI tests.
+Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract.
+
+#### Operation Cost: source-statistic list
+
+- Touches: at most two current statistic rows, each provider's two anchored tuple-fact snapshots, a second local
+  binding read and before/final Subject identity/availability checks.
+- Bound: finite admitted-provider count (two); no totals, history scan, source fetch or cross-partition join.
+- Growth check: existing lifecycle/isolation growth suites retain their indexed current-row/fence scope; the
+  connected provider tests cover independent hydration and concealment. Broad growth measurement is deferred.
+
+#### Operation Cost: source-statistic publish
+
+- Touches: one locked subject, one provider head/observation, optional legacy current row adoption, one immutable
+  observation insert, one current upsert, one event/receipt and anchored tuple/Subject observations.
+- Bound: constant rows/statements per command, one current head lookup by primary key, logarithmic index work
+  as retained observations grow. Two providers share no head or statistic slot. Identical digests have no new effect.
+- Growth check: existing source-statistic growth suites plus connected provider ordering cases; full measurement
+  belongs to integration verification, not an imported-record history walk.
+
+#### Operation Cost: source-statistic clear
+
+- Touches: one locked subject, one provider head/observation, exact tuple comparison, optional legacy adoption,
+  one immutable empty observation/head update, at most one current deletion and one event/receipt.
+- Bound: constant indexed work, including empty heads and stale tuple no-ops; no search for another binding.
+- Growth check: lifecycle growth suite covers exact clear; connected provider tests cover tombstones, older
+  refreshes and independent provider preservation. Broader acceptance remains deferred.
 
 Vote request bodies reject unknown fields and non-integer values. The question scale carries the units used by vote
 requests, so vote routes do not accept or return floating-point vote values. Errors use RFC 9457 problem responses.
@@ -908,7 +990,7 @@ The rating tombstone purge is participant `community`'s rating part; `readRating
 | Subject public figure HTTP read     | One subject read under existing read rules, the standard question scale, one `readPublicFigures` statement for one anchored subject, and one point read of that figure's pending mark in the same snapshot.                                                                                                                                                                                                                                                                          | O(1) statements and rows, independent of votes, populations and subjects; figure index blocks grow logarithmically with the relation.                                                                                                                                                                                                                                                                                                                 | `test/rating/public-figure-http.test.ts`: the ready-figure acceptance measures the same statement count at 1, 64 and 512 voters.                                                                                                                                                                 |
 | Public figure batch and page reads  | The batch seeks up to 256 requested IDs by `(route, question, population, subject)`; the page seeks the exact partition/question/population prefix and strict subject cursor in the existing published-figure partial index, then reads at most the requested ordered window and its figure rows.                                                                                                                                                                                    | Intended bound: one statement per call; at most 256 exact batch rows or 500 visited/returned matching page rows plus logarithmic index seeks, independent of unrelated figure/voter history. Measured growth acceptance UNRUN under minimal verification.                                                                                                                                                                                             | `test/rating/growth-figures-statistics.test.ts`: `Public figure batches and pages stay within their bound as figure and voter history grows`                                                                                                                                                     |
 | Public figure views                 | One question read by key and one statement seeking each requested subject's figure by primary key in its anchor partition, for the standard question and Global population.                                                                                                                                                                                                                                                                                                          | Two statements per non-empty call; at most the requested 256 figure rows; blocks O(N log F), linear in N subjects and logarithmic in F figure rows, independent of votes, populations and Realms. Empty calls issue no statements.                                                                                                                                                                                                                    | `test/rating/public-figure-views.test.ts`: `batched figure views use two statements for 1, 64 and 256 subjects across partitions`                                                                                                                                                                |
-| Source-statistic GET, PUT and clear | GET returns at most one row for the supported `vndb` source, checks its exact facts tuple in two independently anchored tuple-home snapshots, rereads the local binding, and rechecks the current subject before serialization. PUT checks that tuple before its subject-partition upsert and at final disclosure. Clear deletes only one row matching `(route, subject_id, source, source_alias, source_record_id)` and emits the existing change event only when that row changes. | Rows, statements and effect events are constant: at most one source-statistic row per subject/source, one changed row/event per command, and one facts-fence row per tuple snapshot. Index blocks grow logarithmically with source-statistic, receipt and tuple-fence histories. Every nested query and physical occurrence is included in the lifecycle growth capture.                                                                              | `test/rating/growth-source-statistic-lifecycle.test.ts`: `source statistic GET, PUT and authoritative zero clear stay bounded as row and tuple histories grow`; `test/rating/growth-figures-statistics.test.ts`: `Source statistic writes and reads stay within their bound as statistics grow`  |
+| Source-statistic GET, PUT and clear | GET returns at most two rows for the admitted `vndb` and `bangumi` sources, checks its exact facts tuple in two independently anchored tuple-home snapshots, rereads the local binding, and rechecks the current subject before serialization. PUT checks that tuple before its subject-partition upsert and at final disclosure. Clear deletes only one row matching `(route, subject_id, source, source_alias, source_record_id)` and emits the existing change event only when that row changes. | Rows, statements and effect events are constant: at most one source-statistic row per subject/source, one changed row/event per command, and one facts-fence row per tuple snapshot. Index blocks grow logarithmically with source-statistic, receipt and tuple-fence histories. Every nested query and physical occurrence is included in the lifecycle growth capture.                                                                              | `test/rating/growth-source-statistic-lifecycle.test.ts`: `source statistic GET, PUT and authoritative zero clear stay bounded as row and tuple histories grow`; `test/rating/growth-figures-statistics.test.ts`: `Source statistic writes and reads stay within their bound as statistics grow`  |
 | Own-vote and question GET reads     | Each command and mounted GET reads the account by primary key, then seeks one vote by `(route, voter_id, question_id, target_id)` or one question by primary key.                                                                                                                                                                                                                                                                                                                    | Rows and statements are constant per read (two point reads); index blocks grow logarithmically with vote history.                                                                                                                                                                                                                                                                                                                                     | `test/rating/growth-figures-statistics.test.ts`: `Own vote and question reads stay within their bound as votes grow`                                                                                                                                                                             |
 | Protected Realm scored page         | Two native Realm authorizations, two selected-question observations (question and label head, home partition, and current provenance authority), two freshness/prior reads, scored rank generation and seek, and native subject Access/current identity for every consumed row. The seek binds the actual `question_identity` before `prior_generation`.                                                                                                                             | [Derived bound](cost-realm-order.md): rows <= `14+C+2R_R+C R_S+2R_Q`; statements and controls <= `29+2A_R+C A_S+2A_Q`; `C<=limit<=100`, returned `V<=C`; candidate index positioning is logarithmic. This is the compatibility scorer only; it does not establish canonical-name ties or the unscored complement.                                                                                                                                     | `test/rating/growth-realm-rank-source.test.ts`: three scales and first/deep/withheld/empty/terminal cases; its selected-question cost and EXPLAIN assertions remain to be reconciled before acceptance.                                                                                          |
 
