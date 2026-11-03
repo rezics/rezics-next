@@ -5,7 +5,7 @@ import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { SessionEnv } from '../../session/client';
 import { createTypes, type InitialSubject } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
-import { editableScalar, type StatementInput } from './statement-editor';
+import { creationStatement, editableScalar, type StatementInput } from './statement-editor';
 
 export const screenTypes = ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode'] as const;
 export function isScreenType(type: string): boolean {
@@ -74,7 +74,8 @@ export function screenFactId(property: string): string {
 }
 export function screenInitialFacts(release: Release, initial: InitialSubject, statements: StatementInput[]) {
   const item: ScreenItem = { ...initial, statements: {} };
-  for (const statement of statements) (item.statements[statement.property.id] ??= []).push(structuredClone(statement));
+  for (const statement of statements)
+    (item.statements[statement.property.id] ??= []).push(structuredClone(creationStatement(statement, release)));
   const errors = checkSubjectInput(item, release, undefined, true).violations;
   const groups = screenGroups(release, item.type);
   const admitted = Object.entries(groups)

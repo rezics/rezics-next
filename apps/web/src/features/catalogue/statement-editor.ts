@@ -79,6 +79,49 @@ export function statementInput(statement: Statement): StatementInput {
   };
 }
 
+/** A private initial fact starts with the existing URL-first citation affordance when it is admitted. */
+export function emptyCreationStatement(property: string, release: Release): StatementInput {
+  return {
+    property: { id: property },
+    value: { type: 'value', content: '' },
+    qualifiers: [],
+    references:
+      release.properties['schema:url']?.datatype === 'url'
+        ? [
+            {
+              parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }],
+            },
+          ]
+        : [],
+    rank: 'normal',
+  };
+}
+
+function hasValue(content: unknown): boolean {
+  if (typeof content === 'string') return content.trim().length > 0;
+  if (typeof content === 'number' || typeof content === 'boolean') return true;
+  if (Array.isArray(content)) return content.some(hasValue);
+  if (content && typeof content === 'object')
+    return Object.entries(content).some(
+      ([key, value]) => !['unit', 'precision', 'calendarmodel', 'language'].includes(key) && hasValue(value),
+    );
+  return false;
+}
+
+/** Omit untouched reference controls while retaining typed falsy values and local object identity. */
+export function creationStatement(statement: StatementInput, _release: Release): StatementInput {
+  return {
+    ...statement,
+    qualifiers: statement.qualifiers?.filter(
+      (part) => part.value.type !== 'value' || hasValue(part.value.content),
+    ),
+    references: statement.references.flatMap((reference) => {
+      const parts = reference.parts.filter((part) => part.value.type !== 'value' || hasValue(part.value.content));
+      return parts.length ? [{ ...reference, parts }] : [];
+    }),
+  };
+}
+
 export async function readStatementEditor(client: KernelClient, address: EditorAddress): Promise<EditorRead> {
   try {
     // Independent public reads begin together; no privileged fallback or per-field requests.

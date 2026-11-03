@@ -54,6 +54,10 @@ import { statementDraftChanged } from './statement-editor-navigation';
 type Current = Extract<EditorRead, { ok: true }>;
 type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
 type StatementRemovalKind = 'qualifier' | 'reference' | 'part';
+const statementHolderKeys = new WeakMap<object, number>();
+export function statementHolderKey(value: object): number | undefined {
+  return statementHolderKeys.get(value);
+}
 /** Creation has no subject DTO or invented identity; controls need only its chosen Type and related summaries. */
 export type StatementFieldsRead = ScalarRead & {
   source: Current['source'];
@@ -573,6 +577,9 @@ export function StatementFields({
   valueControl,
   partControl,
   feedback,
+  localDraft = false,
+  stablePartAddresses = false,
+  creation = false,
 }: {
   feedback?: StatementFeedback | undefined;
   draft: StatementInput;
@@ -583,6 +590,12 @@ export function StatementFields({
   partControl?: (part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode;
   valueControl?: ReactNode;
   heading?: 'h2' | 'h4';
+  /** Make the current unsent controls removable, including the URL-first citation placeholder. */
+  localDraft?: boolean;
+  /** Keep nested control IDs attached to their statement holder as earlier rows are removed. */
+  stablePartAddresses?: boolean;
+  /** Use creation copy for the primary value heading. */
+  creation?: boolean;
 }) {
   const o = { locale: locale as never };
   const lifetime = useEditorLifetime();
@@ -645,8 +658,9 @@ export function StatementFields({
   function identity(value: object, added = false) {
     let entry = identities.get(value);
     if (!entry) {
-      entry = { key: sequence.current++, added };
+      entry = { key: sequence.current++, added: added || localDraft };
       identities.set(value, entry);
+      statementHolderKeys.set(value, entry.key);
     }
     return entry;
   }
@@ -702,7 +716,9 @@ export function StatementFields({
     return value;
   }
   function revision<T extends object>(previous: T, next: T): T {
-    identities.set(next, identity(previous));
+    const entry = identity(previous);
+    identities.set(next, entry);
+    statementHolderKeys.set(next, entry.key);
     return next;
   }
   function removalTarget(button: HTMLButtonElement, kind: StatementRemovalKind) {
@@ -838,13 +854,19 @@ export function StatementFields({
   }
   const definition = current.release.properties[draft.property.id];
   const section = (name: string) => ({ id: feedback ? `${feedback.id}-${name}` : undefined, tabIndex: -1 });
-  const scalarFeedback = (address: string) => (feedback ? { ...feedback, address } : undefined);
+  const scalarFeedback = (address: string, part?: SnakInput) =>
+    feedback
+      ? {
+          ...feedback,
+          address: stablePartAddresses && part ? `part-${identity(part).key}` : address,
+        }
+      : undefined;
   return (
     <>
       <section {...section('fact')} className={sectionClassName}>
         <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
           <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
-            {m.correction_replacement({}, o)}
+            {creation ? m.correction_value({}, o) : m.correction_replacement({}, o)}
           </ContentItemHeading>
           <p className="min-w-0 font-medium">
             {pageText(definition?.labels, locale).text || m.subject_value_unlabelled({}, o)}
@@ -885,7 +907,7 @@ export function StatementFields({
           <PartEditor
             localKey={identity(part).key}
             control={partControl}
-            feedback={scalarFeedback(`qualifier-${index}`)}
+            feedback={scalarFeedback(`qualifier-${index}`, part)}
             key={identity(part).key}
             part={part}
             read={current}
@@ -951,7 +973,7 @@ export function StatementFields({
               <PartEditor
                 localKey={identity(part).key}
                 control={partControl}
-                feedback={scalarFeedback(`reference-${index}-part-${partIndex}`)}
+                feedback={scalarFeedback(`reference-${index}-part-${partIndex}`, part)}
                 key={identity(part).key}
                 part={part}
                 read={current}

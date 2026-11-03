@@ -5,7 +5,13 @@ import { checkSubjectInput, type Violation } from '@rezics/definitions/validate'
 import type { SessionEnv } from '../../session/client';
 import type { InitialSubject, CreateResult } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
-import { correctionProperty, readStatementEditor, type EditorRead, type StatementInput } from './statement-editor';
+import {
+  correctionProperty,
+  creationStatement,
+  readStatementEditor,
+  type EditorRead,
+  type StatementInput,
+} from './statement-editor';
 
 export const literaryTypes = ['schema:Book', 'schema:BookSeries'] as const;
 export type LiteraryType = (typeof literaryTypes)[number];
@@ -61,7 +67,8 @@ export function literaryInitialItem(
   locale: string,
 ) {
   const item: LiteraryItem = { ...initial, statements: {} };
-  for (const statement of statements) (item.statements[statement.property.id] ??= []).push(structuredClone(statement));
+  for (const statement of statements)
+    (item.statements[statement.property.id] ??= []).push(structuredClone(creationStatement(statement, release)));
   const errors = validateLiteraryItem(release, item, locale);
   return { item, errors };
 }

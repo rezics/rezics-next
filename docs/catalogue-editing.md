@@ -485,8 +485,12 @@ The existing create entry and the Book or BookSeries subject’s Contribute menu
 metadata language and the existing fallback. They do not publish definitions or change a subject's Type.
 
 Creation sends only entered multilingual terms and explicitly added initial scalar facts through ordinary
-`POST /v1/subjects`. Each fact can carry its own citation. No number, language, classification or relation is
-inferred from another field. The form retains independent drafts across Type choices. Native rejection refreshes
+`POST /v1/subjects`. Each fact reuses the shared value, qualifier and grouped-reference controls, with a URL-first
+citation part for the existing quick-entry path. Additional parts stay in their chosen reference group and order;
+their datatypes, units and available qualifiers come from the exact admitted release. Untouched citation scaffolds
+are omitted, while typed zero and false values remain. No number, language, classification or relation is inferred
+from another field. Decision: Literary initial entry remains scalar-only; relation qualifiers stay in the existing
+post-creation relation editor. The form retains independent drafts across Type choices. Native rejection refreshes
 metadata while retaining the draft; uncertain delivery retains the exact command and key. The returned subject ID
 is reread before offering its canonical current-reader link. A created identity with an unavailable reader is
 shown as created, with a separate read retry.
@@ -628,7 +632,11 @@ format, files and viewing progress never manufacture an edition or transfer a wo
 
 Creation uses the common profile and multilingual initial-terms form. Only explicitly added rows enter the native
 `POST /v1/subjects` body; blank added rows are invalid until changed or explicitly removed. Subject targets use
-the existing picker, with released target admission. Optional qualifiers and citations retain their native shape.
+the existing picker, with released target admission. Each row reuses the shared value, qualifier and grouped-reference
+controls, with a URL-first part and explicit Add part/Add reference actions. Qualifiers, reference part datatypes,
+units and multiplicity follow the exact admitted release; populated references preserve group boundaries, order and
+stable holder identity. Untouched citation scaffolds are omitted without losing typed zero or false values. Optional
+qualifiers and citations retain their native shape.
 Initial creation facts are selected in Global. Confirmation retains the exact returned subject ID, and only an
 ordinary read of that ID supplies its reader address. Failed readback offers a read retry without another creation.
 Uncertain delivery freezes the full terms/facts command and key; definite refusals retain the draft, stale metadata

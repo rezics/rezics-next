@@ -18,9 +18,20 @@ import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { createTypes, type CreateTransport, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
-import { EditorFailure, ScalarControl } from './statement-editor-view';
+import {
+  EditorFailure,
+  StatementFields,
+  statementHolderKey,
+  type StatementFieldsRead,
+} from './statement-editor-view';
 import { controlId, presentStatementViolations } from './statement-validation-presentation';
-import type { EditorRead, StatementInput } from './statement-editor';
+import {
+  creationStatement,
+  emptyCreationStatement,
+  type EditorRead,
+  type SnakInput,
+  type StatementInput,
+} from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { isLiteraryType, literaryFields, literaryInitialItem, type LiteraryRead } from './literary-profile';
@@ -52,34 +63,54 @@ function initialFactControl(pointer: string, rows: InitialRow[], read: Ready, ty
   if (!Number.isSafeInteger(index) || index >= siblings.length) return;
   const row = siblings[index]!;
   if (!literaryFields(read.release, type, locale).scalars.includes(property)) return;
+  const statement = creationStatement(row.statement, read.release);
+  let part: StatementInput | SnakInput = statement;
   let address = 'fact';
-  let part: Pick<StatementInput, 'property'> = row.statement;
-  let path = nested;
-  // Initial facts render exactly one URL citation, with no qualifier or additional reference editors.
-  if (nested.slice(0, 4).join('/') === 'references/0/parts/0') {
-    const citation = row.statement.references[0]?.parts[0];
-    if (citation?.property.id !== 'schema:url') return;
+  if (nested[0] === 'qualifiers' && /^(0|[1-9]\d*)$/.test(nested[1] ?? '')) {
+    const qualifier = statement.qualifiers?.[Number(nested[1])];
+    if (!qualifier) return;
+    part = qualifier;
+    address = `qualifier-${nested[1]}`;
+  } else if (
+    nested[0] === 'references' &&
+    /^(0|[1-9]\d*)$/.test(nested[1] ?? '') &&
+    nested[2] === 'parts' &&
+    /^(0|[1-9]\d*)$/.test(nested[3] ?? '')
+  ) {
+    const citation = statement.references[Number(nested[1])]?.parts[Number(nested[3])];
+    if (!citation) return;
     part = citation;
-    address = 'reference-0-part-0';
-    path = nested.slice(4);
+    address = `reference-${nested[1]}-part-${nested[3]}`;
   }
-  // Re-encode decoded segments so an escaped slash cannot become a supported nested address.
-  const suffix = '/' + path.map((segment) => segment.replaceAll('~', '~0').replaceAll('/', '~1')).join('/');
-  const tail = address === 'fact' ? suffix : `/references/0/parts/0${suffix}`;
+  const suffix = nested.length
+    ? '/' + nested.map((segment) => segment.replaceAll('~', '~0').replaceAll('/', '~1')).join('/')
+    : '';
   const id = `literary-fact-${row.id}`;
   const presented = presentStatementViolations(
-    [{ pointer: `/statement${tail}`, code: 'invalid_format' }],
-    row.statement,
+    [{ pointer: `/statement${suffix}`, code: 'invalid_format' }],
+    statement,
     read.release,
     locale,
     id,
   )[0]!;
-  if (!presented.target.startsWith(`${id}-${address}-`)) return;
+  let field: string | undefined = (
+    ['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
+  ).find((candidate) => presented.target === controlId(id, address, candidate));
   let target = presented.target;
-  // The shared editor groups dates; native time and precision errors can name its actual inputs.
   if (read.release.properties[part.property.id]?.datatype === 'time') {
-    if (suffix === '/value/content/precision') target = controlId(id, address, 'precision');
-    else if (suffix === '/value/content/time') target = controlId(id, address, 'year');
+    if (suffix.endsWith('/value/content/precision')) {
+      field = 'precision';
+      target = controlId(id, address, 'precision');
+    } else if (suffix.endsWith('/value/content/time')) {
+      field = 'year';
+      target = controlId(id, address, 'year');
+    }
+  }
+  if (!field) return;
+  if (part !== statement) {
+    const key = statementHolderKey(part);
+    if (key === undefined) return;
+    target = controlId(id, `part-${key}`, field);
   }
   return {
     id: target,
@@ -224,8 +255,8 @@ export function InitialFacts({
   const propertyId = useId();
   const latest = useRef({ rows, change });
   latest.current = { rows, change };
-  const holders = useRef(new WeakMap<InitialRow, { row: object; value: object; citation: object }>());
-  for (const row of rows) if (!holders.current.has(row)) holders.current.set(row, { row: {}, value: {}, citation: {} });
+  const holders = useRef(new WeakMap<InitialRow, { row: object; statement: object }>());
+  for (const row of rows) if (!holders.current.has(row)) holders.current.set(row, { row: {}, statement: {} });
   const observation = useMemo(() => ({}), [type, locale, read.release, disabled, canEdit]);
   const current = useRef<object | null>(observation);
   current.current = observation;
@@ -267,7 +298,11 @@ export function InitialFacts({
   });
   if (!isLiteraryType(type)) return null;
   const fields = literaryFields(read.release, type, locale).scalars;
-  const context = { release: read.release, public: { related: {} } };
+  const context: StatementFieldsRead = {
+    release: read.release,
+    source: null,
+    public: { related: {}, subject: { type } },
+  };
   const currentRow = (row: InitialRow) => {
     const holder = holders.current.get(row);
     return admitted()
@@ -276,25 +311,11 @@ export function InitialFacts({
         )
       : undefined;
   };
-  const update = (row: InitialRow, part: 'value' | 'citation', value: StatementInput['value']) => {
+  const update = (row: InitialRow, statement: StatementInput) => {
     const next = currentRow(row);
-    if (!next) return;
-    const citation = row.statement.references[0]?.parts[0];
-    if (holders.current.get(next)![part] !== holders.current.get(row)![part]) return;
-    const statement = { ...next.statement };
-    if (part === 'value') statement.value = value;
-    else {
-      const references = [...statement.references];
-      const first = references[0];
-      const parts = [...(first?.parts ?? [])];
-      if (value.type === 'value' && value.content === '') parts.shift();
-      else parts.splice(0, 1, { ...(citation ?? { property: { id: 'schema:url' } }), value });
-      if (parts.length) references.splice(0, 1, { ...first, parts });
-      else references.shift();
-      statement.references = references;
-    }
+    if (!next || holders.current.get(next)?.statement !== holders.current.get(row)?.statement) return;
     const replacement = { ...next, statement };
-    holders.current.set(replacement, { ...holders.current.get(next)!, [part]: {} });
+    holders.current.set(replacement, { row: holders.current.get(next)!.row, statement: {} });
     const updated = latest.current.rows.map((candidate) => (candidate === next ? replacement : candidate));
     latest.current = { ...latest.current, rows: updated };
     latest.current.change(updated);
@@ -310,11 +331,6 @@ export function InitialFacts({
           const { id, statement } = row;
           const definition = read.release.properties[statement.property.id];
           const label = pickText(definition?.labels ?? {}, locale);
-          const description = pickText(definition?.descriptions ?? {}, locale);
-          const citation = statement.references[0]?.parts[0] ?? {
-            property: { id: 'schema:url' },
-            value: { type: 'value' as const, content: '' },
-          };
           return (
             <section id={`literary-fact-${id}`} key={id} aria-label={label.text} className="min-w-0">
               <ContentItemFrame
@@ -322,40 +338,18 @@ export function InitialFacts({
                 className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4 [overflow-wrap:anywhere]"
               >
                 {definition ? (
-                  <>
-                    <ContentItemHeading
-                      level={3}
-                      lang={label.lang ?? undefined}
-                      className="break-words font-semibold [overflow-wrap:anywhere]"
-                    >
-                      {label.text}
-                    </ContentItemHeading>
-                    {description.text && (
-                      <p
-                        lang={description.lang ?? undefined}
-                        className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
-                      >
-                        {description.text}
-                      </p>
-                    )}
-                    <ScalarControl
-                      feedback={{ id: `literary-fact-${id}`, address: 'fact', errors: [] }}
-                      part={statement}
-                      definition={definition}
-                      read={context}
-                      locale={locale}
-                      onChange={(value) => update(row, 'value', value)}
-                    />
-                    <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
-                    <ScalarControl
-                      feedback={{ id: `literary-fact-${id}`, address: 'reference-0-part-0', errors: [] }}
-                      part={citation}
-                      definition={read.release.properties['schema:url']}
-                      read={context}
-                      locale={locale}
-                      onChange={(value) => update(row, 'citation', value)}
-                    />
-                  </>
+                  <StatementFields
+                    creation
+                    localDraft
+                    stablePartAddresses
+                    draft={statement}
+                    current={context}
+                    locale={locale}
+                    feedback={{ id: `literary-fact-${id}`, errors: [] }}
+                    guideReturn={`/${locale}/catalogue/literary`}
+                    heading="h4"
+                    change={(next) => update(row, next)}
+                  />
                 ) : (
                   <EditorFailure locale={locale} reason="stale" />
                 )}
@@ -426,14 +420,10 @@ export function InitialFacts({
               const row: InitialRow = {
                 id: crypto.randomUUID(),
                 statement: {
-                  property: { id: property },
-                  value: { type: 'value', content: '' },
-                  qualifiers: [],
-                  references: [],
-                  rank: 'normal',
+                  ...emptyCreationStatement(property, read.release),
                 },
               };
-              holders.current.set(row, { row: {}, value: {}, citation: {} });
+              holders.current.set(row, { row: {}, statement: {} });
               const source = event.currentTarget;
               const document = source.ownerDocument;
               if (event.detail === 0 && document.activeElement === source) {
