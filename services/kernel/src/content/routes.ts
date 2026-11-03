@@ -62,6 +62,13 @@ import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import { readThreadWatchState, unwatchThread, watchThread } from './watch.ts';
 import { watchRoutes } from './watch-routes.ts';
 import type { ContentRuntime } from './runtime.ts';
+import {
+  readContentReadingPage,
+  ReadingPageQuerySchema,
+  ReadingPageResponseSchema,
+  READING_PAGE_REQUEST_BYTES,
+} from './reading-page.ts';
+import type { ReadingPageViewerActionRuntime } from './reading-page.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
   ContentNotFoundError as ReadNotFoundError,
@@ -125,7 +132,10 @@ import {
   setBoardSlowMode,
 } from './board-slow.ts';
 
-export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
+export type Dependencies = ContentCommandDependencies &
+  ContentBoardDependencies &
+  ContentRuntime &
+  Readonly<{ viewerActionRuntime?: () => ReadingPageViewerActionRuntime }>;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const readFailures = {
   400: problemSchema('invalid_request'),
@@ -919,6 +929,40 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           }),
         ),
     )
+    .get(
+      '/v1/threads/:id/reading-page',
+      {
+        params,
+        query: ReadingPageQuerySchema,
+        response: {
+          200: withHeaders(ReadingPageResponseSchema, sessionHeader),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          413: problemSchema('content_too_large'),
+        },
+        detail: {
+          operationId: 'thread.reading_page',
+          description: 'Read a current thread opening and one bounded reply page with the viewer state and mounted actions.',
+          'x-resource-types': ['content.thread'],
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, request, admission, job, session, set }) => {
+        if (new TextEncoder().encode(request.url).byteLength > READING_PAGE_REQUEST_BYTES)
+          throw new ProblemError('content_too_large');
+        existingId(id);
+        if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await readContentReadingPage(dependencies, id, actor, job.deadline, query.cursor);
+            for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+            return result.value;
+          }),
+        );
+      },
+    )
     .post(
       customMethod('/v1/posts/:id', 'restore'),
       {
@@ -1560,6 +1604,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'thread.watch_state',
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:watch',
           security: writeSecurity,
@@ -1587,6 +1632,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: withHeaders(t.Void(), sessionHeader), ...readFailures },
         detail: {
           operationId: 'thread.watch',
+          'x-authority-resource-types': ['content.thread'],
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:watch',
           'x-rate-limit': writeRate,
@@ -1612,6 +1659,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: t.Void(), ...readFailures },
         detail: {
           operationId: 'thread.unwatch',
+          'x-authority-resource-types': ['content.thread'],
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:watch',
           'x-rate-limit': writeRate,

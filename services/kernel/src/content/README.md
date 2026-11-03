@@ -3197,3 +3197,51 @@ Web retains the page/composer consumer and its phone/desktop recovery review; th
   these are internal projection commands, never person-write substitutes.
 - Growth check: the focused native journey exercises real source delivery and exact retry. Independently grow
   published history and revisions for projection/acknowledgement costs before adopting a physical-work ceiling.
+
+## Current thread reading page
+
+`GET /v1/threads/{id}/reading-page` composes the existing `readThread` and signed-cursor `listThreadPosts` readers.
+It returns the opening plus at most 20 raw replies, excluding the opening from the reply list. The first native list
+request selects 21 rows to account for the opening's list slot; each continuation selects 20 after its original
+cursor. It never concatenates pages or accepts a client-selected post-ID batch. `target` carries the board's current
+security revision, and each available post action reference carries the exact disclosed source revision.
+The installed composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`, mounted as
+operation `thread.reading_page`.
+
+Personal data is bounded to the current actor and this page. One deduplicated Accounts summary call admits at most 21
+author identities. Existing viewer-reaction and reaction-count readers receive at most 22 targets (thread, opening,
+and 20 replies); the opening's post reaction remains distinct from the thread reaction. Watch state uses the native
+thread-watch reader. The current board slow-mode summary is included as context; reply eligibility comes only from the
+mounted parent-thread action, and the command remains authoritative for admission. Author review citation remains the
+existing disclosed `readThread` value; no extra vote or provenance reader is introduced.
+
+Action projection receives the production Kernel's complete mounted resource and binding catalogues. Parent-post
+creation is evaluated on `content.thread`, matching the command anchor. Guest sign-in state comes from the mounted
+route's security declaration; resource permission comes only from `readViewerActions`. Missing catalogue/security
+metadata or a dependency failure makes the action component unavailable. Private reads and operation results are not
+used as permission evidence.
+
+The request URL is capped at 8 KiB; the cursor is capped at 4 KiB. Reply, identity, action-reference, and JSON bounds
+are checked before identity, watch, slow-mode, and viewer-action hydration. There are at most 22 action/reaction
+references and 21 unique author identities. The full JSON cap is
+`21 × MAX_DOCUMENT_BYTES × 6 + 21 × 32 KiB + 256 KiB`; the six-byte factor covers JSON escaping. Preflight measures
+the actual mounted operation and metadata projection and reserves 16 KiB for reaction fields within the envelope
+allowance. A serialized author summary must fit 32 KiB. Native content can scan at most 200 ordered candidates per
+`listThreadPosts` call; the reading
+composition calls it once for the response and once for its final check. Each exact candidate disclosure retains the
+existing maximum of 33 post ancestors, so sparse pages can examine up to 400 candidates and 13,200 candidate ancestry
+rows across both calls, in addition to the opening/root and board checks. Reaction counts use one target seek per
+target in each represented content partition (at most seven kind rows); own reactions use one viewer-home batch.
+Accounts, handle claims, avatars, verified Subjects, Access preparation, mounted bindings, watch state, and slow-mode
+admission retain their source owners and may span their represented homes. No table scan or unbounded identifier
+fanout is added.
+
+The initial and final thread, board, and selected cursor page must retain their native witnesses after identity and
+authority hydration. A changed selected source fails with a safe retry; a concealed target remains not found. Watch
+and slow-mode observations are independently rechecked and become unavailable if they changed. Component currentness
+is explicit. Content, Accounts, Access, reaction totals, watch, and slow-mode observations do not share a fabricated
+cross-home transaction. A continuation certifies only its newly selected page, not entries returned on earlier pages;
+commands remain authoritative if a source changes after this response.
+
+Decision: The envelope includes the existing board slow-mode summary as advisory context; only the mounted parent-thread
+action represents reply eligibility, and the command remains final for admission.
