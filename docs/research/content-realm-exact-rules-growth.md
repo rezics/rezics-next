@@ -47,10 +47,10 @@ to unrelated pressure outside observation; shared fixtures and runtime contracts
 pressure graph uses the selected post, Realm and board routes. Retained history grows that private graph without
 changing its heads or adding ancestors or siblings to the selected thread.
 
-| Axis | 256 | 1,024 | 4,096 | Grown records |
-| --- | --- | --- | --- | --- |
-| Population | 256 neighbours | 1,024 neighbours | 4,096 neighbours | Same-route independent Space/Realm heads and revisions, boards, threads, posts, revisions and owner grants |
-| Retained history | 256 histories | 1,024 histories | 4,096 histories | Unselected post revisions, Realm/Space revisions, expired role grants, receipts, outbox and write bases; current heads stay fixed |
+| Axis             | 256            | 1,024            | 4,096            | Grown records                                                                                                                     |
+| ---------------- | -------------- | ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Population       | 256 neighbours | 1,024 neighbours | 4,096 neighbours | Same-route independent Space/Realm heads and revisions, boards, threads, posts, revisions and owner grants                        |
+| Retained history | 256 histories  | 1,024 histories  | 4,096 histories  | Unselected post revisions, Realm/Space revisions, expired role grants, receipts, outbox and write bases; current heads stay fixed |
 
 The existing `checkGrowth` observer captures actual native statements, examined rows, shared hit/read buffers,
 request/response bytes and background work, and uses the shared physical classifier with the owner's constant
