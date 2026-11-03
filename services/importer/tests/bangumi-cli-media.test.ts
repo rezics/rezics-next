@@ -6,6 +6,7 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { runImportCli } from '../src/cli.ts';
 import { ImportSession } from '../src/import-session.ts';
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 // A local wire proof only. Native authority, stored pixels and disclosure are proved by the kernel journey.
 test('Bangumi CLI sends separately licensed summary and cover through its ordinary media port and honours a late fence', async () => {
@@ -49,6 +50,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
     const media = new Map<string, { request: MediaImportRequest; id: string; key: string }>();
     const statuses: string[] = [];
     const calls: string[] = [];
+    const metadata = sourceRecordMetadataFixture();
     let fenced = false;
     let sealed = false;
     const fetchBoundary = (async (input: Request | string | URL, init?: RequestInit) => {
@@ -63,6 +65,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
       }
       expect(url.origin).toBe(api);
       calls.push(url.pathname);
+      if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
       if (url.pathname === '/v1/sourceFences:check') {
         return Response.json({
           fenced: fenced && url.searchParams.get('fieldGroup') === 'cover',
