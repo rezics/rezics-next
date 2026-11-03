@@ -14,7 +14,7 @@ const lifecycleSchema = v.strictObject({
   state: v.picklist(['active', 'retired']),
   revision,
 });
-const questionSchema: v.GenericSchema<HomeQuestion> = v.strictObject({
+const questionSchema = v.strictObject({
   id: v.pipe(v.string(), v.uuid()),
   revision,
   label: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
@@ -26,8 +26,23 @@ const questionSchema: v.GenericSchema<HomeQuestion> = v.strictObject({
   meaning: v.optional(v.string()),
   lifecycle: v.optional(lifecycleSchema),
 });
+type ParsedQuestion = v.InferOutput<typeof questionSchema>;
+function projectQuestion(question: ParsedQuestion): HomeQuestion {
+  return {
+    id: question.id,
+    revision: question.revision,
+    label: question.label,
+    grain: question.grain,
+    scale: question.scale,
+    ...(question.realmId === undefined ? {} : { realmId: question.realmId }),
+    ...(question.canonicalLabel === undefined ? {} : { canonicalLabel: question.canonicalLabel }),
+    ...(question.labelRevision === undefined ? {} : { labelRevision: question.labelRevision }),
+    ...(question.meaning === undefined ? {} : { meaning: question.meaning }),
+    ...(question.lifecycle === undefined ? {} : { lifecycle: question.lifecycle }),
+  };
+}
 export type HomeQuestionPage = NonNullable<Awaited<ReturnType<KernelClient['rating-questions']['get']>>['data']>;
-const directorySchema: v.GenericSchema<HomeQuestionPage> = v.strictObject({
+const directorySchema = v.strictObject({
   ratingQuestions: v.pipe(v.array(questionSchema), v.maxLength(HOME_QUESTION_LIMIT)),
   next: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
 });
@@ -116,7 +131,13 @@ export async function readHomeQuestionPage(
       return { status: 'unavailable', code: 'invalid_question_response' };
     if (cursor !== undefined && parsed.output.next === cursor)
       return { status: 'unavailable', code: 'repeated_question_cursor' };
-    return { status: 'ready', page: parsed.output };
+    return {
+      status: 'ready',
+      page: {
+        ratingQuestions: parsed.output.ratingQuestions.map(projectQuestion),
+        next: parsed.output.next,
+      },
+    };
   } catch (error) {
     return failed(error);
   }
@@ -141,7 +162,7 @@ export async function readHomeQuestion(
       return { status: 'unavailable', code: 'invalid_question_response' };
     if (parsed.output.lifecycle?.state === 'retired') return { status: 'lost', code: 'question_retired' };
     if (parsed.output.realmId !== undefined) return { status: 'denied', code: 'question_not_global' };
-    return { status: 'ready', question: parsed.output };
+    return { status: 'ready', question: projectQuestion(parsed.output) };
   } catch (error) {
     return failed(error);
   }
