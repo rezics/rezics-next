@@ -725,6 +725,33 @@ $$;
 
 
 --
+-- Name: guard_frozen_output(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_frozen_output() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE item record;
+BEGIN
+  IF TG_OP='INSERT' THEN item:=NEW; ELSE item:=OLD; END IF;
+  PERFORM 1 FROM library.collection WHERE route=item.route AND collection_id=item.collection_id FOR UPDATE;
+  IF EXISTS(SELECT 1 FROM library.collection_retained_output r
+    WHERE r.route=item.route AND r.collection_id=item.collection_id AND (TG_TABLE_NAME='collection_source_output_head' OR r.generation=item.generation)) THEN
+    -- Only the terminal disposer may remove the private account attribution on the frozen header.
+    IF TG_TABLE_NAME='collection_source_output' AND TG_OP='UPDATE' THEN
+      IF NEW.account_id IS NULL AND OLD.account_id IS NOT NULL
+        AND (to_jsonb(NEW)-'account_id')=(to_jsonb(OLD)-'account_id')
+        AND EXISTS(SELECT 1 FROM access.account a WHERE a.route=OLD.route
+          AND a.account_id=OLD.account_id AND a.state='deleted' AND a.authn_fenced)
+      THEN RETURN NEW; END IF;
+    END IF;
+    RAISE EXCEPTION 'Frozen Collection output is immutable' USING ERRCODE='23514';
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END; $$;
+
+
+--
 -- Name: guard_identity_scope_evidence(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2101,6 +2128,24 @@ CREATE TABLE library.collection_publication_staging_seal (
     "position" bigint NOT NULL,
     native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
     CONSTRAINT collection_publication_staging_seal_position_check CHECK (("position" > 0))
+);
+
+
+--
+-- Name: collection_retained_output; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_retained_output (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    source_generation bigint NOT NULL,
+    members bigint NOT NULL,
+    member_fence bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    CONSTRAINT collection_retained_output_members_check CHECK ((members >= 0))
 );
 
 
@@ -4173,6 +4218,14 @@ ALTER TABLE ONLY library.collection_publication_staging_seal
 
 
 --
+-- Name: collection_retained_output collection_retained_output_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_pkey PRIMARY KEY (route, collection_id);
+
+
+--
 -- Name: collection_source_output_head collection_source_output_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5946,6 +5999,27 @@ CREATE TRIGGER collection_order_parent BEFORE DELETE OR UPDATE ON library.collec
 
 
 --
+-- Name: collection_source_output_head collection_output_frozen_head; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_head BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_head FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
+-- Name: collection_source_output collection_output_frozen_header; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_header BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
+-- Name: collection_source_output_member collection_output_frozen_member; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_member BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_member FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
 -- Name: collection_source_output_member collection_output_members; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -5992,6 +6066,13 @@ CREATE TRIGGER collection_publication_source_immutable BEFORE UPDATE ON library.
 --
 
 CREATE TRIGGER collection_retained_immutable BEFORE UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_retained_collection();
+
+
+--
+-- Name: collection_retained_output collection_retained_output_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_output_immutable BEFORE DELETE OR UPDATE ON library.collection_retained_output FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
 
 
 --
@@ -6684,6 +6765,22 @@ ALTER TABLE ONLY library.collection_publication_staging_seal
 
 ALTER TABLE ONLY library.collection_publication_staging
     ADD CONSTRAINT collection_publication_stagin_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_retained_output collection_retained_output_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES editorial.write_basis(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: collection_retained_output collection_retained_output_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
 
 
 --
