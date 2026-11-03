@@ -30,7 +30,7 @@ export type SourceObservation = Readonly<{
   asOf: string;
   scale?: { min: number; max: number };
   mean?: number;
-  licence?: string;
+  licence?: string | null;
   attribution?: string;
   expectedObservation?: string | null;
 }>;

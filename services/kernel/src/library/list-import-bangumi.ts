@@ -286,7 +286,8 @@ export function createBangumiImport(deps: Dependencies) {
       };
     });
   }
-  async function observation(actor: Actor, target: string) {
+  type Observation = Awaited<ReturnType<typeof readLibraryProfileSourceObservation>>;
+  async function observation(actor: Actor, target: string): Promise<Observation> {
     const at = await mintReadTime(pool, deps.clock);
     return readLibraryProfileSourceObservation({ ...deps, actor, at, deadline: deadlineFor(5000) }, target);
   }
@@ -334,7 +335,7 @@ export function createBangumiImport(deps: Dependencies) {
           source: 'bangumi',
           external_id: String(e.source.subject_id),
         });
-        if (claim) {
+        if (typeof claim?.subject_id === 'string') {
           const observed = await observation(actor, claim.subject_id);
           if (observed) candidates.push(observed.source.subjectId);
           else unavailable = true;

@@ -1,9 +1,9 @@
 import { ProblemError } from '../http/problem.ts';
-import type { DiscoveryHit } from '../search/discovery.ts';
+import type { DiscoveryUnionHit } from '../search/discovery.ts';
 import type { FeedItem } from './feed-contract.ts';
 
 /** Search owns native summaries and final eligibility. Mapping does no owner reads or refills. */
-export function feedDiscoveryItem(hit: DiscoveryHit): Extract<FeedItem, { source: 'discovery' }> {
+export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { source: 'discovery' }> {
   const { key, summary } = hit;
   const common = {
     id: `discovery:${key.owner}:${key.id}`,
@@ -49,6 +49,10 @@ export function feedDiscoveryItem(hit: DiscoveryHit): Extract<FeedItem, { source
         },
       };
     }
+    case 'collection':
+    case 'review':
+    case 'space':
+      throw new ProblemError('dependency_unavailable');
     default:
       // A new Search variant must acquire an explicit Feed schema/mapping together.
       // Also refuse unknown runtime input instead of treating it as an Account.
