@@ -3,7 +3,11 @@ import { readRatingEligibilityJob } from '../../src/rating/eligibility.ts';
 import { readRatingSegmentJob } from '../../src/rating/segment-job.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { checkGrowth, measure, seed, type Population } from '../support/growth.ts';
-import { id, openTerminalGrowthFixture, type TerminalGrowthFixture } from './support/growth-segment-terminal-fixture.ts';
+import {
+  id,
+  openTerminalGrowthFixture,
+  type TerminalGrowthFixture,
+} from './support/growth-segment-terminal-fixture.ts';
 
 const scales: [number, number, number] = [256, 1024, 4096];
 let fixture: TerminalGrowthFixture;
@@ -193,10 +197,26 @@ async function measureEligibilityRemoval(
 
 test('registered segment and eligibility terminal/replay work stays bounded as unrelated votes and retained history grow', async () => {
   const reports = [
-    await measureRealmAddition(fixture, unrelatedVotes(fixture, 'segment'), 'rating segment terminal and replay with unrelated votes'),
-    await measureRealmAddition(fixture, retainedCommandHistory(fixture, 'segment'), 'rating segment terminal and replay with retained history'),
-    await measureEligibilityRemoval(fixture, unrelatedVotes(fixture, 'eligibility'), 'rating eligibility terminal and replay with unrelated votes'),
-    await measureEligibilityRemoval(fixture, retainedCommandHistory(fixture, 'eligibility'), 'rating eligibility terminal and replay with retained history'),
+    await measureRealmAddition(
+      fixture,
+      unrelatedVotes(fixture, 'segment'),
+      'rating segment terminal and replay with unrelated votes',
+    ),
+    await measureRealmAddition(
+      fixture,
+      retainedCommandHistory(fixture, 'segment'),
+      'rating segment terminal and replay with retained history',
+    ),
+    await measureEligibilityRemoval(
+      fixture,
+      unrelatedVotes(fixture, 'eligibility'),
+      'rating eligibility terminal and replay with unrelated votes',
+    ),
+    await measureEligibilityRemoval(
+      fixture,
+      retainedCommandHistory(fixture, 'eligibility'),
+      'rating eligibility terminal and replay with retained history',
+    ),
   ];
   reports.forEach(assertBounds);
   console.log(
