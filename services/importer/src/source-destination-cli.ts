@@ -177,11 +177,7 @@ function refuseLiveOwner(owner: { pid: number; birth: string } | null): void {
     throw new SourceDestinationError('A live or uninspectable owner holds this source.', 'busy', 5);
 }
 
-function refuseDeclaration(
-  current: SourceDestinationReview,
-  source: string,
-  reviewRevision: string,
-): void {
+function refuseDeclaration(current: SourceDestinationReview, source: string, reviewRevision: string): void {
   if (current.status === 'unavailable')
     throw new SourceDestinationError(
       'Destination metadata is damaged or unreadable; importer state was not changed.',
