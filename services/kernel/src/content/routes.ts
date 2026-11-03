@@ -722,7 +722,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           operationId: 'thread.get',
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
-          'x-action': 'thread:watch',
+          'x-action': 'thread:read',
           security: readSecurity,
         },
       },
@@ -1104,7 +1104,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           operationId: 'board_threads.list',
           'x-resource-types': ['content.board'],
           'x-exposure': 'public',
-          'x-action': 'thread:watch',
+          'x-action': 'thread:read',
           security: readSecurity,
         },
       },
@@ -1173,7 +1173,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'author_threads.list',
           'x-exposure': 'public',
-          'x-action': 'thread:watch',
+          'x-action': 'thread:read',
           security: readSecurity,
         },
       },
@@ -1426,7 +1426,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'thread.watch_state',
           'x-exposure': 'public',
-          'x-action': 'thread:read',
+          'x-action': 'thread:watch',
           security: writeSecurity,
         },
       },
@@ -1453,7 +1453,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'thread.watch',
           'x-exposure': 'public',
-          'x-action': 'thread:read',
+          'x-action': 'thread:watch',
           security: writeSecurity,
         },
       },
@@ -1477,7 +1477,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'thread.unwatch',
           'x-exposure': 'public',
-          'x-action': 'thread:read',
+          'x-action': 'thread:watch',
           security: writeSecurity,
         },
       },

@@ -60,6 +60,7 @@ function workEnvironment(mode: 'empty' | 'full'): Record<string, string | undefi
       current: 1,
       keys: { 1: Buffer.alloc(32, 8).toString('base64url') },
     }),
+    KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 9).toString('base64url')}`,
     AUTH_ISSUER: 'https://accounts.test',
     AUTH_AUDIENCE: 'https://api.test',
     AUTH_JWKS_URL: 'https://accounts.test/.well-known/jwks.json',
