@@ -78,8 +78,9 @@ export async function pinLegacyFactsPage(
   if (kind === 'copy' && pending.some((row) => row.kind !== null && row.kind !== 'legacy-unspecified'))
     throw new Error('Incompatible unpinned legacy copy kind');
   const changed = pending.length
-    ? (await tx.query<{ id: string }>(
-        `/* library.profileMigration.cas:${kind} */
+    ? (
+        await tx.query<{ id: string }>(
+          `/* library.profileMigration.cas:${kind} */
          UPDATE library.${table} AS fact
          SET library_profile_pin=$3::jsonb
            ${kind === 'copy' ? ",kind=COALESCE(fact.kind,'legacy-unspecified'),kind_profile_pin=$3::jsonb,status_profile_pin=$3::jsonb" : ''}
@@ -89,8 +90,9 @@ export async function pinLegacyFactsPage(
            ${kind === 'entry' ? 'AND fact.incarnation_id IS NOT DISTINCT FROM source."incarnationId"' : ''}
            ${kind === 'copy' ? 'AND fact.deletion_id IS NULL' : ''}
          RETURNING fact.${key}::text AS id`,
-        [route, accountId, JSON.stringify(pin), JSON.stringify(pending)],
-      )).rows
+          [route, accountId, JSON.stringify(pin), JSON.stringify(pending)],
+        )
+      ).rows
     : [];
   input.observeChanged?.(changed.map((row) => row.id));
   return {

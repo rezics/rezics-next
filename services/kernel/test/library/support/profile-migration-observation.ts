@@ -18,10 +18,12 @@ type CapturedPage = { page: LibraryProfileMigrationPageObservation; capture?: Ca
  * cannot re-arm it. Operations and every recovery use the production executor. */
 export function createProfileMigrationObservation() {
   const attempts: CapturedPage[] = [];
-  let fault: {
-    boundary: ProfileMigrationBoundary;
-    hit(): void | Promise<void>;
-  } | undefined;
+  let fault:
+    | {
+        boundary: ProfileMigrationBoundary;
+        hit(): void | Promise<void>;
+      }
+    | undefined;
   const arm = (next: NonNullable<typeof fault>) => {
     if (fault) throw new Error('A native migration interruption is already armed');
     fault = next;
@@ -39,23 +41,42 @@ export function createProfileMigrationObservation() {
     pause(boundary: ProfileMigrationBoundary) {
       const reached = Promise.withResolvers<void>();
       const released = Promise.withResolvers<void>();
-      arm({ boundary, hit: async () => { reached.resolve(); await released.promise; } });
-      return { reached: reached.promise, async resume() { released.resolve(); } };
+      arm({
+        boundary,
+        hit: async () => {
+          reached.resolve();
+          await released.promise;
+        },
+      });
+      return {
+        reached: reached.promise,
+        async resume() {
+          released.resolve();
+        },
+      };
     },
     crash(boundary: ProfileMigrationBoundary) {
-      arm({ boundary, hit: () => { throw new ProfileMigrationCrash(boundary); } });
+      arm({
+        boundary,
+        hit: () => {
+          throw new ProfileMigrationCrash(boundary);
+        },
+      });
     },
     async capture<T>(
       operation: () => Promise<T>,
-      capture: (operation: () => Promise<
-        { ok: true; value: T } | { ok: false; error: unknown }
-      >) => Promise<{ value: { ok: true; value: T } | { ok: false; error: unknown }; capture: Capture }>,
+      capture: (
+        operation: () => Promise<{ ok: true; value: T } | { ok: false; error: unknown }>,
+      ) => Promise<{ value: { ok: true; value: T } | { ok: false; error: unknown }; capture: Capture }>,
     ): Promise<T> {
       const start = attempts.length;
       // Keep the native capture on failure, including ROLLBACK and wire costs.
       const measured = await capture(async () => {
-        try { return { ok: true as const, value: await operation() }; }
-        catch (error) { return { ok: false as const, error }; }
+        try {
+          return { ok: true as const, value: await operation() };
+        } catch (error) {
+          return { ok: false as const, error };
+        }
       });
       const cursors = new Map<number, number>();
       for (const attempt of attempts.slice(start)) {
@@ -85,20 +106,30 @@ export function createProfileMigrationObservation() {
 function transactionCapture(capture: Capture, backend: number, from: number) {
   if (!capture.statementBackends || !capture.planStatements)
     return unavailable('native migration transaction/backend plan attribution');
-  const marker = capture.statements.findIndex((sql, index) => index >= from &&
-    capture.statementBackends![index] === backend && sql.includes('pg_current_xact_id()'));
+  const marker = capture.statements.findIndex(
+    (sql, index) =>
+      index >= from && capture.statementBackends![index] === backend && sql.includes('pg_current_xact_id()'),
+  );
   if (marker < 0) return unavailable('native migration transaction identity statement');
   let begin = marker;
-  while (begin >= from && !(capture.statementBackends[begin] === backend &&
-    /^BEGIN ISOLATION LEVEL SERIALIZABLE$/i.test(capture.statements[begin]!.trim()))) begin--;
-  const end = capture.statements.findIndex((sql, index) => index > marker &&
-    capture.statementBackends![index] === backend && /^(COMMIT|ROLLBACK)$/i.test(sql.trim()));
+  while (
+    begin >= from &&
+    !(
+      capture.statementBackends[begin] === backend &&
+      /^BEGIN ISOLATION LEVEL SERIALIZABLE$/i.test(capture.statements[begin]!.trim())
+    )
+  )
+    begin--;
+  const end = capture.statements.findIndex(
+    (sql, index) =>
+      index > marker && capture.statementBackends![index] === backend && /^(COMMIT|ROLLBACK)$/i.test(sql.trim()),
+  );
   if (begin < from || end < 0) return unavailable('native migration transaction begin/end');
   const statements = capture.statements.flatMap((_, index) =>
-    index >= begin && index <= end && capture.statementBackends![index] === backend ? [index] : []);
+    index >= begin && index <= end && capture.statementBackends![index] === backend ? [index] : [],
+  );
   const indexes = new Map(statements.map((index, offset) => [index, offset]));
-  const plans = capture.plans.flatMap((_, index) =>
-    indexes.has(capture.planStatements![index] ?? -1) ? [index] : []);
+  const plans = capture.plans.flatMap((_, index) => (indexes.has(capture.planStatements![index] ?? -1) ? [index] : []));
   return {
     end,
     capture: {
@@ -106,7 +137,9 @@ function transactionCapture(capture: Capture, backend: number, from: number) {
       statementBackends: statements.map((index) => capture.statementBackends![index]),
       ...(capture.requestBytes ? { requestBytes: statements.map((index) => capture.requestBytes![index]!) } : {}),
       ...(capture.responseBytes ? { responseBytes: statements.map((index) => capture.responseBytes![index]!) } : {}),
-      ...(capture.statementErrors ? { statementErrors: statements.map((index) => capture.statementErrors![index]!) } : {}),
+      ...(capture.statementErrors
+        ? { statementErrors: statements.map((index) => capture.statementErrors![index]!) }
+        : {}),
       plans: plans.map((index) => capture.plans[index]),
       planStatements: plans.map((index) => indexes.get(capture.planStatements![index]!)),
       ...(capture.planBackends ? { planBackends: plans.map((index) => capture.planBackends![index]) } : {}),
@@ -134,15 +167,20 @@ function profilePage(page: LibraryProfileMigrationPageObservation, capture?: Cap
     if (!statement.includes('library.profileMigration.source:')) continue;
     for (const { plan, location } of explainPlanEntries(capture.plans[index])) {
       for (const { node } of walkPlanTree(plan, location)) {
-        if (node.Schema !== 'library' || !['entry', 'progress_session', 'copy'].includes(String(node['Relation Name']))) continue;
+        if (node.Schema !== 'library' || !['entry', 'progress_session', 'copy'].includes(String(node['Relation Name'])))
+          continue;
         const loops = node['Actual Loops'];
         const rows = node['Actual Rows'];
         const filtered = node['Rows Removed by Filter'] ?? 0;
         if (typeof loops !== 'number' || typeof rows !== 'number' || typeof filtered !== 'number')
           return unavailable('native migration source scan rows/loops');
         const relation = `library.${node['Relation Name']}`;
-        sourcePlans.push({ relation, indexName: String(node['Index Name'] ?? ''),
-          rowsExamined: (rows + filtered) * loops, rowsRemovedByFilter: filtered * loops });
+        sourcePlans.push({
+          relation,
+          indexName: String(node['Index Name'] ?? ''),
+          rowsExamined: (rows + filtered) * loops,
+          rowsRemovedByFilter: filtered * loops,
+        });
         explainedSources.add(relation);
       }
     }
@@ -155,15 +193,20 @@ function profilePage(page: LibraryProfileMigrationPageObservation, capture?: Cap
     transactionId: page.transactionId,
     ownerRowsRead: page.sources.reduce((n, source) => n + source.rows.length, 0),
     ownerRowsChanged: page.sources.reduce((n, source) => n + source.changedIds.length, 0),
-    sourceRowsExamined: sourcePlans.reduce((n, source) => n + source.rowsExamined, 0), sourcePlans,
-    bytesRead: cost.responseBytes, bytesWritten: cost.requestBytes, statements: cost.statements,
+    sourceRowsExamined: sourcePlans.reduce((n, source) => n + source.rowsExamined, 0),
+    sourcePlans,
+    bytesRead: cost.responseBytes,
+    bytesWritten: cost.requestBytes,
+    statements: cost.statements,
     relationRowsRead,
     get relationRowsWritten(): Record<string, number> {
       // RETURNING source IDs do not measure the checkpoint, index-maintenance
       // triggers or durable intent's affected tuples. Performance owns this gap.
       return unavailable('native migration per-relation affected-row attribution including triggers');
     },
-    checkpointBefore: page.checkpointBefore, checkpointAfter: page.checkpointAfter,
-    committed: page.committed, ownerFenceChecked: page.ownerFenceChecked,
+    checkpointBefore: page.checkpointBefore,
+    checkpointAfter: page.checkpointAfter,
+    committed: page.committed,
+    ownerFenceChecked: page.ownerFenceChecked,
   };
 }

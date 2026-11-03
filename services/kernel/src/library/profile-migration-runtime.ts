@@ -41,7 +41,11 @@ export type LibraryProfileMigrationPageObservation = {
   backendId: number;
   checkpointBefore: LibraryProfileMigrationProgress;
   checkpointAfter: LibraryProfileMigrationProgress;
-  sources: { phase: LibraryProfileMigrationPhase; rows: readonly LibraryProfileMigrationSource[]; changedIds: readonly string[] }[];
+  sources: {
+    phase: LibraryProfileMigrationPhase;
+    rows: readonly LibraryProfileMigrationSource[];
+    changedIds: readonly string[];
+  }[];
   ownerFenceChecked: boolean;
   committed: boolean;
 };
@@ -165,67 +169,88 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
   const boundary = async (boundary: LibraryProfileMigrationBoundary) => {
     if (observed) await deps.observe?.({ kind: 'boundary', boundary, page: structuredClone(observed) });
   };
-  const result = await transaction(deps, accountId, async (tx) => {
-    observed = undefined;
-    const row = await readCheckpoint.run(tx, key);
-    const state = progress(accountId, row);
-    if (!row || state.releaseDigest !== input.releaseDigest) throw new Error('Unknown Library profile migration');
-    if (state.phase !== input.phase || state.after !== input.after) return state;
-    if (deps.observe) {
-      const identity = (await tx.query<{ transactionId: string; backendId: number }>(
-        'SELECT pg_current_xact_id()::text AS "transactionId", pg_backend_pid() AS "backendId"',
-      )).rows[0]!;
-      observed = {
-        ...identity, checkpointBefore: { ...state }, checkpointAfter: { ...state },
-        sources: [], committed: false, ownerFenceChecked: true,
-      };
-    }
-    let remaining = 100;
-    while (state.phase !== 'ready' && remaining > 0) {
-      const page = await pinLegacyFactsPage(tx, {
-        accountId,
-        kind: state.phase,
-        releaseDigest: input.releaseDigest,
-        after: state.after,
-        limit: remaining,
-        ...(observed ? {
-          observeRead: async (rows: readonly LibraryProfileMigrationSource[]) => {
-            observed!.sources.push({ phase: state.phase as LibraryProfileMigrationPhase, rows: structuredClone(rows), changedIds: [] });
-            await boundary('after-page-read-before-cas');
-          },
-          observeChanged: (ids: readonly string[]) => { observed!.sources.at(-1)!.changedIds = [...ids]; },
-        } : {}),
-      });
-      remaining -= page.examined;
-      state.after = page.after;
-      if (!page.exhausted) break;
-      state.phase = phases[phases.indexOf(state.phase) + 1] ?? 'ready';
-      state.after = null;
-    }
-    if (observed) observed.checkpointAfter = { ...state };
-    if (state.phase === 'ready') await boundary('before-owner-ready');
-    // Do not hold the source-head row while a source read is paused. Ordinary
-    // writers also advance this head. The exact old locator is the checkpoint
-    // CAS; a lost CAS rolls back every pin in this serializable attempt.
-    const advanced = await tx.query(
-      `UPDATE library.fact_source_head
+  const result = await transaction(
+    deps,
+    accountId,
+    async (tx) => {
+      observed = undefined;
+      const row = await readCheckpoint.run(tx, key);
+      const state = progress(accountId, row);
+      if (!row || state.releaseDigest !== input.releaseDigest) throw new Error('Unknown Library profile migration');
+      if (state.phase !== input.phase || state.after !== input.after) return state;
+      if (deps.observe) {
+        const identity = (
+          await tx.query<{ transactionId: string; backendId: number }>(
+            'SELECT pg_current_xact_id()::text AS "transactionId", pg_backend_pid() AS "backendId"',
+          )
+        ).rows[0]!;
+        observed = {
+          ...identity,
+          checkpointBefore: { ...state },
+          checkpointAfter: { ...state },
+          sources: [],
+          committed: false,
+          ownerFenceChecked: true,
+        };
+      }
+      let remaining = 100;
+      while (state.phase !== 'ready' && remaining > 0) {
+        const page = await pinLegacyFactsPage(tx, {
+          accountId,
+          kind: state.phase,
+          releaseDigest: input.releaseDigest,
+          after: state.after,
+          limit: remaining,
+          ...(observed
+            ? {
+                observeRead: async (rows: readonly LibraryProfileMigrationSource[]) => {
+                  observed!.sources.push({
+                    phase: state.phase as LibraryProfileMigrationPhase,
+                    rows: structuredClone(rows),
+                    changedIds: [],
+                  });
+                  await boundary('after-page-read-before-cas');
+                },
+                observeChanged: (ids: readonly string[]) => {
+                  observed!.sources.at(-1)!.changedIds = [...ids];
+                },
+              }
+            : {}),
+        });
+        remaining -= page.examined;
+        state.after = page.after;
+        if (!page.exhausted) break;
+        state.phase = phases[phases.indexOf(state.phase) + 1] ?? 'ready';
+        state.after = null;
+      }
+      if (observed) observed.checkpointAfter = { ...state };
+      if (state.phase === 'ready') await boundary('before-owner-ready');
+      // Do not hold the source-head row while a source read is paused. Ordinary
+      // writers also advance this head. The exact old locator is the checkpoint
+      // CAS; a lost CAS rolls back every pin in this serializable attempt.
+      const advanced = await tx.query(
+        `UPDATE library.fact_source_head
        SET profile_migration_phase=$3, profile_migration_digest=$4, profile_migration_after=$5::uuid
        WHERE route=$1 AND account_id=$2 AND profile_migration_phase=$6
          AND profile_migration_digest=$4 AND profile_migration_after IS NOT DISTINCT FROM $7::uuid
        RETURNING account_id`,
-      [key.route, accountId, state.phase, input.releaseDigest, state.after, input.phase, input.after],
-    );
-    if (advanced.rowCount !== 1)
-      throw Object.assign(new Error('Library profile migration checkpoint CAS lost'), { code: '40001' });
-    await enqueue(tx, state);
-    return state;
-  }, deps.observe ? {
-    beforeCommit: () => boundary('before-page-commit'),
-    afterRollback: async () => {
-      if (observed) await deps.observe!({ kind: 'settled', page: structuredClone(observed) });
-      observed = undefined;
+        [key.route, accountId, state.phase, input.releaseDigest, state.after, input.phase, input.after],
+      );
+      if (advanced.rowCount !== 1)
+        throw Object.assign(new Error('Library profile migration checkpoint CAS lost'), { code: '40001' });
+      await enqueue(tx, state);
+      return state;
     },
-  } : undefined);
+    deps.observe
+      ? {
+          beforeCommit: () => boundary('before-page-commit'),
+          afterRollback: async () => {
+            if (observed) await deps.observe!({ kind: 'settled', page: structuredClone(observed) });
+            observed = undefined;
+          },
+        }
+      : undefined,
+  );
   if (observed) {
     observed.committed = true;
     try {

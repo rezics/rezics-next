@@ -11,8 +11,10 @@ import { createProfileEntryFixture, entryKey } from './support/profile-entry-fix
 import { createProfileMigrationObservation, ProfileMigrationCrash } from './support/profile-migration-observation.ts';
 
 const boundaries: LibraryProfileMigrationBoundary[] = [
-  'after-page-read-before-cas', 'before-page-commit',
-  'after-page-commit-before-ack', 'before-owner-ready',
+  'after-page-read-before-cas',
+  'before-page-commit',
+  'after-page-commit-before-ack',
+  'before-owner-ready',
 ];
 
 // Current commands supply the facts here. Historic DATA/receipts stay with the
@@ -30,7 +32,8 @@ for (const boundary of boundaries) {
       await f.grantLibraryGate(accountId);
       const subjectId = await f.createSubject('game');
       const initial = await runtime.start({ accountId, releaseDigest: f.originalDigest });
-      const created = (await f.commands.putEntry(f.other.actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
+      const created = (await f.commands.putEntry(f.other.actor, subjectId, { state: 'planned' }, entryKey())).value
+        .entry;
       running = runtime.resume({ accountId });
       await pause.reached;
       const persisted = await runtime.readProgress({ accountId });
@@ -38,9 +41,16 @@ for (const boundary of boundaries) {
       // The named read boundary precedes all row/checkpoint CAS writes. A writer
       // on the SAME owner must finish, and its new revision/pin must survive retry.
       if (boundary === 'after-page-read-before-cas')
-        await f.commands.putEntry(f.other.actor, subjectId, {
-          state: 'playing', revision: created.revision, incarnationId: created.incarnationId!,
-        }, entryKey());
+        await f.commands.putEntry(
+          f.other.actor,
+          subjectId,
+          {
+            state: 'playing',
+            revision: created.revision,
+            incarnationId: created.incarnationId!,
+          },
+          entryKey(),
+        );
       await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey());
       const before = await f.inspect(accountId);
       await pause.resume();
@@ -80,17 +90,27 @@ for (const boundary of boundaries) {
       expect(observation.attempts).toHaveLength(1);
       const committed = boundary === 'after-page-commit-before-ack';
       expect(observation.attempts[0]!.page.committed).toBe(committed);
-      expect(await runtime.readProgress({ accountId })).toEqual(committed ? {
-        ...initial, phase: 'ready', after: null,
-      } : initial);
+      expect(await runtime.readProgress({ accountId })).toEqual(
+        committed
+          ? {
+              ...initial,
+              phase: 'ready',
+              after: null,
+            }
+          : initial,
+      );
       const before = await f.inspect(accountId);
       const env = workerTestEnv({
-        DATABASE_URL: process.env.DATABASE_URL!, STRIPE_SECRET_KEY: 'sk_test_profile_boundaries',
-        STRIPE_MANAGED_PAYMENTS: 'false', CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
+        DATABASE_URL: process.env.DATABASE_URL!,
+        STRIPE_SECRET_KEY: 'sk_test_profile_boundaries',
+        STRIPE_MANAGED_PAYMENTS: 'false',
+        CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
         CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
       });
       worker = await startWorker(readWorkerConfig(env), undefined, env);
-      await client.retrieveWorkflow(`${LIBRARY_PROFILE_MIGRATION_WORKFLOW}:${accountId}:${f.originalDigest}:entry:start`).getResult();
+      await client
+        .retrieveWorkflow(`${LIBRARY_PROFILE_MIGRATION_WORKFLOW}:${accountId}:${f.originalDigest}:entry:start`)
+        .getResult();
       expect((await runtime.readProgress({ accountId })).phase).toBe('ready');
       const recovered = await f.inspect(accountId);
       expect(recovered.entries).toEqual(before.entries);
