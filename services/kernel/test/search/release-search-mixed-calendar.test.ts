@@ -52,7 +52,13 @@ test('mixed calendar successor preserves precise facts and leaves old mapping an
     'mixed-calendar-v1',
   );
   const [expected] = documentActions(snapshot, [id], undefined, 1);
-  if (oldMixed?.op !== 'index' || calendar?.op !== 'index' || expected?.op !== 'index')
+  if (
+    oldMixed?.op !== 'index' ||
+    oldMixed.document.owner !== 'semantic' ||
+    calendar?.op !== 'index' ||
+    calendar.document.owner !== 'semantic' ||
+    expected?.op !== 'index'
+  )
     throw new Error('Expected mixed Subject projections');
 
   expect(oldMixed.document.document_format).toBe(MIXED_DISCOVERY_DOCUMENT_FORMAT);
