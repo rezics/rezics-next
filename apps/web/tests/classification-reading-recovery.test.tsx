@@ -97,7 +97,10 @@ function button(scope: ParentNode, name: string) {
   return found!;
 }
 
-function attachGenre(read: { public: { subject: { statements: Record<string, unknown[]> }; related: Record<string, unknown> } }, source: { id: string }) {
+function attachGenre(
+  read: { public: { subject: { statements: Record<string, unknown[]> }; related: Record<string, unknown> } },
+  source: { id: string },
+) {
   const seed = structuredClone(source) as Record<string, unknown>;
   read.public.subject.statements['schema:genre'] = [
     {
@@ -119,8 +122,7 @@ function attachGenre(read: { public: { subject: { statements: Record<string, unk
 
 function withdrawClassifications(read: { release: { types: Record<string, { properties: string[] } | undefined> } }) {
   for (const type of Object.values(read.release.types)) {
-    if (type)
-      type.properties = type.properties.filter((id) => id !== 'schema:genre' && id !== 'schema:keywords');
+    if (type) type.properties = type.properties.filter((id) => id !== 'schema:genre' && id !== 'schema:keywords');
   }
 }
 
@@ -139,10 +141,7 @@ test('Album and Manga keep one classification holder across reading loss, withdr
     if (!mangaRead.ok || !mangaRead.public) throw new Error('Expected Manga');
     attachGenre(mangaRead, mangaRead.public.subject.statements['wdt:P179']![0]!);
     const album = albumFixture();
-    attachGenre(
-      { public: album.publicRead },
-      album.publicRead.subject.statements['schema:contributor']![0]!,
-    );
+    attachGenre({ public: album.publicRead }, album.publicRead.subject.statements['schema:contributor']![0]!);
     const albumInitial = await album.loadCorrection();
     if (!albumInitial.ok || !albumInitial.public) throw new Error('Expected Album');
     const commands: FactCommand[] = [];
@@ -168,12 +167,7 @@ test('Album and Manga keep one classification holder across reading loss, withdr
       relations: null,
       authored: null,
     };
-    const MangaHolder = catalogueEditor(function MangaHolderLive({
-      children,
-    }: {
-      children: ReactNode;
-      id?: string;
-    }) {
+    const MangaHolder = catalogueEditor(function MangaHolderLive({ children }: { children: ReactNode; id?: string }) {
       return children;
     });
     function MangaHost({ ready, reading }: { ready: boolean; reading: typeof mangaRead }) {
@@ -229,9 +223,7 @@ test('Album and Manga keep one classification holder across reading loss, withdr
     expect(genre()?.textContent).toContain(citation + 'manga');
     expect(button(genre()!, m.correction_retry()).disabled).toBe(false);
     expect(genre()?.querySelector('[role="combobox"]')).toBeNull();
-    await act(async () =>
-      finish({ ok: false, reason: 'denied' }),
-    );
+    await act(async () => finish({ ok: false, reason: 'denied' }));
 
     let nextRead: EditorRead | Promise<EditorRead> = await album.editors.facts.read();
     const albumEditors = {

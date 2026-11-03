@@ -24,10 +24,7 @@ import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { RelationEditor } from './relation-editor';
 import { classificationFields } from './character-profile-classification';
-import {
-  ClassificationRecovery,
-  beginClassificationKeyboardRecovery,
-} from './classification-recovery';
+import { ClassificationRecovery, beginClassificationKeyboardRecovery } from './classification-recovery';
 import { EditorFailure, PartValue } from './statement-editor-view';
 import { ExactReview, FactField, SelectedFacts } from './subject-facts-view';
 import {

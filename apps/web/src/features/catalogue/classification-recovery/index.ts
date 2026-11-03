@@ -1,5 +1,1 @@
-export {
-  ClassificationRecovery,
-  beginClassificationKeyboardRecovery,
-  retainClassificationRead,
-} from './recovery';
+export { ClassificationRecovery, beginClassificationKeyboardRecovery, retainClassificationRead } from './recovery';
