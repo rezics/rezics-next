@@ -52,6 +52,9 @@ labels, rather than coercing them into numeric years. These primitives do not en
 Decision: when a platform is selected, release languages constrain that same `schema:gamePlatform` statement
 through its `schema:inLanguage` qualifier; without a platform, they use the release-level language facet.
 
+Decision: expose developer and publisher controls only when the active release subtype admits their exact property;
+do not expose a generic producer control without a separately admitted Semantic property.
+
 ## Remaining integration
 
 Install calendar preparation, publication, mixed/universal producer codecs and actual-physical-generation
