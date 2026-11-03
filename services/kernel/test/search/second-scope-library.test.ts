@@ -44,6 +44,7 @@ const observed: {
       request: unknown;
       context: Parameters<SearchService['search']>[4];
   };
+};
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
   async search(principal, request, _time, _active, context) {
