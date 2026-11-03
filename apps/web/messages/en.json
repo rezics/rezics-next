@@ -6324,5 +6324,11 @@
   "ctxw_review_scope": "Missing property defaults inherit natively. This list is the finite captured map, not a stored whole-schema policy.",
   "ctxw_property_unlabelled": "This property has no label in the previewed release. The stable ID remains.",
   "ctxw_captured_mismatch": "The returned Context captured a different policy than the reviewed preview. The workspace below is the actual native result.",
-  "ctxw_captured_unavailable": "Labels for this captured release are unavailable. The stored settings ID and defaults keep their exact meaning."
+  "ctxw_captured_unavailable": "Labels for this captured release are unavailable. The stored settings ID and defaults keep their exact meaning.",
+  "feed_action_reply": "Reply",
+  "feed_action_library": "Add to Library",
+  "feed_action_mute": "Mute author",
+  "feed_action_hide": "Hide",
+  "feed_action_unavailable": "Unavailable",
+  "feed_action_votes_unavailable": "Voting totals are unavailable for this item."
 }

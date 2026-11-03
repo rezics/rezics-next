@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "빠진 속성 기본값은 네이티브로 상속됩니다. 이 목록은 유한한 기록 맵이며 저장된 전체 스키마 정책이 아닙니다.",
   "ctxw_property_unlabelled": "미리본 공개에 이 속성의 이름이 없습니다. 안정적인 ID는 그대로 남습니다.",
   "ctxw_captured_mismatch": "반환된 컨텍스트가 검토한 미리보기와 다른 정책을 기록했습니다. 아래 작업 공간이 실제 네이티브 결과입니다.",
-  "ctxw_captured_unavailable": "이 기록된 공개의 이름은 사용할 수 없습니다. 저장된 설정 ID와 기본값은 정확한 의미를 유지합니다."
+  "ctxw_captured_unavailable": "이 기록된 공개의 이름은 사용할 수 없습니다. 저장된 설정 ID와 기본값은 정확한 의미를 유지합니다.",
+  "feed_action_reply": "답글",
+  "feed_action_library": "라이브러리에 추가",
+  "feed_action_mute": "작성자 뮤트",
+  "feed_action_hide": "숨기기",
+  "feed_action_unavailable": "사용할 수 없음",
+  "feed_action_votes_unavailable": "이 항목의 투표 집계를 불러올 수 없습니다."
 }

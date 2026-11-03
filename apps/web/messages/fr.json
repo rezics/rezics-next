@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "Les défauts de propriété manquants héritent nativement. Cette liste est la carte finie capturée, pas une politique de schéma entier stockée.",
   "ctxw_property_unlabelled": "Cette propriété n'a pas de libellé dans la publication prévisualisée. L'identifiant stable demeure.",
   "ctxw_captured_mismatch": "Le Contexte renvoyé a capturé une politique différente de l'aperçu relu. L'espace de travail ci-dessous est le résultat natif réel.",
-  "ctxw_captured_unavailable": "Les libellés de cette publication capturée sont indisponibles. L'identifiant de paramètres stocké et les défauts conservent leur signification exacte."
+  "ctxw_captured_unavailable": "Les libellés de cette publication capturée sont indisponibles. L'identifiant de paramètres stocké et les défauts conservent leur signification exacte.",
+  "feed_action_reply": "Répondre",
+  "feed_action_library": "Ajouter à la bibliothèque",
+  "feed_action_mute": "Masquer cet auteur",
+  "feed_action_hide": "Masquer",
+  "feed_action_unavailable": "Indisponible",
+  "feed_action_votes_unavailable": "Le total des votes de cet élément est indisponible."
 }

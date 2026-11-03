@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "缺失的属性默认值按原生方式继承。此列表是有限的记录映射，不是存储的整套模式策略。",
   "ctxw_property_unlabelled": "预览的发布中没有此属性的标签。稳定 ID 仍然保留。",
   "ctxw_captured_mismatch": "返回的上下文记录的策略与核对过的预览不同。下方工作区是实际的原生结果。",
-  "ctxw_captured_unavailable": "此已记录发布的标签不可用。存储的设置 ID 和默认值仍保持其确切含义。"
+  "ctxw_captured_unavailable": "此已记录发布的标签不可用。存储的设置 ID 和默认值仍保持其确切含义。",
+  "feed_action_reply": "回复",
+  "feed_action_library": "加入书库",
+  "feed_action_mute": "将作者静音",
+  "feed_action_hide": "隐藏",
+  "feed_action_unavailable": "暂不可用",
+  "feed_action_votes_unavailable": "暂时无法获取此项目的投票总数。"
 }

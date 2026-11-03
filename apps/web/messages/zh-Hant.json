@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "缺少的屬性預設值依原生方式繼承。此清單是有限的記錄對應，不是儲存的整套模式策略。",
   "ctxw_property_unlabelled": "預覽的發布中沒有此屬性的標籤。穩定 ID 仍然保留。",
   "ctxw_captured_mismatch": "傳回的脈絡記錄的策略與核對過的預覽不同。下方工作區是實際的原生結果。",
-  "ctxw_captured_unavailable": "此已記錄發布的標籤無法使用。儲存的設定 ID 與預設值仍保持其確切含義。"
+  "ctxw_captured_unavailable": "此已記錄發布的標籤無法使用。儲存的設定 ID 與預設值仍保持其確切含義。",
+  "feed_action_reply": "回覆",
+  "feed_action_library": "加入書庫",
+  "feed_action_mute": "將作者靜音",
+  "feed_action_hide": "隱藏",
+  "feed_action_unavailable": "目前無法使用",
+  "feed_action_votes_unavailable": "此項目的投票總數目前無法取得。"
 }

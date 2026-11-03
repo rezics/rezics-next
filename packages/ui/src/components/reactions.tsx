@@ -85,6 +85,8 @@ export interface ReactionsProps {
   collapse?: number;
   /** Turns the chips and the React trigger off, for example until the page has hydrated. */
   disabled?: boolean;
+  /** The same one-slot queue, presented as up / score / down. Other admitted kinds keep their chips and picker. */
+  presentation?: 'chips' | 'vote' | 'vote-plain';
 }
 
 interface ReactionView {
@@ -337,6 +339,29 @@ export const Reactions = (props: ReactionsProps) => {
     );
   };
 
+  const votes = props.presentation !== undefined && props.presentation !== 'chips' &&
+    kinds.includes('upvote') && kinds.includes('downvote');
+  // Native count maps omit zero kinds. An admitted map is a complete projection, not a generic click count.
+  const score = (shown.counts.upvote ?? 0) - (shown.counts.downvote ?? 0);
+  const voteArrow = (kind: 'upvote' | 'downvote') => {
+    const Icon = reactionIcons[kind];
+    const pressed = shown.value === kind;
+    const className = cn(
+      'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
+      pressed ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
+    );
+    return signedOut ? (
+      <a href={signInHref} aria-label={labels[kind]} className={className}>
+        <Icon aria-hidden className="size-5" />
+      </a>
+    ) : (
+      <button type="button" aria-label={labels[kind]} aria-pressed={pressed} className={className}
+        disabled={disabled} onClick={() => select(kind)}>
+        <Icon aria-hidden className={cn('size-5', pressed && 'fill-current')} />
+      </button>
+    );
+  };
+
   return (
     <div
       aria-busy={busy}
@@ -345,7 +370,18 @@ export const Reactions = (props: ReactionsProps) => {
       data-slot="reactions"
       role="group"
     >
+      {votes ? (
+        <div data-slot="vote-control" className={cn('inline-flex items-center rounded-full',
+          props.presentation !== 'vote-plain' && 'bg-muted/70')}>
+          {voteArrow('upvote')}
+          <output aria-live="polite" className="min-w-8 px-1 text-center text-sm font-semibold tabular-nums">
+            {formatCount(props.locale, score)}
+          </output>
+          {voteArrow('downvote')}
+        </div>
+      ) : null}
       {kinds.map((kind) => {
+        if (votes && (kind === 'upvote' || kind === 'downvote')) return null;
         const count = shown.counts[kind] ?? 0;
         if (count <= 0) return null;
         const pressed = shown.value === kind;

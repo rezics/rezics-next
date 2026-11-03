@@ -1,5 +1,5 @@
 import { RemovedPost } from '../../threads/post-removed';
-import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { ReplyContext, type ReplyParents } from '../../threads/reply-context';
 import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
@@ -7,13 +7,12 @@ import type { VoteCitation } from '../../threads/post-writes';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { exactRevisionHref } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
-import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
+import { FeedActionBar, feedFeedbackEntries } from '../../features/feed/action-bar';
 import { Byline } from '../../threads/byline';
 import type { VerificationConfig } from '../../report/turnstile';
 import { PostActions } from '../../report/content-actions';
 import type { ThreadPost } from '../../threads/reads';
 import type { PageAuthors } from '../../identity/read';
-import { Share2Icon } from 'lucide-react';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -507,34 +506,7 @@ export function ThreadPage() {
   );
 }
 
-function SharePost({ onCopyLink }: { onCopyLink: () => Promise<void> }) {
-  const [message, setMessage] = useState('');
-  return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={async () => {
-          try {
-            await onCopyLink();
-            setMessage(m.thread_reading_link_copied());
-          } catch {
-            setMessage(m.thread_reading_share_failed());
-          }
-        }}
-      >
-        <Share2Icon aria-hidden="true" />
-        {m.thread_reading_share()}
-      </Button>
-      {message ? (
-        <span role="status" className="text-xs text-muted-foreground">
-          {message}
-        </span>
-      ) : null}
-    </div>
-  );
-}
+
 
 function fullDateTime(value: string): string {
   const date = new Date(value);
@@ -963,17 +935,18 @@ export function ThreadReadingPost({
             ) : null}
           </Byline>
           <div className="max-w-full shrink-0">
-            <ThreadPostActions>
-              <ThreadReactions
-                counts={counts}
-                returnTo={returnTo}
-                signedIn={signedIn}
-                target={target}
-                value={value}
-                onMutation={onMutation}
-                personalReady={personalReady}
-              />
-              {editing ? null : ownsPost ? (
+            <FeedActionBar
+              locale={getLocale()}
+              href={threadLocation(getLocale(), { id: post.threadId }, undefined, post.id)}
+              title={m.threads_untitled()}
+              signedIn={signedIn}
+              plain={post.parentId !== null}
+              layout="detail"
+              origin={{ key: lifetime.id, isCurrent: () => current() }}
+              reaction={{ target, counts, value, onMutation, personalReady, settleWithRead: false,
+                reactionOrigin: { key: lifetime.id, reader: viewerId ?? null, isCurrent: () => current() } }}
+              reply={{ onReply, disabled: replyPending || !personalReady }}
+              overflow={editing ? <span /> : ownsPost ? (
                 <ContentActions
                   key={lifetime.id}
                   labels={labels}
@@ -988,15 +961,17 @@ export function ThreadReadingPost({
                   }}
                   ownsContent
                   triggerRef={menuButton}
+                  extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
                 />
               ) : (
                 <PostActions
                   target={target}
                   {...(post.revisionId ? { revisionId: post.revisionId } : {})}
                   verification={verification}
+                  extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
                 />
               )}
-            </ThreadPostActions>
+            />
           </div>
         </div>
         <ReplyContext parentId={post.parentId} parents={replyParents} authors={authors} reader={replyParentReader} />
@@ -1063,8 +1038,6 @@ export function ThreadReadingPost({
               <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {m.thread_history_licence()}: {post.licence}
               </p>
-              <SharePost onCopyLink={copyLink} />
-              {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
               <Collapsible className="contents">
                 <CollapsibleTrigger
                   aria-controls={`revision-details-${post.id}`}

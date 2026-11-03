@@ -77,7 +77,7 @@ function installSingleReactionMenu() {
   });
 }
 
-type ThreadReactionsProps = {
+export type ThreadReactionsProps = {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
@@ -86,10 +86,19 @@ type ThreadReactionsProps = {
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
+  presentation?: 'chips' | 'vote' | 'vote-plain';
+  /** Feed callers reconcile one successful explicit write with the existing bounded point reader. */
+  settleWithRead?: boolean;
+  locale?: string;
+  /** Explicitly illustrative transports for isolated stories; production callers leave this absent. */
+  preparedTransport?: {
+    change: typeof changeReaction;
+    read: typeof readReaction;
+  };
 };
 
 /** Observe the existing cache only. Remember transitions even when React batches away/back into one render. */
-function observeReactionSession(client: QueryClient | undefined) {
+export function observeReactionSession(client: QueryClient | undefined) {
   // Observe sessionQuery's existing key without importing its server actions into isolated prepared renderers.
   const read = () => client?.getQueryData<ReturnType<typeof useSession>>(['session']);
   const queryState = () => client?.getQueryState(['session']);
@@ -203,6 +212,10 @@ function ReactionCaller({
   expectedReader,
   reactionOrigin,
   isDesired,
+  presentation,
+  settleWithRead,
+  locale,
+  preparedTransport,
 }: ThreadReactionsProps & {
   admitted: boolean;
   disabled: boolean;
@@ -318,7 +331,7 @@ function ReactionCaller({
       result =
         intent.phase === 'read'
           ? { ok: true }
-          : await changeReaction({
+          : await (preparedTransport?.change ?? changeReaction)({
               data,
               headers: { ...headers, 'Idempotency-Key': intent.commandId },
             });
@@ -339,12 +352,12 @@ function ReactionCaller({
         throw new Error(message);
       }
     }
-    if (replay || intent.phase === 'read') {
+    if (replay || intent.phase === 'read' || settleWithRead) {
       // A replay's receipt may describe an older slot. Only a current point read settles it.
       intent.phase = 'read';
       let snapshot: ReactionSnapshot | ReactionFailure;
       try {
-        snapshot = await readReaction({ data, headers });
+        snapshot = await (preparedTransport?.read ?? readReaction)({ data, headers });
       } catch {
         snapshot = { ok: false, reason: 'unavailable' };
       }
@@ -452,6 +465,7 @@ function ReactionCaller({
       tabIndex={-1}
       className="flex min-w-0 flex-wrap items-center gap-2"
       aria-busy={recovering}
+      data-reaction-source={preparedTransport ? 'prepared' : undefined}
       onKeyDownCapture={noteKeyboardActivation}
     >
       <Reactions
@@ -460,10 +474,11 @@ function ReactionCaller({
         disabled={disabled || recovery !== null || recovering}
         {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
         labels={reactionLabels(failed)}
-        locale={getLocale()}
+        locale={locale ?? getLocale()}
+        {...(presentation ? { presentation } : {})}
         onChange={onChange}
         value={resolved ? resolved.snapshot.value : value}
-        {...(signedIn ? {} : { signInHref: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
+        {...(signedIn ? {} : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
       />
       {recovery ? (
         <>

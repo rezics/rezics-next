@@ -104,3 +104,17 @@ Anonymous readers keep the page and receive sign-in guidance without a private w
 the authority for in-app preferences.
 
 Decision: Until Content delivers generated thread-watch reads and commands, Web keeps an installed unavailable seam; test and story responses are illustrative, not native proof.
+
+## Shared post actions
+
+Detail posts use the feed `FeedActionBar` at the top right with the installed reaction count map and viewer slot.
+The up/score/down pill uses the same `ThreadReactions` serialized one-slot queue; other reaction chips and the picker
+remain available. Dense replies use the plain pill. The detail host retains its original reaction refresh callback,
+current-reader source lifetime, reply intent, author edit/erasure commands, history, licence and provenance.
+Copy/share destinations use the existing post locator, including posts outside the first page. Report stays in the
+existing author/report overflow ceremony. `PostActions.extraEntries` adds the shared unavailable mute/hide entries
+without changing report submission, verification, session retirement or copy recovery.
+
+Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
+or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
+exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.

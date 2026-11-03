@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "Los valores predeterminados ausentes heredan de forma nativa. Esta lista es el mapa finito capturado, no una política de esquema completo almacenada.",
   "ctxw_property_unlabelled": "Esta propiedad no tiene etiqueta en la publicación previsualizada. El identificador estable permanece.",
   "ctxw_captured_mismatch": "El Contexto devuelto capturó una política distinta de la vista previa revisada. El espacio de trabajo siguiente es el resultado nativo real.",
-  "ctxw_captured_unavailable": "Las etiquetas de esta publicación capturada no están disponibles. El identificador de ajustes almacenado y los valores predeterminados conservan su significado exacto."
+  "ctxw_captured_unavailable": "Las etiquetas de esta publicación capturada no están disponibles. El identificador de ajustes almacenado y los valores predeterminados conservan su significado exacto.",
+  "feed_action_reply": "Responder",
+  "feed_action_library": "Añadir a la biblioteca",
+  "feed_action_mute": "Silenciar al autor",
+  "feed_action_hide": "Ocultar",
+  "feed_action_unavailable": "No disponible",
+  "feed_action_votes_unavailable": "El total de votos de este elemento no está disponible."
 }

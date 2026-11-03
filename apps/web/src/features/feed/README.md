@@ -55,3 +55,58 @@ An embedded owner list can use the same body without claiming a native mixed-fee
 
 Board and Realm public-discovery summaries absent from the installed native feed remain owner dependencies. Add a
 native branch only after the source schema, disclosure, ordering, and generated-client receiving are delivered.
+
+## Card actions
+
+`FeedActionBar` from `action-bar.tsx` is the shared port for post, discussion, review and reply cards. The installed
+Home renderer supplies it through `HomeFeedActions` in the actual `FeedResults.itemPresentation.actions` slot.
+The original Continue link remains inside that slot. The action bar makes no mount reads, does not reorder rows,
+and does not extend the native feed summary with assumed fields. Installed Realm/Space-scoped Home results use
+the same adapter; unavailable Realm/Space and board carriers retain their owner state.
+
+Pass the admitted localized `href`, `title`, `signedIn` and, when actually supplied, `reaction` containing the native
+`target`, complete count map and current viewer slot. A count map omits zero kinds; it is not an unknown projection.
+The score is upvote minus downvote from that map. Without a supplied map the pill shows an unavailable dash and
+cannot write; it never reports zero or reads each row to manufacture a baseline. Subjects retain their installed
+non-vote reaction kinds. A `plain` reply pill omits its filled background without reducing its phone targets.
+`reaction.reactionOrigin` and `origin` bind commands and browser feedback to the owner's current source visit.
+Do not pass a fabricated current predicate to retain an old private snapshot.
+
+`VoteControl` delegates to `ThreadReactions` and the shared `Reactions` queue. It does not implement another vote
+engine. Fresh feed commands reconcile through the existing single-target point read; `settleWithRead: false` lets
+an existing detail owner retain its existing refresh callback. Unknown writes retain only their immutable current
+visit command and explicit retry. A refused change restores the last projection and announces the native failure.
+No command runs on mount or on a session observation. Account/token replacement and away/back retire old callers.
+
+`reply` accepts an existing reply-intent callback or an admitted link; missing reply destinations remain unavailable.
+`library` accepts the existing Library control or its owner destination. `overflow` accepts the installed author/report
+menu so detail hosts keep edit, erasure and report ownership. Reporting is never a visible action button. Without a
+delivered command/configuration the default menu labels report, mute and hide as unavailable. It never hides a row
+or claims success locally. Signed-out actions navigate to localized sign-in with the admitted destination.
+
+Decision: Work cards open their existing Subject Library slot (`?slot=collections`) for Add to Library; the slot keeps
+its existing private reads, admission and mutation commands, and the feed introduces no private per-row hydration.
+Share uses the native browser sheet when installed, then the clipboard when unsupported or refused. Cancellation
+does not copy. Only a successful clipboard promise announces success. A blocked clipboard exposes the admitted URL
+for manual copying and a Close action returning focus. Replacement visits retire pending share/copy feedback.
+
+### Producer and board handoff
+
+Content's generated `feedItems.get` summaries currently pick thread/post identity, title and creation metadata only;
+they supply neither reaction counts nor the viewer slot. Home deliberately renders unavailable voting until Content
+delivers those fields in the same bounded page, with source privacy and current-reader admission. No browser DTO or
+per-row read fills that gap. Content also needs typed mute-author/hide commands before those menu entries can act.
+Home's report ceremony needs the installed verification configuration from its page owner before it can reuse
+`PostActions`; it remains explicitly unavailable meanwhile. The continuation in `.temp/continuation/feed-actions.md`
+names the remaining user journey and producer interfaces.
+
+The board owner keeps board-feed, pin and slow-mode files. Import `FeedActionBar`, pass each existing thread's actual
+reaction counts/value and current-source origin, keep its existing localized destination and reply route, and pass
+its installed report/author menu as `overflow`. `feedFeedbackEntries(locale, signedIn, href)` supplies honest mute/hide
+entries for that menu. Keep pin/slow-mode entries with their current owners. No extra board read is required.
+
+Presentation is O(NR) for the native page cap (20) and fixed installed kind set. One explicit vote owns one write
+and at most its bounded readback; sharing owns no kernel reads. The focused action-bar scenarios cover 1, 10 and 20
+mounted rows, session/source retirement, receipt settlement/refusal, exact unknown retry, Home Continue, sign-in and
+browser sharing recovery. Story responses are visibly prepared; inspect the signed-in/out, voted, refused, phone,
+dark, long-string and keyboard variants at 390 and 1280 through the normal verifier.

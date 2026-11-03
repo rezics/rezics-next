@@ -1,6 +1,7 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentActions } from '@rezics/ui/content-actions';
+import type { MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
 import type { ReportDialogLabels, ReportSubmission } from '@rezics/ui/report-dialog';
 import {
@@ -153,10 +154,12 @@ export function PostActions({
   target,
   revisionId,
   verification,
+  extraEntries,
 }: {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
   verification: VerificationConfig;
+  extraEntries?: MenuEntry[];
 }) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => observeSession(client), [client]);
@@ -185,6 +188,7 @@ export function PostActions({
       target={target}
       {...(revisionId !== undefined ? { revisionId } : {})}
       verification={verification}
+      {...(extraEntries ? { extraEntries } : {})}
     />
   );
 }
@@ -198,6 +202,7 @@ function ReportActionsVisit({
   target,
   revisionId,
   verification,
+  extraEntries,
 }: {
   activeOwner: MutableRefObject<OwnerToken | null>;
   owner: object;
@@ -207,6 +212,7 @@ function ReportActionsVisit({
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
   verification: VerificationConfig;
+  extraEntries?: MenuEntry[];
 }) {
   const [reportOpen, setReportOpen] = useState(false);
   // A new open also retires retained shared form handlers from the previous ceremony.
@@ -488,6 +494,7 @@ function ReportActionsVisit({
         <ContentActions
           key={ceremony}
           ownsContent={false}
+          {...(extraEntries ? { extraEntries } : {})}
           onCopyLink={copyLink}
           triggerRef={copyTrigger}
           onReport={report}

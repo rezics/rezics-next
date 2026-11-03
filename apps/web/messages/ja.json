@@ -6274,5 +6274,11 @@
   "ctxw_review_scope": "欠けているプロパティの既定はネイティブに継承されます。この一覧は有限の記録マップであり、保存された全スキーマ方針ではありません。",
   "ctxw_property_unlabelled": "プレビューした公開にこのプロパティのラベルはありません。安定したIDはそのまま残ります。",
   "ctxw_captured_mismatch": "返されたコンテキストは、確認したプレビューとは異なるポリシーを記録しました。下の作業領域が実際のネイティブ結果です。",
-  "ctxw_captured_unavailable": "この記録済み公開のラベルは利用できません。保存された設定IDと既定は正確な意味を保ちます。"
+  "ctxw_captured_unavailable": "この記録済み公開のラベルは利用できません。保存された設定IDと既定は正確な意味を保ちます。",
+  "feed_action_reply": "返信",
+  "feed_action_library": "ライブラリに追加",
+  "feed_action_mute": "投稿者をミュート",
+  "feed_action_hide": "非表示",
+  "feed_action_unavailable": "利用できません",
+  "feed_action_votes_unavailable": "この項目の投票集計は利用できません。"
 }

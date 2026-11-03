@@ -4,6 +4,7 @@ import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
+import { HomeFeedActions } from '../feed/action-bar';
 import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
 import { HomeFeedSpaceControl } from './home-feed-space-control';
@@ -207,7 +208,14 @@ export function HomeFeed({
         busy={busy}
         messages={resultMessages}
         getItemKey={(item) => item.id}
-        itemPresentation={(item) => homeFeedItemPresentation(item, locale)}
+        itemPresentation={(item) => {
+          const presentation = homeFeedItemPresentation(item, locale);
+          return { ...presentation, actions: (
+            <HomeFeedActions key={item.id} item={item} locale={locale} signedIn={signedIn}>
+              {presentation.actions}
+            </HomeFeedActions>
+          ) };
+        }}
         onRetry={onRetry}
         onRestart={onRestart}
         suppressResultMessage={suppressResultMessage}
