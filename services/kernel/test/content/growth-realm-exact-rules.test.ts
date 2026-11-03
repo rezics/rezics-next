@@ -36,7 +36,8 @@ test.serial('native settings admit an immutable exact pin and enforce current di
 
     // Native settings replay returns the original pin; a stale fresh command still refuses.
     const replayKey = crypto.randomUUID();
-    const settings = { presentation: { ...emptyPresentation, rules: { postId: pin.postId, revisionId: pin.revisionId } } };
+    const settings = { summary: 'Pinned rules replay',
+      presentation: { ...emptyPresentation, rules: { postId: pin.postId, revisionId: pin.revisionId } } };
     const updated = await f.patchRealm(pin.realmId, settings, { key: replayKey, head });
     const replay = await f.patchRealm(pin.realmId, settings, { key: replayKey, head });
     expect(replay.value.realm.headRevisionId).toBe(updated.value.realm.headRevisionId);
