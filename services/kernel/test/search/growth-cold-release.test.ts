@@ -30,12 +30,16 @@ test('cold and warm native Search release reads stay anchored as activation and 
     expect(sample.cold.native.statements.some((statement) => /semantic\.definition_activation/i.test(statement))).toBe(
       true,
     );
-    expect(sample.cold.native.statements.some((statement) => /SELECT\s+body\s+FROM\s+semantic\.definition_release/i.test(statement))).toBe(
-      true,
-    );
-    expect(sample.warm.native.statements.some((statement) => /SELECT\s+digest\s+FROM\s+semantic\.definition_release/i.test(statement))).toBe(
-      true,
-    );
+    expect(
+      sample.cold.native.statements.some((statement) =>
+        /SELECT\s+body\s+FROM\s+semantic\.definition_release/i.test(statement),
+      ),
+    ).toBe(true);
+    expect(
+      sample.warm.native.statements.some((statement) =>
+        /SELECT\s+digest\s+FROM\s+semantic\.definition_release/i.test(statement),
+      ),
+    ).toBe(true);
   }
 
   const leastExamined = Math.min(...history.map(({ cold }) => cold.cost.examinedRows));

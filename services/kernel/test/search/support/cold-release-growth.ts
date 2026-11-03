@@ -1,8 +1,22 @@
-import { releaseAdmission, releaseDigest, RELEASE_LIMITS, RELEASE_FORMAT, valueSchema, type Release } from '@rezics/definitions';
+import {
+  releaseAdmission,
+  releaseDigest,
+  RELEASE_LIMITS,
+  RELEASE_FORMAT,
+  valueSchema,
+  type Release,
+} from '@rezics/definitions';
 import canonicalize from 'canonicalize';
 import { fileURLToPath } from 'node:url';
 import { activeRelease, bootstrapRelease } from '../../../src/semantic/definitions.ts';
-import { capture, costOf, openGrowthDatabase, settle, type Capture, type GrowthDatabase } from '../../support/growth.ts';
+import {
+  capture,
+  costOf,
+  openGrowthDatabase,
+  settle,
+  type Capture,
+  type GrowthDatabase,
+} from '../../support/growth.ts';
 
 type Scenario = { kind: 'history'; rows: number } | { kind: 'payloads' };
 type Cost = {
@@ -180,7 +194,12 @@ async function seedReleaseHistory(database: GrowthDatabase, rows: number, select
   return seeded.rowCount;
 }
 
-async function measureRelease(database: GrowthDatabase, selected: Release, activationRows: number, releaseRows: number) {
+async function measureRelease(
+  database: GrowthDatabase,
+  selected: Release,
+  activationRows: number,
+  releaseRows: number,
+) {
   if (releaseAdmission(selected).length) throw new Error('The selected definition release exceeds admission limits');
   const canonicalLength = canonicalBytes(selected);
   if (canonicalLength > RELEASE_LIMITS.bytes) throw new Error('The selected canonical release exceeds the byte limit');
@@ -203,9 +222,7 @@ async function measureRelease(database: GrowthDatabase, selected: Release, activ
     warm: withoutRelease(warm),
     warmReusesRelease: cold.release === warm.release,
     immutable:
-      Object.isFrozen(cold.release) &&
-      Object.isFrozen(cold.release.types) &&
-      Object.isFrozen(cold.release.properties),
+      Object.isFrozen(cold.release) && Object.isFrozen(cold.release.types) && Object.isFrozen(cold.release.properties),
   };
 }
 
