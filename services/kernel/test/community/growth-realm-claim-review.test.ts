@@ -27,7 +27,7 @@ test('registered owner erasure supplies the original episode and native HTTP req
     const claim = await fixture.submit();
     expect(claim).toMatchObject({
       realmId: fixture.realm.realmId,
-      state: 'pending',
+      state: 'pending' as const,
       orphanedAt: new Date(erased.at).toISOString(),
       claimEligibleAt: new Date(orphan.claim_eligible_at!).toISOString(),
     });
