@@ -13,6 +13,11 @@ export type ConversionContext = {
   readonly source?: string;
   /** Caller-owned normalized graph rows and explicit immutable native bindings. */
   readonly sourceVocabulary?: SourceVocabularyRequest;
+  /**
+   * Admitted sanitized classification facts for `projectSourceClassification`.
+   * Public dump fields never populate this; an absent value withholds classification.
+   */
+  readonly sourceClassification?: unknown;
 };
 
 /** Canonical BCP 47 syntax, without source-specific language mappings. */

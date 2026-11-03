@@ -27,6 +27,7 @@ import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
 import type { SourceVocabularyGap, SourceVocabularyInput } from '@rezics/conversion';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
+import { projectSourceClassification } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
 import type {
   ImportConversion,
@@ -193,6 +194,9 @@ function addAliases(
     mediaImportIntents,
     ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
     ...(sourceStatisticClear === undefined ? {} : { sourceStatisticClear }),
+    ...(context.sourceClassification === undefined
+      ? {}
+      : { sourceClassification: projectSourceClassification(context.sourceClassification) }),
   };
 }
 

@@ -2,6 +2,12 @@ import type { KernelClient } from '@rezics/client';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
+import type {
+  ClassificationAssociation,
+  ClassificationClear,
+  ClassificationObservation,
+  SourceClassificationRead,
+} from '../../kernel/src/rating/source-classification-contract.ts';
 
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
@@ -68,7 +74,39 @@ export interface ImportTransport {
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]>;
   readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
+  /** Documented classification routes until Content's generated client methods land. */
+  readSourceClassifications?(
+    input: { subjectId: string; associations: readonly ClassificationAssociation[] },
+    signal?: AbortSignal,
+  ): Promise<readonly SourceClassificationRead[]>;
+  writeSourceClassification?(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationObservation;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ observationDigest: string; state: 'published'; figure?: unknown }>;
+  clearSourceClassification?(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationClear;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ observationDigest: string; state: 'cleared' }>;
 }
+
+export type {
+  ClassificationAssociation,
+  ClassificationClear,
+  ClassificationObservation,
+  SourceClassificationRead,
+};
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
 

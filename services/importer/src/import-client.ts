@@ -32,6 +32,10 @@ import {
   type ImportSourceStatisticClearValue,
   type ImportSourceStatisticFigure,
   type ImportPublicFigure,
+  type ClassificationAssociation,
+  type ClassificationClear,
+  type ClassificationObservation,
+  type SourceClassificationRead,
 } from './import-contract.ts';
 
 type SubjectAPI = ReturnType<KernelClient['subjects']>;
@@ -701,6 +705,167 @@ export function createImportTransport(options: ImportTransportOptions) {
       return value as ImportSourceStatisticFigure;
     });
   }
+  async function classificationCall(
+    path: string,
+    body: unknown,
+    expected: number,
+    signal?: AbortSignal,
+    key?: string,
+  ): Promise<unknown> {
+    const bytes = JSON.stringify(snapshot(body, BODY_BYTES));
+    ensure(bytes.length > 0 && Buffer.byteLength(bytes) <= BODY_BYTES);
+    const reply = await response(async () => {
+      try {
+        const fetched = await importFetch(new URL(path, origin), {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+            ...(key === undefined ? {} : { 'idempotency-key': idempotencyKey(key) }),
+          },
+          body: bytes,
+          ...(signal === undefined ? {} : { signal }),
+        });
+        const text = await fetched.text();
+        let data: unknown;
+        if (text.length) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = undefined;
+          }
+        }
+        return {
+          status: fetched.status,
+          data: fetched.ok ? data : undefined,
+          error: fetched.ok ? undefined : { value: data },
+          response: fetched,
+        };
+      } catch (error) {
+        if (error instanceof ImportTransportError) throw error;
+        throw new ImportTransportError();
+      }
+    }, expected, signal);
+    return reply.body;
+  }
+  function associationBody(association: unknown): ClassificationAssociation {
+    const value = snapshot(association, BODY_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+    const body = value as Record<string, unknown>;
+    ensure(
+      Object.keys(body).sort().join(',') ===
+        'candidateId,contextId,property,qualifiersDigest,release,revision,subjectId,targetId',
+    );
+    ensure(
+      typeof body.subjectId === 'string' &&
+        uuid.test(body.subjectId) &&
+        typeof body.candidateId === 'string' &&
+        uuid.test(body.candidateId) &&
+        typeof body.contextId === 'string' &&
+        uuid.test(body.contextId) &&
+        typeof body.targetId === 'string' &&
+        uuid.test(body.targetId) &&
+        typeof body.property === 'string' &&
+        body.property.length > 0 &&
+        body.property.length <= 256 &&
+        Number.isInteger(body.revision) &&
+        (body.revision as number) >= 1 &&
+        typeof body.release === 'string' &&
+        /^[0-9a-f]{64}$/.test(body.release) &&
+        typeof body.qualifiersDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(body.qualifiersDigest),
+    );
+    return body as ClassificationAssociation;
+  }
+  async function readSourceClassifications(
+    input: { subjectId: string; associations: readonly ClassificationAssociation[] },
+    signal?: AbortSignal,
+  ): Promise<readonly SourceClassificationRead[]> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    ensure(Array.isArray(input.associations) && input.associations.length <= 32);
+    const associations = input.associations.map(associationBody);
+    const body = await classificationCall(
+      `/v1/subjects/${input.subjectId}/source-classifications:read`,
+      { associations },
+      200,
+      signal,
+    );
+    const value = snapshot(body, RESPONSE_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value) && 'items' in value);
+    const items = (value as { items: unknown }).items;
+    ensure(Array.isArray(items) && items.length === associations.length);
+    return items as SourceClassificationRead[];
+  }
+  async function writeSourceClassification(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationObservation;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ observationDigest: string; state: 'published'; figure?: unknown }> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const association = associationBody(input.association);
+    ensure(association.subjectId === input.subjectId);
+    const value = snapshot(input.value, BODY_BYTES);
+    ensure(
+      input.expectedObservation === null ||
+        (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
+    );
+    const body = await classificationCall(
+      `/v1/subjects/${input.subjectId}/source-classifications:put`,
+      { association, expectedObservation: input.expectedObservation, value },
+      200,
+      signal,
+      input.idempotencyKey,
+    );
+    const reply = snapshot(body, RESPONSE_BYTES) as Record<string, unknown>;
+    ensure(
+      typeof reply === 'object' &&
+        reply !== null &&
+        typeof reply.observationDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
+        reply.state === 'published',
+    );
+    return reply as { observationDigest: string; state: 'published'; figure?: unknown };
+  }
+  async function clearSourceClassification(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationClear;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<{ observationDigest: string; state: 'cleared' }> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const association = associationBody(input.association);
+    ensure(association.subjectId === input.subjectId);
+    const value = snapshot(input.value, BODY_BYTES);
+    ensure(
+      input.expectedObservation === null ||
+        (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
+    );
+    const body = await classificationCall(
+      `/v1/subjects/${input.subjectId}/source-classifications:clear`,
+      { association, expectedObservation: input.expectedObservation, value },
+      200,
+      signal,
+      input.idempotencyKey,
+    );
+    const reply = snapshot(body, RESPONSE_BYTES) as Record<string, unknown>;
+    ensure(
+      typeof reply === 'object' &&
+        reply !== null &&
+        typeof reply.observationDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
+        reply.state === 'cleared',
+    );
+    return reply as { observationDigest: string; state: 'cleared' };
+  }
   async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     const reply = await response(
@@ -735,6 +900,9 @@ export function createImportTransport(options: ImportTransportOptions) {
     clearSourceStatistic,
     readSourceStatistics,
     readPublicFigure,
+    readSourceClassifications,
+    writeSourceClassification,
+    clearSourceClassification,
     refreshCover,
     media,
     importFromUrl,

@@ -12,7 +12,7 @@ The [package exports](package.json) are only these entry points:
 
 | Import                                    | Named exports                                                                                               |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError` |
+| `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError`, `projectSourceClassification` |
 | `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
 | `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                   |
 | `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
@@ -63,6 +63,7 @@ Context supplies trusted, real target bindings separately from the source body:
 | `mediaIds`           | Exact source URL to an actual available media UUID. No image statement is proposed without this mapping.                                                          |
 | `source`             | Trusted registration alias written to source envelopes and used in command keys. Set it from registration configuration, never from `record`.                     |
 | `sourceVocabulary`   | Optional normalized rows already traversed by the graph caller and explicit released identity bindings; it never discovers rows or creates identities.            |
+| `sourceClassification` | Optional admitted sanitized classification facts. Public VNDB dump licences stay unadmitted; this never identifies a native association.                       |
 
 The context shape is accepted by the converter functions, but its implementation
 type is internal to [`support.ts`](src/support.ts), not an exported package

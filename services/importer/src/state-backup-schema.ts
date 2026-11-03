@@ -80,6 +80,23 @@ const REQUIRED_INDEXES = [
 /** Additive destination binding. Missing on legacy snapshots; present rows are preserved byte-for-byte. */
 const OPTIONAL_TABLES: Record<string, readonly string[]> = {
   source_destinations: ['source', 'origin', 'provenance', 'schema_version'],
+  run_aggregate_operations: [
+    'source',
+    'run_id',
+    'operation_id',
+    'record_key',
+    'subject_id',
+    'provider',
+    'source_alias',
+    'source_record_id',
+    'kind',
+    'command_key',
+    'request_bytes',
+    'intended_json',
+    'status',
+  ],
+  run_aggregate_heads: ['source', 'subject_id', 'provider', 'digest', 'head_json'],
+  run_classification_heads: ['source', 'subject_id', 'association_key', 'digest', 'head_json'],
 };
 
 export type RunBaseline = Readonly<{

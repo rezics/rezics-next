@@ -370,6 +370,40 @@ Decision: observation-conflict is RunStatus plus CLI exit 6; same-date dump refr
 resolution; local digests use kernel `sourceObservation`; generated client fields `expectedObservation` and
 `observation` are an additive seam.
 
+## Resolve source-classification conflicts
+
+A first admitted classification observation writes with `expectedObservation: null`. Any later change to the
+same Semantic association, including a newer date, stops that exact aggregate operation until an operator
+reviews the retained head. Exit code 6 is the shared observation-conflict outcome. An older classification
+date is refused: CAS cannot override date order.
+
+Classification admission is importer-owned. Public dump fields never populate it. Native writes happen only
+when the converter projection is available, an authentic Semantic association is bound, and the facts fence
+is clear. Public VNDB dump licences `ODbL-1.0` and `LicenseRef-DbCL-1.0` stay unadmitted and have no native
+classification effect. A source classification is independent of a REZICS classification ballot.
+
+```sh
+bun services/importer/src/cli.ts classifications --help
+bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb
+bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb --operation <64-hex>
+bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb --operation <64-hex> \
+  --resolve --reviewed-observation <64-hex-head> --api <https-origin> --account-key <path> \
+  --account <uuid> --client <client-id> --auth <https-origin>
+```
+
+Pages list at most 20 unresolved classification operations, keyed by stable operation ids. Detail shows the
+intended association, source record, date, confidence or lie or explicit clear, the readable retained head
+and the native reason. Resolution seals `expectedObservation` onto a successor intent and does not rewrite
+dates. Uncertain deliveries resume through the ordinary import command with the original body and key.
+
+Decision: classification heads live in `run_classification_heads` (`source,subject_id,association_key`);
+operations reuse `run_aggregate_operations` with `intended.family='classification'`. Native calls use the
+documented AIP-136 HTTP seam until Content's generated client lands.
+
+Indexed custody for a classification is one journal lookup/prepare, one POST of
+`/v1/subjects/{id}/source-classifications:read`, the same three fence checks, one `:put` or `:clear` for a
+newly prepared intent, and after delivery one independent read. Work remains O(N+A+R).
+
 Indexed custody lives in `run_aggregate_operations` (primary key `source,run_id,operation_id`;
 `run_aggregate_pending` on unresolved statuses; `run_aggregate_record` on `record_key`) and
 `run_aggregate_heads` (`source,subject_id,provider`). Each eligible record does one indexed journal

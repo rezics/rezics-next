@@ -42,6 +42,23 @@ import {
   type ObservationReason,
   type RetainedObservationHead,
 } from './source-observation.ts';
+import {
+  ClassificationConflictError,
+  ClassificationRefusedError,
+  classificationAssociationKey,
+  classificationOperationId,
+  classifyClassification,
+  headFromClassification,
+  intendedClassificationRequest,
+  intendedFromProjection,
+  isIntendedClassification,
+  parseClassificationReason,
+  type ClassificationHeadRead,
+  type ClassificationReason,
+  type IntendedClassification,
+  type RetainedClassificationHead,
+} from './source-classification.ts';
+import type { ClassificationAssociation } from './import-contract.ts';
 import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession, type ImportOwnership } from './import-session.ts';
@@ -123,6 +140,15 @@ export type ImporterOptions = {
   mediaDeadlineMs?: number;
   mediaResolver?: ImportMediaResolver;
   identifierLookup?: ImportIdentifierLookup;
+  /** Admitted classification facts and authentic Semantic association; public dump fields never populate this. */
+  classificationAdmission?: {
+    facts?(input: { owner: Owner; subject: string; conversion: ImportConversion }): unknown;
+    association?(input: {
+      owner: Owner;
+      subject: string;
+      conversion: ImportConversion;
+    }): ClassificationAssociation | null;
+  };
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
   instrumentDatabase?: (database: Database) => Database;
@@ -280,6 +306,7 @@ export class Importer {
       subjectId?: string;
       mediaIds?: Readonly<Record<string, string>>;
       resolvedReferences?: Readonly<Record<string, string>>;
+      sourceClassification?: unknown;
     } = {},
   ): ImportConversion {
     const result = registration.convert(
@@ -1003,7 +1030,8 @@ export class Importer {
   ): Promise<boolean> {
     const store = this.session.store;
     const operationId = aggregateOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
-    const existing = store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id);
+    const existing =
+      store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id, 'statistic');
     const commandKey = operationKey(
       owner,
       `${run.id}:source-statistic${intended.kind === 'clear' ? '-clear' : ''}:${hash(JSON.stringify(intendedPayload(intended)))}`,
@@ -1121,13 +1149,18 @@ export class Importer {
   async pageObservationConflicts(source: string, after?: string, limit = 20) {
     const run = this.session.store.activeRun(source);
     if (!run) return { operations: [], next: null as string | null };
-    return this.session.store.pageUnresolvedAggregates(run, { ...(after ? { after } : {}), limit });
+    return this.session.store.pageUnresolvedAggregates(run, {
+      ...(after ? { after } : {}),
+      limit,
+      family: 'statistic',
+    });
   }
 
   observationDetail(source: string, operationId: string) {
     const run = this.session.store.activeRun(source);
     if (!run) return null;
-    return this.session.store.aggregateOperation(run, operationId);
+    const detail = this.session.store.aggregateOperation(run, operationId);
+    return detail && !isIntendedClassification(detail.intended) ? detail : null;
   }
 
   async resolveObservation(
@@ -1145,7 +1178,7 @@ export class Importer {
       const run = this.session.store.activeRun(source);
       if (!run) return { status: 'unknown', operationId };
       const prior = this.session.store.aggregateOperation(run, operationId);
-      if (!prior) return { status: 'unknown', operationId };
+      if (!prior || isIntendedClassification(prior.intended)) return { status: 'unknown', operationId };
       if (prior.status === 'delivered' || prior.status === 'superseded')
         return { status: 'delivered', operationId: prior.operationId };
       if (prior.status === 'uncertain' || prior.status === 'prepared') return { status: 'resume', operationId };
@@ -1227,6 +1260,378 @@ export class Importer {
           ? headFromClear(prior.subjectId, prior.intended)
           : (confirmed.head ?? headFromStatistic(prior.subjectId, { source: 'vndb', ...prior.intended } as never));
       this.session.store.retainAggregateHead(source, { ...retained, subjectId: prior.subjectId });
+      this.session.store.markAggregate(run, successor.operationId, {
+        status: 'delivered',
+        reviewedHead: retained,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      return { status: 'delivered', operationId: successor.operationId };
+    } finally {
+      this.session.release(ownership);
+    }
+  }
+
+  private async readClassificationHead(
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<ClassificationHeadRead> {
+    const associationKey = classificationAssociationKey(intended.association);
+    const retained = this.session.store.retainedClassificationHead(owner.source, subjectId, associationKey);
+    const read = this.options.transport.readSourceClassifications;
+    if (!read) return retained ? { kind: 'head', head: retained } : { kind: 'absent' };
+    try {
+      const items = await write(() =>
+        read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
+      );
+      const item = items[0];
+      if (item?.state === 'available') {
+        return {
+          kind: 'head',
+          head: {
+            associationKey,
+            association: intended.association,
+            sourceAlias: item.value.sourceAlias,
+            sourceRecordId: item.value.sourceRecordId,
+            sourceAssociationId: item.value.sourceAssociationId,
+            asOf: item.value.asOf,
+            cleared: false,
+            digest: item.value.observation.digest,
+          },
+        };
+      }
+      return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+    } catch (error) {
+      if (
+        error instanceof ImportTransportError &&
+        (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 503)
+      )
+        return {
+          kind: 'unavailable',
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.code === undefined ? {} : { code: error.code }),
+        };
+      throw error;
+    }
+  }
+
+  private async confirmClassification(
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<{ head: RetainedClassificationHead | null; figure: unknown; figureUnavailable: boolean }> {
+    const read = this.options.transport.readSourceClassifications;
+    let head: RetainedClassificationHead | null = null;
+    if (read) {
+      try {
+        const items = await write(() =>
+          read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
+        );
+        const item = items[0];
+        if (item?.state === 'available')
+          head = {
+            associationKey: classificationAssociationKey(intended.association),
+            association: intended.association,
+            sourceAlias: item.value.sourceAlias,
+            sourceRecordId: item.value.sourceRecordId,
+            sourceAssociationId: item.value.sourceAssociationId,
+            asOf: item.value.asOf,
+            cleared: false,
+            digest: item.value.observation.digest,
+          };
+      } catch {
+        return { head: null, figure: null, figureUnavailable: true };
+      }
+    }
+    if (intended.kind === 'clear' && !head) head = headFromClassification(intended);
+    let figure: unknown = null;
+    let figureUnavailable = false;
+    const readFigure = this.options.transport.readPublicFigure;
+    if (readFigure) {
+      try {
+        figure = await write(() => readFigure.call(this.options.transport, { subjectId }, signal));
+      } catch {
+        figureUnavailable = true;
+      }
+    }
+    return { head, figure, figureUnavailable };
+  }
+
+  private async deliverClassification(
+    subjectId: string,
+    intended: IntendedClassification,
+    commandKey: string,
+    requestBytes: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<'delivered' | 'conflict'> {
+    const body = JSON.parse(requestBytes) as ReturnType<typeof intendedClassificationRequest>;
+    try {
+      if (intended.kind === 'write') {
+        const put = this.options.transport.writeSourceClassification;
+        if (!put) throw new Error('Source classification transport is unavailable');
+        await write(() =>
+          put.call(
+            this.options.transport,
+            {
+              subjectId,
+              association: body.association,
+              value: body.value as never,
+              expectedObservation: body.expectedObservation,
+              idempotencyKey: commandKey,
+            },
+            signal,
+          ),
+        );
+      } else {
+        const clear = this.options.transport.clearSourceClassification;
+        if (!clear) throw new Error('Source classification clear transport is unavailable');
+        await write(() =>
+          clear.call(
+            this.options.transport,
+            {
+              subjectId,
+              association: body.association,
+              value: body.value as never,
+              expectedObservation: body.expectedObservation,
+              idempotencyKey: commandKey,
+            },
+            signal,
+          ),
+        );
+      }
+      return 'delivered';
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 409) return 'conflict';
+      throw error;
+    }
+  }
+
+  private async applyClassification(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<boolean> {
+    const store = this.session.store;
+    const operationId = classificationOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
+    const existing =
+      store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id, 'classification');
+    const commandKey = operationKey(
+      owner,
+      `${run.id}:source-classification${intended.kind === 'clear' ? '-clear' : ''}:${hash(JSON.stringify(intendedClassificationRequest(intended, null)))}`,
+    );
+    const requestBytes = JSON.stringify(intendedClassificationRequest(intended, null));
+    if (existing?.status === 'delivered' && existing.operationId === operationId) return true;
+    if (existing?.status === 'uncertain' || existing?.status === 'prepared') {
+      const sealed = existing.requestBytes;
+      const key = existing.commandKey;
+      store.markAggregate(run, existing.operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(subjectId, intended, key, sealed, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, existing.operationId, { status: 'conflict', nativeReason: 'cas-mismatch' });
+        throw new ClassificationConflictError(existing.operationId, 'cas-mismatch');
+      }
+      const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
+      const head =
+        intended.kind === 'clear'
+          ? headFromClassification(intended)
+          : (confirmed.head ?? headFromClassification(intended));
+      store.retainClassificationHead(owner.source, { ...head, subjectId });
+      store.markAggregate(run, existing.operationId, {
+        status: 'delivered',
+        reviewedHead: head,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      this.progress(signal)?.onAcknowledgedEffects?.(1);
+      return true;
+    }
+    if (existing?.status === 'conflict' || existing?.status === 'refused') {
+      const reason =
+        parseClassificationReason(existing.nativeReason) ??
+        (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
+      if (existing.status === 'refused') throw new ClassificationRefusedError(existing.operationId, reason);
+      throw new ClassificationConflictError(existing.operationId, reason);
+    }
+    const head = await this.readClassificationHead(owner, subjectId, intended, signal, write);
+    if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+    const decision = classifyClassification(intended, head);
+    if (decision.action === 'identical') return true;
+    const reviewed = head.kind === 'head' ? head.head : null;
+    if (decision.action === 'refused' || decision.action === 'conflict') {
+      store.prepareAggregate(run, {
+        operationId,
+        recordKey: owner.external_id,
+        subjectId,
+        sourceAlias: intended.sourceAlias,
+        intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: reviewed,
+        status: decision.action === 'refused' ? 'refused' : 'conflict',
+        nativeReason: decision.reason,
+      });
+      if (decision.action === 'refused') throw new ClassificationRefusedError(operationId, decision.reason);
+      throw new ClassificationConflictError(operationId, decision.reason);
+    }
+    store.prepareAggregate(run, {
+      operationId,
+      recordKey: owner.external_id,
+      subjectId,
+      sourceAlias: intended.sourceAlias,
+      intended,
+      commandKey,
+      requestBytes,
+      reviewedHead: reviewed,
+      status: 'prepared',
+    });
+    try {
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(subjectId, intended, commandKey, requestBytes, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, operationId, { status: 'conflict', nativeReason: 'concurrent-head' });
+        throw new ClassificationConflictError(operationId, 'concurrent-head');
+      }
+    } catch (error) {
+      if (error instanceof ClassificationConflictError) throw error;
+      if (error instanceof Interrupted) throw error;
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw error;
+    }
+    const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
+    const retained =
+      intended.kind === 'clear'
+        ? headFromClassification(intended)
+        : (confirmed.head ?? headFromClassification(intended));
+    store.retainClassificationHead(owner.source, { ...retained, subjectId });
+    store.markAggregate(run, operationId, {
+      status: 'delivered',
+      reviewedHead: retained,
+      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+    });
+    this.progress(signal)?.onAcknowledgedEffects?.(1);
+    return true;
+  }
+
+  async pageClassificationConflicts(source: string, after?: string, limit = 20) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return { operations: [], next: null as string | null };
+    return this.session.store.pageUnresolvedAggregates(run, {
+      ...(after ? { after } : {}),
+      limit,
+      family: 'classification',
+    });
+  }
+
+  classificationDetail(source: string, operationId: string) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return null;
+    const detail = this.session.store.aggregateOperation(run, operationId);
+    return detail && isIntendedClassification(detail.intended) ? detail : null;
+  }
+
+  async resolveClassification(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal = this.shutdown.signal,
+  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
+      throw new TypeError('Classification resolution requires exact operation and reviewed digests');
+    const ownership = this.takeOwnership(source);
+    if (ownership === 'busy') return { status: 'busy', operationId };
+    const write: Write = (operation) => operation();
+    try {
+      const run = this.session.store.activeRun(source);
+      if (!run) return { status: 'unknown', operationId };
+      const prior = this.session.store.aggregateOperation(run, operationId);
+      if (!prior || !isIntendedClassification(prior.intended)) return { status: 'unknown', operationId };
+      if (prior.status === 'delivered' || prior.status === 'superseded')
+        return { status: 'delivered', operationId: prior.operationId };
+      if (prior.status === 'uncertain' || prior.status === 'prepared') return { status: 'resume', operationId };
+      if (prior.status === 'refused' || parseClassificationReason(prior.nativeReason) === 'older-date')
+        return { status: 'refused', operationId };
+      const reviewedHead = prior.reviewedHead as RetainedClassificationHead | null;
+      if (reviewedHead?.digest !== reviewedObservation) return { status: 'conflict', operationId };
+      const owner = { source, external_id: prior.recordKey };
+      const omissions = await this.fences(owner, signal);
+      if (prior.kind === 'write' && omissions.some((omission) => omission.field_group === 'facts'))
+        return { status: 'conflict', operationId };
+      const head = await this.readClassificationHead(owner, prior.subjectId, prior.intended, signal, write);
+      if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+      const currentDigest = head.kind === 'head' ? head.head.digest : null;
+      if (currentDigest !== reviewedObservation) {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: head.kind === 'head' ? head.head : null,
+        });
+        return { status: 'conflict', operationId };
+      }
+      const decision = classifyClassification(prior.intended, head);
+      if (decision.action === 'identical') {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'delivered',
+          reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead,
+        });
+        return { status: 'delivered', operationId };
+      }
+      if (decision.action === 'refused') {
+        this.session.store.markAggregate(run, operationId, { status: 'refused', nativeReason: decision.reason });
+        return { status: 'refused', operationId };
+      }
+      const expectedObservation = reviewedObservation;
+      const successorId = classificationOperationId({
+        runId: run.id,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        intended: prior.intended,
+        expectedObservation,
+      });
+      const commandKey = operationKey(
+        owner,
+        `${run.id}:source-classification${prior.kind === 'clear' ? '-clear' : ''}:cas:${expectedObservation}`,
+      );
+      const requestBytes = JSON.stringify(intendedClassificationRequest(prior.intended, expectedObservation));
+      const successor = this.session.store.supersedeWithSuccessor(run, operationId, {
+        operationId: successorId,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        sourceAlias: prior.sourceAlias,
+        intended: prior.intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: head.kind === 'head' ? head.head : null,
+        expectedObservation,
+        status: 'prepared',
+      });
+      this.session.store.markAggregate(run, successor.operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(
+        prior.subjectId,
+        prior.intended,
+        successor.commandKey,
+        successor.requestBytes,
+        signal,
+        write,
+      );
+      if (result === 'conflict') {
+        this.session.store.markAggregate(run, successor.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        return { status: 'conflict', operationId: successor.operationId };
+      }
+      const confirmed = await this.confirmClassification(prior.subjectId, prior.intended, signal, write);
+      const retained =
+        prior.intended.kind === 'clear'
+          ? headFromClassification(prior.intended)
+          : (confirmed.head ?? headFromClassification(prior.intended));
+      this.session.store.retainClassificationHead(source, { ...retained, subjectId: prior.subjectId });
       this.session.store.markAggregate(run, successor.operationId, {
         status: 'delivered',
         reviewedHead: retained,
@@ -1350,6 +1755,14 @@ export class Importer {
     let deferredCover = false;
     let skipCover = false;
     let statisticWritten = false;
+    let classificationWritten = false;
+    let conversionContext:
+      | {
+          subjectId: string;
+          mediaIds?: Readonly<Record<string, string>>;
+          resolvedReferences?: Readonly<Record<string, string>>;
+        }
+      | undefined;
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
@@ -1369,6 +1782,7 @@ export class Importer {
           ? await this.options.identifierLookup.resolve({ owner, conversion, signal })
           : ownReferences?.resolvedReferences;
         const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
+        conversionContext = context;
         conversion = this.convert(registration, staged, context);
         this.retainDiagnostics(run, staged, conversion, 'application');
         const intents =
@@ -1387,7 +1801,8 @@ export class Importer {
             for (const intent of intents)
               if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
                 throw new Error('Media availability is incomplete');
-            conversion = this.convert(registration, staged, { ...context, mediaIds: resolution.mediaIds });
+            conversionContext = { ...context, mediaIds: resolution.mediaIds };
+            conversion = this.convert(registration, staged, conversionContext);
             this.retainDiagnostics(run, staged, conversion, 'application');
           } else {
             skipCover = true;
@@ -1405,6 +1820,21 @@ export class Importer {
     if (subject && conversion?.sourceStatisticClear) {
       const { source: _source, expectedObservation: _token, ...value } = conversion.sourceStatisticClear;
       statisticWritten = await this.applyObservation(run, owner, subject, { kind: 'clear', ...value }, signal, write);
+    }
+    if (subject && conversion && conversionContext && !omissions.some((o) => o.field_group === 'facts')) {
+      const admitted = this.options.classificationAdmission;
+      const facts = admitted?.facts?.({ owner, subject, conversion });
+      if (facts !== undefined) {
+        conversion = this.convert(registration, staged, { ...conversionContext, sourceClassification: facts });
+        this.retainDiagnostics(run, staged, conversion, 'application');
+      }
+      const projection = conversion.sourceClassification;
+      const association = admitted?.association?.({ owner, subject, conversion }) ?? null;
+      if (projection?.state === 'available' && association) {
+        const intended = intendedFromProjection(projection, association);
+        if (intended)
+          classificationWritten = await this.applyClassification(run, owner, subject, intended, signal, write);
+      }
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();
@@ -1438,12 +1868,14 @@ export class Importer {
     }
     const statisticOnly =
       (statisticWritten ||
+        classificationWritten ||
         (registration.sourceKind === 'vndb' &&
           acknowledged?.state === 'present' &&
           acknowledged.recordRevision === row.recordRevision &&
           acknowledged.converter_revision === row.converter_revision &&
           !conversion?.sourceStatistic &&
-          !conversion?.sourceStatisticClear)) &&
+          !conversion?.sourceStatisticClear &&
+          conversion?.sourceClassification?.state !== 'available')) &&
       !skipCover &&
       candidates.length > 0 &&
       retainedCandidates.size === candidates.length &&
@@ -1805,7 +2237,12 @@ export class Importer {
             return planned;
           } catch (error) {
             if (error instanceof Interrupted) throw error;
-            if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+            if (
+              error instanceof ObservationConflictError ||
+              error instanceof ObservationRefusedError ||
+              error instanceof ClassificationConflictError ||
+              error instanceof ClassificationRefusedError
+            )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
             return 'failed';
           }
@@ -1856,7 +2293,12 @@ export class Importer {
             return planned;
           } catch (error) {
             if (error instanceof Interrupted) throw error;
-            if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+            if (
+              error instanceof ObservationConflictError ||
+              error instanceof ObservationRefusedError ||
+              error instanceof ClassificationConflictError ||
+              error instanceof ClassificationRefusedError
+            )
               return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
             return 'failed';
           }
@@ -1988,6 +2430,8 @@ export class Importer {
       if (error instanceof Interrupted) return finish('interrupted', error.message);
       if (error instanceof Error && (error.name === 'CredentialInputError' || error.name === 'ResumeActivationError'))
         throw error;
+      if (error instanceof ClassificationConflictError || error instanceof ClassificationRefusedError)
+        return finish('observation-conflict', 'Source classification requires explicit operator resolution');
       if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
         return finish('observation-conflict', 'Source observation requires explicit operator resolution');
       return finish('bulk-failed', 'Import operations remain unresolved');
@@ -2163,6 +2607,8 @@ export class Importer {
         finalizeOnly: false,
       });
     } catch (error) {
+      if (error instanceof ClassificationConflictError || error instanceof ClassificationRefusedError)
+        return finish('observation-conflict', 'Source classification requires explicit operator resolution');
       if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
         return finish('observation-conflict', 'Source observation requires explicit operator resolution');
       return finish(

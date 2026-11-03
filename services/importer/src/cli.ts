@@ -51,6 +51,7 @@ import { runBindingInspectionCli } from './binding-inspection-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { resumeUsage, runResumeCli } from './resume-cli.ts';
 import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
+import { classificationsUsage, runClassificationsCli } from './source-classification-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
 import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
@@ -195,6 +196,10 @@ function usage(): string {
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
+    '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       rezics-import classifications --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
+    '       rezics-import classifications --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
+    '       rezics-import classifications --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       rezics-import batch --manifest <path> [--json]',
     '       rezics-import batch --manifest <path> --run --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
@@ -508,6 +513,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     });
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'observations')
     return { code: 0, stdout: `${observationsUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'classifications')
+    return runClassificationsCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      ...(options.testOrigin ? { testOrigin: options.testOrigin } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'classifications')
+    return { code: 0, stdout: `${classificationsUsage()}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'preview')
     return runPreviewCli(argv.slice(1), {
       ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
@@ -1372,7 +1386,7 @@ function resultFor(
       code: 6,
       stdout: '',
       stderr: diagnostic(
-        'Source observation requires explicit operator resolution. Use rezics-import observations to inspect and resolve.',
+        'Source observation requires explicit operator resolution. Use rezics-import observations or rezics-import classifications to inspect and resolve.',
         counts,
         run.skipped,
       ),

@@ -19,6 +19,7 @@ import {
   type IntendedObservation,
   type RetainedObservationHead,
 } from './source-observation.ts';
+import { isIntendedClassification } from './source-classification.ts';
 
 const SOURCE = /^[a-z][a-z0-9_-]{0,31}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -246,7 +247,7 @@ export async function runObservationsCli(
       };
     if (parsed.operation) {
       const detail = session.store.aggregateOperation(run, parsed.operation);
-      if (!detail)
+      if (!detail || isIntendedClassification(detail.intended))
         return {
           code: 2,
           stdout: '',
@@ -258,6 +259,7 @@ export async function runObservationsCli(
     const page = session.store.pageUnresolvedAggregates(run, {
       ...(parsed.after ? { after: parsed.after } : {}),
       limit: parsed.limit,
+      family: 'statistic',
     });
     const lines = [
       'Unresolved source observations (at most 20 per page). A source figure is independent of a REZICS vote.',

@@ -573,7 +573,7 @@ export function bindingResumeGuidance(source: string): string {
     'Inspection is a local capture and does not authorize a native request, mint a new key or change retained bytes.',
     'Resolve an original uncertain request with the existing authorized importer; it rechecks current registration, credentials, fences and original immutable bytes/key:',
     `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${JSON.stringify(source)} --dump <complete-input-path> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
-    'Sealed resume remains the ordinary import command. Source-observation CAS is a separate command and is not a binding acknowledgement.',
+    'Sealed resume remains the ordinary import command. Source-observation and source-classification CAS are separate commands and are not a binding acknowledgement.',
   ].join(' ');
 }
 

@@ -16,6 +16,11 @@ import {
   type IntendedObservation,
   type RetainedObservationHead,
 } from './source-observation.ts';
+import {
+  isIntendedClassification,
+  type IntendedClassification,
+  type RetainedClassificationHead,
+} from './source-classification.ts';
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 import {
@@ -137,6 +142,7 @@ export const RUN_TABLES = [
   'run_conversion_diagnostic_records',
   'run_aggregate_operations',
   'run_aggregate_heads',
+  'run_classification_heads',
   'run_staging_checkpoints',
   'run_staging_prefix',
   'run_retention_work',
@@ -221,6 +227,7 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'status',
   ],
   run_aggregate_heads: ['source', 'subject_id', 'provider', 'digest', 'head_json'],
+  run_classification_heads: ['source', 'subject_id', 'association_key', 'digest', 'head_json'],
   run_staging_checkpoints: [
     'source',
     'run_id',
@@ -302,11 +309,11 @@ export type AggregateOperation = Readonly<{
   provider: 'vndb';
   sourceAlias: string;
   sourceRecordId: string;
-  kind: IntendedObservation['kind'];
+  kind: IntendedObservation['kind'] | IntendedClassification['kind'];
   commandKey: string;
   requestBytes: string;
-  intended: IntendedObservation;
-  reviewedHead: RetainedObservationHead | null;
+  intended: IntendedObservation | IntendedClassification;
+  reviewedHead: RetainedObservationHead | RetainedClassificationHead | null;
   expectedObservation: string | null;
   status: AggregateOperationStatus;
   nativeReason: string | null;
@@ -530,6 +537,10 @@ export class RunStore<Projection = BatchStatement[]> {
       this.database.exec('PRAGMA busy_timeout=5000');
       this.database.exec('PRAGMA synchronous=NORMAL');
       if (options.existing) {
+        this.database.exec(`CREATE TABLE IF NOT EXISTS run_classification_heads (
+          source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
+          digest TEXT NOT NULL, head_json TEXT NOT NULL,
+          PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
         assertExistingRunSchema(this.database);
         return;
       }
@@ -626,6 +637,10 @@ export class RunStore<Projection = BatchStatement[]> {
         source TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
         digest TEXT NOT NULL, head_json TEXT NOT NULL,
         PRIMARY KEY(source, subject_id, provider)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_classification_heads (
+        source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
+        digest TEXT NOT NULL, head_json TEXT NOT NULL,
+        PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_checkpoints (
         source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL,
         sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, source_alias TEXT NOT NULL,
@@ -1343,8 +1358,10 @@ export class RunStore<Projection = BatchStatement[]> {
       kind: row.kind as IntendedObservation['kind'],
       commandKey: row.command_key,
       requestBytes: row.request_bytes,
-      intended: JSON.parse(row.intended_json) as IntendedObservation,
-      reviewedHead: row.reviewed_head_json ? (JSON.parse(row.reviewed_head_json) as RetainedObservationHead) : null,
+      intended: JSON.parse(row.intended_json) as IntendedObservation | IntendedClassification,
+      reviewedHead: row.reviewed_head_json
+        ? (JSON.parse(row.reviewed_head_json) as RetainedObservationHead | RetainedClassificationHead)
+        : null,
       expectedObservation: row.expected_observation,
       status: row.status as AggregateOperationStatus,
       nativeReason: row.native_reason,
@@ -1358,10 +1375,10 @@ export class RunStore<Projection = BatchStatement[]> {
       recordKey: string;
       subjectId: string;
       sourceAlias: string;
-      intended: IntendedObservation;
+      intended: IntendedObservation | IntendedClassification;
       commandKey: string;
       requestBytes: string;
-      reviewedHead: RetainedObservationHead | null;
+      reviewedHead: RetainedObservationHead | RetainedClassificationHead | null;
       expectedObservation?: string | null;
       status: AggregateOperationStatus;
       nativeReason?: string | null;
@@ -1373,6 +1390,7 @@ export class RunStore<Projection = BatchStatement[]> {
     identifier(input.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
     identifier(input.commandKey, 255, /^[\x20-\x7e]+$/u);
     if (input.intended.kind !== 'write' && input.intended.kind !== 'clear') fail();
+    if (isIntendedClassification(input.intended) && input.intended.family !== 'classification') fail();
     const intendedJson = boundedJson(input.intended, 65536);
     const requestBytes = boundedJson(JSON.parse(input.requestBytes), 65536);
     const headJson = input.reviewedHead ? boundedJson(input.reviewedHead, 65536) : null;
@@ -1417,7 +1435,7 @@ export class RunStore<Projection = BatchStatement[]> {
       expectedObservation?: string | null;
       requestBytes?: string;
       commandKey?: string;
-      reviewedHead?: RetainedObservationHead | null;
+      reviewedHead?: RetainedObservationHead | RetainedClassificationHead | null;
       outcome?: unknown;
     },
   ): AggregateOperation {
@@ -1488,15 +1506,25 @@ export class RunStore<Projection = BatchStatement[]> {
     );
     return row ? this.parseAggregate(row) : null;
   }
-  unresolvedAggregate(run: Run, recordKey: string): AggregateOperation | null {
+  unresolvedAggregate(
+    run: Run,
+    recordKey: string,
+    family?: 'statistic' | 'classification',
+  ): AggregateOperation | null {
     validateRun(run);
     keyId(recordKey);
+    const familyClause =
+      family === 'classification'
+        ? " AND json_extract(intended_json, '$.family')='classification'"
+        : family === 'statistic'
+          ? " AND ifnull(json_extract(intended_json, '$.family'),'statistic')!='classification'"
+          : '';
     const row = this.get<Parameters<RunStore['parseAggregate']>[0]>(
       `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
         command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
         native_reason, outcome_json
        FROM run_aggregate_operations
-       WHERE source=? AND run_id=? AND record_key=? AND status IN ('prepared','uncertain','conflict','refused')
+       WHERE source=? AND run_id=? AND record_key=? AND status IN ('prepared','uncertain','conflict','refused')${familyClause}
        ORDER BY operation_id LIMIT 1`,
       run.source,
       run.id,
@@ -1506,25 +1534,31 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   pageUnresolvedAggregates(
     run: Run,
-    input: { after?: string; limit?: number } = {},
+    input: { after?: string; limit?: number; family?: 'statistic' | 'classification' } = {},
   ): { operations: AggregateOperation[]; next: string | null } {
     validateRun(run);
     const limit = input.limit ?? SOURCE_OBSERVATION_PAGE_MAX;
     if (!Number.isInteger(limit) || limit < 1 || limit > SOURCE_OBSERVATION_PAGE_MAX) fail();
     if (input.after !== undefined) identifier(input.after, 64, /^[0-9a-f]{64}$/u);
+    const familyClause =
+      input.family === 'classification'
+        ? " AND json_extract(intended_json, '$.family')='classification'"
+        : input.family === 'statistic'
+          ? " AND ifnull(json_extract(intended_json, '$.family'),'statistic')!='classification'"
+          : '';
     const rows = this.all<Parameters<RunStore['parseAggregate']>[0]>(
       input.after
         ? `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
             command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
             native_reason, outcome_json
            FROM run_aggregate_operations
-           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') AND operation_id>?
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') AND operation_id>?${familyClause}
            ORDER BY operation_id LIMIT ?`
         : `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
             command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
             native_reason, outcome_json
            FROM run_aggregate_operations
-           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused')
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused')${familyClause}
            ORDER BY operation_id LIMIT ?`,
       ...(input.after ? [run.source, run.id, input.after, limit] : [run.source, run.id, limit]),
     );
@@ -1565,6 +1599,36 @@ export class RunStore<Projection = BatchStatement[]> {
       head.digest,
       boundedJson(head, 65536),
     );
+  }
+  retainClassificationHead(source: string, head: RetainedClassificationHead & { subjectId: string }): void {
+    sourceId(source);
+    identifier(head.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(head.associationKey, 64, /^[0-9a-f]{64}$/u);
+    this.write(
+      `INSERT INTO run_classification_heads(source,subject_id,association_key,digest,head_json) VALUES(?,?,?,?,?)
+       ON CONFLICT(source,subject_id,association_key) DO UPDATE SET digest=excluded.digest, head_json=excluded.head_json`,
+      source,
+      head.subjectId,
+      head.associationKey,
+      head.digest,
+      boundedJson(head, 65536),
+    );
+  }
+  retainedClassificationHead(
+    source: string,
+    subjectId: string,
+    associationKey: string,
+  ): RetainedClassificationHead | null {
+    sourceId(source);
+    identifier(subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(associationKey, 64, /^[0-9a-f]{64}$/u);
+    const row = this.get<{ head_json: string }>(
+      'SELECT head_json FROM run_classification_heads WHERE source=? AND subject_id=? AND association_key=?',
+      source,
+      subjectId,
+      associationKey,
+    );
+    return row ? (JSON.parse(row.head_json) as RetainedClassificationHead) : null;
   }
   retainedAggregateHead(source: string, subjectId: string): RetainedObservationHead | null {
     sourceId(source);

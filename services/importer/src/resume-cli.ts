@@ -294,7 +294,7 @@ function resultFor(run: ImportRunResult, httpStatus: number | undefined, signal:
       code: 6,
       stdout: '',
       stderr: diagnostic(
-        'Source observation requires explicit operator resolution. Use rezics-import observations to inspect and resolve.',
+        'Source observation requires explicit operator resolution. Use rezics-import observations or rezics-import classifications to inspect and resolve.',
         counts,
         run.skipped,
       ),

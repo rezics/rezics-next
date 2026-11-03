@@ -58,4 +58,32 @@ describe('source classification projection', () => {
       reason: 'unsupported-record',
     });
   });
+
+  test('keeps public VNDB dump licences unadmitted and retains an optional source association member', () => {
+    expect(
+      projectSourceClassification({
+        ...provenance,
+        licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
+        value: { kind: 'observation', confidence: 2.4 },
+      }),
+    ).toEqual({ state: 'unavailable', reason: 'unadmitted' });
+    expect(
+      projectSourceClassification({
+        ...provenance,
+        licence: { id: 'LicenseRef-DbCL-1.0', url: 'https://opendatacommons.org/licenses/dbcl/1-0/' },
+        value: { kind: 'observation', lie: true },
+      }),
+    ).toEqual({ state: 'unavailable', reason: 'unadmitted' });
+    expect(
+      projectSourceClassification({
+        ...provenance,
+        sourceAssociationId: 'g12',
+        value: { kind: 'observation', confidence: 2.4, lie: false },
+      }),
+    ).toMatchObject({
+      state: 'available',
+      provenance: { sourceAssociationId: 'g12' },
+      value: { kind: 'observation', confidence: 2.4, lie: false },
+    });
+  });
 });

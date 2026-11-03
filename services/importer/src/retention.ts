@@ -181,7 +181,7 @@ const PRESERVED = [
   'run_sources sequence and current generation/present_count',
   'the active generation and its complete baseline snapshot',
   'run_members, run_acknowledged, run_reference_signatures and run_payloads',
-  'record bindings, journals, candidates, media and observation heads',
+  'record bindings, journals, candidates, media, observation heads and classification heads',
 ] as const;
 
 const SQLITE_NOTE =

@@ -2,7 +2,10 @@ const DIGEST = /^[0-9a-f]{64}$/u;
 const ALIAS = /^[a-z][a-z0-9_-]{0,31}$/u;
 const DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})$/u;
+const ASSOCIATION = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,31}$/u;
 const MAX_PROJECTION_BYTES = 8192;
+/** Public VNDB dump licences cannot admit classification until reviewed payload and rights exist. */
+const UNADMITTED_LICENCES = new Set(['ODbL-1.0', 'LicenseRef-DbCL-1.0']);
 
 export type SourceClassificationCoverage =
   | Readonly<{ kind: 'unknown' }>
@@ -23,6 +26,7 @@ export type SourceClassificationProvenance = Readonly<{
   sourceRecordId: string;
   sourceRevision: string | null;
   sourceDigest?: string;
+  sourceAssociationId?: string;
   converterRevision: string;
   observedAt: string | null;
   coverage: SourceClassificationCoverage;
@@ -51,6 +55,7 @@ type ProjectionInput = Readonly<{
   sourceRecordId: unknown;
   sourceRevision: unknown;
   sourceDigest?: unknown;
+  sourceAssociationId?: unknown;
   converterRevision: unknown;
   observedAt: unknown;
   coverage: unknown;
@@ -157,7 +162,7 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
     'value',
   ];
   if (required.some((key) => !Object.hasOwn(value, key))) return { state: 'unavailable', reason: 'incomplete-input' };
-  if (Object.keys(value).some((key) => ![...required, 'sourceDigest'].includes(key)))
+  if (Object.keys(value).some((key) => ![...required, 'sourceDigest', 'sourceAssociationId'].includes(key)))
     return { state: 'unavailable', reason: 'unsupported-record' };
   if (
     !boundedText(value.sourceAlias, 32) ||
@@ -167,6 +172,8 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
     (value.sourceDigest !== undefined &&
       (typeof value.sourceDigest !== 'string' || !DIGEST.test(value.sourceDigest))) ||
     (value.sourceRevision === null && typeof value.sourceDigest !== 'string') ||
+    (value.sourceAssociationId !== undefined &&
+      (!boundedText(value.sourceAssociationId, 32) || !ASSOCIATION.test(value.sourceAssociationId))) ||
     !boundedText(value.converterRevision, 128) ||
     !(value.observedAt === null || validDateTime(value.observedAt)) ||
     !boundedText(value.attribution, 256)
@@ -192,11 +199,13 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
   }
   if (url.protocol !== 'https:' || url.username || url.password)
     return { state: 'unavailable', reason: 'invalid-observation' };
+  if (UNADMITTED_LICENCES.has(licence.id)) return { state: 'unavailable', reason: 'unadmitted' };
   const provenance: SourceClassificationProvenance = {
     sourceAlias: value.sourceAlias,
     sourceRecordId: value.sourceRecordId,
     sourceRevision: value.sourceRevision,
     ...(value.sourceDigest === undefined ? {} : { sourceDigest: value.sourceDigest as string }),
+    ...(value.sourceAssociationId === undefined ? {} : { sourceAssociationId: value.sourceAssociationId as string }),
     converterRevision: value.converterRevision,
     observedAt: value.observedAt,
     coverage,
