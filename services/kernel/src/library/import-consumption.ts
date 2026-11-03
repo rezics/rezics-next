@@ -1,4 +1,9 @@
-import type { ProgressSessionJournal, ProgressSessionJournalDate, ProgressSessionJournalPatch, ProgressSessionJournalWrite } from './progress-model.ts';
+import type {
+  ProgressSessionJournal,
+  ProgressSessionJournalDate,
+  ProgressSessionJournalPatch,
+  ProgressSessionJournalWrite,
+} from './progress-model.ts';
 import type { ProgressSessionJournalAdmission } from './sessions.ts';
 
 export const IMPORT_CONSUMPTION_LIMITS = {
@@ -88,11 +93,9 @@ function journalDate(year: number, month?: number, day?: number): ImportDateSour
     if (day !== undefined) return { state: 'invalid', date: null, precision: null };
     return { state: 'value', date: { year }, precision: 'year' };
   }
-  if (!Number.isSafeInteger(month) || month < 1 || month > 12)
-    return { state: 'invalid', date: null, precision: null };
+  if (!Number.isSafeInteger(month) || month < 1 || month > 12) return { state: 'invalid', date: null, precision: null };
   if (day === undefined) return { state: 'value', date: { year, month }, precision: 'month' };
-  if (!Number.isSafeInteger(day) || day < 1)
-    return { state: 'invalid', date: null, precision: null };
+  if (!Number.isSafeInteger(day) || day < 1) return { state: 'invalid', date: null, precision: null };
   const leap = year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
   const days = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
   if (day > days) return { state: 'invalid', date: null, precision: null };
@@ -105,17 +108,16 @@ function component(value: unknown): number | undefined | null {
 }
 
 /** Admit only the native Gregorian journal shape; parser-level validity is intentionally ignored. */
-export function aniListDateSource(evidence: Record<string, unknown>, field: 'startedAt' | 'completedAt'): ImportDateSource {
+export function aniListDateSource(
+  evidence: Record<string, unknown>,
+  field: 'startedAt' | 'completedAt',
+): ImportDateSource {
   if (!Object.hasOwn(evidence, field)) return { state: 'missing', date: null, precision: null };
   const value = evidence[field];
   if (value === null) return { state: 'unknown', date: null, precision: null };
   if (!record(value) || Object.keys(value).some((key) => !['year', 'month', 'day'].includes(key)))
     return { state: 'invalid', date: null, precision: null };
-  if (
-    typeof value.year === 'number' &&
-    Number.isInteger(value.year) &&
-    (value.year < 1 || value.year > 9_999)
-  )
+  if (typeof value.year === 'number' && Number.isInteger(value.year) && (value.year < 1 || value.year > 9_999))
     return { state: 'unsupported', date: null, precision: null };
   const year = component(value.year),
     month = component(value.month),
@@ -125,7 +127,11 @@ export function aniListDateSource(evidence: Record<string, unknown>, field: 'sta
   const parts = [year, month, day];
   if (parts.every((part) => part === undefined || part === null))
     return { state: 'unknown', date: null, precision: null };
-  if (year === undefined || year === null || (month === undefined || month === null) && day !== undefined && day !== null)
+  if (
+    year === undefined ||
+    year === null ||
+    ((month === undefined || month === null) && day !== undefined && day !== null)
+  )
     return { state: 'invalid', date: null, precision: null };
   return journalDate(year, month == null ? undefined : month, day == null ? undefined : day);
 }
@@ -134,8 +140,7 @@ export function aniListDateSource(evidence: Record<string, unknown>, field: 'sta
 export function vndbDateSource(value: { kind: string; raw: unknown } | undefined): ImportDateSource {
   if (!value || value.kind === 'missing') return { state: 'missing', date: null, precision: null };
   if (value.kind === 'unknown') return { state: 'unknown', date: null, precision: null };
-  if (typeof value.raw !== 'string')
-    return { state: 'invalid', date: null, precision: null };
+  if (typeof value.raw !== 'string') return { state: 'invalid', date: null, precision: null };
   const rawYear = /^(\d+)/.exec(value.raw)?.[1];
   if (rawYear !== undefined) {
     const year = Number(rawYear);
@@ -160,7 +165,11 @@ export function vndbDateSource(value: { kind: string; raw: unknown } | undefined
 function sameDate(left: ProgressSessionJournalDate | null, right: ProgressSessionJournalDate | null): boolean {
   return (
     (left === null && right === null) ||
-    (left !== null && right !== null && left.year === right.year && left.month === right.month && left.day === right.day)
+    (left !== null &&
+      right !== null &&
+      left.year === right.year &&
+      left.month === right.month &&
+      left.day === right.day)
   );
 }
 
@@ -220,7 +229,13 @@ export function reviewImportConsumptionDates(input: {
     current,
     actions: input.actions,
     fields: {
-      startDate: fieldReview('startDate', input.start, current.startDate, input.actions.startDate, input.profileCurrent),
+      startDate: fieldReview(
+        'startDate',
+        input.start,
+        current.startDate,
+        input.actions.startDate,
+        input.profileCurrent,
+      ),
       finishDate: fieldReview(
         'finishDate',
         input.finish,
@@ -328,7 +343,9 @@ export async function executeImportConsumptionDateIntent(input: {
     }
     const prepared = selectedFieldOutcomes(review, fields),
       hasPatch = prepared.patch !== null,
-      unsupported = prepared.outcomes.some((field) => ['missing', 'unknown', 'invalid', 'unsupported'].includes(field.status));
+      unsupported = prepared.outcomes.some((field) =>
+        ['missing', 'unknown', 'invalid', 'unsupported'].includes(field.status),
+      );
     const noPatchOutcome: ImportConsumptionDateOutcome | undefined = hasPatch
       ? undefined
       : {
@@ -360,7 +377,7 @@ export async function executeImportConsumptionDateIntent(input: {
     if (intent.outcome) return intent;
   }
 
-  if (!intent.patch || !intent.outcome && input.signal?.aborted)
+  if (!intent.patch || (!intent.outcome && input.signal?.aborted))
     return {
       ...intent,
       outcome: {

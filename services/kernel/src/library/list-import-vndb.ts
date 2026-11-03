@@ -895,7 +895,12 @@ export function createVndbImport(config: Config) {
     });
     return saved;
   }
-  async function currentConsumptionDates(actor: Actor, id: string, ordinal: number, reviewed: ImportConsumptionDateReview) {
+  async function currentConsumptionDates(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewed: ImportConsumptionDateReview,
+  ) {
     const retained = await retainedRow(actor, id, ordinal),
       decision = retained.decision,
       target = retained.target;
@@ -966,22 +971,23 @@ export function createVndbImport(config: Config) {
             throw new ProblemError('conflict');
           const account = owner(actor),
             nativeRequestKey = previous?.nativeRequestKey ?? `vndb:${id}:${item.ordinal}:dates:${item.version}:journal`,
-            identity: VndbDateAdmissionIdentity =
-              (previous?.admissionIdentity as VndbDateAdmissionIdentity | undefined) ?? {
-                provider: 'vndb',
-                uploadId: id,
-                ordinal: item.ordinal,
-                sourceReviewToken: reviewed.sourceReviewToken,
-                dateReviewVersion: reviewed.version,
-                sourceFingerprint: reviewed.sourceFingerprint,
-                matchFingerprint: reviewed.matchFingerprint,
-                subjectId: reviewed.subjectId,
-                profileDigest: reviewed.profileDigest,
-                occurrence: reviewed.occurrence,
-                occurrenceProfileBinding: reviewed.occurrenceProfileBinding,
-                clientId: account.clientId,
-                requestedBy: account.requestedBy ?? null,
-              },
+            identity: VndbDateAdmissionIdentity = (previous?.admissionIdentity as
+              | VndbDateAdmissionIdentity
+              | undefined) ?? {
+              provider: 'vndb',
+              uploadId: id,
+              ordinal: item.ordinal,
+              sourceReviewToken: reviewed.sourceReviewToken,
+              dateReviewVersion: reviewed.version,
+              sourceFingerprint: reviewed.sourceFingerprint,
+              matchFingerprint: reviewed.matchFingerprint,
+              subjectId: reviewed.subjectId,
+              profileDigest: reviewed.profileDigest,
+              occurrence: reviewed.occurrence,
+              occurrenceProfileBinding: reviewed.occurrenceProfileBinding,
+              clientId: account.clientId,
+              requestedBy: account.requestedBy ?? null,
+            },
             nativeAdmission = await dateAdmission(actor, identity),
             intent = await executeImportConsumptionDateIntent({
               review: reviewed,
@@ -997,7 +1003,13 @@ export function createVndbImport(config: Config) {
                     actor,
                     'consumption-dates-intent',
                     `vndb:${id}:${item.ordinal}:dates:${item.version}:${entryImportMetadataDigest(next)}`,
-                    { id, ordinal: item.ordinal, version: item.version, fields: item.fields, digest: entryImportMetadataDigest(next) },
+                    {
+                      id,
+                      ordinal: item.ordinal,
+                      version: item.version,
+                      fields: item.fields,
+                      digest: entryImportMetadataDigest(next),
+                    },
                     async (tx, account) => {
                       const locked = await tx.query<{ row: VndbRow | null; decision: Decision | null }>(
                         `SELECT rows->$4::integer AS row,decisions->$4::text AS decision FROM library.vndb_import
@@ -1060,7 +1072,12 @@ export function createVndbImport(config: Config) {
       outcomes = result.outcomes.map((outcome, index) => ({ ordinal: input.rows[index]!.ordinal, ...outcome }));
     if (Buffer.byteLength(JSON.stringify(outcomes)) > IMPORT_CONSUMPTION_LIMITS.resultBytes)
       throw new ProblemError('content_too_large');
-    return { uploadId: id, outcomes, complete: result.complete, stopped: signal?.aborted ? 'cancelled' : Date.now() >= deadline ? 'deadline' : null };
+    return {
+      uploadId: id,
+      outcomes,
+      complete: result.complete,
+      stopped: signal?.aborted ? 'cancelled' : Date.now() >= deadline ? 'deadline' : null,
+    };
   }
   async function metadataView(
     actor: Actor,

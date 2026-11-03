@@ -200,7 +200,12 @@ export function vndbImportRoutes(
       ({ actor, params, body, headers, admission, job, session, set }) =>
         run(set, async () => {
           const result = await admission.run('normal', job, () =>
-            service().reviewConsumptionDates(actor, params.uploadId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+            service().reviewConsumptionDates(
+              actor,
+              params.uploadId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
           );
           session.record(result);
           return result.value;

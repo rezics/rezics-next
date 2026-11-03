@@ -166,11 +166,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
     repeats = await Promise.all(
       [0, 1].map(() =>
-        sessions.startSession(
-          importer.actor,
-          { subjectId, mode: 'scalar_amount', unit: 'minute' },
-          entryKey(),
-        ),
+        sessions.startSession(importer.actor, { subjectId, mode: 'scalar_amount', unit: 'minute' }, entryKey()),
       ),
     );
   async function reviewDates(occurrenceId: string, sourceReviewToken = first.reviewId) {

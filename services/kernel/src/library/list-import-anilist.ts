@@ -1396,22 +1396,28 @@ export function createAniListImport(deps: Dependencies) {
         profileCurrent: !!live.profile && !!live.profileBinding,
       }),
       result = publicImportConsumptionDateReview(reviewed);
-    if (Buffer.byteLength(JSON.stringify(result)) > IMPORT_CONSUMPTION_LIMITS.resultBytes) throw new AniListInputError();
+    if (Buffer.byteLength(JSON.stringify(result)) > IMPORT_CONSUMPTION_LIMITS.resultBytes)
+      throw new AniListInputError();
     const saved = await save(actor, id, input.ordinal, 'consumption-dates-review', key, input, (current) => {
-        if (
-          current.review?.id !== sourceReview.id ||
-          current.consumptionDateIntent?.patch &&
-            (!current.consumptionDateIntent.outcome || current.consumptionDateIntent.outcome.status === 'failed')
-        )
-          throw new LibraryConflictError();
-        return { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
-      });
+      if (
+        current.review?.id !== sourceReview.id ||
+        (current.consumptionDateIntent?.patch &&
+          (!current.consumptionDateIntent.outcome || current.consumptionDateIntent.outcome.status === 'failed'))
+      )
+        throw new LibraryConflictError();
+      return { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+    });
     if (saved.value.version !== result.version) throw new LibraryConflictError();
     const latest = await load(actor, id, input.ordinal);
     if (latest.consumptionDateReview?.version !== saved.value.version) throw new LibraryConflictError();
     return saved.value;
   }
-  async function currentConsumptionDates(actor: Actor, id: string, ordinal: number, review: ImportConsumptionDateReview) {
+  async function currentConsumptionDates(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    review: ImportConsumptionDateReview,
+  ) {
     const header = await load<Header>(actor, id, -1),
       stored = await load(actor, id, ordinal);
     if (
@@ -1477,9 +1483,11 @@ export function createAniListImport(deps: Dependencies) {
         const previous = stored.consumptionDateIntent;
         if (previous && (previous.version !== item.version || previous.fields.join(',') !== item.fields.join(',')))
           throw new LibraryConflictError();
-        const nativeRequestKey = previous?.nativeRequestKey ?? `anilist:${id}:${item.ordinal}:dates:${item.version}:journal`,
-          identity: AniListDateAdmissionIdentity =
-            (previous?.admissionIdentity as AniListDateAdmissionIdentity | undefined) ?? {
+        const nativeRequestKey =
+            previous?.nativeRequestKey ?? `anilist:${id}:${item.ordinal}:dates:${item.version}:journal`,
+          identity: AniListDateAdmissionIdentity = (previous?.admissionIdentity as
+            | AniListDateAdmissionIdentity
+            | undefined) ?? {
             provider: 'anilist',
             importId: id,
             ordinal: item.ordinal,
@@ -1517,8 +1525,8 @@ export function createAniListImport(deps: Dependencies) {
                       current.review?.id !== reviewed.sourceReviewToken ||
                       current.consumptionDateReview?.version !== reviewed.version ||
                       hash(current.source) !== reviewed.sourceFingerprint ||
-                      current.consumptionDateIntent?.nativeRequestKey !== undefined &&
-                        current.consumptionDateIntent.nativeRequestKey !== next.nativeRequestKey
+                      (current.consumptionDateIntent?.nativeRequestKey !== undefined &&
+                        current.consumptionDateIntent.nativeRequestKey !== next.nativeRequestKey)
                     )
                       throw new LibraryConflictError();
                     return { ...current, started: true, consumptionDateIntent: next };
@@ -1559,7 +1567,8 @@ export function createAniListImport(deps: Dependencies) {
       }),
     );
     const outcomes = result.outcomes.map((outcome, index) => ({ ordinal: selected[index]!.ordinal, ...outcome }));
-    if (Buffer.byteLength(JSON.stringify(outcomes)) > IMPORT_CONSUMPTION_LIMITS.resultBytes) throw new AniListInputError();
+    if (Buffer.byteLength(JSON.stringify(outcomes)) > IMPORT_CONSUMPTION_LIMITS.resultBytes)
+      throw new AniListInputError();
     return { importId: id, outcomes, complete: result.complete };
   }
   async function cancel(actor: Actor, id: string, key: string, remove = false) {

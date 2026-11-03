@@ -241,12 +241,7 @@ export function aniListImportRoutes(
       },
       ({ actor, params, body, headers }) =>
         command(() =>
-          imports().reviewConsumptionDates(
-            actor,
-            params.importId,
-            body,
-            idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-          ),
+          imports().reviewConsumptionDates(actor, params.importId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
         ),
     )
     .post(

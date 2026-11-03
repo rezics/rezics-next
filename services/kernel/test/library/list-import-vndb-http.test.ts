@@ -295,17 +295,31 @@ test('VNDB score review preserves unsupported precision, explicit native units a
 
 test('VNDB typed dates select one repeat, preserve precision, and clear only with explicit consent', async () => {
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
-    first = (await sessions.startSession(f.owner.actor, { subjectId: matched, mode: 'scalar_amount', unit: 'minute' }, entryKey())).value,
-    second = (await sessions.startSession(f.owner.actor, { subjectId: matched, mode: 'scalar_amount', unit: 'minute' }, entryKey())).value,
+    first = (
+      await sessions.startSession(
+        f.owner.actor,
+        { subjectId: matched, mode: 'scalar_amount', unit: 'minute' },
+        entryKey(),
+      )
+    ).value,
+    second = (
+      await sessions.startSession(
+        f.owner.actor,
+        { subjectId: matched, mode: 'scalar_amount', unit: 'minute' },
+        entryKey(),
+      )
+    ).value,
     { uploadId } = await upload(xml(vn(vnId, '<started>2020-05-00</started><finished>2021-02-03</finished>'))),
     providerReview = await review(uploadId, { ordinal: 0, action: 'retain' });
   expect(
-    (await f.send('other', 'POST', `${base}/${uploadId}/dates/review`, {
-      ordinal: 0,
-      sourceReviewToken: providerReview.reviewId,
-      occurrenceId: first.id,
-      startAction: 'adopt',
-    })).status,
+    (
+      await f.send('other', 'POST', `${base}/${uploadId}/dates/review`, {
+        ordinal: 0,
+        sourceReviewToken: providerReview.reviewId,
+        occurrenceId: first.id,
+        startAction: 'adopt',
+      })
+    ).status,
   ).toBe(404);
   const reviewed = await json('POST', `${base}/${uploadId}/dates/review`, {
     ordinal: 0,
@@ -331,7 +345,10 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
     { field: 'startDate', status: 'applied' },
     { field: 'finishDate', status: 'applied' },
   ]);
-  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({ startDate: null, finishDate: null });
+  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({
+    startDate: null,
+    finishDate: null,
+  });
   await sessions.patchSessionJournal(
     f.owner.actor,
     second.id,
@@ -350,7 +367,10 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
     rows: [{ ordinal: 0, version: clear.version, fields: ['startDate', 'finishDate'] }],
   });
   expect(cleared.outcomes[0].fields.map((field: { status: string }) => field.status)).toEqual(['cleared', 'cleared']);
-  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({ startDate: null, finishDate: null });
+  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({
+    startDate: null,
+    finishDate: null,
+  });
   expect((await sessions.readSession(f.owner.actor, first.id)).revision).toBe(1);
   expect((await sessions.readSession(f.owner.actor, second.id)).revision).toBe(1);
   await json('DELETE', `${base}/${uploadId}`);

@@ -106,7 +106,11 @@ test('review requires independent adoption or clear consent and keeps unknown da
     profileCurrent: true,
   });
   expect(reviewed.fields.startDate).toMatchObject({ sourceState: 'unknown', status: 'unknown' });
-  expect(reviewed.fields.finishDate).toMatchObject({ sourceState: 'missing', current: { year: 2000 }, status: 'clear' });
+  expect(reviewed.fields.finishDate).toMatchObject({
+    sourceState: 'missing',
+    current: { year: 2000 },
+    status: 'clear',
+  });
   const omitted = reviewImportConsumptionDates({
     ...reviewed,
     version: 'omitted',
@@ -121,7 +125,9 @@ test('review requires independent adoption or clear consent and keeps unknown da
 });
 
 test('lost acknowledgement replays the stored patch, key and attribution without rereading the journal', async () => {
-  const reviewed = review(aniListDateSource({ startedAt: { year: 2024, month: 2 } }, 'startedAt')) as ImportConsumptionDateReview;
+  const reviewed = review(
+    aniListDateSource({ startedAt: { year: 2024, month: 2 } }, 'startedAt'),
+  ) as ImportConsumptionDateReview;
   let stored: ImportConsumptionDateIntent | undefined;
   let receipt: { value: { sessionId: string; revision: number; changed: boolean } } | undefined;
   let loseFirstReply = true;
@@ -185,9 +191,19 @@ test('stale journal binding refuses new writes and later cancellation keeps earl
     controller.signal,
     async (row) => {
       if (row === 1) controller.abort();
-      return { version: String(row), status: 'applied', fields: [{ field: 'startDate', status: 'applied' }], receipt: null };
+      return {
+        version: String(row),
+        status: 'applied',
+        fields: [{ field: 'startDate', status: 'applied' }],
+        receipt: null,
+      };
     },
-    (row) => ({ version: String(row), status: 'unattempted', fields: [{ field: 'startDate', status: 'unattempted' }], receipt: null }),
+    (row) => ({
+      version: String(row),
+      status: 'unattempted',
+      fields: [{ field: 'startDate', status: 'unattempted' }],
+      receipt: null,
+    }),
   );
   expect(rows).toMatchObject({ complete: false, outcomes: [{ status: 'applied' }, { status: 'unattempted' }] });
 });
