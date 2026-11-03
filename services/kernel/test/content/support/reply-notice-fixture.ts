@@ -58,6 +58,7 @@ export async function replyNoticeFixture() {
   for (const id of credentials.keys()) {
     await accounts.grant(id, 'board:read', { route: routeOf(boardId)!, id: boardId });
     await accounts.grant(id, 'thread:create', { route: routeOf(boardId)!, id: boardId });
+    await accounts.grant(id, 'account:read', { route: routeOf(id)!, id });
     await accounts.grant(id, 'account:update', { route: routeOf(id)!, id });
   }
   async function call(account: string, method: string, path: string, body?: unknown, key = randomUUID()) {
