@@ -72,7 +72,6 @@ function request(persona: Persona, method: string, path: string, body?: unknown,
       method,
       headers: {
         authorization: `Bearer ${realAccess.bearer(persona)}`,
-        'x-request-id': 'classification-ballot',
         ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(idempotencyKey) }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
