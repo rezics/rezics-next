@@ -5,10 +5,10 @@ import type { OwnDraftReader } from './model';
  * Keep the reader seam typed until those generated methods are published; never turn advice into a fetch URL.
  */
 export const ownDraftNativeReader: OwnDraftReader = Object.freeze({
-  async list() {
+  async list(): Promise<Awaited<ReturnType<OwnDraftReader['list']>>> {
     return 'unavailable';
   },
-  async resume() {
+  async resume(): Promise<Awaited<ReturnType<OwnDraftReader['resume']>>> {
     return 'unavailable';
   },
 });

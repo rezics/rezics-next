@@ -149,8 +149,8 @@ export function OwnDraftsPage({
       identity={identity}
       active={active}
       reader={reader}
-      localWritingReader={localWritingReader}
-      commands={commands}
+      {...(localWritingReader ? { localWritingReader } : {})}
+      {...(commands ? { commands } : {})}
     />
   );
 }

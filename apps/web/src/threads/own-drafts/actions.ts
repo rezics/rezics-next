@@ -71,7 +71,7 @@ export const publishOwnDraft = createServerFn({ method: 'POST' })
       );
       if (!result.error) return { ok: true, post: result.data.post };
       if (result.status === 412) {
-        const current = await client.posts({ id: data.postId }).get(undefined, {
+        const current = await client.posts({ id: data.postId }).get({
           headers: { authorization: credential },
         });
         if (!current.error && current.data) {
@@ -99,7 +99,7 @@ export const readOwnDraftPost = createServerFn({ method: 'GET' })
     try {
       const credential = await authorization();
       if (!credential) return 'denied' as const;
-      const result = await kernelClient().posts({ id: data.postId }).get(undefined, {
+      const result = await kernelClient().posts({ id: data.postId }).get({
         headers: { authorization: credential },
       });
       if (result.error) {
