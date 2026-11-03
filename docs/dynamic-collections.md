@@ -290,6 +290,13 @@ A supported prepared plan may become ready through retained finite work. Private
 counts never become public output. Publication exposes only the last complete adopted subject set. Custom query
 execution remains unavailable until the actual shared native admission and member producer are bound.
 
+Saved Members reads own each successfully bound native owner-filter read and close it with
+`releaseNativeOwnerFilterRead` in `finally`, including post-bind validation and current-authority failures.
+Their separately minted final revalidation time is closed with `releaseOperationalTime` in `finally`.
+Publication status owns its minted read time and closes it in `finally` after either a result or any snapshot
+or authorization error. Native binding retains caller-owned command and Search operational times under their
+original owner; closing a binding neither releases borrowed time nor refunds spent allowance.
+
 ### Saved editor implementation boundary
 
 `collection-rules.ts` supplies shared parsing/immutable-release admission, complete expanded private-family

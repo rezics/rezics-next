@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
+import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
@@ -161,47 +161,51 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
       const route = routeOf(actor.accountId);
       if (route === null) concealed();
       const time = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
-      const first = await snapshot(actor, locator, time, deadline);
-      const checks = first.rule
-        ? await prepareCollectionRuleAuthority(
-            { pool, access },
-            actor,
-            first.rule.filter,
-            { time, read: true },
-            deadline,
+      try {
+        const first = await snapshot(actor, locator, time, deadline);
+        const checks = first.rule
+          ? await prepareCollectionRuleAuthority(
+              { pool, access },
+              actor,
+              first.rule.filter,
+              { time, read: true },
+              deadline,
+            )
+          : [];
+        const final = await readOnly(pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          const currentAccount = await readAccount(client, route, actor.accountId);
+          const collection = await readCollection(client, locator.route, locator.collectionId);
+          const episode = await readCollectionPublicationEpisode(client, locator);
+          if (
+            !currentAccount ||
+            currentAccount.kind !== 'actor' ||
+            currentAccount.state !== 'active' ||
+            currentAccount.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch < 1 ||
+            currentAccount.minimumAuthnEpoch > BigInt(actor.authnEpoch) ||
+            !collection ||
+            collection.state !== 'active' ||
+            collection.curatorAccountId !== actor.accountId ||
+            collection.membershipKind !== 'dynamic' ||
+            !episode ||
+            !isDeepStrictEqual(episode.source, first.episode.source)
           )
-        : [];
-      const final = await readOnly(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        const currentAccount = await readAccount(client, route, actor.accountId);
-        const collection = await readCollection(client, locator.route, locator.collectionId);
-        const episode = await readCollectionPublicationEpisode(client, locator);
-        if (
-          !currentAccount ||
-          currentAccount.kind !== 'actor' ||
-          currentAccount.state !== 'active' ||
-          currentAccount.fenced ||
-          !Number.isSafeInteger(actor.authnEpoch) ||
-          actor.authnEpoch < 1 ||
-          currentAccount.minimumAuthnEpoch > BigInt(actor.authnEpoch) ||
-          !collection ||
-          collection.state !== 'active' ||
-          collection.curatorAccountId !== actor.accountId ||
-          collection.membershipKind !== 'dynamic' ||
-          !episode ||
-          !isDeepStrictEqual(episode.source, first.episode.source)
-        )
-          concealed();
-        if (!(await first.update(client, time))) concealed();
-        if ((episode.phase === 'staging' || episode.phase === 'awaiting_activation') && first.rule) {
-          const currentRule = await readCollectionPublicationRule(client, locator);
-          if (!currentRule) throw new ProblemError('dependency_unavailable');
-          await authorizeCollectionRule(client, { time }, checks);
-          if (!isDeepStrictEqual(currentRule, first.rule)) throw new ProblemError('dependency_unavailable');
-        }
-        return episode;
-      });
-      return collectionPublicationStatus(final);
+            concealed();
+          if (!(await first.update(client, time))) concealed();
+          if ((episode.phase === 'staging' || episode.phase === 'awaiting_activation') && first.rule) {
+            const currentRule = await readCollectionPublicationRule(client, locator);
+            if (!currentRule) throw new ProblemError('dependency_unavailable');
+            await authorizeCollectionRule(client, { time }, checks);
+            if (!isDeepStrictEqual(currentRule, first.rule)) throw new ProblemError('dependency_unavailable');
+          }
+          return episode;
+        });
+        return collectionPublicationStatus(final);
+      } finally {
+        releaseOperationalTime(time);
+      }
     },
   };
 }
