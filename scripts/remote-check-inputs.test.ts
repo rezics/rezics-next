@@ -192,6 +192,7 @@ function generatedScript(fixture: Fixture): string {
     '.',
     ['true'],
     fixture.host,
+    { version: '1.2.3', revision: 'a'.repeat(40) },
     undefined,
     undefined,
     undefined,

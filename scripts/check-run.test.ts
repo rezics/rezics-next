@@ -14,7 +14,7 @@ import {
   type CheckRunArguments,
 } from './check-run.ts';
 import { cancelCheckRunInvocation, getCheckRunStatus, readCheckRunPreparedDescriptor } from './check-run-settlement.ts';
-import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
+import { repositoryBun, runScript, type RemoteCheck, type RemotePhysicalRunReceipt } from './remote-check.ts';
 import type { RemoteCheckSettlement } from './remote-check.ts';
 
 import {
@@ -73,7 +73,10 @@ function candidate(options: { web?: boolean; output?: string; tmpfs?: boolean } 
   git(root, 'init', '--quiet');
   git(root, 'config', 'user.email', 'check-run-test@example.invalid');
   git(root, 'config', 'user.name', 'Check Run Test');
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'candidate-fixture', private: true }) + '\n');
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'candidate-fixture', private: true, packageManager: 'bun@1.2.3' }) + '\n',
+  );
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/input.ts'), 'export const value = 7;\n');
   writeFileSync(join(root, 'src/deleted.ts'), 'export const removed = true;\n');
@@ -94,6 +97,20 @@ function candidate(options: { web?: boolean; output?: string; tmpfs?: boolean } 
   }
   git(root, 'add', '-A');
   git(root, 'commit', '--quiet', '-m', 'candidate fixture');
+  const installed = join(root, 'node_modules/bun');
+  mkdirSync(join(installed, 'bin'), { recursive: true });
+  writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'bun', version: '1.2.3' }));
+  writeFileSync(
+    join(installed, 'bin/bun.exe'),
+    `#!/bin/sh
+if [ "$1" = --eval ]; then
+  printf '%s\\n' '{"version":"1.2.3","revision":"${'c'.repeat(40)}"}'
+  exit 0
+fi
+exit 1
+`,
+  );
+  chmodSync(join(installed, 'bin/bun.exe'), 0o755);
   const hosts = join(parent, 'hosts.json');
   writeFileSync(
     hosts,
@@ -329,6 +346,37 @@ test('check-run CLI preserves argv boundaries after the trusted options separato
   expect(parsed.command).toEqual(['bun', 'run', 'check', 'arg with spaces', 'line one\nline two', '']);
   expect(parsed.returns).toEqual(['reports/run.txt']);
   expect(() => parseCheckRunArguments(['--workspace', '/tmp/candidate', 'bun', 'test'])).toThrow();
+});
+
+test('frozen check-run candidates bind the original candidate runtime and keep source fingerprints', async () => {
+  const fixture = candidate();
+  let transports = 0;
+  const result = await runCheck(argsFor(fixture, ['bun', 'test']), {
+    transport: async (options) => {
+      transports += 1;
+      expect(options.runtimeProducer).toBe(fixture.root);
+      expect(existsSync(join(options.workspace, 'node_modules'))).toBe(false);
+      const runtime = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
+      expect(runtime.version).toBe('1.2.3');
+      expect(runtime.revision).toBe('c'.repeat(40));
+      const script = runScript('check-run', '/srv/rezics-check/runs/check-run', '.', ['bun', 'test'], 'c', runtime);
+      expect(script).toContain('expected_bun=1.2.3');
+      expect(script).toContain(`expected_revision=${runtime.revision}`);
+      expect(options.expectedSourceSha256).toMatch(/^[a-f0-9]{64}$/);
+      options.completed?.(receipt('c', 0));
+      return 0;
+    },
+  });
+  expect(result).toBe(0);
+  expect(transports).toBe(1);
+});
+
+test('a frozen candidate without its producer artifact fails before transport', async () => {
+  const fixture = candidate();
+  rmSync(join(fixture.root, 'node_modules'), { recursive: true, force: true });
+  let transports = 0;
+  expect(await runCheck(argsFor(fixture, ['bun', 'test']), { transport: async () => ++transports })).toBe(1);
+  expect(transports).toBe(0);
 });
 
 test('generic driver freezes a separate candidate, preserves environment, cwd, priority, preparation, receipt, and returns', async () => {

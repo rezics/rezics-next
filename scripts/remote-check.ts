@@ -301,7 +301,14 @@ export type RemoteCheck = {
    * the run directory is removed. A path that is not on the host is skipped.
    */
   returns?: string[];
+  /**
+   * Installed bun artifact root when `workspace` is a frozen snapshot without `node_modules`.
+   * Pin identity still comes from the candidate workspace package.json.
+   */
+  runtimeProducer?: string;
 };
+
+export type PinnedBun = { binary: string; version: string; revision: string };
 
 export type RemotePreparedInputsEvidence = {
   schema: 1;
@@ -569,23 +576,29 @@ export function parseCommandPhases(contents: string): { durations: Record<string
   for (const phase of open.keys()) problems.push(`unmatched start for ${phase}`);
   return { durations, problems };
 }
-let pinnedBun: { version: string; revision: string } | undefined;
+const pinnedBunByIdentity = new Map<string, PinnedBun>();
 
-/** Resolve an installed pinned package through normal ancestor lookup, without installing into frozen source. */
-export function repositoryBun(root: string): { binary: string; version: string; revision: string } {
-  const manifest = join(root, 'package.json');
+function candidateBunPin(manifest: string): string {
   const pin = JSON.parse(readFileSync(manifest, 'utf8')).packageManager as unknown;
   if (typeof pin !== 'string' || !/^bun@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin))
     throw new Error(`pinned Bun: ${manifest} packageManager must pin an exact Bun version`);
+  return pin;
+}
+
+/** Resolve an installed pinned package from the candidate or an explicit producer, without ancestor lookup. */
+export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBun {
+  const manifest = join(resolve(pinRoot), 'package.json');
+  const pin = candidateBunPin(manifest);
   const version = pin.slice(4);
-  let packagePath: string;
-  try {
-    packagePath = Bun.resolveSync('bun/package.json', root);
-  } catch {
+  const producer = resolve(artifactRoot);
+  const packagePath = join(producer, 'node_modules/bun/package.json');
+  const key = `${pin}\0${packagePath}`;
+  const cached = pinnedBunByIdentity.get(key);
+  if (cached) return cached;
+  if (!existsSync(packagePath))
     throw new Error(
-      `pinned Bun: absent installed package for ${pin}; producer=${root}; install dependencies in the launch checkout, not the frozen source`,
+      `pinned Bun: absent installed package for ${pin}; producer=${producer}; install dependencies in the candidate or its producer, not the frozen source`,
     );
-  }
   const installed = JSON.parse(readFileSync(packagePath, 'utf8')) as { version?: string };
   // npm adds build metadata to canary package versions; packageManager may omit that metadata.
   if (installed.version !== version && !(!version.includes('+') && installed.version?.split('+')[0] === version))
@@ -593,7 +606,8 @@ export function repositoryBun(root: string): { binary: string; version: string; 
       `pinned Bun: package identity mismatch for ${pin}; package=${packagePath}; installed=${installed.version}`,
     );
   const binary = join(dirname(packagePath), 'bin/bun.exe');
-  if (!existsSync(binary)) throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${root}`);
+  if (!existsSync(binary))
+    throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${producer}`);
   let output: string;
   try {
     const result = Bun.spawnSync(
@@ -610,7 +624,7 @@ export function repositoryBun(root: string): { binary: string; version: string; 
     output = result.stdout.toString().trim();
   } catch (error) {
     throw new Error(
-      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${root}; ${error instanceof Error ? error.message : error}`,
+      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${producer}; ${error instanceof Error ? error.message : error}`,
     );
   }
   let identity: { version?: unknown; revision?: unknown };
@@ -634,14 +648,14 @@ export function repositoryBun(root: string): { binary: string; version: string; 
     throw new Error(
       `pinned Bun: runtime identity mismatch for ${pin}; binary=${binary}; version=${identity.version}; revision=${identity.revision}`,
     );
-  return { binary, version, revision: identity.revision as string };
+  const resolved = { binary, version, revision: identity.revision as string };
+  pinnedBunByIdentity.set(key, resolved);
+  return resolved;
 }
 
-/** Resolve the repository-pinned Bun only when a remote run is actually generated. */
-function getPinnedBun(): { version: string; revision: string } {
-  if (pinnedBun) return pinnedBun;
-  pinnedBun = repositoryBun(resolve(import.meta.dir, '..'));
-  return pinnedBun;
+/** Candidate pin and producer artifact, before placement, upload, or a held host slot. */
+function admitRemoteRuntime(options: Pick<RemoteCheck, 'workspace' | 'runtimeProducer'>): PinnedBun {
+  return repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
 }
 
 /** Transport discriminator only. Source/binding admission and the child's full schema remain authoritative. */
@@ -3071,6 +3085,7 @@ export function runScript(
   cwd: string,
   command: string[],
   hostName: string,
+  runtime: Pick<PinnedBun, 'version' | 'revision'>,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
   priorityClass = 'ordinary',
   preparationTimeoutMs = configuredTimeout(
@@ -3086,7 +3101,7 @@ export function runScript(
   expectedSourceSha256?: string,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
-  const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
+  const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
   const gitManifestPath =
@@ -6004,6 +6019,7 @@ async function runLeased(
         options.cwd ?? '.',
         options.command,
         host.name,
+        admitRemoteRuntime(options),
         options.progressIntervalMs,
         options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
         configuredTimeout(
@@ -6266,7 +6282,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
+  admitRemoteRuntime(options); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6412,7 +6428,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun();
+  admitRemoteRuntime(options);
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6425,6 +6441,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+  admitRemoteRuntime(options);
   return withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
   );
@@ -6438,7 +6455,7 @@ async function tryRemoteCheckOwned(
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun();
+  admitRemoteRuntime(options);
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
