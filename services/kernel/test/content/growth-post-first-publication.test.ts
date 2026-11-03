@@ -1,3 +1,4 @@
+import '../../src/http/kernel.ts';
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import insertRevision from '../../src/content/insert-revision.sql';
 import updateHead from '../../src/content/update-head.sql';

@@ -1,4 +1,3 @@
-import { BoardSlowModeError, BoardSlowModeInputError, readBoardSlowMode, setBoardSlowMode } from './board-slow.ts';
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { readEditionSourceIdentity } from './edition-reads.ts';
 import { locateThreadPost } from './post-location.ts';
@@ -110,6 +109,7 @@ import {
   AuthorPostsQuerySchema,
   AuthorPostsResponseSchema,
 } from './schemas.ts';
+import { BoardSlowModeError, BoardSlowModeInputError, readBoardSlowMode, setBoardSlowMode } from './board-slow.ts';
 
 export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });

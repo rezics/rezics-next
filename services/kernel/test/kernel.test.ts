@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { testReceiptKeys } from './support/receipt-keys.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
@@ -375,7 +376,7 @@ type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
 test("the kernel app's type, which is the Eden contract, carries exactly the routes it serves and their responses", () => {
-  const served = createKernel({ pool, routeKey: new Uint8Array(32) }).routes.map(
+  const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }).routes.map(
     ({ method, path }) => `${method} ${path}`,
   );
   expect([complete, precise]).toEqual([true, true]);
@@ -383,7 +384,9 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
 });
 
 test('semantic editorial listings document their default page size', () => {
-  const paths = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths;
+  const paths = openApiDocument(
+    createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }),
+  ).paths;
   for (const path of ['/v1/subjects/{id}/candidates', '/v1/subjects/{id}/revisions', '/v1/subjects/{id}/links']) {
     expect(paths[path]!.get!.parameters).toContainEqual(
       expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 20 }) }),
@@ -395,7 +398,7 @@ test('semantic editorial listings document their default page size', () => {
 });
 
 test('mounted action catalogues contain only their declared actions and never infer account management', () => {
-  const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const mounted = actionCatalogue(createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }));
   expect(mounted.has('account:manage')).toBe(false);
   for (const action of new Set(['account:update', 'custom:write', 'account:manage', ...mounted.keys()])) {
     const catalogue = actionCatalogue({
@@ -414,7 +417,7 @@ test('mounted action catalogues contain only their declared actions and never in
 });
 
 test('known-order reconciliation declares its exact own-account action and ordinary write policy', () => {
-  const app = createKernel({ pool, routeKey: new Uint8Array(32) });
+  const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
   expect(actionCatalogue(app).get('order:reconcile')).toEqual({ anonymous: false, authority: 'own-account' });
   expect(openApiDocument(app).paths['/v1/orders/{orderId}:reconcile']?.post).toMatchObject({
     operationId: 'order.reconcile',
@@ -429,6 +432,7 @@ test('known-order reconciliation declares its exact own-account action and ordin
 
 test('subject HTTP refuses an unlicensed document and any media value before attempting storage', async () => {
   const kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
@@ -497,13 +501,14 @@ test('subject HTTP refuses an unlicensed document and any media value before att
 });
 
 test('trending Search keeps the adopted Search exposure group', () => {
-  const operation = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths['/v1/trendingSearches']
-    ?.get;
+  const operation = openApiDocument(
+    createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }),
+  ).paths['/v1/trendingSearches']?.get;
   expect(operation).toMatchObject({ 'x-exposure': 'gate:search', 'x-action': 'subject:read' });
 });
 
 test('creator offer listing declares exact own-account authority', () => {
-  const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
+  const kernel = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
   expect(openApiDocument(kernel).paths['/v1/offers']?.get).toMatchObject({
     operationId: 'offer.list',
     'x-action': 'offer:list',
@@ -516,7 +521,9 @@ test('creator offer listing declares exact own-account authority', () => {
 });
 
 test('commerce money schema publishes only closed static configured money facts through the existing selling exposure', () => {
-  const document = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  const document = openApiDocument(
+    createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }),
+  );
   const operation = document.paths['/v1/commerceMoney']!.get!;
   expect(operation.operationId).toBe('commerce.money_schema');
   expect(operation['x-exposure']).toBe('gate:selling');
@@ -533,7 +540,7 @@ test('commerce money schema publishes only closed static configured money facts 
 });
 
 test('subject offer discovery declares its native read action, purchase gate and bounded raw page', () => {
-  const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
+  const kernel = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
   const operation = openApiDocument(kernel).paths['/v1/subjects/{id}/offers']?.get;
   expect(operation).toMatchObject({
     operationId: 'subject_offers.list',

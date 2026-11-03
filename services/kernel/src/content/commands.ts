@@ -1,4 +1,3 @@
-import { boardSlowAdmission } from './board-slow.ts';
 import { prepareRealmDiscoverySource, type RealmDiscoveryBinding } from '../community/discovery-source.ts';
 import { appendDiscoveryStart } from './discovery.ts';
 import readDiscoveryBoard from './discovery-board.sql';
@@ -57,6 +56,7 @@ import insertRevision from './create-revision.sql';
 import updateHead from './update-head.sql';
 import publishOpeningThread from './publish-opening-thread.sql';
 import readReviewVote from './read-review-vote.sql';
+import { boardSlowAdmission } from './board-slow.ts';
 
 export type { ReviewVoteCitation } from './model.ts';
 

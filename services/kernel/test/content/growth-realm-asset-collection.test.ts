@@ -1,3 +1,4 @@
+import '../../src/http/kernel.ts';
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { mkdirSync, writeFileSync } from 'node:fs';

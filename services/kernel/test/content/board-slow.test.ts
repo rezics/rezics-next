@@ -1,3 +1,4 @@
+import '../../src/http/kernel.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { routeOf } from '../../src/route/route.ts';
