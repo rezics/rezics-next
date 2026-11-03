@@ -12,8 +12,9 @@ capped at 16 selected assignments and four items per page. Client regeneration r
 `bun run --cwd services/kernel check test/library/label-consolidation-review.test.ts`.
 Review covers exact identities, conflicts, missing/changed/inaccessible assignments, native reservation capacity,
 deleted-parent reservations and bounded final pages. Immutable confirmation, native movement, original retries,
-cancellation, finite undo, erasure and native64/512/4096 complete-caller growth remain continuation work. Review
-source presence or a focused test result does not establish that complete journey.
+cancellation, finite undo and erasure are installed in the explicit selected consolidation boundary below. Client
+regeneration and native64/512/4096 complete-caller growth remain continuation work. Source presence or a focused
+test result does not establish broader journey acceptance.
 
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.
