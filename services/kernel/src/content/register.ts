@@ -19,6 +19,7 @@ import { R2Storage } from './r2-storage.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
 import { registerFeedWork } from './feed-work.ts';
+import { registerReportLocatorWork } from './report-locator-work.ts';
 import { createConversationActivityEffect } from './conversation-activity.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
@@ -140,6 +141,7 @@ export const registerContent: WorkModule = {
       fetchConfig: dependencies.fetchConfig,
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
+    registerReportLocatorWork(context);
     context.addEffects([
       createConversationActivityEffect(context.pool),
       ...contentEffects(context.pool, context.client),

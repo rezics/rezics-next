@@ -2,6 +2,130 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+## Own reporter history
+
+`createReporterHistory(ReportDependencies).read({ actor, deadline }, { cursor?, reportId? })` supplies
+`GET /v1/reports/me`. It exports `ReporterHistoryPage`, `ReporterHistoryEntry`, `ReporterHistoryQuery`,
+`ReporterHistoryAction` and `ReporterTargetSummary`. The route is authenticated, private/no-store, and has
+no account selector. `reportId` is one optional exact own selection; a concealed, missing or other reporter's
+selection adds nothing. The response has the reporter's submitted target/revision, reason/evidence, native
+outcome and resolution time, current target summary and GET actions. It has no moderator evidence, decider,
+other reporter identity, transaction metadata or moderation action. Open and follow both use the existing
+exact case GET; follow is advice to revisit its current outcome, never a subscription.
+
+Decision: My reports uses a fixed raw page of 20 and one optional exact own selection alongside it; selection never moves the raw frontier. Installation certifies a sealed migration cut; later creations use the registered native locator effect.
+
+The existing reporter-home inventory retains its primary key for account erasure. Its received-time index
+adds chronological traversal with report ID as the raw tie-breaker; report IDs themselves are derived and
+do not encode submission time. A page examines at most 21 locator keys, hydrates the first 20 and at most
+one extra exact selection, and never refills suppressed cases. Selection is deduplicated in the response.
+The cursor binds account, client, delegated principal, authentication epoch, exact scopes, selection, fixed
+page size and reporter-home epoch. An outcome change during fill fails the whole page; a retry uses its
+original cursor. Operational failures return no advanced frontier. `retry.cursor` also preserves that input
+on a successful preparing response. Native account admission precedes retained-case fills and repeats after
+hydration. Target disclosure repeats after the final source fill; hidden or removed targets return only
+`{ "state": "unavailable" }` and no target action. Original submitted target identity remains retained under
+the existing reporter policy, independently of present target readership.
+
+`report-locator-installation.ts` supplies `installReportLocatorPage(pool, partition)` and
+`createReportLocatorInstallationEffect(pool)`. A migration locks native command positions before report
+insertion, seals per-source epoch/position/count cuts and a finite identity-only journal, and seeds the
+corresponding zero-source certificates from those counted cuts. The worker delivers at most 100 current
+sources before acknowledging deletions and their applied count atomically in the source partition.
+No reporter identity is copied into the journal. Crash replay repeats idempotent delivery; live creation
+after the cut uses its committed original event. Concurrent resolution changes no submitted identity or
+time. Erasure is rechecked at the source and through the existing recipient-home fence/late-item protocol.
+Only an applied count equal to the sealed expected count can certify a cut, never an empty runtime page.
+The receiving effect verifies that committed cut, releases its source checkout and acknowledges it once in
+control partition zero. A single keyed control record supplies request readiness. The default Content
+supervisor registers and starts the durable finite installation workflow; history reads do no installation
+work and do not scan old reports. `preparing` describes incomplete baseline coverage, while ordinary live
+locator delivery remains asynchronous.
+
+These are wire examples for the Web owner; each successful response has `Cache-Control: private, no-store`.
+For a populated page (`GET /v1/reports/me`, 200):
+
+```json
+{"state":"ready","entries":[{"id":"11111111-1111-8111-8111-123411111111","target":{"kind":"thread","id":"22222222-2222-7222-8222-234522222222"},"revisionId":null,"reason":"spam","evidence":"My submission","createdAt":"2026-11-03T10:00:00.000000Z","outcome":"dismissed","resolvedAt":"2026-11-03T11:00:00.000000Z","targetSummary":{"state":"available","label":"Discussion title","href":"/v1/threads/22222222-2222-7222-8222-234522222222"},"viewer":{"ownsReport":true},"actions":{"open":{"method":"GET","href":"/v1/reports/11111111-1111-8111-8111-123411111111"},"follow":{"method":"GET","href":"/v1/reports/11111111-1111-8111-8111-123411111111"},"target":{"method":"GET","href":"/v1/threads/22222222-2222-7222-8222-234522222222"}}}],"selectedReportId":null,"nextCursor":null,"retry":{"cursor":null},"viewer":{"kind":"reporter"}}
+```
+
+An empty page (200) is exactly:
+
+```json
+{"state":"ready","entries":[],"selectedReportId":null,"nextCursor":null,"retry":{"cursor":null},"viewer":{"kind":"reporter"}}
+```
+
+For a withheld target, the same retained entry replaces `targetSummary` with exactly
+`{"state":"unavailable"}` and `actions.target` with `null`; it carries no stale label, snippet or link.
+A signed-out request returns 401 with the existing problem `code: "authentication_required"`.
+A changed-outcome page returns 503 with existing problem `code: "dependency_unavailable"` and
+`Retry-After: 1`; the client repeats the same request, preserving its cursor and selection.
+An incomplete cut returns the same page envelope with `state: "preparing"`, no raw entries or advanced
+cursor, and an optional permitted exact selection. It must not be presented as a complete empty inventory.
+
+No current Web consumer/head is integrated with this route. The existing Web report owner retains the
+interface. Phone/desktop inspection, a real follow/open action and failed-page recovery remain consumer
+acceptance after integration. Current exact post disclosure uses the native per-post ancestry driver;
+batching that producer and connected installation/race/three-scale evidence remain continuation work.
+
+### Cost: own reporter page
+
+- Touches: initial/final native account authority; one control-home coverage point; one reporter-home
+  received-time/ID seek; two owning-case batch fills; two current native target rounds. Each source-home fill
+  admits through native account policy before accessing source bytes. Every checkout is released before
+  another home's command or authorization preparation. No totals or outcome-history enumeration.
+- Bound: raw L=20 plus one optional exact selection; at most L+1 locator rows and P<=21 distinct cases in
+  H<=P source homes. Source SQL has H statements and P exact route/ID probes per fill, including ownership
+  predicates. Locator work is O(log N+L), case work O(P log R), plus the independently derived account,
+  target and control terms below. Evidence is capped by the existing 4096-character report admission;
+  all nested native payload reads count even though this DTO returns only labels and submitted fields.
+- Growth check: focused native HTTP outcomes in `test/content/reporter-history-http.test.ts`; independent
+  256/1024/4096 source, reporter, outcome and backlog growth with strict physical-prefix/byte capture remains
+  pending, with Performance review requested. No measured ceiling or completed growth acceptance is claimed.
+
+### Cost: retained reporter case batch
+
+- Touches: native current account admission per source home; one independently anchored source snapshot per represented
+  home; one lateral native report primary-key probe per supplied exact ID. Both submitted data and current
+  outcomes come from `content.report`, never a second case index or a public case GET mapper.
+- Bound: P<=21 unique keys, H<=P homes, P source rows per fill plus native account and snapshot work. No
+  foreign SQL join, full case payload or moderator-only evidence is selected. Unrelated outcome history,
+  other reporters and locator backlog add only indexed-tree depth, not candidate enumeration.
+- Growth check: the focused HTTP suite pins source ownership, replay, selected-case deduplication and
+  current native dismissed outcomes; nested physical-plan and three-scale measurements remain pending.
+
+### Cost: current reporter target summaries
+
+- Touches: native `readBoards`, `discloseThreads`, `readCurrentSubjectSummaries` with final verification,
+  and exact `readPost` for reported replies. Post locations use represented-home route/ID batches. Shared
+  native producers retain Realm/Space, board, subject, account, grant, ban and ancestry decisions.
+- Bound: T<=21 distinct targets per round; at most T boards, T threads, T posts and T subjects, with
+  redirect witnesses bounded by the native subject producer. Each post has the existing maximum 33-node
+  ancestor chain. Native first-post/post document bytes and community/subject display dependencies count
+  in full; small output labels do not reduce those reads. Two complete rounds add these native bounds.
+- Growth check: the focused suite covers a current link and withheld title/link after target retirement;
+  native post batching and independent three-scale nested authority/payload evidence remain pending.
+
+### Cost: locator installation source page
+
+- Touches: one exact cut/source-head read, at most 100 source-journal entries, current native source
+  ownership for each, recipient-home locator/erasure commands, and one source acknowledgement command.
+  Each source-to-recipient handoff releases its checkout; late erasure uses the existing native protocol.
+- Bound: J<=100 journal entries; O(J) exact source and recipient operations plus their native command,
+  fence and erasure bounds. The source acknowledgement deletes at most J exact journal keys and advances
+  its counter by actual deletions only. A crash before acknowledgement replays at most the same J entries.
+- Growth check: installation crash/resume, counted-cut races, erasure and three-scale worker accounting
+  remain pending; empty-runtime-page success is explicitly refused when the sealed count is incomplete.
+
+### Cost: locator installation certificate delivery
+
+- Touches: one committed source cut/head read, then one control-partition command with an exact source
+  certificate insert and at most one keyed coverage-counter increment. Duplicate delivery changes nothing.
+- Bound: constant statements/rows plus the native command envelope; at most 4096 source certificates,
+  with logarithmic indexed blocks. Requests read only the single keyed coverage record.
+- Growth check: replay/certificate mismatch and all-pool three-scale measurements remain pending; the
+  certificate requires matching original epoch/position/count and source acknowledgement, not a marker.
+
 ## Realm Subject exact-candidate disclosure
 
 `realm-subject-disclosure.ts` exports `prepareRealmSubjectDisclosure(dependencies, input, context)`.

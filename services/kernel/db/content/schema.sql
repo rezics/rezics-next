@@ -1083,6 +1083,30 @@ CREATE TABLE content.conversation_activity_episode (
 
 
 --
+-- Name: conversation_activity_episode; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.conversation_activity_episode (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    opening boolean NOT NULL,
+    contributed_at timestamp with time zone,
+    native_eligible boolean NOT NULL,
+    security_revision bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
+    CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: creator_edition; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1980,6 +2004,70 @@ CREATE TABLE content.report (
 
 
 --
+-- Name: report_locator_coverage; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_locator_coverage (
+    route integer NOT NULL,
+    expected integer NOT NULL,
+    installed integer DEFAULT 0 NOT NULL,
+    CONSTRAINT report_locator_coverage_check CHECK (((installed >= 0) AND (installed <= expected))),
+    CONSTRAINT report_locator_coverage_expected_check CHECK (((expected >= 1) AND (expected <= 4096))),
+    CONSTRAINT report_locator_coverage_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: report_locator_cut; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_locator_cut (
+    partition_no integer NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    expected bigint NOT NULL,
+    applied bigint DEFAULT 0 NOT NULL,
+    notified boolean DEFAULT false NOT NULL,
+    CONSTRAINT report_locator_cut_check CHECK (((applied >= 0) AND (applied <= expected))),
+    CONSTRAINT report_locator_cut_check1 CHECK (((NOT notified) OR (applied = expected))),
+    CONSTRAINT report_locator_cut_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT report_locator_cut_expected_check CHECK ((expected >= 0)),
+    CONSTRAINT report_locator_cut_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT report_locator_cut_position_check CHECK (("position" >= 0))
+);
+
+
+--
+-- Name: report_locator_installed; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_locator_installed (
+    route integer NOT NULL,
+    source_partition integer NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    expected bigint NOT NULL,
+    CONSTRAINT report_locator_installed_route_check CHECK ((route = 0)),
+    CONSTRAINT report_locator_installed_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
+);
+
+
+--
+-- Name: report_locator_pending; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_locator_pending (
+    partition_no integer NOT NULL,
+    report_id uuid NOT NULL,
+    route integer NOT NULL,
+    CONSTRAINT report_locator_pending_check CHECK ((partition_no = (route >> 4))),
+    CONSTRAINT report_locator_pending_check1 CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
+    CONSTRAINT report_locator_pending_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT report_locator_pending_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: report_outcome_delivery; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2016,6 +2104,7 @@ CREATE TABLE content.report_reporter (
     reporter_account_id uuid NOT NULL,
     report_route integer NOT NULL,
     report_id uuid NOT NULL,
+    created_at timestamp with time zone,
     CONSTRAINT report_reporter_check CHECK ((route = ((get_byte(uuid_send(reporter_account_id), 10) * 256) + get_byte(uuid_send(reporter_account_id), 11)))),
     CONSTRAINT report_reporter_check1 CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_reporter_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
@@ -2797,6 +2886,38 @@ ALTER TABLE ONLY content.realm_subject_thread_fence
 
 
 --
+-- Name: report_locator_coverage report_locator_coverage_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_locator_coverage
+    ADD CONSTRAINT report_locator_coverage_pkey PRIMARY KEY (route);
+
+
+--
+-- Name: report_locator_cut report_locator_cut_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_locator_cut
+    ADD CONSTRAINT report_locator_cut_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: report_locator_installed report_locator_installed_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_locator_installed
+    ADD CONSTRAINT report_locator_installed_pkey PRIMARY KEY (route, source_partition);
+
+
+--
+-- Name: report_locator_pending report_locator_pending_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_locator_pending
+    ADD CONSTRAINT report_locator_pending_pkey PRIMARY KEY (partition_no, report_id);
+
+
+--
 -- Name: report_outcome_delivery report_outcome_delivery_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3326,6 +3447,13 @@ CREATE INDEX realm_subject_candidate_unresolved ON content.realm_subject_candida
 --
 
 CREATE INDEX realm_subject_identity_work_pending ON content.realm_subject_identity_work USING btree (route, source_partition, source_epoch, source_position, event_id) WHERE (NOT complete);
+
+
+--
+-- Name: report_reporter_received_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX report_reporter_received_page ON content.report_reporter USING btree (route, reporter_account_id, created_at DESC, report_id DESC) WHERE (created_at IS NOT NULL);
 
 
 --

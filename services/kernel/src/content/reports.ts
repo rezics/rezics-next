@@ -39,6 +39,7 @@ import page from './page-target-reports.sql';
 import boardPage from './board-report-page.sql';
 import { reportBoardPlacement } from './board-report-candidates.ts';
 import read from './read-report.sql';
+import reporterHistoryCases from './reporter-history-cases.sql';
 import readReportBoard from './read-report-board.sql';
 import readReportPost from './read-report-post.sql';
 import readReportPostThread from './read-report-post-thread.sql';
@@ -588,6 +589,18 @@ async function reporterCanReadOwnReport(
   context: ReadContext,
 ): Promise<boolean> {
   if (actor.kind !== 'account' || actor.accountId !== reporterAccountId) return false;
+  return (await reporterHistoryAuthority(dependencies, context)).value;
+}
+
+/** Reporter retention uses the native current account policy independently of
+ * target readership and inspection. This is also the own-inventory admission. */
+export async function reporterHistoryAuthority(
+  dependencies: ReportDependencies,
+  context: ReadContext,
+): Promise<Anchored<boolean>> {
+  const actor = context.actor;
+  if (actor.kind !== 'account') throw new ReportUnavailableError();
+  const reporterAccountId = actor.accountId;
   const accountRoute = route(reporterAccountId);
   const check = await accessCheck(
     dependencies.access,
@@ -596,21 +609,53 @@ async function reporterCanReadOwnReport(
     { route: accountRoute, id: reporterAccountId },
     { pool: dependencies.pool, deadline: context.deadline },
   );
-  return (
-    await snapshot(dependencies, reporterAccountId, context.deadline, async (client) => {
-      const account = await readAccount(client, accountRoute, reporterAccountId);
-      if (
-        !account ||
-        account.accountId !== actor.accountId ||
-        account.kind !== 'actor' ||
-        account.state !== 'active' ||
-        account.fenced ||
-        BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-      )
-        return false;
-      return check(client);
-    })
-  ).value;
+  return snapshot(dependencies, reporterAccountId, context.deadline, async (client) => {
+    const account = await readAccount(client, accountRoute, reporterAccountId);
+    if (
+      !account ||
+      account.accountId !== actor.accountId ||
+      account.kind !== 'actor' ||
+      account.state !== 'active' ||
+      account.fenced ||
+      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+    )
+      return false;
+    return check(client);
+  });
+}
+
+/** Private submitted fields come from the original cases, grouped by native
+ * home, only after current recipient authorization on every fill/recheck. */
+export async function readReporterHistoryCases(
+  dependencies: ReportDependencies,
+  ids: readonly string[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, ReportView>> {
+  if (ids.length > 21) throw new RangeError('At most 20 raw cases and one exact selection');
+  if (context.actor.kind !== 'account') throw new ReportUnavailableError();
+  const reporter = context.actor.accountId;
+  const groups = new Map<number, string[]>();
+  for (const id of new Set(ids)) {
+    const home = partitionOf(route(id));
+    const group = groups.get(home) ?? [];
+    group.push(id);
+    groups.set(home, group);
+  }
+  const records = new Map<string, ReportView>();
+  if (groups.size === 0 && !(await reporterHistoryAuthority(dependencies, context)).value)
+    throw new ReportUnavailableError();
+  for (const keys of groups.values()) {
+    if (!(await reporterHistoryAuthority(dependencies, context)).value) throw new ReportUnavailableError();
+    const result = await snapshot(dependencies, keys[0]!, context.deadline, async (client) => {
+      const parameters = { reporter, keys: JSON.stringify(keys.map((id) => ({ route: route(id), id }))) };
+      return (await client.query<ReportRow>(reporterHistoryCases.sql,
+        reporterHistoryCases.params.map((name) => parameters[name as keyof typeof parameters]))).rows;
+    });
+    for (const row of result.value) {
+      if (row.reporter_account_id === reporter && row.reason !== null) records.set(row.report_id, view(row));
+    }
+  }
+  return records;
 }
 
 function view(row: ReportRow): ReportView {

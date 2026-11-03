@@ -41,7 +41,7 @@ export function createReportLocatorEffect(pool: Pool): Effect {
         event.subject !== data.reportId
       )
         throw new TypeError('Invalid report reporter locator envelope');
-      const reporter = await withConnection(pool, async (client) => {
+      const retained = await withConnection(pool, async (client) => {
         // One partition command/read at a time, including when both homes share a database.
         const anchor = await readPartition(client, partitionOf(reportRoute));
         if (
@@ -59,49 +59,71 @@ export function createReportLocatorEffect(pool: Pool): Effect {
           report.revision_id !== (data.revisionId ?? null)
         )
           throw new Error('Report source reference mismatch');
-        return report.reporter_account_id;
+        return report;
       });
-      if (!reporter) return;
-      const home = routeOf(reporter);
-      if (home === null) throw new TypeError('Invalid reporter identity');
-      const locator = `report:${reportRoute}:${data.reportId}`;
-      const result = await runCommand<{ late: boolean }>(pool, { partition: partitionOf(home) }, async (tx) => {
-        if (await lockErasureFence(tx, reporter)) {
-          await recordLateErasureItem(tx, { accountId: reporter, participant: 'content', locator });
-          await markAccountErasureFound(tx, reporter, 'content');
-          return {
-            value: { late: true as const },
-            events: [
-              {
-                type: 'com.rezics.access.account-updated.v1',
-                subject: reporter,
-                data: { accountId: reporter },
-              },
-            ],
-          };
-        }
-        const added = await insert.run(tx, {
-          route: home,
-          actor_id: reporter,
-          report_route: reportRoute,
-          report_id: data.reportId,
-        });
-        if (!added) return noEffect({ late: false as const });
-        return {
-          value: { late: false as const },
-          events: [
-            {
-              type: 'com.rezics.content.report-reporter.projected.v1',
-              subject: data.reportId,
-              data: { reportId: data.reportId },
-            },
-          ],
-        };
-      });
-      if (result.value.late) {
-        await eraseAccountReportItem({ pool }, reporter, reportRoute, data.reportId);
-        await resolveLateErasureItem({ pool }, { accountId: reporter, participant: 'content', locator });
-      }
+      await deliverReportReporter(pool, data.reportId, reportRoute, retained);
     },
   };
+}
+
+/** Installation reads the current native source, never a copied reporter identity.
+ * The migration journal supplies exact IDs; no source checkout survives delivery. */
+export async function installReportReporter(pool: Pool, reportId: string): Promise<void> {
+  const reportRoute = routeOf(reportId);
+  if (reportRoute === null) throw new TypeError('Invalid report identity');
+  const retained = await withConnection(pool, async (client) => {
+    const anchor = await readPartition(client, partitionOf(reportRoute));
+    if (!anchor || anchor.writeState === 'moved') throw new Error('Report source partition unavailable');
+    return read.run(client, { route: reportRoute, report_id: reportId });
+  });
+  await deliverReportReporter(pool, reportId, reportRoute, retained);
+}
+
+async function deliverReportReporter(
+  pool: Pool,
+  reportId: string,
+  reportRoute: number,
+  retained: Awaited<ReturnType<typeof read.run>>,
+) {
+  const reporter = retained?.reporter_account_id;
+  if (!reporter) return;
+  const createdAt = retained.created_at;
+  if (!createdAt) throw new Error('Report source received time unavailable');
+  const home = routeOf(reporter);
+  if (home === null) throw new TypeError('Invalid reporter identity');
+  const locator = `report:${reportRoute}:${reportId}`;
+  const result = await runCommand<{ late: boolean }>(pool, { partition: partitionOf(home) }, async (tx) => {
+    if (await lockErasureFence(tx, reporter)) {
+      await recordLateErasureItem(tx, { accountId: reporter, participant: 'content', locator });
+      await markAccountErasureFound(tx, reporter, 'content');
+      return {
+        value: { late: true as const },
+        events: [{
+          type: 'com.rezics.access.account-updated.v1',
+          subject: reporter,
+          data: { accountId: reporter },
+        }],
+      };
+    }
+    const added = await insert.run(tx, {
+      route: home,
+      actor_id: reporter,
+      report_route: reportRoute,
+      report_id: reportId,
+      created_at: createdAt,
+    });
+    if (!added) return noEffect({ late: false as const });
+    return {
+      value: { late: false as const },
+      events: [{
+        type: 'com.rezics.content.report-reporter.projected.v1',
+        subject: reportId,
+        data: { reportId },
+      }],
+    };
+  });
+  if (result.value.late) {
+    await eraseAccountReportItem({ pool }, reporter, reportRoute, reportId);
+    await resolveLateErasureItem({ pool }, { accountId: reporter, participant: 'content', locator });
+  }
 }

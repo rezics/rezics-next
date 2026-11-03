@@ -12,6 +12,8 @@ import { ContentForbiddenError, ContentNotFoundError as CommandNotFoundError } f
 import type { AnchoredPosition } from './model.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
 import { dismissReport, ReportResolvedError } from './report-outcomes.ts';
+import { createReporterHistory, ReporterHistoryChangedError, ReporterHistoryCursorError } from './reporter-history.ts';
+import { ReporterHistoryPageSchema, ReporterHistoryQuerySchema } from './reporter-history-schemas.ts';
 import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
 import {
   createReport,
@@ -94,6 +96,7 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
  * and budget charging. No handler may spend again or verify a one-use proof.
  */
 export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportRouteDependencies) {
+  const history = createReporterHistory(dependencies);
   const oversized = new WeakSet<Request>();
   const created = app
     .post(
@@ -181,6 +184,37 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
             }),
           actor.kind === 'anonymous',
         );
+      },
+    )
+    .get(
+      '/v1/reports/me',
+      {
+        query: ReporterHistoryQuerySchema,
+        response: { 200: withHeaders(strictContentSchema(ReporterHistoryPageSchema), privateHeaders), ...readFailures },
+        detail: {
+          operationId: 'report.ownHistory',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          description: 'The current reporter inventory and optional exact own case, with current native outcomes and readable target actions.',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        if (actor.kind !== 'account') throw new ProblemError('authentication_required');
+        if (query.reportId !== undefined) existingId(query.reportId);
+        return reportOperation(() => admission.run('normal', job, async () => {
+          try {
+            const { anchor, ...page } = await history.read({ actor, deadline: job.deadline }, query);
+            session.record(component(anchor));
+            return { ...page, entries: [...page.entries] };
+          } catch (error) {
+            if (error instanceof ReporterHistoryCursorError) throw new ProblemError('invalid_cursor');
+            if (error instanceof ReporterHistoryChangedError)
+              throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+            throw error;
+          }
+        }), true);
       },
     )
     .get(
