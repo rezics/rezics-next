@@ -6,7 +6,6 @@ import {
   authoritativeTimeValue,
   mintReadTime,
   releaseOperationalTime,
-  type AuthoritativeTime,
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -354,7 +353,7 @@ export function createSessionCommands(config: Dependencies) {
         async function time() {
           return withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
         }
-        async function observed(at: AuthoritativeTime) {
+        async function observed() {
           // Use the same private owner authority as readSession: client scope,
           // current native account, and the occurrence's exact owning account.
           return snapshot(owner, 'progress_session:read', async (client) => {
@@ -369,13 +368,13 @@ export function createSessionCommands(config: Dependencies) {
         }
         const at = await time();
         try {
-          const before = await observed(at);
+          const before = await observed();
           const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
           const result = await render(before.fact.session, prepared.presentation, prepared.disclosure);
           const finalTime = await time();
           try {
             await prepared.verify(finalTime);
-            const after = await observed(finalTime);
+            const after = await observed();
             if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
               throw new ProgressConflictError();
           } finally {

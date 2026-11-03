@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountToken } from '../support/admitted-access.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import type { DiaryPage } from '../../src/library/diary-model.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 const scopes = [
   'subject:read',
@@ -222,7 +222,7 @@ test('unavailable native authority refuses pages and reopening; epoch replacemen
   const recorded = await start(subject, identity.bearer);
   await start(subject, identity.bearer);
   const first = await page(undefined, identity.bearer, 1);
-  const partition = Math.floor(routeOf(identity.actor.accountId)! / 16);
+  const partition = partitionOf(routeOf(identity.actor.accountId)!);
   await native.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
   try {
     await json(await send('GET', '/v1/libraryDiary', undefined, identity.bearer), 503);
