@@ -19,7 +19,9 @@ async function selectRevision(page: Page, revision: number): Promise<void> {
   const button = page.getByRole('button', { name: new RegExp(`Revision ${revision}(?!\\d)`) });
   await pageExpect(button).toBeVisible();
   await button.click();
-  await pageExpect(page.getByRole('heading', { name: m.changes_revision({ revision: String(revision) }) })).toBeVisible();
+  await pageExpect(
+    page.getByRole('heading', { name: m.changes_revision({ revision: String(revision) }) }),
+  ).toBeVisible();
 }
 
 async function openChanges(page: Page): Promise<void> {
@@ -55,10 +57,9 @@ test('an adoption row opens only its exact current candidate and safely returns 
   await page.getByRole('link', { name: m.changes_return_to_changes(), exact: true }).click();
   await page.waitForURL(/\/changes/);
   await selectRevision(page, current.multiAdoption!);
-  await pageExpect(changes.getByRole('button', { name: m.changes_revision({ revision: String(current.multiAdoption!) }) })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await pageExpect(
+    changes.getByRole('button', { name: m.changes_revision({ revision: String(current.multiAdoption!) }) }),
+  ).toHaveAttribute('aria-pressed', 'true');
 
   await current.stack.injectKernelFailureOnce({
     method: 'GET',

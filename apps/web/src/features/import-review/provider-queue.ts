@@ -57,7 +57,9 @@ export function validProviderQueueHistory(value: unknown): value is QueuePageHis
     Array.isArray(history.addresses) &&
     history.addresses.length > 0 &&
     history.addresses.length <= providerQueueHistoryLimit &&
-    history.addresses.every((cursor) => cursor === undefined || (typeof cursor === 'string' && cursor.length <= 4096)) &&
+    history.addresses.every(
+      (cursor) => cursor === undefined || (typeof cursor === 'string' && cursor.length <= 4096),
+    ) &&
     Number.isSafeInteger(history.index) &&
     history.index >= 0 &&
     history.index < history.addresses.length &&
@@ -123,11 +125,7 @@ function currentProviderQueueReturn(source: ProviderSessionSource, admission: Pr
 export function peekProviderQueueReturn(source: ProviderSessionSource, admission: ProviderAdmission) {
   return currentProviderQueueReturn(source, admission)?.visit;
 }
-export function takeProviderQueueReturn(
-  source: ProviderSessionSource,
-  admission: ProviderAdmission,
-  id: string,
-) {
+export function takeProviderQueueReturn(source: ProviderSessionSource, admission: ProviderAdmission, id: string) {
   const stored = currentProviderQueueReturn(source, admission);
   if (!stored || stored.visit.id !== id) return undefined;
   clearStoredProviderQueueReturn(id);

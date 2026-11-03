@@ -73,99 +73,108 @@ async function exactPage(stack: CatalogueProviderReviewFixture['stack'], cursor:
   const response = await stack.kernel(`/v1/review-candidates?${query}`, {}, 'alice');
   expect(response.status).toBe(200);
   return (await response.json()) as {
-    candidates: { subject: string; candidate: { id: string; statement: { property: { id: string }; value: { content: string } } } }[];
+    candidates: {
+      subject: string;
+      candidate: { id: string; statement: { property: { id: string }; value: { content: string } } };
+    }[];
   };
 }
 
-nativeTest('a second-page exact review accepts and selects independently, then rereads the scoped queue', 900_000, async () => {
-  const current = fixture!;
-  const alice = await current.auth.signIn('alice');
-  const page = pageFor(alice);
-  page.setDefaultTimeout(30_000);
-  const opened = await page.goto(`${current.stack.web}/en/imports/review`, { waitUntil: 'domcontentloaded' });
-  expect(opened?.status()).toBe(200);
-  await hydrate(page);
-  await chooseContext(page);
-  await page.getByLabel(m.prq_source()).fill(providerReviewSource);
-  await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
-  await waitForRows(page);
+nativeTest(
+  'a second-page exact review accepts and selects independently, then rereads the scoped queue',
+  900_000,
+  async () => {
+    const current = fixture!;
+    const alice = await current.auth.signIn('alice');
+    const page = pageFor(alice);
+    page.setDefaultTimeout(30_000);
+    const opened = await page.goto(`${current.stack.web}/en/imports/review`, { waitUntil: 'domcontentloaded' });
+    expect(opened?.status()).toBe(200);
+    await hydrate(page);
+    await chooseContext(page);
+    await page.getByLabel(m.prq_source()).fill(providerReviewSource);
+    await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await waitForRows(page);
 
-  const first = await readProviderReviewPage(current.stack, 'alice', current.context.id);
-  expect(first.status).toBe(200);
-  expect(typeof first.body.next).toBe('string');
-  const next = first.body.next as string;
-  const second = await exactPage(current.stack, next);
-  expect(second.candidates.length).toBeGreaterThan(0);
-  const target = second.candidates[0]!;
-  const book = current.books.find((entry) => entry.id === target.subject)!;
-  expect(book).toBeDefined();
+    const first = await readProviderReviewPage(current.stack, 'alice', current.context.id);
+    expect(first.status).toBe(200);
+    expect(typeof first.body.next).toBe('string');
+    const next = first.body.next as string;
+    const second = await exactPage(current.stack, next);
+    expect(second.candidates.length).toBeGreaterThan(0);
+    const target = second.candidates[0]!;
+    const book = current.books.find((entry) => entry.id === target.subject)!;
+    expect(book).toBeDefined();
 
-  await page.getByRole('button', { name: m.prq_next(), exact: true }).click();
-  await page.getByText(book.title, { exact: true }).waitFor();
-  await page.getByRole('link', { name: m.prq_open_candidate(), exact: true }).first().click();
-  await page.waitForURL(/\/edit\?/);
-  const reviewUrl = new URL(page.url());
-  expect(reviewUrl.searchParams.get('reviewProperty')).toBe(target.candidate.statement.property.id);
-  expect(reviewUrl.searchParams.get('candidate')).toBe(target.candidate.id);
-  expect(reviewUrl.searchParams.get('context')).toBe(current.context.id);
-  expect(reviewUrl.searchParams.get('returnTo')).toBe('queue');
+    await page.getByRole('button', { name: m.prq_next(), exact: true }).click();
+    await page.getByText(book.title, { exact: true }).waitFor();
+    await page.getByRole('link', { name: m.prq_open_candidate(), exact: true }).first().click();
+    await page.waitForURL(/\/edit\?/);
+    const reviewUrl = new URL(page.url());
+    expect(reviewUrl.searchParams.get('reviewProperty')).toBe(target.candidate.statement.property.id);
+    expect(reviewUrl.searchParams.get('candidate')).toBe(target.candidate.id);
+    expect(reviewUrl.searchParams.get('context')).toBe(current.context.id);
+    expect(reviewUrl.searchParams.get('returnTo')).toBe('queue');
 
-  const review = page.getByRole('region', { name: m.candidate_title(), exact: true });
-  const item = review.locator('[data-candidate-item]');
-  await item.waitFor({ state: 'visible' });
-  await review.getByRole('button', { name: m.candidate_accept(), exact: true }).click();
-  await review.getByRole('button', { name: m.candidate_accept(), exact: true }).last().click();
-  await page.getByRole('button', { name: m.candidate_reload(), exact: true }).waitFor();
+    const review = page.getByRole('region', { name: m.candidate_title(), exact: true });
+    const item = review.locator('[data-candidate-item]');
+    await item.waitFor({ state: 'visible' });
+    await review.getByRole('button', { name: m.candidate_accept(), exact: true }).click();
+    await review.getByRole('button', { name: m.candidate_accept(), exact: true }).last().click();
+    await page.getByRole('button', { name: m.candidate_reload(), exact: true }).waitFor();
 
-  const candidateRead = await current.stack.kernel(
-    `/v1/subjects/${target.subject}/candidates?${new URLSearchParams({
-      property: target.candidate.statement.property.id,
-      context: current.context.id,
-      limit: '20',
-    })}`,
-    {},
-    'alice',
-  );
-  expect(candidateRead.status).toBe(200);
-  const candidates = (await candidateRead.json()) as { candidates: { id: string; decision: string | null }[] };
-  expect(candidates.candidates.find((entry) => entry.id === target.candidate.id)?.decision).toBe('accepted');
+    const candidateRead = await current.stack.kernel(
+      `/v1/subjects/${target.subject}/candidates?${new URLSearchParams({
+        property: target.candidate.statement.property.id,
+        context: current.context.id,
+        limit: '20',
+      })}`,
+      {},
+      'alice',
+    );
+    expect(candidateRead.status).toBe(200);
+    const candidates = (await candidateRead.json()) as { candidates: { id: string; decision: string | null }[] };
+    expect(candidates.candidates.find((entry) => entry.id === target.candidate.id)?.decision).toBe('accepted');
 
-  await page.getByRole('button', { name: m.candidate_reload(), exact: true }).click();
-  await item.waitFor({ state: 'visible' });
-  const choice = review.locator(`#include-${target.candidate.id}`);
-  await choice.waitFor({ state: 'visible' });
-  if (!(await choice.isChecked())) await choice.click();
-  await review.getByRole('button', { name: m.context_adopt(), exact: true }).click();
-  await review.getByRole('button', { name: m.context_adopt(), exact: true }).last().click();
-  await page.getByText(m.context_saved(), { exact: true }).waitFor();
+    await page.getByRole('button', { name: m.candidate_reload(), exact: true }).click();
+    await item.waitFor({ state: 'visible' });
+    const choice = review.locator(`#include-${target.candidate.id}`);
+    await choice.waitFor({ state: 'visible' });
+    if (!(await choice.isChecked())) await choice.click();
+    await review.getByRole('button', { name: m.context_adopt(), exact: true }).click();
+    await review.getByRole('button', { name: m.context_adopt(), exact: true }).last().click();
+    await page.getByText(m.context_saved(), { exact: true }).waitFor();
 
-  const readingResponse = await current.stack.kernel(
-    `/v1/subjects/${target.subject}?context=${encodeURIComponent(current.context.id)}`,
-    {},
-    'alice',
-  );
-  expect(readingResponse.status).toBe(200);
-  const reading = (await readingResponse.json()) as {
-    subject: { statements: Record<string, { id: string; value: { content: string } }[]> };
-  };
-  expect(reading.subject.statements[target.candidate.statement.property.id]?.some((row) => row.id === target.candidate.id)).toBe(true);
+    const readingResponse = await current.stack.kernel(
+      `/v1/subjects/${target.subject}?context=${encodeURIComponent(current.context.id)}`,
+      {},
+      'alice',
+    );
+    expect(readingResponse.status).toBe(200);
+    const reading = (await readingResponse.json()) as {
+      subject: { statements: Record<string, { id: string; value: { content: string } }[]> };
+    };
+    expect(
+      reading.subject.statements[target.candidate.statement.property.id]?.some((row) => row.id === target.candidate.id),
+    ).toBe(true);
 
-  await page.getByRole('link', { name: m.prq_return_to_queue(), exact: true }).click();
-  await page.waitForURL(/\/imports\/review/);
-  await page.getByText(m.prq_return_moved(), { exact: true }).waitFor();
-  await page.getByText(book.title, { exact: true }).waitFor({ state: 'detached' });
+    await page.getByRole('link', { name: m.prq_return_to_queue(), exact: true }).click();
+    await page.waitForURL(/\/imports\/review/);
+    await page.getByText(m.prq_return_moved(), { exact: true }).waitFor();
+    await page.getByText(book.title, { exact: true }).waitFor({ state: 'detached' });
 
-  await current.stack.syncKernelRequests();
-  await page.getByLabel(m.prq_status()).selectOption('accepted_unselected');
-  await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
-  await page.getByText(m.prq_empty(), { exact: true }).waitFor();
-  await current.stack.syncKernelRequests();
-  const queueReads = current.stack.kernelRequests().filter((request) => {
-    if (request.fixtureRequest || request.method !== 'GET') return false;
-    const url = new URL(request.url, current.stack.kernelOrigin);
-    return url.pathname === '/v1/review-candidates' && url.searchParams.get('status') === 'accepted_unselected';
-  });
-  expect(queueReads.length).toBeGreaterThan(0);
-  expect(new URL(queueReads.at(-1)!.url, current.stack.kernelOrigin).searchParams.has('cursor')).toBe(false);
-  await page.close();
-});
+    await current.stack.syncKernelRequests();
+    await page.getByLabel(m.prq_status()).selectOption('accepted_unselected');
+    await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await page.getByText(m.prq_empty(), { exact: true }).waitFor();
+    await current.stack.syncKernelRequests();
+    const queueReads = current.stack.kernelRequests().filter((request) => {
+      if (request.fixtureRequest || request.method !== 'GET') return false;
+      const url = new URL(request.url, current.stack.kernelOrigin);
+      return url.pathname === '/v1/review-candidates' && url.searchParams.get('status') === 'accepted_unselected';
+    });
+    expect(queueReads.length).toBeGreaterThan(0);
+    expect(new URL(queueReads.at(-1)!.url, current.stack.kernelOrigin).searchParams.has('cursor')).toBe(false);
+    await page.close();
+  },
+);

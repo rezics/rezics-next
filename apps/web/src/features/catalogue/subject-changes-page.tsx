@@ -1,7 +1,4 @@
-import {
-  useCatalogueLifetime,
-  type CandidateSessionLease,
-} from '../../subject/candidate-lifetime';
+import { useCatalogueLifetime, type CandidateSessionLease } from '../../subject/candidate-lifetime';
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type MouseEvent, type Ref } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -221,24 +218,22 @@ export function ChangeExplanation({
           )}
         </section>
       )}
-      {(summary.kind === 'candidate' || summary.kind === 'decision') &&
-        summary.candidate &&
-        summary.property && (
-          <section className="space-y-2" aria-label={m.changes_review_current({}, o)}>
-            <p className="text-sm text-muted-foreground">{m.changes_review_notice({}, o)}</p>
-            <CurrentReviewLink
-              pageHref={pageHref}
-              address={{
-                subject: detail.id,
-                property: summary.property,
-                candidate: summary.candidate,
-                context: summary.context ?? candidateContext,
-              }}
-              revision={revision}
-              onReviewCandidate={onReviewCandidate}
-            />
-          </section>
-        )}
+      {(summary.kind === 'candidate' || summary.kind === 'decision') && summary.candidate && summary.property && (
+        <section className="space-y-2" aria-label={m.changes_review_current({}, o)}>
+          <p className="text-sm text-muted-foreground">{m.changes_review_notice({}, o)}</p>
+          <CurrentReviewLink
+            pageHref={pageHref}
+            address={{
+              subject: detail.id,
+              property: summary.property,
+              candidate: summary.candidate,
+              context: summary.context ?? candidateContext,
+            }}
+            revision={revision}
+            onReviewCandidate={onReviewCandidate}
+          />
+        </section>
+      )}
       {summary.kind === 'adoption' && (
         <section className="space-y-2 text-sm" aria-label={m.changes_recorded({}, o)}>
           <h3 className="font-medium">{m.changes_recorded({}, o)}</h3>
@@ -652,7 +647,8 @@ function SubjectChangesReader({
     let found = false;
     let chainNext: string | null | undefined;
     try {
-      if (!visit.lease.current() || visit.subject !== visit.id || visit.revision < 1) throw new Error('Expired history visit');
+      if (!visit.lease.current() || visit.subject !== visit.id || visit.revision < 1)
+        throw new Error('Expired history visit');
       for (let index = 0; index < history.addresses.length; index++) {
         const cursor = history.addresses[index];
         if (index > 0 && cursor !== chainNext) throw new Error('Expired history continuation');

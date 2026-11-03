@@ -71,14 +71,20 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => {
     const property = typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined;
-    const statement = typeof input.statement === 'string' && input.statement.length <= 128 ? input.statement : undefined;
+    const statement =
+      typeof input.statement === 'string' && input.statement.length <= 128 ? input.statement : undefined;
     const hasExact = input.reviewProperty !== undefined || input.candidate !== undefined || input.context !== undefined;
     const reviewProperty =
       typeof input.reviewProperty === 'string' && input.reviewProperty.length > 0 && input.reviewProperty.length <= 256
         ? input.reviewProperty
         : undefined;
     const candidate = typeof input.candidate === 'string' && uuid.test(input.candidate) ? input.candidate : undefined;
-    const context = input.context === undefined ? candidateContext : typeof input.context === 'string' && uuid.test(input.context) ? input.context : undefined;
+    const context =
+      input.context === undefined
+        ? candidateContext
+        : typeof input.context === 'string' && uuid.test(input.context)
+          ? input.context
+          : undefined;
     const validExact = !!reviewProperty && !!candidate && !!context && !property && !statement;
     return {
       property,
@@ -129,8 +135,7 @@ function CorrectionRoute() {
         )
       : undefined;
   const returnHref = providerReturn ? '/imports/review' : changesReturn?.href;
-  const returnUnavailable =
-    (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn);
+  const returnUnavailable = (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn);
   const read = async () => {
     const result = await readCorrection({
       data: editorRequest({ id, property, statement }, editorWork),
@@ -204,25 +209,34 @@ function CorrectionRoute() {
           return {
             read: async (field, cursor, session = initialSession, work) => {
               if (!work?.live()) return { ok: false, reason: 'denied' };
-              const result = exactContext === candidateContext
-                ? await readSubjectCandidates({
-                    data: { expectedReader: work.reader, id, property: field, cursor, session },
-                    headers: csrfHeaders(),
-                  })
-                : await readSubjectContext({
-                    data: { expectedReader: work.reader, id, context: exactContext, property: field, cursor, session },
-                    headers: csrfHeaders(),
-                  });
+              const result =
+                exactContext === candidateContext
+                  ? await readSubjectCandidates({
+                      data: { expectedReader: work.reader, id, property: field, cursor, session },
+                      headers: csrfHeaders(),
+                    })
+                  : await readSubjectContext({
+                      data: {
+                        expectedReader: work.reader,
+                        id,
+                        context: exactContext,
+                        property: field,
+                        cursor,
+                        session,
+                      },
+                      headers: csrfHeaders(),
+                    });
               return result;
             },
             confirm: async (command, work) => {
               if (!work?.live()) return { ok: false, reason: 'denied' };
-              const result = exactContext === candidateContext
-                ? await confirmSubjectCandidate({ data: command, headers: csrfHeaders() })
-                : await confirmSubjectContext({
-                    data: { ...command, context: exactContext },
-                    headers: csrfHeaders(),
-                  });
+              const result =
+                exactContext === candidateContext
+                  ? await confirmSubjectCandidate({ data: command, headers: csrfHeaders() })
+                  : await confirmSubjectContext({
+                      data: { ...command, context: exactContext },
+                      headers: csrfHeaders(),
+                    });
               return result;
             },
           };

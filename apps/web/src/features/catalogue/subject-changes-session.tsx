@@ -103,8 +103,8 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
       locale={locale}
       transport={transport}
       currentHref={currentHref}
-        {...(lease ? { lease } : {})}
-        {...(restored.lease === lease && restored.visit ? { initialReturn: restored.visit } : {})}
+      {...(lease ? { lease } : {})}
+      {...(restored.lease === lease && restored.visit ? { initialReturn: restored.visit } : {})}
     />
   );
 });

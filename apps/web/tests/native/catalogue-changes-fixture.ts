@@ -91,7 +91,9 @@ function selectedUrl(subject: Json, content: string): CatalogueChangeStatement {
 }
 
 /** Provision terms and two adoption revisions through the admitted catalogue APIs. */
-export async function startCatalogueChangesFixture(options: { multipleSelection?: boolean } = {}): Promise<CatalogueChangesFixture> {
+export async function startCatalogueChangesFixture(
+  options: { multipleSelection?: boolean } = {},
+): Promise<CatalogueChangesFixture> {
   const stack = await startNativeWebStack();
   let auth: NativeAuthStack | undefined;
   try {

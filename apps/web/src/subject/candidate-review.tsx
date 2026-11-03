@@ -46,7 +46,8 @@ export type CandidateLifecycle = {
 
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
 export function CandidateReview(props: Omit<ComponentProps<typeof CandidateReviewLive>, 'work'>) {
-  const { id, locale, initialProperty, exactCandidate, context, slot, returnHref, returnLabel, returnUnavailable } = props;
+  const { id, locale, initialProperty, exactCandidate, context, slot, returnHref, returnLabel, returnUnavailable } =
+    props;
   const work = useCandidateWork(
     JSON.stringify([
       id,
@@ -182,10 +183,7 @@ function CandidateReviewLive({
       if (
         exactCandidate &&
         !next.page?.candidates.some(
-          (item) =>
-            item.id === exactCandidate &&
-            item.retracted === null &&
-            item.statement.property.id === field,
+          (item) => item.id === exactCandidate && item.retracted === null && item.statement.property.id === field,
         )
       ) {
         setRead(undefined);

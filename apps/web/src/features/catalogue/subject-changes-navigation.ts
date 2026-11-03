@@ -20,7 +20,9 @@ export function validChangePageHistory(value: unknown): value is ChangePageHisto
     Array.isArray(history.addresses) &&
     history.addresses.length > 0 &&
     history.addresses.length <= changePageHistoryLimit &&
-    history.addresses.every((cursor) => cursor === undefined || (typeof cursor === 'string' && cursor.length <= 4096)) &&
+    history.addresses.every(
+      (cursor) => cursor === undefined || (typeof cursor === 'string' && cursor.length <= 4096),
+    ) &&
     typeof history.truncated === 'boolean'
   );
 }

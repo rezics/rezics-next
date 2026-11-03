@@ -163,77 +163,77 @@ export function ProviderQueue({
         }}
       >
         <fieldset disabled={actionHeld} className="min-w-0">
-        <FieldGroup className="grid gap-4 sm:grid-cols-2">
-          <Field data-invalid={invalidSource}>
-            <FieldLabel htmlFor={`${id}-source`}>{m.prq_source()}</FieldLabel>
-            <Input
-              id={`${id}-source`}
-              value={source}
-              list={`${id}-providers`}
-              maxLength={32}
-              required
-              autoComplete="off"
-              aria-invalid={invalidSource}
-              aria-describedby={`${id}-source-help`}
-              onChange={(event) => {
-                if (!visit.live() || renderedForm !== formVersion.current) return;
-                replaceForm();
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field data-invalid={invalidSource}>
+              <FieldLabel htmlFor={`${id}-source`}>{m.prq_source()}</FieldLabel>
+              <Input
+                id={`${id}-source`}
+                value={source}
+                list={`${id}-providers`}
+                maxLength={32}
+                required
+                autoComplete="off"
+                aria-invalid={invalidSource}
+                aria-describedby={`${id}-source-help`}
+                onChange={(event) => {
+                  if (!visit.live() || renderedForm !== formVersion.current) return;
+                  replaceForm();
+                  invalidate();
+                  setSource(event.target.value);
+                  setInvalidSource(false);
+                }}
+              />
+              <datalist id={`${id}-providers`}>
+                {['bangumi', 'vndb', 'open-library', 'wikidata'].map((key) => (
+                  <option key={key} value={key}>
+                    {providerSourceLabel(key)}
+                  </option>
+                ))}
+              </datalist>
+              <p
+                id={`${id}-source-help`}
+                role={invalidSource ? 'alert' : undefined}
+                className="text-sm text-muted-foreground"
+              >
+                {invalidSource ? m.provider_scope_source_invalid() : m.provider_scope_source_help()}
+              </p>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-status`}>{m.prq_status()}</FieldLabel>
+              <NativeSelect
+                id={`${id}-status`}
+                value={status}
+                onChange={(event) => {
+                  if (!visit.live() || renderedForm !== formVersion.current) return;
+                  replaceForm();
+                  invalidate();
+                  setStatus(event.target.value as QueueScope['status']);
+                }}
+              >
+                <NativeSelectOption value="pending">{m.prq_pending()}</NativeSelectOption>
+                <NativeSelectOption value="accepted_unselected">{m.prq_accepted()}</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            <ProviderContextChoiceField
+              key={`${visit.id}:${choiceEpoch}`}
+              source={contexts}
+              value={choice}
+              locale={locale}
+              current={chooserCurrent}
+              onChange={(next) => {
+                if (!chooserCurrent()) return;
+                choiceVersion.current++;
                 invalidate();
-                setSource(event.target.value);
-                setInvalidSource(false);
+                setChoice(next);
+                setChoiceDenied(false);
               }}
             />
-            <datalist id={`${id}-providers`}>
-              {['bangumi', 'vndb', 'open-library', 'wikidata'].map((key) => (
-                <option key={key} value={key}>
-                  {providerSourceLabel(key)}
-                </option>
-              ))}
-            </datalist>
-            <p
-              id={`${id}-source-help`}
-              role={invalidSource ? 'alert' : undefined}
-              className="text-sm text-muted-foreground"
-            >
-              {invalidSource ? m.provider_scope_source_invalid() : m.provider_scope_source_help()}
-            </p>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-status`}>{m.prq_status()}</FieldLabel>
-            <NativeSelect
-              id={`${id}-status`}
-              value={status}
-              onChange={(event) => {
-                if (!visit.live() || renderedForm !== formVersion.current) return;
-                replaceForm();
-                invalidate();
-                setStatus(event.target.value as QueueScope['status']);
-              }}
-            >
-              <NativeSelectOption value="pending">{m.prq_pending()}</NativeSelectOption>
-              <NativeSelectOption value="accepted_unselected">{m.prq_accepted()}</NativeSelectOption>
-            </NativeSelect>
-          </Field>
-          <ProviderContextChoiceField
-            key={`${visit.id}:${choiceEpoch}`}
-            source={contexts}
-            value={choice}
-            locale={locale}
-            current={chooserCurrent}
-            onChange={(next) => {
-              if (!chooserCurrent()) return;
-              choiceVersion.current++;
-              invalidate();
-              setChoice(next);
-              setChoiceDenied(false);
-            }}
-          />
-          <div>
-            <Button type="submit" className="min-h-11" disabled={!choice}>
-              {m.prq_load()}
-            </Button>
-          </div>
-        </FieldGroup>
+            <div>
+              <Button type="submit" className="min-h-11" disabled={!choice}>
+                {m.prq_load()}
+              </Button>
+            </div>
+          </FieldGroup>
         </fieldset>
       </form>
       {load && load.visitId === visit.id && visit.live() ? (
@@ -537,11 +537,13 @@ function ProviderQueueResults({
           >
             {messages[page.state]()}
           </ContentItemHeading>
-          {page.state === 'invalid' && returnCandidate && (
-            <p role="status">{m.prq_return_unavailable()}</p>
-          )}
+          {page.state === 'invalid' && returnCandidate && <p role="status">{m.prq_return_unavailable()}</p>}
           {page.state === 'unavailable' && (
-            <Button type="button" disabled={busy || custodyLocked || actionHeld || !canWrite} onClick={() => void prepare()}>
+            <Button
+              type="button"
+              disabled={busy || custodyLocked || actionHeld || !canWrite}
+              onClick={() => void prepare()}
+            >
               {m.prq_prepare()}
             </Button>
           )}
@@ -565,12 +567,22 @@ function ProviderQueueResults({
             </Button>
           )}
           {history.index > 0 && (
-            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={previousPage}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || custodyLocked || actionHeld}
+              onClick={previousPage}
+            >
               {m.prq_previous()}
             </Button>
           )}
           {page.state === 'idle' && (
-            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={() => void read()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || custodyLocked || actionHeld}
+              onClick={() => void read()}
+            >
               {m.prq_refresh()}
             </Button>
           )}
@@ -578,14 +590,24 @@ function ProviderQueueResults({
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={() => void read()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || custodyLocked || actionHeld}
+              onClick={() => void read()}
+            >
               {m.prq_retry_page()}
             </Button>
             <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={startOver}>
               {m.prq_start_over()}
             </Button>
             {history.index > 0 && (
-              <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={previousPage}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || custodyLocked || actionHeld}
+                onClick={previousPage}
+              >
                 {m.prq_previous()}
               </Button>
             )}

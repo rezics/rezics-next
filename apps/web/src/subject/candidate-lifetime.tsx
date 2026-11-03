@@ -13,7 +13,11 @@ import { useSession } from '../session/query';
 
 export type CandidateWork = { reader: string; live: () => boolean };
 type Lifetime = CandidateWork & { generation: number; retire: () => void; active: () => boolean };
-export type CandidateSessionLease = { reader: string; current: () => boolean; subscribe: (listener: () => void) => () => void };
+export type CandidateSessionLease = {
+  reader: string;
+  current: () => boolean;
+  subscribe: (listener: () => void) => () => void;
+};
 let nextGeneration = 0;
 const Reader = createContext<Lifetime | null>(null);
 
@@ -136,12 +140,7 @@ function observeSession(client: QueryClient) {
     revision: () => revision,
     current: (reader: string, expected: number) => {
       const data = current();
-      return (
-        !!reader &&
-        revision === expected &&
-        data?.state === 'signed-in' &&
-        data.subject === reader
-      );
+      return !!reader && revision === expected && data?.state === 'signed-in' && data.subject === reader;
     },
     subscribe: (listener: () => void) => {
       listeners.add(listener);

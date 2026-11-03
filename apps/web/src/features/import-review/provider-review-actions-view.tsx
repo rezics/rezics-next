@@ -235,15 +235,13 @@ export function ProviderReviewActions({
   const lastScope = useRef(scope);
   if (selectedScope) lastScope.current = scope;
   // A changed source, Context or status clears checkboxes before the new scope can be acted on.
-  if (selection.scope !== scope || selection.page !== pageAddress)
-    setSelection({ scope, page: pageAddress, ids: [] });
+  if (selection.scope !== scope || selection.page !== pageAddress) setSelection({ scope, page: pageAddress, ids: [] });
   if (confirmation && providerScopeKey(confirmation.scope) !== scope) {
     confirmationOwner.current = null;
     setConfirmation(undefined);
   }
-  const selected = selection.scope === scope && selection.page === pageAddress
-    ? providerSelectionInScope(selection, scope)
-    : [];
+  const selected =
+    selection.scope === scope && selection.page === pageAddress ? providerSelectionInScope(selection, scope) : [];
   const visible = page?.rows ?? [];
   function concealed(row: ProviderDecisionRow) {
     return (
