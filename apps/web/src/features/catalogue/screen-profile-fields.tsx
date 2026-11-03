@@ -296,6 +296,7 @@ export function ScreenInitialFields({
   locale,
   search,
   disabled,
+  omitProperties = [],
 }: {
   type: string;
   rows: ScreenRow[];
@@ -304,6 +305,7 @@ export function ScreenInitialFields({
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
+  omitProperties?: readonly string[] | undefined;
 }) {
   const o = { locale: locale as never };
   const propertySelectId = useId();
@@ -312,7 +314,7 @@ export function ScreenInitialFields({
   const fields = Object.entries(groups)
     .filter(([group]) => group !== 'authored')
     .flatMap(([, ids]) => ids)
-    .filter((id) => release.properties[id]?.disclosure !== 'sourceOrConsent');
+    .filter((id) => !omitProperties.includes(id) && release.properties[id]?.disclosure !== 'sourceOrConsent');
   const current = useRef({ rows, disabled, change, release, fields, property });
   current.current = { rows, disabled, change, release, fields, property };
   const mounted = useRef(true);

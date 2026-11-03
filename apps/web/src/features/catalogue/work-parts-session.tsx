@@ -18,11 +18,13 @@ function WorkPartsSessionLive({
   locale,
   context,
   realm,
+  child,
 }: {
   id: string;
   locale: string;
   context?: string | undefined;
   realm?: string | undefined;
+  child?: string | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -38,6 +40,7 @@ function WorkPartsSessionLive({
       id={id}
       locale={locale}
       search={search}
+      child={child}
       transport={{
         read: (stream, cursor, session) =>
           readSubjectWorkParts({

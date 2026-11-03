@@ -13,7 +13,15 @@ import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueScreen, loadScreenProfile } from './screen-profile-actions';
 import { ScreenProfile } from './screen-profile-view';
 
-function ScreenProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+function ScreenProfileSessionLive({
+  id,
+  locale,
+  series,
+}: {
+  id?: string;
+  locale: string;
+  series?: string | undefined;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -23,14 +31,24 @@ function ScreenProfileSessionLive({ id, locale }: { id?: string; locale: string 
   return (
     <ScreenProfile
       id={id}
+      series={series}
       locale={locale}
       session={state}
       search={search}
       onNavigate={(href) => window.location.assign(href)}
       transport={{
-        load: () => loadScreenProfile({ data: id }),
+        load: () => loadScreenProfile({ data: { ...(id ? { id } : {}), ...(series ? { series } : {}) } }),
         create: (data) => createCatalogueScreen({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
+        createdRelations: (createdId) => ({
+          read: (slot, cursor, session) =>
+            readSubjectRelationEditor({
+              data: editorRequest({ id: createdId, slot, cursor, session }, editorWork),
+              headers: csrfHeaders(),
+            }),
+          propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          confirm: (data) => confirmSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        }),
         ...(id
           ? {
               facts: {

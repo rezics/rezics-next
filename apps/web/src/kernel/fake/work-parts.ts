@@ -16,6 +16,7 @@ import {
   type WorkPartsRead,
   type PartRow,
 } from '../../features/catalogue/work-parts';
+import { seriesEpisodeEntry } from '../../features/catalogue/screen-episode-membership';
 import type { WorkPartsTransport } from '../../features/catalogue/work-parts-page';
 import recording from '../recorded/subject.json';
 import type { FakeRoute } from '../fake-modules';
@@ -173,6 +174,7 @@ export function workPartsFixture(initialScenario: WorkPartsScenario = 'current',
       count: { value: scenario === 'partial' ? 2 : rows().length, exact: scenario !== 'partial' },
       caughtUp: scenario !== 'pending',
       session: 'parts-session',
+      episodeCreate: seriesEpisodeEntry(release, anchor.subject.type),
     };
   }
   const json = (body: unknown, status = 200) =>

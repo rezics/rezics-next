@@ -41,6 +41,7 @@ export type WorkPartsRead =
       count?: ForwardPage['count'];
       caughtUp: boolean;
       session?: string;
+      episodeCreate?: boolean;
     };
 
 // These are existing canonical part relations, not their display-only inverse aliases.
@@ -116,6 +117,16 @@ export function partSlot(stream: PartStream, statement: RelationDraft): Relation
   return slot.property === stream.property && validRelationSlot(slot) ? slot : undefined;
 }
 
+function seriesEpisodeCreate(release: Definitions, type: string): boolean {
+  const property = release.properties['schema:isPartOf'];
+  return (
+    isType(release, type, 'schema:TVSeries') &&
+    !!release.types['schema:Episode']?.properties.includes('schema:isPartOf') &&
+    !!property?.relation &&
+    !!property.targets?.some((target) => target === type || isType(release, type, target))
+  );
+}
+
 /** Clone the complete assertion; no row index, sorting or qualifier reconstruction supplies order. */
 export function partCorrection(row: PartRow, stream: PartStream) {
   if (!row.statement) return;
@@ -143,7 +154,18 @@ export async function readWorkParts(
     const streams = partStreams(definitions, current.data.subject.type, locale);
     const stream = streamKey ? streams.find((item) => item.key === streamKey) : streams[0];
     if ((streamKey && !stream) || (cursor && !streamKey)) return candidateFailure(400);
-    if (!stream) return { ok: true, public: current.data, streams, rows: [], labels: {}, next: null, caughtUp: true };
+    const episodeCreate = seriesEpisodeCreate(definitions, current.data.subject.type);
+    if (!stream)
+      return {
+        ok: true,
+        public: current.data,
+        streams,
+        rows: [],
+        labels: {},
+        next: null,
+        caughtUp: true,
+        episodeCreate,
+      };
     const query = {
       property: stream.property,
       context: candidateContext,
@@ -195,6 +217,7 @@ export async function readWorkParts(
       ...(page.count ? { count: page.count } : {}),
       caughtUp: page.freshness.caught_up,
       ...(token ? { session: token } : {}),
+      episodeCreate,
     };
   } catch {
     return candidateFailure(503);

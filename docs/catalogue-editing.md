@@ -255,6 +255,18 @@ uncaught-up result remains labelled. Denied or failed page reads conceal the pre
 drafts for recovery. Ordinary forms send statement references, never ingestion Source metadata. These controls do
 not infer rights or replace the existing disclosure and source-or-consent rules.
 
+A current TVSeries parts view offers **Create an episode of this series**. That private Screen form locks the
+Episode type, carries the exact series UUID as a suggestion, and reads current series and emitted `schema:isPartOf`
+metadata before offering membership. The contributor explicitly confirms the admitted belongs-to target and may
+enter an optional native position string; the address never infers membership, season identity, credits or an
+ordinal. Confirmed admitted membership may enter the sealed `POST /v1/subjects` body. Otherwise the existing
+relation proposal, review and selection complete the link after the exact created ID is reread. A failed
+relationship is never reported as linked, and a retry does not create a second episode. Return uses a current
+parts-stream read and highlights the child on this page, or shows its located identity without scanning later
+pages. Standalone Screen creation remains unchanged.
+Decision: confirmed admitted series membership may enter Episode POST; a failed or omitted relationship is completed
+through the existing relation proposal and never reported as linked from the create response.
+
 ## Browser flow: game and visual-novel works
 
 `/{locale}/catalogue/game` is the profile-guided entry in catalogue creation. Game, visual-novel, add-on and

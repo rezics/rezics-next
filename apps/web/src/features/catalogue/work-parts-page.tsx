@@ -18,6 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from './relation-editor';
 import { useConsentFocus } from './statement-consent-focus';
 import { partCorrection, type WorkPartsRead, type PartStream, type PartRow } from './work-parts';
+import { locateCreatedChild, screenSeriesId } from './screen-episode-membership';
 import {
   admitOrderingDrafts,
   advanceOrderingReview,
@@ -74,12 +75,14 @@ function WorkPartsPageLive({
   transport,
   search,
   initial,
+  child,
 }: {
   id: string;
   locale: string;
   transport: WorkPartsTransport;
   search: EntityPickerSearch;
   initial?: WorkPartsRead | undefined;
+  child?: string | undefined;
 }) {
   const streamId = useId();
   const lifetime = useEditorLifetime();
@@ -325,6 +328,8 @@ function WorkPartsPageLive({
       setBusy(false);
     }
   }
+  const createdChild = child ? locateCreatedChild(read?.rows ?? [], child) : undefined;
+  const locatedChild = screenSeriesId(child);
   const failed =
     error?.reason === 'denied'
       ? m.candidate_denied({}, o)
@@ -359,6 +364,32 @@ function WorkPartsPageLive({
             >
               {title.text || m.subject_value_unlabelled({}, o)}
             </a>
+            {read.episodeCreate && (
+              <section className="space-y-2 rounded-lg border border-border p-4">
+                <a
+                  className={`${actionClassName} inline-flex items-center font-medium underline`}
+                  href={`/${locale}/catalogue/screen?series=${encodeURIComponent(id)}`}
+                >
+                  {m.work_parts_create_episode({}, o)}
+                </a>
+                <p className="text-sm text-muted-foreground">{m.work_parts_create_episode_help({}, o)}</p>
+              </section>
+            )}
+            {locatedChild && (
+              <p role="status">
+                {createdChild
+                  ? m.work_parts_created_child_on_page({}, o)
+                  : m.work_parts_created_child_located({}, o)}
+                {!createdChild && (
+                  <>
+                    {' '}
+                    <a className={linkClassName} href={subjectHref({ id: locatedChild, label: '' }, locale).href}>
+                      <code className="break-all">{locatedChild}</code>
+                    </a>
+                  </>
+                )}
+              </p>
+            )}
             {!read.streams.length && (
               <p ref={sliceStatus} role="status" tabIndex={-1}>
                 {m.work_parts_no_stream({}, o)}
@@ -399,11 +430,19 @@ function WorkPartsPageLive({
                 )}
                 {!read.rows.length && <p>{m.work_parts_empty({}, o)}</p>}
                 <ul>
-                  {read.rows.map((row, index) => (
+                  {read.rows.map((row, index) => {
+                    const highlighted =
+                      !!createdChild &&
+                      createdChild.holder === row.holder &&
+                      createdChild.statementId === row.statementId;
+                    return (
                     <li
                       key={`${row.holder}:${row.statementId}`}
                       data-slot="list-row"
+                      data-created-child={highlighted ? '' : undefined}
+                      aria-current={highlighted ? 'true' : undefined}
                       aria-labelledby={`${streamId}-part-${index}`}
+                      className={highlighted ? 'rounded-xl ring-2 ring-ring' : undefined}
                     >
                       <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
                         {row.summary && (
@@ -528,7 +567,8 @@ function WorkPartsPageLive({
                         </div>
                       </ContentItemFrame>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
                 {stream.positionEditable && (
                   <WorkPartsOrderingBoard

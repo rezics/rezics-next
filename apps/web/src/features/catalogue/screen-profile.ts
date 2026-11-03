@@ -5,15 +5,24 @@ import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { SessionEnv } from '../../session/client';
 import { createTypes, type InitialSubject } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
+import { episodeMembershipAdmission, screenSeriesId } from './screen-episode-membership';
 import { creationStatement, editableScalar, type StatementInput } from './statement-editor';
 
 export const screenTypes = ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode'] as const;
 export function isScreenType(type: string): boolean {
   return screenTypes.some((id) => id === type);
 }
+export type ScreenAddress = { id?: string | undefined; series?: string | undefined };
 export type ScreenRead =
   | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' }
-  | { ok: true; release: Release; public: SubjectRead | null };
+  | {
+      ok: true;
+      release: Release;
+      public: SubjectRead | null;
+      series?: SubjectRead | null;
+      seriesId?: string | undefined;
+      seriesIssue?: 'concealed' | 'invalid' | 'unavailable' | undefined;
+    };
 export type ScreenItem = InitialSubject & { statements: Record<string, StatementInput[]> };
 export type ScreenCommand = { item: ScreenItem; key: string };
 export type ScreenGroup = 'dates' | 'amounts' | 'credits' | 'parts' | 'classification' | 'text' | 'authored';
@@ -89,11 +98,15 @@ export function screenInitialFacts(release: Release, initial: InitialSubject, st
   }
   return { item, errors };
 }
-export async function readScreenProfile(client: KernelClient, id?: string): Promise<ScreenRead> {
+export async function readScreenProfile(client: KernelClient, address: ScreenAddress = {}): Promise<ScreenRead> {
+  const id = screenSeriesId(address.id);
+  const seriesId = screenSeriesId(address.series);
+  if (address.id && !id) return { ok: false, reason: 'invalid' };
   try {
-    const [subject, active] = await Promise.all([
+    const [subject, active, series] = await Promise.all([
       id ? client.subjects({ id }).get() : undefined,
       client.definitions.active.get(),
+      seriesId ? client.subjects({ id: seriesId }).get() : undefined,
     ]);
     if (subject && [403, 404, 308].includes(subject.status)) return { ok: false, reason: 'concealed' };
     if (active.status !== 200 || !active.data || (id && (subject?.status !== 200 || subject.data?.subject.id !== id)))
@@ -105,7 +118,24 @@ export async function readScreenProfile(client: KernelClient, id?: string): Prom
     const release = bundle.data.release as Release;
     if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };
     if (subject?.data && !release.types[subject.data.subject.type]) return { ok: false, reason: 'unavailable' };
-    return { ok: true, release, public: subject?.data ?? null };
+    let seriesIssue: Extract<ScreenRead, { ok: true }>['seriesIssue'];
+    let suggested: SubjectRead | null = null;
+    if (seriesId) {
+      if (!series || [403, 404].includes(series.status)) seriesIssue = 'concealed';
+      else if (series.status === 308 || (series.data && series.data.subject.id !== seriesId)) seriesIssue = 'invalid';
+      else if (series.status !== 200 || !series.data) seriesIssue = 'unavailable';
+      else {
+        suggested = series.data;
+        if (!episodeMembershipAdmission(release, series.data.subject.type).seriesAdmitted) seriesIssue = 'invalid';
+      }
+    }
+    return {
+      ok: true,
+      release,
+      public: subject?.data ?? null,
+      series: suggested,
+      ...(seriesId ? { seriesId, seriesIssue } : {}),
+    };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

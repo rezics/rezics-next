@@ -786,6 +786,7 @@ function PeopleCreate({
         <Button
           type="button"
           variant="outline"
+          className={peopleActionTarget}
           disabled={!lifetime.active()}
           onClick={() => onReturnToCreditDraft?.(returnedIdentity)}
         >

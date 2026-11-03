@@ -39,10 +39,10 @@ export function screenProfileFixture(
     if (scenario === 'loading') return new Promise(() => {});
     if (scenario === 'definitions-unavailable') return { ok: false, reason: 'unavailable' };
     if (scenario === 'concealed') return { ok: false, reason: 'concealed' };
-    if (scenario === 'empty') return { ok: true, release: { ...release, types: {} }, public: null };
+    if (scenario === 'empty') return { ok: true, release: { ...release, types: {} }, public: null, series: null };
     const current = await facts.transport.read();
     if (!current.ok) return { ok: false, reason: 'unavailable' };
-    return { ok: true, release, public: correction ? current.public : null };
+    return { ok: true, release, public: correction ? current.public : null, series: null };
   };
   const transport: ScreenTransport = {
     load,
@@ -51,6 +51,7 @@ export function screenProfileFixture(
     facts: facts.transport,
     review: facts.review,
     relations: relations.transport,
+    createdRelations: () => relations.transport,
   };
   return { transport, creation, facts, relations, id: facts.date.id };
 }

@@ -18,6 +18,14 @@ import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreateResult, CreatedReader } from './create-subject';
+import { ScreenEpisodeMembership, ScreenEpisodeResult } from './screen-episode-membership.tsx';
+import {
+  episodeJourneyFromCreate,
+  episodeType,
+  membershipCreateStatement,
+  type EpisodeJourney,
+  type MembershipDraft,
+} from './screen-episode-membership';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
@@ -45,6 +53,7 @@ export type ScreenTransport = {
   facts?: FactsTransport;
   review?: (property: string, session?: string) => CandidateTransport;
   relations?: RelationTransport;
+  createdRelations?: (id: string) => RelationTransport;
 };
 
 const screenActionClassName =
@@ -134,6 +143,7 @@ function ScreenParts({
 
 function ScreenProfileLive({
   id,
+  series,
   locale,
   session,
   transport,
@@ -141,6 +151,7 @@ function ScreenProfileLive({
   onNavigate,
 }: {
   id?: string | undefined;
+  series?: string | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: ScreenTransport;
@@ -150,7 +161,13 @@ function ScreenProfileLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
-  const queryKey = ['screen-profile', id, locale, lifetime.generation];
+  const queryKey = ['screen-profile', id, series, locale, lifetime.generation];
+  const [membershipDraft, setMembershipDraft] = useState<MembershipDraft>();
+  const [episodeJourney, setEpisodeJourney] = useState<Exclude<EpisodeJourney, { stage: 'edit' }>>();
+  const membershipRef = useRef(membershipDraft);
+  const journeyRef = useRef(episodeJourney);
+  membershipRef.current = membershipDraft;
+  journeyRef.current = episodeJourney;
   const query = useQuery({
     queryKey,
     queryFn: transport.load,
@@ -319,7 +336,7 @@ function ScreenProfileLive({
       <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6">
         <header className="min-w-0 space-y-3">
           <ViewHeading
-            label={m.screen_title({}, o)}
+            label={read.seriesId ? m.screen_episode_from_series({}, o) : m.screen_title({}, o)}
             headingRef={creationHeading}
             headingTabIndex={-1}
             headingClassName="font-sans"
@@ -329,7 +346,21 @@ function ScreenProfileLive({
         <CreateSubjectForm
           locale={locale}
           session={session}
-          onNavigate={onNavigate}
+          onNavigate={(href) => {
+            if (read.seriesId) return;
+            onNavigate(href);
+          }}
+          onCreated={(result) => {
+            if (!read.seriesId) return;
+            const draft = membershipRef.current;
+            setEpisodeJourney(
+              episodeJourneyFromCreate(
+                result,
+                draft,
+                !!membershipCreateStatement(read.release, read.series?.subject.type, draft),
+              ),
+            );
+          }}
           transport={{
             definitions: async (refresh) => {
               const result = refresh ? await query.refetch({ cancelRefetch: false }) : query;
@@ -339,37 +370,99 @@ function ScreenProfileLive({
               return next?.ok ? { ok: true, types: screenCreateTypes(next.release, locale) } : { ok: false };
             },
             submit: (command) => transport.create(command as ScreenCommand),
-            read: transport.read,
+            read: async (createdId) => {
+              const reader = await transport.read(createdId);
+              const current = journeyRef.current;
+              const draft = membershipRef.current;
+              if (lifetime.active() && current && current.id === createdId) {
+                setEpisodeJourney(
+                  episodeJourneyFromCreate(
+                    { ok: true, id: createdId, reader },
+                    draft,
+                    !!membershipCreateStatement(read.release, read.series?.subject.type, draft),
+                  ),
+                );
+              }
+              return reader;
+            },
           }}
           profile={{
-            title: m.screen_title({}, o),
-            scope: 'screen-profile',
+            title: read.seriesId ? m.screen_episode_from_series({}, o) : m.screen_title({}, o),
+            scope: read.seriesId ? 'screen-episode-from-series' : 'screen-profile',
             hideHeading: true,
-            href: `/${locale}/catalogue/screen`,
+            href: read.seriesId
+              ? `/${locale}/catalogue/screen?series=${encodeURIComponent(read.seriesId)}`
+              : `/${locale}/catalogue/screen`,
+            ...(read.seriesId ? { type: episodeType, readOnlyType: true } : {}),
             labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type) =>
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
-            prepare: (item) =>
-              screenInitialFacts(
+            prepare: (item) => {
+              const statements = (drafts[item.type] ?? []).map((row) => row.statement);
+              const membership = membershipCreateStatement(
                 read.release,
-                item,
-                (drafts[item.type] ?? []).map((row) => row.statement),
-              ),
+                read.series?.subject.type,
+                membershipDraft,
+              );
+              if (membership) statements.push(membership);
+              return screenInitialFacts(read.release, item, statements);
+            },
             fields: (type, disabled) => (
-              <ScreenInitialFields
-                key={type}
-                type={type}
-                release={read.release}
-                locale={locale}
-                disabled={disabled}
-                search={search}
-                rows={drafts[type] ?? []}
-                change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
-              />
+              <>
+                {read.seriesId && (
+                  <ScreenEpisodeMembership
+                    read={read}
+                    locale={locale}
+                    disabled={disabled}
+                    draft={membershipDraft}
+                    change={setMembershipDraft}
+                  />
+                )}
+                <ScreenInitialFields
+                  key={type}
+                  type={type}
+                  release={read.release}
+                  locale={locale}
+                  disabled={disabled}
+                  search={search}
+                  rows={drafts[type] ?? []}
+                  change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
+                  omitProperties={read.seriesId ? ['schema:isPartOf'] : []}
+                />
+              </>
             ),
             control: (pointer, type) => screenCreationControl(pointer, drafts[type] ?? [], read.release, locale),
           }}
         />
+        {episodeJourney && read.seriesId && (
+          <ScreenEpisodeResult
+            journey={episodeJourney}
+            series={{
+              id: read.series?.subject.id ?? read.seriesId,
+              label: read.series ? pickText(read.series.subject.labels, locale).text : '',
+            }}
+            locale={locale}
+            membership={membershipDraft}
+            search={search}
+            relations={transport.createdRelations}
+            onLinked={setEpisodeJourney}
+            onRetryRead={() => {
+              const current = journeyRef.current;
+              if (!current || current.stage !== 'unread') return;
+              void transport.read(current.id).then((reader) => {
+                if (!lifetime.active()) return;
+                const draft = membershipRef.current;
+                setEpisodeJourney(
+                  episodeJourneyFromCreate(
+                    { ok: true, id: current.id, reader },
+                    draft,
+                    !!membershipCreateStatement(read.release, read.series?.subject.type, draft),
+                  ),
+                );
+              });
+            }}
+          />
+        )}
       </div>
     );
 }
