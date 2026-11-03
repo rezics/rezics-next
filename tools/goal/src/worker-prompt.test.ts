@@ -474,6 +474,40 @@ test('minimal product policy keeps supported compiler placement and the open com
   }
 });
 
+test('minimal unchanged dev claims use ordinary worker-check waiting and report the bound actual result', () => {
+  const directory = temporaryDirectory();
+  try {
+    const state = join(directory.path, '.temp/goal');
+    mkdirSync(state, { recursive: true });
+    mkdirSync(join(directory.path, 'scripts'));
+    writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
+    writeFileSync(join(state, 'verification-mode'), 'minimal\n');
+    for (const workerOwned of [false, true]) {
+      const contract = brief();
+      if (workerOwned) contract.acceptance = { ...contract.acceptance, command: [], workerOwned: true };
+      const prompt = workerCheckProtocol(directory.path, contract, state);
+      for (const required of [
+        'clean retained dev source',
+        'run the brief’s acceptance now',
+        'bun scripts/worker-check.ts -- <command...>',
+        'The controller wakes this session with the result',
+        'unchanged-source-acceptance',
+        'sourceCommit',
+        'contractHash',
+        'actual pass or failure',
+      ])
+        expect(prompt).toContain(required);
+      if (workerOwned) expect(prompt).toContain('report its exact command and observed result');
+      expect(prompt).toContain('For attempts that change source, do not run acceptance');
+      expect(workerCheckProtocol(directory.path, { ...contract, target: 'stabilize' }, state)).not.toContain(
+        'run the brief’s acceptance now',
+      );
+    }
+  } finally {
+    directory.close();
+  }
+});
+
 test('original integrated journey proof bypasses only its registered task-scoped minimal ban at final Codex input', () => {
   const directory = temporaryDirectory();
   try {
@@ -643,7 +677,8 @@ test('minimal source completion and incomplete product results use the current p
       expect(prompt).toContain('naming what you completed and the deferred acceptance');
       expect(prompt).not.toContain('must report status blocked');
       expect(prompt).toContain('Unfinished work is not a blocker');
-      expect(prompt).not.toContain('run your acceptance command once');
+      expect(prompt).toContain('For attempts that change source, do not run acceptance');
+      expect(prompt).toContain('run the brief’s acceptance now');
     }
   } finally {
     directory.close();
