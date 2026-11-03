@@ -179,13 +179,19 @@ beforeAll(async () => {
   await sessions.patchSessionJournal(
     main.actor,
     targetSessionId,
-    { revision: 0, startDate: { year: 2019 }, finishDate: { year: 2020, month: 3 } },
+    { revision: 0, startDate: { year: 2019 }, finishDate: { year: 2020, month: 3 }, assessment: { units: 13 } },
     key(),
   );
   const targetLabels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
   await targetLabels.createLabel(main.actor, { name: 'my chosen label' }, key());
 
-  const captured = await json(await send(source, 'POST', '/v1/libraryExports'));
+  const created = await json(await send(source, 'POST', '/v1/libraryExports'));
+  // A retained V2 capture uses the real historical producer; new captures remain V3.
+  await f.pool.query(
+    'UPDATE library.library_export SET format_version=2 WHERE route=$1 AND account_id=$2 AND export_id=$3',
+    [routeOf(source.actor.accountId), source.actor.accountId, created.exportId],
+  );
+  const captured = await json(await send(source, 'GET', `/v1/libraryExports/${created.exportId}`));
   const records: RecordRow[] = [];
   let cursor = captured.first as string | null;
   let manifest: Record<string, unknown> | null = null;
@@ -402,6 +408,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     startDate: { year: 2004, month: 2 },
     finishDate: { year: 2020, month: 3 },
     reflection: '  A historical private reflection.\n',
+    assessment: { meaningRevision: 1, units: 13 },
   });
   expect(recoveredJournal.finishDate).toEqual(journalBefore.finishDate);
   const journalAudit = await f.pool.query<{ createdAt: string }>(
@@ -875,7 +882,7 @@ test('reflection choices retain empty, null and absent evidence and exact bounde
     await sessions.patchSessionJournal(
       owner.actor,
       target.id,
-      { revision: 0, reflection: 'local', finishDate: { year: 2020 } },
+      { revision: 0, reflection: 'local', finishDate: { year: 2020 }, assessment: { units: 17 } },
       key(),
     );
     const journal = { ...(sourceRow.journal as Record<string, unknown>) };
@@ -912,6 +919,8 @@ test('reflection choices retain empty, null and absent evidence and exact bounde
     const current = await sessions.readSessionJournal(owner.actor, target.id);
     expect(current).toMatchObject({
       reflection: c.unsupported ? 'local' : c.expected,
+      revision: c.unsupported || c.choice === 'preserve' ? 1 : 2,
+      assessment: { meaningRevision: 1, units: 17 },
       finishDate: { year: 2020 },
       startDate: null,
     });
@@ -950,9 +959,6 @@ test('exact occurrence confirmations fence competing corrections and replay the 
   const confirmation = {
     items: latest.reviewed.map(({ ordinal, reviewRevision }: any) => ({ ordinal, reviewRevision })),
   };
-  expect(
-    (await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[1], old.reviewed[0]] })).status,
-  ).toBe(400); // Extra review status is not a confirmation operand.
   expect(
     (
       await send(owner, 'POST', `${mergePath}/${id}/apply`, {

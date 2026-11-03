@@ -64,7 +64,7 @@ const v2Omissions = {
 const v3Omissions = {
   ...v2Omissions,
   reimport:
-    'version 1 archive recovery plus reviewed version 2 annotations and journal dates; version 3 manifests, including assessments, and provenance are unsupported',
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; version 3 manifests, including assessments, and provenance are unsupported',
 } as const;
 
 export type LibraryExportManifestV1 = {
