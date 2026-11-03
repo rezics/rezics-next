@@ -132,7 +132,7 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   // Only fixed native table/column literals above are interpolated; inputs remain parameters.
   const { rows } = await tx.query<Scope>(
     `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
-    WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
+    WHERE route=$1 AND account_id=$2${current.phase === 'session' ? " AND state <> 'retired'" : ''} AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
     ORDER BY subject_id,${id} LIMIT 100`,
     [...args, current.subject, current.fact],
   );

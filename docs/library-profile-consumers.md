@@ -539,3 +539,12 @@ The driver interface and outcome suite in `specs/library-profiles-driver.ts` and
 `specs/library-profiles-contract.test.ts` cover only pin fixture shape and the frozen legacy matrix; they are not a
 substitute for the native API outcomes. The missing-driver verifier proves every named outcome fails for the single
 intended reason. It does not prove the product implementation.
+
+## Occurrence lifecycle consumers
+
+[Occurrence correction](library-occurrence-correction.md) owns the mounted `:reopen` and `:retire` operations and
+exact recovery/clear semantics for the existing progress/diary editor. The original profile pin and independent
+measures survive reopening; retirement hides the whole session from ordinary reads and native private source pages.
+Export, diary and analytics consumers must use live native session facts and invalidate on the existing session-updated
+event; retained audit rows and public snapshots are not current repeat/completion facts. Journal fields use the same
+row and lifecycle through shared-source receiving. No duplicate journal store or publication worker is introduced.

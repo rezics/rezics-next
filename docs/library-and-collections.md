@@ -214,6 +214,8 @@ Personal directory cursors remain opaque and keep their current BFF limits: 4,09
 2,048 for Following. Empty, non-string, and over-limit addresses retain the request URL and offer a first-page restart
 without a native directory read.
 History contains consumption sessions and published logs while permitted by lifecycle policy.
+[Occurrence correction and retirement](library-occurrence-correction.md) owns the native addressed operations,
+receipt recovery, private visibility and independent public-snapshot policy.
 
 Decision: A malformed saved published-log position shows a localized explanation and a locale-preserving GET link to the newest page; reading starts only when the owner opens that link.
 
