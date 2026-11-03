@@ -172,7 +172,10 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId, after_id: after };
       if (kind === 'label_consolidation') {
-        const removed = await tx.query('DELETE FROM library.label_consolidation WHERE route=$1 AND account_id=$2', [route, accountId]);
+        const removed = await tx.query('DELETE FROM library.label_consolidation WHERE route=$1 AND account_id=$2', [
+          route,
+          accountId,
+        ]);
         return noEffect({ kind, removed: removed.rowCount ?? 0, parent: null, retain: false, blocked: false });
       }
       if (kind === 'copy_archive') {

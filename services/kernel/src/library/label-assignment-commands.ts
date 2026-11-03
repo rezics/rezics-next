@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
+import { admitGroup } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
@@ -27,7 +28,11 @@ import {
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
-import { assertConsolidationGuard, consolidationSubject, type ConsolidationGuard } from './label-consolidation-binding.ts';
+import {
+  assertConsolidationGuard,
+  consolidationSubject,
+  type ConsolidationGuard,
+} from './label-consolidation-binding.ts';
 import { setLabelAssignment } from './label-assignment-store.ts';
 import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './label-assignment-lifecycle-store.ts';
 import { admitShelfRead } from './shelf-admission.ts';
@@ -136,9 +141,22 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed, ...(guard ? { importReview: guard } : {}),
-        ...(consolidation ? { consolidation: { id: consolidation.id, digest: consolidation.digest, ordinal: consolidation.ordinal,
-          phase: consolidation.phase, ...(consolidation.target ? { target: consolidation.target } : {}) } } : {}) },
+      input: {
+        labelId,
+        ...parsed,
+        ...(guard ? { importReview: guard } : {}),
+        ...(consolidation
+          ? {
+              consolidation: {
+                id: consolidation.id,
+                digest: consolidation.digest,
+                ordinal: consolidation.ordinal,
+                phase: consolidation.phase,
+                ...(consolidation.target ? { target: consolidation.target } : {}),
+              },
+            }
+          : {}),
+      },
       requestKey: key,
     };
     const execute = async (
@@ -218,16 +236,30 @@ export function createLabelAssignmentCommands(deps: {
           return { value: minimal(result.assignment), events: events(account, labelId) };
       }
     };
-    if (operation === 'unassign' && !consolidation) return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
-    return ((guard || consolidation) ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
+    if (operation === 'unassign' && !consolidation)
+      return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
+    return (guard || consolidation ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
         async prepare(attempt) {
           try {
             if (consolidation) {
+              await admitGroup({
+                ...deps,
+                access: () => deps.access,
+                actor: account,
+                clock,
+                deadline,
+                group: 'personal_library',
+                clientAction: 'library_entry:update',
+              });
               const item = consolidation.binding.items[consolidation.ordinal];
-              if (!item || (await consolidationSubject(deps, account, item.evidence.selected.subjectId, attempt.time)) !== item.subject)
+              if (
+                !item ||
+                (await consolidationSubject(deps, account, item.evidence.selected.subjectId, attempt.time)) !==
+                  item.subject
+              )
                 throw new LibraryConflictError();
               return { subjectId: item.evidence.selected.subjectId };
             }
@@ -268,8 +300,22 @@ export function createLabelAssignmentCommands(deps: {
       consolidation,
     )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
-  async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string, consolidation?: ConsolidationGuard) {
-    return (await mutate(actor, labelId, value, key, 'unassign', undefined, consolidation)) as import('../command/command.ts').CommandOutcome<{
+  async function unassignLabel(
+    actor: Actor,
+    labelId: string,
+    value: Expected,
+    key: string,
+    consolidation?: ConsolidationGuard,
+  ) {
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'unassign',
+      undefined,
+      consolidation,
+    )) as import('../command/command.ts').CommandOutcome<{
       deleted: true;
       revision: number;
     }>;
