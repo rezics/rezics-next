@@ -41,6 +41,10 @@ export const LABEL_CONSOLIDATION_LIMITS = Object.freeze({
   retainedPerOwner: 8,
 });
 
+const consolidationEvents = (accountId: string, confirmationId: string) => [
+  { type: 'com.rezics.library.label.consolidation.changed.v1', subject: accountId, data: { confirmationId } },
+];
+
 export type LabelConsolidationSelection = { subjectId: string; assignmentId: string; revision: number };
 type LabelSnapshot = { id: string; name: string; revision: number };
 type AssignmentSnapshot = { id: string; revision: number; effective: boolean };
@@ -516,12 +520,24 @@ export function createLabelConsolidationCommands(deps: {
               ],
             );
           }
+<<<<<<< HEAD
           return noEffect({
             confirmationId,
             expiresAt,
             status: 'active' as const,
             itemCount: evidenceValue.items.length,
           });
+=======
+          return {
+            value: {
+              confirmationId,
+              expiresAt,
+              status: 'active' as const,
+              itemCount: evidenceValue.items.length,
+            },
+            events: consolidationEvents(owner.accountId, confirmationId),
+          };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
         },
       );
     } finally {
@@ -589,7 +605,11 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
+<<<<<<< HEAD
         return noEffect({ updated: true });
+=======
+        return { value: { updated: true }, events: consolidationEvents(owner.accountId, plan.confirmationId) };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
       },
     );
   }
@@ -658,7 +678,14 @@ export function createLabelConsolidationCommands(deps: {
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3`,
           [route, owner.accountId, plan.confirmationId, nextItem, complete, now, command.transactionId],
         );
+<<<<<<< HEAD
         return noEffect({ status, nextItem, complete });
+=======
+        return {
+          value: { status, nextItem, complete },
+          events: consolidationEvents(owner.accountId, plan.confirmationId),
+        };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
       },
     );
   }
@@ -982,7 +1009,14 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
+<<<<<<< HEAD
         return noEffect({ confirmationId, item: current.itemNo });
+=======
+        return {
+          value: { confirmationId, item: current.itemNo },
+          events: consolidationEvents(owner.accountId, confirmationId),
+        };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, operation.value.item) };
@@ -1084,7 +1118,14 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
+<<<<<<< HEAD
         return noEffect({ confirmationId, status: 'cancelled' as const });
+=======
+        return {
+          value: { confirmationId, status: 'cancelled' as const },
+          events: consolidationEvents(owner.accountId, confirmationId),
+        };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
       },
     );
     return { operation, result: await result(owner, sourceLabelId, confirmationId) };
@@ -1262,7 +1303,12 @@ export async function purgeExpiredLabelConsolidations(
                RETURNING consolidation_id`,
               [row.route, row.accountId, row.confirmationId, authoritativeTimeValue(command.time)],
             );
+<<<<<<< HEAD
             return noEffect({ removed: deleted.rows.length > 0 });
+=======
+            if (!deleted.rows.length) return noEffect({ removed: false });
+            return { value: { removed: true }, events: consolidationEvents(row.accountId, row.confirmationId) };
+>>>>>>> 54ab7ea860 (Squash worker branch changes)
           },
         );
         if (outcome.value.removed) removed++;
