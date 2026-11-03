@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { drainPublicFigures } from '../../src/rating/public-figure.ts';
 import { readRatingErasureDone } from '../../src/rating/erasure-status.ts';
 import acknowledgePage from '../../src/rating/erasure-status-ack.sql';
 import deletePopulationVote from '../../src/rating/population-vote-delete.sql';
@@ -10,7 +11,7 @@ import { createVoterEligibilityEffect, readRatingEligibilityJob } from '../../sr
 import { processRatingSegmentPage, type SegmentCursor } from '../../src/rating/segment-job.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -85,6 +86,15 @@ test('rating erasure status is done only after every vote, population vote and v
     return measured.value;
   };
   expect((await status()).done).toBe(false);
+  const rankedTarget = targets[0]!;
+  await applyRatingChanges(db.pool, Array.from({ length: 4 }, (_, index) => ({
+    voterId: newId(route), countingKey: countingKey(`remaining-${index}`), questionId: STANDARD_QUESTION_ID,
+    populationId: realms[0]!, targetId: rankedTarget, units: 10, revision: 1, at,
+  })));
+  await drainPublicFigures(db.pool, partitionOf(routeOf(rankedTarget)!));
+  const rank = () => db.admin.query('SELECT count FROM rating.realm_rank WHERE subject_id=$1 AND population_id=$2',
+    [rankedTarget, realms[0]]);
+  expect((await rank()).rows).toEqual([{ count: '5' }]);
   await deletePersona({ version: 1, pool: db.pool, auth }, voter);
   expect((await status()).done).toBe(false);
   const tombstone = await db.admin.query(
@@ -204,6 +214,16 @@ test('rating erasure status is done only after every vote, population vote and v
     (await db.admin.query('SELECT 1 FROM rating.population_vote WHERE voter_id=$1', [voter.accountId])).rows,
   ).toHaveLength(0);
   expect(await status()).toEqual({ done: true, hadVotes: true });
+  expect((await rank()).rows).toEqual([]);
+  const late = { voterId: voter.accountId, countingKey: countingKey(voter.accountId),
+    questionId: STANDARD_QUESTION_ID, populationId: realms[0]!, targetId: rankedTarget,
+    units: 20, revision: 1, at };
+  await applyRatingChanges(db.pool, [late, { ...late, rekey: true, rekeyAt: at, rekeyAllowMissing: true }]);
+  await drainPublicFigures(db.pool, partitionOf(routeOf(rankedTarget)!));
+  expect((await rank()).rows).toEqual([]);
+  expect((await db.admin.query('SELECT count FROM rating.public_figure WHERE subject_id=$1 AND population_id=$2',
+    [rankedTarget, realms[0]])).rows).toEqual([{ count: '4' }]);
+
   expect(pages.filter((page) => (page.data as { votes: unknown[] }).votes.length === 0)).toHaveLength(3);
   await applyRatingSegmentPageEvent(db.pool, async (_client, id) => countingKey(id), pages[0]!);
   expect(await status()).toEqual({ done: true, hadVotes: true });

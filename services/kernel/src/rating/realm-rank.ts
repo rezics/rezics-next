@@ -12,6 +12,7 @@ import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import readIdentity from '../semantic/read-subject-identity.sql';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { STANDARD_QUESTION_ID } from './votes.ts';
+import readFreshness from './aggregate-read-freshness.sql';
 
 export type RealmRankRequest = Readonly<{
   realmId: string;
@@ -29,6 +30,7 @@ export type RealmRankCandidate = Readonly<{
   priorEpoch: number;
   revision: string;
   asOf: string;
+  updating: boolean;
 }>;
 export type RealmRankPage = Readonly<{
   candidates: readonly RealmRankCandidate[];
@@ -165,12 +167,13 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       const populationRoute = routeOf(input.realmId)!;
       const readPrior = () =>
         observe(deps.pool, partitionOf(populationRoute), deadline, async (client) => {
+          const freshness = await readFreshness.run(client, { route: populationRoute, population_id: input.realmId });
           const result = await client.query<{ generation: string; active: boolean }>(
             `SELECT generation::text,start_count IS NOT NULL AS active FROM rating.population_prior_epoch
            WHERE route=$1 AND question_id=$2 AND population_id=$3`,
             [populationRoute, input.questionId, input.realmId],
           );
-          return result.rows[0] ?? { generation: '0', active: false };
+          return { ...(result.rows[0] ?? { generation: '0', active: false }), updating: freshness!.updating };
         });
       const prior = await readPrior();
       const observed = await observe(deps.pool, input.partition, deadline, async (client, epoch) => {
@@ -182,12 +185,17 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         const parameters: unknown[] = [input.partition, input.questionId, input.realmId, prior.generation, input.limit];
         if (after) parameters.push(after.score, after.subject);
         const result = await client.query<Row>(
-          `SELECT subject_id::text AS "subjectId",count::text,mean::text,score::text,
-                  prior_epoch AS "priorEpoch",revision::text,as_of AS "asOf"
-           FROM rating.realm_rank
-           WHERE partition_no=$1 AND question_id=$2 AND population_id=$3 AND prior_generation=$4
-           ${after ? 'AND (score,subject_id) < ($6::numeric,$7::uuid)' : ''}
-           ORDER BY score DESC,subject_id DESC LIMIT $5`,
+          `SELECT rank.subject_id::text AS "subjectId",rank.count::text,rank.mean::text,rank.score::text,
+                  rank.prior_epoch AS "priorEpoch",rank.revision::text,rank.as_of AS "asOf",
+                  figure.pending_position IS NOT NULL AS updating
+           FROM rating.realm_rank AS rank
+           JOIN rating.public_figure AS figure
+             ON figure.route=get_byte(uuid_send(rank.subject_id),10)*256+get_byte(uuid_send(rank.subject_id),11)
+            AND figure.question_id=rank.question_id AND figure.population_id=rank.population_id
+            AND figure.subject_id=rank.subject_id
+           WHERE rank.partition_no=$1 AND rank.question_id=$2 AND rank.population_id=$3 AND rank.prior_generation=$4
+           ${after ? 'AND (rank.score,rank.subject_id) < ($6::numeric,$7::uuid)' : ''}
+           ORDER BY rank.score DESC,rank.subject_id DESC LIMIT $5`,
           parameters,
         );
         return { generation: current, epoch, rows: result.rows };
@@ -224,6 +232,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
           mean: Number(row.mean),
           score: Number(row.score),
           asOf: row.asOf.toISOString(),
+          updating: row.updating || prior.updating,
         });
       }
       await authorizeRealm();
