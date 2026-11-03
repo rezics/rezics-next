@@ -74,3 +74,35 @@ Evidence and review storage belong to Library's indexed account erasure graph, d
 explicit upload deletion removes both without undoing native facts. Shared command-history erasure retains the
 existing Library pending-custody limitation; this source makes no complete erasure attestation.
 Examples above are constructed API guidance; focused native test execution is reported separately.
+
+## Web journey
+
+The signed-in page is `/library/import-bangumi`, documented in
+[personal Bangumi import](../apps/web/src/library/personal-bangumi-import.md). Library navigation adds that entry
+beside the MyAnimeList importer; the two sources keep separate controllers. Upload, preview, review, confirmation,
+partial results, cancel and discard stay in the mounted visit. JSON, comments and private rows never enter the URL
+or persistent browser storage. A replacement upload deletes the previous native document first. Viewer or CSRF
+replacement retires retry authority. Web binds the generated `libraryImports.bangumi` methods when present and
+otherwise shows unavailable.
+
+Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
+the explicit UUID submitted to `review.target` is identity. Apply defaults to preserving local facts. Ambiguous match
+is rendered if native returns it; unique released provider claims cannot currently produce that set automatically.
+
+Own-upload attestation does not verify a Bangumi account. Preview does not mutate Library facts. Apply revalidates
+identity epoch and release; stale means a deliberate new review. Cancellation stops new admission; already admitted
+work may finish. Evidence deletion removes evidence and reviews, not admitted facts.
+
+## Cost
+
+- Operation: `library.bangumi.preview`, paged owner read, `library.bangumi.review`, `library.bangumi.confirm` apply
+  batches, cancel and delete. Existing Library entry writes remain Commerce-owned.
+- Touched neighbourhood: `library.bangumi_upload` / `library.bangumi_upload_row` on the owner route, unique Bangumi
+  external claims, current released profile state roles, and the personal Library entry command. Web retains the
+  current 10-row page plus N metadata rows; it does not scan other owners or fork the native engine.
+- Formula: `1 preview + K page reads + M reviews + Q apply batches + lifecycle + R retries`, with page `<= 10`,
+  apply `<= 5`, `M <= N <= 100` and `Q <= ceil(M/5)` only when the user confirms full batches.
+- Installed caps: `BANGUMI_LIMITS` in `services/kernel/src/library/list-import-bangumi-model.ts`.
+- Growth check: Web focused test `apps/web/tests/personal-bangumi-import.test.tsx` drives 10, 50 and 100 native-shaped
+  rows through the same controller and asserts call counts, 10-row reads, 5-row writes and the retained-byte bound.
+  Native statement/index bounds stay with the Commerce engine; this journey introduces no new kernel query path.

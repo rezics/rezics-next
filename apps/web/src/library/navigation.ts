@@ -25,6 +25,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     icon: Import,
   },
   {
+    id: 'library.import-bangumi',
+    kind: 'navigation',
+    group: 'personal',
+    order: 17,
+    href: '/library/import-bangumi',
+    match: 'exact',
+    signedIn: true,
+    operation: 'library_entry.put',
+    label: ({ locale }) => m.library_bangumi_nav({}, { locale }),
+    icon: Import,
+  },
+  {
     id: 'library.create-collection',
     kind: 'creation',
     group: 'create',
