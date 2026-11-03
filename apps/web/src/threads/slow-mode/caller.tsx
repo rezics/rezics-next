@@ -121,9 +121,14 @@ export function useSlowModeRead(boardId: string | undefined): {
     enabled: !!visit,
     queryKey: visit ? slowModeQueryKey(visit) : ['board-slow-mode', 'closed'],
     queryFn: async ({ signal }) => {
-      if (!visit?.current(signal)) return { kind: 'unavailable' as const };
-      const result = await port.read({ boardId: visit.boardId, signal });
-      if (!visit.current(signal)) return { kind: 'unavailable' as const };
+      if (!visit) return { kind: 'unavailable' as const };
+      const owner = visit.controller.signal;
+      if (!visit.current(owner) || signal.aborted) return { kind: 'unavailable' as const };
+      const result = await port.read({
+        boardId: visit.boardId,
+        signal: AbortSignal.any([signal, owner]),
+      });
+      if (!visit.current(owner) || signal.aborted) return { kind: 'unavailable' as const };
       return result;
     },
     retry: false,

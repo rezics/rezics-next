@@ -87,7 +87,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   let nextSubmit: WriteFailure | { ok: true; value: { id: string } } = {
     ok: false,
     reason: 'rate-limited',
-    retryAfter: 0,
+    retryAfter: 12,
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, owner);
@@ -138,12 +138,13 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     const reloads = [...host.querySelectorAll('button')].filter((button) => button.textContent === m.slow_mode_retry());
     expect(reloads.length).toBeGreaterThan(0);
     await act(async () => { await user.click(reloads[0]!); });
-    await act(async () => { await Promise.resolve(); });
+    await appeared(m.slow_mode_setting_legend());
     const thirty = [...host.querySelectorAll('label')].find((label) => label.textContent === m.slow_mode_interval_seconds({ seconds: 30 }));
     expect(thirty).toBeDefined();
     await act(async () => { await user.click(thirty!); });
     const save = [...host.querySelectorAll('button')].find((button) => button.textContent === m.slow_mode_apply());
     await act(async () => { await user.click(save!); });
+    await appeared(m.slow_mode_saved());
     expect(changes).toEqual([{ intervalSeconds: 30, idempotencyKey: changes[0]!.idempotencyKey }]);
     expect(host.textContent).toContain(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }));
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
@@ -151,7 +152,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => { await user.click(send!); });
     expect(submits).toHaveLength(1);
     expect(host.textContent).toContain('A draft that must survive a cooldown refusal.');
-    expect(host.textContent).toContain(m.slow_mode_guidance());
+    await appeared(m.slow_mode_guidance());
     expect(host.querySelector('#thread-title')).toHaveProperty('value', 'Cooldown draft');
     nextSubmit = { ok: true, value: { id: recorded.thread.id } };
     const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
@@ -160,7 +161,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(submits[1]!.key).not.toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
     client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
-    await act(async () => { await Promise.resolve(); });
+    for (let attempt = 0; attempt < 25 && host.textContent?.includes(m.slow_mode_saved()); attempt++)
+      await act(async () => { await Promise.resolve(); });
     expect(host.textContent).not.toContain(m.slow_mode_saved());
     expect(documentText(body)).toContain('cooldown');
   } finally {
