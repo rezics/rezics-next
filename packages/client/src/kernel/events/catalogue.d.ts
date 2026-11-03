@@ -884,6 +884,37 @@ declare const productEventTypes: {
         entitlementId: Type.TString;
         orderId: Type.TString;
     }>;
+    readonly "com.rezics.community.space-discovery.invalidated.v1": Type.TObject<{
+        target: Type.TUnion<[Type.TObject<{
+            kind: Type.TLiteral<"context" | "media" | "space">;
+            id: Type.TString;
+        }>, Type.TObject<{
+            kind: Type.TLiteral<"context" | "media" | "space">;
+            id: Type.TString;
+        }>, Type.TObject<{
+            kind: Type.TLiteral<"context" | "media" | "space">;
+            id: Type.TString;
+        }>, Type.TObject<{
+            kind: Type.TLiteral<"source-fence">;
+            route: Type.TInteger;
+            source: Type.TString;
+            externalId: Type.TString;
+            fieldGroup: Type.TUnion<[Type.TLiteral<"facts">, Type.TLiteral<"summary">, Type.TLiteral<"cover">]>;
+        }>, Type.TObject<{
+            kind: Type.TLiteral<"exposure">;
+            group: Type.TString;
+        }>]>;
+        origin: Type.TObject<{
+            partition: Type.TInteger;
+            epoch: Type.TInteger;
+            position: Type.TString;
+            eventId: Type.TString;
+            resourceId: Type.TUnion<[Type.TString, Type.TNull]>;
+            type: Type.TString;
+        }>;
+        revisionId: Type.TUnion<[Type.TString, Type.TNull]>;
+        nativeVersion: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
     readonly 'com.rezics.community.realm-discovery.changed.v1': Type.TObject<{
         realmId: Type.TString;
         realmEpoch: Type.TString;
