@@ -699,6 +699,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
   ratings = ratingRoutes(pins as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
     tokens,
     clock,
     access: () =>

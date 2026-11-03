@@ -376,6 +376,7 @@ export function createVoteCommands(config: Dependencies) {
     const owner = voteAccount(actor);
     if (routeOf(questionId) === null || routeOf(targetId) === null) return null;
     await findQuestion(config, actor, questionId);
+    if (!(await resolveSubject(config, actor, targetId))) return null;
     const route = requireRoute(owner.accountId);
     return withConnection(pool, async (client) => {
       const current = await readAccount(client, route, owner.accountId);

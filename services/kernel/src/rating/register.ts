@@ -1,6 +1,9 @@
 /** Imports and Web use this producer directly in their existing server composition.
  * Imports owns extraction and licence admission; Web owns all presentation and routes.
  */
+export { createOwnVotesReader, OWN_VOTES_PAGE_SIZE } from './own-votes-page.ts';
+export type { OwnVoteActions, OwnVoteEntry, OwnVotesPage } from './own-votes-page.ts';
+export { OwnVoteActionsSchema, OwnVotesPageSchema, OwnVotesPageQuerySchema } from './own-votes-schemas.ts';
 export { createSourceClassificationProducer, SOURCE_CLASSIFICATION_WRITE_ACTION } from './source-classification.ts';
 export type {
   SourceClassificationProducer,

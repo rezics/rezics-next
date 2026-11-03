@@ -494,10 +494,12 @@ messaging.
 
 #### Own vote read and withdrawal Cost
 
-- **Touches:** Existing current-question disclosure plus one account and one vote point read; withdrawal uses the
-  existing account command, one vote row and its existing bounded event fanout.
-- **Bound:** Constant rows per operation independent of the number of retained votes. A lifecycle head is joined by
-  question primary key.
+- **Touches:** Existing current-question disclosure, current original/terminal Subject identity and native Access,
+  plus one account and one vote point read; withdrawal uses the existing account command, one vote row and its
+  existing bounded event fanout. Point readback now withholds a concealed Subject just as the inventory does.
+- **Bound:** Account/vote primary-key probes and one lifecycle head, plus the single-source identity mapping's
+  double collection and original/terminal reference snapshots and Access preparation. Retained vote history is
+  never enumerated; nested identity/Access cost remains part of the operation.
 - **Growth check:** `test/rating/growth-own-votes.test.ts` owns own-vote read growth; the lifecycle test checks retained
   private read and withdrawal while retired.
 
@@ -960,6 +962,107 @@ GET. It rejects more than 100 raw targets before deduplication and rejects unrou
 input still admits the caller. The Map uses exact requested target keys and GET values `{ units, revision, at }`;
 clears and missing votes are absent, while zero remains a vote. It does not resolve redirects or select a controller,
 population or shelf membership. This internal helper adds no HTTP endpoint or scope.
+
+### My ratings
+
+`GET /v1/me/rating-votes` (`rating.own_votes_page`) mounts the account-home native inventory under
+`rating:vote`, authenticated bearer access and the existing `personal_library` exposure gate. Its sole optional
+query field is `cursor`; unknown fields, including voter, selection, search, sort and limit, are rejected.
+Responses use `Cache-Control: no-store`. `register.ts` exports `createOwnVotesReader`, `OWN_VOTES_PAGE_SIZE`,
+`OwnVoteActions`, `OwnVoteEntry`, `OwnVotesPage` and their mounted schemas. The factory takes the existing
+`{pool, access, tokens, routeKey, clock?}` dependencies; `page(actor, {cursor?}, deadline)` returns the same DTO.
+The default Kernel passes its existing trusted route key; this read-only operation registers no new writer,
+projection, event or worker. Existing vote effects and session-token transport remain the mutation authority.
+
+Decision: list all current native votes in question/target key order; retain merged source identities and withhold
+their mutation links because the existing command resolves to the terminal and cannot withdraw the old source safely.
+
+The fixed raw window consumes twenty non-cleared `(question_id, target_id)` keys and at most one lookahead on
+the authenticated account's route. `vote_own_current_page_idx` physically excludes cleared rows. It does not
+sort by change time or invent chronology. Changing a value keeps its key; clearing removes it; reapplying before
+the consumed key is observed on a fresh traversal. Inserts after that key may appear later. This live cursor
+promises neither a historical snapshot nor continued readability of previously consumed rows.
+
+Continuation is sealed to account, authentication epoch, current-native selection and ordering version. Current
+account kind/state/fence/epoch is checked before cursor decoding and before vote payloads. The twenty selected
+source keys alone enter native identity, Subject summary and question observations. Question reads group exact
+IDs by home, join only their label/lifecycle heads, release the home, and check each represented Realm through
+native Access. Global questions retain the existing vote command's disclosure rule. No mounted point GET is used
+for hydration. Final question, original/terminal disclosure, identity and account observations remove stale rows
+and actions. A final exact-key account read also suppresses concurrently cleared votes and returns current values.
+
+Each entry includes the original `targetId`/`questionId`, current permitted `subject` summary and `subjectHref`
+(the native Subject GET), current `question` label/scale/lifecycle, and `own: {units, revision, at}`. Units equal
+zero remain present. A merge can show multiple original votes with the same terminal summary; their source keys
+never collapse into an invented canonical vote. A pending identity suppresses a row. Unavailable identity,
+release or authority work fails the complete request with a retryable problem, retaining the caller's unconsumed
+frontier. An empty or short eligible page keeps `next` when raw continuation exists; it never refills to twenty.
+
+`actions` is a closed union: `editable` supplies `put`, `clear`, `readback`; `retired` supplies clear/readback and
+`reason: question_retired`; `unavailable` supplies `merged_source` or `identity_pending` without mutation URLs.
+All links target the exact existing `/v1/subjects/{id}/ratings/{questionId}/vote`. For a supported row, PUT integer
+units using one idempotency key, keep the returned `rezics-session-token`, and retry an uncertain response with
+that original method/path/body/key. GET readback uses that exact source. DELETE uses its own stable key; subsequent
+GET returns 404 and a fresh inventory omits the clear. Neither replay nor delayed aggregate work recreates a vote.
+Own units imply no public mean, private rank, provider figure or Realm contribution. Aggregate freshness remains
+the existing aggregate read's explicit `freshness` contract; the page does not claim aggregate completion.
+
+Examples for Web's existing account reader and Subject assessment owners:
+
+```ts
+// Populated: exact identities and existing native transport, including a valid zero.
+{ viewer: { accountId }, votes: [{ targetId, questionId, subject, subjectHref,
+  question, own: { units: 0, revision: 1, at },
+  actions: { state: 'editable', put: votePath, clear: votePath, readback: votePath } }], next: null }
+// Empty; deliberately withheld raw windows can instead retain a continuation.
+{ viewer: { accountId }, votes: [], next: null }
+{ viewer: { accountId }, votes: [], next: opaqueCursor }
+// Failed load is HTTP 503 with a retryable problem, never the empty DTO.
+// Signed out is HTTP 401; an authenticated caller without rating:vote is HTTP 403.
+```
+
+Web retains all UI ownership. The account inventory consumer and phone/desktop change/clear/failure-recovery
+inspection after integration are remaining experience work; this API alone does not close that journey.
+
+#### Raw current-vote selection Cost
+
+- Touches: `readOwnVotesRawPage` checks one current account primary key, then seeks the partial Rating index by
+  route, voter and complete question/target continuation. The mounted caller independently binds the account home.
+- Bound: one account row and at most 21 indexed current votes; at most 20 selected payloads enter hydration.
+  Stored fields have fixed UUID/integer/timestamp widths. B-tree positioning grows logarithmically with current
+  keys; cleared rows are absent from the selection index. No count, residual tombstone filter or refill scan.
+- Growth check: focused outcome coverage exercises twenty selected keys, sparse eligible output and continuation.
+  Independent native 256/1024/4096 growth and strict partial-prefix plans remain integration acceptance.
+
+#### Current own-vote page Cost
+
+- Touches: three account-home snapshots (pre-cursor, raw selection, final supplied-key read), four account reads
+  including the raw helper's admission, and at most 20 final exact vote probes. Two question passes each group
+  Q <=20 exact definitions by home and seek their label/lifecycle heads; each pass performs native `readRealm`
+  for R <=Q distinct represented Realms. Two explicit source mapping batches plus the two `readableSubjects`
+  batches make four identity mapping calls. Each mapping call collects twice: per source home one owner batch
+  and one source batch; per represented control home one owner, pending-group and current-closure batch. Both
+  readable passes additionally perform original AND terminal `accessCheck` preparation, original reference
+  disclosure and terminal reference disclosure for up to S <=20 sources; an ordinary source still incurs both
+  reference reads. Each reference snapshot reads its partition and exact Subject and runs native Access.
+  One `readSubjectSummaries` batch hydrates at most S distinct terminals. Two independently anchored Global
+  release reads bracket that summary. All snapshots, pool acquisition, deadlines and runner controls participate.
+- Bound: Rating-owned storage work is at most 21 selected votes plus 20 exact reobservations, four account points,
+  and 2Q definition/label/lifecycle points each. The complete cost additionally includes four real identity
+  batches, 4S prepared native checks/reference observations, 2R Realm reads and one shared summary projection.
+  Summary work includes current labels, original-language and image slots, up to twelve representative-edition
+  keys per supplied terminal, one chosen edition per terminal, up to three planning attempts, native disclosure
+  for all addressed subjects, selected Content media/custody and independently anchored source fences. Release
+  cache misses include the whole released definition bundle. Bytes include all selected labels, expanded-slot
+  candidates, images/credits, serialized Access evidence and cold release bytes, not just vote scalars. These
+  owner terms must be summed from their actual admitted branches; neither a numeric whole-operation ceiling nor
+  constant physical work for every expanded slot/history is asserted here. Empty raw pages stop before all
+  identity, question and summary work. Denied account/scope/epoch stops before private payload selection.
+- Growth check: `test/rating/own-votes-page.test.ts` uses production Kernel, native Access, signed-account fixtures
+  and registered Rating effects for native mutation/replay/readback, sparse pages, two devices and dependency
+  recovery. All-pool controls/rows/bytes and strict by-ID physical-prefix plans at independent 256/1024/4096
+  growth, including question/Subject revisions, remain integration acceptance; Performance review is required
+  before setting the nested numerical ceilings.
 
 ### Subject redirect resolution
 

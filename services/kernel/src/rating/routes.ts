@@ -38,6 +38,8 @@ import {
   type Vote,
 } from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
+import { createOwnVotesReader } from './own-votes-page.ts';
+import { OwnVotesPageQuerySchema, OwnVotesPageSchema } from './own-votes-schemas.ts';
 import {
   RatingAggregateResponseSchema,
   RatingPopulationPageResponseSchema,
@@ -56,7 +58,7 @@ import {
   RatingVoteResponseSchema,
 } from './schemas.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
 type ReadDependencies = Pick<Dependencies, 'pool'> & { access: Access };
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -160,6 +162,21 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
   const votes = () => createVoteCommands(config());
   return app
     .model('PublicFigure', PublicFigureSchema)
+    .get(
+      '/v1/me/rating-votes',
+      {
+        query: OwnVotesPageQuerySchema,
+        response: { 200: OwnVotesPageSchema, ...aggregateFailures },
+        detail: detail('rating.own_votes_page'),
+      },
+      async ({ actor, query, admission, job, set }) => {
+        requirePersonalScope(actor);
+        set.headers['cache-control'] = 'no-store';
+        return admission.run('normal', job, () => command(() =>
+          createOwnVotesReader(config()).page(actor, query, job.deadline),
+        ));
+      },
+    )
     .get(
       '/v1/subjects/:id/figure',
       {
