@@ -60,6 +60,7 @@ import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
 import { malImportRoutes } from '../library/list-import-mal-routes.ts';
 import { libraryExportRoutes } from '../library/library-export-routes.ts';
 import { copyArchiveRoutes } from '../library/copy-archive-routes.ts';
+import { libraryArchiveCollectionRecoveryRoutes } from '../library/library-archive-collection-recovery-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
@@ -637,6 +638,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     workClient,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
+  libraryArchiveCollectionRecoveryRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
   const bangumi = bangumiImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -829,6 +837,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof vndbImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
+  ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &

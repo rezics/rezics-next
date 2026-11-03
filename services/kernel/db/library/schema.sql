@@ -2012,6 +2012,102 @@ END),
 
 
 --
+-- Name: collection_archive_recovery; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_archive_recovery (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    request_key text NOT NULL,
+    upload_digest text NOT NULL,
+    manifest jsonb NOT NULL,
+    coverage jsonb NOT NULL,
+    source_pins jsonb,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    state text NOT NULL,
+    source_record_count integer NOT NULL,
+    source_membership_complete boolean NOT NULL,
+    selected_collection_id uuid,
+    selected_count integer DEFAULT 0 NOT NULL,
+    review_id uuid,
+    review_epoch bigint DEFAULT 0 NOT NULL,
+    review_key text,
+    review_request_digest text,
+    review_digest text,
+    review_snapshot jsonb,
+    native_collection_id uuid,
+    last_added_member_id uuid,
+    pin_state text DEFAULT 'none'::text NOT NULL,
+    pin_reason text,
+    pin_revision bigint,
+    pin_after uuid,
+    cancel_requested boolean DEFAULT false NOT NULL,
+    inflight_action text,
+    inflight_source_id uuid,
+    lease_id uuid,
+    lease_until timestamp with time zone,
+    CONSTRAINT collection_archive_recovery_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT collection_archive_recovery_check1 CHECK ((expires_at = (created_at + '24:00:00'::interval))),
+    CONSTRAINT collection_archive_recovery_check2 CHECK (((lease_id IS NULL) = (lease_until IS NULL))),
+    CONSTRAINT collection_archive_recovery_check3 CHECK ((((inflight_action IS NULL) AND (inflight_source_id IS NULL)) OR ((inflight_action = ANY (ARRAY['create'::text, 'pin'::text])) AND (inflight_source_id IS NULL)) OR ((inflight_action = ANY (ARRAY['member'::text, 'note'::text, 'order'::text])) AND (inflight_source_id IS NOT NULL)))),
+    CONSTRAINT collection_archive_recovery_inflight_action_check CHECK (((inflight_action IS NULL) OR (inflight_action = ANY (ARRAY['create'::text, 'member'::text, 'note'::text, 'order'::text, 'pin'::text])))),
+    CONSTRAINT collection_archive_recovery_pin_state_check CHECK ((pin_state = ANY (ARRAY['none'::text, 'pending'::text, 'applied'::text, 'unsupported'::text]))),
+    CONSTRAINT collection_archive_recovery_request_key_check CHECK (((octet_length(request_key) >= 1) AND (octet_length(request_key) <= 1024))),
+    CONSTRAINT collection_archive_recovery_review_epoch_check CHECK ((review_epoch >= 0)),
+    CONSTRAINT collection_archive_recovery_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT collection_archive_recovery_selected_count_check CHECK (((selected_count >= 0) AND (selected_count <= 1000))),
+    CONSTRAINT collection_archive_recovery_source_record_count_check CHECK (((source_record_count >= 0) AND (source_record_count <= 100000))),
+    CONSTRAINT collection_archive_recovery_state_check CHECK ((state = ANY (ARRAY['preview'::text, 'reviewed'::text, 'applying'::text, 'complete'::text, 'partial'::text, 'cancelled'::text, 'expired'::text]))),
+    CONSTRAINT collection_archive_recovery_upload_digest_check CHECK ((upload_digest ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: collection_archive_recovery_record; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_archive_recovery_record (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    record_kind text NOT NULL,
+    collection_id text NOT NULL,
+    source_id uuid NOT NULL,
+    source_subject_id text,
+    title text,
+    description text,
+    visibility text,
+    membership_kind text,
+    builtin_kind text,
+    presentation_kind text,
+    member_count integer DEFAULT 0 NOT NULL,
+    ordered_count integer DEFAULT 0 NOT NULL,
+    order_key text DEFAULT ''::text NOT NULL,
+    order_present boolean DEFAULT false NOT NULL,
+    note text,
+    note_present boolean DEFAULT false NOT NULL,
+    note_valid boolean DEFAULT true NOT NULL,
+    metadata_valid boolean DEFAULT true NOT NULL,
+    review_id uuid,
+    selected boolean DEFAULT false NOT NULL,
+    target_subject_id text,
+    add_state text DEFAULT 'pending'::text NOT NULL,
+    note_state text DEFAULT 'pending'::text NOT NULL,
+    order_state text DEFAULT 'pending'::text NOT NULL,
+    outcome_reason text,
+    native_member_id uuid,
+    CONSTRAINT collection_archive_recovery_record_add_state_check CHECK ((add_state = ANY (ARRAY['pending'::text, 'applied'::text, 'failed'::text, 'unresolved'::text, 'unsupported'::text]))),
+    CONSTRAINT collection_archive_recovery_record_member_count_check CHECK ((member_count >= 0)),
+    CONSTRAINT collection_archive_recovery_record_note_state_check CHECK ((note_state = ANY (ARRAY['pending'::text, 'applied'::text, 'failed'::text, 'unsupported'::text]))),
+    CONSTRAINT collection_archive_recovery_record_order_state_check CHECK ((order_state = ANY (ARRAY['pending'::text, 'applied'::text, 'failed'::text, 'unsupported'::text]))),
+    CONSTRAINT collection_archive_recovery_record_ordered_count_check CHECK ((ordered_count >= 0)),
+    CONSTRAINT collection_archive_recovery_record_record_kind_check CHECK ((record_kind = ANY (ARRAY['collection'::text, 'occurrence'::text])))
+);
+
+
+--
 -- Name: collection_kind_audience_origin; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4680,6 +4776,30 @@ ALTER TABLE ONLY library.canonical_source_state
 
 
 --
+-- Name: collection_archive_recovery collection_archive_recovery_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_archive_recovery
+    ADD CONSTRAINT collection_archive_recovery_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: collection_archive_recovery_record collection_archive_recovery_record_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_archive_recovery_record
+    ADD CONSTRAINT collection_archive_recovery_record_pkey PRIMARY KEY (route, account_id, upload_id, record_kind, collection_id, source_id);
+
+
+--
+-- Name: collection_archive_recovery collection_archive_recovery_route_account_id_request_key_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_archive_recovery
+    ADD CONSTRAINT collection_archive_recovery_route_account_id_request_key_key UNIQUE (route, account_id, request_key);
+
+
+--
 -- Name: collection_kind_audience_origin collection_kind_audience_origi_route_collection_id_audience_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5847,6 +5967,48 @@ CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference
 --
 
 CREATE UNIQUE INDEX canonical_source_working ON library.canonical_source_generation USING btree (route, collection_id) WHERE (state = 'working'::text);
+
+
+--
+-- Name: collection_archive_recovery_cleanup; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_cleanup ON library.collection_archive_recovery_record USING btree (route, account_id, upload_id, record_kind, source_id);
+
+
+--
+-- Name: collection_archive_recovery_collection_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_collection_page ON library.collection_archive_recovery_record USING btree (route, account_id, upload_id, source_id) WHERE (record_kind = 'collection'::text);
+
+
+--
+-- Name: collection_archive_recovery_occurrence_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_occurrence_page ON library.collection_archive_recovery_record USING btree (route, account_id, upload_id, collection_id, order_key COLLATE "C", source_id) WHERE (record_kind = 'occurrence'::text);
+
+
+--
+-- Name: collection_archive_recovery_owner_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_owner_expiry ON library.collection_archive_recovery USING btree (route, account_id, expires_at, upload_id);
+
+
+--
+-- Name: collection_archive_recovery_selected; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_selected ON library.collection_archive_recovery_record USING btree (route, account_id, upload_id, review_id, source_id) WHERE ((record_kind = 'occurrence'::text) AND selected);
+
+
+--
+-- Name: collection_archive_recovery_selected_order; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_archive_recovery_selected_order ON library.collection_archive_recovery_record USING btree (route, account_id, upload_id, review_id, collection_id, order_key COLLATE "C", source_id) WHERE ((record_kind = 'occurrence'::text) AND selected);
 
 
 --

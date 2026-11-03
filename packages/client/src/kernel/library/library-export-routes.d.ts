@@ -6018,7 +6018,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
     expiresAt: string;
     privacy: 'private';
     completeness: 'supported-native-facts';
-    sections: string[];
+    sections: ("assignments" | "bangumiEvidence" | "bangumiUploads" | "collectionPins" | "collections" | "entries" | "history" | "holdings" | "labels" | "malEvidence" | "malImports" | "occurrences" | "sessions" | "units")[];
     omissions: {
         trash: string;
         providerIdentifiers: string;
