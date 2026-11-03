@@ -114,8 +114,8 @@ export function CharacterCreateReview({
 }) {
   const o = { locale: locale as never };
   const languages = Object.keys(item.labels);
-  const descriptions = item.descriptions ?? {};
-  const aliases = item.aliases ?? {};
+  const descriptions: Record<string, string> = item.descriptions ?? {};
+  const aliases: Record<string, string[]> = item.aliases ?? {};
   return (
     <section
       data-slot="character-create-review"
