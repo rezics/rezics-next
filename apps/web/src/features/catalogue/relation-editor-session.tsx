@@ -10,11 +10,7 @@ import { RelationEditor } from './relation-editor';
 import { relationTargetSearch } from './relation-editor-search';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
 import { claimCreditTargetReturn, discardCreditTargetHandoff, type CreditTargetHandoff } from './credit-target-handoff';
-import {
-  claimRelatedWorkReturn,
-  discardRelatedWorkHandoff,
-  type RelatedWorkHandoff,
-} from './related-work-handoff';
+import { claimRelatedWorkReturn, discardRelatedWorkHandoff, type RelatedWorkHandoff } from './related-work-handoff';
 
 export const RelationEditorSession = candidateSession(RelationEditorSessionLive);
 

@@ -156,9 +156,7 @@ export function RelatedWorkCreate({
   }
 
   const returnedIdentity = handoff?.phase === 'ready' ? handoff.identity : undefined;
-  const sourceHref = handoff
-    ? subjectHref({ id: handoff.workId, label: handoff.sourceLabel }, locale).href
-    : undefined;
+  const sourceHref = handoff ? subjectHref({ id: handoff.workId, label: handoff.sourceLabel }, locale).href : undefined;
 
   return (
     <div className="space-y-6">

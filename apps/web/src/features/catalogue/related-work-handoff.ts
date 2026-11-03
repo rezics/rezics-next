@@ -242,9 +242,7 @@ export function recordCreatedRelatedWork(
   }
   value.createdId = id;
   const createdIdentity =
-    identity &&
-    validIdentity(identity, id) &&
-    relatedWorkTargetAdmitted(identity.type, identity.bases, value.targets)
+    identity && validIdentity(identity, id) && relatedWorkTargetAdmitted(identity.type, identity.bases, value.targets)
       ? identity
       : undefined;
   if (createdIdentity) value.identity = createdIdentity;
@@ -269,11 +267,7 @@ export function beginRelatedWorkDraftReturn(token: string, workId: string, reade
   return persist(value);
 }
 
-export function claimRelatedWorkReturn(
-  token: string,
-  workId: string,
-  reader: string,
-): RelatedWorkHandoff | undefined {
+export function claimRelatedWorkReturn(token: string, workId: string, reader: string): RelatedWorkHandoff | undefined {
   const value = readRelatedWorkHandoff(token);
   if (
     !value ||

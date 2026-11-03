@@ -1535,9 +1535,7 @@ function RelationEditorLive({
                               </Button>
                             </div>
                           )}
-                          {relatedWorkBlocked && (
-                            <p role="alert">{m.relation_related_work_blocked({}, options)}</p>
-                          )}
+                          {relatedWorkBlocked && <p role="alert">{m.relation_related_work_blocked({}, options)}</p>}
                           {!createdCreditIdentity &&
                             draft.value.type === 'somevalue' &&
                             field?.group === 'credit' &&
