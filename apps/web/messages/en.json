@@ -7774,5 +7774,6 @@
   "post_history_comparison_to": "Admitted comparison revision",
   "post_history_comparison_close": "Return to selected history revision",
   "post_history_replace_account": "Replace reader account",
-  "post_history_replace_source": "Replace session source"
+  "post_history_replace_source": "Replace session source",
+  "post_history_reply": "Reply in this discussion"
 }
