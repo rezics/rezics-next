@@ -73,7 +73,9 @@ export class ExportAssembly {
 }
 
 export function deliverLocalFile(file: ExportArtifact): boolean {
-  const blob = new Blob([file.bytes], { type: file.mediaType });
+  const copy = new Uint8Array(file.bytes.byteLength);
+  copy.set(file.bytes);
+  const blob = new Blob([copy.buffer as ArrayBuffer], { type: file.mediaType });
   const url = URL.createObjectURL(blob);
   try {
     const anchor = document.createElement('a');

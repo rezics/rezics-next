@@ -118,8 +118,7 @@ function isOmissions(value: unknown): value is ExportOmissions {
   return Object.values(value).every((item) => typeof item === 'string');
 }
 
-function isCoverage(value: unknown): value is ExportCoverage {
-  if (!record(value)) return false;
+function hasCoverage(value: Record<string, unknown>): boolean {
   if (value.format !== EXPORT_FORMAT || value.version !== EXPORT_VERSION) return false;
   if (typeof value.exportId !== 'string' || !SUBJECT_ID.test(value.exportId)) return false;
   if (typeof value.capturedAt !== 'string' || typeof value.expiresAt !== 'string') return false;
@@ -129,14 +128,15 @@ function isCoverage(value: unknown): value is ExportCoverage {
 }
 
 function isStatus(value: unknown): value is ExportStatus {
-  if (!isCoverage(value) || !isState(value.state)) return false;
+  if (!record(value) || !hasCoverage(value) || !isState(value.state)) return false;
   if (value.first !== null && (typeof value.first !== 'string' || value.first.length > EXPORT_CURSOR_CHARS))
     return false;
   return true;
 }
 
 function isManifest(value: unknown): value is ExportManifest {
-  if (!isCoverage(value) || typeof value.rows !== 'number' || typeof value.recordBytes !== 'number') return false;
+  if (!record(value) || !hasCoverage(value)) return false;
+  if (typeof value.rows !== 'number' || typeof value.recordBytes !== 'number') return false;
   return Number.isInteger(value.rows) && value.rows >= 0 && Number.isInteger(value.recordBytes) && value.recordBytes >= 0;
 }
 

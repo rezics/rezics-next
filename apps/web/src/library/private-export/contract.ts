@@ -123,7 +123,9 @@ export function encodedBytes(value: unknown): number {
   return new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value)).length;
 }
 
-export function isTerminalState(state: ExportState): boolean {
+export function isTerminalState(
+  state: ExportState,
+): state is Extract<ExportState, 'stale' | 'cancelled' | 'expired' | 'limit'> {
   return state === 'stale' || state === 'cancelled' || state === 'expired' || state === 'limit';
 }
 
