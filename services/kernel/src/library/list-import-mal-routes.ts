@@ -20,6 +20,31 @@ import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' }),
   row = t.Integer({ minimum: 0, maximum: MAL_LIMITS.rows - 1 });
+const progressSelection = t.Optional(
+  t.Object(
+    {
+      occurrence: t.Union([
+        t.Object({ kind: t.Literal('existing'), sessionId: id }, closed),
+        t.Object(
+          { kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 128 }) },
+          closed,
+        ),
+      ]),
+      measures: t.Array(
+        t.Object(
+          {
+            field: t.String({ minLength: 1, maxLength: 100 }),
+            action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+            replace: t.Optional(t.Boolean()),
+          },
+          closed,
+        ),
+        { minItems: 1, maxItems: 8 },
+      ),
+    },
+    closed,
+  ),
+);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const params = t.Object({ id }, closed);
 const failures = {
@@ -124,6 +149,7 @@ export function malImportRoutes(
             target: t.Union([id, t.Null()]),
             skip: t.Boolean(),
             replace: t.Boolean(),
+            progress: progressSelection,
             labels: t.Optional(
               t.Array(
                 t.Object(

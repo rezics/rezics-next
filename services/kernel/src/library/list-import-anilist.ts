@@ -15,6 +15,7 @@ import { newId, partitionOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
+import type { LibraryProfileDescriptor } from './profile.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import { readEntry } from './entry-store.ts';
@@ -26,6 +27,7 @@ import {
 import { aniListLabelEvidence, ANILIST_LABEL_LIMITS } from './list-import-anilist-label-evidence.ts';
 import { ANILIST_LIMITS, AniListInputError, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
+import { createSessionCommands } from './sessions.ts';
 import {
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,
@@ -39,6 +41,17 @@ import {
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  describeProgressSources,
+  executeProgressAdoption,
+  progressResults,
+  reviewProgressAdoption,
+  type ProgressAdoptionCheckpoint,
+  type ProgressAdoptionInput,
+  type ProgressAdoptionPlan,
+  type ProgressProfileBinding,
+  type ProgressSourceValue,
+} from './list-import-progress-adoption.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
 export type AniListMatch = {
@@ -53,8 +66,16 @@ export type AniListObservation = {
   proposedState: string | null;
   current: { state: string; revision: number; incarnationId: string | null } | null;
   states: { id: string; role?: string }[];
+  profile?: LibraryProfileDescriptor | null;
+  profileBinding?: ProgressProfileBinding | null;
 };
-export type AniListReviewInput = { subjectId?: string; skip?: boolean; fields: string[]; replace?: boolean };
+export type AniListReviewInput = {
+  subjectId?: string;
+  skip?: boolean;
+  fields: string[];
+  replace?: boolean;
+  progress?: ProgressAdoptionInput;
+};
 type Review = {
   id: string;
   match: AniListMatch;
@@ -63,17 +84,25 @@ type Review = {
   commandKey: string;
   clientId: string;
   requestedBy: string | null;
+  sourceFingerprint: string;
+  progress?: ProgressAdoptionPlan;
 };
 export type AniListOutcome = {
   ordinal: number;
   status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
   retained: string[];
+  progress?: {
+    occurrence: ProgressAdoptionCheckpoint['occurrence'];
+    complete: boolean;
+    measures: ReturnType<typeof progressResults>;
+  };
 };
 export type AniListStored = {
   source: AniListRow;
   review?: Review;
   metadataReviews?: EntryImportMetadataReview[];
   started?: boolean;
+  progress?: ProgressAdoptionCheckpoint;
   outcome?: AniListOutcome;
   labelReview?: AniListLabelReview;
   labelWork?: Record<number, AniListLabelWork>;
@@ -88,6 +117,60 @@ const role: Record<string, string> = {
   DROPPED: 'dropped',
   PAUSED: 'paused',
 };
+function aniListProgressSources(row: AniListRow): ProgressSourceValue[] {
+  const evidence = row.evidence;
+  const media = evidence.media;
+  const kind =
+    media !== null && typeof media === 'object' && !Array.isArray(media)
+      ? (media as Record<string, unknown>).type
+      : null;
+  const fields: [string, string | null][] =
+    kind === 'ANIME'
+      ? [
+          ['progress', 'episode'],
+          ...(Object.hasOwn(evidence, 'progressVolumes') ? [['progressVolumes', null] as [string, null]] : []),
+        ]
+      : kind === 'MANGA'
+        ? [
+            ['progress', 'chapter'],
+            ['progressVolumes', 'volume'],
+          ]
+        : [
+            ...(Object.hasOwn(evidence, 'progress') ? [['progress', null] as [string, null]] : []),
+            ...(Object.hasOwn(evidence, 'progressVolumes') ? [['progressVolumes', null] as [string, null]] : []),
+          ];
+  return fields.map(([field, unit]) => {
+    const present = Object.hasOwn(evidence, field);
+    const validity = row.fields.find((item) => item.field === field)?.validity;
+    const value = evidence[field];
+    const state: ProgressSourceValue['state'] = !present
+      ? 'missing'
+      : validity === 'invalid'
+        ? 'invalid'
+        : validity === 'unknown'
+          ? 'unknown'
+          : typeof value === 'number' && Number.isSafeInteger(value) && value === 0
+            ? 'zero'
+            : validity === 'valid' && typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+              ? 'value'
+              : 'invalid';
+    return {
+      field,
+      unit,
+      state,
+      ...(typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? { amount: String(value) } : {}),
+    };
+  });
+}
+
+function publicProgress(plan: ProgressAdoptionPlan, checkpoint: ProgressAdoptionCheckpoint | null | undefined) {
+  return {
+    occurrence: checkpoint?.occurrence ?? null,
+    complete: checkpoint?.complete ?? false,
+    measures: progressResults(plan, checkpoint),
+  };
+}
+
 export function anilistMetadataProposals(row: AniListRow): EntryImportMetadataProposals {
   const evidence = row.evidence;
   const note: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'notes')
@@ -181,6 +264,7 @@ export function createAniListImport(deps: Dependencies) {
   const runner = createLibraryCommandRunner(deps);
   const entries = createEntryCommands(deps);
   const personalEntries = createEntryPersonalCommands(deps);
+  const sessions = createSessionCommands(deps);
   // Keep source payloads out of command receipts, events and exception text.
   async function snapshot<T>(actor: Actor, body: (client: PoolClient, account: AccountActor) => Promise<T>) {
     const account = owner(actor),
@@ -290,6 +374,11 @@ export function createAniListImport(deps: Dependencies) {
         source.kind === 'supported'
           ? (source.profile.entryStateSet?.states ?? []).map((s) => ({ id: s.id, ...(s.role ? { role: s.role } : {}) }))
           : [],
+      profile: source.kind === 'supported' ? source.profile : null,
+      profileBinding:
+        source.kind === 'supported'
+          ? { pin: source.pin, epoch: String(anchor.identityEpoch), acceptingType: anchor.acceptingType }
+          : null,
       proposedState: null,
     };
   }
@@ -434,16 +523,22 @@ export function createAniListImport(deps: Dependencies) {
     const rows = [];
     for (const row of raw) {
       const matching = await match(actor, row.payload.source);
-      const observation =
+      const inspected =
         matching.state === 'matched'
-          ? propose(await observe(actor, matching.candidates[0]!), row.payload.source)
+          ? await observe(actor, matching.candidates[0]!)
           : null;
+      const { profile, profileBinding: _profileBinding, ...publicObservation } = inspected ?? {};
+      const observation = inspected ? propose(publicObservation as AniListObservation, row.payload.source) : null;
       rows.push({
         ordinal: row.ordinal,
         ...row.payload,
         labelEvidence: aniListLabelEvidence(row.payload.source),
         match: matching,
         proposal: observation,
+        progressMeasures: describeProgressSources(profile ?? null, aniListProgressSources(row.payload.source)),
+        progress: row.payload.review?.progress
+          ? publicProgress(row.payload.review.progress, row.payload.progress)
+          : null,
       });
     }
     await snapshot(actor, async () => undefined);
@@ -453,13 +548,31 @@ export function createAniListImport(deps: Dependencies) {
   }
   async function review(actor: Actor, id: string, ordinal: number, input: AniListReviewInput, key: string) {
     if (input.fields.some((field) => !field.isWellFormed() || field.includes('\0'))) throw new AniListInputError();
+    if (input.skip && input.progress) throw new AniListInputError();
     const account = owner(actor),
       stored = await load(actor, id, ordinal);
     const matching = await match(actor, stored.source);
     const selected = input.subjectId ?? (matching.state === 'matched' ? matching.candidates[0] : undefined);
     if (!input.skip && !selected) throw new LibraryConflictError();
-    const observation = selected ? propose(await observe(actor, selected), stored.source) : null;
+    const inspected = selected ? await observe(actor, selected) : null;
+    const { profile, profileBinding, ...publicObservation } = inspected ?? {};
+    const observation = selected
+      ? propose(inspected ? (publicObservation as AniListObservation) : null, stored.source)
+      : null;
     if (selected && (!observation || selected !== observation.subjectId)) throw new LibraryConflictError();
+    if (input.progress && (!selected || !profile || !profileBinding)) throw new LibraryConflictError();
+    const progress = input.progress
+      ? await reviewProgressAdoption(
+          sessions,
+          actor,
+          selected!,
+          profile!,
+          profileBinding!,
+          aniListProgressSources(stored.source),
+          input.progress,
+          `anilist-progress-start:${hash({ id, ordinal, commandKey: randomUUID() })}`,
+        )
+      : undefined;
     const value: Review = {
       id: randomUUID(),
       commandKey: randomUUID(),
@@ -468,12 +581,14 @@ export function createAniListImport(deps: Dependencies) {
       input,
       clientId: account.clientId,
       requestedBy: account.requestedBy ?? null,
+      sourceFingerprint: hash(stored.source),
+      ...(progress ? { progress } : {}),
     };
     const saved = await save(actor, id, ordinal, 'review', key, input, (current) => {
       if (current.started) throw new LibraryConflictError();
       if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
         throw new LibraryConflictError();
-      return { ...current, review: value, outcome: undefined };
+      return { ...current, review: value, progress: undefined, outcome: undefined };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -768,7 +883,7 @@ export function createAniListImport(deps: Dependencies) {
         });
         continue;
       }
-      if (stored.outcome) {
+      if (stored.outcome && (!reviewed.progress || stored.progress?.complete)) {
         outcomes.push(stored.outcome);
         continue;
       }
@@ -776,7 +891,8 @@ export function createAniListImport(deps: Dependencies) {
         .map((f) => f.field)
         .filter((f) => f !== 'status' || !reviewed.input.fields.includes('status'));
       let status: AniListOutcome['status'] = 'unsupported';
-      if (reviewed.input.skip) status = 'skipped';
+      if (hash(stored.source) !== reviewed.sourceFingerprint) status = 'stale';
+      else if (reviewed.input.skip) status = 'skipped';
       else if (reviewed.input.fields.includes('status') && reviewed.observation?.proposedState) {
         const observed = reviewed.observation;
         const current = await observe(actor, observed.subjectId),
@@ -832,8 +948,55 @@ export function createAniListImport(deps: Dependencies) {
       if (status !== 'applied' && !retained.includes('status') && Object.hasOwn(stored.source.evidence, 'status'))
         retained.push('status');
       const outcome: AniListOutcome = { ordinal: confirmation.ordinal, status, retained };
+      let progressCheckpoint: ProgressAdoptionCheckpoint | undefined;
+      if (reviewed.progress && hash(stored.source) === reviewed.sourceFingerprint) {
+        progressCheckpoint = await executeProgressAdoption(actor, sessions, reviewed.progress, stored.progress, {
+          async canceled() {
+            return (await load<Header>(actor, id, -1)).cancelled;
+          },
+          async binding() {
+            const matching = await match(actor, stored.source);
+            const current = await observe(actor, reviewed.progress!.subjectId);
+            if (
+              matching.fingerprint !== reviewed.match.fingerprint ||
+              !current ||
+              current.subjectId !== reviewed.progress!.subjectId ||
+              current.epoch !== reviewed.progress!.profile.epoch ||
+              hash(current.pin) !== hash(reviewed.progress!.profile.pin)
+            )
+              return null;
+            return current.profileBinding ?? null;
+          },
+          async save(checkpoint, admission = false) {
+            const digest = hash(checkpoint);
+            const saved = await save(
+              actor,
+              id,
+              confirmation.ordinal,
+              admission ? 'start' : 'finish',
+              `anilist-progress:${hash({ reviewId: reviewed.id, admission, digest })}`,
+              { reviewId: reviewed.id, admission, digest },
+              (row) => {
+                if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
+                return { ...row, progress: checkpoint, ...(admission ? { started: true } : {}) };
+              },
+            );
+            if (saved.value.reviewId !== reviewed.id) return false;
+            stored.progress = checkpoint;
+            return true;
+          },
+        });
+        stored.progress = progressCheckpoint;
+        outcome.progress = publicProgress(reviewed.progress, progressCheckpoint);
+        const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
+        if (measureStatuses.includes('stale')) status = 'stale';
+        else if (status === 'unsupported' && measureStatuses.some((value) => value === 'applied' || value === 'cleared'))
+          status = 'applied';
+        else if (measureStatuses.includes('failed')) status = 'failed';
+        outcome.status = status;
+      }
       // Failed attempts remain retryable with the original command; stale reviews can be refreshed before starting.
-      if (status !== 'failed')
+      if (status !== 'failed' && (!reviewed.progress || progressCheckpoint?.complete))
         await save(actor, id, confirmation.ordinal, 'finish', reviewed.commandKey, outcome, (row) => {
           if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
           return status === 'stale' && !row.started

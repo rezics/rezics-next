@@ -6,9 +6,12 @@ import { releaseDigest, type Release } from '@rezics/definitions';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
   fixture,
+  compiledProfile,
   libraryLabels,
   libraryProfile,
   legacyProfile,
+  registryOf,
+  unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
@@ -46,6 +49,10 @@ const entryScopes = [
   'library_entry:list',
   'library_entry:update',
   'library_entry:delete',
+  'progress_session:create',
+  'progress_session:list',
+  'progress_session:read',
+  'progress_session:update',
   'follow:read',
   'follow:create',
   'follow:delete',
@@ -81,7 +88,10 @@ export async function compileLibraryOutcomeRelease(): Promise<Release> {
 }
 
 /** Real compiler output, including a child whose structural bases are not primary types. */
-export async function compileEntryRelease(version: 'original' | 'replacement'): Promise<Release> {
+export async function compileEntryRelease(
+  version: 'original' | 'replacement',
+  gameUnits?: readonly string[],
+): Promise<Release> {
   const profiles = Object.fromEntries(
     Object.entries(entryStates).map(([vertical, state]) => {
       const profile = libraryProfile(`fixture.${vertical}`, vertical === 'record' ? 'track' : 'minute');
@@ -116,14 +126,27 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
       labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
     input.presentation[key] = JSON.stringify(labels);
   }
-  return compileCatalogue(input);
+  const release = await compileCatalogue(input);
+  const game = gameUnits ? registryOf(release)?.['fixture.game'] : null;
+  if (gameUnits && !game) throw new Error('Fixture release is missing the game profile registry entry');
+  if (game) {
+    game.progress.allowed[0].units = gameUnits!.map((unit) => unitData(unit));
+    Object.assign(game, compiledProfile(game));
+  }
+  return release;
 }
 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
 export async function createProfileEntryFixture(
-  options: { clock?: KernelClock; pool?: Pool; singleConnection?: boolean; projectLinks?: boolean } = {},
+  options: {
+    clock?: KernelClock;
+    pool?: Pool;
+    singleConnection?: boolean;
+    projectLinks?: boolean;
+    gameUnits?: readonly string[];
+  } = {},
 ) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -404,8 +427,8 @@ export async function createProfileEntryFixture(
         client.release();
       }
     }
-    const original = await compileEntryRelease('original');
-    const replacement = await compileEntryRelease('replacement');
+    const original = await compileEntryRelease('original', options.gameUnits);
+    const replacement = await compileEntryRelease('replacement', options.gameUnits);
     const originalDigest = await publish(original);
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);

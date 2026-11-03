@@ -47,6 +47,16 @@ import {
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  describeProgressSources,
+  executeProgressAdoption,
+  progressResults,
+  reviewProgressAdoption,
+  type ProgressAdoptionCheckpoint,
+  type ProgressAdoptionInput,
+  type ProgressAdoptionPlan,
+  type ProgressSourceValue,
+} from './list-import-progress-adoption.ts';
 
 export type MalReviewInput = {
   row: number;
@@ -54,6 +64,7 @@ export type MalReviewInput = {
   skip: boolean;
   replace: boolean;
   labels?: MalLabelSelection[];
+  progress?: ProgressAdoptionInput;
 };
 export type MalDateField = 'startDate' | 'finishDate';
 export type MalDateAction = 'adopt' | 'clear';
@@ -113,6 +124,11 @@ export type MalOutcome = {
   reason: string | null;
   labels?: MalLabelOutcome[];
   remainingLabels?: number[];
+  progress?: {
+    occurrence: ProgressAdoptionCheckpoint['occurrence'];
+    complete: boolean;
+    measures: ReturnType<typeof progressResults>;
+  };
 };
 type Binding = { subject: string; route: number; source: string; externalId: string };
 export type MalReview = {
@@ -127,9 +143,17 @@ export type MalReview = {
   conflict: boolean;
   unsupported: string | null;
   labels?: MalLabelReview;
+  fingerprint: string;
+  progress?: ProgressAdoptionPlan;
 };
 export type MalMetadataReviewInput = { row: number; sourceReviewToken: string };
-type Intent = { review: MalReview; fields: string[]; key: string; outcome?: MalOutcome };
+type Intent = {
+  review: MalReview;
+  fields: string[];
+  key: string;
+  progress?: ProgressAdoptionCheckpoint;
+  outcome?: MalOutcome;
+};
 type LabelIntent = {
   version: string;
   selectionDigest: string;
@@ -171,6 +195,33 @@ type Dependencies = {
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const missing = () => new ProblemError('not_found');
 const stale = () => new ProblemError('conflict');
+
+function malProgressSources(row: MalRow): ProgressSourceValue[] {
+  const pairs: [string, string][] =
+    row.kind === 'anime'
+      ? [['my_watched_episodes', 'episode']]
+      : [
+          ['my_read_chapters', 'chapter'],
+          ['my_read_volumes', 'volume'],
+        ];
+  return pairs.map(([field, unit]) => {
+    const value = row.progress[field] ?? { kind: 'missing' as const };
+    return {
+      field,
+      unit,
+      state: value.kind,
+      ...(typeof value.value === 'number' && Number.isSafeInteger(value.value) ? { amount: String(value.value) } : {}),
+    };
+  });
+}
+
+function publicProgress(plan: ProgressAdoptionPlan, checkpoint: ProgressAdoptionCheckpoint | null | undefined) {
+  return {
+    occurrence: checkpoint?.occurrence ?? null,
+    complete: checkpoint?.complete ?? false,
+    measures: progressResults(plan, checkpoint),
+  };
+}
 
 function journalDate(value: MalRow['dates'][string]): ProgressSessionJournalDate | null {
   if (value.kind !== 'value' || typeof value.value !== 'string' || !value.precision) return null;
@@ -378,7 +429,8 @@ export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals 
 export function createMalImport(deps: Dependencies) {
   const { pool, access, journal } = deps,
     runner = createLibraryCommandRunner(deps),
-    entries = createEntryCommands(deps);
+    entries = createEntryCommands(deps),
+    sessions = journal;
   const labels = createPersonalLabelCommands(deps),
     assignments = createLabelAssignmentCommands(deps),
     personalEntries = createEntryPersonalCommands(deps);
@@ -531,13 +583,31 @@ export function createMalImport(deps: Dependencies) {
         ? { subject: claim.subject_id, route, source: identifier.source, externalId: identifier.value }
         : null;
     if (!target)
-      return { target: null, binding, source: null, current: null, state: null, match: 'unmatched' as const };
+      return {
+        target: null,
+        binding,
+        source: null,
+        current: null,
+        state: null,
+        match: 'unmatched' as const,
+        profile: null,
+        profileBinding: null,
+      };
     const observation = await readLibraryProfileSourceObservation(
       { pool, access, actor: a.actor, at: a.at, deadline },
       target,
     );
     if (!observation || observation.source.subjectId !== target)
-      return { target: null, binding: null, source: null, current: null, state: null, match: 'unavailable' as const };
+      return {
+        target: null,
+        binding: null,
+        source: null,
+        current: null,
+        state: null,
+        match: 'unavailable' as const,
+        profile: null,
+        profileBinding: null,
+      };
     const { source, anchor } = observation;
     let current: Entry | null = null;
     try {
@@ -562,6 +632,11 @@ export function createMalImport(deps: Dependencies) {
         : null,
       state: states.length === 1 ? states[0]!.id : null,
       match: current ? ('already-matched' as const) : ('matched' as const),
+      profile: source.kind === 'supported' ? source.profile : null,
+      profileBinding:
+        source.kind === 'supported'
+          ? { pin: source.pin, epoch: anchor.identityEpoch.toString(), acceptingType: anchor.acceptingType }
+          : null,
     };
   }
   async function page(actor: Actor, id: string, after: number, deadline: number) {
@@ -569,7 +644,8 @@ export function createMalImport(deps: Dependencies) {
     const rows = [];
     for (const row of doc.rows.slice(after, after + MAL_LIMITS.page)) {
       const review = doc.reviews[row.index];
-      const observation = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
+      const observed = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
+      const { profile, profileBinding: _profileBinding, ...observation } = observed;
       rows.push({
         ...row,
         ...observation,
@@ -580,6 +656,8 @@ export function createMalImport(deps: Dependencies) {
         dateReview: doc.dateReviews[row.index] ?? null,
         dateOutcome: doc.dateIntents[row.index]?.outcome ?? null,
         labelOutcomes: doc.labelIntents?.[row.index]?.items.flatMap((i) => (i.outcome ? [i.outcome] : [])) ?? [],
+        progressMeasures: describeProgressSources(profile ?? null, malProgressSources(row)),
+        progress: review?.progress ? publicProgress(review.progress, doc.intents[row.index]?.progress) : null,
       });
     }
     await authority(actor, deadline);
@@ -598,10 +676,13 @@ export function createMalImport(deps: Dependencies) {
     const { doc } = await load(actor, id, deadline),
       row = doc.rows[input.row];
     if (!row) throw missing();
+    if (input.skip && input.progress) throw new ProblemError('invalid_request');
     if (doc.metadataReviews?.[input.row]?.some((item) => item.confirmation && !item.confirmation.outcome))
       throw stale();
     const observed = await observe(actor, row, input.target, deadline);
     if (!input.skip && (!observed.source || !observed.target)) throw missing();
+    if (input.progress && (!observed.profile || !observed.profileBinding || !observed.target))
+      throw new ProblemError('unsupported_library_profile');
     const proposed: MalReview = {
       version: key,
       target: observed.target,
@@ -613,6 +694,21 @@ export function createMalImport(deps: Dependencies) {
       binding: observed.binding,
       conflict: observed.current !== null && observed.current.state !== observed.state,
       unsupported: observed.state === null ? 'no-unique-released-status-role' : null,
+      fingerprint: hash(row),
+      ...(input.progress
+        ? {
+            progress: await reviewProgressAdoption(
+              sessions,
+              actor,
+              observed.target!,
+              observed.profile!,
+              observed.profileBinding!,
+              malProgressSources(row),
+              input.progress,
+              `mal-progress-start:${hash({ id, row: input.row, version: key })}`,
+            ),
+          }
+        : {}),
     };
     if (input.labels !== undefined)
       proposed.labels = await reviewMalLabels(
@@ -715,7 +811,12 @@ export function createMalImport(deps: Dependencies) {
     review: MalReview,
     deadline: number,
     signal: AbortSignal,
-    record: (value: CommandOutcome<unknown>) => void,
+    record: (
+      value:
+        | CommandOutcome<unknown>
+        | Awaited<ReturnType<typeof sessions.startSession>>
+        | Awaited<ReturnType<typeof sessions.recordProgress>>,
+    ) => void,
   ): Promise<{ outcomes: MalLabelOutcome[]; remaining: number[] }> {
     const selected = review.labels;
     if (!selected) return { outcomes: [], remaining: [] };
@@ -929,7 +1030,7 @@ export function createMalImport(deps: Dependencies) {
       if (!row || !review || review.version !== selected.version || doc.canceled) throw stale();
       const existing = doc.intents[selected.row];
       if (existing && hash(existing.fields) !== hash(selected.fields)) throw new ProblemError('idempotency_conflict');
-      if (existing?.outcome && !selected.fields.includes('tags')) {
+      if (existing?.outcome && !selected.fields.includes('tags') && (!review.progress || existing.progress?.complete)) {
         outcomes.push(existing.outcome);
         continue;
       }
@@ -953,7 +1054,10 @@ export function createMalImport(deps: Dependencies) {
           ? 'selected-fields-have-no-reviewed-native-admission'
           : 'only-status-has-native-admission',
       };
-      if (r.skip || !selected.fields.length) {
+      if (hash(row) !== r.fingerprint) {
+        outcome.status = 'stale';
+        outcome.reason = 'refresh-review';
+      } else if (r.skip || (!selected.fields.length && !r.progress)) {
         outcome.status = 'skipped';
         outcome.reason = null;
       } else if (selected.fields.includes('status') && r.state && r.target && r.source) {
@@ -1017,8 +1121,79 @@ export function createMalImport(deps: Dependencies) {
         else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
         if (applied.remaining.length) outcome.reason = 'partial-cancellation';
       }
+      if (r.progress && hash(row) === r.fingerprint) {
+        const checkpoint = await executeProgressAdoption(actor, sessions, r.progress, intent.progress, {
+          async canceled() {
+            return (await load(actor, id, deadline)).doc.canceled;
+          },
+          async binding() {
+            const current = await observe(actor, row, r.binding ? null : r.target, deadline);
+            const sameBinding =
+              current.binding === null
+                ? r.binding === null
+                : r.binding !== null &&
+                  current.binding.subject === r.binding.subject &&
+                  current.binding.route === r.binding.route &&
+                  current.binding.source === r.binding.source &&
+                  current.binding.externalId === r.binding.externalId;
+            const sameSource =
+              current.source !== null &&
+              r.source !== null &&
+              current.source.release === r.source.release &&
+              current.source.epoch === r.source.epoch &&
+              current.source.acceptingType === r.source.acceptingType;
+            if (current.target !== r.target || !sameBinding || !sameSource) return null;
+            return current.profileBinding;
+          },
+          async save(progress, admission = false) {
+            const digest = hash(progress);
+            try {
+              await mutate(
+                actor,
+                id,
+                `${intent.key}:progress:${digest}`,
+                admission ? 'intent' : 'outcome',
+                { row: selected.row, progressDigest: digest },
+                (doc) => {
+                  const current = doc.intents[selected.row];
+                  if (!current || current.review.version !== r.version) throw stale();
+                  current.progress = progress;
+                },
+              );
+              intent.progress = progress;
+              return true;
+            } catch (error) {
+              if (admission && error instanceof ProblemError && ['conflict', 'not_found'].includes(error.code))
+                return false;
+              throw error;
+            }
+          },
+          recordNative: record,
+        });
+        intent.progress = checkpoint;
+        outcome.progress = publicProgress(r.progress, checkpoint);
+        const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
+        if (measureStatuses.includes('stale')) {
+          outcome.status = 'stale';
+          outcome.reason = 'refresh-review';
+        } else if (measureStatuses.includes('failed')) {
+          outcome.status = 'failed';
+          outcome.reason = 'native-command-unavailable-retry-original';
+        } else if (
+          outcome.status !== 'stale' &&
+          measureStatuses.some((status) => status === 'applied' || status === 'cleared')
+        ) {
+          outcome.status = 'applied';
+          outcome.reason = null;
+        }
+      }
       // Failed dispatches retain the intent but permit resumption; acknowledged outcomes never change.
-      if (!selected.fields.includes('tags') && outcome.status !== 'failed' && !outcome.remainingLabels?.length)
+      if (
+        !selected.fields.includes('tags') &&
+        outcome.status !== 'failed' &&
+        !outcome.remainingLabels?.length &&
+        (!r.progress || intent.progress?.complete)
+      )
         await mutate(actor, id, `${intent.key}:outcome`, 'outcome', outcome, (doc) => {
           doc.intents[selected.row]!.outcome = outcome;
         });

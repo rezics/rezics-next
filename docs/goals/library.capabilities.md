@@ -584,6 +584,15 @@ receipts. Private evidence retains fields without native admission, including si
 unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
 Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.
 
+## MAL and AniList scalar progress adoption
+
+[The adoption contract](../library-import-progress-adoption.md) extends both retained-row reviews with explicit
+existing-occurrence selection or consented native start, current profile/unit checks and per-measure native receipts.
+Only exact source-to-unit matches admitted by the active profile are supported; zero remains distinct from missing,
+local values are preserved by default, and scalar counts never create canonical Episode facts or dates. The focused
+provider tests cover source review, native measure adoption and result reopening. Native growth execution and full
+controller acceptance remain deferred.
+
 # Native archive progress recovery
 
 [Installed evidence methods](../library-copy-archive-recovery.md) and [progress recovery methods](../library-archive-progress-recovery.md)

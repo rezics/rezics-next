@@ -8,7 +8,7 @@ const anime = (id: string, extra = '', status = 'Completed') =>
 const xml = (rows: string) => `<myanimelist><myinfo><user_name>private</user_name></myinfo>${rows}</myanimelist>`;
 let native: NativeProfileFixture;
 beforeAll(async () => {
-  native = await createProfileEntryFixture();
+  native = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
 }, 120_000);
 afterAll(async () => {
   await native?.close();
@@ -57,6 +57,117 @@ test('MAL retains independent measures, zero, private comments, dates and unknow
   expect(() => parseMal('<wrong/>')).toThrow('root');
   expect(() => parseMal('<myanimelist><anime></myanimelist>')).toThrow('malformed');
   expect(() => parseMal(' '.repeat(MAL_LIMITS.bytes + 1))).toThrow('2 MiB');
+});
+test('MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts', async () => {
+  expect(native.original.types['ex:Parent']?.library?.profileId).toBe('fixture.game');
+  expect(
+    native.original.libraryProfiles?.['fixture.game']?.progress?.allowed[0]?.units.map((unit) => unit.id),
+  ).toContain('episode');
+  await native.grantLibraryGate(native.owner.actor.accountId);
+  const exposure = await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
+  expect(exposure.status).toBe(200);
+  const target = await native.createSubject('game');
+  const id = await upload(
+    anime('210', '<my_watched_episodes>0</my_watched_episodes>') +
+      anime('211') +
+      anime('212', '<my_watched_episodes>2</my_watched_episodes>') +
+      anime('213', '<my_watched_episodes>3</my_watched_episodes>'),
+  );
+  const select = async (row: number, occurrence: Record<string, unknown>) => {
+    const version = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/review`,
+      {
+        row,
+        target,
+        skip: false,
+        replace: false,
+        progress: { occurrence, measures: [{ field: 'my_watched_episodes', action: 'adopt' }] },
+      },
+      version,
+    );
+    return version;
+  };
+  const confirmed = (row: number, version: string) =>
+    json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields: [] }] });
+  const page = await json('GET', `${base}/${id}`);
+  expect(page.rows[0].progressMeasures[0]).toMatchObject({
+    state: 'zero',
+    amount: '0',
+    unit: 'episode',
+    unitSupported: false,
+  });
+  expect(page.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
+
+  const zeroReview = await select(0, { kind: 'start', primaryUnit: 'episode' });
+  const selectedPage = await json('GET', `${base}/${id}`);
+  expect(selectedPage.rows[0].progressMeasures[0]).toMatchObject({ state: 'zero', unitSupported: true });
+  expect(selectedPage.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: false });
+  const zero = await confirmed(0, zeroReview);
+  expect(zero.outcomes[0].progress.measures).toMatchObject([
+    { status: 'applied', sourceAmount: '0', currentAmount: '0' },
+  ]);
+  const sessionId = zero.outcomes[0].progress.occurrence.sessionId;
+  let opened = await json('GET', `/v1/progressSessions/${sessionId}`);
+  expect(opened.progressSession).toMatchObject({
+    mode: 'scalar_amount',
+    unit: 'episode',
+    amount: '0',
+    state: 'active',
+    completedAt: null,
+  });
+  expect((await json('GET', `/v1/progressSessions/${sessionId}/journal`)).journal).toMatchObject({
+    startDate: null,
+    finishDate: null,
+  });
+  expect((await native.inspect()).entries.some((entry) => entry.row.subject_id === target)).toBe(false);
+
+  const absentReview = await select(1, { kind: 'start', primaryUnit: 'episode' });
+  const absent = await confirmed(1, absentReview);
+  expect(absent.outcomes[0].progress).toMatchObject({
+    occurrence: null,
+    complete: true,
+    measures: [{ status: 'missing' }],
+  });
+  expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
+
+  await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 1, measureId: 'episode', amount: '4' });
+  const preserveReview = await select(2, { kind: 'existing', sessionId });
+  const preserved = await confirmed(2, preserveReview);
+  expect(preserved.outcomes[0].progress.measures).toMatchObject([{ status: 'preserved', currentAmount: '4' }]);
+  opened = await json('GET', `/v1/progressSessions/${sessionId}`);
+  expect(opened.progressSession.amount).toBe('4');
+
+  const staleReview = await select(3, { kind: 'existing', sessionId });
+  await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 2, measureId: 'episode', amount: '6' });
+  const stale = await confirmed(3, staleReview);
+  expect(stale.outcomes[0].progress.measures).toMatchObject([{ status: 'stale' }]);
+  expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('6');
+  expect(
+    (await json('GET', `/v1/progressSessions/${sessionId}`, undefined, randomUUID(), 'other', 404)).progressSession,
+  ).toBeUndefined();
+
+  // A lost provider checkpoint replays both original native receipts instead of making a second occurrence.
+  await native.pool.query(
+    `UPDATE library.list_import_mal SET document=jsonb_set(document,'{intents,0,progress}',$3::jsonb)
+     WHERE account_id=$1 AND id=$2`,
+    [
+      native.owner.actor.accountId,
+      id,
+      JSON.stringify({
+        startAttempted: true,
+        occurrence: null,
+        lastRevision: null,
+        steps: {},
+        measures: [],
+        complete: false,
+      }),
+    ],
+  );
+  expect((await confirmed(0, zeroReview)).outcomes[0]).toEqual(zero.outcomes[0]);
+  expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
+  await json('DELETE', `${base}/${id}`);
 });
 test('native HTTP own preview, explicit unmatched resolution, supported status, unsupported evidence, retry and owner fence', async () => {
   const producer = await accountToken({

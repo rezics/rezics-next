@@ -604,6 +604,10 @@ dates, privacy and unsupported fields remain visible private source evidence. Id
 external claims, with explicit unmatched resolution and guarded conflict replacement. Uploads and reviews belong
 to Library account erasure. This source does not provide live synchronization, catalogue creation or public reviews.
 
+[MAL and AniList scalar progress adoption](library-import-progress-adoption.md) composes each retained source row with
+an explicitly selected native consumption occurrence. Exact profile-admitted units only are adopted; counts never
+create canonical Episode facts or infer dates, completion, holdings or publication.
+
 # Native personal archive recovery
 
 [Native archive recovery](library-copy-archive-recovery.md) owns the admitted v1 format, private holding evidence,
