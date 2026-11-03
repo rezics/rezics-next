@@ -909,13 +909,25 @@ Imports owns **Source observation CAS refresh** using this exact positive/clear 
 tombstone, and the `expectedObservation` values accepted by the existing put and clear CAS writers. `?digest=`
 selects that exact retained digest and returns it as `selectedObservation` without replacing it with today's head.
 `?history=true` starts a signed one-row keyset page; `?cursor=` continues it. Native rows descend by committed
-per-subject/provider `nativeOrder`, not provider `asOf`; the bounded lookahead determines `nextCursor`. Retained
+per-subject/provider `nativeOrder`, not provider `asOf`; the raw bounded lookahead determines `nextCursor`. Retained
 observations without native order remain marked `legacy: true` with `nativeOrder: null` and are traversed by their
 stored digest. `payloadVersion` is explicit, and `provenance` labels the content digest as unversioned provider
 provenance. The exported response schema is the actual route DTO for the generated Imports API43 and Web clients.
 
 Decision: inspection always includes the current head; an optional digest resolves that exact retained observation,
 while signed history uses descending committed local order and marks legacy rows as unversioned.
+
+Decision: history consumes one raw position even when concealed, returning empty items with continuation when
+another raw position exists; a changed source observation returns a conflict for retry with the original cursor.
+
+Current head and exact digest remain required: a concealed required tuple returns the existing indistinguishable
+404. A stable concealed historical candidate is omitted before payload acquisition. Lookahead metadata is used
+only for continuation and currentness, never as a returned resource or permission. An empty history page with a
+non-null cursor is therefore continuing, not exhausted. There is no refill. Initial and final native metadata and
+all tuple security revisions must agree; a change to an optional candidate or lookahead returns 409 without a new
+cursor. A final required-source takedown still returns 404. Dependency failures remain failures; callers retain the
+supplied cursor for retry. The signed cursor binds the original route, Subject, provider and native/legacy ordering
+boundary; the existing command and Subject authorization is evaluated afresh for every account and request.
 
 Inspection reuses current Subject and source-tuple fence reads before and after payload hydration. A guessed digest
 cannot disclose an alias or retained payload outside the existing write authorization, current Subject identity and
@@ -925,9 +937,34 @@ provider request, ballot read or source-history sort.
 
 #### Operation Cost: source-observation inspection
 
-- Touches: one existing Access authorization and before/final Subject identity checks; exact reads perform at most four metadata queries across initial/final head and digest checks, while history performs at most six across initial/final head, native page and legacy page queries. Payload hydration reads at most two immutable observation rows or one lazily adopted current scalar row. Up to three distinct source tuples receive both anchored fence snapshots (six fence observations total).
-- Bound: every observation query binds route, Subject and provider. Exact lookup uses the observation primary key; native history uses `(route, subject_id, source, local_order DESC)` and legacy history uses its partial `(route, subject_id, source, digest DESC)` index, each with a page of one and one lookahead row. Payload bytes are at most 32,768 per immutable row and the serialized DTO is at most 68,000 bytes. No full-history sort or receipt/actor data enters the DTO.
-- Growth check: `test/rating/growth-source-figures.test.ts` holds page size and payload shape fixed while growing unrelated provider heads and selected observation history independently at 256/1024/4096; it captures both first/deep pages, response bytes, participating pools and strict ordered-prefix plans. Controller native acceptance owns execution.
+- Touches: current-only uses two head metadata queries; exact uses four metadata queries returning at most four
+  rows; history uses six returning potentially eight rows across a native/legacy boundary. Hydration uses one
+  immutable batch (at most two rows) and, independently, one legacy scalar read; mixed hydration charges both.
+  Up to three distinct tuples (current, candidate, lookahead) each receive initial/final repeatable-read snapshots.
+  Each snapshot dispatches BEGIN, partition authority, exact fence facts and COMMIT: six snapshots add 24 SQL,
+  including 12 transaction controls, plus catalogue freshness work from compiled queries. Required concealment
+  stops before hydration; stable historical concealment omits only its payload. Metadata, fence changes and
+  dependency failures do not refill. Mounted work additionally includes authentication/account lifecycle and
+  root write authorization, admission/runner work and both complete Subject resolutions (redirect, identity,
+  Context/citation/disclosure and Access observations). These are independent current observations, not one atomic
+  snapshot; their inherited owner bounds and participating pools remain additional to the local SQL count.
+- Bound: all metadata/payload queries bind route, Subject and provider. Exact uses the primary key; history uses
+  the partial `(route, subject_id, source, local_order DESC)` or legacy `(route, subject_id, source, digest DESC)`
+  index, each selecting at most two physical ordered positions. No full-history sort is permitted. Head, candidate
+  and lookahead metadata are reobserved before return. Only disclosed head/selection payloads are materialized,
+  with at most two item validations/canonicalizations/hashes after deduplicated I/O. The schema admits immutable
+  JSONB at 32,768 bytes; legacy scalar field bounds remain their writer's admission. Application payload and
+  68,000-byte response checks occur after acquisition/materialization and are not peak-memory bounds. Account for
+  decoded JSON/strings, canonical strings, UTF-8 buffers and hash inputs, retained item objects, repeated head/history
+  serialization and mounted HTTP serialization/copies. Oversize/unsupported historical payloads fail only when
+  selected and permitted. No receipt body or credential is provenance. Full physical/byte ceilings still require
+  inherited authority, catalogue, runner and materialization terms; output caps alone establish none of those.
+- Growth check: `test/rating/growth-source-figures.test.ts` holds page/payload shape fixed while independently
+  growing unrelated heads and selected history at 256/1024/4096, capturing participating backends and strict
+  ordered-prefix plans. `test/rating/source-observation-http.test.ts` uses real Access and fence commands to pin
+  concealed raw continuation, exact concealment, payload/final-fill changes, same-cursor retry and existing CAS
+  recovery. Independent authority growth, mixed legacy boundary materialization and full inherited byte ceilings
+  remain native acceptance obligations; a source assertion or a failed check setup does not establish them.
 
 #### Operation Cost: source-statistic list
 
