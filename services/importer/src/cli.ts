@@ -26,6 +26,7 @@ import {
   VNDB_IMPORTER_SCOPES,
   type CredentialsObserver,
 } from './credentials.ts';
+import { runInspectCli } from './inspect-cli.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -527,6 +528,9 @@ function diagnostic(
 
 /** Parse and run one real importer acquisition without import-time work. */
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
+  if (Array.isArray(argv) && argv[0] === 'inspect')
+    return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+
   let config: Config;
   try {
     const parsed = parse(argv);

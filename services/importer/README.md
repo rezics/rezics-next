@@ -2,6 +2,59 @@
 
 The importer owns source dump ingestion, durable SQLite run and record state, and replayable requests for platform writes through the kernel API.
 
+## Inspect retained source-dump work
+
+`rezics-import inspect` opens an existing importer state file for local read-only inspection. It needs only the state
+path and exact configured source identifier; it does not need a dump, account key, credentials, network access or a
+writer lease. Its help is available without opening a file:
+
+```sh
+bun services/importer/src/cli.ts inspect --help
+bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata
+```
+
+By default, inspection selects the source's active generation, or its completed baseline when no generation is
+active. A recognized empty completed source is shown as an empty baseline. Retained generation progress is separate
+from the baseline and does not advance it. Stored counters keep their production phase meanings; unavailable legacy
+counters are shown as unknown. The displayed status is the stored status, and unrecognized statuses remain
+unrecognized.
+
+Pending envelopes and deferred covers are separate live pages. Pages default to 20 entries and accept at most 100;
+the next cursor is reusable only with the same source, generation and page kind. Each invocation reads one bounded
+page snapshot, so a writer may settle work between page requests. The next page is not a cross-invocation snapshot.
+Page rows show classification, stored unresolved counts and bounded field-group/operation summaries. They do not
+include request bodies or projections.
+
+```sh
+bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --page pending
+bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --page covers
+bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --record Q42
+```
+
+Copy the opaque cursor printed by a page response into the next invocation with that same `--page` value. Use
+`--generation <id>` to select another exact retained generation, `--limit 1..100` to set a page size, or `--json` for
+the deterministic version 1 document. JSON mode emits one JSON value with `version`, `source`, `sourceState`,
+`baseline`, `ownershipRow`, `selection`, `generation`, `record` and `page`; it has no progress chatter. Exact-record
+inspection shows retained envelope byte lengths and SHA-256 digests, command identities, unresolved delivery,
+settled command outcomes and recorded fence omissions without printing serialized request bodies. A local completion
+marker is evidence in this importer journal, not a current selected/public read or proof of publication, adoption,
+source rights or cover permission. Other subsystem journals are outside this view.
+
+Decision: inspection accepts an exact configured source ID, defaults to the active generation or completed baseline,
+and selects pending-envelope or deferred-cover pages explicitly.
+
+After inspection, return to the existing authorized import command and provide a complete input and the usual
+credentials. For the built-in Wikidata source, the invocation shape is:
+
+```sh
+bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
+```
+
+For a configured source alias, keep its original input kind and add
+`--source-alias <configured-source-id>`. The existing importer rechecks input integrity, current authority, source
+registration, fences and single-owner admission. Inspection never resumes automatically and cannot bypass a writer
+or unresolved authority failure.
+
 The [connected design status](../../docs/research/design-status-imports.md) follows the operator from terminal
 acquisition, status and recovery through the private SQLite baseline, source ownership and immutable request/ACK
 journal. Ordinary account Auth (`POST /signin/key` → `POST /token`) authorizes public tuple/bootstrap and proposal
