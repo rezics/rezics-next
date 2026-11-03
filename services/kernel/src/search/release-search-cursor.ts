@@ -21,9 +21,14 @@ export class ReleaseSearchCursorInvalid extends Error {
 
 type PrivateContinuation = ReleaseGroupContinuation | ReleaseChildContinuation;
 
+/** Public groups retain cards and public identities, with sealed child progress only. */
+export type ReleaseSearchGroup<Work, Release> =
+  | Extract<ReleaseGroup<Work, Release>, { kind: 'release' }>
+  | (Omit<Extract<ReleaseGroup<Work, Release>, { kind: 'work' }>, 'next'> & { next: string | null });
+
 export type ReleaseGroupsPage<Work, Release> = {
   status: 'ready' | 'preparing';
-  groups: ReleaseGroup<Work, Release>[];
+  groups: ReleaseSearchGroup<Work, Release>[];
   next: string | null;
 };
 
@@ -139,12 +144,23 @@ export async function readReleaseGroupsPage<Work, Release>(input: {
   now?: number;
 }): Promise<ReleaseGroupsPage<Work, Release>> {
   const now = input.now ?? Date.now();
-  const bound = binding(input.request, input.principal, 'groups');
+  // The cursor envelope and policy must use the same request, even across asynchronous source reads.
+  const request = structuredClone(input.request);
+  const bound = binding(request, input.principal, 'groups');
   const cursor = await decode<ReleaseGroupContinuation>(input.cursors, bound, input.cursor, 'groups', now);
-  const page = await readReleaseGroups(input.source, input.request, cursor);
+  const page = await readReleaseGroups(input.source, request, cursor);
+  const groups = await Promise.all(
+    page.values.map(async (group): Promise<ReleaseSearchGroup<Work, Release>> => {
+      if (group.kind === 'release') return group;
+      return {
+        ...group,
+        next: await encode(input.cursors, binding(request, input.principal, 'children', group.id), group.next, now),
+      };
+    }),
+  );
   return {
     status: page.status,
-    groups: page.values,
+    groups,
     next: await encode(input.cursors, bound, page.next, now),
   };
 }
@@ -160,7 +176,8 @@ export async function readReleaseChildrenPage<Work, Release>(input: {
   now?: number;
 }): Promise<ReleaseChildrenPage<Release>> {
   const now = input.now ?? Date.now();
-  const bound = binding(input.request, input.principal, 'children', input.work);
+  const request = structuredClone(input.request);
+  const bound = binding(request, input.principal, 'children', input.work);
   const cursor = await decode<ReleaseChildContinuation>(
     input.cursors,
     bound,
@@ -169,7 +186,7 @@ export async function readReleaseChildrenPage<Work, Release>(input: {
     now,
     input.work,
   );
-  const page = await readReleaseChildren(input.source, input.request, input.work, cursor);
+  const page = await readReleaseChildren(input.source, request, input.work, cursor);
   return {
     status: page.status,
     children: page.values,

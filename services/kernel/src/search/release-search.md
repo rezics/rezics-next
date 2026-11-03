@@ -127,6 +127,10 @@ permitted actions. `SubjectSource.statements` and Search hit facts are sampled a
 Before HTTP installation, authenticate/encrypt private payloads with the existing cursor lifecycle, binding the
 current viewer and expiry; never expose their raw source positions, work keys or epoch in response JSON.
 
+`release-search-cursor.ts` seals both the group continuation and every preview's child continuation, with separate
+stream and work bindings. Its public groups contain only opaque child tokens; it snapshots the ordered request
+before asynchronous reads so the policy and both cursor envelopes retain the same meaning.
+
 The native grouping source, HTTP cursor installation, active-release operand controls, mounted release page,
 eight-locale states and native all-pool growth measurements remain part of the same journey. There is no measured
 grouping seek count or native growth result yet; derive its seeks from real relation indexes, source caps and
