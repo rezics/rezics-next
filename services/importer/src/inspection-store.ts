@@ -1,8 +1,9 @@
 import { Database } from 'bun:sqlite';
-import { constants } from 'node:fs';
-import { open, stat, type FileHandle } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { InspectionFailure, openReadonlySqlite } from './inspection-open.ts';
+
+export { InspectionFailure } from './inspection-open.ts';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -189,15 +190,6 @@ type CommandRow = {
   envelope_index: unknown;
   done: unknown;
 };
-
-export class InspectionFailure extends Error {
-  constructor(
-    message: string,
-    readonly code: number = 1,
-  ) {
-    super(message);
-  }
-}
 
 function bytes(value: string): number {
   return Buffer.byteLength(value, 'utf8');
@@ -451,13 +443,6 @@ function resumeGuidance(status: string, activeWork: readonly ('applying' | 'defe
   return 'The stored status is not recognized by this inspector; resume behavior is not inferred and the existing importer remains responsible for admission.';
 }
 
-function sameFile(
-  left: Awaited<ReturnType<FileHandle['stat']>>,
-  right: Awaited<ReturnType<FileHandle['stat']>>,
-): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
 /** Dedicated read-only source-generation reader. It never opens RunStore or ImportSession. */
 export class InspectionStore {
   readonly database: Database;
@@ -472,49 +457,15 @@ export class InspectionStore {
   }
 
   static async open(statePath: string): Promise<InspectionStore> {
-    const path = resolve(statePath);
-    let descriptor: FileHandle | undefined;
-    let database: Database | undefined;
-    let store: InspectionStore | undefined;
+    const opened = await openReadonlySqlite(statePath);
+    const store = new InspectionStore(opened.path, opened.descriptor, opened.database);
     try {
-      const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
-      descriptor = await open(path, flags);
-      const identity = await descriptor.stat();
-      if (!identity.isFile())
-        throw new InspectionFailure(`State path is not a regular file: ${JSON.stringify(path)}.`, 2);
-      database = new Database(path, { readonly: true, create: false, strict: true });
-      const afterOpen = await stat(path);
-      if (!sameFile(identity, afterOpen))
-        throw new InspectionFailure('State path changed while it was being opened.', 2);
-      store = new InspectionStore(path, descriptor, database);
-      descriptor = undefined;
-      database = undefined;
       store.validateSchema();
       return store;
     } catch (error) {
-      await store?.close();
-      database?.close();
-      await descriptor?.close().catch(() => {});
+      await store.close();
       if (error instanceof InspectionFailure) throw error;
-      const code = (error as NodeJS.ErrnoException)?.code;
-      if (code === 'ENOENT') throw new InspectionFailure(`State file does not exist: ${JSON.stringify(path)}.`, 2);
-      if (code === 'ELOOP')
-        throw new InspectionFailure(`State path must not be a symbolic link: ${JSON.stringify(path)}.`, 2);
-      if (
-        code === 'SQLITE_BUSY' ||
-        code === 'SQLITE_LOCKED' ||
-        (error instanceof Error && /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message))
-      )
-        throw new InspectionFailure('State database is busy or locked; retry the local inspection.', 1);
-      if (
-        error instanceof Error &&
-        /not a database|unable to open database|database disk image is malformed/i.test(error.message)
-      )
-        throw new InspectionFailure(
-          `State file is not a supported readable SQLite database: ${JSON.stringify(path)}.`,
-          2,
-        );
-      throw new InspectionFailure(`Unable to open state file ${JSON.stringify(path)}${code ? ` (${code})` : ''}.`, 2);
+      throw new InspectionFailure('Malformed or unavailable importer journal data; no state was changed.');
     }
   }
 

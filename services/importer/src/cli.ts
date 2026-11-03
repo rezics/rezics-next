@@ -28,6 +28,7 @@ import {
   type CredentialsObserver,
 } from './credentials.ts';
 import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
+import { runBindingInspectionCli } from './binding-inspection-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
@@ -317,6 +318,11 @@ function diagnostic(
 
 /** Parse and run one real importer acquisition without import-time work. */
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
+  if (Array.isArray(argv) && argv[0] === 'inspect-bindings')
+    return runBindingInspectionCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+    });
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
   if (Array.isArray(argv) && argv[0] === 'observations')
