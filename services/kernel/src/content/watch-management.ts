@@ -134,7 +134,9 @@ export async function listWatches(
       createdAt: new Date(row.created_at).toISOString(),
     };
     finalItems.push(
-      final.presentation ? { ...identity, state: 'available', ...final.presentation } : { ...identity, state: 'unavailable' },
+      final.presentation
+        ? { ...identity, state: 'available', ...final.presentation }
+        : { ...identity, state: 'unavailable' },
     );
   }
   const finalOwner = await requireWatchOwner(deps, actor, deadline, accountId);

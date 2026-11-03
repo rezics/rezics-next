@@ -29,11 +29,7 @@ export type {
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
-export type {
-  WatchManagementItem,
-  WatchManagementKind,
-  WatchManagementPage,
-} from './kernel/content/schemas';
+export type { WatchManagementItem, WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
 
 type Routes = KernelType['~Routes']['v1'];
 type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];

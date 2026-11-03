@@ -1,34 +1,24 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/schemas.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/board-watch-management.test.ts",
-    "services/kernel/test/content/support/watch-management-fixture.ts",
-    "packages/client/src/kernel/**",
-    "packages/client/src/index.ts",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "de02e860-8d24-453a-b13e-3d54ef5f1316"
-  ],
-  "estimate": {
-    "lines": 650,
-    "files": 7
-  },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/schemas.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/board-watch-management.test.ts',
+      'services/kernel/test/content/support/watch-management-fixture.ts',
+      'packages/client/src/kernel/**',
+      'packages/client/src/index.ts',
+      'contracts/openapi.json',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': ['de02e860-8d24-453a-b13e-3d54ef5f1316'],
+  'estimate': { 'lines': 650, 'files': 7 },
+  'inseparable': true,
 }
 ---
 

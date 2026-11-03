@@ -7,11 +7,7 @@ import type { editionRoutes } from './edition-routes.ts';
 import { readBoardWatchState, setBoardWatch } from './board-watch.ts';
 import { listWatches, removeWatch } from './watch-management.ts';
 import { ContentNotFoundError } from './reads.ts';
-import {
-  WatchManagementKindSchema,
-  WatchManagementPageSchema,
-  strictContentSchema,
-} from './schemas.ts';
+import { WatchManagementKindSchema, WatchManagementPageSchema, strictContentSchema } from './schemas.ts';
 import type { WatchDependencies } from './watch-authority.ts';
 
 const closed = { additionalProperties: false };

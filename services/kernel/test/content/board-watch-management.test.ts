@@ -242,10 +242,7 @@ test('inventory retries a reused source identity and the exact same cursor after
   try {
     const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
     await sourceGate.reached;
-    await f.db.admin.query(
-      'DELETE FROM content.thread_watch WHERE watch_id=$1',
-      [firstWatch.watch_id],
-    );
+    await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=$1', [firstWatch.watch_id]);
     await f.db.admin.query(
       `INSERT INTO content.thread_watch(route,thread_id,watcher_account_id,watch_id,created_at)
        VALUES($1,$2,$3,$4,'2026-11-01T12:00:00Z'::timestamptz)`,
@@ -271,7 +268,7 @@ test('inventory retries a reused source identity and the exact same cursor after
   } finally {
     failureGate.restore();
   }
-  expect((await f.call(reader, 'GET', retryPath))).toMatchObject({
+  expect(await f.call(reader, 'GET', retryPath)).toMatchObject({
     status: 200,
     value: { items: [{ resourceId: later.id, state: 'available' }], next: null },
   });
@@ -416,7 +413,6 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).not.toContainEqual(
     expect.objectContaining({ id: removalWatch }),
   );
-
 });
 
 test('unwatch, erasure and late replay cannot recreate subscriptions or old notice presentation', async () => {
@@ -431,7 +427,10 @@ test('unwatch, erasure and late replay cannot recreate subscriptions or old noti
   await effect().run(event);
   expect((await f.notices(opening.firstPost.id)).filter((notice) => notice.recipient_id === reader)).toHaveLength(0);
   const ownerRoute = routeOf(reader)!;
-  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [ownerRoute, reader]);
+  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [
+    ownerRoute,
+    reader,
+  ]);
   const first = await f.thread();
   const later = await f.thread();
   for (const thread of [first, later])
