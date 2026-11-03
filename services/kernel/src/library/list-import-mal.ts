@@ -217,7 +217,7 @@ function sameReviewContext(
     target: string | null;
     binding: Binding | null;
     source: MalReview['source'];
-    current: Entry | null;
+    current: Pick<Entry, 'state' | 'revision' | 'incarnationId'> | null;
     state: string | null;
   },
 ) {
@@ -241,7 +241,7 @@ function sameReviewContext(
 
 /** One source's bounded composition of current Semantic observations and native Library commands. */
 export function createMalImport(deps: Dependencies) {
-  const { pool, access } = deps,
+  const { pool, access, journal } = deps,
     runner = createLibraryCommandRunner(deps),
     entries = createEntryCommands(deps);
   const labels = createPersonalLabelCommands(deps),
@@ -914,7 +914,9 @@ export function createMalImport(deps: Dependencies) {
 
       const key = intent?.key ?? `mal:${id}:${selected.row}:dates:${hash(reviewed.version)}`;
       const nativeRequestKey = intent?.nativeRequestKey ?? `${key}:journal`;
-      const patch: ProgressSessionJournalPatch = { revision: reviewed.journalRevision };
+      const patch: { revision: number } & Partial<Record<MalDateField, ProgressSessionJournalDate | null>> = {
+        revision: reviewed.journalRevision,
+      };
       const fieldOutcomes: MalDateFieldOutcome[] = selected.fields.map((field) => {
         const decision = reviewed[field];
         if (decision.status === 'unknown') return { field, status: 'unknown' };
