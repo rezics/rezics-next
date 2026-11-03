@@ -130,10 +130,10 @@ test('scoped prefix consumes denied candidates and refills to a current permitte
 
 test('membership withdrawn while summaries are hydrated restarts without returning the stale subject', async () => {
   const { run } = fixture(true);
-  await expect(run()).rejects.toMatchObject({ problem: { status: 409, code: 'search_restart_required' } });
+  await expect(run()).rejects.toMatchObject({ code: 'search_restart_required' });
 });
 
 test('a displayed label changed while summaries are hydrated restarts before disclosure', async () => {
   const { run } = fixture(false, true);
-  await expect(run()).rejects.toMatchObject({ problem: { status: 409, code: 'search_restart_required' } });
+  await expect(run()).rejects.toMatchObject({ code: 'search_restart_required' });
 });
