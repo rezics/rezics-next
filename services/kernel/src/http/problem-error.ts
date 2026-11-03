@@ -68,6 +68,16 @@ export const PROBLEMS = {
     title: 'Library Entry Annotation Correction Limit',
     retryable: false,
   },
+  library_entry_annotation_correction_epoch: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Epoch Changed',
+    retryable: false,
+  },
+  library_entry_annotation_correction_expired: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Expired',
+    retryable: false,
+  },
   library_entry_state_restore_stale: {
     status: 409,
     title: 'Library Entry State Restore Stale',
