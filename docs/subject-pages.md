@@ -1056,8 +1056,8 @@ other view. Sections a type does not support are left out; the rest keep this or
 6. **Credits.** Principal staff by role, in credit order.
 7. **Ratings.** The score distribution, count and population, the reader's Realm scores, and a link to Reviews.
 8. **Reviews and discussion.** Public Global and native Realm review/discussion windows retain Content's order,
-   bylines, canonical thread links and bounded continuation. Current Subject cards remain open-only until Content
-   supplies viewer/target-bound action advice. Recorded value, historical scale, question revision and original
+   bylines, canonical thread links and bounded continuation. Current cards mount only the controls admitted by
+   Content's selected-card advice on the exact thread and first-post revision. Recorded value, historical scale, question revision and original
    target remain independent of current question, personal vote and selected population, including zero, retired
    questions and merged targets. A citation without its own complete native provenance stays unavailable.
 
@@ -1070,39 +1070,61 @@ facts. `recorded` must exactly equal the first post's citation. `question` suppl
 label and min/max/step; current lifecycle is separate. `originalTarget` retains its id/label even when `mergedInto`
 names the current Subject. Withheld citation has no partial provenance. Media must belong to the same thread and
 be declared and referenced by that exact document; it uses the existing media renderer without hydration. Native
-activity, reaction counts/freshness and citation disclosure use their existing owners. Readable cards do not admit
-reply, creation, reaction, watch or overflow commands. Accounts retains Realm membership and Semantic retains
-identity/context authority.
+activity, reaction counts/freshness and citation disclosure use their existing owners. Runtime selected-card action
+advice is parsed separately from historical presentation and retained only as four control states; generated
+declarations and `reviewContext` grant no actions. Accounts retains Realm membership, Semantic retains
+identity/context authority, and Content remains the action authority.
 
-Decision: accept historical presentation only through the optional versioned `card` consumer seam; an absent or
+Decision: Bind controls only to Content's current selected-card advice on the exact thread and opening-post revision; `post.create` opens that thread's existing reply owner, and new-thread creation stays unavailable until Content supplies a concrete Board target. Current `reviewContext` grants neither historical provenance nor action authority.
+
+Historical decision: accept presentation only through the optional versioned `card` consumer seam; an absent or
 invalid extension keeps its dependent presentation unavailable and grants no actions.
 
 Community reading cost:
 
-- **Touches:** One native page per region (five overview/twenty full-view rows) and one shared author batch; zero
-  added session, question, vote, media or per-card reads. Sparse continuation never refills. Retry repeats the
-  opaque cursor. Existing session/exposure subscriptions add no reads. This reading slice sends zero commands
-  and readbacks; opening a conversation delegates those costs to its existing owners.
+- **Session:** Session/CSRF and exposure replacement uses the existing cache observers and adds zero reads.
+- **Page:** One native page per region (five overview/twenty full-view rows) and one shared author batch; zero
+  added question, vote, media or per-card reads. The page supplies each card's current reaction/viewer baseline and
+  watch baseline. Sparse continuation never refills. Retry repeats the opaque cursor. A full region mounts at most
+  twenty reaction controls and twenty watch controls.
+- **Commands:** Each deliberate reaction change sends one exact-thread write with one idempotency key; an
+  unresolved intent retries that same key. Each watch toggle sends the one desired-state PUT/DELETE currently
+  admitted by the page, and exact retries repeat the same desired state. A confirmed watch transition spends that
+  page's advice, so the inverse control waits for a fresh native page. There is at most one pending reaction command and one pending watch command per
+  card: twenty of each in a full region. Reply opens the existing thread `post.create` owner. Overflow opens the
+  existing thread report owner. New-thread creation has no concrete target and is not mounted here.
+- **Readbacks:** Neither reaction nor watch reads on mount. A successful reaction write performs at most one exact
+  thread readback; a deliberate reaction recovery check also performs one read. At most twenty current reaction
+  snapshots are retained, each with at most seven counters, one viewer slot and one freshness pair (140 counters
+  total). Watch performs no automatic readback; each deliberate Check again performs one GET, and at most twenty
+  one-boolean watch states are retained. There is no read history or action polling. At most twenty reaction and
+  twenty watch readbacks can be in flight for a full region.
 - **Bound:** Source row ≤2 MiB + 64 KiB JSON bytes; page ≤`limit * rowBytes + 64 KiB`, or 43,319,296 at twenty;
   card extension ≤32 KiB; normalized thread ≤48 KiB. Text fields ≤4096 UTF-16 units, excerpts 280, licences 128,
   language tags 64, timestamps 40, decimal source/freshness positions 20. Realm title ≤2048 units/4096 UTF-8 bytes.
   Each card has ≤2 images with ≤12 derivatives each, hence ≤40 images/480 derivative entries per full region;
   media credit text ≤1024 units, credit licence ≤80 ASCII characters, ≤4 unique obligations, dimensions ≤65536,
   placeholders ≤128/64 units. Seven reaction counters per thread are never summed. Counts are safe integers,
-  scale units 0–4096, revisions positive int32. No action advice or command body is retained. Cursor ≤4096 units,
+  scale units 0–4096, revisions positive int32. Action advice is capped at 512 KiB JSON per card, two references,
+  256 operations per reference and 64 UTF-16 units per action/operation-id string. A twenty-row page inspects at
+  most 10 MiB of action advice. Web retains four fixed control states at ≤128 JSON bytes per row, ≤2560 per region;
+  operation lists and command history are discarded. Cursor ≤4096 units,
   ≤12,288 UTF-8/24,576 JSON-escaped bytes; local observation UUID 36 ASCII characters. Byte admission caps are
   stricter when several text maxima coincide; oversized extensions withhold only dependent presentation.
 - **Memory and Growth:** One raw accepted window, one normalized window (≤20 × 48 KiB), one context/cursor,
-  ≤20 author keys per region, and no retained prior card tree or source registry. Admission temporarily creates
+  ≤20 author keys, ≤2560 JSON bytes of action state, ≤20 pending reaction intents, ≤20 pending watch commands,
+  and ≤20 reaction snapshots (≤140 counters) per region, and no retained prior card tree or source registry. Watch
+  status retains at most twenty booleans. Admission temporarily creates
   page JSON/UTF-8 copies and one row/card/normalized-row copy at a time. Parsed-document and JS object overhead
   remains additional; these are logical admission bounds, not exact heap measurements or a transport-input cap.
   Projection/rendering/source comparison is O(N + admitted bytes), N≤20. Consumer checks at 1/5/20 rows do not
-  establish Content's raw80 or independent 256/1024/4096 growth evidence. Action and command/readback costs remain
-  in the continuation. The [page reader contract](../apps/web/src/features/pages/README.md) defines the closed seam.
+  establish Content's raw80 or independent 256/1024/4096 growth evidence. Control concurrency remains bounded at
+  one owner of each action type per row; repeated network attempts require deliberate user actions and add no
+  retained command history. The [page reader contract](../apps/web/src/features/pages/README.md) defines the closed seam.
 
-Connected Current Reading stories cover anonymous/member/writer, zero, changed current scale, retired/merged
-targets and concealed context. 390px/1280px light/dark browser review and complete admitted/denied command journeys
-remain in the continuation; frozen acceptance entrypoints are unchanged.
+Connected Current Reading stories cover anonymous/member/writer, admitted actions with truthful recovery, zero,
+changed current scale, retired/merged targets and concealed context. 390px/1280px light/dark browser review remains
+for the controller; frozen acceptance entrypoints are unchanged.
 
 9. **Lists.** Public collections and reading orders that include the subject. 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
    external identifiers, and a link to Details.

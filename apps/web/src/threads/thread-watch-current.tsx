@@ -17,6 +17,8 @@ export type ThreadWatchProps = {
   sessionStamp: string;
   admitted: boolean;
   returnTo: string;
+  /** A current native card can seed this visit without a per-thread status request. */
+  initialWatching?: boolean;
   /** The admitted page/source identity, separate from a repeated thread ID. */
   readAuthority?: object;
   isCurrent?: () => boolean;
@@ -72,12 +74,13 @@ function sameBinding(left: Binding, right: Binding): boolean {
     left.props.sessionKnown === right.props.sessionKnown &&
     left.props.sessionStamp === right.props.sessionStamp &&
     left.props.admitted === right.props.admitted &&
+    left.props.initialWatching === right.props.initialWatching &&
     left.props.readAuthority === right.props.readAuthority
   );
 }
 
 /**
- * One admitted browser visit, with one private point read and at most one in-flight operation.
+ * One admitted browser visit, with a native baseline or one private point read and at most one in-flight operation.
  * There is no global visit list, abort-controller collection, poller, or server receipt journal.
  * Retirement revokes local dispatch and result authority; it does not cancel a remote write.
  */
@@ -113,6 +116,10 @@ export class ThreadWatchVisit {
       props.admitted &&
       observedReady
     );
+    if (this.ready && typeof props.initialWatching === 'boolean') {
+      this.started = true;
+      this.view = Object.freeze({ phase: 'confirmed', watching: props.initialWatching });
+    }
     this.owner = Object.freeze({
       threadId: props.threadId,
       viewerId: props.viewerId ?? '',
@@ -243,6 +250,11 @@ export class ThreadWatchVisit {
 
   begin = () => {
     if (!this.current() || this.active || this.view.phase !== 'confirmed' || typeof this.view.watching !== 'boolean')
+      return;
+    if (
+      typeof this.binding.props.initialWatching === 'boolean' &&
+      this.view.watching !== this.binding.props.initialWatching
+    )
       return;
     const command = Object.freeze({ ...this.owner, watching: !this.view.watching });
     void this.send(command);

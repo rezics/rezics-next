@@ -1,9 +1,17 @@
-import { FeedActionBar, type FeedActionBarProps } from '../feed/action-bar';
+import { QueryClientContext } from '@tanstack/react-query';
+import { useContext, useMemo } from 'react';
 import { m } from '../../paraglide/messages.js';
-import type { ThreadReactionsProps } from '../../threads/thread-reactions';
-import type { CommunityThread } from './subject-community';
+import { normalizeSessionObservation } from '../../session/browser-state';
+import { SignInPrompt } from '../../threads/write-prompts';
+import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread-reactions';
+import { ThreadWatch, type ThreadWatchProps } from '../../threads/thread-watch';
+import type { CommunityReactionFreshness, CommunityThread } from './subject-community';
 import { useSubjectCommunityLifetime } from './subject-community-lifetime';
 
+const actionClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+/** Only exact controls admitted by the selected native card are mounted here. */
 export function SubjectCommunityInteractions({
   thread,
   subject,
@@ -12,7 +20,9 @@ export function SubjectCommunityInteractions({
   contextId,
   reader,
   source,
+  reactionsAsOf,
   preparedTransport,
+  preparedWatch,
 }: {
   thread: CommunityThread;
   subject: { id: string; label: string };
@@ -21,9 +31,26 @@ export function SubjectCommunityInteractions({
   contextId: string | null;
   reader: string | null;
   source: string;
+  reactionsAsOf: CommunityReactionFreshness;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
+  preparedWatch?: ThreadWatchProps['native'];
 }) {
-  const ready = reader !== null && thread.reactions !== undefined && thread.viewerReaction !== undefined;
+  const client = useContext(QueryClientContext);
+  const sessionState = client?.getQueryState(['session']);
+  const session = normalizeSessionObservation(client?.getQueryData(['session']));
+  const sessionKnown = !client || sessionState?.status === 'success';
+  const sessionMatches =
+    !client || (sessionKnown && reader !== null && session.state === 'signed-in' && session.subject === reader);
+  const advice = thread.actions;
+  const currentWatch = advice?.watch?.state === 'current' ? advice.watch : null;
+  const canReact =
+    advice?.reaction === 'available' &&
+    reader !== null &&
+    sessionMatches &&
+    thread.reactions !== undefined &&
+    thread.viewerReaction !== undefined &&
+    reactionsAsOf !== null;
+  const canWatch = currentWatch !== null && reader !== null && sessionMatches;
   const lifetime = useSubjectCommunityLifetime({
     subjectId: subject.id,
     contextId,
@@ -31,30 +58,69 @@ export function SubjectCommunityInteractions({
     route: href,
     source,
     targetId: thread.id,
-    ready,
+    ready: canReact || canWatch,
     locale,
   });
-  const reaction: FeedActionBarProps['reaction'] = ready
-    ? {
-        target: { kind: 'thread', id: thread.id },
-        counts: thread.reactions!,
-        value: thread.viewerReaction!,
-        personalReady: true,
-        reactionOrigin: lifetime,
-        settleWithRead: true,
-        ...(preparedTransport ? { preparedTransport } : {}),
-      }
-    : undefined;
+  const readAuthority = useMemo(() => Object.freeze({}), [lifetime.key]);
+  const options = { locale: locale as never };
+  const replyHref = `${href}${href.includes('#') ? '' : '#reply'}`;
+  const reactionSignIn = advice?.reaction === 'sign_in_required' && reader === null;
+  const watchSignIn = advice?.watch?.state === 'sign_in_required' && reader === null;
+  const showReply =
+    (advice?.reply === 'available' && reader !== null && sessionMatches) ||
+    (advice?.reply === 'sign_in_required' && reader === null);
+  const showOverflow = advice?.overflow === true;
+
+  if (!showReply && !canReact && !reactionSignIn && !canWatch && !watchSignIn && !showOverflow) return null;
   return (
-    <FeedActionBar
-      locale={locale}
-      title={thread.title ?? m.threads_untitled({}, { locale: locale as never })}
-      href={href}
-      signedIn={reader !== null}
-      {...(reaction ? { reaction } : {})}
-      reactionPresentation="chips"
-      reply={{ href: `${href}${href.includes('#') ? '' : '#reply'}` }}
-      origin={lifetime}
-    />
+    <div data-slot="community-actions" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+      {showReply && advice?.reply === 'available' ? (
+        <a className={actionClass} href={replyHref}>
+          {m.feed_action_reply({}, options)}
+        </a>
+      ) : showReply ? (
+        <SignInPrompt returnTo={replyHref} label={m.feed_action_reply({}, options)} compact />
+      ) : null}
+      {canReact ? (
+        <ThreadReactions
+          target={{ kind: 'thread', id: thread.id }}
+          counts={thread.reactions!}
+          value={thread.viewerReaction!}
+          signedIn
+          returnTo={replyHref}
+          personalReady
+          reactionOrigin={lifetime}
+          settleWithRead
+          sourceWatermark={reactionsAsOf!}
+          presentation="chips"
+          locale={locale}
+          {...(preparedTransport ? { preparedTransport } : {})}
+        />
+      ) : reactionSignIn ? (
+        <SignInPrompt returnTo={replyHref} label={m.reaction_react({}, options)} compact />
+      ) : null}
+      {canWatch ? (
+        <ThreadWatch
+          threadId={thread.id}
+          session="signed-in"
+          sessionKnown
+          viewerId={reader!}
+          sessionStamp={source}
+          admitted
+          returnTo={replyHref}
+          initialWatching={currentWatch!.watching}
+          readAuthority={readAuthority}
+          isCurrent={lifetime.isCurrent}
+          {...(preparedWatch ? { native: preparedWatch } : {})}
+        />
+      ) : watchSignIn ? (
+        <SignInPrompt returnTo={replyHref} label={m.thread_watch_anonymous({}, options)} compact />
+      ) : null}
+      {showOverflow ? (
+        <a className={actionClass} href={href}>
+          {m.report_more({}, options)}
+        </a>
+      ) : null}
+    </div>
   );
 }

@@ -5,12 +5,14 @@ import { m } from '../../paraglide/messages.js';
 import { Byline } from '../../threads/byline';
 import { threadLocation } from '../../threads/thread-href';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
+import type { ThreadWatchProps } from '../../threads/thread-watch';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
 import { SubjectCommunityPreview } from './subject-community-preview';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
 import { CommunityCardPresentation } from './subject-community-card-view';
+import { SubjectCommunityInteractions } from './subject-community-interactions';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 const headingClass =
@@ -29,6 +31,8 @@ export function SubjectCommunityRegion({
   href,
   paged = false,
   node,
+  preparedTransport,
+  preparedWatch,
 }: {
   id: string;
   kind: CommunityKind;
@@ -41,6 +45,7 @@ export function SubjectCommunityRegion({
   paged?: boolean;
   node?: string;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
+  preparedWatch?: ThreadWatchProps['native'];
 }) {
   const options = { locale: locale as never };
   const community = useContext(SubjectCommunityContext);
@@ -59,7 +64,7 @@ export function SubjectCommunityRegion({
       region.state,
       region.state === 'ready' ? region.context : null,
       region.state === 'ready' ? region.reactionsAsOf : null,
-      region.state === 'ready' ? region.threads.map(({ id, card }) => [id, card]) : null,
+      region.state === 'ready' ? region.threads.map(({ id, card, actions }) => [id, card, actions]) : null,
     ]),
   });
   if (!reading.available) region = { state: 'unavailable' };
@@ -211,6 +216,18 @@ export function SubjectCommunityRegion({
                     locale={locale}
                     reader={reader}
                     reactionsAsOf={reactionsAsOf}
+                  />
+                  <SubjectCommunityInteractions
+                    thread={thread}
+                    subject={subject}
+                    locale={locale}
+                    href={threadHref}
+                    contextId={community?.contextId ?? null}
+                    reader={reader}
+                    source={community?.sourceKey ?? community?.now ?? ''}
+                    reactionsAsOf={reactionsAsOf}
+                    {...(preparedTransport ? { preparedTransport } : {})}
+                    {...(preparedWatch ? { preparedWatch } : {})}
                   />
                   <ListRowControl
                     data-content-item-slot="actions"

@@ -77,7 +77,9 @@ export function ThreadWatch(props: ThreadWatchProps) {
           <p role="status" aria-live="polite" aria-atomic="true">
             {status(view)}
           </p>
-          {visit.ready && view.phase === 'confirmed' ? (
+          {visit.ready &&
+          view.phase === 'confirmed' &&
+          (typeof props.initialWatching !== 'boolean' || view.watching === props.initialWatching) ? (
             <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>
               {view.watching ? m.thread_watch_stop() : m.thread_watch_watch()}
             </Button>

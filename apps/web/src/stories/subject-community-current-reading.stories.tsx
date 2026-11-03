@@ -6,6 +6,8 @@ import { readSubjectCommunity, type CommunityKind, type SubjectCommunity } from 
 import type { CommunityCard } from '../features/pages/subject-community-card';
 import { SubjectCommunityContext, SubjectCommunityRegion } from '../features/pages/subject-community-view';
 import { GLOBAL } from '../features/pages/subject-ratings';
+import type { ThreadReactionsProps } from '../threads/thread-reactions';
+import type { ThreadWatchNative } from '../threads/thread-watch-native';
 import {
   communityAuthor,
   communitySubject,
@@ -17,7 +19,32 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectViewHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
-type Scenario = 'anonymous' | 'member' | 'writer' | 'zero' | 'changed-scale' | 'retired-target' | 'concealed';
+type Scenario =
+  | 'anonymous'
+  | 'member'
+  | 'writer'
+  | 'actions'
+  | 'zero'
+  | 'changed-scale'
+  | 'retired-target'
+  | 'concealed';
+
+const unavailableReactions: NonNullable<ThreadReactionsProps['preparedTransport']> = {
+  async change() {
+    return { ok: false, reason: 'unavailable' };
+  },
+  async read() {
+    return { ok: false, reason: 'unavailable' };
+  },
+};
+const uncertainWatch: ThreadWatchNative = {
+  async read() {
+    return { kind: 'unavailable' };
+  },
+  async set() {
+    return { kind: 'unknown' };
+  },
+};
 function CurrentCommunityReading({
   scenario = 'anonymous',
   kind = 'review',
@@ -84,10 +111,55 @@ function CurrentCommunityReading({
             media: [],
           };
           // This consumer seam is deliberately independent of the installed current-question reviewContext.
+          const actionCard = {
+            state: 'current',
+            authors: { thread: { state: 'withheld' }, openingPost: { state: 'withheld' } },
+            presentation: { state: 'current', language: 'en', spoiler: false },
+            media: { state: 'none', images: [] },
+            comments: {
+              state: 'current',
+              cohort: 'public',
+              count: { kind: 'exact', value: 0 },
+              lastActivityAt: null,
+              source: { epoch: 1, position: '1' },
+            },
+            actions: {
+              state: 'current',
+              retryable: false,
+              references: [
+                {
+                  type: 'content.thread',
+                  id: thread.id,
+                  sourceRevisionId: post.revisionId,
+                  state: 'current',
+                  operations: [
+                    { action: 'post:create', operationId: 'post.create', state: 'available' },
+                    { action: 'reaction:set', operationId: 'thread.set_reaction', state: 'available' },
+                    { action: 'reaction:set', operationId: 'thread.clear_reaction', state: 'available' },
+                    { action: 'thread:watch', operationId: 'thread.watch', state: 'available' },
+                    { action: 'thread:watch', operationId: 'thread.unwatch', state: 'not_applicable' },
+                    { action: 'report:create', operationId: 'report.create', state: 'available' },
+                  ],
+                },
+              ],
+            },
+            reply: { state: 'available' },
+            watch: { state: 'current', watching: false },
+            currentness: {
+              source: 'current',
+              place: 'current',
+              authors: 'current',
+              reactions: 'current',
+              actions: 'current',
+              watch: 'current',
+              media: 'current',
+              comments: 'current',
+            },
+          };
           const native = {
             ...thread,
             firstPost: opening,
-            card,
+            ...(scenario === 'actions' ? { card: actionCard } : { card }),
             ...(scenario === 'changed-scale'
               ? {
                   reviewContext: {
@@ -123,6 +195,9 @@ function CurrentCommunityReading({
               locale={locale}
               href={subjectViewHref(communitySubject, locale, kind === 'review' ? 'reviews' : 'discussion')}
               paged
+              {...(scenario === 'actions'
+                ? { preparedTransport: unavailableReactions, preparedWatch: uncertainWatch }
+                : {})}
             />
           </div>
         </PatternStory>
@@ -140,6 +215,7 @@ type Story = StoryObj<typeof meta>;
 export const Anonymous: Story = { args: { scenario: 'anonymous' } };
 export const Member: Story = { args: { scenario: 'member', kind: 'discussion' } };
 export const Writer: Story = { args: { scenario: 'writer' } };
+export const AdmittedActions: Story = { args: { scenario: 'actions', kind: 'discussion' } };
 export const Zero: Story = { args: { scenario: 'zero' } };
 export const ChangedScale: Story = { args: { scenario: 'changed-scale' } };
 export const RetiredTarget: Story = { args: { scenario: 'retired-target' } };

@@ -40,8 +40,10 @@ Ordinary rows remain readable with bounded text. Null citation is unscored; a re
 provenance is unavailable. Reaction counts require a non-null watermark from the same native page. Counts retain
 seven native kinds without a local total; omitted kinds inside an admitted object are zero. Omitted counts or
 viewer slot remain unavailable; explicit null viewer reaction means no selection. Public projection removes viewer
-slots. Reply, creation, reaction, watch and overflow commands remain unmounted pending native viewer/target advice;
-readable cards and Board destinations do not confer it. Shared Board and command owners remain unchanged.
+slots. Reply, existing-thread post creation, reaction, watch and overflow controls require current native advice bound
+to the exact thread and first-post revision; readable cards and Board destinations do not confer it. A new-thread
+composer stays unavailable until Content supplies a concrete Board target. Shared Board and command owners remain
+unchanged.
 
 Every completed read gets one fresh local observation UUID, including same-URL replacement. Retirement observes
 existing session/CSRF and exposure caches without reads. Account, successful session observation, exposure,
@@ -52,12 +54,26 @@ card returns focus to the stable region heading; replacing the source remounts i
 
 ## Cost
 
-- **Touches:** One planned native page per placed region, at most five rows on overview or twenty in a full view,
-  plus one shared public author batch per composition page. Context and freshness come from that same page.
-  A sparse page retains its native continuation without refill. Explicit retry repeats the same opaque cursor.
-  Projection and cache subscriptions add zero session, media, activity, question, vote or per-card requests.
-  Session preparation belongs to the existing public/private page boundary. This reading slice sends zero commands
-  and zero command readbacks; deliberate conversation opens retain their existing command owners and costs.
+- **Session:** Retirement observes the existing session/CSRF and exposure cache owners; this slice starts zero
+  session or exposure reads. A current card action carries only the actor identity needed by its existing command
+  owner. Credentials remain owned by the existing session/command boundary.
+- **Page:** One planned native page per placed region, at most five rows on overview or twenty in a full view,
+  plus one shared public author batch per composition page. Context, reaction freshness and current watch baseline
+  come from that same page. A full view mounts at most twenty reaction controls and twenty watch controls. A sparse
+  page retains its native continuation without refill; explicit retry repeats the same opaque cursor. Projection
+  and cache subscriptions add zero session, media, activity, question, vote or per-card requests.
+- **Commands:** Each deliberate reaction change uses the existing exact thread target and one idempotency key; an
+  unresolved change retains one intent and retries that same key. A watch toggle uses the one desired-state
+  PUT/DELETE currently admitted by the page; an uncertain write retries the same desired state. A confirmed watch
+  transition spends that page's advice, so the inverse control waits for a fresh native page. Each card retains at most one pending reaction and one pending
+  watch command, so a twenty-row region retains at most twenty of each. Reply opens the exact thread's existing
+  `post.create` composer, and overflow opens that thread's existing report owner; neither adds a command here.
+- **Readbacks:** Reactions use the page's counts/viewer slot without a mount read and perform at most one exact
+  thread read after a successful write or one deliberate recovery check. At most twenty current reaction snapshots
+  are retained, each with at most seven counters, one viewer slot and one freshness pair (140 counters total).
+  Watch uses the page's current state without a mount GET, performs zero automatic reads after a write, and performs
+  one GET for each deliberate Check again; at most twenty one-boolean watch states are retained. No read history or
+  action polling is kept. A full region can have at most twenty reaction reads and twenty watch reads in flight.
 - **Bound:** Admission limits each source row to 2 MiB + 64 KiB of serialized UTF-8 JSON, the whole page to
   `limit * rowBytes + 64 KiB` (43,319,296 bytes at twenty), each closed extension to 32 KiB and each normalized
   thread to 48 KiB. These are enforced admission limits, not promises about unaccepted transport input.
@@ -67,11 +83,16 @@ card returns focus to the stable region heading; replacing the source remounts i
   placeholder strings 128/64 units, and four unique credit obligations; each credit text is at most 1024 units
   and its licence at most 80 ASCII characters. There are at most forty images, 480 derivative entries and 140
   reaction counters per full region. Native ids are UUIDs; question/vote/lifecycle revisions are positive int32,
-  scale units 0–4096, and counts nonnegative safe integers. No action advice or command body is retained here.
+  scale units 0–4096, and counts nonnegative safe integers. One card's inspected action advice is at most 512 KiB
+  of JSON, with at most two references and 256 operations per reference; action and operation-id strings are each
+  at most 64 UTF-16 units. A twenty-row page admits at most 10 MiB of inspected advice. Web retains only four
+  control states, at most 128 JSON bytes per row or 2560 bytes per full region; it never retains the operation list.
   Cursors are opaque, nonempty and at most 4096 UTF-16 units (at most 12,288 UTF-8 or 24,576 escaped JSON bytes).
   One local observation UUID uses 36 ASCII characters. These maxima compose under the stricter JSON byte caps.
 - **Retained memory:** One raw accepted native window (at most 43,319,296 JSON bytes), one normalized window
-  (at most twenty × 48 KiB), one context/cursor and at most twenty distinct author keys per region. Composition
+  (at most twenty × 48 KiB), one context/cursor, at most twenty distinct author keys, and at most 2560 JSON bytes
+  of normalized action advice per region. Up to twenty pending reaction intents and twenty pending watch commands
+  are retained, one of each per card; no command history or automatic retry queue is retained. Composition
   regions share the identity batch. Retirement retains no prior card subtree, cursor history or source registry.
   Admission temporarily materializes one page JSON string and UTF-8 buffer, then one source-row/card/normalized-row
   serialization at a time; each is bounded as above. Parsed source documents and JS object/string overhead remain
@@ -80,11 +101,12 @@ card returns focus to the stable region heading; replacing the source remounts i
 - **Growth:** Projection and indexing are O(N + admitted bytes), N≤20; rendering, source comparison and retained
   card state have the same bound. The 1/5/20-row consumer checks retain one output per supplied row, with no
   accumulation, per-card hydration, reorder, refill or local totals. Native raw80 and independent 256/1024/4096
-  growth evidence remains with Content and is not established by these fixtures. Action and command/readback
-  caps must be completed when their native advice is bound.
+  growth evidence remains with Content and is not established by these fixtures. Action inspection is bounded by
+  512 KiB per card × twenty rows; command and readback concurrency is bounded by one reaction and one watch owner
+  per row, with no automatic retry or polling.
 
-The connected Current Reading stories cover anonymous/member/writer, zero, changed current scale, retired/merged
-original target and concealed context through the native client and this seam. Browser review at 390px/1280px,
-light/dark, keyboard open/action/return and mounted action journeys remains part of the continuation. All eight
+The connected Current Reading stories cover anonymous/member/writer, admitted actions with truthful recovery, zero,
+changed current scale, retired/merged original target and concealed context through the native client and this seam.
+Browser review at 390px/1280px, light/dark, keyboard open/action/return remains for the controller's browser check. All eight
 locales share the same layout and localized historical provenance labels; continuation/retry, disclosure and media
 controls retain 44px targets and wrapping. See [Subject pages](../../../../../docs/subject-pages.md#overview).

@@ -16,6 +16,7 @@ import {
   withinCommunityBytes,
   type CommunityCard,
 } from './subject-community-card';
+import { projectCommunityActionAdvice, type CommunityActionAdvice } from './subject-community-actions';
 
 export type CommunityKind = 'review' | 'discussion';
 type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['threads']['get']>>['data']>;
@@ -35,6 +36,7 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   reactions?: CommunityReactionCounts;
   viewerReaction?: ReactionKind | null;
   card?: CommunityCard;
+  actions?: CommunityActionAdvice;
 };
 export type CommunityRegion =
   | { state: 'loading' | 'unavailable' | 'closed' }
@@ -93,6 +95,18 @@ function communityCitation(value: unknown): value is CommunityVoteCitation {
     (value.revision as number) <= 2_147_483_647 &&
     Object.keys(value).every((key) => key === 'questionId' || key === 'units' || key === 'revision')
   );
+}
+
+function historicalCardInput(thread: unknown): unknown {
+  if (!isRecord(thread)) return undefined;
+  if (!isRecord(thread.card) || thread.card.version !== 1) return thread.card;
+  // Keep the versioned historical seam strict while reading Content's adjacent native action advice.
+  const historical = Object.fromEntries(
+    Object.entries(thread.card).filter(([key]) =>
+      ['version', 'threadId', 'postRevisionId', 'citation', 'activity', 'media'].includes(key),
+    ),
+  );
+  return historical;
 }
 
 function communityContext(value: unknown, expected: CommunityRequest): CommunityDisplayContext | null {
@@ -209,12 +223,15 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
   }
   // Only a supplied extension needs media inspection; ordinary ThreadView stays text-only.
   if (thread.card !== undefined) collectImages(post.body.doc);
-  const card = projectCommunityCard(thread.card, {
+  const card = projectCommunityCard(historicalCardInput(thread), {
     id: thread.id,
     postRevisionId: post.revisionId,
     mediaIds: Array.isArray(post.mediaIds) ? post.mediaIds.filter((id) => referencedMedia.has(id)) : [],
     citation: citationPresent ? (post.voteCitation as CommunityVoteCitation | null) : undefined,
   });
+  const actions = nativeId(post.revisionId)
+    ? projectCommunityActionAdvice(thread, { threadId: thread.id, postRevisionId: post.revisionId })
+    : undefined;
   const reactionsPresent = Object.hasOwn(thread, 'reactions');
   const reactions = reactionsPresent ? communityReactionCounts(thread.reactions) : undefined;
   if (reactionsPresent && reactions === null) return null;
@@ -239,6 +256,7 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     ...(reactionsPresent ? { reactions: reactions! } : {}),
     ...(admitViewer && viewerPresent ? { viewerReaction: thread.viewerReaction as ReactionKind | null } : {}),
     ...(card ? { card } : {}),
+    ...(actions ? { actions } : {}),
   };
   return withinCommunityBytes(projected, COMMUNITY_PROJECTED_BYTES) ? projected : null;
 }
