@@ -75,6 +75,12 @@ async function typecheck(
   emitSchema?: string,
   emitOpenApi = false,
 ): Promise<number> {
+  // Client-dependent tests must see declarations from the source being checked.
+  // The generator checks all source modules; the full workspace checks still run before publication.
+  if (emitClient) {
+    const emitted = await command(['bun', 'scripts/client.ts'], env);
+    if (emitted !== 0) return emitted;
+  }
   const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   if (tsc !== 0) return tsc;
   const constructed = await command(['bun', 'run', 'construct'], env);
@@ -91,8 +97,7 @@ async function typecheck(
     if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
     await Bun.write(resolve(directory, path), dump);
   }
-  // Declaration emission shares this compiler database; it never starts a native check.
-  return emitClient ? command(['bun', 'scripts/client.ts'], env) : 0;
+  return 0;
 }
 
 export async function runKernelTypecheck(

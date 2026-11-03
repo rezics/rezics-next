@@ -633,17 +633,21 @@ Web adoption, frozen acceptance and measured native64/512/4096 cost evidence rem
 evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
 supported fields, immutable review confirmations, exact native PATCH replay and visibility decision. Reflection
 adoption includes empty/set, explicit null/clear and preserve; assessment stays with its coordinated native producer.
-The generated client snapshot handoff remains unavailable pending compiler-host emission and focused verification.
+The generated client snapshot handoff remains unavailable pending compiler-host emission and focused verification;
+see the [client installation continuation](../../.temp/continuation/archive-client-installation.md).
 
 Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
 `services/kernel/test/library/library-archive-merge.test.ts`. Client transport coverage in
 `packages/client/tests/library-archive-merge.test.ts` preserves original JSON text and envelope upload through preview.
+The complete typed journey must add review and exact returned-revision apply together with refreshed declarations.
 The retained generated upload body is `unknown`, preview/review omit `reviewRevision`, and apply accepts
 `{ordinals: number[]}`. Regeneration and the typed `{items: {ordinal: number; reviewRevision: number}[]}` confirmation
 journey remain required before Web file admission; see
-[the generated transport continuation](../../.temp/continuation/archive-client-delivery.md). The canonical Web archive
+[the generated transport continuation](../../.temp/continuation/archive-client-installation.md). Source-checked emission
+now precedes full workspace compiler/construct checks and includes independent public type exports; publication still
+requires every check. The canonical Web archive
 consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
 
 ### Native archive progress recovery

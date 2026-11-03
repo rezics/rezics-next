@@ -86,13 +86,18 @@ strict bounded decoder alone admits the artifact. Web's canonical archive consum
 a handwritten client, proxy cast or alternate upload route.
 
 The retained generated upload body is `unknown`; preview records and review results omit `reviewRevision`, and
-`apply.post` still accepts `{ordinals: number[]}`. Upload text/envelope serialization and preview transport are covered
-by `packages/client/tests/library-archive-merge.test.ts`; this does not establish the complete confirmation journey.
+`apply.post` still accepts `{ordinals: number[]}`. Existing upload/preview coverage in
+`packages/client/tests/library-archive-merge.test.ts` preserves original JSON text and envelope operands. The complete
+generated journey must additionally review selected changes and apply the exact returned revision, with type
+assertions for upload and confirmation operands. Restore that journey together with refreshed declarations so the
+consumer remains type-correct.
 Decision: keep canonical Web file admission unavailable until generated declarations and the exact returned
 review-revision handoff are installed together.
-Client generation must preserve unrelated declarations, including label consolidation. Installed client delivery
-and its complete typed consumer proof continue in
-[the generated transport continuation](../.temp/continuation/archive-client-delivery.md).
+Client generation must preserve unrelated declarations, including label consolidation. Source-checked emission
+precedes the full workspace compiler and construct checks; all checks still gate publication. The generated closure
+also includes public client type exports that are independent of mounted routes. Installed client delivery and its
+complete typed consumer proof continue in
+[the generated transport continuation](../.temp/continuation/archive-client-installation.md).
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results

@@ -130,6 +130,9 @@ preserve/set/clear, stale revision/incarnation handling, missing targets, per-it
 progress and command timestamps remain separate from imported dates. Frozen acceptance and composed native growth
 measurements run after integration.
 
-The route/schema producer is implemented in this source. Generated client snapshot emission awaits successful
-workspace compilation; the existing snapshot must not be presented as the reflection handoff.
-The remaining generation and focused verification are recorded in the reflection client continuation.
+The route/schema producer is implemented in this source. The [generated confirmation journey](library-archive-merge.md#current-native-journey)
+requires raw JSON text or `{manifest, records}` upload and the exact `reviewRevision` returned by review when applying
+selected personal facts. Source-checked generation includes public client type exports before the full workspace
+compiler and construct checks; publication still requires every check to pass. The retained snapshot must not be
+presented as the reflection handoff. Remaining installation and verification are recorded in the
+[client continuation](../.temp/continuation/archive-client-installation.md).
