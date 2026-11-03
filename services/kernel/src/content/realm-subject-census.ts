@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, QueryResultRow } from 'pg';
 import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import {
   createRealmSubjectCandidates,
@@ -28,16 +28,17 @@ const fields = 'generation::text,cut_epoch,cut_position::text,upper_id,after_id,
 /** Finite native source keys and durable cross-home handoff. Never marks a population ready. */
 export function createRealmSubjectCensus(pool: Pool) {
   const candidates = createRealmSubjectCandidates(pool);
-  async function load(route: number, deadline: number) {
+  function point<T extends QueryResultRow>(route: number, deadline: number, sql: string, parameters: unknown[]) {
     return realmSubjectHome(
       pool,
       route,
       deadline,
       false,
-      async (client) =>
-        (await client.query<Census>(`SELECT ${fields} FROM content.realm_subject_census WHERE route=$1`, [route]))
-          .rows[0],
+      async (client) => (await client.query<T>(sql, parameters)).rows[0],
     );
+  }
+  function load(route: number, deadline: number) {
+    return point<Census>(route, deadline, `SELECT ${fields} FROM content.realm_subject_census WHERE route=$1`, [route]);
   }
   async function advance(
     route: number,
@@ -141,22 +142,17 @@ export function createRealmSubjectCensus(pool: Pool) {
         await advance(route, state, deadline, pending, state.after_id, state.ordinal + 1);
         return 'progress';
       }
-      const next = await realmSubjectHome(
-        pool,
+      const next = await point<{
+        thread: string;
+        opening: string | null;
+        revision: string | null;
+        board: string;
+        kind: 'discussion' | 'review';
+        subjects: string[];
+      }>(
         route,
         deadline,
-        false,
-        async (client) =>
-          (
-            await client.query<{
-              thread: string;
-              opening: string | null;
-              revision: string | null;
-              board: string;
-              kind: 'discussion' | 'review';
-              subjects: string[];
-            }>(
-              `WITH next AS MATERIALIZED (
+        `WITH next AS MATERIALIZED (
           SELECT thread_id,first_post_id,board_id,kind FROM content.thread
           WHERE route=$1 AND thread_id>$2::uuid AND thread_id<=$3::uuid ORDER BY thread_id LIMIT 1
         ) SELECT n.thread_id AS thread,n.first_post_id AS opening,p.head_revision_id AS revision,
@@ -164,9 +160,7 @@ export function createRealmSubjectCensus(pool: Pool) {
           FROM next n LEFT JOIN content.post p ON p.route=$1 AND p.thread_id=n.thread_id AND p.post_id=n.first_post_id
           LEFT JOIN content.revision r ON r.route=$1 AND r.thread_id=n.thread_id
             AND r.post_id=n.first_post_id AND r.revision_id=p.head_revision_id`,
-              [route, state.after_id ?? zero, state.upper_id ?? zero],
-            )
-          ).rows[0],
+        [route, state.after_id ?? zero, state.upper_id ?? zero],
       );
       if (!next) {
         await advance(route, state, deadline, null, state.after_id, 0, true);
@@ -176,19 +170,11 @@ export function createRealmSubjectCensus(pool: Pool) {
         // A not-yet-complete native opening cannot be certified by this census.
         return 'unknown';
       }
-      const board = await realmSubjectHome(
-        pool,
+      const board = await point<{ realm: string | null }>(
         realmSubjectRoute(next.board),
         deadline,
-        false,
-        async (client) =>
-          (
-            await client.query<{ realm: string | null }>(
-              `SELECT realm_id AS realm FROM content.board
-          WHERE route=$1 AND board_id=$2`,
-              [realmSubjectRoute(next.board), next.board],
-            )
-          ).rows[0],
+        `SELECT realm_id AS realm FROM content.board WHERE route=$1 AND board_id=$2`,
+        [realmSubjectRoute(next.board), next.board],
       );
       if (!board) return 'unknown';
       if (!board.realm || !next.subjects.length) {

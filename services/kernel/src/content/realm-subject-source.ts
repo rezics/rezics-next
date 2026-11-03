@@ -23,6 +23,7 @@ type Current = 'current' | 'changed' | 'concealed' | 'unavailable';
 type Context = Readonly<{ reader: LeafOptions; work: ScopeWork }>;
 /** Supplied by the separate current-disclosure owner. All methods use the caller root;
  * dependencies bind actor, Access, Realm/place, opening, original and terminal identity.
+ * Currentness also revalidates every Subject/candidate dependency added during a page.
  * A rejected candidate is not_published; uncertainty must be withheld or unknown.
  */
 export interface RealmSubjectDisclosure {
@@ -33,7 +34,11 @@ export interface RealmSubjectDisclosure {
   ): Promise<Readonly<{ state: 'ready'; dependency: string }> | Readonly<{ state: 'concealed' | 'unavailable' }>>;
   current(realm: string, dependency: string, context: Context): Promise<Current>;
   candidate(candidate: RealmSubjectCandidate, dependency: string, context: Context): Promise<RealmSubjectMembership>;
-  subject(subject: string, dependency: string, context: Context): Promise<'readable' | 'withheld' | 'unknown'>;
+  subject(
+    subject: string,
+    dependency: string,
+    context: Context,
+  ): Promise<Readonly<{ state: 'readable'; terminal: string }> | Readonly<{ state: 'withheld' | 'unknown' }>>;
 }
 /** Live maintenance proves every source cut, subsequent writes and identity repairs.
  * A token binds the exact native generation/revision, not just an empty eligible page.
@@ -231,12 +236,12 @@ export function createRealmSubjectSource(input: {
         const visible = await bounded(context, disclosure!.bounds.subject, () =>
           disclosure!.subject(subject, state.dependency, context),
         );
-        let value: RealmSubjectMembership = visible === 'readable' ? 'unknown' : visible;
-        if (visible === 'readable' && remaining > 0) {
+        let value: RealmSubjectMembership = visible.state === 'readable' ? 'unknown' : visible.state;
+        if (visible.state === 'readable' && remaining > 0) {
           const limit = remaining;
           charge(work);
           admitRows(work, limit);
-          const rows = await store.page(observation.realm, null, subject, limit, reader.deadline);
+          const rows = await store.page(observation.realm, null, visible.terminal, limit, reader.deadline);
           chargeRows(work, rows.length);
           remaining -= rows.length;
           value = rows.length < limit ? 'not_published' : 'unknown';

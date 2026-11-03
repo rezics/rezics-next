@@ -1825,13 +1825,16 @@ no thread, grant, account or history enumeration. Focused outcomes are in `test/
 Search adapts its planned port to these exports (prefix/match accept 32 inputs). The separate
 `RealmSubjectDisclosure` owns Realm read/ban, reader binding, original/terminal identity,
 thread, opening, board and place checks. `RealmSubjectMaintenance` owns live cut coverage
-and currentness. Without both capabilities, structural completion remains unavailable.
+and currentness, including dependencies added by each page. Match resolves original inputs
+to their independently readable terminal through disclosure. Without both capabilities,
+structural completion remains unavailable.
 Decision: retain unresolved originals with null terminals; never assume a self mapping.
 
 `createRealmSubjectCandidates` is the single live writer/coverage seam. Maintenance fences a
 thread with its native epoch/position, then reconciles its exact thread keyset and writes
 individual current candidates or tombstones under that fence. Old writes lose; baseline is
-insert-only and loses to any live fence, including removal before census. Identity repair and
+insert-only and loses to any live fence, including removal before census. `initialize`
+installs an empty Realm generation without claiming coverage. Identity repair and
 erasure use the same seam. Maintenance reclaims tombstones only after its replay floor permits;
 rows and pending handoffs contain structural locators, never author, text or grant data.
 

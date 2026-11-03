@@ -116,6 +116,10 @@ export function createRealmSubjectCandidates(pool: Pool) {
     );
   }
   return {
+    async initialize(realm: string, deadline: number) {
+      const route = realmSubjectRoute(realm);
+      await realmSubjectHome(pool, route, deadline, true, (client) => generation(client, route, realm));
+    },
     async observe(realm: string, deadline: number): Promise<RealmSubjectCoverage | null> {
       const route = realmSubjectRoute(realm);
       return realmSubjectHome(
