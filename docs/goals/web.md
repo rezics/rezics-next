@@ -427,7 +427,9 @@ boundaries below: page ≤20, candidates ≤160, conjunctive exact kind/Space/qu
 cursor, bounded real coverage/frontier, one retained page, cancellation/retirement and public/private SSR fences.
 A directory, helper or safe refusal is not positive installed default-feed proof. No browser qualification,
 hidden refill or history scan supplies missing authority. `RealmHomeHeader` source differs from stale publication;
-that image does not justify another hero rewrite.
+that image does not justify another hero rewrite. The current Realm-home source and lifecycle boundary is recorded in
+the [Space page lifetime guide](../../apps/web/src/community/space-page-lifetime.md); its composed visit remains
+pending Content's current viewer observation and generated client declaration.
 
 Source-present provider choices, independent ratings, Spoiler Show/Hide, adjacent candidate confirmation, human
 curation guidance, Search filter entrance, creator offer titles, edition terminal recovery, shelf sorting, exact

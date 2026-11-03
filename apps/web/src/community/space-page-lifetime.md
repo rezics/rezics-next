@@ -75,3 +75,7 @@ authorization credential, independent-cache provenance or unobserved credential 
 private server-rendered output, add a trusted generation or raw credential transport, or add preparation/native reads.
 The existing `createRoot` serialization cases are not `renderToString`/`hydrateRoot` first-paint proof; the private
 first-render producer/SSR contract remains deferred.
+
+## Realm home source boundary
+
+Decision: Web will not mark the composed Realm-home visit available until `RealmHomePage` carries the native current viewer observation and `@rezics/client` exposes the generated declaration for its mounted operation; the existing separate reads do not establish that assembly.
