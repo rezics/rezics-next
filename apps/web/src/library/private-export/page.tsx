@@ -37,11 +37,19 @@ export function PrivateLibraryExportPage({ visit }: { visit?: ExportVisit | null
 function ExportSession({ visit }: { visit: ExportVisit }) {
   const port = useLibraryExportPort();
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const publish = useRef<(snapshot: ExportJourneySnapshot) => void>(() => {});
   const journey = useRef<ExportJourney | null>(null);
-  const [snap, setSnap] = useState<ExportJourneySnapshot>(() => {
-    journey.current = createExportJourney({ port, visit, onChange: setSnap });
-    return journey.current.snapshot();
-  });
+  if (!journey.current) {
+    journey.current = createExportJourney({
+      port,
+      visit,
+      onChange(current) {
+        publish.current(current);
+      },
+    });
+  }
+  const [snap, setSnap] = useState<ExportJourneySnapshot>(() => journey.current!.snapshot());
+  publish.current = setSnap;
 
   useEffect(() => () => journey.current?.retire(), [visit]);
 
