@@ -72,14 +72,25 @@ export async function spaceDiscoveryInvalidation(
   const data = event.data as Record<string, unknown>;
   const evidence = origin(event);
   let target: SpaceDiscoveryInvalidation['target'];
-  const sameHome = (id: unknown): string => {
+  const sameHome = (id: unknown, nativeRoute?: number): string => {
     const route = typeof id === 'string' ? routeOf(id) : null;
-    if (route === null || partitionOf(route) !== evidence.partition || event.subject !== id)
+    if (route === null || partitionOf(nativeRoute ?? route) !== evidence.partition || event.subject !== id)
       throw new TypeError('Invalid Space discovery native identity');
     return id as string;
   };
   if (spaceTypes.includes(event.type)) {
-    target = { kind: 'space', id: sameHome(data.spaceId ?? data.id) };
+    // Claim acceptance without a revision and activation commit in the address home.
+    // Their target remains the Space's own routed identity, never the claim identity.
+    const addressHome =
+      event.type.endsWith('.address-activated.v1') ||
+      (event.type.endsWith('.address-claim-accepted.v1') && !data.revisionId);
+    const nativeRoute = addressHome
+      ? createHash('sha256')
+          .update(data.address as string)
+          .digest()
+          .readUInt16BE(0)
+      : undefined;
+    target = { kind: 'space', id: sameHome(data.spaceId ?? data.id, nativeRoute) };
   } else if (realmTypes.includes(event.type)) {
     const realmId = sameHome(data.realmId ?? data.id);
     const space = await withConnection(
@@ -142,7 +153,10 @@ export function createSpaceDiscoveryEffect(pool: Pool): Effect {
       await runCommand(
         pool,
         {
-          partition: invalidation.origin.partition,
+          partition:
+            invalidation.target.kind === 'space'
+              ? partitionOf(routeOf(invalidation.target.id)!)
+              : invalidation.origin.partition,
           basis,
           receipt: {
             actorAccountId: basis.actorAccountId,

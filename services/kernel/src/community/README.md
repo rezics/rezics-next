@@ -99,8 +99,9 @@ The closed `com.rezics.community.space-discovery.invalidated.v1` payload names a
 the original log `(partition, epoch, position, eventId, type)`, and any native revision/lifecycle/security version.
 All positions remain decimal strings. It contains no title, description, image, removal reason or eligibility
 claim. A Realm delta resolves its immutable host with one exact native identity read, including removed Realms;
-an unavailable binding retries rather than losing a removal. Each invalidation is committed to the originating
-partition. Its own envelope is the delivery position; the retained origin identifies the native change, never a
+an unavailable binding retries rather than losing a removal. Direct invalidations commit in the target Space home;
+dependency scopes commit in their originating home. Address acceptance/activation retain the foreign address-home
+origin and target the native Space home. Its own envelope is the delivery position; the retained origin identifies the native change, never a
 replacement source snapshot or a globally ordered resource version. Native positions from different homes or
 epochs must not be compared as one scalar.
 

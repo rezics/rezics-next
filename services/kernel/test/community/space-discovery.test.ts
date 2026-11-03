@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -70,6 +71,13 @@ test('native edits, protected Realm gates and removal/restoration deliver only v
     { title: 'New place', summary: 'Current purpose' },
     space.headRevisionId,
   );
+  const address = `discovery_${crypto.randomUUID().replaceAll('-', '')}`;
+  const { space: addressed } = await call(
+    'PUT',
+    `/v1/spaces/${space.spaceId}/address`,
+    { address },
+    edited.headRevisionId,
+  );
   const { realm } = await call('POST', '/v1/realms', {
     spaceId: space.spaceId,
     title: 'Carried community',
@@ -82,23 +90,30 @@ test('native edits, protected Realm gates and removal/restoration deliver only v
     'POST',
     `/v1/spaces/${space.spaceId}/removal`,
     { expectedVersion: container.version, reason: 'Private moderation evidence' },
-    edited.headRevisionId,
+    addressed.headRevisionId,
   );
   await call(
     'POST',
     `/v1/spaces/${space.spaceId}/restoration`,
     { expectedVersion: removed.container.version },
-    edited.headRevisionId,
+    addressed.headRevisionId,
   );
   const partition = partitionOf(routeOf(space.spaceId)!);
-  const native = (await events(partition, 'space_discovery_native_test')).filter((event) =>
-    createSpaceDiscoveryEffect(system.database.pool).types.includes(event.type),
-  );
+  const native: CloudEvent[] = [];
+  const effect = createSpaceDiscoveryEffect(system.database.pool);
+  const addressPartition = partitionOf(createHash('sha256').update(address).digest().readUInt16BE(0));
+  for (const home of new Set([partition, addressPartition])) {
+    native.push(
+      ...(await events(home, 'space_discovery_native_test')).filter(
+        (event) => effect.types.includes(event.type) && [space.spaceId, realm.realmId].includes(event.subject),
+      ),
+    );
+  }
   expect(native.some((event) => event.type === 'com.rezics.community.space.updated.v1')).toBe(true);
   expect(native.some((event) => event.type === 'com.rezics.community.realm.updated.v1')).toBe(true);
   expect(native.some((event) => event.type === 'com.rezics.community.space.removed.v1')).toBe(true);
   expect(native.some((event) => event.type === 'com.rezics.community.space.restored.v1')).toBe(true);
-  const effect = createSpaceDiscoveryEffect(system.database.pool);
+  expect(native.some((event) => event.type === 'com.rezics.community.space.address-activated.v1')).toBe(true);
   for (const event of native.toReversed()) await effect.run(event);
   for (const event of native) await effect.run(event);
   const delivered = (await events(partition, 'space_discovery_output_test')).filter(
@@ -111,7 +126,9 @@ test('native edits, protected Realm gates and removal/restoration deliver only v
   for (const event of delivered) {
     const data = event.data as SpaceDiscoveryInvalidation;
     expect(data.target).toEqual({ kind: 'space', id: space.spaceId });
-    expect(data.origin.partition).toBe(partition);
+    expect(native.find((source) => source.id === data.origin.eventId)!.source).toBe(
+      `urn:rezics:log:${data.origin.partition}.${data.origin.epoch}`,
+    );
     expect(BigInt(data.origin.position)).toBeGreaterThan(0n);
     expect(JSON.stringify(data)).not.toMatch(/New place|Current purpose|Private moderation/);
   }
