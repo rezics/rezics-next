@@ -18,7 +18,7 @@ export const BOARD_WATCH_RECIPIENT_BUDGET = 100;
 export const BOARD_WATCH_STEP_DEADLINE_MS = 30_000;
 type Source = ContentEventData<typeof published>;
 type Input = { source: Source; route: number; epoch: number; position: string; eventId: string; time: Date };
-type Opening = { board_id: string; active: boolean };
+type Opening = { board_id: string; active: boolean; published_at: string };
 type Recipient = { route: number; watch_id: string; watcher_account_id: string; created_at: string };
 type Work = { board_id: string; source_epoch: number; source_position: string; source_id: string;
   cursor_created_at: string | null; cursor_watch_id: string | null; done: boolean };
@@ -46,7 +46,7 @@ async function readOpening(pool: Pool, input: Input, deadline: number): Promise<
     const partition = await readPartition(client, partitionOf(input.route));
     if (!partition || partition.writeState === 'moved') throw new Error('Content partition is unavailable');
     const result = await client.query<Opening>(
-      `SELECT t.board_id::text,
+      `SELECT t.board_id::text,o.recorded_at::text AS published_at,
           (t.visibility IN ('published','protected') AND t.availability='available'
            AND p.visibility='published' AND p.availability='available' AND r.availability='available') AS active
        FROM core.outbox o
@@ -71,7 +71,7 @@ async function loadPage(pool: Pool, input: Input, opening: Opening, deadline: nu
       `INSERT INTO content.board_watch_notice_work
        (route,post_id,board_id,thread_id,source_epoch,source_position,source_id,published_at,done)
        VALUES($1,$2,$3,$4,$5,$6::bigint,$7,$8::timestamptz,$9) ON CONFLICT(route,post_id) DO NOTHING`,
-      [input.route,input.source.itemId,opening.board_id,input.source.threadId,input.epoch,input.position,input.eventId,input.time.toISOString(),!opening.active],
+      [input.route,input.source.itemId,opening.board_id,input.source.threadId,input.epoch,input.position,input.eventId,opening.published_at,!opening.active],
     );
     const result = await client.query<Work>(
       `SELECT board_id::text,source_epoch,source_position::text,source_id::text,cursor_created_at::text,cursor_watch_id::text,done
@@ -88,7 +88,7 @@ async function loadPage(pool: Pool, input: Input, opening: Opening, deadline: nu
        WHERE board_id=$1 AND watching AND created_at<$2::timestamptz
          AND ($3::timestamptz IS NULL OR (created_at,watch_id)>($3::timestamptz,$4::uuid))
        ORDER BY created_at,watch_id LIMIT $5`,
-      [opening.board_id,input.time.toISOString(),work.cursor_created_at,work.cursor_watch_id,BOARD_WATCH_RECIPIENT_BUDGET],
+      [opening.board_id,opening.published_at,work.cursor_created_at,work.cursor_watch_id,BOARD_WATCH_RECIPIENT_BUDGET],
     );
     return { done: false, rows: rows.rows };
   }, deadline);
@@ -115,7 +115,7 @@ export async function processBoardWatchNoticePage(pool: Pool, access: Access, ev
       recipientId: row.watcher_account_id, noticeId: newId(row.route), kind: 'board_activity',
       actorId: input.source.actorId, threadId: input.source.threadId, postId: input.source.itemId,
       decisionId: null, reportId: null, sourceId: input.source.itemId, createdAt: input.time,
-    }, readable, deadline, clock, { watchId: row.watch_id, boardId: opening.board_id, publishedAt: input.time });
+    }, readable, deadline, clock, { watchId: row.watch_id, boardId: opening.board_id, publishedAt: opening.published_at });
   }
   const last = page.rows.at(-1);
   const done = page.rows.length < BOARD_WATCH_RECIPIENT_BUDGET;

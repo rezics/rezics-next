@@ -151,7 +151,7 @@ export async function finalizeOptionalNotice(
   readable: boolean,
   deadline: number,
   clock: KernelClock = systemClock,
-  watch?: Readonly<{ watchId: string; publishedAt: Date } & ({ threadId: string } | { boardId: string })>,
+  watch?: Readonly<{ watchId: string } & ({ threadId: string; publishedAt: Date } | { boardId: string; publishedAt: string })>,
 ): Promise<void> {
   const route = validateNotice(notice);
   // A redrive older than the retained decision horizon cannot reopen a send.
@@ -194,7 +194,7 @@ export async function finalizeOptionalNotice(
               })) !== null : (await client.query(
                 `SELECT 1 FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2
                  AND board_id=$3 AND watch_id=$4 AND watching AND created_at<$5::timestamptz FOR KEY SHARE`,
-                [route,notice.recipientId,watch.boardId,watch.watchId,watch.publishedAt.toISOString()],
+                [route,notice.recipientId,watch.boardId,watch.watchId,watch.publishedAt],
               )).rowCount === 1);
             const overlapping = notice.kind === 'board_activity' && (await client.query(
               `SELECT 1 FROM content.notice WHERE route=$1 AND recipient_id=$2 AND source_id=$3
