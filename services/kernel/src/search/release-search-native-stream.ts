@@ -19,7 +19,7 @@ import {
   type ReleaseWorkLink,
 } from './release-search-grouping.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
-import type { SubjectSource } from './source.ts';
+import { subjectPartition, type SubjectSource } from './source.ts';
 
 export type ReleaseSearchCandidatePool = ReleaseSearchNamePool &
   Readonly<{
@@ -61,6 +61,14 @@ type Position = {
 
 function unavailable(): never {
   throw new ReleaseGroupingUnavailable();
+}
+
+function canonicalId(value: unknown): value is string {
+  try {
+    return typeof value === 'string' && value === value.toLowerCase() && subjectPartition(value) >= 0;
+  } catch {
+    return false;
+  }
 }
 
 function nameContext(context: Context) {
@@ -194,9 +202,7 @@ export function createReleaseSearchCandidateStreams(input: {
             return unavailable();
           if (
             evidence.values.some(
-              (value) =>
-                !value ||
-                (value.kind !== 'unknown' && (value.kind !== 'work' || typeof value.id !== 'string' || !value.id)),
+              (value) => !value || (value.kind !== 'unknown' && (value.kind !== 'work' || !canonicalId(value.id))),
             )
           )
             return unavailable();

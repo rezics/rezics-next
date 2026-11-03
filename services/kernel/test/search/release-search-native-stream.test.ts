@@ -201,6 +201,8 @@ test('missing complete evidence fails closed and dispatch reservation failures p
   const f = await fixture();
   f.links.delete(f.id(1));
   await expect(f.streams.groups(request, null, 2)).rejects.toBeInstanceOf(ReleaseGroupingUnavailable);
+  f.links.set(f.id(1), { complete: true, values: [{ kind: 'work', id: 'malformed-target' }] });
+  await expect(f.streams.groups(request, null, 2)).rejects.toBeInstanceOf(ReleaseGroupingUnavailable);
   f.reads.length = 0;
   const streams = createReleaseSearchCandidateStreams({
     ...f,
