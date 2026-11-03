@@ -175,8 +175,8 @@ holding selected work fixed as unrelated history grows. Existing decoder refusal
 Comparison sources were the existing native Collection editor and recovery, `legacy-final`'s recorded anime Collection
 page (reference only), and the BookWyrm shelf view and Ryot Collection filter form named by the shelf research. The
 retained behaviors are explicit owner controls, private visibility, order and unknown evidence without inferred kinds.
-Web's existing `/library/recover-collections` owner has the actual route schema additions. Retained client
-declarations and the library schema snapshot still need the existing producer to run successfully; the unchanged
-Community compiler errors prevent that output on this base. The continuation is
+Web's existing `/library/recover-collections` owner has the actual route schema additions. The library schema snapshot is refreshed from the focused runner's actual migrated-database dump, including
+existing snapshot drift. Retained client declarations still need the existing producer to run successfully; the
+unchanged Community compiler errors prevent that output on this base. The continuation is
 [generated presentation transport](../.temp/continuation/collection-presentation-client.md). Its page implementation
 and broader browser acceptance remain independent. No new page or local importer is added.
