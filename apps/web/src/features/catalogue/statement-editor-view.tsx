@@ -52,7 +52,10 @@ import {
 import { statementDraftChanged } from './statement-editor-navigation';
 
 type Current = Extract<EditorRead, { ok: true }>;
-type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
+type ScalarRead = {
+  release: Pick<Current['release'], 'types' | 'properties'>;
+  public: Pick<Current['public'], 'related'>;
+};
 type StatementRemovalKind = 'qualifier' | 'reference' | 'part';
 const statementHolderKeys = new WeakMap<object, number>();
 export function statementHolderKey(value: object): number | undefined {
@@ -192,6 +195,7 @@ function ScalarControl({
   onChange,
   feedback,
   ariaLabel,
+  unitLabel,
 }: {
   feedback?: ScalarFeedback | undefined;
   ariaLabel?: string | undefined;
@@ -200,6 +204,7 @@ function ScalarControl({
   read: ScalarRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
+  unitLabel?: ((id: string) => string | null) | undefined;
 }) {
   const localId = useId();
   const id = (field: string) => controlId(feedback?.id ?? localId, feedback?.address ?? 'scalar', field);
@@ -277,7 +282,9 @@ function ScalarControl({
     });
   };
   const unitName = (id: string) =>
-    id === '1' ? m.correction_unitless({}, o) : quantityUnitLabel(id, read.public.related, locale);
+    id === '1'
+      ? m.correction_unitless({}, o)
+      : (unitLabel?.(id) ?? quantityUnitLabel(id, read.public.related, locale));
   const units = (
     definition.units?.includes('*') ? ['1', ...Object.keys(unitSymbols)] : (definition.units ?? [])
   ).filter((id) => !!unitName(id));
@@ -471,6 +478,7 @@ function PartEditor({
   removal,
   localKey,
   ariaLabel,
+  unitLabel,
 }: {
   localKey: number;
   ariaLabel?: string | undefined;
@@ -481,6 +489,7 @@ function PartEditor({
   read: StatementFieldsRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
+  unitLabel?: ((id: string) => string | null) | undefined;
 }) {
   return (
     <ContentItemFrame
@@ -501,6 +510,7 @@ function PartEditor({
             read={read}
             locale={locale}
             ariaLabel={ariaLabel}
+            unitLabel={unitLabel}
             onChange={onChange}
           />
         )}
@@ -589,6 +599,7 @@ export function StatementFields({
   reuse,
   focusReference,
   referencePartLabel,
+  unitLabel,
 }: {
   feedback?: StatementFeedback | undefined;
   draft: StatementInput;
@@ -615,6 +626,7 @@ export function StatementFields({
     | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
   referencePartLabel?: ((part: SnakInput, referenceIndex: number, partIndex: number) => string | undefined) | undefined;
+  unitLabel?: ((id: string) => string | null) | undefined;
 }) {
   const o = { locale: locale as never };
   const lifetime = useEditorLifetime();
@@ -924,6 +936,7 @@ export function StatementFields({
                   definition={definition}
                   read={current}
                   locale={locale}
+                  unitLabel={unitLabel}
                   onChange={(value) => change({ ...draft, value })}
                 />
               )}
@@ -945,6 +958,7 @@ export function StatementFields({
                 part={part}
                 read={current}
                 locale={locale}
+                unitLabel={unitLabel}
                 removal={
                   identity(part).added && (
                     <>
@@ -1017,6 +1031,7 @@ export function StatementFields({
                 part={part}
                 read={current}
                 locale={locale}
+                unitLabel={unitLabel}
                 removal={
                   identity(part).added && (
                     <>

@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "媒体",
   "thread_inspect_kind_component": "组件替代内容",
   "thread_inspect_kind_divider": "分隔线",
-  "thread_inspect_kind_unsupported": "不支持的区块"
+  "thread_inspect_kind_unsupported": "不支持的区块",
+  "catalogue_create_fact_unsupported": "此已发布数据类型无法在此编辑器中编辑。它不会加入准备创建的条目；其他事实仍可创建。",
+  "catalogue_create_fact_withdrawn": "当前类型定义已不再允许此字段。草稿会保留。请先删除此字段，再创建条目。",
+  "catalogue_create_review_title": "检查要创建的条目",
+  "catalogue_create_review_stale": "检查后草稿或类型定义已更改。创建前请检查当前条目。",
+  "catalogue_create_review_terms_only": "此条目仅包含词条；不会发送初始陈述。",
+  "catalogue_create_specialized_notice": "此类型有专用创建流程。打开该流程时，当前草稿仍会保留在这里。",
+  "catalogue_create_specialized_open": "打开专用创建流程"
 }

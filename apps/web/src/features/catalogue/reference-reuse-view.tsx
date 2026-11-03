@@ -6,6 +6,8 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { PartValue } from './statement-editor-view';
+import type { StatementFieldsRead } from './statement-editor-view';
+import type { Release } from '@rezics/definitions';
 import {
   completeReferenceGroup,
   previewReuse,
@@ -15,7 +17,7 @@ import {
   type ReuseRefusal,
   type ReuseSource,
 } from './reference-reuse';
-import { factHolder, type FactDraft, type FactsCurrent } from './subject-facts';
+import { factHolder, type FactDraft } from './subject-facts';
 
 const wrap = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2';
 
@@ -56,7 +58,10 @@ export function ReferenceReusePanel({
   source: ReuseSource;
   drafts: FactDraft[];
   selected: readonly string[];
-  read: Pick<FactsCurrent, 'release'> & { public: Pick<FactsCurrent['public'], 'related'> };
+  read: {
+    release: Pick<Release, 'properties' | 'types'>;
+    public: Pick<StatementFieldsRead['public'], 'related'>;
+  };
   locale: string;
   capture: ReuseCapture;
   applied: { holder: string; property: string; index: number }[];

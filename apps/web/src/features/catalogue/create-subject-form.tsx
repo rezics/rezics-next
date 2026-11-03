@@ -25,6 +25,7 @@ import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
+import { GenericCreateFactsWorkspace, GenericCreateReview, genericCreateFactPointers } from './generic-create-facts-view';
 import {
   initialTerms,
   type CreateFailure,
@@ -34,9 +35,25 @@ import {
   type CreateType,
   type TermDraft,
 } from './create-subject';
+import {
+  type GenericCreateFact,
+  type GenericCreateDescriptor,
+  genericCreateDescriptor,
+  genericCreateSpecializedPath,
+  prepareGenericCreate,
+  refreshGenericCreateFacts,
+} from './generic-create-facts';
 
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type Created = Extract<CreateResult, { ok: true }>;
+type CreateItemReview = {
+  item: InitialSubject;
+  fingerprint: string;
+  stale: boolean;
+  descriptor?: GenericCreateDescriptor;
+  factTargets?: Record<string, string>;
+  facts?: GenericCreateFact[];
+};
 
 /** Read the producer's current label after commit; no property meaning is inferred from an endpoint or ID. */
 function CreationCorrection({
@@ -208,6 +225,10 @@ function CreateSubjectFormLive({
   const [type, setType] = useState(profile?.type ?? '');
   const [directoryType, setDirectoryType] = useState<CreateType | null>(null);
   const [directoryPending, setDirectoryPending] = useState(false);
+  const [directoryDescriptorState, setDirectoryDescriptorState] = useState<
+    'idle' | 'reading' | 'current' | 'missing' | 'unavailable' | 'unadmitted'
+  >('idle');
+  const [directoryCheckError, setDirectoryCheckError] = useState<'missing' | 'unavailable' | 'unadmitted' | null>(null);
   const [directoryRefreshToken, setDirectoryRefreshToken] = useState(0);
   const [rows, setRows] = useState<TermDraft[]>([
     { language: profile?.initialLanguage ?? locale, label: '', description: '', aliases: '' },
@@ -215,20 +236,23 @@ function CreateSubjectFormLive({
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const typeRows = useRef(new Map<string, TermDraft[]>());
+  const [genericFactsByType, setGenericFactsByType] = useState<Record<string, GenericCreateFact[]>>({});
   const [failure, setFailure] = useState<CreateFailure>();
   // Capture profile addresses at rejection, before row deletion or Type changes can shift native indices.
   const targets = useRef(new Map<string, { id: string; label?: string }>());
+  const genericFactTargets = useRef<Record<string, string>>({});
   function reject(result: CreateFailure) {
     targets.current = new Map();
+    const genericTargets = genericCreateFactPointers(result.errors ?? [], genericFactTargets.current);
     for (const error of result.errors ?? []) {
-      const target = profile?.control?.(error.pointer, type);
+      const target = profile?.control?.(error.pointer, type) ?? genericTargets[error.pointer];
       if (target) targets.current.set(error.pointer, typeof target === 'string' ? { id: target } : target);
     }
     setFailure(result);
   }
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
-  const [itemReview, setItemReview] = useState<{ item: InitialSubject; fingerprint: string; stale: boolean }>();
+  const [itemReview, setItemReview] = useState<CreateItemReview>();
   const confirmed = useRef(false);
   function invalidateReview() {
     setItemReview((current) => (current && !current.stale ? { ...current, stale: true } : current));
@@ -245,6 +269,9 @@ function CreateSubjectFormLive({
     (entry) => !profile?.type || entry.id === profile.type,
   );
   const selectedType = directoryMode ? directoryType : types.find((entry) => entry.id === type);
+  const genericDescriptor = directoryMode ? genericCreateDescriptor(directoryType) : undefined;
+  const genericFacts = directoryMode && directoryType ? (genericFactsByType[directoryType.id] ?? []) : [];
+  const specializedCreatePath = directoryMode && directoryType ? genericCreateSpecializedPath(directoryType) : undefined;
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain = (failure?.reason === 'unavailable' && request.current !== null) || unresolvedDelivery.current;
@@ -264,7 +291,10 @@ function CreateSubjectFormLive({
     !request.current &&
     (!!profile?.metadata?.pending ||
       (directoryMode
-        ? directoryPending || (!!type && !hasCurrentType)
+        ? directoryPending ||
+          (!!type && !hasCurrentType) ||
+          (!!directoryType && (directoryDescriptorState !== 'current' || !genericDescriptor)) ||
+          !!specializedCreatePath
         : definitionsFailed ||
           definitions.isFetching ||
           types.length === 0 ||
@@ -295,6 +325,19 @@ function CreateSubjectFormLive({
     };
   }, [edit]);
   const termControl = createSubjectControls(rows);
+  function updateGenericFacts(updateFacts: (facts: GenericCreateFact[]) => GenericCreateFact[]) {
+    const typeId = directoryType?.id;
+    if (!typeId) return;
+    setGenericFactsByType((current) => {
+      const facts = updateFacts(current[typeId] ?? []);
+      const next = { ...current };
+      if (facts.length) next[typeId] = facts;
+      else delete next[typeId];
+      return next;
+    });
+    setFailure(undefined);
+    invalidateReview();
+  }
   const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
   const corrections = new Map<string, { id: string | undefined; label: string | undefined; errors: Violation[] }>();
   for (const error of errors) {
@@ -374,31 +417,96 @@ function CreateSubjectFormLive({
     event.preventDefault();
     if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict' || definitionsBlocked)
       return;
-    if (!request.current) {
-      const draft = initialTerms(type, rows);
-      if (profile) {
-        const prepared = profile.prepare(draft.item);
-        draft.item = prepared.item;
-        draft.errors.push(...prepared.errors);
-      }
-      if (!hasCurrentType) draft.errors.push({ pointer: '/type', code: 'unsupported' });
-      if (draft.errors.length) {
-        reject({ ok: false, reason: 'invalid', errors: draft.errors });
-        return;
-      }
-      if (profile?.review) {
-        const fingerprint = JSON.stringify([draft.item, profile?.reviewRevision]);
-        if (!itemReview || itemReview.stale || itemReview.fingerprint !== fingerprint) {
-          setItemReview({ item: structuredClone(draft.item), fingerprint, stale: false });
-          return;
-        }
-      }
-      request.current = { item: structuredClone(draft.item), key: crypto.randomUUID() };
-    }
     running.current = true;
     setBusy(true);
     setFailure(undefined);
+    setDirectoryCheckError(null);
+    let postStarted = false;
     try {
+      if (!request.current) {
+        const draft = initialTerms(type, rows);
+        let currentDescriptor: GenericCreateDescriptor | undefined;
+        if (directoryMode) {
+          const selected = directoryType;
+          if (!selected || !transport.typeDirectory) {
+            reject({ ok: false, reason: 'invalid', errors: [{ pointer: '/type', code: 'required' }] });
+            return;
+          }
+          let result;
+          try {
+            result = await transport.typeDirectory.descriptor(selected.id);
+          } catch {
+            setDirectoryCheckError('unavailable');
+            return;
+          }
+          if (!lifetime.active()) return;
+          if (!result.ok) {
+            setDirectoryCheckError(result.reason);
+            return;
+          }
+          if (typeAdmission?.admitType && !typeAdmission.admitType(result.type)) {
+            setDirectoryCheckError('unadmitted');
+            return;
+          }
+          currentDescriptor = genericCreateDescriptor(result.type);
+          if (!currentDescriptor) {
+            setDirectoryCheckError('unavailable');
+            return;
+          }
+          if (genericCreateSpecializedPath(currentDescriptor)) {
+            setDirectoryType(result.type);
+            setDirectoryDescriptorState('current');
+            return;
+          }
+          const changed = selected.releaseDigest !== currentDescriptor.releaseDigest;
+          setDirectoryType(result.type);
+          setDirectoryDescriptorState('current');
+          if (changed) {
+            setGenericFactsByType((current) => {
+              const facts = refreshGenericCreateFacts(current[selected.id] ?? [], currentDescriptor!);
+              return facts.length ? { ...current, [selected.id]: facts } : current;
+            });
+            invalidateReview();
+            return;
+          }
+          const prepared = prepareGenericCreate(type, rows, genericFacts, currentDescriptor);
+          draft.item = prepared.item;
+          draft.errors = prepared.errors;
+          genericFactTargets.current = prepared.factTargets;
+        } else if (profile) {
+          const prepared = profile.prepare(draft.item);
+          draft.item = prepared.item;
+          draft.errors.push(...prepared.errors);
+        }
+        if (!hasCurrentType) draft.errors.push({ pointer: '/type', code: 'unsupported' });
+        if (draft.errors.length) {
+          reject({ ok: false, reason: 'invalid', errors: draft.errors });
+          return;
+        }
+        if (directoryMode || profile?.review) {
+          const fingerprint = JSON.stringify(
+            directoryMode ? [currentDescriptor?.releaseDigest, draft.item] : [draft.item, profile?.reviewRevision],
+          );
+          if (!itemReview || itemReview.stale || itemReview.fingerprint !== fingerprint) {
+            setItemReview({
+              item: structuredClone(draft.item),
+              fingerprint,
+              stale: false,
+              ...(currentDescriptor
+                ? {
+                    descriptor: currentDescriptor,
+                    factTargets: { ...genericFactTargets.current },
+                    facts: structuredClone(genericFacts),
+                  }
+                : {}),
+            });
+            return;
+          }
+        }
+        request.current = { item: structuredClone(draft.item), key: crypto.randomUUID() };
+      }
+      if (!request.current) return;
+      postStarted = true;
       const result = await transport.submit(request.current);
       if (!lifetime.active()) return;
       if (result.ok) {
@@ -424,8 +532,10 @@ function CreateSubjectFormLive({
       }
     } catch {
       if (!lifetime.active()) return;
-      unresolvedDelivery.current = true;
-      setFailure({ ok: false, reason: 'unavailable' });
+      if (postStarted) {
+        unresolvedDelivery.current = true;
+        setFailure({ ok: false, reason: 'unavailable' });
+      } else setDirectoryCheckError('unavailable');
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -456,7 +566,10 @@ function CreateSubjectFormLive({
 
   const departure = {
     locale,
-    dirty: profileDirty || hasInitialDraft(type, profile?.type ?? '', rows),
+    dirty:
+      profileDirty ||
+      Object.values(genericFactsByType).some((facts) => facts.length > 0) ||
+      hasInitialDraft(type, profile?.type ?? '', rows),
     pending: !created && request.current !== null,
     confirmed: !!created,
     isActive: () => lifetime.active() && !confirmed.current,
@@ -482,6 +595,9 @@ function CreateSubjectFormLive({
           className="space-y-4 rounded-xl border border-border bg-card p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-6"
         >
           <p className="font-medium">{m.catalogue_create_created({}, options)}</p>
+          <p className="min-w-0 break-all">
+            {m.people_profile_created_id({}, options)} <code className="select-all">{created.id}</code>
+          </p>
           {created.reader.state === 'ready' ? (
             <a href={created.reader.href} className={buttonVariants()}>
               {m.catalogue_create_open({}, options)}
@@ -684,12 +800,42 @@ function CreateSubjectFormLive({
                       describedBy={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       refreshToken={directoryRefreshToken}
                       onSelectionChange={(nextType) => {
+                        const previous = directoryType;
                         setDirectoryType(nextType);
                         setType(nextType?.id ?? '');
-                        if (nextType) setFailure(undefined);
+                        if (nextType) {
+                          setFailure(undefined);
+                          setDirectoryCheckError(null);
+                          if (
+                            previous?.id === nextType.id &&
+                            previous.releaseDigest !== nextType.releaseDigest &&
+                            genericCreateDescriptor(nextType)
+                          ) {
+                            setGenericFactsByType((current) => {
+                              const facts = refreshGenericCreateFacts(
+                                current[nextType.id] ?? [],
+                                genericCreateDescriptor(nextType)!,
+                              );
+                              return facts.length ? { ...current, [nextType.id]: facts } : current;
+                            });
+                          }
+                        } else {
+                          setDirectoryDescriptorState('idle');
+                          setDirectoryCheckError(null);
+                        }
                         invalidateReview();
                       }}
                       onPendingChange={setDirectoryPending}
+                      onDescriptorState={(typeId, state) => {
+                        if (state === 'current') {
+                          setDirectoryDescriptorState(state);
+                          setDirectoryCheckError(null);
+                          return;
+                        }
+                        if (typeId !== directoryType?.id) return;
+                        setDirectoryDescriptorState(state);
+                        setDirectoryCheckError(state === 'reading' ? null : state);
+                      }}
                       {...(typeAdmission?.offered ? { offered: typeAdmission.offered } : {})}
                       {...(typeAdmission?.unavailable ? { unavailable: typeAdmission.unavailable } : {})}
                       {...(typeAdmission?.admitType ? { admitType: typeAdmission.admitType } : {})}
@@ -762,7 +908,51 @@ function CreateSubjectFormLive({
                   {profile.fields(type, disabled, edit.active, invalidateReview, discardTypeDraft)}
                 </CreateSubjectProfileDraft>
               )}
-              {itemReview && profile?.review?.(itemReview)}
+              {directoryMode && selectedType && (
+                <GenericCreateFactsWorkspace
+                  key={selectedType.id}
+                  type={selectedType.id}
+                  descriptor={genericDescriptor}
+                  facts={genericFacts}
+                  onChange={updateGenericFacts}
+                  disabled={disabled}
+                  canEdit={edit.active}
+                  locale={locale}
+                  errors={errors}
+                  factTargets={genericFactTargets.current}
+                  onInvalidate={() => {
+                    setFailure(undefined);
+                    invalidateReview();
+                  }}
+                  descriptorIssue={directoryCheckError}
+                  specializedPath={specializedCreatePath}
+                />
+              )}
+              {directoryMode &&
+                itemReview?.descriptor &&
+                itemReview.item.type === type && (
+                  <GenericCreateReview
+                    item={itemReview.item}
+                    descriptor={itemReview.descriptor}
+                    facts={itemReview.facts ?? genericFacts}
+                    factTargets={itemReview.factTargets ?? {}}
+                    locale={locale}
+                    stale={itemReview.stale}
+                    onJump={(id) => {
+                      const target = document.getElementById(id);
+                      if (!target) return;
+                      for (let parent = target.parentElement; parent; parent = parent.parentElement)
+                        if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+                      const focus = target.matches('input, select, textarea, button, [role="combobox"]')
+                        ? target
+                        : target.querySelector<HTMLElement>(
+                            'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="combobox"]',
+                          );
+                      focus?.focus();
+                    }}
+                  />
+                )}
+              {!directoryMode && itemReview && profile?.review?.(itemReview)}
               {failure && (
                 <div
                   ref={outcome}

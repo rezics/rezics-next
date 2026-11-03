@@ -17,6 +17,7 @@ export function TypeDirectoryPicker({
   refreshToken,
   onSelectionChange,
   onPendingChange,
+  onDescriptorState,
   offered,
   unavailable,
   admitType,
@@ -30,6 +31,10 @@ export function TypeDirectoryPicker({
   refreshToken: number;
   onSelectionChange: (type: CreateType | null) => void;
   onPendingChange: (pending: boolean) => void;
+  onDescriptorState?: (
+    typeId: string,
+    state: 'reading' | 'current' | 'missing' | 'unavailable' | 'unadmitted',
+  ) => void;
   offered?: readonly CreateType[];
   unavailable?: readonly string[];
   admitType?: (type: CreateType) => boolean;
@@ -102,6 +107,7 @@ export function TypeDirectoryPicker({
     setSelectionError(null);
     setRetryTypeId(typeId);
     onPendingChange(true);
+    onDescriptorState?.(typeId, 'reading');
     if (clearSelection) onSelectionChange(null);
     try {
       const result = await transport.descriptor(typeId);
@@ -110,19 +116,23 @@ export function TypeDirectoryPicker({
         if (admitType && !admitType(result.type)) {
           if (clearSelection) onSelectionChange(null);
           setSelectionError('unadmitted');
+          onDescriptorState?.(typeId, 'unadmitted');
         } else {
           onSelectionChange(result.type);
           setRetryTypeId(undefined);
           setSelectionError(null);
+          onDescriptorState?.(typeId, 'current');
         }
       } else {
         if (clearSelection) onSelectionChange(null);
         setSelectionError(result.reason);
+        onDescriptorState?.(typeId, result.reason);
       }
     } catch {
       if (request !== selectionRequest.current) return;
       if (clearSelection) onSelectionChange(null);
       setSelectionError('unavailable');
+      onDescriptorState?.(typeId, 'unavailable');
     } finally {
       if (request === selectionRequest.current) {
         setSelectionPending(false);
@@ -133,7 +143,7 @@ export function TypeDirectoryPicker({
 
   useEffect(() => {
     if (!refreshToken || !selectedRef.current) return;
-    void readDescriptor(selectedRef.current.id, true);
+    void readDescriptor(selectedRef.current.id, false);
   }, [refreshToken]);
 
   const currentBinding = activeSearch;

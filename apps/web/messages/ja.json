@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "メディア",
   "thread_inspect_kind_component": "コンポーネントの代替表示",
   "thread_inspect_kind_divider": "区切り線",
-  "thread_inspect_kind_unsupported": "未対応のブロック"
+  "thread_inspect_kind_unsupported": "未対応のブロック",
+  "catalogue_create_fact_unsupported": "この公開データ型はこのエディターでは編集できません。準備中の項目から除外されます。他の事実は作成できます。",
+  "catalogue_create_fact_withdrawn": "現在の型定義ではこの項目は許可されていません。下書きは保持されます。項目を作成する前に削除してください。",
+  "catalogue_create_review_title": "作成する項目を確認",
+  "catalogue_create_review_stale": "確認後に下書きまたは型定義が変更されました。作成する前に現在の項目を確認してください。",
+  "catalogue_create_review_terms_only": "この項目には用語のみが含まれます。初期ステートメントは送信されません。",
+  "catalogue_create_specialized_notice": "このタイプには専用の作成フォームがあります。フォームを開いている間も、現在の下書きはここに残ります。",
+  "catalogue_create_specialized_open": "専用フォームを開く"
 }

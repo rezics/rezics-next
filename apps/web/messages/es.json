@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "Contenido multimedia",
   "thread_inspect_kind_component": "Contenido alternativo del componente",
   "thread_inspect_kind_divider": "Separador",
-  "thread_inspect_kind_unsupported": "Bloque no compatible"
+  "thread_inspect_kind_unsupported": "Bloque no compatible",
+  "catalogue_create_fact_unsupported": "Este tipo de dato publicado no se admite en este editor. Se omite del elemento preparado; se pueden crear los demás hechos.",
+  "catalogue_create_fact_withdrawn": "La definición actual del tipo ya no admite este campo. Se conserva el borrador. Elimínalo antes de crear el elemento.",
+  "catalogue_create_review_title": "Revisar el elemento que se creará",
+  "catalogue_create_review_stale": "El borrador o la definición del tipo cambió después de esta revisión. Revisa el elemento actual antes de crearlo.",
+  "catalogue_create_review_terms_only": "Este elemento solo contiene términos; no se enviarán declaraciones iniciales.",
+  "catalogue_create_specialized_notice": "Este tipo tiene un creador específico. Tu borrador actual permanece aquí mientras lo abres.",
+  "catalogue_create_specialized_open": "Abrir su creador"
 }

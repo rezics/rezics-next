@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "Média",
   "thread_inspect_kind_component": "Contenu de remplacement du composant",
   "thread_inspect_kind_divider": "Séparateur",
-  "thread_inspect_kind_unsupported": "Bloc non pris en charge"
+  "thread_inspect_kind_unsupported": "Bloc non pris en charge",
+  "catalogue_create_fact_unsupported": "Ce type de donnée publié n’est pas pris en charge par cet éditeur. Il est omis de l’élément préparé ; les autres faits peuvent être créés.",
+  "catalogue_create_fact_withdrawn": "La définition actuelle du type n’admet plus ce champ. Son brouillon est conservé. Supprimez-le avant de créer l’élément.",
+  "catalogue_create_review_title": "Vérifier l’élément à créer",
+  "catalogue_create_review_stale": "Le brouillon ou la définition du type a changé depuis cette vérification. Vérifiez l’élément actuel avant de le créer.",
+  "catalogue_create_review_terms_only": "Cet élément contient uniquement des termes ; aucune déclaration initiale ne sera envoyée.",
+  "catalogue_create_specialized_notice": "Ce type a son propre formulaire de création. Votre brouillon actuel reste ici pendant que vous l’ouvrez.",
+  "catalogue_create_specialized_open": "Ouvrir son formulaire"
 }

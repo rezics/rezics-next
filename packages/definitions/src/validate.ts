@@ -15,7 +15,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const pointer = (base: string, part: string | number) =>
   `${base}/${String(part).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
-export function checkSubjectStructure(input: unknown, release?: Release) {
+export function checkSubjectStructure(input: unknown, release?: Pick<Release, 'properties'>) {
   const errors: Violation[] = [];
   const add = (at: string, code: Violation['code']) => {
     if (errors.length < 16) errors.push({ pointer: at, code });
@@ -513,7 +513,7 @@ function combine(first: Violation[], second: Violation[]): Violation[] {
 
 export function checkSubjectInput(
   input: unknown,
-  release: Release,
+  release: Pick<Release, 'properties'> & Pick<Release, 'types'>,
   rejectContent?: (property: PropertyDefinition) => boolean,
   authoredDocuments = false,
 ): { violations: Violation[]; targets: ItemTarget[] } {

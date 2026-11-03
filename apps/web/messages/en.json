@@ -6599,5 +6599,12 @@
   "thread_inspect_kind_media": "Media",
   "thread_inspect_kind_component": "Component fallback",
   "thread_inspect_kind_divider": "Divider",
-  "thread_inspect_kind_unsupported": "Unsupported block"
+  "thread_inspect_kind_unsupported": "Unsupported block",
+  "catalogue_create_fact_unsupported": "This released datatype is not supported in this editor. It is omitted from the prepared item; other facts may still be created.",
+  "catalogue_create_fact_withdrawn": "This field is no longer admitted by the current Type definition. Its draft is kept. Remove it before creating the item.",
+  "catalogue_create_review_title": "Review the subject to create",
+  "catalogue_create_review_stale": "The draft or Type definition changed after this review. Review the current item before creating it.",
+  "catalogue_create_review_terms_only": "This item contains terms only; no initial statements will be sent.",
+  "catalogue_create_specialized_notice": "This Type has a dedicated creator. Your current draft stays here while you open it.",
+  "catalogue_create_specialized_open": "Open its creator"
 }

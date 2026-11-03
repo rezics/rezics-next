@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import type { PropertyDefinition, TypeDefinition } from '@rezics/definitions';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
@@ -11,17 +12,31 @@ import {
   type TypeDirectoryDescriptor,
   type DescriptorRead,
   type CurrentTypeRead,
+  type CurrentTypeDescriptor,
 } from './type-directory-client';
+import { musicContextKind } from './music-context-profile';
 export type { TypeDirectoryDescriptor } from './type-directory-client';
 
-function createType(summary: {
+type CreateDescriptorRead =
+  | { ok: true; descriptor: CurrentTypeDescriptor; specializedPath?: string }
+  | { ok: false; reason: 'missing' | 'unavailable' };
+
+function createType(
+  summary: {
   typeId: string;
   label: string;
   language: string | null;
   description: string | null;
   descriptionLanguage: string | null;
-  definition?: Record<string, unknown>;
-}): CreateType {
+  definition?: { bases?: unknown };
+  },
+  current?: {
+    releaseDigest: string;
+    definition: TypeDefinition;
+    properties: Record<string, PropertyDefinition>;
+    specializedPath?: string;
+  },
+): CreateType {
   const listed = summary.definition?.bases;
   const bases = Array.isArray(listed)
     ? listed.filter((base): base is string => typeof base === 'string' && base.length > 0 && base.length <= 256)
@@ -33,7 +48,52 @@ function createType(summary: {
     description: summary.description ?? '',
     ...(summary.descriptionLanguage ? { descriptionLanguage: summary.descriptionLanguage } : {}),
     ...(bases.length ? { bases } : {}),
+    ...(current
+      ? {
+          releaseDigest: current.releaseDigest,
+          definition: current.definition,
+          propertyDefinitions: current.properties,
+          ...(current.specializedPath ? { specializedPath: current.specializedPath } : {}),
+        }
+      : {}),
   };
+}
+
+/** Complete only qualifier definitions missing from the bounded exact Type projection. */
+async function readCreateDescriptor(typeId: string, locale: string): Promise<CreateDescriptorRead> {
+  const client = kernelClient(locale);
+  const result = await readCurrentDescriptor(client, typeId, locale);
+  if (!result.ok) return result;
+  try {
+    const response = await client.definitions.releases({ digest: result.descriptor.releaseDigest }).get();
+    if (response.status !== 200 || response.data?.digest !== result.descriptor.releaseDigest || !response.data.release)
+      return { ok: false, reason: 'unavailable' };
+    const release = response.data.release as Release;
+    if (!release.types?.[typeId] || !release.properties) return { ok: false, reason: 'unavailable' };
+    const specializedPath = musicContextKind(release, typeId) === 'unsupported' ? undefined : '/catalogue/music-context';
+    const missing = new Set<string>();
+    for (const id of result.descriptor.definition.properties) {
+      const property = result.descriptor.properties[id];
+      if (!Array.isArray(property?.qualifiers)) return { ok: false, reason: 'unavailable' };
+      for (const qualifier of property.qualifiers) {
+        if (!Object.hasOwn(result.descriptor.properties, qualifier)) missing.add(qualifier);
+      }
+    }
+    const completed = { ...result.descriptor.properties };
+    for (const id of missing) {
+      const definition = release.properties[id];
+      if (!definition || !definition.labels || !Object.keys(definition.labels).length)
+        return { ok: false, reason: 'unavailable' };
+      completed[id] = definition;
+    }
+    return {
+      ok: true,
+      descriptor: { ...result.descriptor, properties: completed },
+      ...(specializedPath ? { specializedPath } : {}),
+    };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 }
 
 /** A fresh caller-aware read every time: no descriptor survives authority or catalogue changes. */
@@ -124,7 +184,7 @@ export const readCreateTypePage = createServerFn({ method: 'GET' })
       });
       if (response.error) return { ok: false, reason: httpStatus(response.error) === 409 ? 'stale' : 'unavailable' };
       if (!response.data) return { ok: false, reason: 'unavailable' };
-      return { ok: true, types: response.data.types.map(createType), next: response.data.next };
+      return { ok: true, types: response.data.types.map((summary) => createType(summary)), next: response.data.next };
     } catch {
       return { ok: false, reason: 'unavailable' };
     }
@@ -139,8 +199,18 @@ export const readCreateTypeDescriptor = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<TypeDescriptorRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const locale = requestLocale() ?? 'en';
-    const result = await readTypeDescriptor(data, locale);
-    return result.ok ? { ok: true, type: createType(result.descriptor) } : result;
+    const result = await readCreateDescriptor(data, locale);
+    return result.ok
+      ? {
+          ok: true,
+          type: createType(result.descriptor, {
+            releaseDigest: result.descriptor.releaseDigest,
+            definition: result.descriptor.definition,
+            properties: result.descriptor.properties,
+            ...(result.specializedPath ? { specializedPath: result.specializedPath } : {}),
+          }),
+        }
+      : result;
   });
 
 export const readCurrentTypeDescriptor = createServerFn({ method: 'GET' })

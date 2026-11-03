@@ -130,7 +130,10 @@ per Type without invoking validation callbacks, so returning to unchanged values
 
 The generic creation route uses one search field with an explicit localized-label-prefix or exact-Type-ID mode;
 running a search keeps the selected Type and multilingual term drafts, while choosing a result requires its current
-exact descriptor.
+exact descriptor. Without a specialized profile, that descriptor supplies the admitted property choices; supported
+scalar and exact readable item values use shared controls, while unsupported datatypes remain visible and are omitted
+from the prepared item so other supported facts can still be created. Types owned by an existing creator show a
+direct handoff and cannot be prepared here; the current draft stays in place until that link is followed.
 
 ## Browser flow: fictional character identity and credits
 

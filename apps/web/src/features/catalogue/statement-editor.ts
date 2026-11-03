@@ -80,7 +80,7 @@ export function statementInput(statement: Statement): StatementInput {
 }
 
 /** A private initial fact starts with the existing URL-first citation affordance when it is admitted. */
-export function emptyCreationStatement(property: string, release: Release): StatementInput {
+export function emptyCreationStatement(property: string, release: Pick<Release, 'properties'>): StatementInput {
   return {
     property: { id: property },
     value: { type: 'value', content: '' },
@@ -109,7 +109,7 @@ function hasValue(content: unknown): boolean {
 }
 
 /** Omit untouched reference controls while retaining typed falsy values and local object identity. */
-export function creationStatement(statement: StatementInput, _release: Release): StatementInput {
+export function creationStatement(statement: StatementInput, _release?: Pick<Release, 'properties'>): StatementInput {
   return {
     ...statement,
     ...(statement.qualifiers

@@ -1,4 +1,5 @@
 import { candidateAuthorization } from '../../subject/candidate-admission';
+import { checkSubjectStructure } from '@rezics/definitions/validate';
 import { originalReaderInput } from './editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -31,15 +32,18 @@ export const createCatalogueSubject = createServerFn({ method: 'POST', strict: f
     originalReaderInput((input: CreateSubjectCommand): CreateSubjectCommand => {
       if (!input || typeof input.key !== 'string' || !input.item || typeof input.item.type !== 'string')
         throw new Error('Invalid subject request');
-      // Initial terms only: never admit statements, caller-selected IDs or custom definitions through this form.
+      // Pass only public native fields and validate their bounded structure before native admission.
+      const item = {
+        type: input.item.type,
+        labels: input.item.labels,
+        ...(input.item.descriptions === undefined ? {} : { descriptions: input.item.descriptions }),
+        ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
+        ...(input.item.statements === undefined ? {} : { statements: structuredClone(input.item.statements) }),
+      };
+      if (checkSubjectStructure(item).violations.length) throw new Error('Invalid subject request');
       return {
         key: input.key,
-        item: {
-          type: input.item.type,
-          labels: input.item.labels,
-          ...(input.item.descriptions === undefined ? {} : { descriptions: input.item.descriptions }),
-          ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
-        },
+        item,
       };
     }),
   )

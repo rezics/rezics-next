@@ -1,12 +1,14 @@
 import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
+import type { PropertyDefinition, TypeDefinition } from '@rezics/definitions';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
+import type { StatementInput } from './statement-editor';
 
 /** The generated POST body is the public ItemInputSchema, not an editor-specific wire format. */
 export type InitialSubject = Pick<
   Parameters<KernelClient['subjects']['post']>[0],
   'type' | 'labels' | 'descriptions' | 'aliases'
->;
+> & { statements?: Record<string, StatementInput[]> };
 export type CreateSubjectCommand = { item: InitialSubject; key: string };
 export type CreateType = {
   id: string;
@@ -16,6 +18,12 @@ export type CreateType = {
   descriptionLanguage?: string;
   /** Structural bases from the exact Type descriptor; admission consumers do not invent them. */
   bases?: string[];
+  /** Present only on an exact current Type descriptor, never on a bounded directory page. */
+  releaseDigest?: string;
+  definition?: TypeDefinition;
+  propertyDefinitions?: Record<string, PropertyDefinition>;
+  /** Exact current descriptor only: an existing feature-specific creator owns this Type. */
+  specializedPath?: string;
 };
 export type CreateDefinitions = { ok: true; types: CreateType[] } | { ok: false };
 export type TypeDirectoryQuery = { query?: string; typeId?: string; cursor?: string };

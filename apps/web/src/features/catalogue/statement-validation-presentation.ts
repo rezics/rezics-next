@@ -60,7 +60,7 @@ function editableField(
 export function presentStatementViolations(
   errors: readonly Violation[],
   draft: StatementInput,
-  release: Release,
+  release: Pick<Release, 'properties'>,
   locale: string,
   id: string,
 ): PresentedViolation[] {

@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "미디어",
   "thread_inspect_kind_component": "구성 요소 대체 내용",
   "thread_inspect_kind_divider": "구분선",
-  "thread_inspect_kind_unsupported": "지원하지 않는 블록"
+  "thread_inspect_kind_unsupported": "지원하지 않는 블록",
+  "catalogue_create_fact_unsupported": "이 공개 데이터 유형은 이 편집기에서 지원되지 않습니다. 준비된 항목에서 제외되며 다른 사실은 계속 만들 수 있습니다.",
+  "catalogue_create_fact_withdrawn": "현재 유형 정의에서 이 필드를 더 이상 허용하지 않습니다. 초안은 유지됩니다. 항목을 만들기 전에 삭제하세요.",
+  "catalogue_create_review_title": "만들 항목 검토",
+  "catalogue_create_review_stale": "검토 후 초안 또는 유형 정의가 변경되었습니다. 항목을 만들기 전에 현재 내용을 검토하세요.",
+  "catalogue_create_review_terms_only": "이 항목에는 용어만 포함되며 초기 문장은 전송되지 않습니다.",
+  "catalogue_create_specialized_notice": "이 유형에는 전용 생성 양식이 있습니다. 양식을 여는 동안 현재 초안은 여기에 남아 있습니다.",
+  "catalogue_create_specialized_open": "전용 양식 열기"
 }

@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "媒體",
   "thread_inspect_kind_component": "元件替代內容",
   "thread_inspect_kind_divider": "分隔線",
-  "thread_inspect_kind_unsupported": "不支援的區塊"
+  "thread_inspect_kind_unsupported": "不支援的區塊",
+  "catalogue_create_fact_unsupported": "此已發布資料型別無法在此編輯器中編輯。它不會加入準備建立的項目；其他事實仍可建立。",
+  "catalogue_create_fact_withdrawn": "目前型別定義已不再允許此欄位。草稿會保留。請先移除此欄位，再建立項目。",
+  "catalogue_create_review_title": "檢查要建立的項目",
+  "catalogue_create_review_stale": "檢查後草稿或型別定義已變更。建立前請檢查目前項目。",
+  "catalogue_create_review_terms_only": "此項目僅包含詞條；不會傳送初始陳述。",
+  "catalogue_create_specialized_notice": "此類型有專用建立流程。開啟該流程時，目前的草稿仍會保留在這裡。",
+  "catalogue_create_specialized_open": "開啟專用建立流程"
 }

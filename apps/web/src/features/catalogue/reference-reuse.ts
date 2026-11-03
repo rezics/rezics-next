@@ -44,7 +44,7 @@ export function reuseSourcePresent(draft: FactDraft | undefined, source: ReuseSo
   );
 }
 
-function partAdmitted(part: SnakInput, release: Release): boolean {
+function partAdmitted(part: SnakInput, release: Pick<Release, 'properties'>): boolean {
   const definition = release.properties[part.property.id];
   return !!definition && !definition.relation;
 }
@@ -52,7 +52,7 @@ function partAdmitted(part: SnakInput, release: Release): boolean {
 export function previewReuse(
   target: FactDraft | undefined,
   group: ReferenceGroup,
-  release: Release,
+  release: Pick<Release, 'properties'>,
   sourceHolder?: string,
 ): ReusePreview {
   if (!target) return { ok: false, reason: 'missing' };
@@ -116,7 +116,7 @@ export function applyReuse(
   drafts: FactDraft[],
   source: ReuseSource,
   selected: readonly string[],
-  release: Release,
+  release: Pick<Release, 'properties'>,
 ): {
   drafts: FactDraft[];
   applied: { holder: string; property: string; index: number }[];

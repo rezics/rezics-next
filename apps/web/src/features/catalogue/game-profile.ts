@@ -51,7 +51,7 @@ export function gameGroups(release: Release, type: string): Record<GameGroup, st
   }
   return groups;
 }
-export function gameTarget(release: Release, property: string, type: string) {
+export function gameTarget(release: Pick<Release, 'properties' | 'types'>, property: string, type: string) {
   return (
     release.properties[property]?.targets?.some(
       (base) => base === type || release.types[type]?.bases.includes(base),

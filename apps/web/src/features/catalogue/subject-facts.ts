@@ -24,6 +24,8 @@ export type FactDraft = {
   baseline: StatementInput | null;
   statement: StatementInput;
   included: boolean;
+  /** A private holder can remain visible while its current definition forbids reuse. */
+  locked?: boolean;
   submission?: { statement: StatementInput; release: Release } | undefined;
   command?: FactCommand | undefined;
   result?: FactResult | undefined;
@@ -100,7 +102,7 @@ export function factHolder(draft: Pick<FactDraft, 'holder' | 'property'>): strin
 }
 /** Writable for a new local edit or evidence copy; sealed command bodies stay untouched. */
 export function factWritable(draft: FactDraft): boolean {
-  return !factLocked(draft) && !draft.command && !draft.reuseBlocked;
+  return !draft.locked && !factLocked(draft) && !draft.command && !draft.reuseBlocked;
 }
 export function includedChanges(drafts: FactDraft[]): FactDraft[] {
   return drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);

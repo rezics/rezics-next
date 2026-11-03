@@ -6549,5 +6549,12 @@
   "thread_inspect_kind_media": "Medien",
   "thread_inspect_kind_component": "Komponenten-Ersatzinhalt",
   "thread_inspect_kind_divider": "Trennlinie",
-  "thread_inspect_kind_unsupported": "Nicht unterstützter Block"
+  "thread_inspect_kind_unsupported": "Nicht unterstützter Block",
+  "catalogue_create_fact_unsupported": "Dieser veröffentlichte Datentyp wird in diesem Editor nicht unterstützt. Er wird aus dem vorbereiteten Eintrag ausgelassen; andere Fakten können weiterhin erstellt werden.",
+  "catalogue_create_fact_withdrawn": "Dieses Feld ist in der aktuellen Typdefinition nicht mehr zugelassen. Der Entwurf bleibt erhalten. Entferne es, bevor du den Eintrag erstellst.",
+  "catalogue_create_review_title": "Zu erstellenden Eintrag prüfen",
+  "catalogue_create_review_stale": "Der Entwurf oder die Typdefinition wurde nach dieser Prüfung geändert. Prüfe den aktuellen Eintrag vor der Erstellung.",
+  "catalogue_create_review_terms_only": "Dieser Eintrag enthält nur Begriffe; es werden keine anfänglichen Aussagen gesendet.",
+  "catalogue_create_specialized_notice": "Für diesen Typ gibt es eine eigene Erstellung. Ihr aktueller Entwurf bleibt hier, während Sie sie öffnen.",
+  "catalogue_create_specialized_open": "Eigene Erstellung öffnen"
 }
