@@ -1324,7 +1324,6 @@ returned as unrequested (204), retaining their existing client state. A continue
 those groups a fresh-start link. No first-page slice or cross-group cursor represents a complete graph or total.
 The existing 16-read, 128-slot and native request bounds still apply.
 
-
 ## Mounted cross-media visits
 
 Home mounts the native `/` page's four existing TypeLists alongside the existing Home feed. Books, Anime,

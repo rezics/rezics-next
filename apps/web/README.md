@@ -3447,7 +3447,6 @@ Cost: current sales read
   subsequent healthy rotation.
   Native/browser/visual/full acceptance remains controller-owned after integration.
 
-
 ## Mounted cross-media catalogue navigation
 
 Home now includes the existing native route TypeLists without replacing the Home feed or Search adapters. Realm
