@@ -1368,3 +1368,54 @@ for retry. These source observations remain separate from community classificati
   clear a retained slot after concealment. No retained payload is returned by this route.
 - Growth check: focused mounted tests clear an observation and verify anonymous reads cannot resurrect it.
   Native growth and current-authority race injection remain continuation work.
+## Classification assessments
+
+A classification association is the exact current Semantic statement, not its display label. The first native reader supports only disclosed Global associations whose released property is in the `classification` group and targets `skos:Concept`. Realm-local candidates are unavailable until their disclosure contract is adopted. Association identity binds the original candidate, release and revision, subject, target, Global context and qualifiers, including spoiler qualifiers. The actor home retains the association identifiers and a digest of that immutable binding, not a copied Semantic statement. Reads do not follow redirects. A replacement or redirected candidate stays unavailable until a native rebind policy exists. Source confidence, source voter counts and inferred source ballots never seed these native totals.
+
+The mounted APIs are:
+
+- `PUT /v1/subjects/{id}/classification-associations/{associationId}/assessment` with `{ "assessment": "support" | "oppose", "falsePositive": boolean }`.
+- `DELETE /v1/subjects/{id}/classification-associations/{associationId}/assessment` withdraws the whole ballot.
+- `GET /v1/subjects/{id}/classification-associations/{associationId}/assessment` reads only the authenticated person's slot.
+- `GET /v1/subjects/{id}/classification-associations/{associationId}/aggregate` reads the privacy-qualified native aggregate.
+
+Their mounted action labels are `classification_ballot:set`, `classification_ballot:read-own` and `classification_ballot:read-aggregate`.
+One current slot belongs to the account and exact association. A set response contains `associationId`, `revision` and `delivery`. The own-state response contains `hasBallot`, `assessment`, `falsePositive`, `revision` and `pending`; `pending` compares only that person's slot revision with their retained target contribution. A changed write returns `delivery: "enqueued"`; an unchanged write returns `delivery: "unchanged"`. Neither response claims that the public aggregate has changed.
+
+Below five eligible current ballots, the aggregate is `{ "associationId": "…", "state": "suppressed", "pending": "unknown" }` and includes no numeric count, fraction, voter identifier or ordering clue. At five or more, `state: "published"` includes support and oppose counts, an independent false-positive count, `supportFraction = supportCount / (supportCount + opposeCount)`, `asOf`, `generation` and `pending: "unknown"`. The fraction is defined only when support plus oppose has a denominator. The public pending state is unknown because an exact association-home read does not scan actor homes. Published values describe the last delivered target-home generation; current Semantic subject, target, association, spoiler and moderation disclosure gates apply on every own-state and aggregate read. Loss of current association disclosure hides the aggregate immediately without erasing private ballot provenance.
+
+The default worker consumes the actor-home outbox with `projectBatch`, preserves source route, epoch and position, and applies each actor slot revision once at the association home. It subtracts the exact retained contribution before adding the next eligible contribution. Account suspension, reinstatement and tombstone events use the existing Access lifecycle producer; cleanup advances through indexed pages of at most 50 ballots per actor. A redirect or replacement never transfers a contribution. These totals are separate from `rating.vote`, rating figures, reaction counts, semantic acceptance and imported source statistics. Web owns the following subject classification reader/editor; this slice adds no second presentation owner.
+
+Decision: support fraction is support divided by support plus oppose, false-positive flags count independently, public pending is unknown without an actor-home scan, own pending compares only the caller's slot revision with its retained contribution, changed writes say enqueued and unchanged writes say unchanged.
+
+### Cost: set or change
+
+**Touches:** One actor-home eligibility row, one exact actor slot, its receipt and outbox; Semantic performs bounded released reads for the subject, current association and target.
+
+**Bound:** One slot write and a fixed number of point reads; no actor or association enumeration.
+
+**Growth check:** Storage grows by one retained slot per actor and exact association. Each changed slot emits one durable projection event.
+
+### Cost: withdraw
+
+**Touches:** The authenticated actor-home eligibility row and one exact retained slot, followed by one durable projection event when a ballot existed.
+
+**Bound:** One slot point read and at most one slot update. If current association visibility is gone, the existing own-account command boundary permits clearing only the caller's retained slot and returns no prior state.
+
+**Growth check:** Withdrawal keeps the private revisioned slot for delivery ordering; it adds no voter index or global scan.
+
+### Cost: read own state
+
+**Touches:** Current bounded Semantic disclosure, one account-home slot point read and, when that slot exists, one exact association-home contribution point read.
+
+**Bound:** At most three released snapshots and no voter enumeration.
+
+**Growth check:** Read cost remains independent of the number of ballots on the association.
+
+### Cost: read aggregate
+
+**Touches:** Current bounded Semantic disclosure and one association-home aggregate point read keyed by the exact binding hash.
+
+**Bound:** No actor-home query, request-time count or scan. Suppressed responses omit the stored numeric totals.
+
+**Growth check:** One aggregate and one retained contribution per actor/association; actor cleanup visits at most 50 indexed slots per durable step.

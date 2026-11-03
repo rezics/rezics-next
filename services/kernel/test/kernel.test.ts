@@ -456,6 +456,10 @@ const typed = [
   'DELETE /v1/subjects/:id/ratings/:questionId/vote',
   'GET /v1/subjects/:id/ratings/:questionId/vote',
   'GET /v1/me/rating-votes',
+  'PUT /v1/subjects/:id/classification-associations/:associationId/assessment',
+  'DELETE /v1/subjects/:id/classification-associations/:associationId/assessment',
+  'GET /v1/subjects/:id/classification-associations/:associationId/assessment',
+  'GET /v1/subjects/:id/classification-associations/:associationId/aggregate',
   'GET /v1/subjects/:id/threads',
   'GET /v1/accounts/:accountId/threads',
   'GET /v1/accounts/:accountId/drafts',
@@ -553,6 +557,47 @@ test('mounted action catalogues contain only their declared actions and never in
     });
     expect([...catalogue.keys()]).toEqual([action]);
   }
+});
+
+test('classification ballot APIs mount the three declared actions on semantic subjects', () => {
+  const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
+  const actions = actionCatalogue(app);
+  for (const action of [
+    'classification_ballot:set',
+    'classification_ballot:read-own',
+    'classification_ballot:read-aggregate',
+  ])
+    expect(actions.has(action)).toBe(true);
+  const paths = openApiDocument(app).paths;
+  const assessment = paths['/v1/subjects/{id}/classification-associations/{associationId}/assessment'];
+  expect(assessment?.put).toMatchObject({
+    'x-action': 'classification_ballot:set',
+    'x-exposure': 'public',
+    'x-resource-types': ['semantic.subject'],
+  });
+  expect(assessment?.delete).toMatchObject({
+    'x-action': 'classification_ballot:set',
+    'x-exposure': 'public',
+    'x-resource-types': ['semantic.subject'],
+  });
+  expect(assessment?.get).toMatchObject({
+    'x-action': 'classification_ballot:read-own',
+    'x-exposure': 'public',
+    'x-resource-types': ['semantic.subject'],
+  });
+  expect(paths['/v1/subjects/{id}/classification-associations/{associationId}/aggregate']?.get).toMatchObject({
+    'x-action': 'classification_ballot:read-aggregate',
+    'x-exposure': 'public',
+    'x-resource-types': ['semantic.subject'],
+  });
+  for (const [path, methods] of [
+    ['/v1/subjects/:id/classification-associations/:associationId/assessment', ['put', 'delete', 'get']],
+    ['/v1/subjects/:id/classification-associations/:associationId/aggregate', ['get']],
+  ] as const)
+    for (const method of methods)
+      expect(app.routes.filter((route) => route.path === path && route.method.toLowerCase() === method)).toHaveLength(
+        1,
+      );
 });
 
 test('known-order reconciliation declares its exact own-account action and ordinary write policy', () => {

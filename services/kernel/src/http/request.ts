@@ -63,7 +63,7 @@ export function anonymousRequestDigest(operation: string, input: { semantic: unk
   return requestDigest(operation, { kind: 'anonymous' }, input.semantic);
 }
 
-const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
+const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_-]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
 const RESOURCE_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/;
 

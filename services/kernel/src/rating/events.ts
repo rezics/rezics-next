@@ -9,6 +9,8 @@ const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const units = Type.Union([Type.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }), Type.Null()]);
 
 export const POPULATION_TOTAL_DELIVERY = 'com.rezics.rating.population-total.delivery.v1';
+export const CLASSIFICATION_BALLOT_CHANGED = 'com.rezics.rating.classification-ballot.changed.v1';
+export const CLASSIFICATION_BALLOT_CLEANUP = 'com.rezics.rating.classification-ballot.cleanup.v1';
 const serial = Type.String({ pattern: '^[1-9][0-9]{0,18}$' });
 const signed = Type.String({ pattern: '^-?(0|[1-9][0-9]{0,18})$' });
 const deliveryAddress = {
@@ -16,6 +18,25 @@ const deliveryAddress = {
   populationId: Type.String({ pattern: UUID }),
   serial,
 };
+const classificationRevision = Type.String({ pattern: '^[1-9][0-9]{0,18}$' });
+const classificationChanged = Type.Object(
+  {
+    actorId: Type.String({ pattern: UUID }),
+    subjectId: Type.String({ pattern: UUID }),
+    associationId: Type.String({ pattern: UUID }),
+    bindingHash: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+    assessment: Type.Union([Type.Literal('support'), Type.Literal('oppose'), Type.Null()]),
+    falsePositive: Type.Boolean(),
+    revision: classificationRevision,
+    eligibilityGeneration: classificationRevision,
+    eligible: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+const classificationCleanup = Type.Object(
+  { actorId: Type.String({ pattern: UUID }), generation: classificationRevision },
+  { additionalProperties: false },
+);
 const populationTotalDelivery = Type.Union([
   Type.Object(
     {
@@ -43,6 +64,7 @@ export type PopulationTotalDelivery = Extract<PopulationTotalEvent, { action: 'd
 
 export const RATING_IDENTITY_WORK = 'com.rezics.rating.identity-work.changed.v1';
 export const RATING_IDENTITY_PAGE = 'com.rezics.rating.identity-repair.page.v1';
+export const CLASSIFICATION_AGGREGATE_CHANGED = 'com.rezics.rating.classification-aggregate.changed.v1';
 const identityPage = Type.Object(
   {
     voterId: Type.String({ pattern: UUID }),
@@ -121,6 +143,17 @@ export const RATING_EVENTS = {
     { additionalProperties: false },
   ),
   [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery,
+  [CLASSIFICATION_BALLOT_CHANGED]: classificationChanged,
+  [CLASSIFICATION_BALLOT_CLEANUP]: classificationCleanup,
+  [CLASSIFICATION_AGGREGATE_CHANGED]: Type.Object(
+    {
+      subjectId: Type.String({ pattern: UUID }),
+      associationId: Type.String({ pattern: UUID }),
+      generation: classificationRevision,
+      asOf: Type.String({ format: 'date-time' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.erasure-page.applied.v1': Type.Object(
     { voterId: Type.String({ pattern: UUID }), pageId: Type.String({ pattern: UUID }) },
     { additionalProperties: false },

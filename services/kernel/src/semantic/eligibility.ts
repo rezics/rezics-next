@@ -174,7 +174,7 @@ export function relatedReadEligibility(
   });
 }
 
-export function subjectReadEligibility(resource: { route: number; id: string }): ResourceEligibility {
+export function subjectReadEligibility(resource: { route: number; id: string }, action = 'subject:read'): ResourceEligibility {
   const prepare = measured<Prepare, PublicState>(
     ({ resource }) => pointWork(resource, publicStateBytes, true),
     ({ pool, resource }) => withConnection(pool, (client) => publicState(client, resource, true)),
@@ -194,7 +194,7 @@ export function subjectReadEligibility(resource: { route: number; id: string }):
   );
   return createResourcePublicEligibility({
     resource,
-    action: 'subject:read',
+    action,
     work: { prepare: prepare.producer, verify: verify.producer },
     prepare: prepare.run,
     verify: verify.run,
