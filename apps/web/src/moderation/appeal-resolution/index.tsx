@@ -7,7 +7,7 @@ import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads
 import { useSession } from '../../session/query';
 import { actionOnAppeal, type AppealResolutionResult } from '../actions';
 import { appealNavigationContext } from '../appeals-read-model';
-import { createAppealResolutionIntent, type ResolutionCommand } from './intent';
+import { appealResolutionObservation, createAppealResolutionIntent, type ResolutionCommand } from './intent';
 
 export type { ResolutionCommand } from './intent';
 export type ResolveAppeal = (input: ResolutionCommand) => Promise<AppealResolutionResult>;
@@ -130,10 +130,7 @@ function ResolutionForm({
   const uncertain = intent.phase === 'uncertain';
   const terminal = intent.phase === 'settled';
   const response = intent.result;
-  const result: Resolution | null | undefined =
-    response?.state === 'resolved'
-      ? { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement }
-      : resolution;
+  const result = appealResolutionObservation(intent.phase, response, resolution);
   const count = Array.from(statement.trim()).length;
   const departure = useAuthoringDeparture(
     () => mounted.current && isCurrent?.() !== false && !result && intent.needsDecision,

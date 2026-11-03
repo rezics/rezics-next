@@ -5,9 +5,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { AppealResolution } from '../appeal-resolution';
-import { appealTarget, type Appeal } from '../appeals-read';
-import { moderationTargetContent } from '../target-content';
-import type { ResolvedReportTarget } from '../reports-read';
+import { appealTarget, type Appeal, type AppealAppellantIdentity, type AppealTargetContext } from '../appeals-read';
 import { workbenchAppealFromPage } from './read-model';
 
 const date = (value: string) =>
@@ -44,7 +42,6 @@ export function WorkbenchAppeal({
   return (
     <WorkbenchAppealDetail
       appeal={result.appeal}
-      target={result.target}
       queueHref={queueHref}
       {...(isCurrent ? { isCurrent } : {})}
       {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
@@ -54,58 +51,54 @@ export function WorkbenchAppeal({
 
 export function WorkbenchAppealDetail({
   appeal,
-  target,
   queueHref,
   isCurrent,
   onUnresolvedChange,
 }: {
   appeal: Appeal;
-  target: ResolvedReportTarget | undefined;
   queueHref: string;
   isCurrent?: () => boolean;
   onUnresolvedChange?: (unresolved: boolean) => void;
 }) {
-  const identity = appealTarget(appeal);
-  const appealKind =
-    identity?.kind === 'post'
-      ? m.moderation_queue_post()
-      : identity?.kind === 'thread'
-        ? m.moderation_queue_thread()
-        : identity?.kind === 'board'
-          ? m.reporter_status_board()
-          : m.moderation_target_unavailable();
-  const targetKind =
-    identity?.kind === 'post'
-      ? m.reporter_status_post()
-      : identity?.kind === 'thread'
-        ? m.reporter_status_thread()
-        : identity?.kind === 'board'
-          ? m.reporter_status_board()
-          : m.moderation_target_unavailable();
+  const originalTarget = appealTarget(appeal);
+  const resolution = appeal.resolution !== undefined ? appeal.resolution : (appeal.decision.appeal ?? null);
   return (
     <article className="space-y-5">
       <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
         {m.moderation_workbench_history_return()}
       </a>
-      <h2 className="text-xl font-semibold">
-        {m.moderation_appeals_tab()} · {appealKind}
-      </h2>
+      <h2 className="text-xl font-semibold">{m.moderation_appeals_tab()}</h2>
       <ContentItemFrame as="article" className="space-y-5 p-4 sm:p-6">
         <p className="text-sm text-muted-foreground">
           {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
         </p>
         <section className="space-y-2">
           <ContentItemHeading level={3} className="text-sm font-semibold">
+            {m.moderation_appeal_appellant_label()}
+          </ContentItemHeading>
+          <AppellantIdentity identity={appeal.appellantIdentity} />
+        </section>
+        <section className="space-y-2">
+          <ContentItemHeading level={3} className="text-sm font-semibold">
             {m.moderation_appeal_decision_label()}
           </ContentItemHeading>
           <p className="whitespace-pre-wrap break-words">{appeal.decision.statement}</p>
+          <div className="space-y-1 text-sm">
+            <p>{m.moderation_appeal_original_target_label()}</p>
+            {originalTarget ? (
+              <p className="wrap-anywhere">
+                {targetKindLabel(originalTarget.kind)} <code className="break-all">{originalTarget.id}</code>
+              </p>
+            ) : (
+              <p>{m.moderation_target_unavailable()}</p>
+            )}
+          </div>
         </section>
         <section className="space-y-2">
           <ContentItemHeading level={3} className="text-sm font-semibold">
             {m.moderation_current_target_label()}
           </ContentItemHeading>
-          <Badge variant="outline">{targetKind}</Badge>
-          <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">{moderationTargetContent(target)}</blockquote>
+          <CurrentDestination context={appeal.targetContext} />
         </section>
         <section className="space-y-2">
           <ContentItemHeading level={3} className="text-sm font-semibold">
@@ -114,16 +107,18 @@ export function WorkbenchAppealDetail({
           <p className="whitespace-pre-wrap break-words">{appeal.statement}</p>
         </section>
         <div className="space-y-3 border-t pt-4">
-          {appeal.decision.appeal ? (
+          {resolution ? (
             <p className="text-sm text-muted-foreground">
               {m.moderation_queue_resolved_at()}{' '}
-              <time dateTime={appeal.decision.appeal.resolvedAt}>{date(appeal.decision.appeal.resolvedAt)}</time>
+              <time dateTime={resolution.resolvedAt}>{date(resolution.resolvedAt)}</time>
             </p>
-          ) : null}
+          ) : (
+            <p className="text-sm text-muted-foreground">{m.moderation_appeal_resolution_pending()}</p>
+          )}
           <AppealResolution
             appealId={appeal.id}
             mayResolve={appeal.canResolve === true}
-            resolution={appeal.decision.appeal ?? null}
+            resolution={resolution}
             {...(isCurrent ? { isCurrent } : {})}
             {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
           />
@@ -131,6 +126,57 @@ export function WorkbenchAppealDetail({
       </ContentItemFrame>
     </article>
   );
+}
+
+function AppellantIdentity({ identity }: { identity: AppealAppellantIdentity | undefined }) {
+  if (!identity || identity.state === 'unavailable') return <p>{m.moderation_appeal_appellant_unavailable()}</p>;
+  if (identity.state === 'deleted') return <p>{m.moderation_appeal_appellant_deleted()}</p>;
+  if (identity.state === 'concealed') return <p>{m.moderation_appeal_appellant_concealed()}</p>;
+  const name = identity.displayName?.trim();
+  const handle = identity.handle?.trim();
+  return (
+    <div className="space-y-1">
+      <p className="wrap-anywhere">
+        {name || handle ? (
+          <>
+            {name}
+            {name && handle ? ' · ' : null}
+            {handle ? `@${handle}` : null}
+          </>
+        ) : (
+          m.moderation_appeal_appellant_unavailable()
+        )}
+      </p>
+      {identity.automated ? <Badge variant="outline">{m.moderation_appeal_automated()}</Badge> : null}
+    </div>
+  );
+}
+
+function CurrentDestination({ context }: { context: AppealTargetContext | undefined }) {
+  if (!context || context.state === 'unavailable') return <p>{m.moderation_target_unavailable()}</p>;
+  if (context.state === 'concealed') return <p>{m.moderation_appeal_context_concealed()}</p>;
+  const destination = context.destination;
+  return (
+    <div className="space-y-1 text-sm">
+      <p className="wrap-anywhere">
+        <Badge variant="outline">{targetKindLabel(destination.kind)}</Badge>{' '}
+        <code className="break-all">{destination.id}</code>
+      </p>
+      {destination.kind === 'thread' ? (
+        <p className="wrap-anywhere">
+          {m.reporter_status_board()} <code className="break-all">{destination.boardId}</code>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function targetKindLabel(kind: 'board' | 'thread' | 'post') {
+  return kind === 'board'
+    ? m.reporter_status_board()
+    : kind === 'thread'
+      ? m.reporter_status_thread()
+      : m.reporter_status_post();
 }
 
 export function WorkbenchAppealStatus({

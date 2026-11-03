@@ -12,12 +12,50 @@ import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './a
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
+export type AppealAppellantIdentity =
+  | {
+      state: 'available';
+      kind: 'actor' | 'organization';
+      handle: string | null;
+      displayName: string | null;
+      automated: boolean;
+    }
+  | { state: 'deleted' | 'concealed' | 'unavailable' };
+export type AppealTargetContext =
+  | {
+      state: 'available';
+      destination:
+        | { kind: 'board'; id: string }
+        | { kind: 'thread'; id: string; boardId: string };
+    }
+  | { state: 'concealed' | 'unavailable' };
+export type AppealResolutionSnapshot = {
+  outcome: 'upheld' | 'reversed';
+  statement: string;
+  resolvedAt: string;
+};
+export type AppealSource = { partition: number; epoch: number; position: string };
+export type AppealProvenance = {
+  actorId: string;
+  session: { clientId: string; authnEpoch: number };
+  source: AppealSource;
+};
+export type AppealResolutionCommand = {
+  operationId: 'moderation_appeal.resolve';
+  method: 'POST';
+  path: string;
+};
 export type Appeal = {
   id: string;
   decisionId: string;
   appellantId: string;
+  appellantIdentity?: AppealAppellantIdentity;
   statement: string;
   createdAt: string;
+  targetContext?: AppealTargetContext;
+  resolution?: AppealResolutionSnapshot | null;
+  resolutionCommand?: AppealResolutionCommand;
+  source?: AppealSource;
   decision: {
     statement: string;
     target?: { kind: 'board' | 'post' | 'thread'; id: string };
@@ -30,7 +68,12 @@ export type Appeal = {
   canResolve?: boolean;
 };
 /** Consumer presentation, independent of the pending page. Native binding remains unavailable. */
-export type AppealPage = { appeals: Appeal[]; next: string | null; selectedAppeal?: Appeal };
+export type AppealPage = {
+  appeals: Appeal[];
+  next: string | null;
+  selectedAppeal?: Appeal;
+  provenance?: AppealProvenance;
+};
 export type AppealReadSource = {
   boardAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
   threadAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;

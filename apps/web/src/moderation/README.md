@@ -41,15 +41,18 @@ twenty on the current page.
 ## Exact appeal inspection
 
 The existing selected workbench consumer accepts one exact selection independently of the bounded pending page.
-It never selects by searching pending rows. Board and thread pending reads retain their native fields and do no
-per-row target, identity or media hydration. Board targets remain operational appeals.
+It never selects by searching pending rows. Its presentation keeps the original decision target separate from the
+native current board/thread destination and uses only disclosed appellant display names and handles. It does not
+read current target bodies or fall back to the appellant account ID. Board and thread pending reads do no per-row
+target, identity or media hydration. Board targets remain operational appeals.
 
-The generated client has not installed Content's composed `inspect` response or genuine response examples.
-Production exact selection therefore exposes `native-appeal-inspect` as unavailable, preserving the captured return
-queue. Binding the composed appellant, destination, provenance and original command remains continuation work;
-no successful native exact inspection is claimed. See the [case and appeal guide](workbench-case.md) for the source,
-retirement and cost boundaries. Existing AppealResolution captures its sender and CSRF headers with its immutable
-command, retaining them through explicit uncertain retry.
+The installed generated client still has not published Content's composed `inspect` request and response. Production
+exact selection therefore exposes `native-appeal-inspect` as unavailable, preserving the captured return queue. The
+consumer can present the composed disclosure and resolution fields when an admitted selected record is supplied,
+but native provenance, opaque session custody and the exact request remain unbound. No successful native exact
+inspection is claimed. See the [case and appeal guide](workbench-case.md) for the source, retirement and cost
+boundaries. Existing AppealResolution captures its sender and CSRF headers with its immutable command, retaining
+them through explicit uncertain retry.
 
 Selected workbench retry stays inside its admitted private reader and preserves the exact search, including the
 selected appeal and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless

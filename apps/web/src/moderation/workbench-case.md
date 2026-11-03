@@ -41,10 +41,15 @@ The form shows its confirmed or uncertain result before the reviewer follows the
 result permits only the existing exact retry, retaining the original sender, credentials, key and operands. Conflict,
 denied and definitive refusal require refresh or a fresh read; unavailable current or reported content remains visibly
 unavailable. Appeal resolution continues to use the existing minimal owner-scoped `AppealResolution` controls and native
-`POST /v1/moderation-appeals/{appealId}:resolve` command on the selected workbench appeal. The original decision and
-statement remain separate from current target context. Appeal reads no longer hydrate target bodies, identities or
-media independently; composed disclosure belongs to Content. The independent selected presentation consumes one
-exact appeal and its existing resolution representation, never a matching row from the pending page.
+`POST /v1/moderation-appeals/{appealId}:resolve` command on the selected workbench appeal. The original decision,
+statement and target reference remain separate from the current destination. The selected presentation uses only the
+native allowlisted appellant display name and handle plus the current board/thread destination reference. It never
+falls back to `appellantId` or reads a current target body. Concealed and unavailable context keeps the appeal and its
+resolution visible. Appeal reads do no per-row target, identity or media hydration. The independent selected
+presentation consumes one exact appeal and its resolution, never a matching row from the pending page.
+
+Decision: show only native appellant display names and handles and the current board/thread destination IDs; never
+fall back to appellant IDs or render current target bodies. Keep concealed and unavailable states explicit.
 
 A session, board, queue, page or reader replacement retires the mounted case or appeal and its command authority.
 Uncertain retry keeps the original sender, credentials, key and operands. Authoring departure uses the existing
@@ -61,11 +66,12 @@ continues to use only the original frozen command and sender.
 ## Remaining binding
 
 The report case page and typed return builder remain bound to their existing clients. The installed generated
-board/thread Appeals GET still declares only `cursor`, `limit`, `appeals` and `next`; it lacks `inspect`,
-`selectedAppeal`, `appellantIdentity`, `targetContext`, `resolutionCommand`, `source` and `provenance`.
-The producer implements these in `services/kernel/src/content/appeal-routes.ts`, but generated delivery and genuine
-populated/concealed/failed recordings have not arrived. The named `native-appeal-inspect` seam returns unavailable
-without an undeclared request or a page-only fallback. No new native DTO or endpoint is authored by Web.
+board/thread Appeals GET declares only `cursor`, `limit`, `appeals` and `next`; it lacks `inspect`, `selectedAppeal`,
+`appellantIdentity`, `targetContext`, `resolutionCommand`, `source` and `provenance`. Content's producer schema and
+examples in `services/kernel/src/content/appeal-routes.ts` contain those fields, but they have not arrived in the
+installed client. The named `native-appeal-inspect` seam remains unavailable without an undeclared request, cast or
+page-only fallback. The consumer view accepts the composed shape, while native page/selection provenance and opaque
+session custody still need to be bound. No new native DTO or endpoint is authored by Web.
 
 Decision: retain the installed pending list and make exact inspection explicitly unavailable until generated composed
 inspection types arrive; keep the independent selection consumer ready without deriving selection from queue rows.
@@ -78,9 +84,10 @@ acceptance and public publication remain separate boundaries.
 
 ## Cost
 
-- **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target reads.
-  Each explicit selected retry invokes the same reader once; unsupported exact inspection still performs zero native
-  calls. Resolution uses the existing command owner. Pending or uncertain resolution blocks refresh and retry reads.
+- **Touches:** one board Appeals GET per explicit pending read; no Account, Media or current-target reads. The
+  unsupported selected inspection currently performs zero native calls; once the generated request arrives, each
+  explicit selected retry will repeat that exact read. Resolution uses the existing command owner. Pending or
+  uncertain resolution blocks refresh and retry reads.
 - **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.
   Recovery retains one current projection, one in-flight read and one focus handoff, without a page history.
   An empty page with `next` stays sparse. A missing selection is unavailable even when the page contains its ID.

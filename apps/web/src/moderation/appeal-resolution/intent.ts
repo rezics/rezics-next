@@ -1,4 +1,5 @@
 import type { AppealResolutionResult } from '../actions';
+import type { AppealResolutionSnapshot } from '../appeals-read';
 
 export type ResolutionCommand = Readonly<{
   id: string;
@@ -7,6 +8,17 @@ export type ResolutionCommand = Readonly<{
   idempotencyKey: string;
 }>;
 export type ResolutionSender = (command: ResolutionCommand) => Promise<AppealResolutionResult>;
+
+/** A current read cannot acknowledge a command whose receipt is still unknown. */
+export function appealResolutionObservation(
+  phase: 'draft' | 'pending' | 'uncertain' | 'settled' | 'retired',
+  response: AppealResolutionResult | null,
+  observation: AppealResolutionSnapshot | null | undefined,
+): { outcome: 'upheld' | 'reversed'; statement: string } | null | undefined {
+  if (response?.state === 'resolved')
+    return { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement };
+  return phase === 'pending' || phase === 'uncertain' ? undefined : observation;
+}
 
 /** Memory belongs to one mounted private view. Retirement is irreversible; retries never create intent. */
 export function createAppealResolutionIntent(appealId: string) {
