@@ -88,6 +88,14 @@ test('Following feed projects native counts and only the current viewer slot for
     expect(empty.feedItems).toHaveLength(2);
     const threadCard = empty.feedItems.find((item) => item.key.kind === 'thread')!;
     const postCard = empty.feedItems.find((item) => item.key.kind === 'post')!;
+    expect(postCard.summary.parentContext).toMatchObject({
+      kind: 'reply',
+      parent: {
+        state: 'available',
+        id: world.mainTarget.postId,
+        author: { id: world.author.accountId },
+      },
+    });
     expect(threadCard.summary).toMatchObject({
       reactionTarget: { targetKind: 'thread', targetId: world.mainTarget.threadId },
       reactions: {},

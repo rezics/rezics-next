@@ -16,6 +16,8 @@ import { REACTION_KINDS } from './events.ts';
 import { MAX_RATING_STORED_UNITS } from '../rating/question-scale.ts';
 import type { AuthorPostEntry } from './author-item-reads.ts';
 import type { BoardView } from './model.ts';
+import type { FeedReviewContext } from './model.ts';
+import { FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
@@ -271,7 +273,9 @@ export const PostEntrySchema = t.Unsafe<PostEntry & ViewerReactionSlot & Reactio
     ),
   ]),
 );
-export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot>(
+export const ThreadViewSchema = t.Unsafe<
+  ThreadView & ViewerReactionSlot & ReactionCountsSlot & Readonly<{ reviewContext?: FeedReviewContext }>
+>(
   t.Object(
     {
       ...metadata,
@@ -281,6 +285,7 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & React
       title: t.Union([t.String(), t.Null()]),
       availability,
       firstPost: PostEntrySchema,
+      reviewContext: t.Optional(FeedReviewContextSchema),
       ...viewerReaction,
       ...reactions,
     },

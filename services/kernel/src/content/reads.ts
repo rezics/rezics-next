@@ -1509,6 +1509,15 @@ async function disclose(
   return disclosed;
 }
 
+const citationDisclosure = new WeakMap<object, 'absent' | 'visible' | 'withheld'>();
+
+/** The public context projector may distinguish a missing citation from one
+ * removed by native question disclosure without exposing a private question. */
+export function readCitationDisclosure(value: PostEntry | ThreadView): 'absent' | 'visible' | 'withheld' {
+  const post = 'firstPost' in value ? value.firstPost : value;
+  return citationDisclosure.get(post) ?? ('voteCitation' in post && post.voteCitation ? 'visible' : 'absent');
+}
+
 /** Independently anchored question authorization runs only after content releases
  * its snapshots. An unreadable question suppresses the citation, preserving the
  * ordinary post and its own disclosure checks; unavailable authority propagates. */
@@ -1519,15 +1528,26 @@ async function readableCitation<T extends PostEntry | ThreadView>(
 ): Promise<T> {
   const post = 'firstPost' in value ? value.firstPost : value;
   const citation = 'voteCitation' in post ? post.voteCitation : null;
-  if (!citation || citation.questionId === STANDARD_QUESTION_ID) return value;
+  if (!citation) {
+    citationDisclosure.set(post, 'absent');
+    return value;
+  }
+  if (citation.questionId === STANDARD_QUESTION_ID) {
+    citationDisclosure.set(post, 'visible');
+    return value;
+  }
   let readable = false;
   try {
     readable = !!(await readVisibleRatingQuestion(dependencies, context.actor, citation.questionId, context.deadline));
   } catch (error) {
     if (!(error instanceof ProblemError && error.code === 'not_found')) throw error;
   }
-  if (readable) return value;
+  if (readable) {
+    citationDisclosure.set(post, 'visible');
+    return value;
+  }
   const filtered = { ...post, voteCitation: null };
+  citationDisclosure.set(filtered, 'withheld');
   return ('firstPost' in value ? { ...value, firstPost: filtered } : filtered) as T;
 }
 

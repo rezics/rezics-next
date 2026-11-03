@@ -14,13 +14,14 @@ import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
+import { prepareFeedContentContext, type FeedContentContextReference } from './feed-context.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
 import { feedDiscoveryItem } from './feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
-import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
+import { ContentNotFoundError, discloseThreads, readBoard, readPost, type PostEntry, type ThreadView } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
 import {
@@ -125,6 +126,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
     summaries: Awaited<ReturnType<typeof readSubjectSummaries>>,
     threads: ReadonlyMap<string, ThreadView | null>,
     authors: Map<string, string>,
+    contextSources: Map<string, Readonly<{ thread: ThreadView; post?: PostEntry }>>,
     space?: FollowingSpace,
   ): Promise<FeedItem | null> {
     if (!(await supported(activity, actor, deadline))) return null;
@@ -223,6 +225,11 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         destination: { kind: 'collection', id: collection.id, title: collection.title },
       };
     }
+    if (item && object.owner === 'content')
+      contextSources.set(activity.id, {
+        thread,
+        ...(object.kind === 'post' ? { post: entry } : {}),
+      });
     return item;
   }
 
@@ -315,6 +322,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       const names: Lane[] = ['continue', 'following', 'discovery'];
       type Candidate = { item: FeedItem | null; after?: string };
       const lanes: Record<Lane, Candidate[]> = { continue: [], following: [], discovery: [] };
+      const contextSources = new Map<string, Readonly<{ thread: ThreadView; post?: PostEntry }>>();
       const next = { ...position };
       let continueFingerprint = '';
       let discoveryAsOf: string | undefined;
@@ -435,7 +443,9 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               lanes.following = await Promise.all(
                 page.activities.map(async (activity) => {
                   try {
-                    return { item: await hydrate(activity, actor, deadline, summaries, threads, authorIds, space) };
+                    return {
+                      item: await hydrate(activity, actor, deadline, summaries, threads, authorIds, contextSources, space),
+                    };
                   } catch (error) {
                     if (
                       error instanceof ContentNotFoundError ||
@@ -517,6 +527,123 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           };
       }
       next.turn = turn;
+      const contextReferences: Array<FeedContentContextReference & { source: 'discovery' | 'following' }> = [];
+      for (const item of feedItems) {
+        if (item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review') {
+          const source = contextSources.get(item.id);
+          contextReferences.push({
+            key: item.id,
+            source: item.source,
+            threadId: item.key.id,
+            ...(source ? { initialThread: source.thread } : {}),
+          });
+        } else if (item.source === 'following' && item.key.owner === 'content') {
+          const source = contextSources.get(item.id);
+          if (item.key.kind === 'thread')
+            contextReferences.push({
+              key: item.id,
+              source: item.source,
+              threadId: item.key.id,
+              ...(source ? { initialThread: source.thread } : {}),
+            });
+          else
+            contextReferences.push({
+              key: item.id,
+              source: item.source,
+              threadId: item.summary.threadId,
+              postId: item.key.id,
+              ...(source ? { initialThread: source.thread, ...(source.post ? { initialPost: source.post } : {}) } : {}),
+            });
+        }
+      }
+      if (contextReferences.length) {
+        try {
+          const composition = await prepareFeedContentContext(content, contextReferences, { actor, deadline }, languages);
+          const composed = await composition.finish();
+          const concealed = new Set<string>();
+          for (const reference of contextReferences) {
+            const item = feedItems.find((candidate) => candidate.id === reference.key);
+            const context = composed.contexts.get(reference.key);
+            const thread = context?.thread;
+            if (!item || !thread || thread.availability !== 'available' || thread.firstPost.availability !== 'available') {
+              concealed.add(reference.key);
+              continue;
+            }
+            const excerpt = feedExcerpt(thread.firstPost);
+            const reviewContext = context.reviewContext;
+            if (item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review') {
+              const summary = { ...item.summary };
+              summary.title = thread.title;
+              if (excerpt) summary.excerpt = excerpt;
+              else delete summary.excerpt;
+              if (context.threadAuthor)
+                summary.author = {
+                  displayName: context.threadAuthor.displayName,
+                  handle: context.threadAuthor.handle,
+                };
+              else delete summary.author;
+              if (reviewContext?.target.state === 'available')
+                summary.subject = {
+                  id: reviewContext.target.subject.id,
+                  title: reviewContext.target.subject.label?.value ?? null,
+                };
+              else summary.subject = null;
+              if (reviewContext) summary.reviewContext = reviewContext;
+              else delete summary.reviewContext;
+              item.summary = summary;
+              item.destination = { ...item.destination, title: thread.title };
+            } else if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'thread') {
+              const summary = { ...item.summary };
+              summary.id = thread.id;
+              summary.kind = thread.kind;
+              summary.title = thread.title;
+              summary.createdAt = thread.createdAt;
+              if (excerpt) summary.excerpt = excerpt;
+              else delete summary.excerpt;
+              if (context.threadAuthor) summary.author = context.threadAuthor;
+              else delete summary.author;
+              if (reviewContext) summary.reviewContext = reviewContext;
+              else delete summary.reviewContext;
+              item.summary = summary;
+              item.destination = { ...item.destination, title: thread.title };
+            } else if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post') {
+              const post = context.post;
+              if (!post || post.availability !== 'available') {
+                concealed.add(reference.key);
+                continue;
+              }
+              const postExcerpt = feedExcerpt(post);
+              const summary = { ...item.summary };
+              summary.threadId = thread.id;
+              summary.title = thread.title;
+              summary.createdAt = post.createdAt;
+              if (postExcerpt) summary.excerpt = postExcerpt;
+              else delete summary.excerpt;
+              if (context.postAuthor) summary.author = context.postAuthor;
+              else delete summary.author;
+              if (reviewContext) summary.reviewContext = reviewContext;
+              else delete summary.reviewContext;
+              if (context.parentContext) summary.parentContext = context.parentContext;
+              else delete summary.parentContext;
+              item.summary = summary;
+              item.destination = { ...item.destination, title: thread.title };
+            }
+          }
+          if (concealed.size)
+            for (let index = feedItems.length - 1; index >= 0; index--)
+              if (concealed.has(feedItems[index]!.id)) feedItems.splice(index, 1);
+        } catch (error) {
+          const affected = new Set(contextReferences.map(({ source }) => source));
+          for (const source of affected) {
+            sources[source] = sourceState(error);
+            lanes[source] = [];
+            next[source] = position[source];
+            if (source === 'continue') next.resume = position.resume;
+          }
+          for (let index = feedItems.length - 1; index >= 0; index--)
+            if (affected.has(feedItems[index]!.source as 'discovery' | 'following')) feedItems.splice(index, 1);
+        }
+      }
       let reactionsAsOf: FeedPage['reactionsAsOf'];
       try {
         const projected = await projectFeedReactions(content, actor, feedItems, deadline);

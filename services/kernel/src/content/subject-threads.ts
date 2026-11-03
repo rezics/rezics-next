@@ -12,6 +12,7 @@ import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, 
 import page from './page-subject-threads.sql';
 import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
 import { projectSubjectThreadReactions, type SubjectThreadWithReactions } from './subject-threads-reactions.ts';
+import { prepareFeedContentContext } from './feed-context.ts';
 import type { ReactionCountFreshness } from './reads.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
@@ -186,10 +187,34 @@ export async function listSubjectThreads(
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;
   const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
-  anchors.push(...projected.anchors);
+  const composition = await prepareFeedContentContext(
+    dependencies,
+    projected.entries.map((thread) => ({ key: thread.id, threadId: thread.id, initialThread: thread })),
+    context,
+    [],
+    {
+      observeThreads: (threadIds, current) =>
+        Promise.all(
+          threadIds.map(async (threadId) =>
+            await readSubjectThread(dependencies, threadId, subjectId, input.place, current)
+          ),
+        ),
+    },
+  );
+  const composed = await composition.finish();
+  const composedEntries = projected.entries.flatMap((thread) => {
+    const context = composed.contexts.get(thread.id);
+    if (!context?.thread) return [];
+    const selected = Object.fromEntries(
+      Object.entries(thread).filter(([key]) => key !== 'reactions' && key !== 'viewerReaction'),
+    ) as ThreadView;
+    if (JSON.stringify(selected) !== JSON.stringify(context.thread)) throw new ProblemError('dependency_unavailable');
+    return [{ ...thread, ...(context.reviewContext ? { reviewContext: context.reviewContext } : {}) }];
+  });
+  anchors.push(...projected.anchors, ...composed.anchors);
   return {
     context: await pageContext.finish(),
-    entries: projected.entries,
+    entries: composedEntries,
     reactionsAsOf: projected.reactionsAsOf,
     anchor: candidates.anchor,
     anchors,

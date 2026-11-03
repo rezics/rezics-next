@@ -1,7 +1,7 @@
 import { ProblemError } from '../http/problem.ts';
 import type { FeedItem, FeedReactionCounts } from './feed-contract.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
-import type { AnchoredPosition, ReadContext } from './model.ts';
+import type { AnchoredPosition, FeedReviewContext, ReadContext } from './model.ts';
 import {
   readSubjectThread,
   type ContentReadDependencies,
@@ -14,6 +14,7 @@ export type SubjectThreadWithReactions = ThreadView &
   Readonly<{
     reactions: FeedReactionCounts;
     viewerReaction?: ViewerReactionKind | null;
+    reviewContext?: FeedReviewContext;
   }>;
 
 /** Adapt already disclosed native thread keys to Home's installed reaction producer.

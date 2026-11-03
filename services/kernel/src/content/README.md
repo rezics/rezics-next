@@ -333,6 +333,21 @@ preparing coverage into native readiness; those source authorities remain in the
 - Bound: O(B) key/route validation and projection with B at most the existing 160 raw-candidate ceiling; no refill, and each output remains inside the closed Feed schema.
 - Growth check: `test/content/feed-discovery.test.ts` pins every current owner variant and mismatched identities at fixed size; independent native 1x/4x/16x pool measurements remain deferred to the continuation.
 
+### Cost: selected Home review and reply context
+
+`prepareFeedContentContext(dependencies, references, context, languages?, options?)` returns a one-use composition with
+`finish(): Promise<{contexts: ReadonlyMap<string, FeedContentContextValue>, anchors: readonly AnchoredPosition[]}>`.
+Each selected reference carries an exact thread key and may carry one post key and already disclosed initial values.
+The public context preserves current permitted review-target and question summaries, the exact recorded vote units and
+revision, and only the immediate reply parent. Target, citation and parent distinguish available, absent or withheld
+states; removed parents have a native tombstone shape. Current Accounts identity supplies permitted author fields.
+The Subject-thread page uses this same projector with its exact Subject/place final observer. The projector does not
+provide viewer action advice; mounted resource readers and the current-thread card owner retain that authority.
+
+- Touches: With R <= 20 selected references, T <= R distinct threads, P <= R distinct posts, M <= P distinct immediate parents, S <= 20 Subjects, Q <= 20 cited questions and A <= 60 author identities, preparation and finish each observe selected Content, then read current Subject summaries, Accounts summaries and each distinct rating question. Content uses `discloseThreads` for thread keys and exact `readPost` calls for post and parent keys; Subject pages use at most T exact `readSubjectThread` final observations. Each post read retains native source, revision/body, ancestry, Board/place and nested Access/disclosure work. Account summaries may additionally read one avatar and one verified-agent Subject per identity. The 640-byte UTF-8 excerpt cap applies to serialized parent previews; native documents are still read and inspected in full.
+- Bound: R <= 20; P + M <= 40 distinct exact post keys in an observation and at most 2(P + M) <= 80 `readPost` calls for a composition without reusable initial posts. Each `readPost` is bounded by its native 33-entry ancestry check, so charge up to 2,640 ancestry entries in addition to the two thread-observation rounds (at most 2 * 20 * 33 entries); supplied initial ThreadViews/Posts reduce those calls. A body can reach the existing 2 MiB native admission limit. These are input/ancestry ceilings, not a physical SQL, Access, history or total-byte ceiling: every nested native reader, partition, transaction, full-body copy, serialization copy and retry remains charged. No ancestor chain is returned in the preview.
+- Growth check: `test/content/feed-context.test.ts` creates a native standard-question review and a two-level reply chain, then verifies exact zero citation units, the current question revision, opening-versus-reply shape, immediate-parent-only preview and Subject-thread parity. Independent 256/1024/4096 growth of unrelated feed, Subject, author, ancestry and authority rows; strict route/identity and cursor-prefix plans; every participating pool/runner phase; and empty, withheld, stale and retry measurements remain in the continuation.
+
 ## Worker authorization composition
 
 Default `registerContent` consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
@@ -1466,12 +1481,11 @@ the count watermark does not represent source or viewer-slot atomicity.
 Decision: reuse Home's reaction assembly for original thread keys, preserve the raw frontier on final concealment,
 and retry changed readable sources before returning hydrated entries.
 
-The shared current-thread card envelope factory/finish and Home parent/target-context projection remain to be
-composed from their producer owners' exact contracts. The installed reading-page composer is a bounded reply page,
-not that card factory. Author/media presentation, contribution/comment disclosure, recorded review score display
-and applicable actions remain part of that continuation; native recorded citations stay unchanged here.
-Derived OpenAPI/client publication and the Web binding review remain with the controller and existing Subject
-interface owner. No rendered Web or complete card acceptance is claimed.
+The shared current-thread card envelope factory/finish remains separate from Home's selected review/parent context
+projector; the installed reading-page composer is a bounded reply page, not either card factory. Author/media
+presentation, contribution/comment disclosure and applicable action advice remain part of the continuation; native
+recorded citations remain unchanged. Derived OpenAPI/client publication and the Web binding review remain with the
+controller and existing Subject interface owner. No rendered Web or complete card acceptance is claimed.
 
 ### Cost: listSubjectThreads context
 

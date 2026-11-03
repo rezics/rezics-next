@@ -16,6 +16,8 @@ import { continuePageSchema } from '../library/continue-routes.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
+import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
+import type { FeedParentContext, FeedReviewContext } from './model.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -109,13 +111,16 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
 export type FeedContentSummary = {
   author?: FeedAuthor;
   excerpt?: string;
+  reviewContext?: FeedReviewContext;
   reactionTarget?: FeedReactionTarget;
   reactions?: FeedReactionCounts;
   viewerReaction?: ViewerReactionKind | null;
 };
+type FeedPostContentSummary = FeedContentSummary & { parentContext?: FeedParentContext };
 const contentSummaryFields = {
   author: t.Optional(FeedAuthorSchema),
   excerpt: t.Optional(t.String({ maxLength: 160 })),
+  reviewContext: t.Optional(FeedReviewContextSchema),
   reactionTarget: t.Optional(reactionTarget),
   reactions: t.Optional(reactionCounts),
   viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
@@ -133,7 +138,7 @@ const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'creat
   ),
 );
 const postSummary = t.Unsafe<
-  Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedContentSummary
+  Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedPostContentSummary
 >(
   t.Object(
     {
@@ -142,6 +147,7 @@ const postSummary = t.Unsafe<
       threadId: uuid,
       createdAt: t.String(),
       title: nullable,
+      parentContext: t.Optional(FeedParentContextSchema),
     },
     closed,
   ),
@@ -153,7 +159,8 @@ const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
   t.Object({ id: uuid, title: t.String({ minLength: 1 }), description: nullable }, closed),
 );
 const discoveryReviewSummary = t.Unsafe<
-  PublicReviewDiscoverySummary & Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction'>
+  PublicReviewDiscoverySummary &
+    Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext'>
 >(
   t.Object(
     {
@@ -163,6 +170,7 @@ const discoveryReviewSummary = t.Unsafe<
       author: t.Optional(t.Object({ displayName: nullable, handle: nullable }, closed)),
       excerpt: t.Optional(t.String({ maxLength: 640 })),
       subject: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
+      reviewContext: t.Optional(FeedReviewContextSchema),
       reactionTarget: t.Optional(reactionTarget),
       reactions: t.Optional(reactionCounts),
       viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
