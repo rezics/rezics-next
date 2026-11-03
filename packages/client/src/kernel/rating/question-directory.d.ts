@@ -19,6 +19,8 @@ export type RatingQuestionView = {
     };
     realmId?: string;
     meaning?: string;
+    canonicalLabel?: string;
+    labelRevision?: number;
 };
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
  * meaning; ownerId is the authoring account and is never used as a Realm selector. */
@@ -32,6 +34,8 @@ export declare function ratingQuestionView(row: {
     stepUnits: number;
     realmId?: string | null;
     meaning?: string | null;
+    presentationLabel?: string | null;
+    labelRevision?: number | null;
 }): RatingQuestionView;
 /** Existing Global definitions authority, with no held connection during preparation. */
 export declare function requireGlobalQuestionRead(deps: Dependencies, actor: Actor, deadline: number): Promise<void>;

@@ -1486,6 +1486,11 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly 'com.rezics.rating.question.label-changed.v1': Type.TObject<{
+        questionId: Type.TString;
+        realmId: Type.TString;
+        labelRevision: Type.TInteger;
+    }>;
     readonly 'com.rezics.rating.question.created.v1': Type.TObject<{
         questionId: Type.TString;
         realmId: Type.TString;

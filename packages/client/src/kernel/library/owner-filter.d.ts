@@ -122,6 +122,12 @@ export declare function readNativeCollectionMemberAdmission(admission: Collectio
     deadline: number;
     retainedMeaning: boolean;
 }> | undefined;
+type PrivateRead = {
+    action: string;
+    group: string;
+};
+/** Native family list authority, including branches whose truth could otherwise short circuit. */
+export declare function collectionMemberPrivateReads(filter: FilterDocument): PrivateRead[];
 /** Repeat the admitted expanded families at the actual caller time, including every negative branch. */
 export declare function prepareNativeCollectionMemberAuthority(deps: Dependencies, viewer: Actor, admission: CollectionMemberAdmission, at: AuthoritativeTime, deadline: number, attempt?: CommandAttempt): Promise<import("../request/access.ts").AccessCheck[]>;
 /** Shared grammar/release admission only. The returned AST certifies neither execution nor disclosure. */

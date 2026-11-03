@@ -36,6 +36,8 @@ export declare function createRealmRatingQuestion(deps: {
     meaning: string;
     revision: number;
     label: string;
+    canonicalLabel: string;
+    labelRevision: number;
     grain: QuestionGrain;
     scale: {
         min: number;

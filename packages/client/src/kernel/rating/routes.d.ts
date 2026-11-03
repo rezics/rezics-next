@@ -5860,6 +5860,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 meaning: string;
                                 revision: number;
                                 label: string;
+                                canonicalLabel: string;
+                                labelRevision: number;
                                 grain: import("./question-authoring.ts").QuestionGrain;
                                 scale: {
                                     min: number;
@@ -5871,6 +5873,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 id: string;
                                 revision: number;
                                 realmId?: string;
+                                canonicalLabel?: string;
+                                labelRevision?: number;
                                 meaning?: string;
                                 label: string;
                                 grain: "character" | "episode" | "release" | "work";
@@ -5967,6 +5971,340 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
 } & {
     v1: {
         "rating-questions": {
+            ":questionId": {
+                label: {
+                    put: {
+                        body: {
+                            expectedLabelRevision: number;
+                            label: string;
+                        };
+                        params: {
+                            questionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                questionId: string;
+                                labelRevision: number;
+                                label: string;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        "rating-questions": {
+            ":questionId": {
+                labels: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            questionId: string;
+                        };
+                        query: {
+                            limit?: string | number;
+                            cursor?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                labels: {
+                                    questionId: string;
+                                    labelRevision: number;
+                                    label: string;
+                                    at: string | null;
+                                    author: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "deleted";
+                                    } | {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "active";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                        automated: boolean;
+                                        operatorId: string | null;
+                                    } | null;
+                                }[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        "rating-questions": {
+            ":questionId": {
+                labels: {
+                    ":labelRevision": {
+                        get: {
+                            body: unknown;
+                            params: {
+                                questionId: string;
+                                labelRevision: number;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    questionId: string;
+                                    labelRevision: number;
+                                    label: string;
+                                    at: string | null;
+                                    author: {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "deleted";
+                                    } | {
+                                        id: string;
+                                        kind: "actor" | "organization";
+                                        state: "active";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                        automated: boolean;
+                                        operatorId: string | null;
+                                    } | null;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        "rating-questions": {
             get: {
                 body: unknown;
                 params: {};
@@ -5982,6 +6320,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             id: string;
                             revision: number;
                             realmId?: string;
+                            canonicalLabel?: string;
+                            labelRevision?: number;
                             meaning?: string;
                             label: string;
                             grain: "character" | "episode" | "release" | "work";
@@ -6196,6 +6536,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             id: import("typebox").TString;
             revision: import("typebox").TInteger;
             realmId: import("typebox").TOptional<import("typebox").TString>;
+            canonicalLabel: import("typebox").TOptional<import("typebox").TString>;
+            labelRevision: import("typebox").TOptional<import("typebox").TInteger>;
             meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
@@ -6322,6 +6664,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             id: string;
             revision: number;
             realmId?: string;
+            canonicalLabel?: string;
+            labelRevision?: number;
             meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
@@ -6414,6 +6758,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             id: string;
             revision: number;
             realmId?: string;
+            canonicalLabel?: string;
+            labelRevision?: number;
             meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
@@ -6531,6 +6877,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 id: import("typebox").TString;
                 revision: import("typebox").TInteger;
                 realmId: import("typebox").TOptional<import("typebox").TString>;
+                canonicalLabel: import("typebox").TOptional<import("typebox").TString>;
+                labelRevision: import("typebox").TOptional<import("typebox").TInteger>;
                 meaning: import("typebox").TOptional<import("typebox").TString>;
                 label: import("typebox").TString;
                 grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
@@ -6717,6 +7065,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             id: import("typebox").TString;
             revision: import("typebox").TInteger;
             realmId: import("typebox").TOptional<import("typebox").TString>;
+            canonicalLabel: import("typebox").TOptional<import("typebox").TString>;
+            labelRevision: import("typebox").TOptional<import("typebox").TInteger>;
             meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
