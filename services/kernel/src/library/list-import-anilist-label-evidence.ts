@@ -22,10 +22,17 @@ export function aniListLabelEvidence(row: AniListRow) {
       values.push({ key: 'customLists:' + name, value: name, origin: 'customLists', member });
     }
   }
+  const media = object(row.evidence.media) ? row.evidence.media : {};
+  const tagState = (source: Record<string, unknown>): State => !Object.hasOwn(source, 'tags') ? 'missing'
+    : source.tags === null ? 'unknown'
+    : source.tags === '' || (Array.isArray(source.tags) && source.tags.length === 0) || (object(source.tags) && Object.keys(source.tags).length === 0) ? 'empty'
+    : 'unsupported';
+  const tagEvidence = { entry: tagState(row.evidence), media: tagState(media), membership: 'unavailable' as const };
   const group = row.group;
   const grouping = !group ? 'missing' : group.isCustomList === false ? 'default'
     : group.isCustomList === null || !Object.hasOwn(group, 'isCustomList') ? 'unknown'
     : group.isCustomList !== true ? 'invalid'
+    : !Object.hasOwn(group, 'name') ? 'missing'
     : typeof group.name !== 'string' ? group.name === null ? 'unknown' : 'invalid'
     : !group.name.trim() ? 'empty' : 'custom';
   if (grouping === 'custom')
@@ -34,7 +41,8 @@ export function aniListLabelEvidence(row: AniListRow) {
   const selectable = values.filter(v => v.member && (v.origin === 'customContainer' || membership === 'available'));
   return {
     membership, grouping, values, selectable,
-    tags: !Object.hasOwn(row.evidence, 'tags') ? 'missing' as const : row.evidence.tags === null ? 'unknown' as const : 'unsupported' as const,
-    reason: 'Retained tags have no supported AniList personal-membership contract; status and default display groups are not custom lists',
+    tagEvidence,
+    tags: tagEvidence.entry !== 'missing' ? tagEvidence.entry : tagEvidence.media,
+    reason: 'Media.tags describes media themes, not personal membership; unfamiliar entry tags have no supported membership schema. Status and default display groups are not custom lists',
   };
 }

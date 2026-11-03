@@ -18,6 +18,8 @@ test('retained membership distinguishes absent, null, empty, invalid, unsupporte
     expect(evidence(value === undefined ? {} : { customLists: value }).membership).toBe(state);
   expect(evidence({ tags: ['a'], status: 'CURRENT' }, { name: 'Watching', isCustomList: false })).toMatchObject({ grouping: 'default', tags: 'unsupported', selectable: [] });
   expect(evidence({}, { name: 'Unspecified grouping' })).toMatchObject({ grouping: 'unknown', selectable: [] });
+  expect(evidence({ media: { tags: [{ name: 'Official theme' }] } })).toMatchObject({ tags: 'unsupported', tagEvidence: { entry: 'missing', media: 'unsupported', membership: 'unavailable' }, selectable: [] });
+  expect(evidence({ tags: [], media: { tags: null } }).tagEvidence).toEqual({ entry: 'empty', media: 'unknown', membership: 'unavailable' });
   const supported = evidence({ customLists: { First: true, Second: false } }, { name: 'First', isCustomList: true });
   expect(supported.values.map(v => [v.value, v.member, v.origin])).toEqual([
     ['First', true, 'customLists'], ['Second', false, 'customLists'], ['First', true, 'customContainer'],

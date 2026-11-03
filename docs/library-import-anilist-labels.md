@@ -10,7 +10,8 @@ array variants and retained tags have no installed membership schema and remain 
 
 The retained primary reference is AniList docs commit `03281c0a4bbf0c7f2097e0c935cddaed1096aa65`,
 `object/medialist.md` (`customLists`: map of booleans; `asArray` has no object-field schema) and
-`object/medialistgroup.md` (`name`, `isCustomList`, `isSplitCompletedList`, `status`), under
+`object/medialistgroup.md` (`name`, `isCustomList`, `isSplitCompletedList`, `status`), and `object/media.md`
+(`tags` describes media elements/themes), under
 `.reference/api-first-platform-coverage/anilist-docs/docs/reference`. No provider account is fetched.
 
 ## Review and outcomes
@@ -20,8 +21,8 @@ to each existing retained row. `labelEvidence.membership` distinguishes missing,
 available, unsupported (array representation), and oversized evidence. Boolean false is visible nonmembership.
 A mixed-invalid map remains visible but its map values cannot be selected. Grouping is missing, unknown, invalid,
 empty, custom or default. A default or split-completed display group supplies no selectable value. An explicitly
-custom container is distinct from a per-entry membership. Tags remain missing, unknown or unsupported; no tag
-is silently reclassified as a custom-list name or official state. Values expose exact source keys, original text,
+custom container is distinct from a per-entry membership. `tagEvidence` separately reports missing, unknown, empty or unsupported entry/media tags,
+with personal tag membership explicitly unavailable. No tag is silently reclassified as a custom-list name or official state. Values expose exact source keys, original text,
 origin and membership; `selectable` contains only supported positive evidence.
 
 `POST /v1/libraryImports/anilist/{importId}:reviewLabels`, with the ordinary quoted Idempotency-Key, takes:
