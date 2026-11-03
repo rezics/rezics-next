@@ -92,3 +92,15 @@ moderator inspects and changes that interval on the board. Waiting keeps the dra
 guidance and never auto-submits. Decision: Send and Retry stay explicitly usable so the browser clock does not gate
 native permission. The [slow-mode contract](slow-mode.md) records units, eligibility display, private caller
 retirement, native refusal recovery and the remaining `boards({ id }).slowMode` producer binding.
+
+## Thread watch
+
+A signed-in reader can watch one currently readable thread for preference-governed in-app activity. Watching grants no
+read access and sends no email. The mounted control reads private state only for the current thread and viewer/session;
+it uses a no-store read outside SSR/shared caches and retires the result when its target, access or credentials change.
+Each command freezes the thread, viewer/session stamp, requested state, native revision and idempotency key. An unknown
+response permits only exact retry; a refusal requires a fresh status read and never claims a new current state.
+Anonymous readers keep the page and receive sign-in guidance without a private watch read. Notification settings remain
+the authority for in-app preferences.
+
+Decision: Until Content delivers generated thread-watch reads and commands, Web keeps an installed unavailable seam; test and story responses are illustrative, not native proof.

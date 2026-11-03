@@ -76,8 +76,12 @@ independent rather than making shared files or unfinished producer delivery into
   refusal authority. Content owns policy, eligibility, exemptions and the setting command. Web binds
   `KernelClient.boards({ id }).slowMode` GET/PUT when generated, and otherwise shows unavailable. Edits, mute/block,
   penalties and watch stay out of this slice. Details: [board slow mode](../../apps/web/src/threads/slow-mode.md).
-- **Watch.** Start with a signed-in reader's thread watch toggle for in-app thread activity. Watching grants no read
-  access; existing preferences and send-time access still govern notices. Board-wide watching is a later extension.
+- **Watch.** The default thread route shows the current confirmed watch state beside its title and offers one explicit
+  watch or stop action to the current signed-in reader. Private reads stay in the mounted client and outside SSR/shared
+  caches; target, access or session replacement retires the result. Unknown commands retain their immutable identity
+  for exact retry, while refusal requires a fresh status read. Watching grants no read access or email delivery;
+  existing notification preferences still govern in-app notices. Content's generated watch read/command API remains
+  the named missing producer behind the installed unavailable seam. Board-wide watching is a later extension.
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
   and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are
   used as supplied. Membership, rules, covers, authors and ratings stay omitted when absent. Public discovery

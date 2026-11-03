@@ -25,7 +25,16 @@ import { documentImageForPost, type ThreadDocumentMedia } from '../../threads/do
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -43,6 +52,7 @@ import {
 import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
+import { ThreadWatch } from '../../threads/thread-watch';
 import { PageHeading } from '../../shell/page-heading';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import {
@@ -111,11 +121,24 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   component: ThreadPage,
 });
 
-export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; title: string | null }) {
+export function ThreadReadingHeader({
+  page,
+  title,
+  watch,
+}: {
+  page: ThreadReadingPage;
+  title: string | null;
+  watch?: ReactNode;
+}) {
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
       <BoardContext realm={page.realm} board={page.board} prominent />
-      {title ? <PageHeading>{title}</PageHeading> : null}
+      {title || watch ? (
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          {title ? <PageHeading>{title}</PageHeading> : null}
+          {watch}
+        </div>
+      ) : null}
       <ThreadSubjects subjects={page.subjects} />
       {page.linkedPostUnavailable ? (
         <div role="status" className="space-y-2">
@@ -452,7 +475,30 @@ export function ThreadPage() {
         pageCallbackRevision={callbackRevision}
         isPageCallbackCurrent={isCallbackCurrent}
         returnTo={returnTo}
-        renderHeader={(title, visiblePage) => <ThreadReadingHeader page={visiblePage} title={title} />}
+        renderHeader={(title, visiblePage) => (
+          <ThreadReadingHeader
+            page={visiblePage}
+            title={title}
+            watch={
+              <ThreadWatch
+                key={JSON.stringify([visiblePage.thread.id, subject ?? null, callbackRevision])}
+                threadId={visiblePage.thread.id}
+                session={session}
+                sessionKnown={session !== 'unknown'}
+                viewerId={subject ?? undefined}
+                sessionStamp={callbackRevision}
+                admitted={
+                  binding.current &&
+                  !currentPageUnavailable &&
+                  (session !== 'signed-in' ||
+                    (!!caller && caller.personalSessionReady() && caller.isConnectedCurrent()))
+                }
+                returnTo={returnTo}
+                isCurrent={isCallbackCurrent}
+              />
+            }
+          />
+        )}
         onMutation={refreshThreadQueries}
         onPageRefresh={refreshThreadPage}
         onPostIdsChange={setPostIds}
