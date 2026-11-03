@@ -593,11 +593,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
       throw new Error('lost acknowledgement at Collection expiry boundary');
     },
   });
-  const boundaryUpload = await boundaryService.create(
-    otherActor,
-    archiveForOther(archiveRecords),
-    randomUUID(),
-  );
+  const boundaryUpload = await boundaryService.create(otherActor, archiveForOther(archiveRecords), randomUUID());
   boundaryUploadId = boundaryUpload.uploadId;
   boundaryExpiry = boundaryUpload.expiresAt;
   const boundaryPreview = await boundaryService.previewCollection(otherActor, boundaryUploadId, collection, {

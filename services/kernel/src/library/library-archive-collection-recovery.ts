@@ -1532,8 +1532,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         const recovering = current !== null && current.inflightAction !== null;
         const expiredRecovery = current?.state === 'expired' && recovering;
         const matchesReview = recovering
-          ? current?.inflightReviewId === confirmation.reviewId &&
-            current.inflightReviewDigest === confirmation.digest
+          ? current?.inflightReviewId === confirmation.reviewId && current.inflightReviewDigest === confirmation.digest
           : current?.reviewId === confirmation.reviewId && current.reviewDigest === confirmation.digest;
         if (
           !current ||
@@ -1541,8 +1540,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           (!expiredRecovery && current.leaseUntil !== null && Date.parse(current.leaseUntil) > now) ||
           (recovering
             ? current.inflightEffectId !== root.inflightEffectId ||
-              (!expiredRecovery &&
-                (current.state !== 'applying' || Date.parse(current.expiresAt) <= now))
+              (!expiredRecovery && (current.state !== 'applying' || Date.parse(current.expiresAt) <= now))
             : (current.state !== 'reviewed' && current.state !== 'applying') ||
               Date.parse(current.expiresAt) <= now ||
               current.cancelRequested)
@@ -1765,7 +1763,13 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     });
   }
 
-  async function executeEffect(owner: OwnerActor, root: RecoveryRoot, leaseId: string, effect: AdmittedEffect, signal?: AbortSignal) {
+  async function executeEffect(
+    owner: OwnerActor,
+    root: RecoveryRoot,
+    leaseId: string,
+    effect: AdmittedEffect,
+    signal?: AbortSignal,
+  ) {
     if (effect.action === 'pin' && effect.operands.collectionId === null) {
       await checkpointEffect(
         root,
@@ -1798,7 +1802,11 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         if (presentationKind !== undefined && presentationKind !== null && typeof presentationKind !== 'string')
           throw conflict();
         const reviewedReleaseDigest = effect.operands.reviewedReleaseDigest;
-        if (reviewedReleaseDigest !== undefined && reviewedReleaseDigest !== null && typeof reviewedReleaseDigest !== 'string')
+        if (
+          reviewedReleaseDigest !== undefined &&
+          reviewedReleaseDigest !== null &&
+          typeof reviewedReleaseDigest !== 'string'
+        )
           throw conflict();
         const created = await commands.createCollection(
           owner,
@@ -1833,7 +1841,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           statement: `UPDATE library.collection_archive_recovery_record SET native_member_id=$7::uuid,add_state='applied'
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId, member.value.id],
+          values: [
+            root.route,
+            owner.accountId,
+            root.uploadId,
+            collectionId,
+            sourceId,
+            effect.reviewId,
+            member.value.id,
+          ],
           second: {
             statement: `UPDATE library.collection_archive_recovery SET last_added_member_id=
                  CASE WHEN state='expired' THEN NULL ELSE $4::uuid END
@@ -1929,7 +1945,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             statement: `UPDATE library.collection_archive_recovery_record SET note_state='failed',outcome_reason=$7
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                  AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-            values: [root.route, owner.accountId, root.uploadId, operandString('collectionId'), sourceId, effect.reviewId, failure.reason],
+            values: [
+              root.route,
+              owner.accountId,
+              root.uploadId,
+              operandString('collectionId'),
+              sourceId,
+              effect.reviewId,
+              failure.reason,
+            ],
           };
         } else throw error;
       } else if (effect.action === 'order') {
@@ -2020,7 +2044,11 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     ) {
       throw conflict();
     }
-    if (root.state === 'reviewed' && root.reviewSnapshot && !(await reviewedMappingsCurrent(owner, root.reviewSnapshot, signal))) {
+    if (
+      root.state === 'reviewed' &&
+      root.reviewSnapshot &&
+      !(await reviewedMappingsCurrent(owner, root.reviewSnapshot, signal))
+    ) {
       await invalidateStaleReview(root);
       throw conflict();
     }
