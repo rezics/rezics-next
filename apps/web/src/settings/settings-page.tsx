@@ -1,3 +1,5 @@
+import { WatchesSection } from './watches';
+import type { WatchManagementIO } from './watch-native';
 import { exposureQuery, sessionQuery, useSession } from '../session/query';
 import { useQuery, useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
 import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback, type ReactNode } from 'react';
@@ -180,11 +182,13 @@ function SettingsSections({
   page,
   csrfToken,
   managedAccountsIO,
+  watchesIO,
   preferenceIO,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
+  watchesIO?: WatchManagementIO | undefined;
   preferenceIO: PreferenceIO;
 }) {
   const collectionsAdmitted = useOperation('account.collections');
@@ -298,6 +302,7 @@ function SettingsSections({
           )}
         </section>
       ) : null,
+    watches: <WatchesSection io={watchesIO} />,
     privacy: <CollectionPrivacySection />,
     verification: (
       <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>
@@ -435,12 +440,14 @@ function OwnedSettingsPage({
   csrfToken,
   preferenceIO,
   managedAccountsIO,
+  watchesIO,
   onRetry,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
   preferenceIO: PreferenceIO;
   managedAccountsIO?: ManagedAccountsIO | undefined;
+  watchesIO?: WatchManagementIO | undefined;
   onRetry: () => void;
 }) {
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
@@ -453,6 +460,7 @@ function OwnedSettingsPage({
           csrfToken={csrfToken}
           preferenceIO={preferenceIO}
           managedAccountsIO={managedAccountsIO}
+          watchesIO={watchesIO}
         />
       </SettingsNavigationProvider>
     </SettingsSessionContext.Provider>
@@ -463,6 +471,7 @@ export function SettingsPageView({
   page,
   requestSession,
   managedAccountsIO,
+  watchesIO,
   preferenceIO = nativePreferences,
 }: {
   page: SettingsPage;
@@ -470,6 +479,7 @@ export function SettingsPageView({
   /** Supplied only by the guarded route, from its request's established session query. */
   requestSession?: ReturnType<typeof useSession> | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
+  watchesIO?: WatchManagementIO | undefined;
   preferenceIO?: PreferenceIO;
 }) {
   const location = useLocation();
@@ -531,6 +541,7 @@ export function SettingsPageView({
           csrfToken={session.csrfToken}
           preferenceIO={preferenceIO}
           managedAccountsIO={managedAccountsIO}
+          watchesIO={watchesIO}
           onRetry={retry}
         />
       ) : signedOut ? (

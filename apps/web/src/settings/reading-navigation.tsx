@@ -25,7 +25,7 @@ import type { PreferenceChange, ReadingPreferences } from './preferences';
 import { sameReading, type ReadingValues } from './reading-preferences';
 import { SettingsSessionContext, useSettingsCurrent, useSettingsSessionOwner } from './settings-session-owner';
 
-type DraftKind = 'reading' | 'profile' | 'notifications' | 'collection-privacy' | 'verification';
+type DraftKind = 'watches' | 'reading' | 'profile' | 'notifications' | 'collection-privacy' | 'verification';
 type Draft = { kind: DraftKind; needsDecision: () => boolean };
 
 export function readingNeedsNavigationDecision(state: {

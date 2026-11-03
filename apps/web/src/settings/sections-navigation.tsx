@@ -2,7 +2,7 @@ import { m } from '../paraglide/messages.js';
 import type { MouseEvent } from 'react';
 
 export type SettingsSection = {
-  id: 'reading' | 'display' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
+  id: 'watches' | 'reading' | 'display' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
   label: string;
   status?: string | undefined;
 };
@@ -34,6 +34,7 @@ export function settingsSections({
               : undefined,
     },
     ...(display ? [{ id: 'display' as const, label: m.settings_display_heading() }] : []),
+    { id: 'watches', label: m.settings_watches_heading() },
     ...(notifications ? [{ id: 'notifications' as const, label: m.settings_notifications_heading() }] : []),
     ...(collections ? [{ id: 'privacy' as const, label: m.settings_privacy_heading() }] : []),
     ...(verification ? [{ id: 'verification' as const, label: m.settings_verification_heading() }] : []),

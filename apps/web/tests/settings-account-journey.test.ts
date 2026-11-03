@@ -22,6 +22,7 @@ test('Phone and desktop users can navigate directly to every available settings 
   const html = renderToStaticMarkup(createElement(SectionsNavigation, { sections }));
   expect(hrefs(html)).toEqual([
     '#reading',
+    '#watches',
     '#notifications',
     '#privacy',
     '#verification',
@@ -40,7 +41,7 @@ test('Phone and desktop users can navigate directly to every available settings 
     readingState: 'closed',
   });
   const pending = renderToStaticMarkup(createElement(SectionsNavigation, { sections: closed, pending: true }));
-  expect(hrefs(pending)).toEqual(['#reading', '#profile', '#public-activity', '#account']);
+  expect(hrefs(pending)).toEqual(['#reading', '#watches', '#profile', '#public-activity', '#account']);
   expect(pending).toContain('role="status"');
   expect(closed[0]?.status).toBeTruthy();
   for (const readingState of ['preparing', 'unavailable'] as const) {
