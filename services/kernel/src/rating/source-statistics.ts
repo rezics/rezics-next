@@ -707,8 +707,8 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
               deadline: job.deadline,
             }),
           );
-          session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
           committed = true;
+          session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
           await readFenceSnapshot(config(), tuple, job.deadline);
           if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
           set.status = 204;

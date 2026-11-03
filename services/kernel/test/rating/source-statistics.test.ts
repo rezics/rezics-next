@@ -2,18 +2,16 @@ import { testReceiptKeys } from '../support/receipt-keys.ts';
 // Cost: at most one current row per admitted provider; observation/fence work is indexed.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { sourceObservation } from '../../src/rating/source-provider.ts';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const routeKey = new Uint8Array(32).fill(121);
@@ -24,14 +22,6 @@ const accountIds = {
 };
 type Persona = keyof typeof accountIds | 'anonymous';
 const tokens = new Map<string, string>();
-const owner: AccountActor = {
-  kind: 'account',
-  accountId: accountIds.owner,
-  clientId: 'source-statistics-test',
-  scopes: ['subject:read', 'rating:vote'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
 let database: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
 
@@ -57,18 +47,16 @@ function request(
 }
 
 async function createTarget(): Promise<string> {
-  const key = randomUUID();
-  return (
-    await createSubject(database.pool, {
-      actor: owner,
-      target: subjectTarget(routeKey, owner.accountId, key),
-      idempotencyKey: key,
-      digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: key } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    })
-  ).subject.id;
+  const response = await request(
+    'POST',
+    '/v1/subjects',
+    {
+      type: 'schema:Book',
+      labels: { en: randomUUID() },
+    },
+    'importer',
+  );
+  return (await json(response)).subject.id;
 }
 
 async function json(response: Response, status = 200) {
@@ -120,7 +108,11 @@ beforeAll(async () => {
        VALUES ($1, $2, 'actor', 'active', $2)`,
       [routeOf(accountId), accountId],
     );
-    const scopes = ['subject:read', 'rating:vote', ...(persona === 'owner' ? [] : ['source_statistic:write'])];
+    const scopes = [
+      'subject:read',
+      'rating:vote',
+      ...(persona === 'owner' ? [] : ['source_statistic:write', 'subject:create']),
+    ];
     tokens.set(
       persona,
       await new SignJWT({
