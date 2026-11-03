@@ -102,9 +102,9 @@ Profile migration page/receipt instrumentation and complete privacy inspections 
 must be replaced by actual producer bindings as those surfaces land. Existing frozen outcomes and their full growth,
 replay, current-authorization and privacy obligations remain required for the controller's combined native checks.
 
-The source stage uses only foreground local kernel typing. Acceptance, useful native outcomes, whole-row privacy,
-integration, promotion and Goal proof remain pending; wrapper discoverability and compiler success establish none of
-those results.
+Acceptance, useful native outcomes, whole-row privacy, integration, promotion and Goal proof remain pending;
+wrapper discoverability and compiler success establish none of those results. Preserve the owning runner's
+configured compiler-database/check-host placement for later execution.
 
 The adopted quality reports leave every Done-when clause and interface evidence open. They are source inventories
 with their own immutable revision bindings, not measurements on this or a later integrated commit:
