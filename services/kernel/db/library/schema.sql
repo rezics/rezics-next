@@ -1148,6 +1148,23 @@ $$;
 
 
 --
+-- Name: index_vndb_import_rows(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.index_vndb_import_rows() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.rows IS NOT DISTINCT FROM OLD.rows THEN RETURN NULL; END IF;
+  DELETE FROM library.vndb_import_row WHERE route=NEW.route AND account_id=NEW.account_id AND upload_id=NEW.upload_id;
+  INSERT INTO library.vndb_import_row
+    SELECT NEW.route,NEW.account_id,NEW.upload_id,(ordinality-1)::integer,evidence
+    FROM jsonb_array_elements(NEW.rows) WITH ORDINALITY AS r(evidence,ordinality);
+  RETURN NULL;
+END; $$;
+
+
+--
 -- Name: initialize_follow_count_owner(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -3773,14 +3790,14 @@ CREATE TABLE library.library_export (
     route integer NOT NULL,
     account_id uuid NOT NULL,
     export_id uuid NOT NULL,
-    format_version smallint DEFAULT 1 NOT NULL,
     generation bigint NOT NULL,
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     state text NOT NULL,
+    format_version smallint DEFAULT 1 NOT NULL,
     CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
-    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2]))),
+    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2, 3]))),
     CONSTRAINT library_export_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT library_export_state_check CHECK ((state = ANY (ARRAY['collecting'::text, 'ready'::text, 'stale'::text, 'cancelled'::text, 'expired'::text, 'limit'::text])))
 );
@@ -3796,6 +3813,26 @@ CREATE TABLE library.list_import_anilist (
     import_id uuid NOT NULL,
     ordinal integer NOT NULL,
     payload jsonb NOT NULL,
+    export_source jsonb GENERATED ALWAYS AS (
+CASE
+    WHEN (ordinal >= 0) THEN (payload -> 'source'::text)
+    ELSE NULL::jsonb
+END) STORED,
+    export_score_format text GENERATED ALWAYS AS (
+CASE
+    WHEN (ordinal = '-1'::integer) THEN (payload ->> 'scoreFormat'::text)
+    ELSE NULL::text
+END) STORED,
+    export_cancelled boolean GENERATED ALWAYS AS (
+CASE
+    WHEN (ordinal = '-1'::integer) THEN ((payload ->> 'cancelled'::text))::boolean
+    ELSE NULL::boolean
+END) STORED,
+    export_count integer GENERATED ALWAYS AS (
+CASE
+    WHEN (ordinal = '-1'::integer) THEN ((payload ->> 'count'::text))::integer
+    ELSE NULL::integer
+END) STORED,
     CONSTRAINT list_import_anilist_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT list_import_anilist_check1 CHECK ((route = ((get_byte(uuid_send(import_id), 10) * 256) + get_byte(uuid_send(import_id), 11)))),
     CONSTRAINT list_import_anilist_ordinal_check CHECK (((ordinal >= '-1'::integer) AND (ordinal <= 199))),
@@ -5096,6 +5133,20 @@ CREATE TABLE library.vndb_import (
     CONSTRAINT vndb_import_rows_check CHECK (((jsonb_typeof(rows) = 'array'::text) AND (jsonb_array_length(rows) <= 5000) AND (octet_length((rows)::text) <= 16777216))),
     CONSTRAINT vndb_import_state_check CHECK ((state = ANY (ARRAY['active'::text, 'cancelled'::text]))),
     CONSTRAINT vndb_import_xml_check CHECK ((octet_length(xml) <= 2097152))
+);
+
+
+--
+-- Name: vndb_import_row; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.vndb_import_row (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT vndb_import_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 4999)))
 );
 
 
@@ -6458,6 +6509,14 @@ ALTER TABLE ONLY library.vndb_label_adoption
 
 
 --
+-- Name: vndb_import_row vndb_import_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_import_row
+    ADD CONSTRAINT vndb_import_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
 -- Name: vndb_label_adoption_item vndb_label_adoption_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7061,6 +7120,13 @@ CREATE INDEX entry_source_observation_owner ON library.entry_source_observation 
 
 
 --
+-- Name: library_export_anilist_header; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_anilist_header ON library.list_import_anilist USING btree (route, account_id, import_id) WHERE (ordinal = '-1'::integer);
+
+
+--
 -- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -7306,10 +7372,24 @@ CREATE INDEX library_export_copy_seek ON library.copy USING btree (route, accoun
 
 
 --
+-- Name: library_export_mal_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_mal_expiry ON library.list_import_mal USING btree (route, account_id, expires_at);
+
+
+--
 -- Name: library_export_unit_seek; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX library_export_unit_seek ON library.progress_unit USING btree (route, session_id, unit_id COLLATE "C");
+
+
+--
+-- Name: library_export_vndb_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_vndb_expiry ON library.vndb_import USING btree (route, account_id, expires_at);
 
 
 --
@@ -8055,10 +8135,31 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.co
 
 
 --
+-- Name: list_import_anilist export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_anilist FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: list_import_mal export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
 --
 
 CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: vndb_import export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.vndb_import FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: vndb_import_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.vndb_import_row FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
 --
@@ -8094,6 +8195,13 @@ CREATE TRIGGER identity_scope_effect_immutable BEFORE DELETE OR UPDATE ON librar
 --
 
 CREATE TRIGGER identity_scope_seal_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_seal FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
+-- Name: vndb_import index_parsed_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER index_parsed_rows AFTER INSERT OR UPDATE OF rows ON library.vndb_import FOR EACH ROW EXECUTE FUNCTION library.index_vndb_import_rows();
 
 
 --
@@ -9087,6 +9195,14 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: vndb_import_row vndb_import_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_import_row
+    ADD CONSTRAINT vndb_import_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
 
 
 --
