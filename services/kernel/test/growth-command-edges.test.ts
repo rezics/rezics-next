@@ -195,7 +195,12 @@ for (const principalKind of ['account', 'anonymous'] as const) {
           await seed(database, population, { from: previous * 512, to: scale * 512 });
         },
         operation: async () => {
-          const options = { ...identity, partition, authorization, receipt: { kind, key: crypto.randomUUID(), digest } };
+          const options = {
+            ...identity,
+            partition,
+            authorization,
+            receipt: { kind, key: crypto.randomUUID(), digest },
+          };
           await expect(
             runCommand(db.pool, options, async (tx) => {
               await tx.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [partition]);
