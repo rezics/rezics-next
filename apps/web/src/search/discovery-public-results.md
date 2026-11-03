@@ -7,11 +7,11 @@ separate results in native order.
 
 The current public row shapes are intentionally small:
 
-| Native key | Current supplied summary | Canonical destination |
-| --- | --- | --- |
-| `library / collection` | `id`, `title`, nullable `description` | `/{locale}/collections/{id}` |
-| `content / review` | thread `id`, `kind: review`, nullable `title`, optional current author, excerpt and reviewed Subject | `/{locale}/threads/{id}/{title-slug}` (the ID route uses `thread` when the title is absent) |
-| `community / space` | `id`, `title`, current `address`, optional summary and Realm title | `/{locale}/spaces/{address}` |
+| Native key             | Current supplied summary                                                                             | Canonical destination                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `library / collection` | `id`, `title`, nullable `description`                                                                | `/{locale}/collections/{id}`                                                                |
+| `content / review`     | thread `id`, `kind: review`, nullable `title`, optional current author, excerpt and reviewed Subject | `/{locale}/threads/{id}/{title-slug}` (the ID route uses `thread` when the title is absent) |
+| `community / space`    | `id`, `title`, current `address`, optional summary and Realm title                                   | `/{locale}/spaces/{address}`                                                                |
 
 Decision: Search UI uses `library/collection`, `content/review`, and the pending `community/space` source tags, and
 derives canonical local links from the admitted full key and current owner summary; absent optional text stays absent.

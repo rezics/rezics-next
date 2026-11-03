@@ -2,11 +2,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
-import {
-  discoveryCollectionHref,
-  discoveryReviewHref,
-  discoverySpaceHref,
-} from './discovery-public-links';
+import { discoveryCollectionHref, discoveryReviewHref, discoverySpaceHref } from './discovery-public-links';
 import type { PublicCollectionSummary, PublicDiscoveryHit, PublicReviewSummary, PublicSpaceSummary } from './discovery';
 
 function options(locale: string) {
@@ -69,7 +65,14 @@ function ReviewRow({
       title={reviewTitle(summary.title, locale)}
       href={discoveryReviewHref(id, summary.title, locale)}
       context={context}
-      metadata={authorName ? <span>{authorName}{authorHandle ? ` ${authorHandle}` : ''}</span> : undefined}
+      metadata={
+        authorName ? (
+          <span>
+            {authorName}
+            {authorHandle ? ` ${authorHandle}` : ''}
+          </span>
+        ) : undefined
+      }
       preview={summary.excerpt ? <p className="line-clamp-3 break-words">{summary.excerpt}</p> : undefined}
     />
   );

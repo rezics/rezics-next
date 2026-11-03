@@ -3,7 +3,13 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { DiscoveryResults } from '../src/search/discovery-results';
-import { discoveryKey, parseDiscoveryPage, readDiscovery, type DiscoveryPage, type DiscoveryRequest } from '../src/search/discovery';
+import {
+  discoveryKey,
+  parseDiscoveryPage,
+  readDiscovery,
+  type DiscoveryPage,
+  type DiscoveryRequest,
+} from '../src/search/discovery';
 
 const request: DiscoveryRequest = { representation: 'discovery-v1', text: 'Mira', limit: 100, languages: ['en'] };
 
@@ -48,7 +54,12 @@ function mixedPage(): DiscoveryPage {
     },
   );
   page.kinds.values.push(
-    { id: 'collection', labels: { en: 'Collection' }, icon: 'collection', count: { kind: 'collection', value: 8, exact: true } },
+    {
+      id: 'collection',
+      labels: { en: 'Collection' },
+      icon: 'collection',
+      count: { kind: 'collection', value: 8, exact: true },
+    },
     { id: 'review', labels: { en: 'Review' }, icon: 'review', count: { kind: 'review', value: 12, exact: false } },
     { id: 'space', labels: { en: 'Space' }, icon: 'space', count: { kind: 'space', unavailable: true } },
   );
@@ -90,11 +101,35 @@ test('unknown kinds, owner or summary mismatches, malformed pages and missing hy
   const collection = page.hits.find((hit) => hit.summary.kind === 'collection');
   if (!collection || collection.summary.kind !== 'collection') throw new Error('Expected a Collection hit');
   const invalidPages: unknown[] = [
-    { ...page, hits: [...page.hits.slice(0, 4), { ...collection, summary: { kind: 'future-kind', value: {} } }, ...page.hits.slice(5)] },
-    { ...page, hits: [...page.hits.slice(0, 4), { ...collection, key: { ...collection.key, owner: 'content' } }, ...page.hits.slice(5)] },
+    {
+      ...page,
+      hits: [
+        ...page.hits.slice(0, 4),
+        { ...collection, summary: { kind: 'future-kind', value: {} } },
+        ...page.hits.slice(5),
+      ],
+    },
+    {
+      ...page,
+      hits: [
+        ...page.hits.slice(0, 4),
+        { ...collection, key: { ...collection.key, owner: 'content' } },
+        ...page.hits.slice(5),
+      ],
+    },
     { hits: 'not-a-page', kinds: page.kinds, next: page.next, as_of: page.as_of },
     { ...page, hits: [...page.hits.slice(0, 4), { ...collection, summary: null }, ...page.hits.slice(5)] },
-    { ...page, hits: [...page.hits.slice(0, 4), { ...collection, summary: { ...collection.summary, value: { ...collection.summary.value, rule: { private: true } } } }, ...page.hits.slice(5)] },
+    {
+      ...page,
+      hits: [
+        ...page.hits.slice(0, 4),
+        {
+          ...collection,
+          summary: { ...collection.summary, value: { ...collection.summary.value, rule: { private: true } } },
+        },
+        ...page.hits.slice(5),
+      ],
+    },
   ];
   for (const malformed of invalidPages) {
     expect(parseDiscoveryPage(malformed)).toBeUndefined();
