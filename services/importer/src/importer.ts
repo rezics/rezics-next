@@ -186,7 +186,8 @@ function classificationDeliveryHead(
   confirmed: ClassificationConfirmation,
 ): RetainedClassificationHead | null {
   if (intended.kind === 'clear') return confirmed.state === 'absent' ? headFromClassification(intended) : null;
-  if (confirmed.state !== 'available' || confirmed.head?.digest !== classificationOperationDigest(intended)) return null;
+  if (confirmed.state !== 'available' || confirmed.head?.digest !== classificationOperationDigest(intended))
+    return null;
   return confirmed.head;
 }
 
@@ -1531,16 +1532,7 @@ export class Importer {
         throw new ClassificationConflictError(existing.operationId, 'cas-mismatch');
       }
       const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
-      this.acknowledgeClassification(
-        run,
-        owner,
-        subjectId,
-        existing.operationId,
-        intended,
-        confirmed,
-        signal,
-        true,
-      );
+      this.acknowledgeClassification(run, owner, subjectId, existing.operationId, intended, confirmed, signal, true);
       return true;
     }
     if (existing?.status === 'conflict' || existing?.status === 'refused') {

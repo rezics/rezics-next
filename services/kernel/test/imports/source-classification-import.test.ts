@@ -53,7 +53,10 @@ function resultFor(request: BatchWriteRequest, subjectId: string): BatchWriteRes
 }
 
 async function associationForFixture() {
-  const targetId = await fixture.createSubject({ type: 'skos:Concept', labels: { en: 'Authored classification target' } });
+  const targetId = await fixture.createSubject({
+    type: 'skos:Concept',
+    labels: { en: 'Authored classification target' },
+  });
   const subjectId = await fixture.createSubject({
     type: 'schema:Book',
     labels: { en: 'Authored classification subject' },
@@ -100,7 +103,9 @@ test('admitted classification uses the mounted client, retains provenance separa
   const directory = await mkdtemp(join(temporaryRoot, 'classification-import-'));
   const ballotCounts = async () => {
     const votes = await fixture.database.admin.query('SELECT count(*)::text AS n FROM rating.vote');
-    const ballots = await fixture.database.admin.query('SELECT count(*)::text AS n FROM rating.classification_ballot_actor');
+    const ballots = await fixture.database.admin.query(
+      'SELECT count(*)::text AS n FROM rating.classification_ballot_actor',
+    );
     return [votes[0]?.n, ballots[0]?.n];
   };
   const ballotsBefore = await ballotCounts();
@@ -166,7 +171,10 @@ test('admitted classification uses the mounted client, retains provenance separa
     expect(putRequests[1]).toEqual(putRequests[0]);
     expect(JSON.parse(putRequests[0]!.body)).toMatchObject({ expectedObservation: null });
 
-    const read = await client.readSourceClassifications({ subjectId: association.subjectId, associations: [association] });
+    const read = await client.readSourceClassifications({
+      subjectId: association.subjectId,
+      associations: [association],
+    });
     expect(read[0]).toMatchObject({
       state: 'available',
       value: {
@@ -186,7 +194,10 @@ test('admitted classification uses the mounted client, retains provenance separa
     const resolved = await importer.resolveClassification('vndb', pending.operationId, pending.reviewedHead!.digest);
     expect(resolved.status).toBe('delivered');
     expect(importer.classificationDetail('vndb', pending.operationId)!.intended).toEqual(original);
-    const current = await client.readSourceClassifications({ subjectId: association.subjectId, associations: [association] });
+    const current = await client.readSourceClassifications({
+      subjectId: association.subjectId,
+      associations: [association],
+    });
     expect(current[0]).toMatchObject({
       state: 'available',
       value: { confidence: { state: 'available', value: 1.2 }, sourceRecordId: 'v123' },
