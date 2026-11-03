@@ -36,7 +36,7 @@ const errors = {
 };
 const response = <T>() => ({ 200: t.Unsafe<T>(t.Any()), ...errors });
 const detail = (operation: string, write = true) => ({
-  operationId: `library_vndb.labels.${operation}`,
+  operationId: `library_vndb_labels.${operation}`,
   'x-action': 'library_entry:update',
   'x-exposure': 'gate:personal_library',
   'x-authority-anchor': 'own-account',

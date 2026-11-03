@@ -199,7 +199,7 @@ export function malImportRoutes(
           200: t.Object({ id, reviewToken: t.String({ minLength: 1, maxLength: 128 }) }, closed),
           ...failures,
         },
-        detail: { ...detail('metadata.review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_review'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
@@ -264,7 +264,7 @@ export function malImportRoutes(
           200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createMalImport>['applyMetadata']>>>(t.Any()),
           ...failures,
         },
-        detail: { ...detail('metadata.apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        detail: { ...detail('metadata_apply'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
         safe(async () => {
