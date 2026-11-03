@@ -60,8 +60,7 @@ async function mount(navigation = false, state: Parameters<typeof ContinueExampl
   cache.setQueryData(['session'], { state: 'signed-in', subject: 'mira', csrfToken: 'story-csrf-token-1234567890' });
   const router = createRouter({
     routeTree: createRootRoute({
-      component: () =>
-        createElement(AppShell, null, createElement(ContinueExample, { state, navigation })),
+      component: () => createElement(AppShell, null, createElement(ContinueExample, { state, navigation })),
     }),
     history: createMemoryHistory({ initialEntries: ['/en/library/continue'] }),
   });
