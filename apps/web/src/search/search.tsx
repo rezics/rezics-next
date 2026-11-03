@@ -416,7 +416,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
                 text: data.query,
                 ...(body?.filter ? { filter: body.filter } : {}),
                 ...(data.resourceScope ? { scope: data.resourceScope } : {}),
-                ratingPopulation: data.ratingPopulation,
+                ...(data.ratingPopulation ? { ratingPopulation: data.ratingPopulation } : {}),
                 sort: data.sort ?? 'relevance',
                 mode: searchRequiresCurrentReader(data) ? 'personal' : 'public-anonymous',
               }),

@@ -111,7 +111,7 @@ function ConstructedRatingOutcome({ readiness }: { readiness: RealmRatingReadine
     ...searchUnavailablePage(state),
     recovery: { status: 'ready' as const },
     discovery: { status: 'ready' as const, page: discoveryExample },
-    ratingPopulation: state.ratingPopulation,
+    ...(state.ratingPopulation ? { ratingPopulation: state.ratingPopulation } : {}),
     ratingReadiness: readiness,
   };
   return (
