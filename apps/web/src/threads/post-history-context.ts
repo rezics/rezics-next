@@ -103,7 +103,8 @@ export function historyContextMatches(
     scores.add(item.revisionId);
     if (
       item.state === 'available' &&
-      (item.citation.questionId !== revision.voteCitation?.questionId ||
+      (!revision.voteCitation ||
+        item.citation.questionId !== revision.voteCitation.questionId ||
         item.citation.revision !== revision.voteCitation.revision ||
         item.citation.units !== revision.voteCitation.units ||
         item.question.id !== item.citation.questionId)
