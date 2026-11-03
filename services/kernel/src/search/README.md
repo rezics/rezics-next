@@ -1513,6 +1513,9 @@ writer is introduced by this orchestration.
 
 ## Producer integrity and remaining native delivery
 
+The mixed public index lifecycle and second-scope producer readiness contract live in
+[discovery-index.md](discovery-index.md).
+
 [Identity writer custody](identity-epoch-participant.md) documents the native ordinary-writer enrollment installed
 by the runner, its structural close, generation-publication barrier and bounded copy/recovery exports, and the exact remaining
 owner support/receiving dependency. The fixed

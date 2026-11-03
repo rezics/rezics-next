@@ -358,6 +358,58 @@ export async function rebuildSubjects(options: {
 
 export type DiscoveryGeneration = DiscoveryTarget & { state: string; kinds: string[] };
 
+/** Required public metadata kinds for a complete second-scope discovery generation. */
+export const SECOND_SCOPE_PUBLIC_METADATA_KINDS = Object.freeze(['collection', 'review', 'space'] as const);
+
+export type DiscoveryProducerRegistration = Readonly<{ kind: string; owner: string }>;
+
+/** A candidate cannot be populated or published from an incomplete native producer set. */
+export class DiscoveryProducerCoverageError extends Error {
+  readonly missingKinds: readonly string[];
+  readonly unsupportedKinds: readonly string[];
+  readonly duplicateKinds: readonly string[];
+
+  constructor(input: {
+    missingKinds: readonly string[];
+    unsupportedKinds: readonly string[];
+    duplicateKinds: readonly string[];
+  }) {
+    const details = [
+      ...(input.missingKinds.length ? [`missing kinds: ${input.missingKinds.join(', ')}`] : []),
+      ...(input.unsupportedKinds.length ? [`unsupported kinds: ${input.unsupportedKinds.join(', ')}`] : []),
+      ...(input.duplicateKinds.length ? [`duplicate kinds: ${input.duplicateKinds.join(', ')}`] : []),
+    ];
+    const message = 'Discovery generation is not ready: native producer coverage is incomplete';
+    super(details.length ? `${message} (${details.join('; ')})` : message);
+    this.name = 'DiscoveryProducerCoverageError';
+    this.missingKinds = input.missingKinds;
+    this.unsupportedKinds = input.unsupportedKinds;
+    this.duplicateKinds = input.duplicateKinds;
+  }
+}
+
+/** Validate readiness before allocation can create a physical target or population rows. */
+export function assertDiscoveryProducerCoverage(
+  registrations: readonly DiscoveryProducerRegistration[],
+  requiredKinds: readonly string[] = [],
+): void {
+  const owners = new Map<string, string>();
+  const duplicates = new Set<string>();
+  for (const { kind, owner } of registrations) {
+    if (!kind || !owner) throw new TypeError('Discovery producer registrations require a kind and owner');
+    if (owners.has(kind)) duplicates.add(kind);
+    else owners.set(kind, owner);
+  }
+  const missingKinds = [...new Set(requiredKinds)].filter((kind) => !owners.has(kind)).sort();
+  const unsupportedKinds = [...owners]
+    .filter(([, owner]) => owner !== 'accounts' && owner !== 'semantic')
+    .map(([kind]) => kind)
+    .sort();
+  const duplicateKinds = [...duplicates].sort();
+  if (missingKinds.length || unsupportedKinds.length || duplicateKinds.length)
+    throw new DiscoveryProducerCoverageError({ missingKinds, unsupportedKinds, duplicateKinds });
+}
+
 const DISCOVERY_LIVE_LIMIT = MAX_SUBJECT_GENERATIONS + 1;
 const LIVE_QUOTA_STATES = new Set(['active', 'retiring', 'quarantined']);
 
@@ -381,7 +433,13 @@ export async function discoveryGenerations(pool: Pool, prefix: string): Promise<
 }
 
 /** Short allocation transaction registers replay before any native population observation. */
-export async function allocateDiscovery(pool: Pool, prefix: string, registry: DiscoveryRegistry): Promise<void> {
+export async function allocateDiscovery(
+  pool: Pool,
+  prefix: string,
+  registry: DiscoveryRegistry,
+  requiredKinds: readonly string[] = [],
+): Promise<void> {
+  assertDiscoveryProducerCoverage(registry.entries, requiredKinds);
   discoveryAlias(prefix);
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
@@ -648,8 +706,10 @@ export async function advanceDiscovery(options: {
   prefix: string;
   registry: DiscoveryRegistry;
   listing: SubjectListingSource;
+  requiredKinds?: readonly string[];
 }): Promise<void> {
   const { pool, search, prefix, registry } = options;
+  assertDiscoveryProducerCoverage(registry.entries, options.requiredKinds ?? []);
   let generations = await discoveryGenerations(pool, prefix);
   const kinds = registry.entries.map(({ kind }) => kind).sort();
   if (
@@ -657,7 +717,7 @@ export async function advanceDiscovery(options: {
     (generations.every((row) => ['active', 'retiring', 'quarantined'].includes(row.state)) &&
       generations.some((row) => row.state === 'active' && !isDeepStrictEqual(row.kinds, kinds)))
   ) {
-    await allocateDiscovery(pool, prefix, registry);
+    await allocateDiscovery(pool, prefix, registry, options.requiredKinds ?? []);
     generations = await discoveryGenerations(pool, prefix);
   }
   const target = generations.find((row) => !['active', 'retiring', 'quarantined'].includes(row.state));
@@ -828,15 +888,17 @@ export async function rebuildDiscovery(options: {
   listing: SubjectListingSource;
   prefix: string;
   routeKey: Uint8Array;
+  requiredKinds?: readonly string[];
 }) {
   const registry = await nativeDiscoveryRegistry(options.pool, options.routeKey, options.source);
   const previous =
     (await discoveryGenerations(options.pool, options.prefix)).find((row) => row.state === 'active')?.generation ??
     null;
-  await allocateDiscovery(options.pool, options.prefix, registry);
+  const requiredKinds = options.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS;
+  await allocateDiscovery(options.pool, options.prefix, registry, requiredKinds);
   const generation = (await discoveryGenerations(options.pool, options.prefix)).at(-1)?.generation;
   if (generation === undefined) throw new Error('Discovery allocation is absent');
-  const runner = startDiscoveryIndexing(options),
+  const runner = startDiscoveryIndexing({ ...options, requiredKinds }),
     deadline = Date.now() + 3_600_000;
   try {
     for (;;) {

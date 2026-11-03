@@ -6,7 +6,14 @@ import {
   registerRetiredErasure,
   copyLocator,
 } from './account-discovery.ts';
-import { advanceDiscovery, discoveryGenerations, discoveryConsumer, type DiscoveryGeneration } from './generations.ts';
+import {
+  advanceDiscovery,
+  discoveryGenerations,
+  discoveryConsumer,
+  DiscoveryProducerCoverageError,
+  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+  type DiscoveryGeneration,
+} from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
@@ -41,7 +48,7 @@ export async function startSearchIndexing(options: {
   discoverMs?: number;
   concurrency?: number;
   retireAfterMs?: number;
-  discovery?: { routeKey: Uint8Array };
+  discovery?: { routeKey: Uint8Array; requiredKinds?: readonly string[] };
   publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
@@ -50,7 +57,11 @@ export async function startSearchIndexing(options: {
   if (!Number.isFinite(retireAfterMs) || retireAfterMs < 0)
     throw new RangeError('retireAfterMs must be a non-negative finite number');
   const mixed = options.discovery
-    ? startDiscoveryIndexing({ ...options, routeKey: options.discovery.routeKey })
+    ? startDiscoveryIndexing({
+        ...options,
+        routeKey: options.discovery.routeKey,
+        requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+      })
     : undefined;
   let current: ReturnType<typeof startRelays> | undefined;
   let currentGenerations: number[] | undefined;
@@ -293,6 +304,7 @@ export function startDiscoveryIndexing(options: {
   routeKey: Uint8Array;
   intervalMs?: number;
   concurrency?: number;
+  requiredKinds?: readonly string[];
 }) {
   const relays = new Map<number, ReturnType<typeof startRelays>>();
   let stopped = false,
@@ -310,9 +322,15 @@ export function startDiscoveryIndexing(options: {
   const step = async () => {
     if (stopped || paused) return;
     const registry = await nativeDiscoveryRegistry(options.pool, options.routeKey, options.source);
-    await advanceDiscovery({ ...options, registry });
+    let readiness: DiscoveryProducerCoverageError | undefined;
+    try {
+      await advanceDiscovery({ ...options, registry, requiredKinds: options.requiredKinds ?? [] });
+    } catch (error) {
+      if (!(error instanceof DiscoveryProducerCoverageError)) throw error;
+      readiness = error;
+    }
     const generations = await discoveryGenerations(options.pool, options.prefix);
-    delay = generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
+    delay = !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
       ? 0
       : (options.intervalMs ?? 100);
     for (const target of generations) {
@@ -348,6 +366,7 @@ export function startDiscoveryIndexing(options: {
         await relay.stop();
         relays.delete(generation);
       }
+    if (readiness) throw readiness;
   };
   const refresh = () => {
     const next = running.then(step);
