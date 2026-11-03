@@ -76,21 +76,19 @@ continue to report per-item `current_conflict`/`unresolved` for Entry/label work
 A refresh cannot change an applying/acknowledged item. Those items keep their original key and canonical operands;
 accepted receipts can be retried after cancellation, while expiry/pruning never undoes native effects.
 
-The route producer declares the revised `KernelClient.libraryArchiveMerges` upload, preview, review and apply contract. Upload's declared body is
-`string | {manifest: Record<string,unknown>, records: Record<string,unknown>[]}`. Original JSON text is sent unchanged;
-ingress still preserves raw bytes and the
-strict bounded decoder alone admits the artifact. Web's canonical archive consumer8bb retains the existing
-`/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
-a handwritten client, proxy cast or alternate upload route.
+The route producer declares the installed `KernelClient.libraryArchiveMerges` upload, preview, review and apply
+contract. Upload accepts `string | {manifest: Record<string, unknown>; records: Record<string, unknown>[]}`;
+original JSON text is sent unchanged, while envelope values are serialized as JSON. Preview records and review
+results expose `reviewRevision`, and `apply.post` accepts `{items: {ordinal: number; reviewRevision: number}[]}`.
+The generated client journey test covers both upload operands and applies the exact returned review revision.
+Ingress preserves raw bytes and the strict bounded decoder alone admits the artifact. The canonical Web owner keeps
+the existing `/library/recover-archive` interface and all file/recovery ownership, without a handwritten client,
+proxy cast or alternate upload route.
 
-The retained generated upload body is `unknown`; preview records and review results omit `reviewRevision`, and
-`apply.post` still accepts `{ordinals: number[]}`. Upload text/envelope serialization and preview transport are covered
-by `packages/client/tests/library-archive-merge.test.ts`; this does not establish the complete confirmation journey.
-Decision: keep canonical Web file admission unavailable until generated declarations and the exact returned
-review-revision handoff are installed together.
-Client generation must preserve unrelated declarations, including label consolidation. Installed client delivery
-and its complete typed consumer proof continue in
-[the generated transport continuation](../.temp/continuation/archive-client-delivery.md).
+Decision: the canonical Web consumer can implement file admission through the installed generated client and must
+carry the returned review revision into apply.
+Client generation preserves unrelated declarations, including label consolidation. Broader Web adoption and
+acceptance remain with their owners.
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results

@@ -20,12 +20,7 @@ The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET
 and preview are private and no-store. The canonical archive consumer8bb owns the only archive interface; manual
 Entry and journal editing retain their existing interface owners.
 
-The retained generated client exposes `libraryArchiveMerges.post(body: unknown)` and owner `.preview.get`,
-`.review.patch`, and `.apply.post({ordinals: number[]})`. Preview records and review results currently omit the
-native `reviewRevision`; this generated surface cannot confirm personal fact recovery. The required installed
-upload operand is `string | {manifest: Record<string, unknown>; records: Record<string, unknown>[]}`, and apply
-must take `{items: {ordinal: number; reviewRevision: number}[]}` from the returned review. Canonical Web file
-admission remains unavailable until that complete generated handoff is delivered.
+The installed generated client exposes `libraryArchiveMerges.post(body: string | {manifest: Record<string, unknown>; records: Record<string, unknown>[]})` and owner `.preview.get`, `.review.patch`, and `.apply.post({items: {ordinal: number; reviewRevision: number}[]})`. Preview records and review results expose `reviewRevision`, so apply can carry the exact returned review revision. Original JSON text is sent unchanged; envelope values use the declared `{manifest, records}` shape. The canonical Web consumer can implement its existing file journey against this client without a handwritten client, proxy cast, or alternate endpoint.
 
 | Retained row  | Explicit current target                         | Selected fields           | Native operation                                |
 | ------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------- |
@@ -79,5 +74,6 @@ missing targets, per-item replay, cancellation, expiry pruning, foreign-owner de
 checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
 typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
 
-After landing, Commerce receives the exact installed review/apply methods and field outcomes. The canonical archive consumer8bb remains the
-single coordinated archive consumer; no second restoration interface is introduced.
+Decision: the generated client is ready for the canonical Web archive consumer, which retains the only file and recovery interface and applies each selected row with its returned review revision.
+
+The canonical archive consumer8bb remains the single coordinated archive consumer; no second restoration interface is introduced.
