@@ -362,11 +362,7 @@ function SubjectTermsPageLive({
   const resolving = stale && comparison?.state === 'ready' && !!resolution;
   const resolved = useMemo(() => {
     if (!resolving || comparison?.state !== 'ready' || !resolution) return;
-    const changes = partitionTermChanges(
-      resolution.original.subject,
-      comparison.snapshot.subject,
-      resolution.intent,
-    );
+    const changes = partitionTermChanges(resolution.original.subject, comparison.snapshot.subject, resolution.intent);
     const applied = applyTermResolutions(changes, comparison.snapshot.subject, choices, replacements);
     return {
       changes,

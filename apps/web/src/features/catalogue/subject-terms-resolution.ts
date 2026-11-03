@@ -1,12 +1,5 @@
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
-import {
-  patchedTerms,
-  termFields,
-  type TermEdit,
-  type TermField,
-  type Terms,
-  type TermsPatch,
-} from './subject-terms';
+import { patchedTerms, termFields, type TermEdit, type TermField, type Terms, type TermsPatch } from './subject-terms';
 
 export type TermPresence = { present: false } | { present: true; value: string | readonly string[] };
 export type ResolutionKind = 'current' | 'draft' | 'replacement';
@@ -47,8 +40,7 @@ export function intentPresence(original: Terms, intent: TermsPatch, field: TermF
   const map = intent[field];
   if (!map || !Object.hasOwn(map, language)) return termPresence(original, field, language);
   const value = map[language];
-  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0))
-    return { present: false };
+  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) return { present: false };
   return { present: true, value };
 }
 
