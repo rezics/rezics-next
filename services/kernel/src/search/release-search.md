@@ -145,3 +145,21 @@ replayed lookahead and empty seeks, and revalidates all pools before returning. 
 another seek to prove EOF. These internal candidate keys establish neither matching, grouping nor disclosure.
 Group and child classification, whole-filter hydration, card serialization, final authority reservations and the
 complete native growth measurements still need installation; this traversal supplies no whole-page work bound.
+
+Decision: a current CreativeWork that also admits release operands can independently supply a work candidate and
+an ungroupable release candidate; neither role establishes a matching child.
+
+`release-search-native-stream.ts` connects the all-pool name frontier to current Subject snapshots and the complete
+native `schema:exampleOfWork` reader. Group candidates retain canonical name order; child candidates have independent
+per-work progress. Both advance past rejected names and require native EOF. A split pair replays its current name
+and complete ownership evidence before returning the second candidate, without a growing seen set. Sampled facts
+never determine ownership. Missing complete-reader support or missing evidence makes the operation unavailable;
+explicit incomplete evidence remains unproven, and concealed targets retain the owner's identity-free unknown value.
+
+Its retained cut includes a required full-authority observer in addition to every pool's canonical-name population.
+Current snapshot positions and security revisions must agree with their name homes. Release, physical generation
+and all source authority cuts participate in private stream bindings and before/after validation, including empty
+pools. This observer is a native integration seam, not an implementation of final disclosure. Dispatch reservations
+cover current snapshots, complete work-link calls and all-pool authority observations; they do not account for the
+complete reader's internal work or claim a whole-page bound. Relevance, current matching/card hydration, HTTP and
+page installation, native reservations for the complete plan and deferred measurements remain to be implemented.
