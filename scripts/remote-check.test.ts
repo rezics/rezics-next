@@ -6903,6 +6903,94 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   );
 });
 
+test('preparation evicts source and native artifacts by last use within the host byte budget, preserving held locks', async () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const entries = ['a', 'b', 'c'].map((key, index) => join(cache, ...(index === 1 ? ['native'] : []), key.repeat(64)));
+  for (const [index, entry] of entries.entries()) {
+    mkdirSync(entry, { recursive: true });
+    writeFileSync(join(entry, 'old-artifact'), Buffer.alloc(96 * 1024));
+    utimesSync(entry, index + 1, index + 1);
+  }
+  const holder = Bun.spawn(['flock', entries[0] + '.lock', 'sh', '-c', 'echo LOCKED; cat'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  try {
+    await waitForOutput(holder, 'LOCKED\n');
+    const program = dependencyPreparationProgram.replace(
+      'def install():',
+      "shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 3000000})()\ndef install():",
+    );
+    const run = fixture.create({ program });
+    const result = run.execute();
+    expect(result.status, result.stderr).toBe(0);
+    expect(entries.map((entry) => existsSync(entry))).toEqual([true, false, true]);
+    expect(result.stderr).toContain('dependency artifacts evicted ' + entries[1]);
+    const sizes = [...result.stderr.matchAll(/cache bytes=(\d+) bound=(\d+)/g)];
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const [, bytes, bound] of sizes) {
+      expect(Number(bound)).toBe(300_000);
+      expect(Number(bytes)).toBeLessThanOrEqual(Number(bound));
+    }
+    const entry = join(cache, run.artifacts().key);
+    utimesSync(entry, 1, 1);
+    const warm = fixture.create({ program });
+    expect(warm.execute().status).toBe(0);
+    expect(warm.artifacts().cache).toBe('hit');
+    expect(statSync(entry).mtimeMs).toBeGreaterThan(1_000);
+    const native = join(
+      cache,
+      'native',
+      readdirSync(join(cache, 'native')).find((name) => !name.endsWith('.lock'))!,
+    );
+    utimesSync(native, 1, 1);
+    const edited = fixture.create({ program, source: 'changed source' });
+    expect(edited.execute().status).toBe(0);
+    expect(edited.artifacts().nativeCache).toBe('hit');
+    expect(statSync(native).mtimeMs).toBeGreaterThan(1_000);
+    const tiny = fixture.create({
+      program: program.replace("'total': 3000000, 'free': 3000000", "'total': 10, 'free': 10"),
+      source: 'entry larger than the byte bound',
+    });
+    const tinyResult = tiny.execute();
+    expect(tinyResult.status, tinyResult.stderr).toBe(0);
+    expect(existsSync(join(cache, tiny.artifacts().key))).toBe(false);
+    expect(existsSync(entries[0]!)).toBe(true);
+  } finally {
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+  }
+});
+
+for (const failures of [1, 2]) {
+  test(`full-disk publication evicts and retries once, then ${failures === 1 ? 'publishes' : 'skips caching without failing the command'}`, () => {
+    const fixture = preparationFixture();
+    const cache = join(fixture.directory, 'dependency-artifacts');
+    const old = join(cache, 'd'.repeat(64));
+    mkdirSync(old, { recursive: true });
+    writeFileSync(join(old, 'old-artifact'), 'old bytes');
+    const program = dependencyPreparationProgram.replace(
+      "            copy_entries(root, stage / 'payload', manifest['entries'])",
+      `            shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 0 if attempt < ${failures} else 3000000})()
+            if attempt < ${failures}:
+                (stage / 'partial').write_text('partial publication')
+                raise OSError(errno.ENOSPC, 'No space left on device')
+            copy_entries(root, stage / 'payload', manifest['entries'])`,
+    );
+    const run = fixture.create({ program });
+    const result = run.execute();
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(join(cache, run.artifacts().key))).toBe(failures === 1);
+    expect(result.stderr.match(/evicting before one retry/g)).toHaveLength(2);
+    expect(result.stderr.match(/publication skipped after ENOSPC retry/g) ?? []).toHaveLength(failures === 2 ? 2 : 0);
+    expect(readdirSync(join(run.run, '.temp/check-host')).filter((name) => name.startsWith('artifacts-'))).toEqual([]);
+  });
+}
+
 test('native preparation invalidates changed package version, lock, platform, runtime revision and corrupt or partial artifacts', () => {
   const fixture = preparationFixture();
   const first = fixture.create();
