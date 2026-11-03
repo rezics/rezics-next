@@ -34,8 +34,17 @@ const queries = {
     ORDER BY c.collection_id LIMIT 16`,
   collectionPins: `SELECT account_id::text AS key,collection_ids,revision::text FROM library.collection_pins
     WHERE route=$1 AND account_id=$2 AND account_id>$3::uuid ORDER BY account_id LIMIT 1`,
+  bangumiUploads: `SELECT upload_id::text AS key,upload_id,cancelled FROM library.bangumi_upload
+    WHERE route=$1 AND account_id=$2 AND upload_id>$3::uuid ORDER BY upload_id LIMIT 16`,
+  bangumiEvidence: `SELECT upload_id::text||'/'||ordinal::text AS key,upload_id,ordinal,evidence
+    FROM library.bangumi_upload_row WHERE route=$1 AND account_id=$2
+      AND (upload_id,ordinal)>(split_part($3,'/',1)::uuid,split_part($3,'/',2)::integer)
+    ORDER BY upload_id,ordinal LIMIT 16`,
+  malImports: `SELECT id::text AS key,id AS upload_id,(document->>'canceled')::boolean AS cancelled,expires_at::text
+    FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
+      AND id>$3::uuid ORDER BY id LIMIT 16`,
 } as const;
-export const exportSections = [...Object.keys(queries), 'units', 'history', 'occurrences'] as const;
+export const exportSections = [...Object.keys(queries), 'units', 'history', 'occurrences', 'malEvidence'] as const;
 export type ExportRecord = Record<string, unknown>;
 export type ExportSeek = {
   section: number;
@@ -75,23 +84,40 @@ export async function readExportSourcePage(
   route: number,
   accountId: string,
   input: ExportSeek,
+  capturedAt: string,
 ): Promise<ExportSourcePage> {
   const seek = { ...input };
   const section = exportSections[seek.section]!;
   let rows: Awaited<ReturnType<typeof bounded>>;
   if (seek.section < Object.keys(queries).length) {
     const sql = queries[section as keyof typeof queries];
-    const after = seek.after || (section === 'assignments' ? `${ZERO}/${ZERO}` : ZERO);
-    rows = await bounded(client, sql, [route, accountId, after]);
+    const after =
+      seek.after ||
+      (section === 'assignments' ? `${ZERO}/${ZERO}` : section === 'bangumiEvidence' ? `${ZERO}/-1` : ZERO);
+    rows = await bounded(
+      client,
+      sql,
+      section === 'malImports' ? [route, accountId, after, capturedAt] : [route, accountId, after],
+    );
   } else {
     const occurrences = section === 'occurrences';
+    const mal = section === 'malEvidence';
     if (!seek.parent) {
-      const sql = occurrences
-        ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
+      const sql = mal
+        ? `SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+             AND expires_at>$4::timestamptz AND id>$3::uuid ORDER BY id LIMIT 1`
+        : occurrences
+          ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
              AND state='active' AND membership_kind='curated' AND collection_id>$3::uuid ORDER BY collection_id LIMIT 1`
-        : `SELECT session_id AS id FROM library.progress_session WHERE route=$1 AND account_id=$2
+          : `SELECT session_id AS id FROM library.progress_session WHERE route=$1 AND account_id=$2
              AND session_id>$3::uuid ORDER BY session_id LIMIT 1`;
-      seek.parent = (await client.query<{ id: string }>(sql, [route, accountId, seek.after || ZERO])).rows[0]?.id ?? '';
+      seek.parent =
+        (
+          await client.query<{ id: string }>(
+            sql,
+            mal ? [route, accountId, seek.after || ZERO, capturedAt] : [route, accountId, seek.after || ZERO],
+          )
+        ).rows[0]?.id ?? '';
       seek.after = '';
       if (!seek.parent) {
         seek.section++;
@@ -103,8 +129,12 @@ export async function readExportSourcePage(
         };
       }
     }
-    const sql =
-      section === 'units'
+    const sql = mal
+      ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
+           FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
+             least(jsonb_array_length(document->'rows')-1,$3::integer+16)) i
+           WHERE route=$1 AND id=$2 AND account_id=$4 ORDER BY i LIMIT 16`
+      : section === 'units'
         ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
            WHERE route=$1 AND session_id=$2 AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT 16`
         : section === 'history'
@@ -117,7 +147,8 @@ export async function readExportSourcePage(
     rows = await bounded(client, sql, [
       route,
       seek.parent,
-      seek.after || (section === 'history' ? '0' : occurrences ? ZERO : ''),
+      seek.after || (mal ? '-1' : section === 'history' ? '0' : occurrences ? ZERO : ''),
+      ...(mal ? [accountId] : []),
     ]);
   }
   const records: ExportRecord[] = [];
@@ -129,6 +160,7 @@ export async function readExportSourcePage(
       break;
     }
     const { key, ...data } = row.value;
+    if (section === 'malEvidence') data.evidence = publicEvidence(data.evidence);
     for (const field of ['subject_id', 'requested_subject_id', 'version_subject_id']) {
       const value = data[field];
       if (typeof value === 'string')
@@ -165,4 +197,20 @@ export async function readExportSourcePage(
     done: seek.section === exportSections.length,
     oversized,
   };
+}
+
+/** Unknown inert source fields survive, except credential/capability-shaped keys and field descriptors. */
+function publicEvidence(value: unknown): unknown {
+  const privateKey = /token|password|authorization|credential|secret|capability/i;
+  if (Array.isArray(value))
+    return value
+      .filter((v) => !(v && typeof v === 'object' && 'field' in v && privateKey.test(String(v.field))))
+      .map(publicEvidence);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !privateKey.test(key))
+        .map(([key, v]) => [key, publicEvidence(v)]),
+    );
+  return value;
 }

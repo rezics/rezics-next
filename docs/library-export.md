@@ -2,7 +2,8 @@
 
 The authenticated native API exports current owner facts independently of public Collection ItemList export.
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
-requires a new request identity, including after a completed stream or a failed local download.
+requires a new request identity, including after a completed stream or a failed local download. Installed import
+evidence joins this fence; expiring MAL evidence makes the original capture stale.
 
 ## Mounted methods and Web handoff
 
@@ -49,6 +50,9 @@ current metadata visibility, provider identity or entitlement. No subject metada
 | collectionPins | Owner `collection_ids` ordering and revision; references do not disclose referenced Collections                                                                                                                       |
 | occurrences    | Own curated live `member_id`, parent/subject IDs, note, `ordinal_key`, member revision and `added_at`; duplicates retain independent identity and order                                                               |
 
+| bangumiUploads / bangumiEvidence | Owner upload identity/cancellation and original ordinal/evidence, including stored provider IDs and field meanings; no reviews, choice tokens or apply internals |
+| malImports / malEvidence | Unexpired owner upload identity/cancellation/expiry and indexed parsed source rows, including original provider IDs, dates/precision and unknown vocabulary; credential-shaped fields excluded |
+
 A pin retains provenance, immutable release digest, accepting Type and profile ID exactly as stored. Unknown old
 vocabulary stays readable as raw text plus its stored pin, including null pins; no current meaning is guessed.
 Decimals and bigint revisions are decimal strings. Native integer revisions/counts remain numbers. SQL dates are
@@ -60,9 +64,9 @@ regardless of any Collection visibility field.
 
 ## Coverage and bounded continuation
 
-Installed native owner tables supply these sections. The manifest explicitly marks personal import source evidence
-and provider identifiers unavailable: this base has no owner Library import-evidence/identifier store. It does not
-scan shared provider custody or invent identifiers. No successful absent-source section or fabricated zero count
+Installed native owner tables supply these sections, including retained Bangumi and unexpired MAL row evidence.
+Raw MAL XML/envelope metadata and review/apply internals are excluded; credential/capability-shaped field keys are
+removed. Other import stores are unavailable; no shared provider custody is scanned and no identifier is invented. No successful absent-source section or fabricated zero count
 is emitted. `ready` means all supported native sections were exhausted, never a completed full account export.
 Trash, published/working output, credentials, Access capabilities, secrets, other accounts and Commerce order or
 financial evidence are excluded. No compatibility with a re-import endpoint is promised.

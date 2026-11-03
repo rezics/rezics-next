@@ -6283,6 +6283,20 @@ CREATE TRIGGER entry_profile_migration_writer BEFORE INSERT OR UPDATE ON library
 
 
 --
+-- Name: bangumi_upload export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.bangumi_upload FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: bangumi_upload_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.bangumi_upload_row FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: collection export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -6357,6 +6371,13 @@ CREATE TRIGGER label_assignment_fact_source_rows AFTER INSERT ON library.label_a
 --
 
 CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: list_import_mal export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
 --

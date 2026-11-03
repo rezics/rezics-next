@@ -111,8 +111,9 @@ function manifest(capture: Capture) {
     sections: [...exportSections],
     omissions: {
       trash: 'excluded; current live facts and retained session history only',
-      providerIdentifiers: 'unavailable in the native owner Library store; no identifiers inferred',
-      personalImportEvidence: 'unavailable; no installed native personal import evidence store',
+      providerIdentifiers: 'stored personal import evidence only; no shared custody scan or inferred identifiers',
+      personalImportEvidence:
+        'retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded',
       commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
       publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
       reimport: 'unavailable; this format does not promise an installed re-import endpoint',
@@ -227,10 +228,19 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
     ).rows[0];
     if (!capture) throw new ProblemError('not_found');
     const source = await generation(tx, route, accountId);
+    const expiredEvidence =
+      (
+        await tx.query(
+          `SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+        AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz LIMIT 1`,
+          [route, accountId, capture.created_at, new Date(now).toISOString()],
+        )
+      ).rowCount !== 0;
     const state =
       now >= Date.parse(capture.expires_at)
         ? 'expired'
-        : (capture.state === 'collecting' || capture.state === 'ready') && source !== capture.generation
+        : (capture.state === 'collecting' || capture.state === 'ready') &&
+            (source !== capture.generation || expiredEvidence)
           ? 'stale'
           : capture.state;
     if (state !== capture.state) {
@@ -309,7 +319,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
             manifest: null,
           };
         const seek = seekOf(deps, accountId, capture, token, now);
-        const page = await readExportSourcePage(tx, route, accountId, seek);
+        const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at);
         if (page.oversized || page.seek.rows > 100_000 || page.seek.bytes > 32 * 1024 * 1024) {
           await tx.query(`UPDATE library.library_export SET state='limit' WHERE route=$1 AND account_id=$2`, [
             route,

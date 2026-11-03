@@ -9,6 +9,8 @@ import { newId } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
+import { parseMal } from '../../src/library/list-import-mal-parser.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
@@ -107,6 +109,9 @@ beforeAll(async () => {
   for (const note of ['first occurrence', 'second occurrence'])
     await sql`INSERT INTO library.collection_member(route,collection_id,member_id,subject_id,note,ordinal_key,added_at,transaction_id) VALUES(${route},${collection},${newId(route)},${subjectIds[4]},${note},${note.startsWith('first') ? 'a0' : 'a1'},now(),${owner})`;
   await sql`INSERT INTO library.entry(route,account_id,subject_id,state,library_profile_pin,revision,created_at,updated_at,transaction_id) VALUES(${route},${other},${subjectIds[0]},'secret-other-state',${legacyPin},1,now(),now(),${other})`;
+  await sql`INSERT INTO library.bangumi_upload(route,account_id,upload_id) VALUES(${route},${owner},${copy}),(${route},${other},${copy})`;
+  await sql`INSERT INTO library.bangumi_upload_row(route,account_id,upload_id,ordinal,evidence,review) VALUES(${route},${owner},${copy},0,${parseBangumiUpload('{"format":"rezics.bangumi-collection.v1","collections":[{"subject_id":42,"notes":"source note","type":99}]}')[0]},'{"token":"never-export-review"}')`;
+  await sql`INSERT INTO library.list_import_mal(route,account_id,id,document,expires_at) VALUES(${route},${owner},${copy},${{ rows: parseMal('<myanimelist><anime><series_animedb_id>17</series_animedb_id><series_title>Original title</series_title><my_start_date>2020-00-00</my_start_date><my_password>never-export-secret</my_password></anime></myanimelist>'), canceled: false, xml: 'never-export-raw-xml' }},now()+interval '1 day')`;
 });
 afterAll(async () => {
   await workClient?.close();
@@ -159,7 +164,15 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.assignments?.[0]).toMatchObject({ label_id: label, subject_id: subjectIds[1] });
   expect(sections.units?.map((r) => r.unit_id)).toEqual(['chapter-1', 'chapter-9']);
   expect(JSON.stringify(records)).not.toContain('secret-other-state');
-  expect(JSON.stringify(records)).not.toContain('transaction_id');
+  expect(JSON.stringify(records)).not.toMatch(/transaction_id|never-export-/);
+  expect(sections.bangumiEvidence?.[0]).toMatchObject({
+    ordinal: 0,
+    evidence: { source: { subject_id: 42, notes: 'source note', type: 99 } },
+  });
+  expect(sections.malEvidence?.[0]).toMatchObject({
+    ordinal: 0,
+    evidence: { identifier: { value: '17' }, dates: { started: { precision: 'year' } } },
+  });
   expect((await get(`/v1/libraryExports/${id}`)).state).toBe('ready');
   await sql`UPDATE library.collection_member SET note='edited' WHERE route=${route} AND collection_id=${collection}`;
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], manifest: null });

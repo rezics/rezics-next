@@ -271,7 +271,7 @@ Decision: Reopened bulk Library removals offer one explicit restore at a time; a
 [Personal Library export](library-export.md) mounts authenticated capture, status, bounded pages and cancellation
 at `/v1/libraryExports`. It preserves independent native facts and accepted pins with explicit source omissions;
 Web assembles the versioned artifact after the final manifest. Native edits require restart, and terminal deletion
-immediately denies delivery. Provider identifiers and personal import evidence have no installed owner store;
+immediately denies delivery. Installed Bangumi and unexpired MAL source rows preserve personal evidence and provider identifiers;
 this slice promises neither a full account export nor a re-import endpoint.
 
 ## Indexed filtering and disclosure
