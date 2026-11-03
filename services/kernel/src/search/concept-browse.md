@@ -148,8 +148,13 @@ or synthetic coverage producer is returned.
 `matchNativeConceptStatements` composes these native windows with the sealed-cut membership batch.
 Qualifiers and the independently supplied spoiler threshold constrain each statement separately.
 Semantic marks `complete` only when `selection_ready` holds, the first request has no cursor, and the
-raw selected prefix contains fewer rows than the bounded window. The proof includes hidden, rejected
-and withheld raw candidates and is returned only after the full prefix and its native dependencies are
+raw selected prefix contains fewer rows than the bounded window. The raw traversal includes hidden,
+rejected and withheld candidates, but enumeration alone supplies no negative disclosure evidence.
+`nativeConceptStatementCoverage` certifies a window only when every examined raw candidate has a
+current disclosed witness. Concealed, malformed, fenced or otherwise undisclosed candidates remove
+both the first-window absence certificate and the multi-window ready-prefix certificate. A disclosed
+witness that fails the current property/value, qualifier or spoiler condition can still contribute
+false. Certificates are returned only after the full prefix and its native dependencies are
 revalidated. A full window or a terminal continuation suffix stays incomplete. This single-window
 proof covers only prefixes that fit one dispatch. Each ready native window also carries its
 selected-prefix observation for the bounded multi-window composition below.
@@ -178,6 +183,8 @@ in the continuation. Focused tests do not measure native growth or connected bro
 ## Bounded complete statement prefixes
 
 Decision: multi-window absence starts at the native prefix origin on each attempt and spends an explicit raw-row and window allowance; exhausted allowances remain unknown and never trigger an implicit refill.
+
+Decision: native window enumeration cannot prove absence when any raw candidate lacks a disclosed witness; each attempt retains at most 32 window revalidators and admits at most 2048 raw rows, with larger prefixes left preparing for retained ownership.
 
 `matchNativeConceptStatementPrefix` owns the request, retained cut and allowance before awaiting.
 Each native seek admits at most 64 raw rows and consumes its full admitted row limit, even for

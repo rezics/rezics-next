@@ -55,6 +55,8 @@ export type ConceptStatementReader = (
 ) => Promise<ConceptStatementRead>;
 
 export const CONCEPT_STATEMENT_PAGE_SIZE = 64;
+/** Attempt-local revalidators retain native evidence. These bound one dispatch, not a prefix. */
+export const CONCEPT_STATEMENT_PREFIX_LIMITS = Object.freeze({ windows: 32, rows: 2048 });
 export type ConceptStatementPrefixAllowance = Readonly<{
   /** Dispatches, including a possible empty terminal seek. */
   windows: number;
@@ -85,6 +87,34 @@ export function completeNativeStatementPrefix(
     limit > 0 &&
     examined < limit
   );
+}
+
+/** A ready selection proves enumeration, not disclosure. Missing native witnesses cannot
+ * become negative evidence, even when the raw keyset has reached its end. A disclosed
+ * nonmatching witness (for example, a spoiler above the threshold) can still prove false.
+ */
+export function nativeConceptStatementCoverage(
+  selectionReady: boolean,
+  after: ConceptStatementCursor | null,
+  examined: number,
+  limit: number,
+  disclosed: number,
+  observation: string,
+): Readonly<{ complete: boolean; readyPrefix?: string }> {
+  const covered =
+    selectionReady &&
+    Number.isSafeInteger(examined) &&
+    examined >= 0 &&
+    Number.isSafeInteger(limit) &&
+    limit > 0 &&
+    limit <= CONCEPT_STATEMENT_PAGE_SIZE &&
+    examined <= limit &&
+    disclosed === examined &&
+    /^[0-9a-f]{64}$/.test(observation);
+  return {
+    complete: covered && completeNativeStatementPrefix(selectionReady, after, examined, limit),
+    ...(covered ? { readyPrefix: observation } : {}),
+  };
 }
 /** Own and structurally admit inputs before any native or retained await. */
 export function conceptStatementRequest(
@@ -181,10 +211,14 @@ export async function matchNativeConceptStatements(
   if (read.status !== 'current') return { status: read.status, match: 'not_proven' };
   const nativePage = structuredClone(read.page);
   if (
+    !Array.isArray(nativePage.statements) ||
     !Number.isSafeInteger(nativePage.examined) ||
+    nativePage.examined < 0 ||
     nativePage.examined < nativePage.statements.length ||
     nativePage.examined > limit ||
     typeof nativePage.complete !== 'boolean' ||
+    typeof nativePage.terminal !== 'boolean' ||
+    (nativePage.complete && (!nativePage.terminal || nativePage.examined >= limit)) ||
     (!nativePage.terminal && nativePage.after === null)
   )
     return restart();
@@ -232,8 +266,10 @@ export async function matchNativeConceptStatementPrefix(
   if (
     !Number.isSafeInteger(budget.windows) ||
     budget.windows < 1 ||
+    budget.windows > CONCEPT_STATEMENT_PREFIX_LIMITS.windows ||
     !Number.isSafeInteger(budget.rows) ||
-    budget.rows < 1
+    budget.rows < 1 ||
+    budget.rows > CONCEPT_STATEMENT_PREFIX_LIMITS.rows
   )
     throw new RangeError('Invalid concept statement prefix allowance');
   const request = conceptStatementRequest(partition, input, null, Math.min(CONCEPT_STATEMENT_PAGE_SIZE, budget.rows));

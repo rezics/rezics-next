@@ -3,6 +3,7 @@ import { newId } from '../../src/route/route.ts';
 import { compileCurrentFilter } from '../../src/search/current-filter-plan.ts';
 import {
   matchNativeConceptStatementPrefix,
+  nativeConceptStatementCoverage,
   type ConceptStatementReader,
 } from '../../src/search/concept-browse-statements.ts';
 import type { ConceptBrowseSource, ConceptBrowseState, ConceptBrowseStore } from '../../src/search/concept-browse.ts';
@@ -34,6 +35,7 @@ function fixture(
     unavailable?: number;
     certified?: boolean;
     brokenCursor?: boolean;
+    concealed?: boolean;
   } = {},
 ) {
   const dispatches: number[] = [],
@@ -59,7 +61,10 @@ function fixture(
         examined: index < 2 ? limit : 0,
         terminal: index >= 2,
         complete: false,
-        ...(options.certified === false ? {} : { readyPrefix: observation }),
+        ...(options.certified === false || options.concealed ? {} : { readyPrefix: observation }),
+        ...(options.concealed
+          ? nativeConceptStatementCoverage(true, after, index < 2 ? limit : 0, limit, 0, observation)
+          : {}),
         after:
           index >= 2 || (options.brokenCursor && index === 1)
             ? after
@@ -118,4 +123,17 @@ test('a nonadvancing full raw cursor restarts without treating the omitted suffi
   const f = fixture({ brokenCursor: true });
   expect(await f.match()).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
   expect(f.retired()).toBe(1);
+});
+
+test('concealed native evidence in any window prevents complete multi-window exclusion', async () => {
+  const f = fixture({ concealed: true });
+  expect(await f.match()).toMatchObject({ status: 'current', match: 'not_proven', complete: false });
+  expect(f.validations).toEqual([0, 1, 2]);
+});
+
+test('oversized dispatch allowances are rejected before native or retained work', async () => {
+  const f = fixture();
+  await expect(f.match(33, 129)).rejects.toThrow('Invalid concept statement prefix allowance');
+  await expect(f.match(3, 2049)).rejects.toThrow('Invalid concept statement prefix allowance');
+  expect(f.dispatches).toEqual([]);
 });

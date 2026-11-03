@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { newId } from '../../src/route/route.ts';
 import {
   completeNativeStatementPrefix,
+  nativeConceptStatementCoverage,
   matchNativeConceptStatements,
   conceptStatementRequest,
   type ConceptStatementReader,
@@ -97,6 +98,29 @@ test('withheld and terminal empty windows remain unknown under exclusion and Boo
   expect(compileCurrentFilter({ or: [leaf, { type: { in: ['schema:Book'] } }] }).evaluate([result.match, false])).toBe(
     'not_proven',
   );
+});
+
+test('a short ready native prefix with a concealed row cannot prove exclusion', async () => {
+  const f = fixture([statement(root, '2')], 'current', true);
+  const reader: ConceptStatementReader = async (...args) => {
+    const read = await f.reader(...args);
+    if (read.status !== 'current') return read;
+    return {
+      ...read,
+      page: {
+        ...read.page,
+        examined: 2,
+        ...nativeConceptStatementCoverage(true, null, 2, 64, 1, 'a'.repeat(64)),
+      },
+    };
+  };
+  const result = await matchNativeConceptStatements(reader, graph, f.store, state, 0, request);
+  expect(result.match).toBe('not_proven');
+  const excluded = compileCurrentFilter({
+    not: { statement: { property: selection.property, in: [root], concept: { scheme, includeChildren: true } } },
+  });
+  expect(excluded.evaluate([result.match])).toBe('not_proven');
+  expect(f.revalidated()).toBe(1);
 });
 
 test('only a current complete first prefix proves absence; a terminal resumed suffix stays unknown', async () => {
