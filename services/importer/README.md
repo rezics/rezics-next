@@ -122,6 +122,55 @@ source rights or cover permission. Other subsystem journals are outside this vie
 Decision: inspection accepts an exact configured source ID, defaults to the active generation or completed baseline,
 and selects pending-envelope or deferred-cover pages explicitly.
 
+## Compare two retained complete captures
+
+`rezics-import capture-comparison` selects two exact retained complete generation IDs for the same configured source
+and pages captured-record differences. It needs the state path, source identifier, `--before` and `--after`; it does
+not need a dump, account key, credentials, network access or a writer lease. Generation IDs are exact decimal text
+and are never rounded or replaced with the current generation. Help is available without opening a file:
+
+```sh
+bun services/importer/src/cli.ts capture-comparison --help
+bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --counts
+```
+
+Both captures must be complete history of that exact source. An empty complete capture is a valid input. Staging,
+abandoned, noncomplete, missing, partially retired and retired history are distinct unavailable states. API68
+retirement metadata is consumed when those columns or statuses are already present; this command does not invent or
+migrate that schema. Missing provenance and incomplete supplied-versus-present accounting fail instead of inventing
+an empty result.
+
+Comparison uses retained normalized input rows, not public current facts. Present population is `row_json.state =
+present`. Vanished journal rows stay in the generation but are excluded from that population; a staged
+new/changed/unchanged/vanished classification is import-time evidence and is not this comparison result. Before-only
+present records are vanished, after-only present records are new, and common present records are unchanged only when
+stored revision, digest and converter revision are all equal. `--before` and `--after` are operator-selected
+identities, not a chronological requirement.
+
+Pages default to 20 rows and accept at most 100. Use `--page new|changed|unchanged|vanished`, `--limit`, the printed
+opaque cursor, `--record` for two indexed point reads, or `--json` for the version 1 document. Complete category
+counts require `--counts` and one explicit streaming merge; a detail page does not recount. A sparse category stops
+after a bounded scan window and continues with the cursor even if the page is not full. A page with no matches and
+remaining work is not a completed empty comparison. Cursors bind source, both generation IDs, schema and page
+parameters, then revalidate header/capture state before the next page. Retirement or incompatible mutation
+invalidates the cursor.
+
+One invocation reads one consistent SQLite snapshot and closes. Concurrent source progress cannot retarget the
+selected generations inside that invocation. The reader uses the inspect producer's readonly opening, path and
+schema guards and never constructs RunStore, RecordBindings or RecordStore. It makes no database create, migration,
+lease, checkpoint, cleanup, credential, network, dump or native effect. Bounded projection field detail is shown
+only from the immutable stored source-record format; unavailable legacy projection is reported honestly. Native
+candidate proposal, acceptance, adoption and current publication stay independent of this local view.
+
+```sh
+bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --page changed --json
+bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --record Q42
+bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
+```
+
+Decision: capture comparison requires exact `--before`/`--after` complete generation IDs for one configured source;
+counts are an explicit `--counts` pass; vanished-state journal rows are excluded from each present population.
+
 ## Resolve VNDB source-observation conflicts
 
 A newer same-binding VNDB statistic still imports automatically. An equal-date correction, record rebinding or
@@ -219,8 +268,8 @@ vocabulary/measured inputs and broader discovery remain deferred.
 
 Keep the same SQLite state after an interrupted or uncertain request. Copying only the main file can miss committed
 WAL frames. `rezics-import backup`, `validate-snapshot` and `restore` are local snapshot commands: they route before
-credentials and network, and they never construct an Importer just to inspect a file. `inspect`, dump previews, live
-progress and observation CAS keep their existing commands.
+credentials and network, and they never construct an Importer just to inspect a file. `inspect`, capture-comparison,
+dump previews, live progress and observation CAS keep their existing commands.
 
 ```sh
 bun services/importer/src/cli.ts backup --state .state/imports.sqlite --output .state/imports.snapshot
@@ -319,7 +368,8 @@ Converters already return `{ pointer, code }` diagnostics on `ConvertedRecord`. 
 vector with the exact source, generation, record, digest, converter revision and phase it describes, then offers a
 read-only `diagnostics` CLI command. Journal rows are not native publication, request acknowledgement or candidate
 selection. API47 keeps generation/pending-envelope/cover inspection; this command owns a separate read model and does
-not take a writer lease. Decision: inspect, preview, compare and diagnostics remain separate CLI subcommands.
+not take a writer lease. Decision: inspect, preview, compare, capture-comparison and diagnostics remain separate CLI
+subcommands. API47 keeps single-capture inspection; capture-comparison owns two retained complete generations.
 
 Phases are `staging` for dump conversion and `application` for dependency-driven reconversion. A recognized empty
 vector is stored; missing journal rows on a generation are unavailable historical evidence. Resume of the same
@@ -850,6 +900,12 @@ state while effects remain unresolved. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Compare two retained complete captures
+
+- Touches: the two selected complete captures with N and M retained input rows, source/generation header point reads, and at most p≤100 displayed details plus bounded scan windows. Other sources and old generations are unrelated.
+- Bound: complete `--counts` is one indexed merge of O(N+M) row visits plus index seek cost, O(p+w) working memory for fixed scan window w=256, and no retained global key set. A detail page performs at most w scanned present-merge steps with a continuation even if fewer than p matches; total full traversal remains O(N+M) without recounting. Exact-record detail uses two primary-key seeks and bounded stored projection decode.
+- Growth check: production compare/count/page/exact-record paths on 32/128/512 captured rows, equal ratio 4, including mostly-unchanged sparse changes, vanished/reappeared records, converter-only changes, and independently growing unrelated history. Count visited rows, decoded projection bytes, comparison calls, retained buffers and SQLite read queries. Counts and paged union agree; page/cancellation bounds hold.
 
 ### Explicit source statistic removal
 

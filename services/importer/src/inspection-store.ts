@@ -4,19 +4,19 @@ import { open, stat, type FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
-const MAX_GENERATION_ID_BYTES = 32;
-const MAX_RECORD_KEY_BYTES = 512;
+export const DEFAULT_PAGE_SIZE = 20;
+export const MAX_PAGE_SIZE = 100;
+export const MAX_GENERATION_ID_BYTES = 32;
+export const MAX_RECORD_KEY_BYTES = 512;
 const MAX_ENVELOPE_BYTES = 65_536;
 const MAX_ENVELOPES = 3;
 const MAX_RECORD_COMMANDS = 300;
 const MAX_RECORD_BYTES = 2 * 1024 * 1024 + 64;
 const MAX_KEYS_JSON_BYTES = 256 * 1024;
 
-const SOURCE_ID = /^[a-z][a-z0-9_-]{0,31}$/u;
-const GENERATION_ID = /^[1-9][0-9]*$/u;
-const RECORD_KEY =
+export const SOURCE_ID = /^[a-z][a-z0-9_-]{0,31}$/u;
+export const GENERATION_ID = /^[1-9][0-9]*$/u;
+export const RECORD_KEY =
   /^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u;
 const FIELD_GROUPS = new Set(['facts', 'summary', 'cover']);
 const OPERATIONS = new Set(['create', 'propose', 'retract']);
@@ -199,16 +199,20 @@ export class InspectionFailure extends Error {
   }
 }
 
-function bytes(value: string): number {
+export function utf8Bytes(value: string): number {
   return Buffer.byteLength(value, 'utf8');
 }
 
-function validSource(value: unknown): asserts value is string {
+function bytes(value: string): number {
+  return utf8Bytes(value);
+}
+
+export function validSource(value: unknown): asserts value is string {
   if (typeof value !== 'string' || bytes(value) > 32 || !SOURCE_ID.test(value))
     throw new InspectionFailure('Source must be an exact configured source identifier.', 2);
 }
 
-function validGeneration(value: unknown): asserts value is string {
+export function validGeneration(value: unknown): asserts value is string {
   if (
     typeof value !== 'string' ||
     bytes(value) > MAX_GENERATION_ID_BYTES ||
@@ -218,12 +222,12 @@ function validGeneration(value: unknown): asserts value is string {
     throw new InspectionFailure('Generation must be a positive stored generation ID.', 2);
 }
 
-function validRecordKey(value: unknown): asserts value is string {
+export function validRecordKey(value: unknown): asserts value is string {
   if (typeof value !== 'string' || bytes(value) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(value))
     throw new InspectionFailure('Record key must be an exact native source record key.', 2);
 }
 
-function integer(value: unknown, label: string, minimum = 0): number {
+export function integer(value: unknown, label: string, minimum = 0): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum)
     throw new InspectionFailure(`Malformed journal value: ${label} is not a bounded integer.`);
   return value;
@@ -233,7 +237,7 @@ function nullableInteger(value: unknown, label: string): number | null {
   return value === null || value === undefined ? null : integer(value, label);
 }
 
-function exactObject(value: unknown, required: readonly string[], label: string): Record<string, unknown> {
+export function exactObject(value: unknown, required: readonly string[], label: string): Record<string, unknown> {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -256,7 +260,7 @@ function parseJson(value: unknown, label: string, maxBytes: number): unknown {
   }
 }
 
-function parseRecordRow(
+export function parseCapturedRecordRow(
   value: unknown,
   source: string,
   key: string,
@@ -384,8 +388,12 @@ function safeStatus(value: unknown): string {
   return value;
 }
 
-function cursorEncode(value: Record<string, unknown>): string {
+export function encodeOpaqueCursor(value: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+}
+
+function cursorEncode(value: Record<string, unknown>): string {
+  return encodeOpaqueCursor(value);
 }
 
 function cursorDecode(value: string, request: InspectionRequest, runId: string): Record<string, unknown> {
@@ -628,6 +636,14 @@ export class InspectionStore {
         );
       throw new InspectionFailure('Malformed or unavailable importer journal data; no state was changed.');
     }
+  }
+
+  /**
+   * One bounded consistent read. Capture comparison shares this snapshot so a
+   * single invocation's headers, counts and rows cannot retarget mid-flight.
+   */
+  readConsistent<T>(signal: AbortSignal | undefined, operation: () => T): T {
+    return this.snapshot(signal, operation);
   }
 
   inspect(request: InspectionRequest, signal?: AbortSignal): InspectionDocument {
@@ -978,7 +994,7 @@ export class InspectionStore {
       )
       .get(source, runId, key) as EntryRow | null;
     if (!entry) return { recordKey: key, found: false };
-    const metadata = parseRecordRow(entry.row_json, source, key);
+    const metadata = parseCapturedRecordRow(entry.row_json, source, key);
     const kind = this.classification(entry.kind);
     if (entry.resolved !== 0 && entry.resolved !== 1)
       throw new InspectionFailure('Malformed journal row: resolved flag is not boolean.');

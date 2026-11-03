@@ -28,6 +28,7 @@ import {
   type CredentialsObserver,
 } from './credentials.ts';
 import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
+import { captureComparisonUsage, runCaptureComparisonCli } from './capture-comparison-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
@@ -319,6 +320,10 @@ function diagnostic(
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+  if (Array.isArray(argv) && argv[0] === 'capture-comparison')
+    return runCaptureComparisonCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'capture-comparison')
+    return { code: 0, stdout: `${captureComparisonUsage()}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'observations')
     return runObservationsCli(argv.slice(1), {
       ...(options.signal ? { signal: options.signal } : {}),
