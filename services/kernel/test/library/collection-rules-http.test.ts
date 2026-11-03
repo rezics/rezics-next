@@ -129,9 +129,18 @@ test('public saved execution is explicitly unavailable without the complete Publ
   const access = createAccess(f.runtime.identity.accessConfig);
   const actor = await access.authenticate(f.owner, { pool: f.database.pool, deadline: performance.now() + 30_000 });
   const commands = createCollectionCommands({ pool: f.database.pool, access });
-  await expect(commands.createCollection(actor, {
-    membershipKind: 'dynamic', title: 'Unbound Publication', visibility: 'public', rule: { filter: presence },
-  }, randomUUID())).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  await expect(
+    commands.createCollection(
+      actor,
+      {
+        membershipKind: 'dynamic',
+        title: 'Unbound Publication',
+        visibility: 'public',
+        rule: { filter: presence },
+      },
+      randomUUID(),
+    ),
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
 }, 120_000);
 
 test('native suspension rejects a previously issued editor bearer and its old receipt', async () => {

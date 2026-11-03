@@ -560,10 +560,13 @@ export function createCollectionPublicationEpisodes(config: {
             if (original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex'))
               throw new IdempotencyConflictError(partitionOf(route));
             if (
-              !creation && (
-              !(await readCollectionPublicationRule(tx, original.creation.source.locator)) ||
-              !prepared.metadata ||
-              !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata)))
+              !creation &&
+              (!(await readCollectionPublicationRule(tx, original.creation.source.locator)) ||
+                !prepared.metadata ||
+                !isDeepStrictEqual(
+                  original.creation.source.input.identity,
+                  await readCurrentInput(tx, prepared.metadata),
+                ))
             )
               throw unavailable();
           }
@@ -574,7 +577,8 @@ export function createCollectionPublicationEpisodes(config: {
               if (!collection || collection.state !== 'active' || collection.curatorAccountId !== actor.accountId)
                 throw new ProblemError('not_found');
             } else if (current !== null) throw conflict();
-          } else if (materialization ? current !== null : !isDeepStrictEqual(current, prepared.meaning)) throw conflict();
+          } else if (materialization ? current !== null : !isDeepStrictEqual(current, prepared.meaning))
+            throw conflict();
           return mode;
         },
         async finalize(tx, attempt, evidence) {

@@ -1,4 +1,7 @@
-import { createCollectionPublicationEpisodes, type CollectionPublicationEpisodes } from './collection-publication-episodes.ts';
+import {
+  createCollectionPublicationEpisodes,
+  type CollectionPublicationEpisodes,
+} from './collection-publication-episodes.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
@@ -396,40 +399,40 @@ export function createCollectionCommands(config: {
   ) {
     const resource = Object.freeze({ route, id });
     return parentCreationAuthorization({
-          access: creation,
-          actor,
-          action: 'collection:create',
-          parent: {
-            resource: Object.freeze({ route, id: actor.accountId }),
-            async validate(client, time) {
-              authoritativeTimeValue(time);
-              const account = await readAccount(client, route, actor.accountId);
-              return account !== null && account.kind === 'actor' && account.state === 'active' && !account.fenced;
-            },
-          },
-          context: {
-            pool,
-            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-            resource,
-            creation: {
-              async validate(inner, target, time) {
-                const provenance = inserted();
-                if (!provenance || target.route !== route || target.id !== id) return false;
-                authoritativeTimeValue(time);
-                const found = await inner.query(
-                  `SELECT 1
+      access: creation,
+      actor,
+      action: 'collection:create',
+      parent: {
+        resource: Object.freeze({ route, id: actor.accountId }),
+        async validate(client, time) {
+          authoritativeTimeValue(time);
+          const account = await readAccount(client, route, actor.accountId);
+          return account !== null && account.kind === 'actor' && account.state === 'active' && !account.fenced;
+        },
+      },
+      context: {
+        pool,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+        resource,
+        creation: {
+          async validate(inner, target, time) {
+            const provenance = inserted();
+            if (!provenance || target.route !== route || target.id !== id) return false;
+            authoritativeTimeValue(time);
+            const found = await inner.query(
+              `SELECT 1
                      FROM library.collection
                     WHERE route = $1 AND collection_id = $2 AND curator_account_id = $3
                       AND revision = 1 AND state = 'active'
                       AND transaction_id = $4 AND created_at = $5::timestamptz
                       AND xmin = pg_current_xact_id()::xid`,
-                  [route, id, actor.accountId, provenance.transactionId, provenance.at],
-                );
-                return found.rows.length === 1;
-              },
-            },
+              [route, id, actor.accountId, provenance.transactionId, provenance.at],
+            );
+            return found.rows.length === 1;
           },
-        });
+        },
+      },
+    });
   }
 
   async function createCollection(
@@ -453,12 +456,15 @@ export function createCollectionCommands(config: {
       ...(draft.membershipKind === 'dynamic' ? { membershipKind: 'dynamic', rule: draft.rule } : {}),
     };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
-    const previous = rule && visibility !== 'private' && route !== null
-      ? (await pool.query<{ id: string }>(
-          'SELECT collection_id::text AS id FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3',
-          [route, actor.kind === 'account' ? actor.accountId : null, requestKey],
-        )).rows[0]
-      : undefined;
+    const previous =
+      rule && visibility !== 'private' && route !== null
+        ? (
+            await pool.query<{ id: string }>(
+              'SELECT collection_id::text AS id FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3',
+              [route, actor.kind === 'account' ? actor.accountId : null, requestKey],
+            )
+          ).rows[0]
+        : undefined;
     const id = previous?.id ?? (route === null ? newId(1) : newId(route));
     let provenance: { transactionId: string; at: string } | null = null;
 
@@ -479,12 +485,27 @@ export function createCollectionCommands(config: {
           const shelf = { client: tx, route, accountId: actor.accountId };
           await enterShelfWrite(shelf);
           // The pending header advertises intent; only COMPLETE output can supply shared members.
-          await insertSavedCollection(tx, route, {
-            id, curatorAccountId: actor.accountId, title, description, visibility, ...selection,
-          }, admitted, { transactionId: command.transactionId, time: at });
+          await insertSavedCollection(
+            tx,
+            route,
+            {
+              id,
+              curatorAccountId: actor.accountId,
+              title,
+              description,
+              visibility,
+              ...selection,
+            },
+            admitted,
+            { transactionId: command.transactionId, time: at },
+          );
           await createShelfCounters().collection(shelf, 1);
           provenance = { transactionId: command.transactionId, at };
-          await initializeResourceGrants(tx, { resource: { route, id }, type: 'library.collection', creator: actor.accountId });
+          await initializeResourceGrants(tx, {
+            resource: { route, id },
+            type: 'library.collection',
+            creator: actor.accountId,
+          });
           return activeCollection(tx, route, id);
         },
       });
