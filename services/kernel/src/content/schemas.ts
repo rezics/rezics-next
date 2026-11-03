@@ -961,12 +961,7 @@ export const SubjectThreadCardSchema = t.Unsafe<SubjectThreadCard>(
       ]),
       media: t.Object(
         {
-          state: t.Union([
-            t.Literal('none'),
-            t.Literal('available'),
-            t.Literal('unavailable'),
-            t.Literal('withheld'),
-          ]),
+          state: t.Union([t.Literal('none'), t.Literal('available'), t.Literal('unavailable'), t.Literal('withheld')]),
           images: t.Array(subjectThreadCardImage, { maxItems: 32 }),
         },
         closed,
@@ -981,10 +976,7 @@ export const SubjectThreadCardSchema = t.Unsafe<SubjectThreadCard>(
               closed,
             ),
             lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
-            source: t.Object(
-              { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[0-9]+$' }) },
-              closed,
-            ),
+            source: t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[0-9]+$' }) }, closed),
           },
           closed,
         ),

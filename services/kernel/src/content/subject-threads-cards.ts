@@ -141,8 +141,7 @@ function assertReactionCurrent(
   if (!reaction || reaction.state !== 'current') return false;
   if (JSON.stringify(reactionRecord(thread.reactions)) !== JSON.stringify(reactionRecord(reaction.counts)))
     throw new ProblemError('dependency_unavailable');
-  if (thread.viewerReaction !== reaction.viewerSelection)
-    throw new ProblemError('dependency_unavailable');
+  if (thread.viewerReaction !== reaction.viewerSelection) throw new ProblemError('dependency_unavailable');
   return true;
 }
 
@@ -190,8 +189,7 @@ function mediaFor(
   if (post.availability !== 'available') return { state: 'unavailable', images: [] };
   if (post.mediaIds.length === 0) return { state: 'none', images: [] };
   const selected = post.mediaIds.map((id) => images.get(id));
-  if (selected.some((image) => !image || image.containerId !== post.id))
-    return { state: 'unavailable', images: [] };
+  if (selected.some((image) => !image || image.containerId !== post.id)) return { state: 'unavailable', images: [] };
   return { state: 'available', images: selected as DocumentImagePresentation[] };
 }
 
@@ -217,12 +215,10 @@ async function readMedia(
   const images = new Map<string, DocumentImagePresentation>();
   for (let offset = 0; offset < ids.length; offset += 32) {
     requireAccessDeadline(context.deadline);
-    const page = await readDocumentMediaPresentations(
-      dependencies,
-      context.actor,
-      ids.slice(offset, offset + 32),
-      { deadline: context.deadline, routeKey: dependencies.routeKey },
-    );
+    const page = await readDocumentMediaPresentations(dependencies, context.actor, ids.slice(offset, offset + 32), {
+      deadline: context.deadline,
+      routeKey: dependencies.routeKey,
+    });
     requireAccessDeadline(context.deadline);
     for (const image of page.images) images.set(image.id, image);
   }
@@ -240,16 +236,12 @@ function watch(
   if (result.watch.state === 'unavailable') return { state: 'unavailable', retryable: true };
   const item = result.watch.items.find((candidate) => candidate.threadId === threadId);
   if (!item) throw new ProblemError('dependency_unavailable');
-  if (item.state === 'current' && item.watching !== undefined)
-    return { state: 'current', watching: item.watching };
+  if (item.state === 'current' && item.watching !== undefined) return { state: 'current', watching: item.watching };
   if (item.state === 'sign_in_required') return { state: 'sign_in_required' };
   return { state: 'unavailable', retryable: true };
 }
 
-function equalNativeThread(
-  selected: SubjectThreadWithReactions,
-  current: ThreadView | null,
-): boolean {
+function equalNativeThread(selected: SubjectThreadWithReactions, current: ThreadView | null): boolean {
   if (!current) return false;
   const { reactions: _reactions, viewerReaction: _viewerReaction, ...source } = selected;
   return JSON.stringify(source) === JSON.stringify(current);
@@ -278,18 +270,12 @@ export async function projectSubjectThreadCards(
     selected.map((thread) => thread.id),
     context.deadline,
   );
-  const content = await prepareFeedContentContext(
-    dependencies,
-    selected.map(contentReference),
-    context,
-    [],
-    {
-      observeThreads: (threadIds, current) =>
-        Promise.all(
-          threadIds.map(async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, placeId, current)),
-        ),
-    },
-  );
+  const content = await prepareFeedContentContext(dependencies, selected.map(contentReference), context, [], {
+    observeThreads: (threadIds, current) =>
+      Promise.all(
+        threadIds.map(async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, placeId, current)),
+      ),
+  });
 
   const cardResult = await cards.finish();
   const finalActivity = await activity.confirm(initialActivity, context.deadline);
@@ -312,7 +298,10 @@ export async function projectSubjectThreadCards(
     if (selectedCard.state === 'withheld') continue;
     const composed = contentResult.contexts.get(thread.id);
     if (!composed?.thread || !composed.post) continue;
-    if (!equalNativeThread(thread, composed.thread) || JSON.stringify(thread.firstPost) !== JSON.stringify(composed.post))
+    if (
+      !equalNativeThread(thread, composed.thread) ||
+      JSON.stringify(thread.firstPost) !== JSON.stringify(composed.post)
+    )
       throw new ProblemError('dependency_unavailable');
     if (selectedCard.state === 'current') mediaPosts.push(composed.post);
     ready.push({ thread, selected: selectedCard, post: composed.post, context: composed });
@@ -340,10 +329,7 @@ export async function projectSubjectThreadCards(
             (reference) => reference.id === item.thread.id || reference.id === item.post.id,
           )
         : [];
-    const reply =
-      item.selected.state === 'current'
-        ? item.selected.reply
-        : { state: 'withheld' as const };
+    const reply = item.selected.state === 'current' ? item.selected.reply : { state: 'withheld' as const };
     const cardMedia = mediaFor(item.post, item.selected.state, images);
     const presentation =
       item.selected.state === 'current' && item.post.availability === 'available'
@@ -404,9 +390,7 @@ export async function projectSubjectThreadCards(
     const { reactions: _counts, viewerReaction: _viewerReaction, ...withoutReactions } = item.thread;
     const exposeReactions = reactionCurrent;
     entries.push({
-      ...(exposeReactions
-        ? item.thread
-        : withoutReactions),
+      ...(exposeReactions ? item.thread : withoutReactions),
       ...(item.selected.state === 'current' && item.context.reviewContext
         ? { reviewContext: item.context.reviewContext }
         : {}),
