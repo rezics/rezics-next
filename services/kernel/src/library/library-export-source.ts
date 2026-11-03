@@ -19,7 +19,7 @@ const queries = {
         AND l.label_id=a.label_id AND l.deleted_at IS NULL)
     ORDER BY a.subject_id,a.label_id LIMIT 16`,
   sessions: `SELECT session_id::text AS key, session_id,subject_id,version_subject_id,mode,unit,total::text,
-    amount::text,locator,position::text,completed_unit_count,state,revision,library_profile_pin,
+    amount::text,additional_measures,locator,position::text,completed_unit_count,state,revision,library_profile_pin,
     started_at::text,completed_at::text,last_changed_at::text
     FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2 AND session_id > $3::uuid
     ORDER BY session_id LIMIT 16`,

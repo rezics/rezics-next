@@ -37,6 +37,7 @@ import type {
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
+import type { LibraryProfilePin } from './profile.ts';
 import {
   compatibleProgressUnits,
   nativeProgressUnit,
@@ -57,6 +58,21 @@ import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
 type Client = CommandTransaction;
+type ExpectedProgressBinding = { subjectId: string; profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }> };
+
+function assertExpectedBinding(
+  source: Awaited<ReturnType<typeof readLibraryProfileSource>>,
+  expected?: ExpectedProgressBinding,
+) {
+  if (
+    expected &&
+    (!source ||
+      source.kind !== 'supported' ||
+      source.subjectId !== expected.subjectId ||
+      JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin))
+  )
+    throw new ProgressConflictError();
+}
 
 export class ProgressInvalidError extends Error {
   constructor(readonly field: string) {
@@ -148,7 +164,7 @@ export function createSessionCommands(config: Dependencies) {
     return session;
   }
 
-  async function startSession(actor: Actor, input: unknown, requestKey: string) {
+  async function startSession(actor: Actor, input: unknown, requestKey: string, expected?: ExpectedProgressBinding) {
     const owner = account(actor, 'progress_session:create');
     // Syntax normalization is the existing receipt input; trusted metadata never enters its digest.
     const parsed = valid(parseSessionCreate(input, 'syntax'));
@@ -170,6 +186,7 @@ export function createSessionCommands(config: Dependencies) {
                 : parsed.versionSubjectId === parsed.subjectId
                   ? source
                   : await readLibraryProfileSource(deps, parsed.versionSubjectId);
+            assertExpectedBinding(source, expected);
             return { source, version };
           } catch (error) {
             return { error };
@@ -216,6 +233,7 @@ export function createSessionCommands(config: Dependencies) {
     input: unknown,
     requestKey: string,
     action: ProgressAction | 'record' | 'reopen' | 'retire',
+    expected?: ExpectedProgressBinding,
   ) {
     const owner = account(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId);
@@ -238,7 +256,7 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
           try {
-            if (action === 'reopen' || action === 'retire') {
+            if (action === 'reopen' || action === 'retire' || (expected && action !== 'record')) {
               const session = await snapshot(owner, 'progress_session:update', (client) =>
                 load(client, owner, sessionId),
               );
@@ -246,6 +264,7 @@ export function createSessionCommands(config: Dependencies) {
                 { pool, access, actor: owner, at: attempt.time, deadline },
                 session.subjectId,
               );
+              assertExpectedBinding(source, expected);
               if (!source) throw new LibraryNotFoundError();
               // No new value is admitted. The original session identity and meaning stay intact,
               // including when the current profile no longer offers its unit.
@@ -274,6 +293,7 @@ export function createSessionCommands(config: Dependencies) {
               { pool, access, actor: owner, at: attempt.time, deadline },
               fact.session.subjectId,
             );
+            assertExpectedBinding(source, expected);
             return { original, source, pin: fact.pin };
           } catch (error) {
             return { error };
@@ -292,6 +312,7 @@ export function createSessionCommands(config: Dependencies) {
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
         if (current.state === 'retired') throw new LibraryNotFoundError();
+        if (expected) assertExpectedBinding(prepared.source, expected);
         if (
           measureId !== undefined &&
           (current.mode !== 'scalar_amount' ||
@@ -371,8 +392,13 @@ export function createSessionCommands(config: Dependencies) {
     );
   }
 
-  const recordProgress = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'record');
+  const recordProgress = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'record', expected);
   const completeSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
     update(actor, sessionId, input, requestKey, 'complete');
   const abandonSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
