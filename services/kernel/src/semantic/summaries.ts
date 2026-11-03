@@ -10,6 +10,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { fenceKey } from './fences.ts';
 import { partitionReadClient, partitionReadClients } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { readPartitions } from '../partition/partition.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
 import { relatedReadEligibility } from './eligibility.ts';
@@ -60,6 +61,16 @@ export type SummaryReaderDependencies = {
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
 type Batches = readonly (readonly string[])[];
+type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
+type ObserveSummaries = (sources: SummarySources, batches: Batches, disclosed: ReadonlySet<string>) => void;
+
+/** Internal composition, never a browser-supplied witness or a cached allow.
+ * Each component is an independent native home position, as in Subject reads.
+ */
+export type SubjectSummaryObservation = Readonly<{
+  summaries: ReadonlyMap<string, SubjectSummary | null>;
+  current: () => Promise<boolean>;
+}>;
 const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
 
 /** Preserve the callable related-read adapter, and expose preparation to the batch owner.
@@ -116,6 +127,69 @@ export async function readSubjectSummaries(
   ids: readonly string[],
   { languages = [] }: { languages?: readonly string[] } = {},
 ): Promise<Map<string, SubjectSummary | null>> {
+  return readSummaryBatch(deps, ids, languages);
+}
+
+/** Read the ordinary projection and retain its actual source homes for a
+ * composing native reader. No owner connection survives the returned promise.
+ */
+export async function readSubjectSummaryObservation(
+  deps: SummaryReaderDependencies,
+  ids: readonly string[],
+  { languages = [] }: { languages?: readonly string[] } = {},
+): Promise<SubjectSummaryObservation> {
+  let sources: SummarySources = [];
+  let batches: Batches = [];
+  let disclosed: ReadonlySet<string> = new Set();
+  const summaries = await readSummaryBatch(deps, ids, languages, (observed, selected, visible) => {
+    sources = observed;
+    batches = selected;
+    disclosed = visible;
+  });
+  return {
+    summaries,
+    async current() {
+      requireAccessDeadline(deps.deadline);
+      // Reprepare native disclosure outside the source snapshot. The same
+      // initial and representative batches preserve related-read eligibility.
+      const checks: AccessCheck[] = [];
+      for (const batch of batches) {
+        for (const id of new Set(batch)) {
+          if (!disclosed.has(id)) continue;
+          const route = routeOf(id);
+          if (route === null) continue;
+          checks.push(
+            await accessCheck(
+              deps.access,
+              deps.actor,
+              'subject:read',
+              { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
+              { pool: deps.pool, deadline: deps.deadline },
+            ),
+          );
+        }
+      }
+      return withReadTransaction(deps.pool, async (client) => {
+        await partitionReadClients(client, sources.map((source) => source.partition));
+        const current = new Map((await readPartitions(client, sources.map((source) => source.partition)))
+          .map((source) => [source.partitionNo, source]));
+        for (const source of sources) {
+          const found = current.get(source.partition);
+          if (!found || found.epoch !== source.epoch || found.position !== source.position) return false;
+        }
+        for (const check of checks) if (!(await check(client))) return false;
+        return true;
+      }, deps.deadline);
+    },
+  };
+}
+
+async function readSummaryBatch(
+  deps: SummaryDependencies | SummaryReaderDependencies,
+  ids: readonly string[],
+  languages: readonly string[],
+  observe?: ObserveSummaries,
+): Promise<Map<string, SubjectSummary | null>> {
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
     throw new TypeError('Subject summaries require the server route key');
   if (deps.deadline !== undefined) requireAccessDeadline(deps.deadline);
@@ -152,6 +226,9 @@ export async function readSubjectSummaries(
           const active = 'access' in deps ? await activeRelease(client) : null;
           if ('access' in deps && !active) {
             await partitionReadClient(client, 0);
+            // A composed shelf must distinguish failed preparation from an
+            // authentic empty/withheld source observation.
+            if (observe) throw new AccessUnavailableError('contention');
             return results;
           }
           const release = 'access' in deps ? active!.release : deps.release;
@@ -170,6 +247,7 @@ export async function readSubjectSummaries(
             plan,
             Boolean(prepare),
             'access' in deps,
+            observe,
           );
         },
         deadline,
@@ -189,6 +267,7 @@ async function projectSummaries(
   expectedPlan: Map<string, string> | undefined,
   needsPreparation: boolean,
   releaseHome: boolean,
+  observe?: ObserveSummaries,
 ): Promise<Map<string, SubjectSummary | null>> {
   const deps = storage;
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
@@ -343,6 +422,16 @@ async function projectSummaries(
       focalPoint: reference.focalPoint ?? null,
       credit: reference.credit,
     };
+  }
+  if (observe) {
+    const sourceHomes = [...new Set([...partitions, ...homes.keys()])];
+    observe(
+      (await readPartitions(deps.client, sourceHomes)).map((home) => ({
+        partition: home.partitionNo, epoch: home.epoch, position: home.position,
+      })),
+      [[...results.keys()], [...new Set(representatives.values())].filter((id) => !subjects.has(id))],
+      new Set([...subjects.keys(), ...editions.keys()]),
+    );
   }
   return results;
 }

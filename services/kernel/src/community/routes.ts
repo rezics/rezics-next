@@ -78,6 +78,12 @@ import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
 import { readCommunityPresentations } from '../content/community-presentation.ts';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
+import {
+  createRealmHomePublicationReader,
+  RealmHomePublicationPageSchema,
+  RealmHomePublicationQuerySchema,
+  realmHomePublicationResponse,
+} from './realm-home-publications.ts';
 import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
 import {
   listPublications,
@@ -1634,6 +1640,38 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           );
           if (!page) throw new ProblemError('not_found');
           return { items: page.items.map(publishedPublication), next: page.next };
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/publicationShelf',
+      {
+        params: realmParams,
+        query: strict(RealmHomePublicationQuerySchema),
+        response: {
+          200: strict(RealmHomePublicationPageSchema),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+        },
+        detail: {
+          operationId: 'realm.publicationShelf',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const page = await admission.run('normal', job, () =>
+            createRealmHomePublicationReader(realmDependencies())(realmId, { actor, deadline: job.deadline }, query),
+          );
+          if (!page) throw new ProblemError('not_found');
+          return realmHomePublicationResponse(page);
         } catch (error) {
           communityProblem(error);
         }
