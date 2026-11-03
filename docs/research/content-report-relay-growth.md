@@ -21,5 +21,9 @@ All growth operations use 64 / 512 / 4096, three measured repetitions, one warmu
 constant native rows, buffers observed, and statements; logarithmic blocks. Setup, report selection, relay
 completion and replay remain separate boundaries.
 
+Run with `bun run --cwd services/kernel check test/content/growth-report-native-relay.test.ts`. The test requires
+the kernel check runner's migrated native database and emits per-scale, per-repetition rows, blocks, statements
+and shared-buffer observations. Source inspection alone does not establish the bound.
+
 **Binding decision:** Use a fresh source route and target/board neighborhood for each selected report, and vary
 source rows, target rows, or outbox history one axis at a time.
