@@ -455,6 +455,16 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     let stage = 'mount';
     const bulkModule = await import('../src/moderation/reports-bulk-action');
     const originalFactory = bulkModule.createReportsBulkAction;
+    const renderObserverHost = globalThis as typeof globalThis & {
+      __moderationRenderObserver?: (component: string) => void;
+    };
+    const originalRenderObserver = renderObserverHost.__moderationRenderObserver;
+    const renderCounts = new Map<string, number>();
+    renderObserverHost.__moderationRenderObserver = (component) => {
+      const count = (renderCounts.get(component) ?? 0) + 1;
+      renderCounts.set(component, count);
+      if (count >= 500) throw new Error(`DIAGNOSTIC_RENDER_BUDGET:${component}-${stage}:${count}`);
+    };
     let bulkNotifications = 0;
     let bulkSnapshotReads = 0;
     const factorySpy = spyOn(bulkModule, 'createReportsBulkAction').mockImplementation((...args) => {
@@ -489,6 +499,8 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     restoreModerationRenderDiagnosis = () => {
       factorySpy.mockRestore();
       departurePrototype.notify = originalNotify;
+      if (originalRenderObserver) renderObserverHost.__moderationRenderObserver = originalRenderObserver;
+      else delete renderObserverHost.__moderationRenderObserver;
     };
     const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
     const setStage = (next: string) => {

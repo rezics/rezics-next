@@ -62,6 +62,8 @@ export function ReportReviewCard({
   onTakenDown: () => void;
   onRefresh?: () => Promise<void>;
 }) {
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.('report-review-card');
   const id = useId();
   const [reason, setReason] = useState('');
   const currentOwner = useRef(intentOwner);

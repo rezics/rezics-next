@@ -40,9 +40,13 @@ export type ReportQueueProps = {
 };
 
 const emptyRevisions: ReportedRevision[] = [];
+const diagnoseRender = (name: string) =>
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.(name);
 
 /** Injected queues keep the same decision UI without requiring a route or private reader. */
 export function BoardReportQueue(props: ReportQueueProps) {
+  diagnoseRender('board-report-queue');
   return (
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
       <ReportQueue {...props} />
@@ -52,6 +56,7 @@ export function BoardReportQueue(props: ReportQueueProps) {
 
 /** Each data replacement or authority change retires all private intents, including sparse pages. */
 function ReportQueue(props: ReportQueueProps) {
+  diagnoseRender('report-queue');
   const generation = useRef<{
     props: ReportQueueProps;
     controller: ReportsBulkAction;
@@ -112,6 +117,7 @@ function QueueGeneration({
   bulkEnabled = true,
   onLeave,
 }: ReportQueueProps & { controller: ReportsBulkAction }) {
+  diagnoseRender('queue-generation');
   const selectionId = useId();
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { requestNavigation } = useAuthoringDeparture(

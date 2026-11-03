@@ -49,6 +49,8 @@ export function ReportsBulkControls({
   onAction: ReportQueueAction;
   onRefresh?: () => Promise<void>;
 }) {
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.('reports-bulk-controls');
   type FocusTarget = 'review' | 'results' | 'trigger';
   type FocusIntent = {
     controller: ReportsBulkAction;

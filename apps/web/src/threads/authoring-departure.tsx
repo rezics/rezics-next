@@ -251,6 +251,8 @@ export function AuthoringDepartureProvider({
   /** `subject` treats a same-account token refresh as the same session; `true` also binds the token. */
   sessionBound?: boolean | 'subject';
 }) {
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.('authoring-provider');
   const leave = useRef(onNavigationLeave);
   leave.current = onNavigationLeave;
   const [navigation] = useState(() => new AuthoringDepartureState(() => leave.current?.()));
@@ -345,6 +347,8 @@ function RouterDeparture({
   navigation: AuthoringDepartureState;
   navigationContext: NavigationContext;
 }) {
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.('router-departure');
   useBlocker({
     shouldBlockFn: ({ current, next }) =>
       navigation.blockLocation(
@@ -471,6 +475,8 @@ export function useAuthoringDeparture(
   messages?: NavigationMessages,
   navigationContext?: NavigationContext,
 ) {
+  (globalThis as typeof globalThis & { __moderationRenderObserver?: (component: string) => void })
+    .__moderationRenderObserver?.('authoring-departure-hook');
   const navigation = useContext(DepartureContext);
   const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, kind, messages, released: false });
   if (latest.current.signature !== signature) latest.current.released = false;
