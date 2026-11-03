@@ -67,6 +67,8 @@ Decision: confirmation rejects changed, missing, inaccessible or capacity-limite
 confirmation, a changed binding stops that item and requires a new review. This keeps a selected plan tied to the
 evidence the owner explicitly confirmed.
 
+Decision: consolidation coordination writes emit a private `label.consolidation.changed` fact containing only the confirmation ID; read-only retry receipts and unchanged cleanup use `noEffect`, while native assignment events remain unchanged.
+
 Web's existing Labels interface owns the single consolidation flow and can use these APIs. It must not interpret
 `movable` or the `selection` hash as permission or immutable confirmation. No competing label editor, list engine or
 bulk job is introduced.
