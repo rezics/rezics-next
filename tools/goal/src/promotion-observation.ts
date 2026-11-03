@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
@@ -6,8 +7,8 @@ export const PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE =
   'scripts/remote-check.ts exposes no structured current run, generation, cgroup identity, or terminal custody event';
 export const PROMOTION_LAUNCH_SOURCE_UNAVAILABLE =
   'scripts/remote-check.ts exposes no authenticated launch revision, script hash, producer revision, or client cohort receipt';
-export const MAX_PROMOTION_COMMAND_RECORD_BYTES = 32 * 1024;
-export const MAX_PROMOTION_REASON_BYTES = 1024;
+export const MAX_PROMOTION_COMMAND_RECORD_BYTES = defaultPolicy.promotion.commandRecordBytes;
+export const MAX_PROMOTION_REASON_BYTES = defaultPolicy.promotion.reasonBytes;
 
 export type PromotionWindowPhase =
   | 'wait-ended'
@@ -145,10 +146,10 @@ function timestamp(value = new Date().toISOString()): string {
   return new Date(Date.parse(value)).toISOString();
 }
 
-function commandRecord(commands: readonly (readonly string[])[]): string {
+function commandRecord(commands: readonly (readonly string[])[], limit: number): string {
   const value = JSON.stringify(commands);
   const bytes = Buffer.byteLength(value);
-  if (bytes <= MAX_PROMOTION_COMMAND_RECORD_BYTES) return value;
+  if (bytes <= limit) return value;
   return JSON.stringify({
     omitted: true,
     bytes,
@@ -156,9 +157,9 @@ function commandRecord(commands: readonly (readonly string[])[]): string {
   });
 }
 
-function boundedReason(reason: string): string {
+function boundedReason(reason: string, limit: number): string {
   const bytes = Buffer.byteLength(reason);
-  if (bytes <= MAX_PROMOTION_REASON_BYTES) return reason;
+  if (bytes <= limit) return reason;
   return `reason omitted (${bytes} bytes; sha256 ${createHash('sha256').update(reason).digest('hex')})`;
 }
 
@@ -209,6 +210,7 @@ export function beginPromotionGroupWindow(
     commands: readonly (readonly string[])[];
     at?: string;
   },
+  policy = defaultPolicy.promotion,
 ): string {
   ensurePromotionObservationSchema(db);
   const id = randomUUID();
@@ -236,7 +238,7 @@ export function beginPromotionGroupWindow(
       input.group,
       attempt + 1,
       input.commit,
-      commandRecord(input.commands),
+      commandRecord(input.commands, policy.commandRecordBytes),
       at,
       at,
       PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE,
@@ -300,6 +302,7 @@ export function recordPromotionCustodyUnavailable(
   db: Database,
   windowId: string | undefined,
   reason = PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE,
+  policy = defaultPolicy.promotion,
 ): void {
   if (!windowId) return;
   ensurePromotionObservationSchema(db);
@@ -308,7 +311,7 @@ export function recordPromotionCustodyUnavailable(
       cpu_peak_cores=NULL, cpu_interval_ms=NULL, cpu_coverage_ms=NULL, memory_peak_bytes=NULL, memory_peak_scope=NULL,
       physical_host=NULL, physical_run_id=NULL, physical_generation=NULL, physical_incarnation=NULL, physical_cgroup=NULL,
       sample_started_at=NULL, sample_ended_at=NULL WHERE id=?`,
-  ).run('unavailable', boundedReason(reason), windowId);
+  ).run('unavailable', boundedReason(reason, policy.reasonBytes), windowId);
 }
 
 /** Called only after acquiring promotion.lease, so open windows belong to a process that has lost custody. */

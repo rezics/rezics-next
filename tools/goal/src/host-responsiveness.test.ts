@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readLogTail } from './records.ts';
-import { managerHostRestartAllowed } from './integration-cli.ts';
+import { hostRequest } from './integration-cli.ts';
+import { readControlPolicy } from './policy.ts';
 
 const MAX_TAIL = 256 * 1024;
 
@@ -26,15 +27,12 @@ test('watchdog and settle log scans are bounded to a line-aligned 256 KiB suffix
   }
 });
 
-test('a stale manager host records at most one restart in each ten-minute interval', () => {
-  const root = mkdtempSync(join(tmpdir(), 'goal-host-restart-'));
-  try {
-    expect(managerHostRestartAllowed(root, 1_000_000)).toBe(true);
-    expect(managerHostRestartAllowed(root, 1_599_999)).toBe(false);
-    expect(managerHostRestartAllowed(root, 1_600_000)).toBe(true);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test('host RPC uses local policy and explicit arguments retain precedence', async () => {
+  const policy = readControlPolicy({ host: { requestTimeoutMs: 15, requestRetryMs: 1 } }).host;
+  await expect(hostRequest('missing.sock', { command: 'decision' }, undefined, undefined, policy)).rejects.toThrow(
+    'after 15ms',
+  );
+  await expect(hostRequest('missing.sock', { command: 'decision' }, 30, 0, policy)).rejects.toThrow('after 30ms');
 });
 
 test('log-tail reads remain usable when the final event follows a multi-megabyte prefix', () => {

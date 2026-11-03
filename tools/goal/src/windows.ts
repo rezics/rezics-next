@@ -1,9 +1,16 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 
-export type WindowSettings = { socket: string; session: string; tmuxCommand?: string; termspacesCommand?: string };
+export type WindowSettings = {
+  policy?: ControlPolicy['windows'] | undefined;
+  socket: string;
+  session: string;
+  tmuxCommand?: string;
+  termspacesCommand?: string;
+};
 export type WindowRunner = (executable: string, argv: string[]) => string;
-const run: WindowRunner = (executable, argv) => {
-  const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: 15_000 });
+const run = (executable: string, argv: string[], policy = defaultPolicy.windows): string => {
+  const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: policy.commandTimeoutMs });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error((result.stderr || `${executable} failed`).trim());
   return result.stdout.trim();
@@ -62,7 +69,7 @@ export interface ManagerWindows {
 export class TermspacesWindows implements ManagerWindows {
   constructor(
     private readonly settings: WindowSettings,
-    private readonly execute: WindowRunner = run,
+    private readonly execute: WindowRunner = (executable, argv) => run(executable, argv, settings.policy),
   ) {}
   private tmux(argv: string[]): string {
     return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-S', this.settings.socket, ...argv]);

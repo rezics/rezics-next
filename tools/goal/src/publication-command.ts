@@ -14,6 +14,7 @@ function configuredController(runtime: CommandRuntime): PublicationController {
   if (!operationsManager || operationsManager.trim() !== operationsManager)
     throw new Error('publication ingress requires a configured integration.operationsManager');
   return new PublicationController({
+    policy: runtime.settings.policy,
     db: runtime.db,
     mainCheckout: runtime.mainCheckout,
     stateDirectory: runtime.stateDirectory,

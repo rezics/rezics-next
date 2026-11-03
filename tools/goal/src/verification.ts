@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import type { ProofMetadata } from './types.ts';
 
 /** CP reservation identity; mapped exactly to the delivered native token wire field. */
@@ -83,7 +84,12 @@ const PRODUCER_START = `import {pathToFileURL} from 'node:url';
 const binding = JSON.parse(await Bun.stdin.text());
 const {startControllerWorkerCheck} = await import(pathToFileURL(binding.cwd + '/scripts/worker-check.ts').href);
 console.log(JSON.stringify(await startControllerWorkerCheck(binding)));`;
-async function invokeProofProducer(binding: ProofBinding, registry: string, env: NodeJS.ProcessEnv): Promise<unknown> {
+async function invokeProofProducer(
+  binding: ProofBinding,
+  registry: string,
+  env: NodeJS.ProcessEnv,
+  policy = defaultPolicy.proof,
+): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--eval', PRODUCER_START], {
       cwd: binding.cwd,
@@ -104,7 +110,7 @@ async function invokeProofProducer(binding: ProofBinding, registry: string, env:
       output += chunk.toString();
     });
     child.stderr.on('data', (chunk: Buffer) => {
-      error = (error + chunk.toString()).slice(-8192);
+      error = (error + chunk.toString()).slice(-policy.producerErrorCharacters);
     });
     child.once('error', reject);
     child.once('close', (code) => {
@@ -138,6 +144,7 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
           spawnSync('git', ['merge-base', '--is-ancestor', PROOF_PRODUCER_COMMIT, binding.sourceCommit], {
             cwd: binding.cwd,
             stdio: 'ignore',
+            timeout: store.policy.proof.commandTimeoutMs,
           }).status !== 0
         )
           return {
@@ -184,7 +191,11 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
               throw new Error('Native proof reservation was revoked or changed');
           } else writeAtomicJson(path, reservation);
         });
-        return receiveProofStart(binding, registry, await invokeProofProducer(binding, registry, env));
+        return receiveProofStart(
+          binding,
+          registry,
+          await invokeProofProducer(binding, registry, env, store.policy.proof),
+        );
       } catch (error) {
         return { status: 'unknown', cause: String(error) };
       }
@@ -223,7 +234,17 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Brief, Task } from './types.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
 import type { WorkerStore } from './store.ts';
-import { git } from './tasks.ts';
+function proofGit(cwd: string, args: string[], policy = defaultPolicy.proof): string {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
+  });
+  if (result.status !== 0 || result.error)
+    throw new Error(result.error?.message || result.stderr?.trim() || `git ${args[0]} failed`);
+  return result.stdout.trim();
+}
 
 export type ProofAuthorization = {
   fingerprint: string;
@@ -341,15 +362,16 @@ export function authorizeProof(
   operations: string | undefined,
   integrationBranch: string,
 ): ProofAuthorization {
+  const policy = store.policy.proof;
   if (brief.kind !== 'verification' || !brief.proof || brief.criticalPath)
     throw new Error('invalid verification registration');
   authenticateProofManager(store, brief.manager, actor, operations);
   const proof = parseProofMetadata(brief.proof);
   if (!originalCommandHasInputs(brief.acceptance.command))
     throw new Error('proof cannot register a broad root or gate campaign');
-  if (git(root, ['rev-parse', `refs/heads/${integrationBranch}`]) !== proof.sourceCommit)
+  if (proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy) !== proof.sourceCommit)
     throw new Error('proof source must be the captured integration head');
-  if (git(root, ['rev-parse', `${proof.sourceCommit}^{commit}`]) !== proof.sourceCommit)
+  if (proofGit(root, ['rev-parse', `${proof.sourceCommit}^{commit}`], policy) !== proof.sourceCommit)
     throw new Error('proof source is not a captured commit');
   const originals = proof.sourceTasks.map((id) => {
     const task = store.task(id);
@@ -362,7 +384,7 @@ export function authorizeProof(
       !commit
     )
       throw new Error(`proof source ${id} must be a same-Goal integrated original`);
-    if (git(root, ['merge-base', commit, proof.sourceCommit]) !== commit)
+    if (proofGit(root, ['merge-base', commit, proof.sourceCommit], policy) !== commit)
       throw new Error(`proof source commit does not contain ${id}`);
     return { taskId: id, commit, argv: [...task.brief.acceptance.command] };
   });
@@ -378,12 +400,12 @@ export function authorizeProof(
     fingerprint: proofFingerprint(brief),
     manager: actor.id,
     sessionId: actor.sessionId,
-    sourceTree: git(root, ['rev-parse', `${proof.sourceCommit}^{tree}`]),
+    sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
     originals,
   };
 }
 /** Read captured Git objects only. Explicit command files, including shell-contained originals, must exist. */
-export function preflightProof(root: string, brief: Brief): string[] {
+export function preflightProof(root: string, brief: Brief, policy = defaultPolicy.proof): string[] {
   if (!brief.proof) return ['proof metadata unavailable'];
   const tokens = brief.acceptance.command.flatMap(
     (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
@@ -397,8 +419,11 @@ export function preflightProof(root: string, brief: Brief): string[] {
   return [...new Set(tokens)].filter((file) => {
     if (file.startsWith('-') || file.includes('..') || file.startsWith('/')) return true;
     return (
-      spawnSync('git', ['cat-file', '-e', `${brief.proof!.sourceCommit}:${cwd}${file}`], { cwd: root, stdio: 'ignore' })
-        .status !== 0
+      spawnSync('git', ['cat-file', '-e', `${brief.proof!.sourceCommit}:${cwd}${file}`], {
+        cwd: root,
+        stdio: 'ignore',
+        timeout: policy.commandTimeoutMs,
+      }).status !== 0
     );
   });
 }
@@ -866,11 +891,18 @@ export type HistoricalProofReaderSource = {
 };
 const importedHistoricalSources = new Map<string, string>();
 /** Validate code against the controller's Git objects before importing any part of the native module closure. */
-export function validateHistoricalProofReaderSource(source: HistoricalProofReaderSource): string {
+export function validateHistoricalProofReaderSource(
+  source: HistoricalProofReaderSource,
+  policy = defaultPolicy.proof,
+): string {
   const { root, integrationRoot, integrationBranch } = source;
-  if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
+  if (
+    !isAbsolute(root) ||
+    realpathSync(root) !== root ||
+    proofGit(root, ['rev-parse', '--show-toplevel'], policy) !== root
+  )
     throw new Error('Historical reader root must be a canonical Git checkout root');
-  const commit = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  const commit = proofGit(root, ['rev-parse', '--verify', 'HEAD^{commit}'], policy);
   for (const [ancestor, descendant] of [
     [PROOF_PRODUCER_COMMIT, commit],
     [commit, `refs/heads/${integrationBranch}`],
@@ -879,13 +911,14 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
       spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
         cwd: integrationRoot,
         stdio: 'ignore',
+        timeout: policy.commandTimeoutMs,
       }).status !== 0
     )
       throw new Error(
         'Historical reader source must contain the delivered producer and be a captured integration ancestor',
       );
   }
-  if (git(root, ['status', '--porcelain', '--untracked-files=no']))
+  if (proofGit(root, ['status', '--porcelain', '--untracked-files=no'], policy))
     throw new Error('Historical reader source must be Git-clean');
   if (importedHistoricalSources.has(root) && importedHistoricalSources.get(root) !== commit)
     throw new Error('Imported historical reader source changed; configure an immutable captured checkout');
@@ -904,12 +937,13 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
       !lstatSync(absolute).isFile()
     )
       throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
-    const entry = git(integrationRoot, ['ls-tree', commit, '--', path]);
+    const entry = proofGit(integrationRoot, ['ls-tree', commit, '--', path], policy);
     if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
       throw new Error(`Historical reader module is not a captured regular file: ${path}`);
     const expected = spawnSync('git', ['show', `${commit}:${path}`], {
       cwd: integrationRoot,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: policy.sourceBufferBytes,
+      timeout: policy.commandTimeoutMs,
     });
     const contents = readFileSync(absolute);
     if (expected.status !== 0 || !contents.equals(expected.stdout))
@@ -927,8 +961,9 @@ export function validateHistoricalProofReaderSource(source: HistoricalProofReade
 export async function loadHistoricalProofReader(
   registry: string,
   source: HistoricalProofReaderSource,
+  policy = defaultPolicy.proof,
 ): Promise<HistoricalProofReader> {
-  const commit = validateHistoricalProofReaderSource(source);
+  const commit = validateHistoricalProofReaderSource(source, policy);
   // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
   importedHistoricalSources.set(source.root, commit);
   const wrapper = join(source.root, 'scripts/worker-check.ts');
@@ -997,7 +1032,7 @@ export async function refreshHistoricalProofAdmission(
   if (!checks.length) return;
   let reader: HistoricalProofReader;
   try {
-    reader = await loadHistoricalProofReader(registry, source);
+    reader = await loadHistoricalProofReader(registry, source, store.policy.proof);
   } catch (error) {
     const cause = `Historical admission requires the trusted current native reader: ${String(error)}`;
     store.historicalProofReaderUnavailable(checks[0]!, cause);
@@ -1063,14 +1098,15 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
 }
 
 /** Passing evidence belongs only to this exact source and integration ref, never a later source. */
-export function proofSourceUnchanged(task: Task, integrationBranch: string): boolean {
+export function proofSourceUnchanged(task: Task, integrationBranch: string, policy = defaultPolicy.proof): boolean {
   if (!registeredProof(task.brief, task.proofAuthorization)) return false;
   try {
     return (
-      git(task.worktree, ['rev-parse', 'HEAD']) === task.brief.proof!.sourceCommit &&
-      git(task.worktree, ['rev-parse', 'HEAD^{tree}']) === task.proofAuthorization!.sourceTree &&
-      git(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`]) === task.brief.proof!.sourceCommit &&
-      git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) === ''
+      proofGit(task.worktree, ['rev-parse', 'HEAD'], policy) === task.brief.proof!.sourceCommit &&
+      proofGit(task.worktree, ['rev-parse', 'HEAD^{tree}'], policy) === task.proofAuthorization!.sourceTree &&
+      proofGit(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`], policy) ===
+        task.brief.proof!.sourceCommit &&
+      proofGit(task.worktree, ['status', '--porcelain', '--untracked-files=all'], policy) === ''
     );
   } catch {
     return false;
@@ -1078,8 +1114,10 @@ export function proofSourceUnchanged(task: Task, integrationBranch: string): boo
 }
 
 export class ProofCapacityQueuedError extends Error {
-  constructor() {
-    super('Proof queued: three current ordinary checks active');
+  constructor(concurrency = defaultPolicy.proof.concurrency) {
+    // English number names preserve the existing diagnostic, not admission policy.
+    const count = ['zero', 'one', 'two', 'three'][concurrency] ?? String(concurrency);
+    super(`Proof queued: ${count} current ordinary checks active`);
   }
 }
 

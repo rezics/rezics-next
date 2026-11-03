@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -28,7 +29,30 @@ function cancelOwnedCommand(child: ChildProcess, signal: AbortSignal | undefined
 }
 
 export function git(cwd: string, ...args: string[]): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  return policyGit(cwd, args);
+}
+
+/** Enforce completed pipe results too: Bun can return a whole chunk beyond spawnSync's maxBuffer. */
+export function gitOutputError(
+  result: { stdout?: string | Buffer | null; stderr?: string | Buffer | null },
+  bytes: number,
+  command = 'git',
+): Error | undefined {
+  if (Buffer.byteLength(result.stdout ?? '') > bytes || Buffer.byteLength(result.stderr ?? '') > bytes)
+    return new Error(`${command} output exceeds ${bytes} bytes`);
+  return undefined;
+}
+
+/** A caller-bound Git helper; the variadic compatibility helper retains package defaults. */
+export function policyGit(cwd: string, args: string[], policy = defaultPolicy.merge): string {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
+  const overflow = gitOutputError(result, policy.gitBufferBytes, `git ${args[0]}`);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
@@ -44,9 +68,9 @@ export function remoteCheckEnvironment(stateDirectory: string | undefined): { KE
   return hosts !== undefined && existsSync(hosts) ? { KERNEL_CHECK_REMOTE: hosts } : {};
 }
 /** Gates run in the main checkout's worktrees, so the state directory is the one the control plane itself defaults to. */
-function gateStateDirectory(cwd: string, parent: NodeJS.ProcessEnv): string | undefined {
+function gateStateDirectory(cwd: string, parent: NodeJS.ProcessEnv, policy = defaultPolicy.merge): string | undefined {
   try {
-    const main = dirname(git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'));
+    const main = dirname(policyGit(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'], policy));
     return resolve(main, parent.GOAL_STATE_DIRECTORY || '.temp/goal');
   } catch {
     return undefined;
@@ -91,11 +115,11 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, stopGroups);
 }
 
-function compilerContainerCleanup(pid: number): string | undefined {
+function compilerContainerCleanup(pid: number, policy: ControlPolicy['merge']): string | undefined {
   const query = () =>
     spawnSync('docker', ['ps', '-aq', '--filter', `label=rezics.compiler.pid=${pid}`], {
       encoding: 'utf8',
-      timeout: 10_000,
+      timeout: policy.cleanupCommandTimeoutMs,
     });
   const describeFailure = (result: ReturnType<typeof query>) =>
     result.error?.message || result.stderr?.trim() || `docker exited with status ${result.status}`;
@@ -109,7 +133,10 @@ function compilerContainerCleanup(pid: number): string | undefined {
   if (containers.length > 1)
     return `Compiler database cleanup could not be proven for PID ${pid}: expected one owned container, found ${containers.join(', ')}`;
   if (containers.length) {
-    const removed = spawnSync('docker', ['rm', '-f', '-v', containers[0]!], { encoding: 'utf8', timeout: 10_000 });
+    const removed = spawnSync('docker', ['rm', '-f', '-v', containers[0]!], {
+      encoding: 'utf8',
+      timeout: policy.cleanupCommandTimeoutMs,
+    });
     if (removed.error || removed.status !== 0)
       return `Compiler database cleanup failed for PID ${pid}: ${describeFailure(removed)}`;
     listed = query();
@@ -135,6 +162,7 @@ export function processGroupRunner(
   stateDirectory?: string,
   parent: NodeJS.ProcessEnv = process.env,
   sanitizeEnvironment = true,
+  policy = defaultPolicy.merge,
 ): GateRunner {
   const run: GateRunner = async (argv, cwd, logPath, options) => {
     if (!argv.length) throw new Error('A gate command is required');
@@ -143,7 +171,9 @@ export function processGroupRunner(
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)) : parent,
+        env: sanitizeEnvironment
+          ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
+          : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -167,17 +197,19 @@ export function processGroupRunner(
           return (error as NodeJS.ErrnoException).code === 'EPERM';
         }
       };
-      const stopGroup = (graceMs = 12_000): Promise<boolean> => {
+      const stopGroup = (graceMs = policy.terminationGraceMs): Promise<boolean> => {
         if (stopPromise) return stopPromise;
         stopPromise = (async () => {
           if (!groupAlive()) return true;
           signalGroup('SIGTERM');
           const deadline = Date.now() + graceMs;
-          while (groupAlive() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+          while (groupAlive() && Date.now() < deadline)
+            await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
           if (groupAlive()) {
             signalGroup('SIGKILL');
-            const killDeadline = Date.now() + 1_000;
-            while (groupAlive() && Date.now() < killDeadline) await new Promise((resolve) => setTimeout(resolve, 50));
+            const killDeadline = Date.now() + policy.killGraceMs;
+            while (groupAlive() && Date.now() < killDeadline)
+              await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
           }
           return !groupAlive();
         })();
@@ -220,7 +252,7 @@ export function processGroupRunner(
             } else if (Number(owner[1]) !== pid) {
               output += `Compiler database cleanup could not be proven for PID ${pid}: producer reported owner PID ${owner[1]}\n`;
             } else {
-              const failure = compilerContainerCleanup(pid);
+              const failure = compilerContainerCleanup(pid, policy);
               if (failure) output += `${failure}\n`;
             }
           }
@@ -287,17 +319,24 @@ export type CheckResultGateOptions = {
 };
 
 export function gateRunner(
-  timeoutMs = 600_000,
+  timeoutMs: number | undefined = undefined,
   stateDirectory?: string,
   environment: NodeJS.ProcessEnv | CheckResultGateOptions = {},
   reuse?: CheckResultGateOptions,
+  policy = defaultPolicy.merge,
 ): GateRunner {
   if ('root' in environment && 'results' in environment) {
     reuse = environment as CheckResultGateOptions;
     environment = {};
   }
   const env = environment as NodeJS.ProcessEnv;
-  const run = processGroupRunner(timeoutMs, stateDirectory, { ...process.env, ...env });
+  const run = processGroupRunner(
+    timeoutMs ?? policy.gateTimeoutMs,
+    stateDirectory,
+    { ...process.env, ...env },
+    true,
+    policy,
+  );
   return async (argv, cwd, logPath, options = {}) => {
     options.signal?.throwIfAborted();
     let key: ReturnType<typeof checkResultKey> | undefined;
@@ -307,10 +346,16 @@ export function gateRunner(
     const startedAt = Date.now();
     if (reuse && reusableCommand(argv)) {
       try {
-        cleanBefore = git(cwd, 'status', '--porcelain').length === 0;
+        cleanBefore = policyGit(cwd, ['status', '--porcelain'], policy).length === 0;
         if (cleanBefore) {
-          head = git(cwd, 'rev-parse', 'HEAD');
-          key = checkResultKey({ root: reuse.root, cwd, command: argv, env: { ...process.env, ...env } });
+          head = policyGit(cwd, ['rev-parse', 'HEAD'], policy);
+          key = checkResultKey({
+            root: reuse.root,
+            cwd,
+            command: argv,
+            env: { ...process.env, ...env },
+            policy: reuse.results.policy,
+          });
           cached = reuse.results.lookup(key.key);
           appendFileSync(logPath, `check-results: ${cached ? 'hit' : 'miss'} ${key.key}\n`);
           if (cached && reuse.enabled && !reuse.shadow)
@@ -328,8 +373,8 @@ export function gateRunner(
           key &&
           cleanBefore &&
           !result.timedOut &&
-          git(cwd, 'status', '--porcelain').length === 0 &&
-          git(cwd, 'rev-parse', 'HEAD') === head &&
+          policyGit(cwd, ['status', '--porcelain'], policy).length === 0 &&
+          policyGit(cwd, ['rev-parse', 'HEAD'], policy) === head &&
           result.passed
         ) {
           reuse!.results.record({
@@ -363,7 +408,7 @@ export function gateRunner(
 }
 
 /** Extract assertion content, ignoring reporter ordering, source locations and timing decoration. */
-export function firstFailure(output: string): FirstFailure {
+export function firstFailure(output: string, policy = defaultPolicy.merge): FirstFailure {
   const raw = output.replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/);
   const lines = raw
     .map((line) =>
@@ -392,34 +437,48 @@ export function firstFailure(output: string): FirstFailure {
       /error|assert|expect|received|actual|fail|panic|not ok/i.test(line) &&
       !/^\s*\d+ (?:pass|fail)|^\s*(?:test suites|test files|tests|snapshots|duration|time|ran \d)/i.test(line),
   );
-  const head = [...new Set(failing.map((line) => line.trim()))].slice(0, 60).join('\n').slice(0, 4000);
-  const tail = output.slice(-(8000 - head.length - 5));
+  const head = [...new Set(failing.map((line) => line.trim()))]
+    .slice(0, policy.failureLines)
+    .join('\n')
+    .slice(0, Math.min(policy.failureHeadCharacters, policy.failureCharacters));
+  const separator = '\n...\n';
+  const tailCharacters = Math.max(0, policy.failureCharacters - head.length - separator.length);
+  const tail = tailCharacters ? output.slice(-tailCharacters) : '';
   return {
     fingerprint: createHash('sha256').update(assertion).digest('hex'),
     assertion,
-    excerpt: head ? `${head}\n...\n${tail}` : output.slice(-8000),
+    excerpt: head
+      ? `${head}${separator}${tail}`.slice(0, policy.failureCharacters)
+      : output.slice(-policy.failureCharacters),
   };
 }
 
-export function changedFiles(cwd: string, base: string): string[] {
+export function changedFiles(cwd: string, base: string, policy = defaultPolicy.merge): string[] {
   // Include both sides of renames: moving a protected file into scope is still out of scope.
   const result = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, 'HEAD'], {
     cwd,
     encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr || 'Cannot read changed paths');
   return result.stdout.split('\0').filter(Boolean);
 }
 
 /** Paths marked linguist-generated are excluded from estimates, using attributes in this checkout. */
-export function nonGeneratedFiles(cwd: string, files: readonly string[]): string[] {
+export function nonGeneratedFiles(cwd: string, files: readonly string[], policy = defaultPolicy.merge): string[] {
   if (!files.length) return [];
   const result = spawnSync('git', ['check-attr', '-z', '--stdin', 'linguist-generated'], {
     cwd,
     encoding: 'utf8',
     input: `${files.join('\0')}\0`,
-    maxBuffer: 32 * 1024 * 1024,
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr || 'Cannot read linguist-generated attributes');
   const values = result.stdout.split('\0');
   const generated = new Set<string>();
@@ -428,13 +487,18 @@ export function nonGeneratedFiles(cwd: string, files: readonly string[]): string
   return files.filter((file) => !generated.has(file));
 }
 
-export function diffLineCount(cwd: string, base: string, files?: readonly string[]): number {
+export function diffLineCount(
+  cwd: string,
+  base: string,
+  files?: readonly string[],
+  policy = defaultPolicy.merge,
+): number {
   const args = ['diff', '--numstat', base, 'HEAD'];
   if (files) {
     args.push('--', ...files);
     if (!files.length) return 0;
   }
-  return git(cwd, ...args)
+  return policyGit(cwd, args, policy)
     .split('\n')
     .reduce((sum, line) => {
       const [added, removed] = line.split('\t');

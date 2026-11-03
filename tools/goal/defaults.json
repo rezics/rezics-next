@@ -175,7 +175,8 @@
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
-      "refusalSummaryCharacters": 1000
+      "refusalSummaryCharacters": 1000,
+      "expiredTaskExamples": 5
     },
     "capacity": {
       "maxWorkers": 32,
@@ -190,6 +191,502 @@
       "notifierArgumentCharacters": 4096,
       "hourlyReportMaxTimeoutMs": 120000
     },
-    "flowHistoryMs": 2592000000
+    "flowHistoryMs": 2592000000,
+    "worker": {
+      "capacityPauseMs": 10000,
+      "usageLimitRetryPauseMs": 180000,
+      "usageLimitRefusalWindowMs": 3600000,
+      "usageLimitRefusals": 3,
+      "usageLimitExhaustionMs": 3600000,
+      "waitingResumeLaunchFailures": 3,
+      "startGraceMs": 600000,
+      "silenceCheckMs": 60000,
+      "activityPollMs": 30000,
+      "orphanStartGraceMultiplier": 2,
+      "sweepYieldItems": 8,
+      "retryIntentLeadMs": 1000,
+      "toolRetryBackoffMs": [120000, 600000, 1800000],
+      "toolRetryWindowMs": 3600000,
+      "toolRetryEventRows": 5000,
+      "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],
+      "logTailBytes": 262144,
+      "diagnosticCharacters": 4000,
+      "summaryCharacters": 1000,
+      "reportResultCharacters": 2000,
+      "failedResultCharacters": 500,
+      "fixtureCleanupGraceMs": 250,
+      "blockerFingerprintCharacters": 300,
+      "checkLogBytes": 4096,
+      "checkCommandCharacters": 1200,
+      "checkStatusCharacters": 80,
+      "checkSummaryCharacters": 400,
+      "recoveryCharacters": 500,
+      "retrySetupCharacters": 800,
+      "worktreeLockAgeMs": 60000
+    },
+    "workerResources": {
+      "cpuWeight": 50,
+      "ioWeight": 50,
+      "preparationTimeoutMs": 5000,
+      "memoryReserveGiB": 14,
+      "minimumMemoryFraction": 0.25
+    },
+    "appServer": {
+      "requestTimeoutMs": 30000,
+      "readinessTimeoutMs": 30000,
+      "connectTimeoutMs": 30000,
+      "terminationGraceMs": 500,
+      "diagnosticCharacters": 262144,
+      "exitPollMs": 20,
+      "killWaitMs": 5000
+    },
+    "containers": {
+      "commandTimeoutMs": 15000,
+      "maxAgeHours": 4,
+      "cleanupIntervalMs": 600000
+    },
+    "process": {
+      "groupPollMs": 1000,
+      "exitPollMs": 50,
+      "signalDiagnosticCharacters": 4096,
+      "resolverTerminationGraceMs": 1000
+    },
+    "host": {
+      "startupTimeoutMs": 45000,
+      "supervisorStartupTimeoutMs": 45000,
+      "socketTimeoutMs": 250,
+      "leasePollMs": 25,
+      "pollMs": 1000,
+      "minBackoffMs": 250,
+      "maxBackoffMs": 30000,
+      "retryFailures": 30,
+      "healthResetMs": 60000,
+      "startupLogBytes": 4000,
+      "retryDiagnosticCharacters": 160,
+      "restartIntervalMs": 600000,
+      "stateSweepIntervalMs": 60000,
+      "codePollMs": 1000,
+      "recoveryIntervalMs": 60000,
+      "recoveryReadinessMs": 100,
+      "requestTimeoutMs": 60000,
+      "requestRetryMs": 25,
+      "decisionAuditTimeoutMs": 500,
+      "flowReviewIntervalMs": 3600000,
+      "reportTimeoutMs": 150000,
+      "reportOverheadMs": 30000,
+      "reportTerminationGraceMs": 250,
+      "reportOutputCharacters": 512
+    },
+    "watchdog": {
+      "noWorkerMs": 600000,
+      "stabilizeBehindMs": 1800000,
+      "alertEveryMs": 7200000,
+      "failureWindowMs": 1800000,
+      "failureAttempts": 3,
+      "failureTasks": 2,
+      "failureExampleCharacters": 200,
+      "hostProbeEveryMs": 300000,
+      "hostProbeTimeoutMs": 20000,
+      "hostProbeConnectTimeoutSeconds": 10,
+      "hostProbeDiagnosticCharacters": 4096,
+      "hostProbeFailures": 2,
+      "attemptLimitMs": 7200000,
+      "recentCommands": 10,
+      "commandLogTailBytes": 262144,
+      "commitCountTimeoutMs": 5000,
+      "processPollingCommands": 2,
+      "longAttemptReportMs": 3600000
+    },
+    "width": {
+      "workerThreshold": 10,
+      "bucketMs": 900000,
+      "pageSize": 64,
+      "sweepYieldItems": 8
+    },
+    "flow": {
+      "alertEveryMs": 3600000,
+      "waitingTaskExamples": 3
+    },
+    "lifecycle": {
+      "conflictWindowRows": 1000
+    },
+    "provider": {
+      "claudeRefreshMs": 120000,
+      "claudeStaleMs": 1200000,
+      "claudeRequestTimeoutSeconds": 10,
+      "codexAllowanceTailBytes": 1048576,
+      "usageContextObjects": 24,
+      "observationClockSkewMs": 60000
+    },
+    "pacing": {
+      "scheduleRefreshMs": 1800000,
+      "scheduleRequestTimeoutSeconds": 15,
+      "minimumResetMs": 900000,
+      "alertPercentPerHour": 2,
+      "alertUnusedPercent": 20,
+      "alertResetHours": 24,
+      "alertEveryMs": 10800000
+    },
+    "manager": {
+      "sleepAlarmPerHour": 10,
+      "sleepHistoryHours": 24,
+      "inboxPollMs": 2000,
+      "fileClockSlackMs": 1000,
+      "continuationBudgetPercent": 90,
+      "continuationCharacters": 8000,
+      "messageWords": 60
+    },
+    "guidance": {
+      "longCommandWaitMs": 300000,
+      "summaryWords": 120,
+      "blockerWords": 80,
+      "toolFailureRetries": 2
+    },
+    "routing": {
+      "implementation": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "interface": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "bulk-text": {
+        "maxSteps": 500,
+        "maxMs": 7200000
+      },
+      "claim": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "specification": {
+        "maxSteps": 200,
+        "maxMs": 3600000
+      },
+      "critical-path": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "research": {
+        "maxSteps": 200,
+        "maxMs": 3600000
+      }
+    },
+    "records": {
+      "sessionHeadBytes": 65536,
+      "sessionReadBufferBytes": 65536,
+      "sessionRecordBytes": 1048576,
+      "legacyApproachCharacters": 1000,
+      "legacyResultCharacters": 2000
+    },
+    "consultation": {
+      "timeoutMs": 120000,
+      "causeCharacters": 1000
+    },
+    "hourlyReport": {
+      "fieldCharacters": 160,
+      "goalRows": 8,
+      "landingRows": 8,
+      "launchRows": 8,
+      "waitRows": 5,
+      "incidentRows": 5,
+      "incidentTaskExamples": 5,
+      "reportBytes": 32000,
+      "notifierOutputBytes": 4096,
+      "interruptedSendGraceMs": 5000,
+      "notifierTerminationGraceMs": 250
+    },
+    "storage": {
+      "sqliteBusyTimeoutMs": 30000,
+      "checkResultTtlMs": 604800000,
+      "globalInputCacheClearAboveEntries": 64
+    },
+    "dependencies": {
+      "storeLeaseWaitMs": 900000,
+      "retainedStores": 3,
+      "storeRetentionMs": 86400000,
+      "install": {
+        "startupMs": 15000,
+        "runMs": 180000,
+        "budgetMs": 180000,
+        "terminationMs": 15000
+      },
+      "gate": {
+        "startupMs": 60000,
+        "runMs": 5400000,
+        "budgetMs": 5400000,
+        "terminationMs": 15000
+      },
+      "captureHeadBytes": 16777216,
+      "captureTailBytes": 16777216,
+      "pollMs": 20,
+      "supervisorTerminationMultiplier": 3,
+      "supervisorOverheadMs": 5000,
+      "supervisorBufferBytes": 1048576
+    },
+    "promotion": {
+      "gateTimeoutMs": 14400000,
+      "infrastructureReruns": 2,
+      "advanceAttempts": 5,
+      "commandRecordBytes": 32768,
+      "reasonBytes": 1024
+    },
+    "verifier": {
+      "gateTimeoutMs": 14400000,
+      "standaloneGateTimeoutMs": 7200000,
+      "installAttempts": 3,
+      "checkAttempts": 3,
+      "findingRows": 2000,
+      "runRows": 5000,
+      "concurrency": 3,
+      "findingAssertions": 64,
+      "existingProbes": 8,
+      "diagnosticCharacters": 6000,
+      "gitBufferBytes": 33554432,
+      "residentPollMs": 60000
+    },
+    "leases": {
+      "waitMs": 30000,
+      "pollMs": 50,
+      "acquisitionAttempts": 3,
+      "dispatchWaitMs": 900000,
+      "workspacePollMs": 10
+    },
+    "integration": {
+      "checkTimeoutMs": 600000,
+      "affectedTransportAttempts": 2,
+      "typecheckAttempts": 2,
+      "advanceAttempts": 5,
+      "candidateGitBufferBytes": 262144,
+      "candidateDetailCharacters": 800,
+      "candidatePaths": 64,
+      "candidateStatCharacters": 4000,
+      "candidatePatchLines": 80,
+      "candidatePatchCharacters": 5000
+    },
+    "controlPlane": {
+      "devLeaseWaitMs": 30000,
+      "pollMs": 50,
+      "proofAttempts": 3,
+      "candidateValidations": 5,
+      "checkTimeoutMs": 600000,
+      "negativeProbeTimeoutMs": 60000,
+      "testTimeoutMs": 30000,
+      "launchSmokeTimeoutMs": 300000,
+      "negativeProbeFiles": 3,
+      "negativeProbeCommands": 1,
+      "diagnosticCharacters": 6000
+    },
+    "history": {
+      "attemptPageSize": 100,
+      "diagnosticCharacters": 2000
+    },
+    "proof": {
+      "concurrency": 3,
+      "producerErrorCharacters": 8192,
+      "sourceBufferBytes": 8388608,
+      "commandTimeoutMs": 30000,
+      "gitBufferBytes": 33554432
+    },
+    "launchContext": {
+      "dependencies": 48,
+      "textCharacters": 512,
+      "diagnosticCharacters": 300,
+      "stateCharacters": 80,
+      "pathCharacters": 1024,
+      "revisionCharacters": 128,
+      "renderedBytes": 12000,
+      "gitBufferBytes": 65536,
+      "probeBufferBytes": 16384
+    },
+    "inbox": {
+      "defaultPageSize": 50,
+      "maxPageSize": 100,
+      "dedupeWindowMs": 3600000,
+      "managerSends": 6,
+      "managerMessageCharacters": 600,
+      "sendWindowMs": 3600000,
+      "questionAgeMs": 1800000,
+      "blockerAgeMs": 3600000,
+      "threadDepth": 10000,
+      "pollMs": 2000
+    },
+    "launchSmoke": {
+      "pollMs": 100,
+      "budgetMs": 270000,
+      "outputBytes": 2097152,
+      "evidenceBudgetBytes": 40000,
+      "evidenceDepth": 8,
+      "evidenceStringBytes": 4096,
+      "evidenceArrayItems": 64,
+      "evidenceObjectEntries": 40,
+      "evidenceKeyCharacters": 100,
+      "evidenceBytes": 65536,
+      "logTailBytes": 32768,
+      "logEvents": 32,
+      "stderrBytes": 2048,
+      "diagnosticCharacters": 1200,
+      "commandTimeoutMs": 30000,
+      "stopGraceMs": 500,
+      "fakeCommandTimeoutMs": 10000,
+      "checkWaitMs": 10000,
+      "worktreeCleanupTimeoutMs": 2000,
+      "innerTerminationGraceMs": 3000,
+      "cloneTimeoutMs": 45000,
+      "innerOverheadMs": 5000,
+      "scopeCleanupTimeoutMs": 5000,
+      "snapshotEvents": 16,
+      "launchErrors": 8,
+      "resultCharacters": 400,
+      "drainWaitMs": 5000,
+      "processTerminationGraceMs": 1000,
+      "processCleanupGraceMs": 500,
+      "processCleanupPollMs": 25,
+      "systemdCommandTimeoutMs": 25000
+    },
+    "brief": {
+      "bytes": 65536,
+      "pathCharacters": 65536,
+      "pathMatchStates": 1000000
+    },
+    "workerPrompt": {
+      "characters": 20000,
+      "gitBufferBytes": 16777216
+    },
+    "publication": {
+      "workflowDeadlineSeconds": 1800,
+      "workflowGraceSeconds": 30,
+      "commandTimeoutMs": 30000,
+      "commandBufferBytes": 2097152,
+      "inventoryMaxAgeMs": 300000,
+      "observationClockSkewMs": 30000,
+      "processPollMs": 100
+    },
+    "publicationLegacy": {
+      "evidenceBytes": 1048576,
+      "records": 256,
+      "fieldCharacters": 512,
+      "documentReferences": 16
+    },
+    "nativeCommands": {
+      "commandTimeoutMs": 30000,
+      "commandBufferBytes": 32768
+    },
+    "evidence": {
+      "manifestCharacters": 8000,
+      "outputLines": 60,
+      "outputCharacters": 2800,
+      "fieldCharacters": 500,
+      "approaches": 3,
+      "approachCharacters": 140,
+      "approachResultCharacters": 160,
+      "pathCharacters": 800,
+      "visiblePathCharacters": 700,
+      "commandCharacters": 250,
+      "statCharacters": 250,
+      "failureCharacters": 4000,
+      "gitBufferBytes": 33554432,
+      "commandTimeoutMs": 30000
+    },
+    "merge": {
+      "gitBufferBytes": 33554432,
+      "commandTimeoutMs": 30000,
+      "cleanupCommandTimeoutMs": 10000,
+      "terminationGraceMs": 12000,
+      "killGraceMs": 1000,
+      "pollMs": 50,
+      "gateTimeoutMs": 600000,
+      "outsideScopePaths": 20,
+      "affectedFailureLines": 20,
+      "failureLines": 60,
+      "failureHeadCharacters": 4000,
+      "failureCharacters": 8000
+    },
+    "trainResolver": {
+      "inputBytes": 262144,
+      "outputBytes": 262144,
+      "timeoutMs": 240000,
+      "killGraceMs": 5000,
+      "sourceContracts": 4,
+      "sourceContractCharacters": 16000
+    },
+    "toolIncidents": {
+      "threshold": 3,
+      "windowMs": 1200000,
+      "probeMs": 600000,
+      "exampleTasks": 5,
+      "sourceBufferBytes": 1048576,
+      "sourceTimeoutMs": 30000
+    },
+    "localSettings": {
+      "diagnosticCharacters": 300
+    },
+    "service": {
+      "logLines": 50,
+      "socketTimeoutMs": 1000,
+      "diagnosticCharacters": 4096
+    },
+    "cpSync": {
+      "configSmokeTimeoutMs": 60000,
+      "cliSmokeTimeoutMs": 300000,
+      "testTimeoutMs": 30000,
+      "installTimeoutMs": 600000,
+      "typecheckTimeoutMs": 900000,
+      "suiteTimeoutMs": 1800000,
+      "gitBufferBytes": 268435456,
+      "dirtyPaths": 20,
+      "terminationGraceMs": 15000,
+      "heartbeatMs": 120000,
+      "pipeGraceMs": 5000,
+      "compilerLines": 40,
+      "failureLines": 30,
+      "conflictPaths": 10,
+      "changedPaths": 10,
+      "residentSamples": 10,
+      "residentSampleMs": 60000,
+      "statColumns": 120
+    },
+    "gateParity": {
+      "budgetMs": 270000,
+      "gitTimeoutMs": 5000,
+      "gitBufferBytes": 131072,
+      "testTimeoutMs": 30000,
+      "fixtureTimeoutMs": 60000,
+      "compatibilityTimeoutMs": 120000,
+      "outputBytes": 32768,
+      "cloneTimeoutMs": 30000,
+      "checkoutTimeoutMs": 10000,
+      "installTimeoutMs": 120000
+    },
+    "candidateProbe": {
+      "gitBufferBytes": 1048576,
+      "paths": 64,
+      "gitDetailCharacters": 800,
+      "diagnosticCharacters": 1200,
+      "statusCharacters": 500
+    },
+    "lifecycleRegressions": {
+      "testTimeoutMs": 30000,
+      "commandTimeoutMs": 60000,
+      "diagnosticCharacters": 2500
+    },
+    "managerSmoke": {
+      "compactTokens": 300000,
+      "tokenBudget": 20000
+    },
+    "hostRoute": {
+      "journalAgeSeconds": 120,
+      "clockSkewSeconds": 1,
+      "connectTimeoutSeconds": 15
+    },
+    "windows": {
+      "commandTimeoutMs": 15000
+    },
+    "completion": {
+      "diagnosticCharacters": 1000
+    },
+    "maintenance": {
+      "derivedRefreshMs": 3600000
+    }
   }
 }
