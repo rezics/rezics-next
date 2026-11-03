@@ -31,6 +31,7 @@ readiness, source-currentness, full shelf outcome or growth proof is claimed by 
 standard-question requested Subject, including survivors with inherited source votes. `prepareViewerFacts` runs
 before the caller checkout; `readViewerFacts` uses the existing account-home repeatable-read client;
 `viewerFactsCurrent` invokes the retained reader's finish after release and rechecks Library's own authority terms.
+Each preparation binds one private snapshot read; retries prepare afresh so another read cannot replace its witness.
 Preparations and selected rows stay instance-local; callers keep the exact actor and ordered input and must discard
 provisional facts on false currentness. `readViewerFactsPage` performs that sequence for actual Library list and
 Collection member consumers. Search retains admission, source witnesses, private assembly and its final guard.

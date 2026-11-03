@@ -153,6 +153,9 @@ test('selected row and account changes withhold stale assembly, while unchanged 
   expect(await viewerFactsCurrent(deps(), owner, unchanged, deadline())).toBe(true);
   const changed = await staged(id);
   await vote(id, 9);
+  expect(
+    await withReadTransaction(fixture.database.pool, (client) => readViewerFacts(client, owner, changed), deadline()),
+  ).toMatchObject({ state: 'unavailable', reason: 'currentness' });
   expect(await viewerFactsCurrent(deps(), owner, changed, deadline())).toBe(false);
   expect(await page([id])).toMatchObject({ state: 'current', rows: [{ vote: { units: 9 } }] });
   const scoped = await staged(id);

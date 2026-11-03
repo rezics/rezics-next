@@ -147,6 +147,7 @@ type NativeStage = {
   request: OwnCountedVoteRequest;
   preparation?: OwnCountedVotePreparation;
   read?: OwnCountedVoteReadResult;
+  readStarted?: boolean;
 };
 const nativeStages = new WeakMap<PreparedViewerFacts, NativeStage>();
 
@@ -310,6 +311,8 @@ export async function readViewerFacts(
   if (native && (!native.preparation || actor !== native.request.actor)) return unavailable('currentness');
   if (native?.preparation) {
     if (native.preparation.targets.some((target) => 'state' in target)) return unavailable('identity');
+    if (native.readStarted) return unavailable('currentness');
+    native.readStarted = true;
     native.read = await native.reader.read(client, native.request, native.preparation);
     if (native.read.status !== 'read') return unavailable('currentness');
   }
