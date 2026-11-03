@@ -306609,52 +306609,286 @@
                   "additionalProperties": false,
                   "properties": {
                     "actions": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "claim": {
-                          "enum": [
-                            "sign-in",
-                            "unavailable"
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "const": "sign-in",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state"
                           ],
-                          "type": "string"
+                          "type": "object"
                         },
-                        "join": {
-                          "enum": [
-                            "sign-in",
-                            "unavailable"
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "enter": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "body": {
+                                      "type": "null"
+                                    },
+                                    "expectedStatus": {
+                                      "enum": [
+                                        200,
+                                        202
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "enum": [
+                                        "GET",
+                                        "DELETE"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "maxLength": 128,
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "available",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "method",
+                                    "path",
+                                    "body",
+                                    "expectedStatus"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "enum": [
+                                        "not_authorized",
+                                        "not_member",
+                                        "signed_out",
+                                        "governance_read_only"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "prohibited",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "const": "owner_invariant_observation_unavailable",
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "leave": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "body": {
+                                      "type": "null"
+                                    },
+                                    "expectedStatus": {
+                                      "enum": [
+                                        200,
+                                        202
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "enum": [
+                                        "GET",
+                                        "DELETE"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "maxLength": 128,
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "available",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "method",
+                                    "path",
+                                    "body",
+                                    "expectedStatus"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "enum": [
+                                        "not_authorized",
+                                        "not_member",
+                                        "signed_out",
+                                        "governance_read_only"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "prohibited",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "const": "owner_invariant_observation_unavailable",
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "manage": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "body": {
+                                      "type": "null"
+                                    },
+                                    "expectedStatus": {
+                                      "enum": [
+                                        200,
+                                        202
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "enum": [
+                                        "GET",
+                                        "DELETE"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "maxLength": 128,
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "available",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "method",
+                                    "path",
+                                    "body",
+                                    "expectedStatus"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "enum": [
+                                        "not_authorized",
+                                        "not_member",
+                                        "signed_out",
+                                        "governance_read_only"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "prohibited",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reason": {
+                                      "const": "owner_invariant_observation_unavailable",
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "state": {
+                              "const": "current",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "enter",
+                            "manage",
+                            "leave"
                           ],
-                          "type": "string"
-                        },
-                        "leave": {
-                          "enum": [
-                            "sign-in",
-                            "unavailable"
-                          ],
-                          "type": "string"
-                        },
-                        "manage": {
-                          "enum": [
-                            "sign-in",
-                            "unavailable"
-                          ],
-                          "type": "string"
-                        },
-                        "participate": {
-                          "enum": [
-                            "sign-in",
-                            "unavailable"
-                          ],
-                          "type": "string"
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "participate",
-                        "join",
-                        "leave",
-                        "claim",
-                        "manage"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "boards": {
                       "additionalProperties": false,
@@ -307868,20 +308102,100 @@
                       "type": "object"
                     },
                     "viewer": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "state": {
-                          "enum": [
-                            "anonymous",
-                            "unavailable"
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "const": "anonymous",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state"
                           ],
-                          "type": "string"
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "membership": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reservationId": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    },
+                                    "since": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    "state": {
+                                      "const": "member",
+                                      "type": "string"
+                                    },
+                                    "transactionId": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "since",
+                                    "reservationId",
+                                    "transactionId"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "reservationId": {
+                                      "type": "null"
+                                    },
+                                    "since": {
+                                      "type": "null"
+                                    },
+                                    "state": {
+                                      "const": "none",
+                                      "type": "string"
+                                    },
+                                    "transactionId": {
+                                      "type": "null"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "since",
+                                    "reservationId",
+                                    "transactionId"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "participation": {
+                              "enum": [
+                                "allowed",
+                                "denied"
+                              ],
+                              "type": "string"
+                            },
+                            "readability": {
+                              "const": "allowed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "readability",
+                            "membership",
+                            "participation"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "state"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [
