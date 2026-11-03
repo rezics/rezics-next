@@ -325,6 +325,8 @@ export function GameInitialFacts({
   change,
   editAllowed,
   omitProperties = [],
+  reuse,
+  focusReference,
 }: {
   type: string;
   release: Release;
@@ -335,6 +337,8 @@ export function GameInitialFacts({
   change: (rows: { key: string; statement: StatementInput }[]) => void;
   editAllowed?: (() => boolean) | undefined;
   omitProperties?: readonly string[] | undefined;
+  reuse?: { onReuse: (key: string, index: number) => void } | undefined;
+  focusReference?: { key: string; index: number; nonce: number } | undefined;
 }) {
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
@@ -425,6 +429,16 @@ export function GameInitialFacts({
                   if (!editable(row)) return;
                   publish(current.current.statements.map((item) => (item === row ? { ...item, statement } : item)));
                 }}
+                reuse={
+                  reuse && statements.length > 1
+                    ? { disabled, onReuse: (index) => reuse.onReuse(row.key, index) }
+                    : undefined
+                }
+                focusReference={
+                  focusReference && focusReference.key === row.key
+                    ? { index: focusReference.index, nonce: focusReference.nonce }
+                    : undefined
+                }
               />
               <GameInitialFactRemove
                 row={row}

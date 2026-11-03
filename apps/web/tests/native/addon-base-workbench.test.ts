@@ -77,7 +77,11 @@ describe('native add-on base-work workspace', () => {
     const addonLabel = `Native add-on ${marker}`;
     const createStart = fixture.stack.kernelRequests().length;
     await page.getByLabel('Name', { exact: true }).fill(addonLabel);
-    await page.getByRole('button', { name: 'Create subject', exact: true }).click();
+    const submit = page.getByRole('button', { name: 'Create subject', exact: true });
+    await submit.click();
+    await playExpect(page.locator('[data-addon-create-review]')).toBeVisible();
+    await playExpect(page.getByText('No base-work statement is included', { exact: false })).toBeVisible();
+    await submit.click();
     await playExpect(page.getByRole('link', { name: 'Open subject', exact: true })).toBeVisible();
     await fixture.stack.syncKernelRequests();
     const createPost = fixture.stack

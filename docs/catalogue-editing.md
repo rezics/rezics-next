@@ -233,9 +233,20 @@ checks target admission against the current immutable release before staging `wd
 stale or unadmitted target leaves the existing draft editable. Contributors can revise or remove the unsent choice,
 then add admitted qualifiers and grouped citations with the shared statement fields. This does not copy base credits,
 languages, platforms, availability, progression or licence. Date precision, language strings, qualifiers and grouped
-citations retain native schemas. Item-valued qualifier keys use the same native picker as game credits. Initial facts
-are selected at creation; the exact returned UUID is reread before offering the reader and correction links.
-Concealed or unavailable readback keeps that UUID and offers a read retry without another creation.
+citations retain native schemas. Item-valued qualifier keys use the same native picker as game credits. Before
+creation, the contributor reviews the exact prepared item: admitted type identity and language attribution, every
+term and alias, the explicit base statement or its absence, and every initial assertion with qualifiers and grouped
+references. A contextual suggestion never appears as a sent assertion. Pending target checks block confirmation.
+Unsupported or withdrawn entries stay as repair needs. Confirmation seals that reviewed item through the ordinary
+create command. Unknown delivery retries the identical body and key; a known acknowledgement records the returned
+UUID once and later failures retry only that current read. Initial facts are selected at creation; the exact returned
+UUID is reread before offering the reader and correction links. Concealed or unavailable readback keeps that UUID and
+offers a read retry without another creation. Native diagnostics address the captured holder, nested qualifier or
+reference part; a removed holder keeps a summary and does not focus a neighbour. Contributors may copy one complete
+citation group onto other editable initial-fact holders in the same visit. Decision: AddonBaseWorkspace keeps
+AddonBaseDraft `{ key, statement }` and does not export a FactDraft holder, so creation-time reference reuse copies
+only among admitted GameInitialFacts rows; the explicit base statement keeps its own evidence editor and is never a
+copy source, copy target, or confirmation of the work-query suggestion.
 
 Correction shows the selected current base-work assertions separately from the route suggestion and gives `wdt:P8646`
 its own filtered view of the existing relation editor. Values, qualifiers, rank, grouped evidence, exact-slot review,

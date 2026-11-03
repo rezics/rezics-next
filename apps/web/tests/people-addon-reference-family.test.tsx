@@ -607,6 +607,8 @@ test('People credit and Addon base references share installed parts without chan
         user.type(within(host).getByRole('textbox', { name: m.catalogue_create_label() }), 'New add-on'),
       );
       await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
+      await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+      await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
       await waitFor(() => expect(within(host).getByRole('link', { name: m.addon_correct() })).toBeDefined());
       const continuation = within(host).getByRole('link', { name: m.addon_correct() });
       expect(continuation.getAttribute('href')).toMatch(/\/new-add-on\/addon$/);

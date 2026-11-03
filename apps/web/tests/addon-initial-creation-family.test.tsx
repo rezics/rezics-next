@@ -112,6 +112,10 @@ test('add-on initial creation preserves explicit bases, independent corrections,
   ];
   const click = (name: string, scope: HTMLElement = host) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  async function confirm(scope: HTMLElement = host) {
+    await click(m.catalogue_create_submit(), scope);
+    if (scope.querySelector('[data-addon-create-review]')) await click(m.catalogue_create_submit(), scope);
+  }
   async function input(element: HTMLElement, value: string) {
     await act(async () => {
       const prototype =
@@ -235,7 +239,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
       await input(within(platform).getByRole('textbox', { name: m.correction_url() }), url);
       expect((within(platform).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value).toBe(url);
       expect(fixture.calls).toHaveLength(baseline);
-      await click(m.catalogue_create_submit());
+      await confirm();
       await until(() => !!within(host).queryByRole('link', { name: m.catalogue_create_open() }));
       const item = commands[0]!.item as GameItem;
       expect(item.type).toBe(addonType);
@@ -275,7 +279,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
       await until(() => forms().length === 1);
       expect(!!within(host).queryByRole('button', { name: m.addon_use_base() })).toBe(supplied);
       await terms();
-      await click(m.catalogue_create_submit());
+      await confirm();
       await until(() => !!within(host).queryByRole('link', { name: m.catalogue_create_open() }));
       const body = fixture.calls.find((call) => call.method === 'POST')!.body as GameItem;
       expect(body.statements[addonBase]).toBeUndefined();
@@ -322,16 +326,18 @@ test('add-on initial creation preserves explicit bases, independent corrections,
       const row = await add('schema:inLanguage', form);
       expect(rows(forms()[1 - index]!)).toHaveLength(index === 0 ? 0 : 1);
       await input(within(row).getByRole('textbox', { name: m.correction_value() }), 'invalid language');
-      await click(m.catalogue_create_submit(), form);
+      const field = within(row).getByRole('textbox', { name: m.correction_value() });
+      await confirm(form);
       await until(() => !!within(form).queryByRole('alert'));
-      const correction = within(within(form).getByRole('alert')).getByRole('link', { name: m.game_profile_initial() });
-      expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).toBe(targets[index]!.id);
-      expect(window.document.getElementById(targets[index]!.id)).toBe(targets[index]!);
+      const correction = within(within(form).getByRole('alert')).getByRole('link');
+      expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).toBe(field.id);
+      expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).not.toBe(targets[index]!.id);
+      expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).not.toBe(targets[1 - index]!.id);
       await act(async () => {
         correction.focus();
         await user.keyboard('{Enter}');
       });
-      expect(window.document.activeElement).toBe(targets[index]!);
+      expect(window.document.activeElement).toBe(field);
       expect(form.contains(window.document.activeElement as unknown as Node)).toBe(true);
       expect(correction.textContent).not.toContain('/statements');
       await act(async () =>
@@ -349,7 +355,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
     expect(pair.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
     const beforeRecovery = created.length;
     for (const form of forms()) {
-      await click(m.catalogue_create_submit(), form);
+      await confirm(form);
       await until(() => !form.isConnected);
     }
     expect(created.length - beforeRecovery).toBe(2);
@@ -410,7 +416,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
           (within(group()).getAllByRole('button', { name: m.correction_add() })[0] as HTMLButtonElement).disabled,
         ).toBe(true);
       }
-      await click(m.catalogue_create_submit());
+      await confirm();
       await until(() => !!within(host).queryByRole('link', { name: m.catalogue_create_open() }));
       expect(
         (fixture.calls.find((call) => call.method === 'POST')!.body as GameItem).statements['schema:sameAs'],
@@ -446,7 +452,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
     await terms();
     const fact = await add('schema:inLanguage');
     await input(within(fact).getByRole('textbox', { name: m.correction_value() }), 'ja');
-    await click(m.catalogue_create_submit());
+    await confirm();
     await until(() => host.textContent!.includes(m.catalogue_create_unavailable()));
     expect(forms()).toHaveLength(0);
     expect(addresses).toEqual([{ work: addonWorkId }]);
@@ -510,7 +516,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
         const optional = await add('schema:inLanguage');
         await input(within(optional).getByRole('textbox', { name: m.correction_value() }), 'ja');
       }
-      await click(m.catalogue_create_submit());
+      await confirm();
       if (scenario === 'uncertain') {
         await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
         expect(host.querySelector('input')!.closest('fieldset[disabled]')).not.toBeNull();
@@ -562,7 +568,7 @@ test('add-on initial creation preserves explicit bases, independent corrections,
     await render(direct(retiringRead, { ...retiring.transport, create: () => pending }));
     await until(() => forms().length === 1);
     await terms();
-    await click(m.catalogue_create_submit());
+    await confirm();
     await render(null, false, true);
     await act(async () =>
       finish({ ok: true, id: addonCreatedId, reader: { state: 'ready', href: '/en/subjects/retired' } }),
