@@ -4,7 +4,7 @@ import type { KernelClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type DiaryPage } from './diary-model.ts';
+import { type DiaryPage, type DiaryQuery } from './diary-model.ts';
 /** Explicit wire contract keeps the client independent of database and private reader implementations. */
 export type DiaryProblem<Status extends number, Code extends string> = {
     type: string;
@@ -28,10 +28,7 @@ export type DiaryRoutes = {
                 body: unknown;
                 headers: unknown;
                 params: {};
-                query: {
-                    limit?: number;
-                    cursor?: string;
-                };
+                query: DiaryQuery;
                 response: {
                     200: DiaryPage;
                 } & DiaryFailures;

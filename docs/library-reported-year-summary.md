@@ -133,3 +133,12 @@ separate from executed measurement. Three-scale 64/512/4096 growth, statements/e
 nested authority/history, populated/absent/deep years, full maintenance and erasure campaigns remain integration
 acceptance. Missing coverage, unavailable preparation or counter errors are failed/unmeasured, never growth passes.
 Performance review is required for the nested preparation/campaign terms; no measurement result is asserted here.
+
+## Open the counted occurrences
+
+The [existing diary's reported-year filter](library-consumption-diary.md#opening-a-reported-year-count) now opens
+whole-year, numbered month and explicit `unallocated` counts as exact retained completed occurrence IDs. The same
+journal/progress rows and installed inclusion predicate own both views. Compare the returned snapshot revision with
+this summary; changed membership invalidates filtered cursors and requires refreshing counts and navigation.
+The existing Web318 continued by Web142 interface owns consumption of these typed native methods. No additional
+history page or browser aggregation is introduced. Executed growth and integrating Web acceptance remain deferred.

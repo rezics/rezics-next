@@ -14,7 +14,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { DIARY_LIMIT, DIARY_PAYLOAD_BYTES, type DiaryPage, type DiarySubject } from './diary-model.ts';
+import { reportedYearRevision } from './reported-year-summary.ts';
+import { DIARY_LIMIT, DIARY_PAYLOAD_BYTES, type DiaryFilter, type DiaryQuery, type DiaryPage, type DiarySubject } from './diary-model.ts';
 import {
   cancelDiaryNavigation,
   createDiaryNavigation,
@@ -26,7 +27,7 @@ import {
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array };
 type Client = Pick<PoolClient, 'query'>;
-type PageOptions = { limit?: number; cursor?: string };
+type PageOptions = DiaryQuery;
 
 function ownerOf(actor: Actor): AccountActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -70,6 +71,22 @@ function sizeOf(options: PageOptions): number {
   return size;
 }
 
+function filterOf(options: PageOptions): DiaryFilter | null {
+  if (options.year === undefined) {
+    if (options.month !== undefined) throw new ProblemError('invalid_request');
+    return null;
+  }
+  if (!Number.isInteger(options.year) || options.year < 1 || options.year > 9999 ||
+      (options.month !== undefined && options.month !== 'unallocated' &&
+        (!Number.isInteger(options.month) || options.month < 1 || options.month > 12)))
+    throw new ProblemError('invalid_request');
+  return { year: options.year, ...(options.month === undefined ? {} : { month: options.month }) };
+}
+
+function filterKey(filter: DiaryFilter | null) {
+  return filter ? [filter.year, filter.month === 'unallocated' ? 13 : (filter.month ?? 0)] : [0, 0];
+}
+
 /** Owner-only indexed occurrence reader. No subject enumeration, copied facts or per-row owner reads. */
 export function createDiaryReads(deps: Dependencies) {
   const { pool, access, clock, tokens } = deps;
@@ -78,21 +95,30 @@ export function createDiaryReads(deps: Dependencies) {
     return { operation: 'library.diary', parameters: { accountId: owner.accountId, caller: callerOf(owner) } };
   }
 
-  function decode(owner: AccountActor, token: string, now: Date, limit?: number) {
+  function decode(owner: AccountActor, token: string, now: Date, limit?: number, filter: DiaryFilter | null = null) {
     if (token.length === 0 || token.length > 2048) throw new ProblemError('invalid_cursor');
     const decoded = decodeCursor(tokens, binding(owner), token, now.getTime());
     if (!decoded.ok) throw new ProblemError(decoded.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
-    const [id, size, time, sessionId] = decoded.after;
+    // Filter metadata is sealed with the caller binding and is retained on cancellation handles.
+    const filtered = decoded.after.length === 5 || decoded.after.length === 7;
+    const [id, size] = decoded.after;
+    const [year, bucket, revision] = filtered ? decoded.after.slice(2, 5) : [0, 0, null];
+    const keys = decoded.after.slice(filtered ? 5 : 2);
+    const [time, sessionId] = keys;
+    const expected = filterKey(filter);
     if (
-      (decoded.after.length !== 2 && decoded.after.length !== 4) ||
+      (!filtered && decoded.after.length !== 2 && decoded.after.length !== 4) ||
+      (filtered && (typeof year !== 'number' || !Number.isInteger(year) || year < 1 || year > 9999 ||
+        typeof bucket !== 'number' || !Number.isInteger(bucket) || bucket < 0 || bucket > 13 ||
+        typeof revision !== 'string' || revision.length > 36)) ||
       typeof id !== 'string' ||
       routeOf(id) !== routeOf(owner.accountId) ||
       typeof size !== 'number' ||
       !Number.isInteger(size) ||
       size < 1 ||
       size > DIARY_LIMIT ||
-      (limit !== undefined && (size !== limit || decoded.after.length !== 4)) ||
-      (decoded.after.length === 4 &&
+      (limit !== undefined && (size !== limit || keys.length !== 2 || year !== expected[0] || bucket !== expected[1])) ||
+      (keys.length === 2 &&
         (typeof time !== 'string' ||
           !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(time) ||
           !Number.isFinite(Date.parse(time)) ||
@@ -103,7 +129,8 @@ export function createDiaryReads(deps: Dependencies) {
     return {
       id,
       epoch: decoded.epoch,
-      after: decoded.after.length === 4 ? { recordedStartedAt: time as string, id: sessionId as string } : null,
+      after: keys.length === 2 ? { recordedStartedAt: time as string, id: sessionId as string } : null,
+      revision: revision as string | null,
     };
   }
 
@@ -169,6 +196,7 @@ export function createDiaryReads(deps: Dependencies) {
     async list(actor: Actor, options: PageOptions, deadline: number): Promise<DiaryPage> {
       const owner = ownerOf(actor);
       const limit = sizeOf(options);
+      const filter = filterOf(options);
       const route = routeOf(owner.accountId)!;
       return withRequestDeadline(deadline, () =>
         within(deadline, async () => {
@@ -183,13 +211,14 @@ export function createDiaryReads(deps: Dependencies) {
           let after: DiaryKey | null = null;
           let navigation: DiaryNavigation | null = null;
           const before = await snapshot(owner, deadline, async (client, epoch, now) => {
+            const revision = filter ? await reportedYearRevision(client, route, owner.accountId) : null;
             if (options.cursor !== undefined) {
-              const decoded = decode(owner, options.cursor, now, limit);
-              if (decoded.epoch !== epoch) throw new ProblemError('stale_cursor');
+              const decoded = decode(owner, options.cursor, now, limit, filter);
+              if (decoded.epoch !== epoch || decoded.revision !== revision) throw new ProblemError('stale_cursor');
               navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
               after = decoded.after;
             }
-            return { epoch, rows: await diaryRows(client, route, owner.accountId, after, limit + 1) };
+            return { epoch, revision, rows: await diaryRows(client, route, owner.accountId, after, limit + 1, filter) };
           });
           const shown = before.rows.slice(0, limit);
           const ids = [
@@ -207,7 +236,9 @@ export function createDiaryReads(deps: Dependencies) {
           const more = before.rows.length > limit;
           navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
             if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
-            const current = await diaryRows(client, route, owner.accountId, after, limit + 1);
+            const current = await diaryRows(client, route, owner.accountId, after, limit + 1, filter);
+            if (filter && await reportedYearRevision(client, route, owner.accountId) !== before.revision)
+              throw new ProblemError('conflict');
             if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
             if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
             return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
@@ -220,7 +251,7 @@ export function createDiaryReads(deps: Dependencies) {
                   binding(owner),
                   {
                     epoch: navigation.epoch,
-                    after: [navigation.id, limit, ...keys],
+                    after: [navigation.id, limit, ...(filter ? [...filterKey(filter), before.revision!] : []), ...keys],
                   },
                   Date.parse(navigation.createdAt),
                 )
@@ -228,6 +259,7 @@ export function createDiaryReads(deps: Dependencies) {
           const result: DiaryPage = {
             occurrences,
             order: 'recorded_started_desc_id_desc',
+            ...(before.revision ? { currentness: { state: 'snapshot' as const, revision: before.revision } } : {}),
             next: more && last ? token([last.recordedStartedAt, last.id]) : null,
             continuation: token([]),
             expiresAt: navigation?.expiresAt ?? null,

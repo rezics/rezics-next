@@ -649,3 +649,14 @@ Content's owner-wide identity-currentness producer is an explicit unbound port; 
 503 unavailable even after installation. The viewer-facts overlay is independent. Whole public traversal after
 binding the native producer, complete merge/lifecycle currentness and controller native growth remain outstanding
 in `.temp/continuation/personal-score-currentness.md`. Existing date-order assertions are unchanged.
+
+## Reported-year occurrence navigation
+
+The existing private diary now accepts typed year and month/`unallocated` filters and returns actual completed
+occurrence IDs, including repeated Subjects, with summary-comparable revision currentness. Native journal indexes
+seek addressed buckets; corrections and retirement invalidate filtered continuations. Existing unfiltered order,
+scopes, disclosure, eight navigation slots, cancellation and exact Session/journal reopening are retained.
+[Installed navigation and cost contract](../library-consumption-diary.md#opening-a-reported-year-count) owns the
+query shape and lifecycle. Focused typed-client scenarios extend `services/kernel/test/library/diary.test.ts`.
+Web318 continued by Web142 remains the history interface owner. Frozen acceptance, Web integration and executed
+whole-caller native64/512/4096 growth remain deferred to integration.
