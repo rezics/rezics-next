@@ -33,6 +33,7 @@ export type VndbLabelOperand = {
   subjectId: string | null;
   source: string | null;
   mapping: number;
+  assignment: (LabelIdentity & { effective: boolean }) | null;
 };
 export type VndbLabelStatus = 'ready' | 'applied' | 'already_present' | 'stale' | 'unsupported' | 'refused';
 export type VndbLabelResult = {

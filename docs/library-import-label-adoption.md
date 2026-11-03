@@ -50,7 +50,8 @@ identity even if that identity has since been retired; fresh assignments still r
 Only exact non-state names present in the installed VN row's `labels` can be selected. Playing, Finished, Stalled,
 Dropped and Wishlist remain the producer's entry-state evidence. Metadata rows and unresolved/ambiguous/unavailable
 identity cannot supply guessed assignments. Source review identity, immutable row digest, canonical Subject,
-identity/type/profile fingerprint, owner, upload and target label ID/revision bind every fresh native admission.
+identity/type/profile fingerprint, owner, upload, target label ID/revision and original membership identity/revision
+bind every fresh native admission. A membership edit after review returns stale, preserving the concurrent edit.
 Two selected rows resolving to one Subject require choosing one row, avoiding duplicate canonical review authority.
 Repeated source labels and multiple names mapped to the same target yield one intent per Subject/target. Unsupported
 per-label attributes remain in exact private source evidence; only the name participates in adoption. No annotations,

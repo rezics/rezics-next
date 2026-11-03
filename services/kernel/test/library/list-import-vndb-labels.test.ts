@@ -84,6 +84,17 @@ test('revision/incarnation changes and refreshed source review refuse stale work
   await remove(next.id);
 }, 120000);
 
+test('a membership removed after review is never restored by adoption', async () => {
+  const l = await label(), r = await retained(['One']);
+  const added = await assignments().assignLabel(f.owner.actor, l.id, { subjectId: r.subjectId }, entryKey());
+  const c = await consent(r, [map('One', l)]);
+  await assignments().unassignLabel(f.owner.actor, l.id,
+    { subjectId: r.subjectId, assignmentId: added.value.assignment.id, revision: added.value.assignment.revision }, entryKey());
+  expect((await apply(r.id, c.previewId)).outcomes[0].status).toBe('stale');
+  expect((await json('GET', `/v1/libraryLabelAssignments?subjectId=${r.subjectId}`)).assignments).toEqual([]);
+  await remove(r.id);
+}, 120000);
+
 test('partial cancellation preserves acknowledged labels, source deletion cascades previews/results, retired review cannot reinstall consent', async () => {
   const r = await retained(['One', 'Two']), mappings = ['One', 'Two'].map(source => ({ source, target: { name: `Cancel ${entryKey()}` } }));
   const oldKey = entryKey(), old = await consent(r, mappings, oldKey), c = await consent(r, mappings);
