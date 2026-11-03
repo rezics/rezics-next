@@ -929,6 +929,8 @@ export async function revisePost(
     { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
     async (tx, command) => {
       const previous = container.current.posts[0]!;
+      const threadSecurityRevision = container.current.thread.security_revision;
+      if (previous.security_revision === null || threadSecurityRevision === null) throw new ContentNotFoundError();
       // A fresh key cannot revise an erased post or any erased ancestor. Replay
       // never enters this body. updateHead also refuses to advance an erased head.
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
@@ -985,7 +987,7 @@ export async function revisePost(
           thread_id: value.threadId,
           post_id: value.itemId,
           author_id: author.accountId,
-          security_revision: container.current.thread.security_revision,
+          security_revision: threadSecurityRevision,
         });
         if (!published) throw new ContentNotFoundError();
       }
