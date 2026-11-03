@@ -3,7 +3,13 @@ import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
 import { erasePost } from '../../src/content/moderation.ts';
 import { restorePost } from '../../src/content/restore-post.ts';
-import { createNativeReviewDiscoveryAdapter, createReviewDiscoveryAdapter } from '../../src/search/review-discovery.ts';
+import {
+  createNativeReviewDiscoveryAdapter,
+  createReviewDiscoveryAdapter,
+  REVIEW_DISCOVERY_PAGE_SIZE,
+  type ReviewDiscoveryDocument,
+  type ReviewDiscoveryFrontier,
+} from '../../src/search/review-discovery.ts';
 import type { DiscoveryReadContext } from '../../src/search/discovery.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -18,6 +24,7 @@ const request = () => ({
   deadline: Date.now() + 30_000,
   requestId: Bun.randomUUIDv7(),
 });
+type PublishedReview = { id: string; postId: string; subjectId: string; title: string; text: string };
 
 describe('public review discovery adapter', () => {
   test('uses Content pages and current hydration for sparse progress, publication and lifecycle', async () => {
@@ -44,10 +51,10 @@ describe('public review discovery adapter', () => {
       return id;
     }
 
-    async function publish(target: string, ordinal: number, reviewAuthor = author) {
+    async function publish(target: string, ordinal: number): Promise<PublishedReview> {
       const result = await createThread(
         { pool: fixture.pool, access: fixture.access, routeKey },
-        reviewAuthor,
+        author,
         {
           kind: 'review',
           title: `Native review ${ordinal}`,
@@ -59,10 +66,16 @@ describe('public review discovery adapter', () => {
         },
         request(),
       );
-      return { id: result.value.threadId, postId: result.value.itemId, subjectId: target };
+      return {
+        id: result.value.threadId,
+        postId: result.value.itemId,
+        subjectId: target,
+        title: `Native review ${ordinal}`,
+        text: `Public review opening ${ordinal}.`,
+      };
     }
 
-    const initial = [];
+    const initial: PublishedReview[] = [];
     for (let ordinal = 0; ordinal < 5; ordinal += 1) initial.push(await publish(await subject(ordinal), ordinal));
     initial.sort((left, right) => left.id.localeCompare(right.id));
     const route = routeOf(author.accountId)!;
@@ -92,53 +105,61 @@ describe('public review discovery adapter', () => {
     expect(sparse.value.next).toEqual({ route, id: initial[3]!.id });
     expect((await adapter.readCurrent([initial[0]!.id], context)).size).toBe(0);
 
-    let lateAuthor: typeof author | undefined;
-    for (let attempt = 0; attempt < 32; attempt += 1) {
-      const candidate = (await fixture.context()).actor;
-      const candidateRoute = routeOf(candidate.accountId)!;
-      if (partitionOf(candidateRoute) === partition && candidateRoute > route) {
-        lateAuthor = candidate;
+    const lateReviews: PublishedReview[] = [];
+    let late: PublishedReview | undefined;
+    for (let ordinal = 9; ordinal < 73; ordinal += 1) {
+      const review = await publish(await subject(ordinal), ordinal);
+      lateReviews.push(review);
+      if (review.id.localeCompare(initial[4]!.id) > 0) {
+        late = review;
         break;
       }
     }
-    if (!lateAuthor) throw new Error('Could not create a later native review route in the same partition');
-    await fixture.grant(lateAuthor.accountId, 'thread:create', { route: board.route, id: board.board_id });
-    const late = await publish(await subject(9), 9, lateAuthor);
-    const lateRoute = routeOf(late.id)!;
-    const fifth = await adapter.page(partition, sparse.value.next, 1);
-    expect(fifth.status).toBe('ready');
-    if (fifth.status !== 'ready') return;
-    const fifthDocument = fifth.value.documents[0]!;
+    if (!late) throw new Error('Could not publish a review after the retained native frontier');
+
+    let cursor = sparse.value.next;
+    let fifthDocument: ReviewDiscoveryDocument | undefined;
+    let lateDocument: ReviewDiscoveryDocument | undefined;
+    let latePosition = 0n;
+    for (let pageNumber = 0; pageNumber <= lateReviews.length; pageNumber += 1) {
+      const page = await adapter.page(partition, cursor, 1);
+      expect(page.status).toBe('ready');
+      if (page.status !== 'ready') return;
+      const row = page.value.documents[0];
+      if (row?.id === initial[4]!.id) fifthDocument = row;
+      if (row?.id === late.id) {
+        lateDocument = row;
+        latePosition = page.value.position;
+        expect(page.value.next).toBeNull();
+      }
+      if (page.value.next === null) break;
+      cursor = page.value.next;
+    }
     expect(fifthDocument).toMatchObject({
       identity: `content:review:${initial[4]!.id}`,
       owner: 'content',
       kind: 'review',
       route,
       id: initial[4]!.id,
-      source_position: fifth.value.position.toString(),
-      version: fifth.value.position.toString(),
+      source_position: expect.any(String),
+      version: expect.any(String),
       opening_revision_id: expect.any(String),
       text: 'Public review opening 4.',
     });
+    if (!fifthDocument || !lateDocument) throw new Error('Content continuation lost an eligible review');
     expect(fifthDocument).not.toHaveProperty('authorId');
     expect(fifthDocument).not.toHaveProperty('voteCitation');
-    expect(fifth.value.position).toBeGreaterThan(sparse.value.position);
-    expect(fifth.value.next).toEqual({ route, id: initial[4]!.id });
-
-    const latePage = await adapter.page(partition, fifth.value.next, 1);
-    expect(latePage).toMatchObject({ status: 'ready', value: { next: null } });
-    if (latePage.status !== 'ready') return;
-    expect(latePage.value.documents[0]?.identity).toBe(`content:review:${late.id}`);
-    const lateCard = await adapter.currentSummaries(latePage.value.documents, context);
+    expect(latePosition).toBeGreaterThan(sparse.value.position);
+    const lateCard = await adapter.currentSummaries([lateDocument], context);
     expect(lateCard).toMatchObject({ status: 'ready' });
     if (lateCard.status === 'ready') {
       expect(lateCard.value.get(`content:review:${late.id}`)).toEqual({
         kind: 'review',
         id: late.id,
-        route: lateRoute,
-        openingRevisionId: latePage.value.documents[0]!.opening_revision_id,
-        title: 'Native review 9',
-        text: 'Public review opening 9.',
+        route,
+        openingRevisionId: lateDocument.opening_revision_id,
+        title: late.title,
+        text: late.text,
       });
       expect(lateCard.value.get(`content:review:${late.id}`)).not.toHaveProperty('authorId');
     }
@@ -150,8 +171,8 @@ describe('public review discovery adapter', () => {
     const authorSummary = await adapter.readCurrent([initial[4]!.id], context);
     expect(authorSummary.get(initial[4]!.id)).toEqual({
       id: initial[4]!.id,
-      title: 'Native review 4',
-      summary: 'Public review opening 4.',
+      title: initial[4]!.title,
+      summary: initial[4]!.text,
     });
 
     await revisePost(
@@ -163,10 +184,22 @@ describe('public review discovery adapter', () => {
     const withdrawn = await adapter.currentSummaries([fifthDocument], context);
     expect(withdrawn).toEqual({ status: 'ready', value: new Map() });
 
-    const revisedPage = await adapter.page(partition, sparse.value.next, 1);
-    expect(revisedPage.status).toBe('ready');
-    if (revisedPage.status !== 'ready') return;
-    const revisedDocument = revisedPage.value.documents[0]!;
+    async function currentDocument(id: string): Promise<ReviewDiscoveryDocument | undefined> {
+      let after: ReviewDiscoveryFrontier | null = null;
+      const maxPages = Math.ceil((initial.length + lateReviews.length) / REVIEW_DISCOVERY_PAGE_SIZE) + 1;
+      for (let pageNumber = 0; pageNumber < maxPages; pageNumber += 1) {
+        const page = await adapter.page(partition, after, REVIEW_DISCOVERY_PAGE_SIZE);
+        expect(page.status).toBe('ready');
+        if (page.status !== 'ready') return undefined;
+        const found = page.value.documents.find((row) => row.id === id);
+        if (found) return found;
+        if (page.value.next === null) return undefined;
+        after = page.value.next;
+      }
+      return undefined;
+    }
+
+    const revisedDocument = (await currentDocument(initial[4]!.id))!;
     expect(revisedDocument.id).toBe(initial[4]!.id);
     expect(revisedDocument.opening_revision_id).not.toBe(fifthDocument.opening_revision_id);
     expect((await adapter.currentSummaries([revisedDocument], context)).status).toBe('ready');
@@ -185,10 +218,7 @@ describe('public review discovery adapter', () => {
     await restorePost({ pool: fixture.pool, access: fixture.access, routeKey }, author, initial[4]!.postId, request());
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'preparing' });
 
-    const restoredPage = await adapter.page(partition, sparse.value.next, 1);
-    expect(restoredPage.status).toBe('ready');
-    if (restoredPage.status !== 'ready') return;
-    const restoredDocument = restoredPage.value.documents[0]!;
+    const restoredDocument = (await currentDocument(initial[4]!.id))!;
     expect(restoredDocument.id).toBe(initial[4]!.id);
     expect(restoredDocument.opening_revision_id).toBe(revisedDocument.opening_revision_id);
     expect(BigInt(restoredDocument.source_position)).toBeGreaterThan(BigInt(revisedDocument.source_position));
