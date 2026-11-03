@@ -793,8 +793,8 @@ The existing positive body and response accept optional `figures: SourceFigures`
 [source-figures.ts](source-figures.ts). `createSourceStatisticCommands({pool, routeKey, clock?})` still exports
 `write`, `writeCommand`, `clear`, and `read`; `SourceStatistic` is now an exported additive DTO. The mounted
 GET/PUT/clear routes, registered change event and default Kernel composition remain the same producer. The
-existing generated `rating.source_statistics_get` and `rating.source_statistic_put` contracts carry this exact
-optional object. Neither source requests nor native vote commands acquire another endpoint.
+source schemas for existing `rating.source_statistics_get` and `rating.source_statistic_put` operations declare
+this exact optional object; their generated client declarations must be published before consumer integration. Neither source requests nor native vote commands acquire another endpoint.
 
 ```json
 {
