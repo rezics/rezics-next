@@ -334,7 +334,7 @@ function projectAppeal(
       operationId: 'moderation_appeal.resolve',
       method: 'POST',
       path: `/v1/moderation-appeals/${row.appeal_id}:resolve`,
-    },
+    } as const,
     source: sourceView(anchor),
   };
 }
@@ -356,8 +356,10 @@ async function selectedAppeal(deps: AppealDependencies, scope: AppealScope, cont
   return { row: initial.value, anchor: initial.anchor };
 }
 
-function retainedResolution(row: AppealSourceRow): unknown {
+function retainedResolution(row: AppealSourceRow) {
   if (row.outcome === null) return null;
+  if (row.outcome !== 'upheld' && row.outcome !== 'reversed')
+    throw new Error('Resolved appeal has an invalid retained outcome');
   if (!row.resolver_statement || !row.resolved_at)
     throw new Error('Resolved appeal is missing its retained resolution');
   return {

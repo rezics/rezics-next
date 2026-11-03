@@ -84,7 +84,7 @@ export async function createGrowthAppealBoundariesFixture() {
 
     client = await createWorkClient(databaseUrl, db.pool);
     const registered: Effect[] = [];
-    const runnerPhases: Array<{ effect: string; type: string; subject?: string }> = [];
+    const runnerPhases: Array<{ effect: string; type: string; subject?: string | undefined }> = [];
     await DBOS.shutdown({ deregister: true });
     work = await composeWork(
       [
