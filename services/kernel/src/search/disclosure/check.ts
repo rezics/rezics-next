@@ -187,14 +187,13 @@ export async function checkHits(
                 values.some((value, leaf) => {
                   const clause = plan.leaves[leaf]!;
                   if (value === 'not_proven') return true;
-                  return (
-                    Array.isArray(value) &&
-                    (plan.positive.has(leaf) ||
-                      (clause.facet === 'statement' &&
-                        (!!clause.qualifiers?.length ||
-                          options?.spoilerThreshold !== undefined ||
-                          ('values' in clause && clause.inverse === true)))
-                  );
+                  const sensitive =
+                    plan.positive.has(leaf) ||
+                    (clause.facet === 'statement' &&
+                      (!!clause.qualifiers?.length ||
+                        options?.spoilerThreshold !== undefined ||
+                        ('values' in clause && clause.inverse === true));
+                  return Array.isArray(value) && sensitive;
                 }),
             };
           });
