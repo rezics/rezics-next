@@ -145,8 +145,7 @@ export const routes: FakeRoute[] = [
                 : later
                   ? [paidCreatorStatementFixture]
                   : [creatorStatementFixture, euro],
-          next:
-            selected === 'empty' || selected === 'unknown-unit' || later ? null : 'story-statements-next',
+          next: selected === 'empty' || selected === 'unknown-unit' || later ? null : 'story-statements-next',
         };
       }
       const statements =

@@ -83,10 +83,15 @@ test('later line stale and empty keep the admitted paid statement while global p
       status: 409,
       code: 'stale_cursor',
     });
-    const stalePage = await loadCreatorStatement(client(), request(), {}, {
-      id: paidCreatorStatementFixture.id,
-      cursor: laterCursor,
-    });
+    const stalePage = await loadCreatorStatement(
+      client(),
+      request(),
+      {},
+      {
+        id: paidCreatorStatementFixture.id,
+        cursor: laterCursor,
+      },
+    );
     expect(stalePage).toEqual({
       kind: 'ready',
       statement: paidCreatorStatementFixture,
@@ -126,10 +131,15 @@ test('later line stale and empty keep the admitted paid statement while global p
       lines: [],
       next: null,
     });
-    const emptyPage = await loadCreatorStatement(client(), request(), {}, {
-      id: paidCreatorStatementFixture.id,
-      cursor: laterCursor,
-    });
+    const emptyPage = await loadCreatorStatement(
+      client(),
+      request(),
+      {},
+      {
+        id: paidCreatorStatementFixture.id,
+        cursor: laterCursor,
+      },
+    );
     expect(emptyPage).toEqual({
       kind: 'ready',
       statement: paidCreatorStatementFixture,
@@ -169,8 +179,10 @@ test('detail page stories map later line recovery through PageStory without rewr
   expect(story).toContain('<PageStory visitor="Signed In" path={`/creator/statements/${id}${search}`} />');
   expect(story).toContain("render('later-stale-lines', paidCreatorStatementFixture.id, laterLineSearch)");
   expect(story).toContain("render('later-empty-lines', paidCreatorStatementFixture.id, laterLineSearch)");
-  expect(story).toContain("cursor=story-lines-next&from=story-statements-next");
-  expect(story).toContain("export const Stale: Story = { render: () => render('stale'), play: stateReady(m.statements_stale) }");
+  expect(story).toContain('cursor=story-lines-next&from=story-statements-next');
+  expect(story).toContain(
+    "export const Stale: Story = { render: () => render('stale'), play: stateReady(m.statements_stale) }",
+  );
   expect(story).toContain("render('denied')");
   expect(story).toContain("render('unavailable')");
   expect(story).toContain("render('lines-unavailable')");
