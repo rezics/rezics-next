@@ -454,6 +454,7 @@ const primaryTerms: Record<string, string[]> = {
   'schema:Episode': ['wd:Q1983062'],
   'schema:Game': ['wd:Q11410'],
   'schema:Movie': ['wd:Q11424'],
+  'schema:MusicAlbum': ['wd:Q482994'],
   'schema:Organization': ['wd:Q43229'],
   'schema:Person': ['wd:Q5'],
   'schema:TVSeries': ['wd:Q5398426'],
@@ -633,10 +634,20 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   for (const group of data.enumerations) for (const entry of group.values) validate(entry.mapping);
   for (const mapping of data.vocabulary) validate(mapping);
   const group = (id: string) => data.enumerations.find((entry) => entry.id === id)!.values;
-  for (const id of ['staff.3', 'staff.6', 'platform.music', 'platform.real', 'relation.3', 'relation.6'])
+  for (const id of ['staff.3', 'staff.6', 'relation.3', 'relation.6'])
     for (const entry of group(id)) expect(entry.mapping.status).toBe('omitted');
-  for (const id of [3, 6])
-    expect(group('subject.type').find((entry) => entry.id === id)!.mapping.status).toBe('omitted');
+  expect(group('subject.type').find((entry) => entry.id === 3)!.mapping).toMatchObject({
+    status: 'existing',
+    term: 'schema:MusicAlbum',
+    on: 'schema:MusicAlbum',
+  });
+  expect(group('subject.type').find((entry) => entry.id === 6)!.mapping.status).toBe('omitted');
+  expect(group('platform.real').find((entry) => entry.id === 6002)!.mapping.profile?.term).toBe('schema:Movie');
+  for (const id of [0, 1, 2, 3, 6001, 6003, 6004])
+    expect(group('platform.real').find((entry) => entry.id === id)!.mapping.profile?.term).toBe('schema:TVSeries');
+  expect(group('platform.music').find((entry) => entry.id === 0)!.mapping.profile?.term).toBe('schema:MusicAlbum');
+  for (const id of [3001, 3002, 3003, 3004])
+    expect(group('platform.music').find((entry) => entry.id === id)!.mapping.status).toBe('omitted');
   for (const file of data.files)
     for (const field of file.fields)
       if (/^(tags|favorite|score|score_details|rank|comments|collects)(\.|$)/.test(String(field.id)))
