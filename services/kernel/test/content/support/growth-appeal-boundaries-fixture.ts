@@ -333,6 +333,7 @@ export async function createGrowthAppealBoundariesFixture() {
       return call('GET', `/v1/boards/${boardId}/appeals?${query}`, { bearer });
     }
 
+    const authorityOffsets = new Map<string, number>();
     async function seedHistory(
       database: GrowthDatabase,
       axis: AppealHistoryAxis,
@@ -355,6 +356,8 @@ export async function createGrowthAppealBoundariesFixture() {
         return;
       }
       if (axis === 'authority-history') {
+        if (!authorityOffsets.has(tag)) authorityOffsets.set(tag, authorityOffsets.size * 1_000_000);
+        const offset = authorityOffsets.get(tag)!;
         // Expired intervals on the same resource and principal must not change current queue authority.
         await database.admin.query(
           `INSERT INTO access.resource_grant
@@ -363,7 +366,7 @@ export async function createGrowthAppealBoundariesFixture() {
              tstzrange('2000-01-01'::timestamptz + n * interval '1 second',
                        '2000-01-01'::timestamptz + (n+1) * interval '1 second','[)'),$4
            FROM generate_series($5::integer,$6::integer) AS n`,
-          [boardRoute, pressureBoardId, people.reviewer.accountId, randomUUID(), previous, scale - 1],
+          [boardRoute, pressureBoardId, people.reviewer.accountId, randomUUID(), offset + previous, offset + scale - 1],
         );
         return;
       }
