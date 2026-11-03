@@ -4,10 +4,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
-import {
-  createResourceCreationManifest,
-  parentCreationAuthorization,
-} from '../../src/access/index.ts';
+import { createResourceCreationManifest, parentCreationAuthorization } from '../../src/access/index.ts';
 import { currentCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { revisionResource } from '../../src/semantic/authorship.ts';
@@ -169,13 +166,7 @@ async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', l
   return created.body.subject.id as string;
 }
 
-function nativeCreationEntry(
-  resource: Resource,
-  type: string,
-  accountId: string,
-  subject: string,
-  revision: number,
-) {
+function nativeCreationEntry(resource: Resource, type: string, accountId: string, subject: string, revision: number) {
   return {
     resource,
     type,

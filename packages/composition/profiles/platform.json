@@ -2975,9 +2975,7 @@
                 "fr": "Livres",
                 "es": "Libros"
               },
-              "types": [
-                "schema:Book"
-              ],
+              "types": ["schema:Book"],
               "sort": "collections",
               "limit": 12
             }
@@ -2996,10 +2994,7 @@
                 "fr": "Anime",
                 "es": "Anime"
               },
-              "types": [
-                "schema:TVSeries",
-                "schema:Movie"
-              ],
+              "types": ["schema:TVSeries", "schema:Movie"],
               "sort": "collections",
               "limit": 12
             }
@@ -3018,9 +3013,7 @@
                 "fr": "Visual novels",
                 "es": "Novelas visuales"
               },
-              "types": [
-                "wd:Q689445"
-              ],
+              "types": ["wd:Q689445"],
               "sort": "collections",
               "limit": 12
             }
@@ -3039,9 +3032,7 @@
                 "fr": "Recettes",
                 "es": "Recetas"
               },
-              "types": [
-                "schema:Recipe"
-              ],
+              "types": ["schema:Recipe"],
               "sort": "collections",
               "limit": 12
             }
