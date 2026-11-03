@@ -12,15 +12,14 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { lifecycleSpecFromArgv } from './check-lifecycle-child.ts';
 
-// Host names are identities, not placement policy; only configured performance flags admit work.
-export const CHECK_HOST_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$';
+export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
 export const CHECK_HOST_RUNS_ROOT = '/srv/rezics-check/runs';
 export const CHECK_HOST_SUPERVISOR_MARKER = '.remote-check-supervisor';
 /** Shared producer/receiver description for the physical lifetime marker. */
 export const CHECK_HOST_SUPERVISOR_MARKER_SCHEMA = {
   version: 1,
   fields: ['schema', 'host', 'run', 'pid', 'started', 'group', 'uid'],
-  hostNamePattern: CHECK_HOST_NAME_PATTERN,
+  hosts: PERFORMANCE_HOST_NAMES,
   runIdPattern: '^[a-z0-9-]{1,64}$',
   maxBytes: 4096,
   maxPid: Number.MAX_SAFE_INTEGER,
@@ -673,9 +672,9 @@ export function classifyCheck(argv: readonly string[], cwd = process.cwd()): Che
   return classifyCommand(parsed.command, resolve(cwd), root);
 }
 
-/** Only explicitly performance-approved configured hosts receive heavy checks. */
-export function performanceHosts<T extends { name: string; performance?: boolean }>(hosts: readonly T[]): T[] {
-  return hosts.filter((host) => host.performance === true);
+/** Keep placement targets pinned to the two performance-approved check hosts. */
+export function performanceHosts<T extends { name: string }>(hosts: readonly T[]): T[] {
+  return hosts.filter((host) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(host.name));
 }
 
 function refusal(reason: CheckHostRecognitionReason): CheckHostRecognitionDisposition {
@@ -789,7 +788,7 @@ export function recognizeCheckHostRun(
       (owner.uid as number) > CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.maxPid
     )
       return refusal('supervisor-marker-invalid');
-    if (!new RegExp(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.hostNamePattern).test(owner.host))
+    if (!(CHECK_HOST_SUPERVISOR_MARKER_SCHEMA.hosts as readonly string[]).includes(owner.host))
       return refusal('supervisor-host-invalid');
     if (owner.run !== runId) return refusal('supervisor-run-mismatch');
     let uid: number;

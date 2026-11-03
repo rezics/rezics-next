@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -111,6 +112,42 @@ async function cleanHosted(
     signal(owner, 'SIGKILL');
   }
   for (const child of childrenBeforeExit) signal(child, 'SIGKILL');
+}
+
+async function waitForHostEnvironments(
+  path: string,
+  count: number,
+): Promise<{ pid: number; env: NodeJS.ProcessEnv }[]> {
+  for (let n = 0; n < 300; n++) {
+    try {
+      const records = readFileSync(path, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      if (records.length >= count) return records;
+    } catch {}
+    await Bun.sleep(10);
+  }
+  throw new Error(`timed out waiting for ${count} manager host environment records at ${path}`);
+}
+
+function expectNeutralHostEnvironment(env: NodeJS.ProcessEnv, expectedPath: string | undefined): void {
+  expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE_'))).toEqual([]);
+  for (const key of [
+    'CLAUDECODE',
+    'CODEX_HOME',
+    'CODEX_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'GOAL_MANAGER',
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'GOAL_CHECK_WAIT_FILE',
+  ])
+    expect(env[key]).toBeUndefined();
+  expect(env.PATH).toBe(process.env.PATH);
+  expect(env.GOAL_LOCAL_CONFIG).toBe('/configured/local.json');
+  expect(env.GOAL_STATE_DIRECTORY).toBe('/configured/state');
+  expect(env.FAKE_GOAL_HOST_ENV_CAPTURE).toBe(expectedPath);
 }
 
 test('the app-server a host owns exits with the host', async () => {
@@ -397,36 +434,29 @@ test('a host whose state directory is gone exits', async () => {
   }
 }, 10_000);
 
-test('manager commands request systemd activation and retain its exact failure', async () => {
-  const f = fixture();
-  const bin = join(f.path, 'bin');
-  mkdirSync(bin);
-  const calls = join(f.path, 'systemctl.args');
-  writeFileSync(
-    join(bin, 'systemctl'),
-    '#!/bin/sh\nprintf "%s\\n" "$*" >> "' + calls + '"\necho "fixture user bus unavailable" >&2\nexit 1\n',
-  );
-  chmodSync(join(bin, 'systemctl'), 0o755);
-  f.env.PATH = bin + ':' + process.env.PATH;
-  try {
-    for (const command of ['start', 'stop', 'complete', 'decision', 'turn-start', 'turn-end']) {
-      const result = await f.command(
-        'manager',
-        command,
-        'accounts',
-        ...(command === 'start' ? ['--engine', 'codex', '--budget', '1000'] : []),
-      );
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain('fixture user bus unavailable');
-      expect(hostIdentity(f.path)).toBeUndefined();
+test('every manager command starts the host when it is not running', async () => {
+  const subcommands: [string, string[]][] = [
+    ['start', ['--engine', 'codex', '--budget', '1000']],
+    ['stop', []],
+    ['complete', []],
+    ['decision', []],
+    ['turn-start', []],
+    ['turn-end', []],
+  ];
+  for (const [subcommand, flags] of subcommands) {
+    const f = fixture();
+    try {
+      const result = await f.command('manager', subcommand, 'accounts', ...flags);
+      const owner = hostIdentity(f.path);
+      expect(owner, `${subcommand} did not start a manager host; command output: ${result.stderr}`).toBeDefined();
+      expect(sameProcess(owner!)).toBe(true);
+      expect(result.stderr).not.toContain('ENOENT');
+    } finally {
+      await cleanHosted(f.path);
+      f.close();
     }
-    expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual(
-      Array(6).fill('--user start rezics-goal-host.service'),
-    );
-  } finally {
-    f.close();
   }
-});
+}, 30_000);
 
 test('daily audit validation and dispatch failures are durable and reported once without escaping the real host', async () => {
   for (const failure of ['parse', 'dispatch']) {
@@ -444,6 +474,7 @@ test('daily audit validation and dispatch failures are durable and reported once
       import { readFileSync } from 'node:fs';
       const runtime = createIntegrationRuntime();
       const inbox = new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+      runtime.hostCommand = [process.execPath, import.meta.filename];
       runtime.dispatchDailyStepAudit = () => dispatchDailyStepAudit(runtime.db, [], () => {
         ${
           failure === 'parse'
@@ -506,3 +537,61 @@ test('daily audit validation and dispatch failures are durable and reported once
     }
   }
 }, 15_000);
+test('neutral host spawn and self-handoff remove inherited provider and task identity markers', async () => {
+  const capture = join(process.cwd(), '.temp/goal-tests/host-env-' + randomUUID() + '.jsonl');
+  const reexec = join(process.cwd(), '.temp/goal-tests/host-reexec-' + randomUUID());
+  const claudeSession = randomUUID();
+  const codexSession = randomUUID();
+  const f = fixture({
+    FAKE_APP_SERVER_PERSIST: '1',
+    FAKE_GOAL_HOST_ENV_CAPTURE: capture,
+    FAKE_GOAL_REEXEC_FLAG: reexec,
+    CLAUDE_CODE_SESSION_ID: claudeSession,
+    CLAUDE_CONFIG_DIR: '/wrong/claude-account',
+    CLAUDECODE: '1',
+    CLAUDE_PARENT_ONLY_HINT: 'must-not-cross-host-boundary',
+    CODEX_HOME: '/wrong/codex-account',
+    CODEX_SESSION_ID: 'old-codex-session',
+    CODEX_THREAD_ID: codexSession,
+    GOAL_MANAGER: 'ambient-caller',
+    GOAL_TASK_ID: 'ambient-task',
+    GOAL_ATTEMPT: '99',
+    GOAL_CHECK_WAIT_FILE: '/stale/check-wait',
+    GOAL_LOCAL_CONFIG: '/configured/local.json',
+    GOAL_STATE_DIRECTORY: '/configured/state',
+  });
+  f.env.FAKE_GOAL_STATE = f.path;
+  try {
+    const originalCaller = { ...f.env };
+    const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
+    expect(started.code).toBe(0);
+    expect(JSON.parse(started.stdout)).toMatchObject({ id: 'accounts', status: 'running', budget: 1000 });
+    const first = await waitForHostEnvironments(capture, 1);
+    expectNeutralHostEnvironment(first[0]!.env, capture);
+    expect(originalCaller.CLAUDE_CODE_SESSION_ID).toBe(claudeSession);
+    expect(originalCaller.CODEX_THREAD_ID).toBe(codexSession);
+    expect(f.env.CLAUDE_CODE_SESSION_ID).toBe(claudeSession);
+    expect(f.env.CODEX_THREAD_ID).toBe(codexSession);
+
+    writeFileSync(reexec, 'relaunch from current code');
+    const records = await waitForHostEnvironments(capture, 2);
+    expect(records[1]!.pid).not.toBe(records[0]!.pid);
+    expectNeutralHostEnvironment(records[1]!.env, capture);
+    const owner = hostIdentity(f.path);
+    expect(owner?.pid).toBe(records[1]!.pid);
+    expect(owner && sameProcess(owner)).toBe(true);
+
+    const rpc = readFileSync(join(f.path, 'rpc.jsonl'), 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    expect(rpc.some((message) => message.method === 'thread/resume' && message.params.threadId === 'thread-1')).toBe(
+      true,
+    );
+  } finally {
+    await cleanHosted(f.path);
+    rmSync(capture, { force: true });
+    rmSync(reexec, { force: true });
+    f.close();
+  }
+}, 20_000);

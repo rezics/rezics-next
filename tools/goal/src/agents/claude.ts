@@ -7,7 +7,6 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { defaultPolicy } from '../policy.ts';
 
 export const claudeAdapter: AgentAdapter = {
   supportsConsultation() {
@@ -124,9 +123,12 @@ export function parseClaudeUsage(body: string, pool: Pool, now = Date.now()): Po
     error: null,
   };
 }
-// All control-plane processes share observations; each caller applies its own refresh and stale policy.
-// The OAuth token goes to curl on stdin, never in its arguments.
-const MAX_DATE_MS = 8.64e15; // ECMAScript Date's representable range, not a retention policy.
+// The endpoint rate-limits its callers, so all control-plane processes share one cached reading: it is refreshed at
+// most every two minutes, and a refused refresh keeps the last good reading for up to twenty minutes. The token goes
+// to curl on stdin, never in its arguments.
+const CLAUDE_REFRESH_MS = 120_000,
+  CLAUDE_STALE_MS = 1_200_000;
+const MAX_DATE_MS = 8.64e15;
 const claudeReadings = new Map<string, PoolReading>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,11 +141,11 @@ function dateMilliseconds(value: unknown): number | undefined {
   return Number.isFinite(milliseconds) ? milliseconds : undefined;
 }
 
-function validCachedReading(value: unknown, pool: Pool, now: number, staleMs: number): PoolReading | undefined {
+function validCachedReading(value: unknown, pool: Pool, now: number): PoolReading | undefined {
   if (!isRecord(value) || value.pool !== pool.name || value.allowanceKey !== pool.allowanceKey) return undefined;
   if (dateMilliseconds(value.at) === undefined || typeof value.observedAt !== 'string') return undefined;
   const observedAt = dateMilliseconds(value.observedAt);
-  if (observedAt === undefined || now < observedAt || now - observedAt >= staleMs) return undefined;
+  if (observedAt === undefined || now < observedAt || now - observedAt >= CLAUDE_STALE_MS) return undefined;
   if (!Array.isArray(value.windows) || !value.windows.length) return undefined;
   const validWindows = value.windows.every(
     (window) =>
@@ -173,7 +175,7 @@ function claudeCache(pool: Pool): string {
   );
 }
 
-function cachedClaudeReading(pool: Pool, cache: string, now: number, staleMs: number): PoolReading | undefined {
+function cachedClaudeReading(pool: Pool, cache: string, now: number): PoolReading | undefined {
   let disk: unknown;
   try {
     disk = JSON.parse(readFileSync(cache, 'utf8')) as unknown;
@@ -181,7 +183,7 @@ function cachedClaudeReading(pool: Pool, cache: string, now: number, staleMs: nu
     /* A damaged cache is not an observation. */
   }
   return [claudeReadings.get(cache), disk]
-    .map((reading) => validCachedReading(reading, pool, now, staleMs))
+    .map((reading) => validCachedReading(reading, pool, now))
     .filter((reading): reading is PoolReading => !!reading)
     .sort((left, right) => Date.parse(right.observedAt!) - Date.parse(left.observedAt!))[0];
 }
@@ -243,9 +245,9 @@ export function recordClaudeRateLimit(pool: Pool, log: string, now = Date.now())
     /* Allowance observation must never fail worker settlement. */
   }
 }
-export function readClaudeUsage(pool: Pool, now: number, policy = defaultPolicy.provider): PoolReading {
+export function readClaudeUsage(pool: Pool, now: number): PoolReading {
   const cache = claudeCache(pool);
-  const cached = cachedClaudeReading(pool, cache, now, policy.claudeStaleMs);
+  const cached = cachedClaudeReading(pool, cache, now);
   const age = cached ? now - Date.parse(cached.observedAt!) : Infinity;
   const reuse = (reading: PoolReading) => ({
     ...reading,
@@ -253,7 +255,7 @@ export function readClaudeUsage(pool: Pool, now: number, policy = defaultPolicy.
     allowanceKey: pool.allowanceKey,
     at: new Date(now).toISOString(),
   });
-  if (cached && age < policy.claudeRefreshMs) return reuse(cached);
+  if (cached && age < CLAUDE_REFRESH_MS) return reuse(cached);
   const token = (() => {
     try {
       return (
@@ -274,7 +276,7 @@ export function readClaudeUsage(pool: Pool, now: number, policy = defaultPolicy.
         [
           '-sf',
           '-m',
-          String(policy.claudeRequestTimeoutSeconds),
+          '10',
           '-H',
           '@-',
           '-H',
@@ -297,7 +299,7 @@ export function readClaudeUsage(pool: Pool, now: number, policy = defaultPolicy.
     return reading;
   }
   if (response?.status === 0) observationError = 'Claude OAuth usage response was invalid';
-  if (cached && age < policy.claudeStaleMs) return reuse(cached);
+  if (cached && age < CLAUDE_STALE_MS) return reuse(cached);
   return unknownReading(pool, now, observationError);
 }
 
