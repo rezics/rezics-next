@@ -39,12 +39,14 @@ const access: Access = {
 };
 
 const observed: {
-  current?: {
-      principal: string;
-      request: unknown;
-      context: Parameters<SearchService['search']>[4];
-  };
-};
+  current:
+    | {
+        principal: string;
+        request: unknown;
+        context: Parameters<SearchService['search']>[4];
+      }
+    | undefined;
+} = { current: undefined };
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
   async search(principal, request, _time, _active, context) {
@@ -106,16 +108,17 @@ test('Library scope requests preserve the verified reader, Access, route key, de
 
   expect(response.status).toBe(200);
   const capture = observed.current;
-  expect(capture).toBeDefined();
-  expect(capture!.principal).toBe(`account:${reader.accountId}`);
-  expect(capture!.request).toEqual(body);
-  expect(capture!.context?.scope?.actor).toBe(reader);
-  expect(capture!.context?.scope?.access).toBe(access);
-  expect(capture!.context?.scope?.routeKey).toBe(routeKey);
-  expect(capture!.context?.scope?.deadline).toBeGreaterThan(Date.now());
-  expect(capture!.context?.deadline).toBe(capture!.context?.scope?.deadline);
+  if (!capture) throw new Error('Search route did not call the bound service');
+  expect(capture.principal).toBe(`account:${reader.accountId}`);
+  expect(capture.request).toEqual(body);
+  expect(capture.context?.scope?.actor).toBe(reader);
+  expect(capture.context?.scope?.access).toBe(access);
+  expect(capture.context?.scope?.routeKey).toBe(routeKey);
+  expect(capture.context?.scope?.deadline).toBeGreaterThan(Date.now());
+  expect(capture.context?.deadline).toBe(capture.context?.scope?.deadline);
 
-  const scope = capture!.context!.scope!;
+  const scope = capture.context?.scope;
+  if (!scope) throw new Error('Search route did not pass its scope context');
   const actor = scope.actor;
   if (!actor) throw new Error('Search passed an incomplete scope context');
   const collection = '018f0000-0000-7000-8000-00a000000010';

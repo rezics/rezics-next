@@ -739,8 +739,9 @@ export function createSearchService({
             );
             if (page.basis.canonical !== preparedScope.basis.canonical)
               throw new ProblemError('search_restart_required');
+            if (page.order !== 'name') throw new ProblemError('search_restart_required');
             scopeWork.native(page.usage.work);
-            nativeHits.push(...page.hits);
+            nativeHits.push(...page.hits.map((hit) => ({ ...hit, sort: [...hit.sort] })));
             covered = page.coveredThrough;
             exhausted = page.exhausted;
             if (nativeHits.length >= limit || exhausted) break;
@@ -768,8 +769,9 @@ export function createSearchService({
             );
             if (page.basis.canonical !== preparedScope.basis.canonical)
               throw new ProblemError('search_restart_required');
+            if (page.order !== 'collections') throw new ProblemError('search_restart_required');
             scopeWork.native(page.usage.work);
-            nativeHits.push(...page.hits);
+            nativeHits.push(...page.hits.map((hit) => ({ ...hit, sort: [...hit.sort] })));
             covered = page.coveredThrough;
             exhausted = page.exhausted;
             if (nativeHits.length >= limit || exhausted) break;
