@@ -65,6 +65,11 @@ test('post history and exact revision reads keep their compatible route addresse
     .get({ query: { editionIdentity: 'true' } });
 
   expect(history.data?.revisions[0]?.voteCitation?.units).toBe(0);
+  expect(history.data?.page.reviewScores.items[0]).toMatchObject({
+    revisionId,
+    citation: { questionId, units: 0, revision: 1 },
+    question: { scale: { min: 0, max: 20, displayStep: 1 } },
+  });
   expect(history.data).toMatchObject({
     page: {
       authors: { items: [{ id: authorId, state: 'concealed' }] },
