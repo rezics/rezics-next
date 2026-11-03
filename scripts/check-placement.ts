@@ -13,7 +13,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { lifecycleSpecFromArgv } from './check-lifecycle-child.ts';
 
 // Host names are identities, not placement policy; only configured performance flags admit work.
-export const CHECK_HOST_NAME_PATTERN = '^[a-z0-9][a-z0-9-]{0,63}$';
+export const CHECK_HOST_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$';
 export const CHECK_HOST_RUNS_ROOT = '/srv/rezics-check/runs';
 export const CHECK_HOST_SUPERVISOR_MARKER = '.remote-check-supervisor';
 /** Shared producer/receiver description for the physical lifetime marker. */

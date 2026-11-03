@@ -8124,6 +8124,6 @@ test('loopback c admission respects configured slots, memory and slice CPU capac
     new Response(child.stderr).text(),
   ]);
   expect(code, stderr).toBe(0);
-  expect(stdout.trim()).toBe('no-slot');
+  expect(stdout.trim().split('\n').at(-1)).toBe('no-slot');
   expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
 });

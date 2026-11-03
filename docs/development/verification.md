@@ -96,7 +96,7 @@ go to a performance-approved check host. Package-script, `--cwd` and ordinary `e
 
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
-name-based placement allowlist. Host names use lowercase letters, digits and hyphens, with a letter or digit first
+name-based placement allowlist. Host names use letters, digits and hyphens, with a letter or digit first
 and at most 64 characters. Local flags, off markers, learned memory weights, local leases, an absent host pool and
 a transport error cannot replay heavy or unknown work outside a physical check run. A failed or unavailable remote run remains non-green. A command is already on a check
 host only when its working directory is inside that run's directory, its cgroup names the matching run scope, and
