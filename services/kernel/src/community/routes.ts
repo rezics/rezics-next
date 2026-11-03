@@ -92,8 +92,10 @@ import {
   confirmRealmMemberSelection,
   MemberPageUnavailableError,
   publicMemberIdentity,
+  realmMemberEpisodeToken,
   readRealmMemberActions,
   readRealmMemberIdentities,
+  samePublicIdentityObservation,
   selectRealmMembers,
 } from './member-page.ts';
 import { listOwnRealms } from './own-realms.ts';
@@ -479,6 +481,7 @@ const memberActions = t.Object(
 const memberRow = t.Object(
   {
     accountId: id,
+    episode: t.String({ maxLength: 64 }),
     membership: t.Literal('member'),
     identity: t.Union([memberIdentity, t.Null()]),
     displayName: t.String({ maxLength: 4096 }),
@@ -490,6 +493,7 @@ const memberRow = t.Object(
 const selectedMember = t.Object(
   {
     accountId: id,
+    episode: t.String({ maxLength: 64 }),
     membership: t.Union([t.Literal('member'), t.Literal('none')]),
     identity: t.Union([memberIdentity, t.Null()]),
     displayName: t.String({ maxLength: 4096 }),
@@ -519,6 +523,7 @@ const memberPageResponse = t.Object(
         items: [
           {
             accountId: '00000000-0000-0000-0000-000000000020',
+            episode: 'mep1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
             membership: 'member',
             identity: {
               id: '00000000-0000-0000-0000-000000000020',
@@ -787,8 +792,7 @@ function sameIdentityAnchor(
   before: import('../access/account-data.ts').PublicIdentity | undefined,
   after: import('../access/account-data.ts').PublicIdentity | undefined,
 ) {
-  if (!before || !after) return before === after;
-  return before.id === after.id && before.kind === after.kind && before.state === after.state;
+  return samePublicIdentityObservation(before, after);
 }
 
 function memberActionAdvice(input: {
@@ -2481,6 +2485,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             );
             if (!managerAllowed) throw new ProblemError('forbidden');
 
+            const selectedIdentityBefore =
+              query.accountId === undefined
+                ? new Map()
+                : await readRealmMemberIdentities(dependencies.pool, [query.accountId], job.deadline);
             const selection = await selectRealmMembers(
               { pool: dependencies.pool, tokens: dependencies.tokens, deadline: job.deadline },
               {
@@ -2504,13 +2512,17 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               ...selection.members.map((member) => member.accountId),
               ...(selection.selected === null ? [] : [selection.selected.accountId]),
             ];
-            const identitiesBefore = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
-            const latestIdentities = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
-            // A changed identity anchor means this read crossed account replacement or deletion.
-            // Withhold private roster data and let the caller retry the same raw cursor.
+            const identitiesAfterSelection = await readRealmMemberIdentities(
+              dependencies.pool,
+              accountIds,
+              job.deadline,
+            );
+            // The exact selected Account is anchored before membership selection; page IDs are compared through hydration.
             if (
-              accountIds.some(
-                (accountId) => !sameIdentityAnchor(identitiesBefore.get(accountId), latestIdentities.get(accountId)),
+              query.accountId !== undefined &&
+              !sameIdentityAnchor(
+                selectedIdentityBefore.get(query.accountId),
+                identitiesAfterSelection.get(query.accountId),
               )
             )
               return assertRealmMemberPageBytes({
@@ -2549,6 +2561,22 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               }
             }
 
+            const latestIdentities = await readRealmMemberIdentities(dependencies.pool, accountIds, job.deadline);
+            // Withhold changed names and controls if the public identity moved during action hydration.
+            if (
+              accountIds.some(
+                (accountId) =>
+                  !sameIdentityAnchor(identitiesAfterSelection.get(accountId), latestIdentities.get(accountId)),
+              )
+            )
+              return assertRealmMemberPageBytes({
+                realmId,
+                state: 'preparing' as const,
+                items: [],
+                next: query.cursor ?? null,
+                selected: null,
+              });
+
             const stillCurrent = await confirmRealmMemberSelection(
               { pool: dependencies.pool, deadline: job.deadline },
               {
@@ -2576,6 +2604,15 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             if (!finalManagerAllowed) throw new ProblemError('forbidden');
 
             const present = (accountId: string) => publicMemberIdentity(accountId, latestIdentities.get(accountId));
+            const episode = (accountId: string, anchor: import('./member-page.ts').MemberAnchor | null) =>
+              realmMemberEpisodeToken({
+                tokens: dependencies.tokens,
+                realmId,
+                viewerAccountId: actor.accountId,
+                accountId,
+                epoch: selection.epoch,
+                anchor,
+              });
             const banState = (accountId: string) => {
               if (!banPermission) return 'unknown' as const;
               const action = banObservations.get(accountId);
@@ -2585,6 +2622,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               const identity = present(member.accountId);
               return {
                 accountId: member.accountId,
+                episode: episode(member.accountId, member),
                 membership: 'member' as const,
                 identity: identity.identity,
                 displayName: identity.displayName,
@@ -2606,6 +2644,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                     const identity = present(selection.selected!.accountId);
                     return {
                       accountId: selection.selected!.accountId,
+                      episode: episode(
+                        selection.selected!.accountId,
+                        selection.selected!.membership === 'member' ? selection.selected!.anchor : null,
+                      ),
                       membership: selection.selected!.membership,
                       identity: identity.identity,
                       displayName: identity.displayName,
