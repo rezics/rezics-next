@@ -1,4 +1,3 @@
-import { hasDocumentContent } from '@rezics/document';
 import { useBlocker, useRouter } from '@tanstack/react-router';
 import { createElement, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
@@ -13,21 +12,14 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
-import type { AuthoredDraft } from './authored-field-state';
+import { authoredDraftHasContent, type AuthoredDraft } from './authored-field-state';
 
 export function authoredFieldNavigationState(
   drafts: Readonly<Record<string, AuthoredDraft>>,
   pending: boolean,
   confirmed: boolean,
 ) {
-  const dirty =
-    !confirmed &&
-    Object.values(drafts).some(
-      (draft) =>
-        hasDocumentContent(draft.document) ||
-        [draft.language, draft.licence, draft.citation].some((text) => text.trim()) ||
-        draft.original,
-    );
+  const dirty = !confirmed && Object.values(drafts).some(authoredDraftHasContent);
   return { dirty, pending, protect: dirty || pending };
 }
 

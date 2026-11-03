@@ -191,8 +191,10 @@ function ScalarControl({
   locale,
   onChange,
   feedback,
+  ariaLabel,
 }: {
   feedback?: ScalarFeedback | undefined;
+  ariaLabel?: string | undefined;
   part: SnakInput;
   definition: PropertyDefinition | undefined;
   read: ScalarRead;
@@ -236,12 +238,12 @@ function ScalarControl({
   ) => (
     <Field className="min-w-0">
       <FieldLabel className={labelClassName} htmlFor={id(key)}>
-        {label}
+        {ariaLabel ?? label}
       </FieldLabel>
       <Input
         className={inputClassName}
         {...(key === 'year' || key === 'month' || key === 'day' ? { id: id(key), ...invalid('date') } : control(key))}
-        aria-label={label}
+        aria-label={ariaLabel ?? label}
         type={type}
         value={value}
         onChange={(event) => update(event.target.value)}
@@ -468,8 +470,10 @@ function PartEditor({
   feedback,
   removal,
   localKey,
+  ariaLabel,
 }: {
   localKey: number;
+  ariaLabel?: string | undefined;
   removal?: ReactNode;
   feedback?: ScalarFeedback | undefined;
   control?: ((part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode) | undefined;
@@ -496,6 +500,7 @@ function PartEditor({
             definition={read.release.properties[part.property.id]}
             read={read}
             locale={locale}
+            ariaLabel={ariaLabel}
             onChange={onChange}
           />
         )}
@@ -580,8 +585,10 @@ export function StatementFields({
   localDraft = false,
   stablePartAddresses = false,
   creation = false,
+  referencesOnly = false,
   reuse,
   focusReference,
+  referencePartLabel,
 }: {
   feedback?: StatementFeedback | undefined;
   draft: StatementInput;
@@ -598,6 +605,8 @@ export function StatementFields({
   stablePartAddresses?: boolean;
   /** Use creation copy for the primary value heading. */
   creation?: boolean;
+  /** Reuse the native grouped-reference controls without exposing a fact value or qualifiers. */
+  referencesOnly?: boolean;
   reuse?:
     | {
         disabled?: boolean;
@@ -605,6 +614,7 @@ export function StatementFields({
       }
     | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
+  referencePartLabel?: ((part: SnakInput, referenceIndex: number, partIndex: number) => string | undefined) | undefined;
 }) {
   const o = { locale: locale as never };
   const lifetime = useEditorLifetime();
@@ -884,6 +894,8 @@ export function StatementFields({
       : undefined;
   return (
     <>
+      {!referencesOnly && (
+        <>
       <section {...section('fact')} className={sectionClassName}>
         <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
           <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
@@ -975,6 +987,8 @@ export function StatementFields({
           }
         />
       </section>
+        </>
+      )}
       <section {...section('references')} className={`${sectionClassName} space-y-4`}>
         <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
           {m.correction_references({}, o)}
@@ -998,6 +1012,7 @@ export function StatementFields({
                 localKey={identity(part).key}
                 control={partControl}
                 feedback={scalarFeedback(`reference-${index}-part-${partIndex}`, part)}
+                ariaLabel={referencePartLabel?.(part, index, partIndex)}
                 key={identity(part).key}
                 part={part}
                 read={current}

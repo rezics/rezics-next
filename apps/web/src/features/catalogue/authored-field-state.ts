@@ -1,13 +1,13 @@
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import type { CandidateFailure } from '../../subject/candidates';
-import type { ProposalResult } from './statement-editor';
+import type { ProposalResult, StatementInput } from './statement-editor';
 import type { AuthoredCommand, AuthoredRead } from './authored-field';
 
 export type AuthoredDraft = {
   document: DocumentSnapshot;
   language: string;
   licence: string;
-  citation: string;
+  references: StatementInput['references'];
   original: boolean;
 };
 type AuthoredState = {
@@ -28,9 +28,34 @@ const blank = (): AuthoredDraft => ({
   document: fromPlainText(''),
   language: '',
   licence: '',
-  citation: '',
+  // Preserve the existing URL citation affordance as the first ordinary reference part.
+  references: [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] },
+  ],
   original: false,
 });
+
+function hasValue(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.some(hasValue);
+  if (value && typeof value === 'object')
+    return Object.entries(value).some(
+      ([key, nested]) => !['unit', 'precision', 'calendarmodel', 'language'].includes(key) && hasValue(nested),
+    );
+  return false;
+}
+
+export function authoredDraftHasContent(draft: AuthoredDraft): boolean {
+  return (
+    hasDocumentContent(draft.document) ||
+    [draft.language, draft.licence].some((text) => text.trim()) ||
+    draft.references.some((reference) =>
+      reference.parts.some((part) => part.value.type !== 'value' || hasValue(part.value.content)),
+    ) ||
+    draft.original
+  );
+}
 
 export function initialAuthoredState(initial: AuthoredRead): AuthoredState {
   return {

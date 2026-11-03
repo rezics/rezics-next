@@ -297,8 +297,11 @@ fresh proposals and exact replays wait until current admission returns.
 
 Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
 Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
-for terms writes. Authored text
-uses the existing document/licence editor. Ordinary forms do not submit ingestion Source metadata, infer rights,
+for terms writes. Authored text uses the existing document/licence editor with a local safe preview and exact
+grouped-evidence review. The preview compares only the currently authorized selected document for that field;
+submitting sends an ordinary native candidate proposal, while candidate review and selection remain independent. A
+citation supports the field but does not grant permission to copy its prose. Ordinary forms do not submit ingestion
+Source metadata, infer rights,
 copy provider prose or covers, publish profiles, or change Library progress.
 
 ## Browser flow: ordinary identifier evidence

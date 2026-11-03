@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { RichTextEditor } from '@rezics/ui';
-import { hasDocumentContent } from '@rezics/document';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -28,17 +27,27 @@ import { editorLabels } from '../../threads/composer';
 import { CandidateValue, pageText } from '../pages/data';
 import { SpoilerGate } from '../pages/values';
 import { spoilerLevel } from '../pages/shared';
-import { EditorFailure } from './statement-editor-view';
-import { authoredState, initialAuthoredState, type AuthoredDraft } from './authored-field-state';
+import {
+  EditorFailure,
+  PartValue,
+  StatementFields,
+  StatementViolationLinks,
+  type StatementFieldsRead,
+} from './statement-editor-view';
+import { authoredDraftHasContent, authoredState, initialAuthoredState, type AuthoredDraft } from './authored-field-state';
 import { AuthoredFieldNavigation } from './authored-field-navigation';
 import {
   authoredProperties,
+  authoredDocumentError,
   authoredStatement,
   validateAuthored,
+  type AuthoredStatement,
   type AuthoredBody,
   type AuthoredRead,
   type AuthoredTransport,
 } from './authored-field';
+import { presentStatementViolations, type StatementFeedback } from './statement-validation-presentation';
+import type { StatementInput } from './statement-editor';
 
 // Match the caller-level phone targets while retaining dense fine-pointer desktop controls.
 const actionClassName =
@@ -113,6 +122,100 @@ function Body({
   );
 }
 
+type PreparedReview = { subject: string; property: string; statement: AuthoredStatement; original: true };
+type AuthoredCurrent = Extract<AuthoredRead, { ok: true }>;
+
+function selectedLanguage(current: AuthoredCurrent): string | undefined {
+  const content = current.selected?.value.type === 'value' ? current.selected.value.content : undefined;
+  return content && typeof content === 'object' && 'language' in content && typeof content.language === 'string'
+    ? content.language
+    : undefined;
+}
+
+function DraftReviewCard({
+  prepared,
+  current,
+  locale,
+  heading,
+}: {
+  prepared: PreparedReview;
+  current: AuthoredCurrent;
+  locale: string;
+  heading: string;
+}) {
+  const o = { locale: locale as never };
+  const content = (prepared.statement.value as {
+    type: 'value';
+    content: { document: AuthoredDraft['document']; language: string; licence: string };
+  }).content;
+  const documentError = authoredDocumentError(content.document);
+  const property = current.release.properties[prepared.property];
+  const read: StatementFieldsRead = {
+    release: current.release,
+    source: current.selected,
+    public: { related: current.public.related, subject: { type: current.public.subject.type } },
+  };
+  return (
+    <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+      <ContentItemHeading className="text-lg font-semibold">{heading}</ContentItemHeading>
+      <p className="text-sm text-muted-foreground">{m.authored_local_preview({}, o)}</p>
+      <p className="font-medium">
+        {m.candidate_field({}, o)}: {pageText(property?.labels, locale).text || m.subject_value_unlabelled({}, o)}
+      </p>
+      {documentError ? (
+        <p role="alert">{m.authored_preview_unavailable({}, o)}</p>
+      ) : (
+        <div lang={content.language}>
+          <DocumentBody
+            document={content.document}
+            locale={locale}
+            labels={{ revealSpoiler: m.thread_reveal_spoiler({}, o) }}
+          />
+        </div>
+      )}
+      <section aria-label={m.authored_contribution_details({}, o)} className="space-y-2 text-sm">
+        <h3 className="font-semibold">{m.authored_contribution_details({}, o)}</h3>
+        <p>
+          {m.authored_language({}, o)}: {content.language}
+        </p>
+        <p>
+          {m.authored_licence({}, o)}: {content.licence}
+        </p>
+        <p>{m.authored_original({}, o)}</p>
+      </section>
+      <section aria-label={m.authored_evidence({}, o)} className="space-y-3">
+        <h3 className="font-semibold">{m.authored_evidence({}, o)}</h3>
+        {prepared.statement.references.length ? (
+          <ol className="min-w-0 space-y-3">
+            {prepared.statement.references.map((reference, referenceIndex) => (
+              <li key={referenceIndex} className="min-w-0 border-s-2 border-border ps-3">
+                <p className="text-sm font-medium">{m.correction_references({}, o)} {referenceIndex + 1}</p>
+                {reference.parts.length ? (
+                  <ol className="min-w-0 space-y-2">
+                    {reference.parts.map((part, partIndex) => (
+                      <li key={partIndex} className="min-w-0">
+                        <p className="text-sm text-muted-foreground">
+                          {pageText(current.release.properties[part.property.id]?.labels, locale).text ||
+                            m.subject_value_unlabelled({}, o)}
+                        </p>
+                        <PartValue part={part} read={read} locale={locale} />
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>{m.authored_no_citations({}, o)}</p>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>{m.authored_no_citations({}, o)}</p>
+        )}
+      </section>
+    </ContentItemFrame>
+  );
+}
+
 /**
  * Always composes a new original work; existing rich documents and candidates remain intact.
  *
@@ -150,7 +253,7 @@ function AuthoredFieldLive({
     document: `${formId}-document`,
     language: `${formId}-language`,
     licence: `${formId}-licence`,
-    citation: `${formId}-citation`,
+    evidence: `${formId}-evidence`,
     original: `${formId}-original`,
     draft: `${formId}-draft`,
     draftHint: `${formId}-draft-hint`,
@@ -171,6 +274,9 @@ function AuthoredFieldLive({
   const [reading, setReading] = useState(false);
   const [readFailure, setReadFailure] = useState(initial.ok ? undefined : initial.reason);
   const [errors, setErrors] = useState<Violation[]>([]);
+  const [stage, setStage] = useState<'compose' | 'preview' | 'review'>('compose');
+  const [prepared, setPrepared] = useState<PreparedReview>();
+  const preparedReview = useRef<PreparedReview | undefined>(undefined);
   const [reviewing, setReviewing] = useState(false);
   const [proposalBody, setProposalBody] = useState<AuthoredBody | null>();
   const [comparisonCurrent, setComparisonCurrent] = useState<Extract<AuthoredRead, { ok: true }>>();
@@ -185,6 +291,8 @@ function AuthoredFieldLive({
   const selectedBoundary = useRef<HTMLElement>(null);
   const emptyBoundary = useRef<HTMLParagraphElement>(null);
   const draftBoundary = useRef<HTMLFormElement>(null);
+  const compositionFocus = useRef<HTMLElement | null>(null);
+  const restoreCompositionFocus = useRef(false);
   const readFailureBoundary = useRef<HTMLParagraphElement>(null);
   const running = useRef(false);
   const session = useRef(initial.ok ? initial.session : undefined);
@@ -268,9 +376,22 @@ function AuthoredFieldLive({
       emptyBoundary.current
     )?.focus();
   }, [busy, current, readFailure, work, ids.failure]);
+  useFocusLayoutEffect(() => {
+    if (stage !== 'compose' || !restoreCompositionFocus.current) return;
+    restoreCompositionFocus.current = false;
+    const previous = compositionFocus.current;
+    if (previous?.isConnected && !previous.matches(':disabled, [hidden], [inert]')) {
+      previous.focus();
+      return;
+    }
+    draftBoundary.current?.querySelector<HTMLElement>('.ProseMirror')?.focus();
+  }, [stage]);
   function retireReading(retireComparison = true, keepFocus?: ReadRecoveryFocus) {
     retireDiscard();
     focusEditor.current = false;
+    preparedReview.current = undefined;
+    setPrepared(undefined);
+    setStage('compose');
     if (readRecoveryFocus.current !== keepFocus) clearReadRecoveryFocus();
     const generation = ++readGeneration.current;
     setCurrent(undefined);
@@ -350,6 +471,10 @@ function AuthoredFieldLive({
     )
       return;
     retireDiscard();
+    if (stage !== 'compose') restoreCompositionFocus.current = true;
+    preparedReview.current = undefined;
+    setPrepared(undefined);
+    setStage('compose');
     currentDraft.current = undefined;
     dispatch({ type: 'edit', property, change });
     setErrors([]);
@@ -403,11 +528,45 @@ function AuthoredFieldLive({
     };
     discardQuestion.current = question;
     if (
-      hasDocumentContent(draft.document) ||
-      [draft.language, draft.licence, draft.citation].some((text) => text.trim())
+      authoredDraftHasContent(draft)
     )
       setDiscarding(question);
     else discard(question, keyboard);
+  }
+
+  function returnToCompose() {
+    preparedReview.current = undefined;
+    setPrepared(undefined);
+    restoreCompositionFocus.current = true;
+    setStage('compose');
+  }
+
+  function returnToPreview() {
+    if (!preparedReview.current || !readingLive()) return;
+    setStage('preview');
+  }
+
+  function preparePreview() {
+    if (!readingLive() || running.current || proposed || !current || !draft || !property || locked) return;
+    const statement = authoredStatement(property, draft.document, draft.language, draft.licence, draft.references);
+    const violations = validateAuthored(statement, current.release);
+    if (!draft.original) violations.push({ pointer: '/original', code: 'required' });
+    setErrors(violations);
+    if (violations.length) {
+      preparedReview.current = undefined;
+      setPrepared(undefined);
+      setStage('compose');
+      return;
+    }
+    const next: PreparedReview = {
+      subject: current.public.subject.id,
+      property,
+      statement: structuredClone(statement),
+      original: true,
+    };
+    preparedReview.current = next;
+    setPrepared(next);
+    setStage('preview');
   }
 
   async function refresh(
@@ -516,15 +675,18 @@ function AuthoredFieldLive({
       return;
     let request = command;
     if (!request) {
-      const statement = authoredStatement(property, draft.document, draft.language, draft.licence, draft.citation);
-      const violations = validateAuthored(statement, current.release);
-      if (!draft.original) violations.push({ pointer: '/original', code: 'required' });
-      setErrors(violations);
-      if (violations.length) return;
+      const prepared = preparedReview.current;
+      if (
+        stage !== 'review' ||
+        !prepared ||
+        prepared.subject !== current.public.subject.id ||
+        prepared.property !== property
+      )
+        return;
       request = {
-        id: current.public.subject.id,
+        id: prepared.subject,
         key: crypto.randomUUID(),
-        statement: structuredClone(statement),
+        statement: structuredClone(prepared.statement),
         ...(session.current ? { session: session.current } : {}),
       };
     }
@@ -559,14 +721,51 @@ function AuthoredFieldLive({
         : error.pointer.includes('/licence')
           ? 'licence'
           : error.pointer.includes('/references')
-            ? 'citation'
+          ? 'evidence'
             : 'document';
   const labels = {
     original: m.authored_original({}, o),
     language: m.authored_language({}, o),
     licence: m.authored_licence({}, o),
-    citation: m.authored_citation({}, o),
+    evidence: m.authored_evidence({}, o),
     document: m.authored_text({}, o),
+  };
+  const statementDraft: StatementInput | undefined = current && property && draft
+    ? {
+        property: { id: property },
+        value: {
+          type: 'value',
+          content: { document: draft.document, language: draft.language, licence: draft.licence },
+        },
+        references: draft.references,
+        qualifiers: [],
+        rank: 'normal',
+      }
+    : undefined;
+  const fieldsRead: StatementFieldsRead | undefined = current
+    ? {
+        release: current.release,
+        source: current.selected,
+        public: { related: current.public.related, subject: { type: current.public.subject.type } },
+      }
+    : undefined;
+  const evidenceFeedback: StatementFeedback = {
+    id: ids.evidence,
+    errors:
+      statementDraft && current
+        ? presentStatementViolations(
+            errors
+              .filter((error) => errorField(error) === 'evidence')
+              .map((error) => ({
+                ...error,
+                pointer: error.pointer.startsWith('/statement') ? error.pointer : `/statement${error.pointer}`,
+              })),
+            statementDraft,
+            current.release,
+            locale,
+            ids.evidence,
+          )
+        : [],
   };
   const review: CandidateTransport = {
     reader: work.reader,
@@ -635,6 +834,85 @@ function AuthoredFieldLive({
       </details>
     </>
   );
+  const selectedHeading = stage === 'compose' ? m.authored_selected({}, o) : m.authored_current_comparison({}, o);
+  const selectedSection = current && (
+    <section ref={selectedBoundary} aria-label={selectedHeading} tabIndex={-1}>
+      <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+        <ContentItemHeading className="text-lg font-semibold">{selectedHeading}</ContentItemHeading>
+        {current.selected ? (
+          spoilerLevel(current.selected) > 0 ? (
+            <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{selectedContent}</SpoilerGate>
+          ) : (
+            selectedContent
+          )
+        ) : (
+          <p>{m.authored_no_selected({}, o)}</p>
+        )}
+        {current.selected && (
+          <p className="text-sm text-muted-foreground">
+            {m.authored_language({}, o)}: {selectedLanguage(current) ?? m.authored_body_unavailable({}, o)}
+          </p>
+        )}
+        {current.selected && <Provenance body={current.body} locale={locale} />}
+        <Button
+          variant="outline"
+          className={actionClassName}
+          disabled={busy || !!command || confirmingDiscard}
+          onClick={(event) => {
+            const focus = noteReadRecovery(event, false);
+            void refresh(property, false, true, work, focus);
+          }}
+        >
+          {m.authored_reload_current_text({}, o)}
+        </Button>
+      </ContentItemFrame>
+    </section>
+  );
+  const stageNavigation = (
+    <nav aria-label={m.authored_steps({}, o)}>
+      <ol className="flex flex-wrap gap-2">
+        <li>
+          <Button
+            data-authored-step
+            type="button"
+            variant={stage === 'compose' ? 'default' : 'outline'}
+            className={actionClassName}
+            aria-current={stage === 'compose' ? 'step' : undefined}
+            disabled={stage === 'compose'}
+            onClick={returnToCompose}
+          >
+            {m.authored_compose_step({}, o)}
+          </Button>
+        </li>
+        <li>
+          <Button
+            data-authored-step
+            type="button"
+            variant={stage === 'preview' ? 'default' : 'outline'}
+            className={actionClassName}
+            aria-current={stage === 'preview' ? 'step' : undefined}
+            disabled={!prepared || stage === 'preview'}
+            onClick={() => preparedReview.current && readingLive() && setStage('preview')}
+          >
+            {m.authored_preview_step({}, o)}
+          </Button>
+        </li>
+        <li>
+          <Button
+            data-authored-step
+            type="button"
+            variant={stage === 'review' ? 'default' : 'outline'}
+            className={actionClassName}
+            aria-current={stage === 'review' ? 'step' : undefined}
+            disabled={!prepared || stage === 'review'}
+            onClick={() => preparedReview.current && readingLive() && setStage('review')}
+          >
+            {m.authored_review_step({}, o)}
+          </Button>
+        </li>
+      </ol>
+    </nav>
+  );
 
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6">
@@ -656,6 +934,7 @@ function AuthoredFieldLive({
         )}
         <p className="text-sm text-muted-foreground">{m.authored_intro({}, o)}</p>
       </header>
+      {stageNavigation}
       {failure && (
         <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
           {readFailure && !command ? (
@@ -697,7 +976,7 @@ function AuthoredFieldLive({
           {m.authored_empty({}, o)}
         </p>
       )}
-      {current && property && (
+      {current && property && stage === 'compose' && (
         <>
           <Field>
             <FieldLabel htmlFor={ids.property} className={labelClassName}>
@@ -717,32 +996,7 @@ function AuthoredFieldLive({
               ))}
             </NativeSelect>
           </Field>
-          <section ref={selectedBoundary} aria-label={m.authored_selected({}, o)} tabIndex={-1}>
-            <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
-              <ContentItemHeading className="text-lg font-semibold">{m.authored_selected({}, o)}</ContentItemHeading>
-              {current.selected ? (
-                spoilerLevel(current.selected) > 0 ? (
-                  <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{selectedContent}</SpoilerGate>
-                ) : (
-                  selectedContent
-                )
-              ) : (
-                <p>{m.authored_no_selected({}, o)}</p>
-              )}
-              {current.selected && <Provenance body={current.body} locale={locale} />}
-              <Button
-                variant="outline"
-                className={actionClassName}
-                disabled={busy || !!command || confirmingDiscard}
-                onClick={(event) => {
-                  const focus = noteReadRecovery(event, false);
-                  void refresh(property, false, true, work, focus);
-                }}
-              >
-                {m.authored_reload_current_text({}, o)}
-              </Button>
-            </ContentItemFrame>
-          </section>
+          {selectedSection}
         </>
       )}
       {(current || command || comparisonCurrent) && property && (
@@ -751,17 +1005,24 @@ function AuthoredFieldLive({
             <form
               ref={draftBoundary}
               className="min-w-0"
+              hidden={stage !== 'compose'}
               aria-labelledby={ids.draft}
               aria-describedby={ids.draftHint}
               aria-busy={busy}
               tabIndex={-1}
+              onFocusCapture={(event) => {
+                const target = event.target;
+                if (target instanceof HTMLElement && !target.closest('[data-authored-step]'))
+                  compositionFocus.current = target;
+              }}
               onSubmit={(event) => {
                 event.preventDefault();
-                void submit();
+                if (stage === 'compose') preparePreview();
+                else if (stage === 'review') void submit();
               }}
             >
               <ContentItemFrame as="div" className="min-w-0 p-4">
-                <FieldSet disabled={locked || confirmingDiscard} className="min-w-0 gap-4">
+                <FieldSet disabled={locked || confirmingDiscard || stage !== 'compose'} className="min-w-0 gap-4">
                   <FieldLegend className="mb-0 max-w-full">
                     <ContentItemHeading id={ids.draft} className="text-lg font-semibold">
                       {m.authored_replacement({}, o)}
@@ -771,6 +1032,9 @@ function AuthoredFieldLive({
                   {errors.length > 0 && (
                     <FieldError id={ids.errors} className="space-y-2">
                       <p>{m.authored_invalid({}, o)}</p>
+                      {errors.some((error) => errorField(error) === 'document') && (
+                        <p>{m.authored_preview_unavailable({}, o)}</p>
+                      )}
                       <ul>
                         {[...new Set(errors.map(errorField))].map((field) => (
                           <li key={field} id={`${ids[field]}-error`}>
@@ -839,22 +1103,27 @@ function AuthoredFieldLive({
                       <FieldDescription id={`${ids.licence}-hint`}>{m.authored_licence_hint({}, o)}</FieldDescription>
                     </Field>
                   </div>
-                  <Field>
-                    <FieldLabel htmlFor={ids.citation} className={labelClassName}>
-                      {labels.citation}
-                    </FieldLabel>
-                    <Input
-                      id={ids.citation}
-                      className={inputClassName}
-                      type="url"
-                      value={draft.citation}
-                      disabled={locked}
-                      aria-invalid={errors.some((error) => errorField(error) === 'citation')}
-                      aria-describedby={`${ids.citation}-hint${errors.some((error) => errorField(error) === 'citation') ? ` ${ids.citation}-error` : ''}`}
-                      onChange={(event) => update({ citation: event.target.value })}
-                    />
-                    <FieldDescription id={`${ids.citation}-hint`}>{m.authored_citation_hint({}, o)}</FieldDescription>
-                  </Field>
+                  <div id={ids.evidence} className="min-w-0 space-y-3">
+                    {evidenceFeedback.errors.length > 0 && (
+                      <StatementViolationLinks feedback={evidenceFeedback} locale={locale} active={readingLive} />
+                    )}
+                    {statementDraft && fieldsRead && (
+                      <StatementFields
+                        draft={statementDraft}
+                        current={fieldsRead}
+                        locale={locale}
+                        change={(next) => update({ references: next.references })}
+                        feedback={evidenceFeedback}
+                        localDraft
+                        referencePartLabel={(part, referenceIndex, partIndex) =>
+                          referenceIndex === 0 && partIndex === 0 && part.property.id === 'schema:url'
+                            ? m.authored_citation({}, o)
+                            : undefined
+                        }
+                        referencesOnly
+                      />
+                    )}
+                  </div>
                   <Field orientation="horizontal">
                     <Checkbox
                       id={ids.original}
@@ -883,11 +1152,13 @@ function AuthoredFieldLive({
                   </p>
                   {!proposed && (
                     <Button
-                      type="submit"
+                      data-authored-step
+                      type="button"
                       className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                       disabled={locked}
+                      onClick={preparePreview}
                     >
-                      {m.correction_submit({}, o)}
+                      {m.authored_preview_draft({}, o)}
                     </Button>
                   )}
                 </FieldSet>
@@ -941,6 +1212,72 @@ function AuthoredFieldLive({
                 )}
               </ContentItemFrame>
             </form>
+          )}
+          {prepared && current && stage === 'preview' && (
+            <section aria-label={m.authored_preview_step({}, o)} className="min-w-0 space-y-4">
+              <ContentItemHeading className="text-xl font-semibold">{m.authored_preview_step({}, o)}</ContentItemHeading>
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <DraftReviewCard
+                  prepared={prepared}
+                  current={current}
+                  locale={locale}
+                  heading={m.authored_draft_preview({}, o)}
+                />
+                {selectedSection}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" variant="outline" className={actionClassName} onClick={returnToCompose}>
+                  {m.authored_edit_draft({}, o)}
+                </Button>
+                <Button
+                  type="button"
+                  className={actionClassName}
+                  disabled={!readingLive() || !!command}
+                  onClick={() => preparedReview.current && readingLive() && setStage('review')}
+                >
+                  {m.authored_continue_review({}, o)}
+                </Button>
+              </div>
+            </section>
+          )}
+          {prepared && current && stage === 'review' && (
+            <section aria-label={m.authored_review_contribution({}, o)} className="min-w-0 space-y-4">
+              <ContentItemHeading className="text-xl font-semibold">
+                {m.authored_review_contribution({}, o)}
+              </ContentItemHeading>
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <DraftReviewCard
+                  prepared={prepared}
+                  current={current}
+                  locale={locale}
+                  heading={m.authored_draft_preview({}, o)}
+                />
+                {selectedSection}
+              </div>
+              <p className="text-sm text-muted-foreground">{m.authored_submit_notice({}, o)}</p>
+              {proposed && <p role="status">{m.authored_submitted({}, o)}</p>}
+              <div className="flex flex-wrap gap-3">
+                {!proposed && (
+                  <Button type="button" variant="outline" className={actionClassName} onClick={returnToCompose}>
+                    {m.authored_edit_draft({}, o)}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClassName}
+                  disabled={!prepared || !readingLive()}
+                  onClick={returnToPreview}
+                >
+                  {m.authored_back_to_preview({}, o)}
+                </Button>
+                {!proposed && (
+                  <Button type="button" className={actionClassName} disabled={locked} onClick={() => void submit()}>
+                    {command && failure === 'unavailable' ? m.correction_retry({}, o) : m.authored_submit_contribution({}, o)}
+                  </Button>
+                )}
+              </div>
+            </section>
           )}
           {proposed && id && comparisonReading && (
             <section className="space-y-4">
