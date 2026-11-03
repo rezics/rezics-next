@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -25,7 +25,8 @@ import { type FacetPage, type FacetState, type RequestedFacet } from './request'
 /** Native refusal, restart and Retry-After block every entry; expiry only admits an explicit recovery. */
 function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = Date.now()): boolean {
   if (!state || state.status === 'ready') return true;
-  if (state.status === 'refused' || state.status === 'restart') return false;
+  if (state.status === 'refused') return false;
+  if (state.status === 'restart') return recovery;
   if (state.retryAt !== undefined && state.retryAt > now) return false;
   return recovery;
 }
@@ -67,14 +68,25 @@ type RefinementProps = {
   rangeDraftKey?: string;
   rangeDraftState?: RangeDraftState;
   onRangeDraftChange?: (property: string, draft: RangeDraft) => void;
+  deferNavigation?: boolean;
+  perPropertyState?: boolean;
+  onConditionsChange?: (conditions: RefinementConditions) => void;
+  onValueSelectionChange?: (
+    property: string,
+    values: string[],
+    firstValue: string | undefined,
+    firstLabel: string | undefined,
+  ) => void;
+  selectedLabels?: Record<string, string>;
+  onShownChange?: (properties: string[]) => void;
+  rangeName?: (property: string, bound: 'from' | 'to') => string;
 };
 
 /** Compose existing native fields and checkboxes inside the page's shared desktop/phone Filters surface. */
 export function Refinement(props: RefinementProps) {
-  const queryIdentity = JSON.stringify([
-    props.data.key,
-    refinementHref(props.locale, props.query, props.conditions, props.sort),
-  ]);
+  const queryIdentity = props.deferNavigation
+    ? props.data.key
+    : JSON.stringify([props.data.key, refinementHref(props.locale, props.query, props.conditions, props.sort)]);
   const currentIdentity = useRef(queryIdentity);
   currentIdentity.current = queryIdentity;
   return (
@@ -99,6 +111,13 @@ function RefinementInstance({
   rangeDraftKey,
   rangeDraftState: suppliedRangeDraftState,
   onRangeDraftChange,
+  deferNavigation = false,
+  perPropertyState = false,
+  onConditionsChange,
+  onValueSelectionChange,
+  selectedLabels = {},
+  onShownChange,
+  rangeName,
   queryIdentity,
   isCurrent,
 }: RefinementProps & { queryIdentity: string; isCurrent: () => boolean }) {
@@ -118,6 +137,15 @@ function RefinementInstance({
       : [],
   );
   const [state, setState] = useState(data.initial);
+  const [propertyStates, setPropertyStates] = useState<Record<string, FacetState>>(() => {
+    if (data.initial?.status !== 'ready') return {};
+    return Object.fromEntries(
+      data.initial.page.facets.map((facet) => [
+        facet.property,
+        { status: 'ready' as const, page: { ...data.initial!.page, facets: [facet] } },
+      ]),
+    );
+  });
   const draftKey = rangeDraftKey ?? queryIdentity;
   const [localRangeDraftState, setLocalRangeDraftState] = useState(() => createRangeDraftState(draftKey));
   const rangeDraftState = suppliedRangeDraftState ?? localRangeDraftState;
@@ -130,6 +158,7 @@ function RefinementInstance({
   const continuations = useRef(new FacetContinuationLedger(queryIdentity));
   continuations.current.retain(shown);
   const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
+  const propertyReads = useRef(new Map<string, { facets: RequestedFacet[]; more?: string | undefined }>());
   const boundFocus = useRef<BoundFocus | null>(null);
   const focusSeq = useRef(0);
   const propertyRegions = useRef(new Map<string, HTMLElement>());
@@ -145,6 +174,7 @@ function RefinementInstance({
     },
     [],
   );
+  useEffect(() => onShownChange?.(shown), [onShownChange, shown]);
 
   function bindFocus(source: HTMLElement, property: string, action: BoundFocus['action']) {
     const id = ++focusSeq.current;
@@ -181,20 +211,34 @@ function RefinementInstance({
       return;
     }
     statusRegion.current?.focus();
-  }, [pages, state, busy, shown, queryIdentity]);
+  }, [pages, state, propertyStates, busy, shown, queryIdentity]);
   const href = (next: RefinementConditions) => refinementHref(locale, query, next, sort);
+  const changeConditions = (next: RefinementConditions) => {
+    if (onConditionsChange) onConditionsChange(next);
+    else navigate(href(next));
+  };
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
   const options = { locale: locale as never };
   const selected = Object.entries(conditions.facetValues).flatMap(([property, values]) =>
     values.map((value) => ({ property, value })),
   );
-  const failed = state && state.status !== 'ready';
+  const failed = !perPropertyState && state && state.status !== 'ready';
   const disabled =
-    busy ||
-    state?.status === 'unavailable' ||
-    state?.status === 'refused' ||
-    state?.status === 'restart' ||
-    state?.status === 'preparing';
+    !perPropertyState &&
+    (busy ||
+      state?.status === 'unavailable' ||
+      state?.status === 'refused' ||
+      state?.status === 'restart' ||
+      state?.status === 'preparing');
+
+  function propertyState(property: string) {
+    return perPropertyState ? propertyStates[property] : state;
+  }
+
+  function propertyFailed(property: string) {
+    const current = propertyState(property);
+    return current !== undefined && current.status !== 'ready';
+  }
 
   async function read(properties: string[], more?: string, focusId?: number, recovery = false) {
     const facets = properties
@@ -214,14 +258,21 @@ function RefinementInstance({
     return readRequested(facets, more, focusId, recovery);
   }
 
+  function setFacetState(property: string, next: FacetState) {
+    if (perPropertyState) setPropertyStates((current) => ({ ...current, [property]: next }));
+    else setState(next);
+  }
+
   function stopContinuation(property: string, code = 'repeated_facet_continuation') {
     setPages((current) => current.map((page) => (page.property === property ? { ...page, next: null } : page)));
     lastRead.current = undefined;
-    setState({ status: 'restart', code });
+    setFacetState(property, { status: 'restart', code });
   }
 
   async function readRequested(facets: RequestedFacet[], more?: string, focusId?: number, recovery = false) {
-    if (!isCurrent() || !admitFacetRead(state, recovery)) {
+    const readProperty = facets[0]?.property;
+    const currentState = readProperty ? propertyState(readProperty) : state;
+    if (!isCurrent() || !admitFacetRead(currentState, recovery)) {
       if (boundFocus.current?.id === focusId) boundFocus.current = null;
       return;
     }
@@ -244,6 +295,8 @@ function RefinementInstance({
       return;
     }
     lastRead.current = { facets, more };
+    if (perPropertyState)
+      for (const facet of facets) propertyReads.current.set(facet.property, { facets: [facet], more });
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
@@ -271,7 +324,7 @@ function RefinementInstance({
             previous &&
             facet.values.some((entry) => previous.values.some((old) => old.value === entry.value))
           ) {
-            setState({ status: 'unavailable', code: 'invalid_facet_response' });
+            setFacetState(facet.property, { status: 'unavailable', code: 'invalid_facet_response' });
             settleFocus(focusId);
             return;
           }
@@ -288,23 +341,68 @@ function RefinementInstance({
         if (exhausted) {
           setPages(next.map((page) => (page.property === exhausted.property ? { ...page, next: null } : page)));
           lastRead.current = undefined;
-          setState({ status: 'restart', code: 'facet_window_limit' });
+          setFacetState(exhausted.property, { status: 'restart', code: 'facet_window_limit' });
           settleFocus(focusId);
           return;
         }
         setPages(next);
         lastRead.current = undefined;
+        if (perPropertyState)
+          setPropertyStates((current) => ({
+            ...current,
+            ...Object.fromEntries(
+              returned.map((facet) => [
+                facet.property,
+                { status: 'ready' as const, page: { ...result.page, facets: [facet] } },
+              ]),
+            ),
+          }));
+        else setState(result);
+      } else if (perPropertyState) {
+        setPropertyStates((current) => ({
+          ...current,
+          ...Object.fromEntries(facets.map((facet) => [facet.property, result])),
+        }));
+      } else {
+        setState(result);
       }
-      setState(result);
       settleFocus(focusId);
     } catch (error) {
       if (!controller.signal.aborted && isCurrent()) {
-        setState({ status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' });
+        const failure: FacetState = {
+          status: 'unavailable',
+          code: error instanceof Error ? error.name : 'transport_error',
+        };
+        if (perPropertyState)
+          setPropertyStates((current) => ({
+            ...current,
+            ...Object.fromEntries(facets.map((facet) => [facet.property, failure])),
+          }));
+        else setState(failure);
         settleFocus(focusId);
       }
     } finally {
       if (!controller.signal.aborted && isCurrent()) setBusy(false);
     }
+  }
+
+  function retryProperty(property: string, event: ReactMouseEvent<HTMLButtonElement>) {
+    const current = propertyState(property);
+    if (!current || current.status === 'refused') return;
+    const attempt = current.status === 'restart' ? undefined : propertyReads.current.get(property);
+    if (current.status === 'restart') {
+      continuations.current.reset(property);
+      setPages((currentPages) => currentPages.filter((page) => page.property !== property));
+      setPropertyStates((currentStates) => {
+        const next = { ...currentStates };
+        delete next[property];
+        return next;
+      });
+    }
+    const focusId = bindFocus(event.currentTarget, property, attempt?.more ? 'more' : 'load');
+    void (attempt
+      ? readRequested(attempt.facets, attempt.more, focusId, true)
+      : read([property], undefined, focusId, true));
   }
 
   return (
@@ -470,9 +568,9 @@ function RefinementInstance({
       {selected
         .filter(
           ({ property, value }) =>
-            disabled ||
             !shown.includes(property) ||
-            !pages.find((entry) => entry.property === property)?.values.some((entry) => entry.value === value),
+            (!perPropertyState &&
+              (disabled || !pages.find((entry) => entry.property === property)?.values.some((entry) => entry.value === value))),
         )
         .map(({ property, value }) => (
           <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
@@ -480,6 +578,15 @@ function RefinementInstance({
       {shown.map((property) => {
         const definition = data.properties.find((entry) => entry.property === property)!;
         const page = pages.find((entry) => entry.property === property);
+        const currentState = propertyState(property);
+        const selectedValues = conditions.facetValues[property] ?? [];
+        const visibleValues = page?.values ?? [];
+        const values = [
+          ...visibleValues,
+          ...selectedValues
+            .filter((value) => !visibleValues.some((entry) => entry.value === value))
+            .map((value) => ({ value, labels: {} })),
+        ];
         const title =
           definition.mode === 'types' ? m.search_subject_types({}, options) : label(definition.labels) || property;
         return (
@@ -493,10 +600,11 @@ function RefinementInstance({
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={
               busy ||
-              state?.status === 'refused' ||
-              state?.status === 'restart' ||
-              state?.status === 'preparing' ||
-              (definition.mode !== 'range' && disabled)
+              (!perPropertyState &&
+                (state?.status === 'refused' ||
+                  state?.status === 'restart' ||
+                  state?.status === 'preparing' ||
+                  (definition.mode !== 'range' && disabled)))
             }
           >
             <FieldLegend variant="label">{title}</FieldLegend>
@@ -517,12 +625,15 @@ function RefinementInstance({
                   invalid: false,
                 })}
                 onDraftChange={(draft) => changeRangeDraft(definition.property, draft)}
+                deferNavigation={deferNavigation}
+                rangeName={rangeName}
+                onConditionsChange={onConditionsChange}
               />
             ) : definition.mode === 'unsupported' ? (
               <p className="text-sm text-muted-foreground">{m.refinement_unsupported({}, options)}</p>
             ) : (
               <>
-                {page?.values.map((entry, index) => (
+                {values.map((entry, index) => (
                   <Label
                     key={entry.value}
                     htmlFor={`${id}-${property}-${index}`}
@@ -532,35 +643,68 @@ function RefinementInstance({
                       id={`${id}-${property}-${index}`}
                       name={`f.${property}`}
                       value={entry.value}
-                      checked={conditions.facetValues[property]?.includes(entry.value) || false}
+                      checked={selectedValues.includes(entry.value)}
+                      disabled={busy || (perPropertyState && propertyFailed(property) && !selectedValues.includes(entry.value))}
                       onChange={(event) => {
+                        const nextValues = event.currentTarget.checked
+                          ? [...selectedValues, entry.value]
+                          : selectedValues.filter((value) => value !== entry.value);
+                        if (onValueSelectionChange)
+                          onValueSelectionChange(
+                            property,
+                            nextValues,
+                            nextValues[0],
+                            nextValues[0] === entry.value
+                              ? label(entry.labels) || selectedLabels[property]
+                              : undefined,
+                          );
+                        if (onConditionsChange) {
+                          onConditionsChange({
+                            ...conditions,
+                            facetValues: { ...conditions.facetValues, [property]: nextValues },
+                          });
+                          return;
+                        }
                         if (!onNavigate && !router) {
                           event.currentTarget.form?.requestSubmit();
                           return;
                         }
-                        const values = conditions.facetValues[property] ?? [];
                         navigate(
                           href({
                             ...conditions,
                             facetValues: {
                               ...conditions.facetValues,
-                              [property]: event.currentTarget.checked
-                                ? [...values, entry.value]
-                                : values.filter((value) => value !== entry.value),
+                              [property]: nextValues,
                             },
                           }),
                         );
                       }}
                     />
                     <span className="min-w-0 break-words">
-                      {label(entry.labels) || m.refinement_selected_value({}, options)}
+                      {label(entry.labels) ||
+                        (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
+                        (perPropertyState ? entry.value : m.refinement_selected_value({}, options))}
                     </span>
                   </Label>
                 ))}
-                {page?.values.length === 0 && state?.status === 'ready' && (
+                {page?.values.length === 0 && !selectedValues.length && currentState?.status === 'ready' && (
                   <p className="text-sm text-muted-foreground">{m.refinement_no_values({}, options)}</p>
                 )}
-                {page?.next && (
+                {perPropertyState && propertyFailed(property) && (
+                  <PropertyFacetStatus
+                    state={currentState as Exclude<FacetState, { status: 'ready' }>}
+                    locale={locale}
+                    busy={busy}
+                    onRetry={(event) => retryProperty(property, event)}
+                    statusRef={(node) => {
+                      if (node) statusRegion.current = node;
+                    }}
+                    retryRef={(node) => {
+                      if (node) recoveryAction.current = node;
+                    }}
+                  />
+                )}
+                {page?.next && !propertyFailed(property) && (
                   <Button
                     ref={(node) => {
                       if (node) moreControls.current.set(property, node);
@@ -569,7 +713,7 @@ function RefinementInstance({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={disabled}
+                    disabled={busy || (!perPropertyState && disabled)}
                     onClick={(event) => {
                       void read([property], property, bindFocus(event.currentTarget, property, 'more'));
                     }}
@@ -577,7 +721,7 @@ function RefinementInstance({
                     {m.refinement_more_values({}, options)}
                   </Button>
                 )}
-                {!page && !failed && (
+                {!page && !failed && !propertyFailed(property) && (
                   <Button
                     ref={(node) => {
                       if (node) loadControls.current.set(property, node);
@@ -588,7 +732,11 @@ function RefinementInstance({
                     size="sm"
                     disabled={busy}
                     onClick={(event) => {
-                      void read(shown, undefined, bindFocus(event.currentTarget, property, 'load'));
+                      void read(
+                        perPropertyState ? [property] : shown,
+                        undefined,
+                        bindFocus(event.currentTarget, property, 'load'),
+                      );
                     }}
                   >
                     {m.refinement_load_values({}, options)}
@@ -611,6 +759,9 @@ function RangeControl({
   locale,
   draft,
   onDraftChange,
+  deferNavigation = false,
+  rangeName,
+  onConditionsChange,
 }: {
   definition: RefinementProperty;
   conditions: RefinementConditions;
@@ -619,6 +770,9 @@ function RangeControl({
   locale: string;
   draft: RangeDraft;
   onDraftChange: (draft: RangeDraft) => void;
+  deferNavigation?: boolean;
+  rangeName?: (property: string, bound: 'from' | 'to') => string;
+  onConditionsChange?: (conditions: RefinementConditions) => void;
 }) {
   const id = useId();
   const options = { locale: locale as never };
@@ -634,6 +788,7 @@ function RangeControl({
           <Input
             id={`${id}-lower`}
             type="number"
+            name={rangeName?.(definition.property, 'from')}
             min={time ? -Number.MAX_SAFE_INTEGER : undefined}
             max={time ? Number.MAX_SAFE_INTEGER : undefined}
             step={time ? '1' : 'any'}
@@ -648,6 +803,7 @@ function RangeControl({
           <Input
             id={`${id}-upper`}
             type="number"
+            name={rangeName?.(definition.property, 'to')}
             min={time ? -Number.MAX_SAFE_INTEGER : undefined}
             max={time ? Number.MAX_SAFE_INTEGER : undefined}
             step={time ? '1' : 'any'}
@@ -681,7 +837,25 @@ function RangeControl({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        {applied && (
+        {applied && deferNavigation && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onDraftChange({ lower: '', upper: '', unit, invalid: false });
+              onConditionsChange?.({
+                ...conditions,
+                ranges: Object.fromEntries(
+                  Object.entries(conditions.ranges ?? {}).filter(([property]) => property !== definition.property),
+                ),
+              });
+            }}
+          >
+            {m.refinement_range_remove_action({}, options)}
+          </Button>
+        )}
+        {applied && !deferNavigation && (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
             href={href({
@@ -694,7 +868,7 @@ function RangeControl({
             {m.refinement_range_remove_action({}, options)}
           </a>
         )}
-        <Button
+        {!deferNavigation && <Button
           type="button"
           variant="outline"
           size="sm"
@@ -729,8 +903,57 @@ function RangeControl({
           }}
         >
           {m.search_apply({}, options)}
-        </Button>
+        </Button>}
       </div>
+    </div>
+  );
+}
+
+function PropertyFacetStatus({
+  state,
+  locale,
+  busy,
+  onRetry,
+  statusRef,
+  retryRef,
+}: {
+  state: Exclude<FacetState, { status: 'ready' }>;
+  locale: string;
+  busy: boolean;
+  onRetry: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  statusRef: (node: HTMLElement | null) => void;
+  retryRef: (node: HTMLButtonElement | null) => void;
+}) {
+  const options = { locale: locale as never };
+  const waiting = useSearchRetryWait(state.retryAt);
+  return (
+    <div
+      ref={statusRef}
+      role={state.status === 'preparing' ? 'status' : 'alert'}
+      className="space-y-2 text-sm text-muted-foreground"
+    >
+      <p>
+        {state.status === 'refused'
+          ? m.refinement_refused({}, options)
+          : state.status === 'preparing'
+            ? m.search_reader_facets_not_ready({}, options)
+            : state.status === 'restart'
+              ? m.refinement_restart({}, options)
+              : m.search_reader_facets_unavailable({}, options)}
+      </p>
+      {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
+      {state.status !== 'refused' && (
+        <Button
+          ref={retryRef}
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy || waiting}
+          onClick={onRetry}
+        >
+          {m.search_facet_retry({}, options)}
+        </Button>
+      )}
     </div>
   );
 }

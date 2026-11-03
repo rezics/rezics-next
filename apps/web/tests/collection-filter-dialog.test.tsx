@@ -234,8 +234,7 @@ test('Collection filters open a correctly sized dialog or phone sheet and apply 
       expect([...host.querySelectorAll('[data-slot="collection-member-card"]')]).toEqual(members);
       expect(page.members).toBe(collectionStoryMembers);
     }
-    expect(lookups.length).toBeGreaterThan(0);
-    expect(lookups.every((query) => query === concept)).toBe(true);
+    expect(lookups).toEqual([]);
   } finally {
     await act(async () => root.unmount());
     client.clear();

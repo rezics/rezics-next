@@ -62,6 +62,7 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   filterStatus?: 'unsupported' | 'preparing' | 'failed' | undefined;
   filterProperties?: CollectionFilterProperty[];
   filterParams?: CollectionFilterParams;
+  filterReleaseKey?: string;
   pins?: LibraryPinsRead;
   navigationCollections?: MineCollection[];
   following?: boolean | null;

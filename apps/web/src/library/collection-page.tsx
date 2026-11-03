@@ -1500,6 +1500,8 @@ function CollectionPageLifetime({
                 type={page.filterType ?? 'schema:Book'}
                 properties={page.filterProperties}
                 params={page.filterParams}
+                filterReleaseKey={page.filterReleaseKey}
+                viewerKey={session.state === 'signed-in' ? session.subject : 'anonymous'}
               />
             ) : null}
             <nav

@@ -3,31 +3,34 @@ import { useRouter, useRouterState } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CollectionFilterParams } from './collection-filter-params';
-import type { SuggestionResult } from '../search/suggestions';
 import type { FilterDocument } from '@rezics/filter';
 import { collectionFilterAddress } from './collection-filter-params';
 import { CollectionFilterAddressState } from './collection-filter-address-state';
+import {
+  collectionFacetRequest,
+  loadCollectionFacetValues,
+  type CollectionFacetLoader,
+} from './collection-facet-values';
+import { requestLanguages } from '../kernel/languages';
 import { Exposure } from '../kernel/exposure';
 import { SaveQueryLink } from './saved-query-editor/link';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@rezics/ui/shadcn/combobox';
 import { SlidersHorizontalIcon } from 'lucide-react';
-import { localizedLabel } from '../search/results';
+import { Refinement, type RefinementData, type RefinementConditions } from '../search/refinement/refinement';
+import { MAX_CACHED_FACET_PROPERTIES } from '../search/refinement/facet-continuation';
+import { createRangeDraftState, getRangeDraft, updateRangeDraft, type RangeDraftState } from '../search/refinement/range-draft';
+import type { RefinementProperty } from '../search/refinement/model';
 
 export type CollectionFilterProperty = {
   id: string;
   label: string;
   datatype: string;
+  mode?: RefinementProperty['mode'];
+  labels?: Record<string, string>;
+  units?: readonly string[];
   unit?: string;
   targets?: readonly string[];
 };
@@ -97,20 +100,66 @@ export function CollectionFilters({
   type,
   properties,
   params,
+  filterReleaseKey,
+  viewerKey = 'anonymous',
+  facetLoader,
 }: {
   id: string;
   type: string;
   properties: CollectionFilterProperty[];
   params: CollectionFilterParams;
+  filterReleaseKey?: string;
+  viewerKey?: string;
+  facetLoader?: CollectionFacetLoader;
 }) {
   const locale = getLocale();
   const search = useRouterState({ select: (state) => state.location.searchStr });
   const mobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const refinementProperties = properties.map((property): RefinementProperty => ({
+    property: property.id,
+    labels: property.labels ?? { [locale]: property.label },
+    mode:
+      property.mode ??
+      (property.datatype === 'quantity' || property.datatype === 'time'
+        ? 'range'
+        : property.datatype === 'wikibase-item' || property.datatype === 'string'
+          ? 'values'
+          : 'unsupported'),
+    datatype: property.datatype,
+    units: (property.units ?? (property.unit ? [property.unit] : [])).slice(0, 1),
+  }));
+  const initialShown = refinementProperties.slice(0, MAX_CACHED_FACET_PROPERTIES).map((property) => property.property);
+  const identity = JSON.stringify({
+    id,
+    type,
+    release: filterReleaseKey ?? JSON.stringify(refinementProperties),
+    locale,
+    viewer: viewerKey,
+    filter: params.document ?? null,
+    selected: params.selected,
+    ranges: params.ranges,
+  });
+  const [shown, setShown] = useState(initialShown);
+  const [draftConditions, setDraftConditions] = useState(() => collectionConditions(params, refinementProperties));
+  const [draftLabels, setDraftLabels] = useState(params.selectedLabels);
+  const [rangeDraftState, setRangeDraftState] = useState<RangeDraftState>(() => createRangeDraftState(identity));
   const trigger = useRef<HTMLButtonElement>(null);
   const surfaceId = useId();
   const clearAddress = collectionFilterAddress(locale, id, {}, {}, {}, type, new URLSearchParams(search));
+  useEffect(() => {
+    setDraftConditions(collectionConditions(params, refinementProperties));
+    setDraftLabels(params.selectedLabels);
+    setRangeDraftState(createRangeDraftState(identity));
+    setShown(initialShown);
+  }, [identity]);
   function changeOpen(next: boolean) {
+    if (next) {
+      setDraftConditions(collectionConditions(params, refinementProperties));
+      setDraftLabels(params.selectedLabels);
+      setRangeDraftState(createRangeDraftState(identity));
+      setShown(initialShown);
+    }
     setOpen(next);
     if (!next) requestAnimationFrame(() => trigger.current?.focus());
   }
@@ -124,13 +173,27 @@ export function CollectionFilters({
       if (key.startsWith('f.') && String(value)) (selected[key.slice(2)] ??= []).push(String(value));
       if (key.startsWith('l.') && String(value)) labels[key.slice(2)] = String(value);
     });
-    for (const property of properties.filter((item) => item.datatype === 'quantity')) {
+    for (const property of properties.filter((item) => refinementProperties.find((entry) => entry.property === item.id)?.mode === 'range')) {
       const from = String(form.get(`range.from.${property.id}`) ?? '').trim();
       const to = String(form.get(`range.to.${property.id}`) ?? '').trim();
+      const lower = from ? Number(from) : undefined;
+      const upper = to ? Number(to) : undefined;
+      const time = property.datatype === 'time';
+      const invalid =
+        (lower !== undefined && (!Number.isFinite(lower) || (time && !Number.isSafeInteger(lower)))) ||
+        (upper !== undefined && (!Number.isFinite(upper) || (time && !Number.isSafeInteger(upper)))) ||
+        (lower !== undefined && upper !== undefined && lower > upper);
+      if (invalid) {
+        const current = getRangeDraft(rangeDraftState, identity, property.id, rangeDraft(property, params));
+        setRangeDraftState((previous) =>
+          updateRangeDraft(previous, identity, property.id, { ...current, invalid: true }),
+        );
+        return;
+      }
       if (from || to)
         ranges[property.id] = {
-          ...(from ? { from: Number(from) } : {}),
-          ...(to ? { to: Number(to) } : {}),
+          ...(lower === undefined ? {} : { from: lower }),
+          ...(upper === undefined ? {} : { to: upper }),
         };
     }
     changeOpen(false);
@@ -145,7 +208,74 @@ export function CollectionFilters({
       action={`/${locale}/collections/${encodeURIComponent(id)}`}
       className="min-w-0"
     >
-      <FilterFields type={type} properties={properties} params={params} clearAddress={clearAddress} />
+      <>
+        <input type="hidden" name="type" value={type} />
+        {Object.entries(draftLabels).map(([property, label]) =>
+          label && draftConditions.facetValues[property]?.length ? (
+            <input key={property} type="hidden" name={`l.${property}`} value={label} />
+          ) : null,
+        )}
+        <Refinement
+          key={identity}
+          data={{ key: identity, properties: refinementProperties } satisfies RefinementData}
+          conditions={draftConditions}
+          query=""
+          locale={locale}
+          showSummary={false}
+          deferNavigation
+          perPropertyState
+          onConditionsChange={setDraftConditions}
+          onValueSelectionChange={(property, values, firstValue, firstLabel) => {
+            setDraftLabels((previous) => {
+              const next = { ...previous };
+              if (!values.length) delete next[property];
+              else if (firstLabel) next[property] = firstLabel;
+              else if (firstValue !== params.selected[property]?.[0]) delete next[property];
+              return next;
+            });
+          }}
+          selectedLabels={draftLabels}
+          onShownChange={setShown}
+          rangeName={(property, bound) => `range.${bound}.${property}`}
+          rangeDraftKey={identity}
+          rangeDraftState={rangeDraftState}
+          onRangeDraftChange={(property, draft) =>
+            setRangeDraftState((previous) => updateRangeDraft(previous, identity, property, draft))
+          }
+          load={async (facets, signal) => {
+            const request = collectionFacetRequest(
+              {
+                resource: { kind: 'collection', id },
+                type,
+                release: filterReleaseKey ?? 'unavailable',
+                ...(params.document ? { filter: params.document } : {}),
+                languages: requestLanguages(locale),
+              },
+              facets,
+            );
+            return (facetLoader ?? loadCollectionFacetValues)(request, signal);
+          }}
+        />
+        {properties
+          .filter((property) => !shown.includes(property.id) && refinementProperties.find((entry) => entry.property === property.id)?.mode === 'range')
+          .map((property) => {
+            const draft = getRangeDraft(rangeDraftState, identity, property.id, rangeDraft(property, params));
+            return (
+              <span key={property.id} hidden>
+                <input type="hidden" name={`range.from.${property.id}`} value={draft.lower} />
+                <input type="hidden" name={`range.to.${property.id}`} value={draft.upper} />
+              </span>
+            );
+          })}
+        <div className="sticky bottom-0 flex flex-wrap gap-2 bg-popover py-3">
+          <button className="min-h-11 rounded-lg bg-primary px-4 text-primary-foreground" type="submit">
+            {m.collection_filter_apply()}
+          </button>
+          <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={clearAddress}>
+            {m.collection_filter_clear()}
+          </a>
+        </div>
+      </>
     </form>
   ) : null;
   return (
@@ -213,279 +343,32 @@ export function CollectionFilters({
   );
 }
 
-function FilterFields({
-  type,
-  properties,
-  params,
-  clearAddress,
-}: {
-  type: string;
-  properties: CollectionFilterProperty[];
-  params: CollectionFilterParams;
-  clearAddress: string;
-}) {
-  return (
-    <>
-      <input type="hidden" name="type" value={type} />
-      {properties.map((property) => (
-        <fieldset key={property.id} className="mb-4 min-w-0 space-y-2">
-          <legend className="max-w-full break-words text-sm font-medium">
-            {property.label}
-            {property.unit ? ` (${property.unit})` : ''}
-          </legend>
-          {property.datatype === 'wikibase-item' ? (
-            <ConceptSuggestion
-              property={property}
-              {...(params.selected[property.id]?.[0] ? { selected: params.selected[property.id]![0]! } : {})}
-              {...(params.selectedLabels[property.id] ? { selectedLabel: params.selectedLabels[property.id]! } : {})}
-            />
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <label className="min-w-0 text-sm">
-                {m.collection_filter_from()}
-                <input
-                  className="block min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
-                  type="number"
-                  name={`range.from.${property.id}`}
-                  defaultValue={params.ranges[property.id]?.from ?? ''}
-                />
-              </label>
-              <label className="min-w-0 text-sm">
-                {m.collection_filter_to()}
-                <input
-                  className="block min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-2 py-2"
-                  type="number"
-                  name={`range.to.${property.id}`}
-                  defaultValue={params.ranges[property.id]?.to ?? ''}
-                />
-              </label>
-            </div>
-          )}
-          {params.selected[property.id]?.slice(1).map((value) => (
-            <label key={value} className="flex min-h-11 items-center gap-2 break-all text-sm">
-              <input type="checkbox" name={`f.${property.id}`} value={value} defaultChecked />
-              <code>{value}</code>
-            </label>
-          ))}
-        </fieldset>
-      ))}
-      <div className="sticky bottom-0 flex flex-wrap gap-2 bg-popover py-3">
-        <button className="min-h-11 rounded-lg bg-primary px-4 text-primary-foreground" type="submit">
-          {m.collection_filter_apply()}
-        </button>
-        <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={clearAddress}>
-          {m.collection_filter_clear()}
-        </a>
-      </div>
-    </>
+function collectionConditions(
+  params: CollectionFilterParams,
+  properties: RefinementProperty[],
+): RefinementConditions {
+  const byProperty = new Map(properties.map((property) => [property.property, property]));
+  const ranges = Object.fromEntries(
+    Object.entries(params.ranges).map(([property, range]) => {
+      const definition = byProperty.get(property);
+      return [
+        property,
+        {
+          ...(range.from === undefined ? {} : { gte: range.from }),
+          ...(range.to === undefined ? {} : { lte: range.to }),
+          ...(definition?.datatype === 'quantity' && definition.units[0] ? { unit: definition.units[0] } : {}),
+        },
+      ];
+    }),
   );
+  return { facetValues: structuredClone(params.selected), ranges };
 }
 
-type ConceptSuggestionProps = {
-  property: CollectionFilterProperty;
-  selected?: string;
-  selectedLabel?: string;
-};
-
-function ConceptSuggestion(props: ConceptSuggestionProps) {
-  if (!props.property.targets?.length)
-    return (
-      <>
-        {props.selected ? <input type="hidden" name={`f.${props.property.id}`} value={props.selected} /> : null}
-        {props.selectedLabel ? (
-          <input type="hidden" name={`l.${props.property.id}`} value={props.selectedLabel} />
-        ) : null}
-        <input
-          className="min-h-11 w-full min-w-0"
-          aria-label={props.property.label}
-          disabled
-          placeholder={m.collection_filter_concept()}
-        />
-        <p role="status">{m.collection_filter_concepts_unavailable()}</p>
-      </>
-    );
-  return <TargetedConceptSuggestion {...props} targets={props.property.targets} />;
-}
-
-function TargetedConceptSuggestion({
-  property,
-  selected,
-  selectedLabel,
-  targets,
-}: ConceptSuggestionProps & { targets: readonly string[] }) {
-  const locale = getLocale();
-  const [query, setQuery] = useState(() =>
-    selectedLabel && !isIdentifierLabel(selectedLabel, selected ?? '') ? selectedLabel : '',
-  );
-  const [choices, setChoices] = useState<ConceptChoice[]>([]);
-  const [choice, setChoice] = useState<ConceptChoice | null>(null);
-  const [value, setValue] = useState(selected ?? '');
-  const [initialSelectionResolved, setInitialSelectionResolved] = useState(!selected);
-  const [phase, setPhase] = useState<'idle' | 'searching' | 'done' | 'failed'>('idle');
-  const [selectionUnavailable, setSelectionUnavailable] = useState(false);
-  const initialSelection = selected;
-  useEffect(() => {
-    const resolvingSelection = Boolean(initialSelection && value === initialSelection && !initialSelectionResolved);
-    if (choice && query === choice.label && value === choice.id && !resolvingSelection) {
-      setChoices([]);
-      setPhase('idle');
-      return;
-    }
-    const searchText = resolvingSelection ? initialSelection : query.trim();
-    if (!searchText) {
-      setChoices([]);
-      setPhase('idle');
-      return;
-    }
-    const controller = new AbortController();
-    setPhase('searching');
-    const timer = window.setTimeout(
-      async () => {
-        try {
-          const response = await fetch(
-            `/api/search/suggestions?q=${encodeURIComponent(searchText)}&locale=${encodeURIComponent(locale)}`,
-            { signal: controller.signal },
-          );
-          if (!response.ok) throw new Error('Suggestions unavailable');
-          const result = (await response.json()) as SuggestionResult;
-          if (controller.signal.aborted) return;
-          const concepts = result.subjects
-            .filter((subject) => matchesPropertyTarget(subject, targets))
-            .flatMap((subject) => {
-              const label = localizedLabel(subject.labels, locale);
-              if (!label.text || isIdentifierLabel(label.text, subject.id)) return [];
-              const typeLabel = localizedLabel(result.types[subject.type] ?? {}, locale);
-              return [
-                {
-                  id: subject.id,
-                  label: label.text,
-                  ...(label.lang ? { lang: label.lang } : {}),
-                  typeLabel: typeLabel.text,
-                  ...(typeLabel.lang ? { typeLang: typeLabel.lang } : {}),
-                },
-              ];
-            })
-            .slice(0, 8);
-          if (resolvingSelection) {
-            const current = concepts.find((item) => item.id === initialSelection);
-            if (current) {
-              setChoice(current);
-              setQuery(current.label);
-              setSelectionUnavailable(false);
-            } else {
-              setChoice(null);
-              setSelectionUnavailable(true);
-            }
-            setInitialSelectionResolved(true);
-            setPhase('idle');
-            setChoices([]);
-            return;
-          }
-          setChoices(concepts);
-          setSelectionUnavailable(false);
-          setPhase('done');
-        } catch (error) {
-          if (controller.signal.aborted) return;
-          setChoices([]);
-          setPhase('failed');
-          if (resolvingSelection) {
-            setSelectionUnavailable(true);
-            setInitialSelectionResolved(true);
-          }
-        }
-      },
-      resolvingSelection ? 0 : 200,
-    );
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [choice, initialSelection, initialSelectionResolved, locale, query, targets, value]);
-  function inputValueChange(text: string, reason: string, isItemPress: boolean) {
-    if (isItemPress || reason === 'item-press') return;
-    setQuery(text);
-    if (choice && text !== choice.label) setChoice(null);
-    if (text !== choice?.label) {
-      setValue('');
-      setSelectionUnavailable(false);
-      setInitialSelectionResolved(true);
-    }
-    setPhase(text.trim() ? 'searching' : 'idle');
-  }
-  return (
-    <div className="relative min-w-0">
-      <Combobox
-        items={choices}
-        filter={null}
-        value={choice}
-        inputValue={query}
-        itemToStringLabel={(item: ConceptChoice) => item.label}
-        isItemEqualToValue={(left: ConceptChoice, right: ConceptChoice) => left.id === right.id}
-        onInputValueChange={(text, details) => inputValueChange(text, details.reason, details.isItemPress ?? false)}
-        onValueChange={(item: ConceptChoice | null) => {
-          if (!item) return;
-          setChoice(item);
-          setValue(item.id);
-          setQuery(item.label);
-          setInitialSelectionResolved(true);
-          setSelectionUnavailable(false);
-          setChoices([]);
-          setPhase('idle');
-        }}
-      >
-        <ComboboxInput
-          aria-label={property.label}
-          autoComplete="off"
-          placeholder={m.collection_filter_concept()}
-          className="min-h-11 w-full min-w-0 [&_input]:min-h-11"
-          showTrigger={false}
-        />
-        <ComboboxContent aria-busy={phase === 'searching'}>
-          <ComboboxEmpty>
-            {phase === 'searching'
-              ? m.collection_filter_searching()
-              : phase === 'failed'
-                ? m.search_suggestions_failed()
-                : query.trim()
-                  ? m.search_no_suggestions()
-                  : m.collection_filter_concept()}
-          </ComboboxEmpty>
-          <ComboboxList aria-label={property.label} tabIndex={choices.length ? 0 : -1}>
-            {(item: ConceptChoice) => (
-              <ComboboxItem key={item.id} value={item} className="min-h-11 items-start">
-                <span className="min-w-0 flex-1 break-words" lang={item.lang}>
-                  {item.label}
-                </span>
-                {item.typeLabel ? (
-                  <span className="text-xs text-muted-foreground" lang={item.typeLang}>
-                    {item.typeLabel}
-                  </span>
-                ) : null}
-              </ComboboxItem>
-            )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      <input type="hidden" name={`l.${property.id}`} value={value ? (choice?.label ?? selectedLabel ?? '') : ''} />
-      <input type="hidden" name={`f.${property.id}`} value={value} />
-      {phase === 'searching' ? <p role="status">{m.collection_filter_searching()}</p> : null}
-      {phase === 'failed' ? <p role="status">{m.search_suggestions_failed()}</p> : null}
-      {phase === 'done' && query.trim() && choices.length === 0 ? (
-        <p role="status">{m.search_no_suggestions()}</p>
-      ) : null}
-      {selectionUnavailable ? <p role="status">{m.library_subject_unavailable()}</p> : null}
-    </div>
-  );
-}
-
-type ConceptChoice = { id: string; label: string; lang?: string; typeLabel: string; typeLang?: string };
-
-function matchesPropertyTarget(subject: SuggestionResult['subjects'][number], targets: readonly string[] | undefined) {
-  if (!targets?.length) return false;
-  const subjectTypes = new Set([subject.type, ...(subject.summary?.types ?? [])]);
-  return targets.some((target) => subjectTypes.has(target));
-}
-
-function isIdentifierLabel(label: string, id: string) {
-  return label === id || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(label) || /^[a-z][\w.-]*:[\w.-]+$/i.test(label);
+function rangeDraft(property: CollectionFilterProperty, params: CollectionFilterParams) {
+  return {
+    lower: params.ranges[property.id]?.from?.toString() ?? '',
+    upper: params.ranges[property.id]?.to?.toString() ?? '',
+    unit: property.units?.[0] ?? property.unit ?? '',
+    invalid: false,
+  };
 }

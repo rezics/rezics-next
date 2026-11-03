@@ -59,8 +59,10 @@ independent rather than making shared files or unfinished producer delivery into
   conflict and uncertain recovery without inventing members, counts or occurrence IDs. The Web results seam is
   documented in [saved-query results](../../apps/web/src/library/saved-query-results.md).
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
-  count-free value continuation for that exact Collection. Keep at most eight active properties; changing the
-  property window does not discard selected operands. This is shared by curated and built-in dynamic readers.
+  count-free value continuation for that exact Collection. Eight active properties is a UI window; changing the
+  property window does not discard applied operands. This is shared by curated and built-in dynamic readers. The
+  installed `subjects:facets` client has no Collection resource scope, so Web keeps this read unavailable until
+  Search binds it and never requests Global values.
 - **Scopes.** Search offers viewer-self Library and exact Collection, Realm or Zone resource conditions using the
   adopted request-only grammar. Review an explicitly resolved identity before applying it; retain a refused
   selection for correction or removal. Choice metadata grants no membership or read authority.

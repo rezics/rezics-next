@@ -20,10 +20,11 @@ import {
 import { readRelease } from '../subject/definitions';
 import { readCollectionFilterParams } from './collection-filter-params';
 import { collectionFilterSearch, readCollectionFilterAddress } from './collection-filter-address-read';
-import { facetProperties } from '@rezics/filter';
 import { requestLocale } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import { isPublicCacheRender, publicPageCacheControl, recordPublicPageCachePolicy } from '../security/page-cache';
+import { refinementProperties } from '../search/refinement/model';
+import type { CollectionFilterProperty } from './collection-filters';
 
 function validatePageInput(input: unknown): {
   id: string;
@@ -87,35 +88,33 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         : configuredFilters === true || configuredFilters === 'true';
     let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
     let filterStatus: 'failed' | undefined = !filtersOn && data.filterActive ? 'failed' : undefined;
-    let filterProperties: {
-      id: string;
-      label: string;
-      datatype: string;
-      unit?: string;
-      targets?: readonly string[];
-    }[] = [];
+    let filterProperties: CollectionFilterProperty[] = [];
+    let filterReleaseKey: string | undefined;
     const requested = data.search ?? {};
     const type = typeof requested.type === 'string' ? requested.type : 'schema:Book';
     if (filtersOn) {
       try {
         const release = await readRelease();
+        filterReleaseKey = release.digest;
         const locale = requestLocale() ?? 'en';
-        filterProperties = facetProperties(release, [type])
-          .slice(0, 8)
-          .flatMap((id) => {
-            const definition = release.properties[id];
-            if (!definition || !['wikibase-item', 'quantity'].includes(definition.datatype)) return [];
-            const labels = (definition as typeof definition & { labels?: Record<string, string> }).labels ?? {};
-            return [
-              {
-                id,
-                datatype: definition.datatype,
-                label: labels[locale] ?? labels[locale.split('-')[0]!] ?? labels.en ?? m.collection_filters(),
-                ...(definition.units?.[0] ? { unit: definition.units[0] } : {}),
-                ...(definition.targets ? { targets: definition.targets } : {}),
-              },
-            ];
-          });
+        filterProperties = refinementProperties(release, type)
+          .filter((property) => property.property !== 'type' && property.mode !== 'unsupported')
+          .map((property) => ({
+            id: property.property,
+            datatype: property.datatype,
+            mode: property.mode,
+            labels: property.labels,
+            units: property.units,
+            label:
+              property.labels[locale] ??
+              property.labels[locale.split('-')[0]!] ??
+              property.labels.en ??
+              m.collection_filters(),
+            ...(property.units[0] ? { unit: property.units[0] } : {}),
+            ...(release.properties[property.property]?.targets
+              ? { targets: release.properties[property.property]!.targets }
+              : {}),
+          }));
         const admission = readCollectionFilterAddress(requested, release, type);
         filter = admission.filterParams;
         filterStatus = admission.filterStatus;
@@ -132,6 +131,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         ...(filter?.document ? { filter: filter.document } : {}),
         ...(filterStatus ? { filterStatus } : {}),
         ...(filter ? { filterIgnored: filter.ignored, filterType: type, filterProperties, filterParams: filter } : {}),
+        ...(filterReleaseKey ? { filterReleaseKey } : {}),
       },
       data.credentialMode,
     );
@@ -162,7 +162,11 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
           }
         : {}),
       ...(filtersOn
-        ? { filterProperties, filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] } }
+        ? {
+            filterProperties,
+            filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] },
+            ...(filterReleaseKey ? { filterReleaseKey } : {}),
+          }
         : {}),
     };
     if (data.credentialMode === 'anonymous') {

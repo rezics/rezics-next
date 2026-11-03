@@ -1,6 +1,7 @@
 # Collection filters
 
-The public Collection page supplies up to eight released facet properties to `CollectionFilters`. Its page-local
+A Collection page supplies its released supported facet roster to `CollectionFilters`. The property picker
+searches that roster while the overlay keeps at most eight properties active at once. Its page-local
 launcher opens a desktop Dialog with a 32rem maximum width and viewport-bounded scrolling, or the shared BottomSheet
 on phones below 768px. The sheet supplies its heading, grab handle, localized Done action and safe-area padding.
 Both surfaces return focus to the launcher. Phone controls have at least 44px targets. Shared shadcn sources stay
@@ -8,13 +9,16 @@ unchanged; forms use their supported Dialog composition rather than action Menu 
 
 Fields are drafts until Apply navigates. Dismissal discards edits; reopening starts from the supplied applied params.
 Clear filters navigates to the same Collection and type with all filter values removed. Apply and Clear retain
-unrelated route params, including layout, and remove the old predicate's cursor. Repeated concept values keep their
-order, and a supplied selection remains carried when its concept lookup or target metadata is unavailable. Editing
-the visible concept replaces its first value; other applied values remain carried by the existing grammar.
+unrelated route params, including layout, and a changed predicate drops the old member cursor. Repeated values keep
+their route order. Applied values remain carried when they are outside the visible property or value page; editing a
+visible selection changes only that property's values.
 
 The existing `f.`, `r.` and `l.` address grammar, inclusive quantity bounds, filter admission and members query
-adapter remain authoritative. Only the provided properties and their existing targeted, eight-result, debounced
-suggestion lookup are rendered. The overlay introduces no member reads, writes, scans or new scope capability.
+adapter remain authoritative. Released range operators and units come from the definitions release. Decision: eight
+active properties is a UI window, not a filter limit; applied fields and values outside the window remain in the
+Collection predicate. The overlay introduces no member reads, writes or scans. The installed
+`subjects:facets` client has no Collection resource scope, so this overlay reports unavailable until Search binds
+that scope instead of requesting Global values.
 Preparing, unsupported, unavailable and empty results retain their existing distinct feedback. Opening and editing
 filters leave the current member projection and order intact; applying starts the existing filtered members read.
 
@@ -22,7 +26,9 @@ filters leave the current member projection and order intact; applying starts th
 common renderer. Pattern stories remain supporting apply/clear and no-match/preparing/unavailable interactions on
 the same illustrative Collection fixture. Combined long property labels stay a pattern overlay because the Collection
 reader takes property labels from the definitions release; Concept IDs, property IDs and the long range bound travel
-in explicit `f.`/`l.`/`r.` route search. Inspect those same IDs with `phone390`/`desktop1280`, locale and theme
+in explicit `f.`/`l.`/`r.` route search. `Pages/Collections/Advanced facets` records the released property picker,
+count-free paging, retained selections outside the window and honest unavailable scope seam. Its fixture pages are
+illustrative, not native evidence. Inspect both reader contexts at `phone390`/`desktop1280`, with locale and theme
 globals. The focused `collection-filter-route-story.test.ts` regression pins the routed composition; keyboard, 44px
 and original screenshots remain unmeasured until admitted. Native query semantics stay with Commerce.
 

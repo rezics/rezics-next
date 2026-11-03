@@ -258,6 +258,7 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     filterStatus?: 'unsupported' | 'preparing' | 'failed' | undefined;
     filterProperties?: CollectionFilterProperty[];
     filterParams?: CollectionFilterParams;
+    filterReleaseKey?: string;
     /** Whether the visible first member page can be exported as a complete public ItemList. */
     publicExport: boolean;
     typeRatios?: Record<string, string>;
@@ -330,6 +331,7 @@ export async function loadEditableCollectionPage(
     filterType?: string;
     filterProperties?: CollectionFilterProperty[];
     filterParams?: CollectionFilterParams;
+    filterReleaseKey?: string;
     filterStatus?: EditableCollectionPage['filterStatus'];
   },
   credentialMode: ReadCredentialMode = 'session',
@@ -431,6 +433,7 @@ export async function loadEditableCollectionPage(
       ...(filterStatus ? { filterStatus } : {}),
       ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
       ...(input.filterParams ? { filterParams: input.filterParams } : {}),
+      ...(input.filterReleaseKey ? { filterReleaseKey: input.filterReleaseKey } : {}),
       following,
       ...(cursorRestarted ? { cursorRestarted: true as const } : {}),
     };
@@ -584,6 +587,7 @@ export async function loadEditableCollectionPage(
     ...(filterStatus ? { filterStatus } : {}),
     ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
     ...(input.filterParams ? { filterParams: input.filterParams } : {}),
+    ...(input.filterReleaseKey ? { filterReleaseKey: input.filterReleaseKey } : {}),
     ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
     publicExport:
       memberState === 'ready' &&

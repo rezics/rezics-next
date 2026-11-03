@@ -22,6 +22,10 @@ export class FacetContinuationLedger {
     return (this.consumed.get(property)?.size ?? 0) >= MAX_FACET_CONTINUATIONS;
   }
 
+  reset(property: string) {
+    this.consumed.delete(property);
+  }
+
   repeats(property: string, requested: string | undefined, next: string | null | undefined) {
     return (
       (requested !== undefined && this.has(property, requested)) ||

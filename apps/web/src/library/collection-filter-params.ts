@@ -27,7 +27,7 @@ export function readCollectionFilterParams(
     ignored.push(key);
     issues.push({ key, reason });
   };
-  const facets = facetProperties(release, [type]).slice(0, 8);
+  const facets = facetProperties(release, [type]);
   const labels = new Map(
     [...params].filter(([key]) => key.startsWith('l.')).map(([key, value]) => [key.slice(2), value]),
   );
@@ -47,7 +47,11 @@ export function readCollectionFilterParams(
       reject(key, 'invalid');
       continue;
     }
-    if (match[1] === 'f' && definition.datatype === 'wikibase-item') {
+    if (
+      match[1] === 'f' &&
+      (definition.datatype === 'wikibase-item' ||
+        (definition.datatype === 'string' && Boolean(definition.value?.pattern)))
+    ) {
       // Count the complete request before deduplication, just like native `in` admission.
       if (values.length > FILTER_LIMITS.in) {
         reject(key, 'limit');
@@ -69,7 +73,7 @@ export function readCollectionFilterParams(
       }
       continue;
     }
-    if (match[1] === 'r' && definition.datatype === 'quantity') {
+    if (match[1] === 'r' && ['quantity', 'time'].includes(definition.datatype)) {
       if (values.length !== 1) {
         reject(key, 'ambiguous');
         continue;
@@ -87,12 +91,20 @@ export function readCollectionFilterParams(
         reject(key, 'invalid');
         continue;
       }
-      const unit = definition.units?.[0];
-      if (!unit) {
+      if (definition.datatype === 'time' && [from, to].some((bound) => bound !== undefined && !Number.isSafeInteger(bound))) {
         reject(key, 'invalid');
         continue;
       }
-      const range = { ...(from === undefined ? {} : { gte: from }), ...(to === undefined ? {} : { lte: to }), unit };
+      const unit = definition.datatype === 'quantity' ? definition.units?.[0] : undefined;
+      if (definition.datatype === 'quantity' && !unit) {
+        reject(key, 'invalid');
+        continue;
+      }
+      const range = {
+        ...(from === undefined ? {} : { gte: from }),
+        ...(to === undefined ? {} : { lte: to }),
+        ...(unit ? { unit } : {}),
+      };
       try {
         const clause = { statement: { property, range } } as FilterDocument;
         admitFilter(clause, release);

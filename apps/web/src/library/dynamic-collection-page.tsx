@@ -161,6 +161,8 @@ function DynamicCollectionPageLifetime({
             type={current.filterType ?? 'schema:Book'}
             properties={current.filterProperties}
             params={current.filterParams}
+            filterReleaseKey={current.filterReleaseKey}
+            viewerKey={viewerId ?? 'anonymous'}
           />
         ) : null}
         <CollectionFilterFeedback
