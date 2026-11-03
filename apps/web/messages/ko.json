@@ -7811,5 +7811,10 @@
   "library_filtered_status_pending": "아직 완료되지 않음",
   "library_filtered_status_read": "원래 작업 새로고침",
   "library_filtered_status_more": "다음 결과 페이지",
-  "library_filtered_status_expired": "네이티브 결과가 만료되었습니다"
+  "library_filtered_status_expired": "네이티브 결과가 만료되었습니다",
+  "person_reader_title": "이 인물에 관하여",
+  "person_reader_correct": "수정 제안",
+  "person_reader_statement": "진술 세부 정보",
+  "person_reader_more": "현재 정보 모두 읽기",
+  "person_reader_return": "약력으로 돌아가기"
 }

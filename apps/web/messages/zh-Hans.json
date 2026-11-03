@@ -7811,5 +7811,10 @@
   "library_filtered_status_pending": "尚未完成",
   "library_filtered_status_read": "刷新原始操作",
   "library_filtered_status_more": "下一页结果",
-  "library_filtered_status_expired": "原生结果已过期"
+  "library_filtered_status_expired": "原生结果已过期",
+  "person_reader_title": "关于此人物",
+  "person_reader_correct": "提出更正",
+  "person_reader_statement": "陈述详情",
+  "person_reader_more": "阅读全部当前信息",
+  "person_reader_return": "返回人物传记"
 }

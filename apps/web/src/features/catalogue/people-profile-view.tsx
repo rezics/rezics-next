@@ -115,6 +115,14 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
   return (
     <div className="min-w-0 space-y-3 text-sm [overflow-wrap:anywhere]">
       <p>{m.people_profile_intro({}, o)}</p>
+      {subject?.type === 'schema:Person' && (
+        <a
+          className={peopleLinkTarget + ' inline-flex items-center underline'}
+          href={`${subjectHref({ id: subject.id, label: definitionText(subject.labels, locale).text }, locale).href}#person-biography`}
+        >
+          {m.person_reader_return({}, o)}
+        </a>
+      )}
       {profile && <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>}
       {subject && (
         <dl className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">

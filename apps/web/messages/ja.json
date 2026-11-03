@@ -7811,5 +7811,10 @@
   "library_filtered_status_pending": "未完了",
   "library_filtered_status_read": "元の操作を更新",
   "library_filtered_status_more": "次の結果ページ",
-  "library_filtered_status_expired": "ネイティブの結果は期限切れです"
+  "library_filtered_status_expired": "ネイティブの結果は期限切れです",
+  "person_reader_title": "この人物について",
+  "person_reader_correct": "修正を提案",
+  "person_reader_statement": "記述の詳細",
+  "person_reader_more": "現在の情報をすべて読む",
+  "person_reader_return": "略歴に戻る"
 }

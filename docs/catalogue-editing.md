@@ -818,6 +818,30 @@ predecessor/successor descriptors bind only when admitted. Released media fields
 this flow supplies no cover import or inferred rights. Metadata text retains its actual fallback language, independently
 of the entered facts' languages.
 
+The ordinary Person overview reads biography, occupations and working languages from the current composed
+Subject, with the same emitted property meanings as the correction profile. It never rereads the Subject, derives
+occupations from credits or hydrates related targets. Document text uses only the page's admitted, exact
+subject/candidate/document/digest/language binding and the existing authored-text renderer, spoiler controls and
+media/link policy. Missing native document presentation is explicitly unavailable. Each assertion retains its
+qualifiers and ordered citation groups; withheld item targets expose neither identity nor link. Partial dates keep
+the native precision. The existing People correction journey returns to the canonical overview's biography heading.
+A changed source observation, locale, viewer/session, exposure or lifetime removes the complete old reader subtree,
+including expanded evidence and delayed definition results; a focused removed control returns to the stable heading.
+
+Decision: the ordinary reader shows admitted alternatives within each named group; when none are admitted it shows
+one unsupported notice, rather than repeating technical predicate alternatives.
+
+Cost: each fresh Person observation adds only the existing active-definition pointer and immutable release GETs
+(two requests); zero Subject, document, session, exposure, target, media or per-fact requests. Definition failure
+stays unavailable until a fresh page observation. Retention replaces one definition result and one current page
+projection, without history or background retry. At most 15 admitted fields per group and 20 selected assertions per
+field render; additional assertions link to the existing finite Details view. Evidence renders at most 32 qualifiers,
+32 ordered citation groups and 32 parts per group per assertion; larger evidence shows unavailable and remains in
+the existing correction/Details owners. Page document selection retains its existing 15-document and native body
+bounds; Web adds no hydration. Projection is O(admitted fields + current statements + rendered evidence), independent
+of catalogue size. The owner of the composition response retains its original transport bounds. Source stories
+exercise admitted, empty, withheld and unsupported states; they do not establish native or rendered acceptance.
+
 The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
 `pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and
 `organization-route` stories enter the real router; `create`, `person`, `organization`, `correct-cited-fact`,

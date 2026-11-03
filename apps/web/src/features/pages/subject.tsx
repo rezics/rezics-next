@@ -18,6 +18,7 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
+import { PersonOverview } from '../catalogue/person-reader/reader';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
@@ -724,6 +725,17 @@ export function SubjectPage({
             )}
             {!overview && bar}
             {overview && !header && afterHeader}
+            {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
+              <PersonOverview
+                source={page}
+                viewer={page.requestedReader ?? null}
+                locale={locale}
+                public={composedSubjectRead(read)}
+                documents={read.documents}
+                link={ContextLink}
+                {...(reader ? { reader } : {})}
+              />
+            ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
               <MusicAlbumOverview
                 locale={locale}

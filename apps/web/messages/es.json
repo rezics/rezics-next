@@ -7811,5 +7811,10 @@
   "library_filtered_status_pending": "Sin finalizar",
   "library_filtered_status_read": "Actualizar operación original",
   "library_filtered_status_more": "Siguiente página de resultados",
-  "library_filtered_status_expired": "Los resultados nativos han caducado"
+  "library_filtered_status_expired": "Los resultados nativos han caducado",
+  "person_reader_title": "Sobre esta persona",
+  "person_reader_correct": "Proponer correcciones",
+  "person_reader_statement": "Detalles de la afirmación",
+  "person_reader_more": "Leer todos los datos actuales",
+  "person_reader_return": "Volver a la biografía"
 }

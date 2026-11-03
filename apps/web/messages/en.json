@@ -7886,5 +7886,10 @@
   "post_history_comparison_close": "Return to selected history revision",
   "post_history_replace_account": "Replace reader account",
   "post_history_replace_source": "Replace session source",
-  "post_history_reply": "Reply in this discussion"
+  "post_history_reply": "Reply in this discussion",
+  "person_reader_title": "About this person",
+  "person_reader_correct": "Suggest corrections",
+  "person_reader_statement": "Statement details",
+  "person_reader_more": "Read all current facts",
+  "person_reader_return": "Return to the biography"
 }
