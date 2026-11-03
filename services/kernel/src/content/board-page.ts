@@ -425,7 +425,12 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     const reads = readDependencies();
     const initialCounts = await withReactionCountsAndCoverage(reads, targets, context.deadline);
     const initialViewers = await withViewerReactions(reads, context.actor, targets, context.deadline);
-    const initialActivity = await readBoardActivity(activityDependencies, context.actor, uniqueThreads, context.deadline);
+    const initialActivity = await readBoardActivity(
+      activityDependencies,
+      context.actor,
+      uniqueThreads,
+      context.deadline,
+    );
     const authorIds = accountIdsFor(uniqueThreads);
     const authors = await readAuthors(dependencies, authorIds, context.deadline);
     const images = await readMedia(dependencies, context.actor, uniqueThreads, context.deadline);
