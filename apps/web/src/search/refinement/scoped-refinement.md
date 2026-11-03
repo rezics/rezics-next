@@ -1,9 +1,16 @@
 # Scoped Search refinement
 
-Scoped Search results and property facets are built from the same `discoveryRequest` predicate. It carries the query
-text, ordered language chain, catalogue condition tree, existing filter, Realm or Collection leaf, type/value choices,
-ranges and kinds. Initial facet reads and later value pages use that predicate and the existing `POST /v1/subjects:facets`
-request; the native value and continuation contract remains owned by [Public facet discovery](../../../../../docs/search-facets.md).
+Scoped Search results and property facets are built from the same `discoveryRequest` predicate. The additive facet
+request carries `scope: {kind,id}` plus `conditions` with the complete effective filter, including the scope leaf,
+alongside the existing text, filter, languages and facets fields. The `subjects:facets` route runs the shared Search
+scope admission with the verified actor, current reader, Access instance and request deadline before cursor or native
+producer work. Its response DTO and opaque per-property continuation remain owned by
+[Public facet discovery](../../../../../docs/search-facets.md).
+
+Collection facets use the installed service-bound Search Scope candidate and current-membership interfaces. Search
+prepares canonical values from the complete authorized Collection population and rechecks the same scope, contributor,
+target and source observations before disclosing each page. Missing or changed evidence returns preparation/restart
+inside the selected scope. Realm facets stay unavailable until Content installs its canonical enumerator.
 
 For a scoped read, the server prepares the current request through the shared session reader, then uses that request's
 credential and verified subject together for results, kinds and facets. The browser's installed session owner must
@@ -21,4 +28,6 @@ the released units and authored correction state.
 
 A successful empty terminal page is the native absence of eligible values. Withheld coverage, preparation, malformed
 or rejected requests, and stale continuations remain separate states; an unavailable or withheld page is never
-presented as exhaustion. Short terminal pages retain their exact native values and order.
+presented as exhaustion. Short terminal pages retain their exact native values and order. Desktop and narrow layouts
+share the same ready, pending-preparation and currentness-restart states; a scope change while a value page is pending
+retires its displayed values and continuation before retrying in the selected scope.

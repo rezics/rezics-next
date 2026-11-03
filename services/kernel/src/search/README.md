@@ -71,14 +71,16 @@ and native ascending keys are preserved. Captured observation/build/generation l
 Trusted composition supplies `createSearchService({ facetProvider })`. The provider supplies the actual registered
 Source definition, complete pinned meaning, Search generation and `FacetNativeOperations` from
 `facet-discovery-native.ts`. `captureFacet({plan}, context)` returns existing `PublicFilterConsumerCapture`;
-`pageFacets({reads}, context)` owns shared START/FINAL, complete retained preparation, current original/terminal/
-contributor/target checks and eligible lookahead across all reads. Its `ready` branch is native evidence, never a
+`pageFacets({reads}, context)` reuses the actual retained consumer `query` execution created for preparation and owns
+shared nonnull START/FINAL, complete retained preparation, current original/terminal/contributor/target checks and
+eligible lookahead across all reads. A sibling page makes one indexed `size + 1` candidate seek; any currentness
+rejection retires that value generation before another sibling seek. Its `ready` branch is native evidence, never a
 callback that the HTTP caller can provide. Capture must deduplicate persisted jobs and resume the finite native
 frontier. The continuation runtime deliberately admits prepared snapshots only; direct execution stays closed.
 Missing native composition returns `503 index_not_ready` with `Retry-After: 1`, never preview values.
 
 `createFacetDiscoveryStorage` in `facet-discovery-storage.ts` implements Search's derived value preparation/storage.
-Its `prepareFacetStep(plan,queried,context,meter,textObservation?)` consumes the actual Source binding and finite
+Its `prepareFacetStep(plan,queried,context,meter,textObservation?,execution)` consumes the actual Source binding and finite
 population, exhausts complete projections, folds the shared three-valued predicate, canonicalizes item targets,
 stages and indexes distinct native keys, and commits effects/frontier by version CAS. Text preparation requires
 the shared lifecycle's actual immutable PIT, checked through the same Source definition and native version;

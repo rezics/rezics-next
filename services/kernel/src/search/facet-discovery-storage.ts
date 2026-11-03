@@ -5,7 +5,11 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import type { PublicFilterSource, PublicFilterProjectionFrontier } from '../semantic/public-filter-source-contract.ts';
+import type {
+  PrivacyReductionStart,
+  PublicFilterSource,
+  PublicFilterProjectionFrontier,
+} from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import type { FacetPopulationSource } from '../semantic/facet-population-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -171,8 +175,19 @@ export function createFacetDiscoveryStorage(
       return null;
     return joined;
   }
-  async function safe(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, meter: Meter) {
-    const observed = await source.readPrivacyReductionHeads({ kind: 'population', queried, start: null, context });
+  async function safe(
+    queried: PublicFilterQueriedObservation,
+    execution: Readonly<{ start: PrivacyReductionStart; execution: string }>,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    const observed = await source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried,
+      start: execution.start,
+      execution: execution.execution,
+      context,
+    });
     add(meter, observed.cost);
     return observed.status === 'observed' &&
       observed.routingComplete &&
@@ -201,6 +216,7 @@ export function createFacetDiscoveryStorage(
     context: PublicFilterConsumerContext,
     meter: Meter,
     textObservation?: PublicFilterQueriedObservation,
+    execution?: Readonly<{ start: PrivacyReductionStart; execution: string }>,
   ) {
     check(context);
     const joined = await join(plan, queried, context, meter);
@@ -465,7 +481,8 @@ export function createFacetDiscoveryStorage(
         // Complete is native finite population proof, including creation/change bridge and final validation.
         if (
           !complete ||
-          !(await safe(queried, context, meter)) ||
+          !execution ||
+          !(await safe(queried, execution, context, meter)) ||
           !(await safeScope(plan, context, meter)) ||
           !(await join(plan, queried, context, meter))
         )
@@ -595,6 +612,23 @@ export function createFacetDiscoveryStorage(
     return { status: 'candidates' as const, rows, asOf: selected[0].as_of, cost: meter };
   }
 
+  /** Retire the exact retained value generation as soon as its contributor/target observation fails. */
+  async function retireFacetCandidates(read: FacetNativeRead, context: PublicFilterConsumerContext) {
+    const meter: Meter = { ...emptyCost() };
+    check(context);
+    const joined = await join(read.plan, read.queried, context, meter);
+    if (!joined) return { cost: meter };
+    const key = coordinates(read.plan, read.queried, joined.definition.source.partition);
+    await sql(
+      pool,
+      meter,
+      `UPDATE search.facet_generation SET state='retired',version=version+1
+       WHERE partition_no=$1 AND definition=$2 AND generation=$3 AND state='ready'`,
+      key,
+    );
+    return { cost: meter };
+  }
+
   async function expireFacetStep(context: PublicFilterConsumerContext) {
     check(context);
     const meter: Meter = { ...emptyCost() };
@@ -648,5 +682,5 @@ export function createFacetDiscoveryStorage(
       db.release();
     }
   }
-  return { prepareFacetStep: step, readFacetCandidates, expireFacetStep };
+  return { prepareFacetStep: step, readFacetCandidates, retireFacetCandidates, expireFacetStep };
 }

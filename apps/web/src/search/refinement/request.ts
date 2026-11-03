@@ -4,7 +4,14 @@ import type { SearchResourceScope } from '../advanced-scope';
 import { searchRetryAt } from '../search-recovery-retry';
 
 export type RequestedFacet = { property: string; size?: number; cursor?: string };
-export type FacetRequest = { text?: string; filter?: FilterDocument; languages?: string[]; facets: RequestedFacet[] };
+export type FacetRequest = {
+  text?: string;
+  filter?: FilterDocument;
+  conditions?: unknown;
+  scope?: SearchResourceScope;
+  languages?: string[];
+  facets: RequestedFacet[];
+};
 const problem = v.object({
   type: v.exactOptional(v.string()),
   title: v.exactOptional(v.string()),
