@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { encodeReceiptKey } from '../../../src/command/receipt-key.ts';
 import { registerContent } from '../../../src/content/register.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
@@ -144,13 +145,17 @@ export async function createGrowthAppealBoundariesFixture() {
       return { body: result.value as T, key, response: result.response };
     }
 
-    async function completeRegisteredCommand(principalId: string, key: string): Promise<void> {
+    async function completeRegisteredCommand(
+      principalId: string,
+      key: string,
+      kind = 'content.moderation:takedown',
+    ): Promise<void> {
       const receipt = (
         await db!.admin.query<{ partition_no: number; epoch: number; position: string }>(
           `SELECT partition_no,epoch,position::text AS position
            FROM core.receipt
            WHERE principal_kind='account' AND principal_id=$1 AND idempotency_key=$2`,
-          [principalId, key],
+          [principalId, encodeReceiptKey(testReceiptKeys(), kind, { kind: 'account', id: principalId }, key)],
         )
       ).rows[0];
       if (!receipt) throw new Error(`Missing committed receipt for registered Content command ${key}`);
@@ -225,7 +230,7 @@ export async function createGrowthAppealBoundariesFixture() {
         { target: { kind: 'thread', id: target.threadId }, reason: 'spam' },
         { bearer: people.reporter.bearer, expectedStatus: 201 },
       );
-      await completeRegisteredCommand(people.reporter.accountId, report.key);
+      await completeRegisteredCommand(people.reporter.accountId, report.key, 'content.report.create');
 
       await grant(target.threadId, people.decider.accountId, ['moderation:takedown']);
       await grant(target.threadId, people.reviewer.accountId, ['moderation:takedown']);
@@ -261,7 +266,7 @@ export async function createGrowthAppealBoundariesFixture() {
         throw new Error(
           `POST /v1/moderation-decisions/${decision.decision_id}:appeal replay: ${appealReplay.response.status}`,
         );
-      await completeRegisteredCommand(people.author.accountId, appeal.key);
+      await completeRegisteredCommand(people.author.accountId, appeal.key, 'content.appeal');
 
       const reportReceipt = await call('GET', `/v1/reports/${report.body.reportId}`, {
         bearer: people.reporter.bearer,
@@ -291,7 +296,7 @@ export async function createGrowthAppealBoundariesFixture() {
         { outcome: 'uphold', statement: 'Reviewed independently' },
         { bearer: people.reviewer.bearer, expectedStatus: 200 },
       );
-      await completeRegisteredCommand(people.reviewer.accountId, result.key);
+      await completeRegisteredCommand(people.reviewer.accountId, result.key, 'content.resolve-appeal');
     }
 
     async function listAppeals(boardId: string, bearer: string, cursor?: string) {

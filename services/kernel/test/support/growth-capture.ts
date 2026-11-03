@@ -1056,7 +1056,7 @@ async function captureInternal<T>(
       const owners = record.background ? backgroundPlanOwners : foregroundPlanOwners;
       if (!owners.has(record.index))
         throw new Error(
-          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}`,
+          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; plan owners: ${JSON.stringify([...owners])}; preceding occurrences: ${JSON.stringify(active.statementRecords.filter((statement) => statement.background === record.background && statement.index <= record.index).map((statement) => ({ index: statement.index, text: statement.text.slice(0, 180) })))}`,
         );
     }
     const run = measuredRun.getStore();
