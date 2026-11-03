@@ -3,7 +3,7 @@
 The authenticated native API exports current owner facts independently of public Collection ItemList export.
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
 requires a new request identity, including after a completed stream or a failed local download. Installed import
-evidence joins this fence; expiring MAL evidence makes the original capture stale.
+evidence joins this fence; expiring MAL or VNDB evidence makes the original capture stale.
 Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
 original coverage, and reviewed V2 annotation/journal-date recovery is owned by the existing archive consumer.
 
@@ -25,7 +25,7 @@ A status has `format`, a supported `version`, `exportId`, `capturedAt`, `expires
 `completeness:"supported-native-facts"`, `fullExport:false`, `sections`, `omissions` and `first`.
 A page has `{exportId,state,records,next,manifest}`. Each record has `section` and the fields below.
 Only the final page has a manifest; it adds cumulative `rows` and `recordBytes` to the format/version/coverage
-fields. Version 2 also includes `sectionTotals` for every declared section, including sections with zero rows. A
+fields. Versions 2 and 3 also include `sectionTotals` for every declared section, including sections with zero rows. A
 non-final page never asserts completeness. An empty intermediate page can still have `next`.
 Web fetches sequentially, keeps the original identity and cursors, and assembles a local JSON artifact
 `{manifest,records}` only after a final `ready` page. The manifest's omissions must remain visible with the file.
@@ -52,7 +52,7 @@ Cancellation during traversal, viewer or session replacement, unmount and termin
 Return uses locale-aware `/library` with no shelf or filter operands.
 
 Version 1 is the fixed historical coverage set below and never implies annotation, provenance or journal coverage.
-New captures use version 2. A stored version 1 capture and its epoch 1 cursors keep their original sections,
+New captures use version 3. A stored version 1 capture and its epoch 1 cursors keep their original sections,
 manifest fields and byte accounting; version 2 cursors use epoch 2 and carry per-section counters. Unsupported
 versions and cursor shapes are refused. The existing archive consumer accepts both V1 and V2 manifests; its
 supported annotation and journal operations are specified in
@@ -63,7 +63,7 @@ supported annotation and journal operations are specified in
 | Version | Capture use                                | Sections                                                                       | Final accounting                                               |
 | ------- | ------------------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
 | 1       | Existing stored captures and their retries | The original 14 sections listed in the first installed manifest                | `rows` and `recordBytes`; no new section claim or counters     |
-| 2       | New captures                               | The version 1 sections followed by `annotations`, `provenance`, and `journals` | `rows`, `recordBytes`, and `sectionTotals` for all 17 sections |
+| 2       | Existing stored captures and their retries | The version 1 sections followed by `annotations`, `provenance`, and `journals` | `rows`, `recordBytes`, and `sectionTotals` for all 17 sections |
 
 | Omission                 | Version 1                                                                                                             | Version 2                                                                                                                 |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -90,6 +90,86 @@ partial calendar objects: absent month or day components remain absent, and a cl
 reflections remain distinct from `null`. The progress revision and journal revision are independent. A retired
 occurrence is not exported even while its audit rows remain in erasure custody. Existing MAL evidence remains its
 own section; no importer-to-journal provenance link or new completion is inferred.
+
+## Version 3 provider evidence and assessment seam
+
+Decision: version 3 appends `vndbUploads`, `vndbEvidence`, `anilistUploads`, `anilistEvidence`, in that order,
+uses coverage `private-library-owner-facts-v3`, epoch 3 cursors and totals for all 21 sections. V1/V2 sections,
+byte accounting, cursor shapes and decoding remain fixed. New captures never reinterpret an older identity.
+`fullExport` remains false. V3 `personalImportEvidence` declares retained Bangumi, unexpired MAL and VNDB, and
+retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities are excluded.
+V3 `reimport` explicitly declares recovery unavailable to the installed V1/V2 archive consumer. That consumer
+refuses V3 with `unsupported_version`; a future consumer must retain unsupported evidence privately and never
+execute exported capabilities. Unknown format versions remain unavailable to Web, never empty success.
+
+VNDB metadata is `{upload_id,state,expires_at}`. Its native lifetime is 24 hours; only uploads unexpired at capture
+are selected, including cancelled uploads with retained evidence. Each evidence record is `{upload_id,ordinal,evidence}`,
+where `evidence` is the stored parsed VNDB row: `identifier`, `fields` (kind/raw/value/precision/scale), labels,
+retained reason and parsed XML evidence. Metadata-only retained rows remain included. Missing, unknown, invalid and
+zero values retain their original distinctions; VNDB vote zero remains invalid. Titles never create identifiers.
+No original XML upload, decisions, native target keys or review/apply state is projected.
+
+AniList has no time expiry in its installed store: retained upload headers (ordinal -1) supply
+`{upload_id,score_format,cancelled,row_count}`. The count is original admitted count, not a completeness assertion.
+Each `{upload_id,ordinal,evidence}` projects only the stored `source` object: original `evidence`, `group`,
+`identifiers`, and per-field `fields` validity/reason. This preserves source score format (including unknown/null),
+missing/null/zero, unfamiliar vocabulary, fuzzy date components and original declared AniList/MAL identifiers.
+Wrapper documents and raw JSON are excluded; their absence is not a supported empty section. Cancellation retains
+evidence, removal deletes it. Imported scores are never native votes; provider dates never create occurrences.
+
+V3 applies credential/capability-shaped key redaction recursively to all retained evidence, including arrays of
+`{field,...}` descriptions and nested parsed XML nodes. Review IDs, command/client keys, receipts, authority grants,
+confirmation and apply/recovery state keys are also removed. Allowed unknown vocabulary values stay original.
+V1/V2 retain their historical redaction and byte meaning. SQL projection and final JSON encoding both enforce
+65,536-byte record bounds before delivery, including escaping and UTF-8; oversize returns `limit`, never truncation.
+
+The received occurrence producer seam is `journal.assessment:{meaningRevision:1,units:number|null}` with integer
+units 0..20. V3 serializes the producer-owned nullable `journal_assessment_units` column through a JSON row lookup,
+so deployment before that producer's column exists yields the documented null initial state without adding a writer.
+The assessment owner must deliver its CAS/write semantics; this export adds no assessment adoption or archive writer.
+V1/V2 absence never establishes an assessment. Their serialized journals stay unchanged.
+
+The same owner source generation covers VNDB parent and indexed evidence rows, plus every AniList header/source/
+review mutation, cancellation, pruning and deletion. Indexed MAL/VNDB expiry probes run before and after each page,
+status and original create replay. Expiry needs no row write to make collecting or completed captures stale.
+The final page rechecks current owner, source and time under the existing account barrier and source lock; no GET
+repairs, replacements, partial success or new request identities occur. Erasure still owns the export control row;
+VNDB parent deletion cascades its source-owned parsed row index, and existing AniList erasure deletes its rows.
+
+### Whole caller work
+
+Let P=16 and S<=17 be candidates, Uv<=4 retained VNDB uploads, Ua<=5 retained AniList headers, and K actual pages
+(including parent-transition/empty pages). Existing admission, account barrier, authorization, operational
+preparation/locks/receipt work and native section counters remain on the existing Library request payer.
+Each page adds no account-wide discovery: direct metadata uses one owner-indexed P+1 seek; provider evidence uses
+at most one owner/upload parent seek and one owner/upload/ordinal P+1 seek. Header-only AniList's partial index
+avoids reading unrelated rows. Expiry uses two owner/expiry-indexed existence probes per currentness check (MAL and
+VNDB); each page does two currentness checks, each with one exact control-row lock and one source-generation lock.
+Create uses the existing command receipt/transaction, exact owner capture lock/upsert, generation lock, then status
+currentness. Status and cancel each use one currentness check, with cancel's exact update. Original retries repeat
+these bounded checks; R retries add R times the respective caller work, never a refreshed lifetime.
+
+Parsed VNDB rows are indexed at source write time: one backfill over retained arrays at migration and, on actual
+source rows change, at most 5,000 row replacements per upload (16 MiB total parsed input). Export never reparses
+that upload array. AniList source and header metadata are stored generated projections, computed once per source
+write (existing payload cap 4 MiB); export reads no raw wrapper/header document. Candidate source JSON work is
+bounded by admitted source bytes (VNDB <=16 MiB per addressed parent, AniList <=17*4 MiB worst-case parsed source
+projections); SQL limits each driver row to 64 KiB, at most 17 such rows. Application redaction, reference expansion
+and serialization process at most 16*64 KiB candidate input per page, returning <=120,000 encoded record bytes.
+Native annotation/provenance optional joins remain at most 16 exact Subject keys; counters/cursors now process
+21 fixed pairs. Artifact caps, browser assembly, expiry and one control row per owner are unchanged.
+
+VNDB deletion/pruning/terminal cleanup adds at most 5,000 indexed child deletes and fence updates per parent to its
+existing source cleanup payer; AniList generated projections follow each existing row's cleanup. Source index data
+is never an export artifact and has no independent lifetime. No new server artifact, scheduler, payer, automatic
+retry or runtime refill is introduced. Total work is the existing capture/status/cancel costs plus K bounded page
+callers, returned native rows/bytes, source projection write/cleanup work and explicit retries. Native growth and
+whole-caller budget measurements remain unmeasured here and belong to controller acceptance.
+
+References inspected: `legacy-final:packages/model/src/native-export.ts` (bounded continuation and revision binding),
+`legacy-final:services/main/src/modules/library-import/formats/vndb.ts` (private identifiers and precision), installed
+VNDB/AniList parsers and upload lifetime owners, and the retained AniList MediaList/FuzzyDate reference. No legacy
+code was copied. Web323 retains the existing export interface; canonical archive8bb receives the V3 handoff.
 
 ## Version 2 accounting and work bounds
 
@@ -166,8 +246,8 @@ regardless of any Collection visibility field.
 
 Installed native owner tables supply these sections, including retained Bangumi and unexpired MAL row evidence.
 Raw MAL XML/envelope metadata and review/apply internals are excluded; credential/capability-shaped field keys are
-removed. Other import stores are unavailable; no shared provider custody is scanned and no identifier is invented.
-Both formats declare their fixed section sets; version 2 reports zero totals for empty sections without fabricating
+removed. Version 3 also includes unexpired VNDB and retained AniList uploads and parsed rows; other import stores are unavailable; no shared provider custody is scanned and no identifier is invented.
+All three formats declare their fixed section sets; version 2 reports zero totals for empty sections without fabricating
 fact records. `ready` means all supported native sections were exhausted, never a completed full account export.
 Trash, published/working output, credentials, Access capabilities, secrets, other accounts and Commerce order or
 financial evidence are excluded. No compatibility with a re-import endpoint is promised.

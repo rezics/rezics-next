@@ -24,14 +24,16 @@ export const exportSections = [
   'malEvidence',
 ] as const;
 export const exportSectionsV2 = [...exportSections, 'annotations', 'provenance', 'journals'] as const;
-export type LibraryExportVersion = 1 | 2;
+export const exportSectionsV3 = [...exportSectionsV2, 'vndbUploads', 'vndbEvidence', 'anilistUploads', 'anilistEvidence'] as const;
+export type LibraryExportVersion = 1 | 2 | 3;
+export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 /** The archive recovery consumer shares the installed V1 and V2 section vocabulary. */
 export type LibraryExportSection = LibraryExportSectionV2;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
-  return version === 1 ? exportSections : exportSectionsV2;
+  return version === 1 ? exportSections : version === 2 ? exportSectionsV2 : exportSectionsV3;
 }
 
 type Capture = { export_id: string; created_at: string; expires_at: string };
@@ -59,6 +61,13 @@ const v2Omissions = {
     'version 1 archive recovery plus reviewed version 2 annotations and journal dates; provenance remains unsupported',
 } as const;
 
+const v3Omissions = {
+  ...v2Omissions,
+  personalImportEvidence:
+    'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
+  reimport: 'version 3 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+} as const;
+
 export type LibraryExportManifestV1 = {
   format: typeof LIBRARY_EXPORT_FORMAT;
   version: 1;
@@ -84,7 +93,13 @@ export type LibraryExportManifestV2 = {
   omissions: typeof v2Omissions;
 };
 
-export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2;
+export type LibraryExportManifestV3 = Omit<LibraryExportManifestV2, 'version' | 'coverage' | 'sections' | 'omissions'> & {
+  version: 3;
+  coverage: 'private-library-owner-facts-v3';
+  sections: LibraryExportSectionV3[];
+  omissions: typeof v3Omissions;
+};
+export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3;
 export type LibraryExportFinalManifestV1 = LibraryExportManifestV1 & {
   fullExport: false;
   rows: number;
@@ -96,10 +111,17 @@ export type LibraryExportFinalManifestV2 = LibraryExportManifestV2 & {
   recordBytes: number;
   sectionTotals: SectionTotals;
 };
-export type LibraryExportFinalManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;
+export type LibraryExportFinalManifestV3 = LibraryExportManifestV3 & {
+  fullExport: false;
+  rows: number;
+  recordBytes: number;
+  sectionTotals: Record<LibraryExportSectionV3, { rows: number; recordBytes: number }>;
+};
+export type LibraryExportFinalManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2 | LibraryExportFinalManifestV3;
 
 export function libraryExportManifest(capture: Capture & { format_version?: 1 }): LibraryExportManifestV1;
 export function libraryExportManifest(capture: Capture & { format_version: 2 }): LibraryExportManifestV2;
+export function libraryExportManifest(capture: Capture & { format_version: 3 }): LibraryExportManifestV3;
 export function libraryExportManifest(
   capture: Capture & { format_version?: LibraryExportVersion },
 ): LibraryExportManifest;
@@ -122,6 +144,13 @@ export function libraryExportManifest(
       sections: [...exportSections],
       omissions: v1Omissions,
     };
+  if (capture.format_version === 3) return {
+    ...common,
+    version: 3,
+    coverage: 'private-library-owner-facts-v3',
+    sections: [...exportSectionsV3],
+    omissions: v3Omissions,
+  };
   return {
     ...common,
     version: 2,
@@ -132,4 +161,4 @@ export function libraryExportManifest(
 }
 
 /** The native archive decoder recognizes both installed export vocabularies. */
-export type LibraryArchiveManifest = LibraryExportFinalManifest;
+export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;

@@ -14,7 +14,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
-import { exportSectionsV2, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
+import { initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
 import {
   libraryExportManifest as manifest,
   LIBRARY_EXPORT_LIMITS,
@@ -66,7 +66,7 @@ function binding(accountId: string, capture: Capture) {
       accountId,
       exportId: capture.export_id,
       generation: capture.generation,
-      ...(capture.format_version === 2 ? { formatVersion: capture.format_version } : {}),
+      ...(capture.format_version !== 1 ? { formatVersion: capture.format_version } : {}),
     },
   };
 }
@@ -82,7 +82,7 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
         seek.after,
         seek.rows,
         seek.bytes,
-        ...(capture.format_version === 2 ? [seek.sectionTotals] : []),
+        ...(capture.format_version !== 1 ? [seek.sectionTotals] : []),
       ],
     },
     Date.parse(capture.created_at),
@@ -122,7 +122,7 @@ function seekOf(
   if (capture.format_version === 1) return { section, parent, after, rows, bytes };
   if (
     !Array.isArray(sectionTotals) ||
-    sectionTotals.length !== exportSectionsV2.length ||
+    sectionTotals.length !== sections.length ||
     sectionTotals.some(
       (total) =>
         !Array.isArray(total) ||
@@ -256,8 +256,10 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
     const expiredEvidence =
       (
         await tx.query(
-          `SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
-        AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz LIMIT 1`,
+          `SELECT 1 WHERE EXISTS (SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+        AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
+        ${capture.format_version === 3 ? `OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2
+          AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)` : ''}`,
           [route, accountId, capture.created_at, new Date(now).toISOString()],
         )
       ).rowCount !== 0;
@@ -307,7 +309,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
             `INSERT INTO library.library_export(route,account_id,export_id,format_version,generation,created_at,expires_at,state)
-          VALUES($1,$2,$3,2,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
+          VALUES($1,$2,$3,3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
           ON CONFLICT(route,account_id) DO UPDATE SET export_id=EXCLUDED.export_id,generation=EXCLUDED.generation,
             format_version=EXCLUDED.format_version,created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
             [route, account.accountId, id, source, at],
@@ -345,6 +347,11 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           };
         const seek = seekOf(deps, accountId, capture, token, now);
         const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at, capture.format_version);
+        // Expiry has no row write. Recheck after serialization as well as before reading,
+        // including replay of a completed download under the original request identity.
+        const final = await current(tx, route, accountId, id, Math.max(now, clock().getTime()));
+        if (final.state !== 'collecting' && final.state !== 'ready')
+          return { exportId: id, state: final.state, records: [], next: null, manifest: null };
         if (
           page.oversized ||
           page.seek.rows > LIBRARY_EXPORT_LIMITS.records ||
@@ -378,10 +385,10 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
                 fullExport: false as const,
                 rows: page.seek.rows,
                 recordBytes: page.seek.bytes,
-                ...(capture.format_version === 2
+                ...(capture.format_version !== 1
                   ? {
                       sectionTotals: Object.fromEntries(
-                        exportSectionsV2.map((section, index) => {
+                        sectionsForVersion(capture.format_version).map((section, index) => {
                           const [rows, recordBytes] = page.seek.sectionTotals?.[index] ?? [0, 0];
                           return [section, { rows, recordBytes }];
                         }),

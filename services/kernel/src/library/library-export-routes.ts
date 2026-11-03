@@ -5,7 +5,7 @@ import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createLibraryExport, exportAuthorityTypes, type LibraryExportDependencies } from './library-export.ts';
-import { exportSections, exportSectionsV2 } from './library-export-format.ts';
+import { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
@@ -60,6 +60,12 @@ const manifestV2Fields = {
   omissions: t.Record(text, text),
   fullExport: t.Literal(false),
 };
+const manifestV3Fields = {
+  ...manifestV2Fields,
+  version: t.Literal(3),
+  coverage: t.Literal('private-library-owner-facts-v3'),
+  sections: t.Tuple(exportSectionsV3.map((section) => t.Literal(section)) as never),
+};
 const state = t.Union([
   t.Literal('collecting'),
   t.Literal('ready'),
@@ -71,6 +77,7 @@ const state = t.Union([
 const statusSchema = t.Union([
   t.Object({ ...manifestV1Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
+  t.Object({ ...manifestV3Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
 const sectionTotalsV2 = t.Object(
@@ -179,6 +186,18 @@ const journalRecord = t.Object(
   },
   closed,
 );
+const journalV3Record = t.Object({
+  ...journalRecord.properties,
+  journal: t.Object({
+    ...journalRecord.properties.journal.properties,
+    assessment: t.Object({ meaningRevision: t.Literal(1), units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]) }, closed),
+  }, closed),
+}, closed);
+const providerRecords = [
+  t.Object({ section: t.Literal('vndbUploads'), upload_id: text, state: t.Union([t.Literal('active'), t.Literal('cancelled')]), expires_at: text }, closed),
+  t.Object({ section: t.Literal('anilistUploads'), upload_id: text, cancelled: t.Union([t.Boolean(), t.Null()]), score_format: nullable, row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]) }, closed),
+  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) => t.Object({ section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() }, closed)),
+];
 const finalManifest = t.Union([
   t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
   t.Object(
@@ -190,6 +209,12 @@ const finalManifest = t.Union([
     },
     closed,
   ),
+  t.Object({
+    ...manifestV3Fields,
+    rows: t.Integer({ minimum: 0 }),
+    recordBytes: t.Integer({ minimum: 0 }),
+    sectionTotals: t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
+  }, closed),
 ]);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -263,7 +288,7 @@ export function libraryExportRoutes(
             {
               exportId: text,
               state,
-              records: t.Array(t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecord]), {
+              records: t.Array(t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecord, journalV3Record, ...providerRecords]), {
                 maxItems: 16,
               }),
               next: nullable,

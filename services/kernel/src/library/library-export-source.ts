@@ -1,11 +1,10 @@
 import type { PoolClient } from 'pg';
 import {
   exportSections,
-  exportSectionsV2,
   LIBRARY_EXPORT_LIMITS,
   sectionsForVersion,
   type LibraryExportSectionV1,
-  type LibraryExportSectionV2,
+  type LibraryExportSectionV3,
   type LibraryExportVersion,
 } from './library-export-format.ts';
 export { exportSections, exportSectionsV2 } from './library-export-format.ts';
@@ -71,9 +70,13 @@ export type JournalExportRecord = {
     startDate: JournalDate | null;
     finishDate: JournalDate | null;
     reflection: string | null;
+    assessment?: { meaningRevision: 1; units: number | null };
   };
 };
-export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord;
+export type ProviderExportRecord = Record<string, unknown> & {
+  section: 'vndbUploads' | 'vndbEvidence' | 'anilistUploads' | 'anilistEvidence';
+};
+export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord | ProviderExportRecord;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
   section: number;
@@ -93,7 +96,7 @@ export const initialExportSeek = (version: LibraryExportVersion = 1): ExportSeek
   after: '',
   rows: 0,
   bytes: 0,
-  ...(version === 2 ? { sectionTotals: exportSectionsV2.map(() => [0, 0] as [number, number]) } : {}),
+  ...(version !== 1 ? { sectionTotals: sectionsForVersion(version).map(() => [0, 0] as [number, number]) } : {}),
 });
 export type ExportSourcePage = {
   records: ExportRecord[];
@@ -103,7 +106,7 @@ export type ExportSourcePage = {
 };
 
 /** Each indexed selection fetches P+1 bounded rows so a full page can seek without an empty follow-up page. */
-const queries: Partial<Record<LibraryExportSectionV2, string>> = {
+const queries: Partial<Record<LibraryExportSectionV3, string>> = {
   entries: `SELECT subject_id::text AS key, subject_id, requested_subject_id, incarnation_id, state,
     revision, library_profile_pin, created_at::text, updated_at::text, activity_at::text, finished_at::text
     FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id > $3::uuid
@@ -145,6 +148,13 @@ const queries: Partial<Record<LibraryExportSectionV2, string>> = {
   malImports: `SELECT id::text AS key,id AS upload_id,(document->>'canceled')::boolean AS cancelled,expires_at::text
     FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
       AND id>$3::uuid ORDER BY id LIMIT ${FETCH_ROWS}`,
+  vndbUploads: `SELECT upload_id::text AS key,upload_id,state,expires_at::text
+    FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
+      AND upload_id>$3::uuid ORDER BY upload_id LIMIT ${FETCH_ROWS}`,
+  anilistUploads: `SELECT import_id::text AS key,import_id AS upload_id,export_score_format AS score_format,
+    export_cancelled AS cancelled,export_count AS row_count
+    FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND ordinal=-1
+      AND import_id>$3::uuid ORDER BY import_id LIMIT ${FETCH_ROWS}`,
   annotations: `SELECT f.subject_id::text AS key,f.account_id::text AS "accountId",f.subject_id::text AS "subjectId",
     f.annotation_revision AS "annotationRevision",f.note,f.priority,
     CASE WHEN f.annotation_updated_at IS NULL THEN NULL ELSE
@@ -203,7 +213,7 @@ async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unk
   ).rows;
 }
 
-function v1Direct(section: LibraryExportSectionV2, version: LibraryExportVersion) {
+function v1Direct(section: LibraryExportSectionV3, version: LibraryExportVersion) {
   return version === 1 ? v1DirectSections.has(section) : Object.hasOwn(queries, section);
 }
 
@@ -220,14 +230,19 @@ export async function readExportSourcePage(
     sectionTotals: input.sectionTotals?.map(([rows, bytes]) => [rows, bytes] as [number, number]),
   };
   const sections = sectionsForVersion(version);
-  const section = sections[seek.section] as LibraryExportSectionV2 | undefined;
+  const section = sections[seek.section] as LibraryExportSectionV3 | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
   const fetchRows = version === 1 ? LIBRARY_EXPORT_LIMITS.pageRows : FETCH_ROWS;
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
-    const sourceSql = queries[section];
+    let sourceSql = queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
+    // The assessment producer owns this nullable column and its journal-local revision.
+    // The JSON lookup allows the documented seam before its column migration is installed.
+    if (version === 3 && section === 'journals')
+      sourceSql = sourceSql.replace("'reflection',p.journal_reflection)",
+        "'reflection',p.journal_reflection,'assessment',jsonb_build_object('meaningRevision',1,'units',to_jsonb(p)->'journal_assessment_units'))");
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
       seek.after ||
@@ -241,14 +256,23 @@ export async function readExportSourcePage(
     rows = await bounded(
       client,
       sql,
-      section === 'malImports' ? [route, accountId, after, capturedAt] : [route, accountId, after],
+      section === 'malImports' || section === 'vndbUploads' ? [route, accountId, after, capturedAt] : [route, accountId, after],
       LIBRARY_EXPORT_LIMITS.maxRecordBytes,
     );
   } else {
     const occurrences = section === 'occurrences';
     const mal = section === 'malEvidence';
+    const vndb = section === 'vndbEvidence';
+    const anilist = section === 'anilistEvidence';
+    const provider = mal || vndb || anilist;
     if (!seek.parent) {
-      const parentSql = mal
+      const parentSql = vndb
+        ? `SELECT upload_id AS id FROM library.vndb_import WHERE route=$1 AND account_id=$2
+             AND expires_at>$4::timestamptz AND upload_id>$3::uuid ORDER BY upload_id LIMIT 1`
+        : anilist
+        ? `SELECT import_id AS id FROM library.list_import_anilist WHERE route=$1 AND account_id=$2
+             AND ordinal=-1 AND import_id>$3::uuid ORDER BY import_id LIMIT 1`
+        : mal
         ? `SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2
              AND expires_at>$4::timestamptz AND id>$3::uuid ORDER BY id LIMIT 1`
         : occurrences
@@ -260,7 +284,7 @@ export async function readExportSourcePage(
         (
           await client.query<{ id: string }>(
             parentSql,
-            mal ? [route, accountId, seek.after || ZERO, capturedAt] : [route, accountId, seek.after || ZERO],
+            mal || vndb ? [route, accountId, seek.after || ZERO, capturedAt] : [route, accountId, seek.after || ZERO],
           )
         ).rows[0]?.id ?? '';
       seek.after = '';
@@ -269,7 +293,14 @@ export async function readExportSourcePage(
         return { records: [], seek, done: seek.section === sections.length, oversized: false };
       }
     }
-    const sql = mal
+    const sql = vndb
+      ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.vndb_import_row
+           WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
+      : anilist
+      ? `SELECT ordinal::text AS key,import_id AS upload_id,ordinal,export_source AS evidence
+           FROM library.list_import_anilist WHERE route=$1 AND import_id=$2 AND account_id=$4
+             AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
+      : mal
       ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
            FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
              least(jsonb_array_length(document->'rows')-1,$3::integer+${fetchRows})) i
@@ -291,8 +322,8 @@ export async function readExportSourcePage(
       [
         route,
         seek.parent,
-        seek.after || (mal ? '-1' : section === 'history' ? '0' : occurrences ? ZERO : ''),
-        ...(mal || section === 'units' || section === 'history' ? [accountId] : []),
+        seek.after || (provider ? '-1' : section === 'history' ? '0' : occurrences ? ZERO : ''),
+        ...(provider || section === 'units' || section === 'history' ? [accountId] : []),
       ],
       LIBRARY_EXPORT_LIMITS.maxRecordBytes,
     );
@@ -339,7 +370,8 @@ export async function readExportSourcePage(
       data.entryIncarnationId = entry?.entryIncarnationId ?? null;
       data.libraryProfilePin = entry?.libraryProfilePin ?? null;
     }
-    if (section === 'malEvidence') data.evidence = publicEvidence(data.evidence);
+    if (section === 'malEvidence' || (version === 3 && section.endsWith('Evidence')))
+      data.evidence = publicEvidence(data.evidence, version === 3);
     if (section !== 'annotations' && section !== 'provenance' && section !== 'journals') {
       for (const field of ['subject_id', 'requested_subject_id', 'version_subject_id']) {
         const value = data[field];
@@ -352,7 +384,7 @@ export async function readExportSourcePage(
     }
     const record = { section, ...data } as ExportRecord;
     const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
-    if (version === 2 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
+    if (version !== 1 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
       oversized = true;
       break;
     }
@@ -383,17 +415,19 @@ export async function readExportSourcePage(
 }
 
 /** Retained import rows exclude raw credentials and review capabilities before export. */
-function publicEvidence(value: unknown): unknown {
-  const privateKey = /token|password|authorization|credential|secret|capability/i;
+function publicEvidence(value: unknown, expanded = false): unknown {
+  const privateKey = expanded
+    ? /token|password|authorization|credential|secret|capability|review.?id|command.?key|client.?id|requested.?by|receipt|authority.?grant|confirmation|recovery.?state|apply.?state/i
+    : /token|password|authorization|credential|secret|capability/i;
   if (Array.isArray(value))
     return value
       .filter((v) => !(v && typeof v === 'object' && 'field' in v && privateKey.test(String(v.field))))
-      .map(publicEvidence);
+      .map((v) => publicEvidence(v, expanded));
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value)
         .filter(([key]) => !privateKey.test(key))
-        .map(([key, v]) => [key, publicEvidence(v)]),
+        .map(([key, v]) => [key, publicEvidence(v, expanded)]),
     );
   return value;
 }
