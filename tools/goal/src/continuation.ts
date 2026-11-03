@@ -153,7 +153,7 @@ export function completeContinuation(
 function invalidReason(
   markdown: string,
   task: Task,
-  settings: Pick<Settings, 'riskAreasFile'>,
+  settings: Pick<Settings, 'riskAreasFile' | 'policy'>,
   known: Set<string>,
 ): string | undefined {
   try {
