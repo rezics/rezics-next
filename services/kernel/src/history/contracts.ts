@@ -313,6 +313,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.statement.retracted.v1': nonPersonal,
   'com.rezics.subject.adopted.v1': nonPersonal,
   'com.rezics.subject.created.v1': nonPersonal,
+  'com.rezics.semantic.subject_page.dependencies_changed.v1': nonPersonal,
   'com.rezics.subject.merged.v1': nonPersonal,
   'com.rezics.subject.revised.v1': nonPersonal,
   'com.rezics.subject.statement_disclosed.v1': nonPersonal,
