@@ -128,11 +128,14 @@ test('ordinary configured server returns current mixed discovery through its def
         expect(hit.key.owner).toBe('semantic');
         expect(hit.key.kind).toBe('schema:Person');
         expect(hit.summary.value.label?.language).toBe('fr');
-      } else {
+      } else if (hit.summary.kind === 'account') {
+        const account = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'account' } }>;
         expect(hit.key.owner).toBe('accounts');
         expect(hit.key.kind).toBe('account');
-        expect(hit.summary.value.handle).toBe(profile.handle);
-        expect(hit.summary.value.displayName).toBe(profile.displayName);
+        expect(account.summary.value.handle).toBe(profile.handle);
+        expect(account.summary.value.displayName).toBe(profile.displayName);
+      } else {
+        throw new Error('Unexpected owner in the Account and Subject fixture');
       }
     }
     for (const [n, action] of ['hide', 'takedown'].entries()) {
