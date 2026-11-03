@@ -85,6 +85,14 @@ test('a frozen producer imports without launches and discovers its launch checko
   const checkout = mkdtempSync(join(root, 'import-without-deps-'));
   mkdirSync(join(checkout, 'scripts/check-host'), { recursive: true });
   copyFileSync(remoteCheck, join(checkout, 'scripts/remote-check.ts'));
+  for (const file of [
+    'check-artifacts.ts',
+    'check-output-tree.ts',
+    'check-placement.ts',
+    'check-custody.ts',
+    'check-lifecycle-child.ts',
+  ])
+    copyFileSync(join(repository, 'scripts', file), join(checkout, 'scripts', file));
   copyFileSync(join(repository, 'scripts/check-host/docker'), join(checkout, 'scripts/check-host/docker'));
   copyFileSync(join(repository, 'package.json'), join(checkout, 'package.json'));
   const result = spawnSync(
