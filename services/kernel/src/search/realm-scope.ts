@@ -98,6 +98,10 @@ export function createRealmScopeSource(input: {
     }
   }
   return {
+    /** The admitted, already resolved Realm resources drive separate finite source frontiers. */
+    realms(scope: PreparedRealmScope): readonly string[] {
+      return [...state(scope).observations.keys()].sort();
+    },
     async prepare(
       filter: DiscoveryFilterDocument,
       allowance: WorkAllowance,

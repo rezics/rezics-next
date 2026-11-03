@@ -112,6 +112,7 @@ export function createScopePreparation(
     let registration: IdentityScopeRegistration;
     let capturedFrontier = record.frontier;
     const definition = record.definition;
+    if (definition.kind === 'realm') throw new ProblemError('dependency_unavailable');
     if (definition.kind === 'library') {
       if (record.frontier.kind !== 'library') throw new TypeError('Scope frontier kind changed');
       let frontier = record.frontier.value;

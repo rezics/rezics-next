@@ -97,7 +97,7 @@ export async function readOrderedScopeRows(
   size: number,
   work: ScopeWork,
 ): Promise<SearchHit[]> {
-  if (!Number.isSafeInteger(size) || size < 1 || size > 100) throw new RangeError('Invalid ordered Scope seek');
+  if (!Number.isSafeInteger(size) || size < 1 || size > 101) throw new RangeError('Invalid ordered Scope seek');
   work.consume({ ...zeroScopeWork(), statements: 1 });
   const rows = after
     ? await pageSql.run(pool, {

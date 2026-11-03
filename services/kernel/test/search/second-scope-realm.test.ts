@@ -151,6 +151,54 @@ test('Content observation handles survive preparation; opaque raw prefixes retai
   expect((await f.scope.sourcePrefix(scope, realm, null, 32, allowance())).subjects).toEqual([other]);
 });
 
+test('sparse Content prefixes advance one opaque frontier per bounded preparation step', async () => {
+  const reader = { deadline: Date.now() + 60_000 } as LeafOptions;
+  const calls: (string | null)[] = [];
+  const source: RealmSubjectSource = {
+    async resolve(id) {
+      return { state: 'ready', observation: Object.freeze({ realm: id, revision: 'sparse' }) };
+    },
+    async current() {
+      return 'current';
+    },
+    async prefix(_observation, after, limit) {
+      expect(limit).toBe(32);
+      calls.push(after);
+      return after === null
+        ? { subjects: [], after: 'opaque-frontier', exhausted: false }
+        : { subjects: [other], after: null, exhausted: true };
+    },
+    async match(_observation, subjects) {
+      return subjects.map(() => 'discussed');
+    },
+  };
+  const scopeSource = createRealmScopeSource({
+    pool: {} as Pool,
+    reader,
+    source,
+    release: async () => ({ digest: '1', release }),
+  });
+  const { scope } = await scopeSource.prepare(leaf, allowance());
+  const first = await scopeSource.sourcePrefix(scope, realm, null, 32, allowance());
+  expect(first).toMatchObject({ subjects: [], after: 'opaque-frontier', exhausted: false });
+  const second = await scopeSource.sourcePrefix(scope, realm, first.after, 32, allowance());
+  expect(second).toMatchObject({ subjects: [other], after: null, exhausted: true });
+  expect(calls).toEqual([null, 'opaque-frontier']);
+});
+
+test('Realm searches reject output orders without retained canonical tuples', async () => {
+  const service = createSearchService({
+    pool: {} as Pool,
+    client: {} as never,
+    prefix: 'realm-sort',
+    source: {} as never,
+    cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
+  });
+  await expect(
+    service.search('anonymous', { filter: leaf, text: 'book', sort: 'collections' }),
+  ).rejects.toMatchObject({ code: 'unsupported_query' });
+});
+
 test('unknown and withheld membership cannot establish a tautological Realm OR', async () => {
   const f = fixture();
   const { scope } = await f.scope.prepare({ or: [leaf, { not: leaf }] }, allowance());
