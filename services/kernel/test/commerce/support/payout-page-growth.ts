@@ -178,10 +178,10 @@ export async function payoutPageGrowthFixture() {
   if (!usdStatement) throw new Error('Native royalty recording did not create the selected USD statement');
   const selectedStatementId = usdStatement.statement_id;
   const nativeLineCount = (
-    await db.admin.query(
-      'SELECT count(*)::int AS n FROM commerce.royalty_line WHERE route=$1 AND statement_id=$2',
-      [route, selectedStatementId],
-    )
+    await db.admin.query('SELECT count(*)::int AS n FROM commerce.royalty_line WHERE route=$1 AND statement_id=$2', [
+      route,
+      selectedStatementId,
+    ])
   ).rows[0]!.n as number;
   expect(nativeLineCount).toBe(NATIVE);
   const statementTemplate = (
@@ -313,8 +313,7 @@ export async function payoutPageGrowthFixture() {
   async function operate(job: PayoutPageJob, axis: PayoutPageAxis) {
     const surface = axis === 'selected statement lines' ? 'lines' : 'statements';
     if (job === 'denied') {
-      const page =
-        surface === 'lines' ? await listLines(denied, selectedStatementId) : await listStatements(denied);
+      const page = surface === 'lines' ? await listLines(denied, selectedStatementId) : await listStatements(denied);
       expect(page.status).toBe(404);
       return;
     }
