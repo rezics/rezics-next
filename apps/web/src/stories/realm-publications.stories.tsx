@@ -91,11 +91,36 @@ const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
   };
 };
 const sendUnavailable = async () => ({ kind: 'unavailable' as const });
-function Example({ mode = 'ready', signedOut = false }: { mode?: Mode; signedOut?: boolean }) {
+function Example({
+  mode = 'ready',
+  signedOut = false,
+  current = 'adopt',
+  preparationFailure,
+}: {
+  mode?: Mode;
+  signedOut?: boolean;
+  current?: 'adopt' | 'withdraw' | 'reject' | null;
+  preparationFailure?: 'denied' | 'unavailable';
+}) {
   let decisions = 0;
   let originalKey: string | undefined;
   const transport: RealmShelfTransport = {
-    prepare,
+    prepare: async (input) => {
+      if (preparationFailure) return { kind: preparationFailure };
+      const result = await prepare(input);
+      if (result.kind === 'ready') {
+        result.preparation.current = current === null ? null : { ...result.preparation.current!, verdict: current };
+        if (current === null) {
+          const publish = result.preparation.commands.publish!;
+          result.preparation.commands = {
+            publish: { ...publish, expectedHead: null, ifMatch: null },
+            withdraw: null,
+            reject: null,
+          };
+        }
+      }
+      return result;
+    },
     boards: async () => {
       if (mode === 'loading') return new Promise(() => {});
       if (mode === 'denied' || mode === 'unavailable' || mode === 'stale') return { kind: mode };
@@ -136,17 +161,44 @@ function Example({ mode = 'ready', signedOut = false }: { mode?: Mode; signedOut
     </PatternStory>
   );
 }
-async function withdraw(canvasElement: HTMLElement) {
+async function selectWork(canvasElement: HTMLElement) {
   const subject = subjects[0]!;
   const title = subject.labels[getLocale()] ?? subject.label ?? '';
   const trigger = await within(canvasElement).findByRole('button', { name: m.realm_publication_actions({ title }) });
   trigger.focus();
   await userEvent.keyboard('{Enter}');
   await userEvent.click(await screen.findByText(m.realm_publication_withdraw()));
+}
+async function withdraw(canvasElement: HTMLElement) {
+  await selectWork(canvasElement);
   await userEvent.click(
     await within(canvasElement).findByRole('button', { name: m.realm_publication_review_withdraw() }),
   );
 }
+export const NoCurrentDecision: Story = {
+  render: () => <Example current={null} />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const CurrentAdopted: Story = {
+  render: () => <Example />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const CurrentRejected: Story = {
+  render: () => <Example current="reject" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const CurrentWithdrawn: Story = {
+  render: () => <Example current="withdraw" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const PreparationDenied: Story = {
+  render: () => <Example preparationFailure="denied" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const PreparationUnavailable: Story = {
+  render: () => <Example preparationFailure="unavailable" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
 export const Rest: Story = { render: () => <Example signedOut /> };
 export const LaterItems: Story = {
   render: () => <Example />,

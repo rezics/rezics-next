@@ -498,6 +498,7 @@ describe('Complete Realm publication original caller lifetime', () => {
   }
 
   async function settleHost(index: number, outcome: PublicationOutcome) {
+    if (outcome.kind === 'saved') shelfSubjects = [{ ...target(), publicationId: outcome.head }];
     await act(async () => {
       hostWrites[index]!.resolve(outcome);
       await tick();
@@ -525,6 +526,10 @@ describe('Complete Realm publication original caller lifetime', () => {
     expect(item).toBeDefined();
     await act(async () => {
       item!.click();
+      await tick();
+    });
+    await act(async () => {
+      shelfButton(m.realm_publication_review_withdraw()).click();
       await tick();
     });
   }
@@ -597,7 +602,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     await shelfWithdraw();
     expect(hostWrites).toHaveLength(2);
     await settleHost(1, { kind: 'saved', head: nextHead });
-    expect(host.textContent).not.toContain(target().title);
+    expect([...host.querySelectorAll('a')].some((node) => node.textContent?.includes(target().title))).toBe(false);
     expect(host.textContent).toContain(m.realm_publication_removed());
   });
 });

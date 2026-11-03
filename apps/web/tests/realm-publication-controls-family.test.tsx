@@ -318,18 +318,13 @@ test('Realm publication selection and outcomes use installed shared family with 
       expect(status()).toContain(m.realm_publication_conflict());
       expect(buttons().some((node) => node.textContent === m.realm_publication_retry())).toBe(false);
       noFalseResult();
-      const review =
-        action === 'withdraw'
-          ? m.realm_publication_review_withdraw()
-          : action === 'reject'
-            ? m.realm_publication_review_reject()
-            : m.realm_publication_review();
       currentSubjects = [{ ...supplied, publicationId: head }];
       await click(button(m.realm_publication_review()));
       await startChange(action);
       expect(writes.at(-1)!.input).toMatchObject({
         ...original,
         expectedHead: head,
+        ifMatch: JSON.stringify(head),
         idempotencyKey: expect.any(String),
       });
       expect(writes.at(-1)!.input.idempotencyKey).not.toBe(original.idempotencyKey);
