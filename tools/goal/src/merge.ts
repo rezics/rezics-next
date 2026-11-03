@@ -173,9 +173,12 @@ export function processGroupRunner(
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: { ...(sanitizeEnvironment
-          ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
-          : parent), ...temporary.env },
+        env: {
+          ...(sanitizeEnvironment
+            ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
+            : parent),
+          ...temporary.env,
+        },
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

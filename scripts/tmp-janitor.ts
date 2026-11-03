@@ -38,11 +38,13 @@ export const temporaryEntryRules = [
   { pattern: /^\.[a-f0-9]+-\d+\.hm$/, maxAgeMs: HOUR },
   { pattern: /^node-compile-cache$/, maxAgeMs: 24 * HOUR },
   {
-    pattern: /^(?:goal-(?:rollout|gate-env|ws|mcp|db|capacity-critical|claude-usage|idle-probe)-|capacity-queue-|watch-or-poll-|claude-config-|rezics-(?:producer-lifecycle|web-check|web-worker|auth-worker)-)/,
+    pattern:
+      /^(?:goal-(?:rollout|gate-env|ws|mcp|db|capacity-critical|claude-usage|idle-probe)-|capacity-queue-|watch-or-poll-|claude-config-|rezics-(?:producer-lifecycle|web-check|web-worker|auth-worker)-)/,
     maxAgeMs: 24 * HOUR,
   },
   {
-    pattern: /^(?:\.tmp[A-Za-z0-9]{6,}|(?:\.org\.chromium\.Chromium\.|org\.chromium\.Chromium\.|playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-)[A-Za-z0-9_-]+)$/,
+    pattern:
+      /^(?:\.tmp[A-Za-z0-9]{6,}|(?:\.org\.chromium\.Chromium\.|org\.chromium\.Chromium\.|playwright_chromiumdev_profile-|puppeteer_dev_chrome_profile-)[A-Za-z0-9_-]+)$/,
     maxAgeMs: 24 * HOUR,
   },
 ] as const;
@@ -57,7 +59,7 @@ function inode(stat: { dev: number; ino: number }): string {
 }
 
 /** Snapshot references once per pass, rather than scan every PID for each of hundreds of thousands of markers. */
-function processUse(uid: number, processDirectory: string): Use {
+function processUse(processDirectory: string): Use {
   const used: Use = { paths: new Set(), inodes: new Set() };
   const reference = (path: string) => {
     for (let current = path; ; current = dirname(current)) {
@@ -68,16 +70,14 @@ function processUse(uid: number, processDirectory: string): Use {
   for (const pid of readdirSync(processDirectory)) {
     if (!/^\d+$/.test(pid)) continue;
     const directory = join(processDirectory, pid);
-    let own = false;
     try {
-      own = statSync(directory).uid === uid;
       const link = (file: string) => {
         try {
           const target = readlinkSync(file).replace(/ \(deleted\)$/, '');
           if (isAbsolute(target)) reference(target);
           used.inodes.add(inode(statSync(file)));
         } catch (error) {
-          if (!gone(error) && own) throw error;
+          if (!gone(error)) throw error;
         }
       };
       link(join(directory, 'cwd'));
@@ -90,7 +90,11 @@ function processUse(uid: number, processDirectory: string): Use {
         if (path) {
           const target = path.replace(/\\040/g, ' ').replace(/ \(deleted\)$/, '');
           reference(target);
-          try { used.inodes.add(inode(statSync(target))); } catch (error) { if (!gone(error)) throw error; }
+          try {
+            used.inodes.add(inode(statSync(target)));
+          } catch (error) {
+            if (!gone(error)) throw error;
+          }
         }
       }
       // Reserve the whole scratch directory while its owner lives, even between file opens.
@@ -99,8 +103,17 @@ function processUse(uid: number, processDirectory: string): Use {
         if (match) reference(match[1]!);
       }
     } catch (error) {
-      if (!gone(error) && own) throw new Error(`tmp-janitor: cannot inspect live process ${pid}`, { cause: error });
+      if (!gone(error)) throw new Error(`tmp-janitor: cannot inspect live process ${pid}`, { cause: error });
     }
+  }
+  // Socket descriptors expose socket:[inode], not the bound filesystem path.
+  try {
+    for (const line of readFileSync(join(processDirectory, 'net/unix'), 'utf8').split('\n')) {
+      const path = /^(?:\S+\s+){7}(\/.*)$/.exec(line)?.[1];
+      if (path) reference(path);
+    }
+  } catch (error) {
+    if (!gone(error)) throw error;
   }
   return used;
 }
@@ -119,22 +132,25 @@ function treeUsed(path: string, used: Use, uid: number, cutoff: number): boolean
 export type JanitorResult = { removed: string[]; skipped: string[]; errors: string[] };
 
 /** Only current-UID, recognized, inactive entries qualify. /tmp itself and symlink targets never qualify. */
-export function cleanTemporaryEntries(options: {
-  root?: string;
-  now?: number;
-  dryRun?: boolean;
-  ownerUid?: number;
-  /** Isolated procfs view for tests; the CLI always inspects the host's /proc. */
-  processDirectory?: string;
-} = {}): JanitorResult {
+export function cleanTemporaryEntries(
+  options: {
+    root?: string;
+    now?: number;
+    dryRun?: boolean;
+    ownerUid?: number;
+    /** Isolated procfs view for tests; the CLI always inspects the host's /proc. */
+    processDirectory?: string;
+  } = {},
+): JanitorResult {
   const root = resolve(options.root ?? '/tmp');
   const rootStat = lstatSync(root);
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('tmp-janitor: root must be a real directory');
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
+    throw new Error('tmp-janitor: root must be a real directory');
   const uid = options.ownerUid ?? process.getuid!();
   if (!Number.isSafeInteger(uid) || uid < 0 || (process.getuid!() !== 0 && uid !== process.getuid!()))
     throw new Error('tmp-janitor: only root can select a different owner UID');
   const now = options.now ?? Date.now();
-  const used = processUse(uid, options.processDirectory ?? '/proc'); // Refuse the pass before any deletion on failure.
+  const used = processUse(options.processDirectory ?? '/proc'); // Refuse the pass before any deletion on failure.
   const result: JanitorResult = { removed: [], skipped: [], errors: [] };
   for (const name of readdirSync(root)) {
     const rule = temporaryEntryRules.find((rule) => rule.pattern.test(name));
@@ -144,7 +160,8 @@ export function cleanTemporaryEntries(options: {
       const stat = lstatSync(path);
       const cutoff = now - rule.maxAgeMs;
       if (
-        stat.uid !== uid || stat.isSymbolicLink() ||
+        stat.uid !== uid ||
+        stat.isSymbolicLink() ||
         Math.max(stat.mtimeMs, stat.ctimeMs) > cutoff ||
         used.paths.has(path) ||
         treeUsed(path, used, uid, cutoff)

@@ -44,7 +44,9 @@ afterEach(async () => {
     try {
       await dispose();
       fixtureDisposals.delete(path);
-    } catch (error) { failures.push(error); }
+    } catch (error) {
+      failures.push(error);
+    }
   }
   if (failures.length) throw new AggregateError(failures, 'temporary fixture cleanup failed');
 });
@@ -160,7 +162,9 @@ export function checkScriptFixture(ref = 'refs/heads/dev') {
 }
 
 export function temporaryDirectory(): { path: string; close(): void } {
-  const temporary = ownedTemporaryDirectory(tmpdir(), 'case-');
+  const root = resolve(import.meta.dir, '../../../.temp/goal-tests');
+  const inherited = resolve(tmpdir());
+  const temporary = ownedTemporaryDirectory(inherited.startsWith(`${root}/`) ? inherited : root, 'case-');
   const close = () => {
     temporary.close();
     fixtureDisposals.delete(temporary.path);

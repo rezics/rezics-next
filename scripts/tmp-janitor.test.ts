@@ -1,6 +1,17 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { cleanTemporaryEntries, ownedTemporaryDirectory } from './tmp-janitor.ts';
 import { fixturePool, harness, temporaryDirectory } from '../tools/goal/src/test-support.ts';
@@ -12,17 +23,28 @@ const agedNow = () => Date.now() + 3 * 24 * 60 * 60 * 1000;
 function inspectCaller() {
   const t = temporaryDirectory();
   symlinkSync('/proc/self', join(t.path, `${process.pid}`));
+  symlinkSync('/proc/net', join(t.path, 'net'));
   return t.path;
 }
 
 test('janitor removes stale known entries, preserving recent, unknown and symlink entries', () => {
   const t = temporaryDirectory();
   const processDirectory = inspectCaller();
-  const stale = ['.abc123-0.hm', 'node-compile-cache', 'goal-rollout-old', 'rezics-producer-lifecycle-old', '.tmpAb1234', 'playwright_chromiumdev_profile-old'];
+  const stale = [
+    '.abc123-0.hm',
+    'node-compile-cache',
+    'goal-rollout-old',
+    'rezics-producer-lifecycle-old',
+    '.tmpAb1234',
+    'playwright_chromiumdev_profile-old',
+  ];
   for (const name of stale) {
     const path = join(t.path, name);
     if (name.endsWith('.hm')) writeFileSync(path, '');
-    else { mkdirSync(path); writeFileSync(join(path, 'file'), 'fixture'); }
+    else {
+      mkdirSync(path);
+      writeFileSync(join(path, 'file'), 'fixture');
+    }
   }
   writeFileSync(join(t.path, 'unrelated'), 'keep');
   symlinkSync(join(t.path, 'unrelated'), join(t.path, 'goal-db-link'));
@@ -41,7 +63,9 @@ test('live cwd, descriptors, hard links and mappings reserve stale trees until r
   const t = temporaryDirectory();
   const processDirectory = inspectCaller();
   const busy = join(t.path, 'goal-db-live');
+  const cwd = join(t.path, 'goal-ws-cwd');
   mkdirSync(busy);
+  mkdirSync(cwd);
   const file = join(busy, 'open');
   writeFileSync(file, 'mapped');
   const alias = join(t.path, '.ab12-0.hm');
@@ -49,13 +73,32 @@ test('live cwd, descriptors, hard links and mappings reserve stale trees until r
   const fd = openSync(file, 'r');
   const previous = process.cwd();
   try {
-    process.chdir(busy);
+    process.chdir(cwd);
     expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([]);
-  } finally { process.chdir(previous); closeSync(fd); }
+    process.chdir(previous);
+    expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([cwd]);
+  } finally {
+    process.chdir(previous);
+    closeSync(fd);
+  }
   // mmap must remain protected after the creating descriptor has closed.
   const mapped = Bun.mmap(file);
   expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([]);
-  expect(mapped.toString()).toBe('mapped');
+  expect(new TextDecoder().decode(mapped)).toBe('mapped');
+});
+
+test('an unreadable process view refuses the entire pass before removing any entry', () => {
+  const t = temporaryDirectory();
+  const processDirectory = join(t.path, 'proc');
+  const pid = join(processDirectory, `${process.pid}`);
+  mkdirSync(join(pid, 'fd'), { recursive: true });
+  mkdirSync(join(pid, 'maps')); // EISDIR simulates unavailable process inspection without requiring root.
+  const marker = join(t.path, '.a12-0.hm');
+  writeFileSync(marker, '');
+  expect(() => cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() })).toThrow(
+    'cannot inspect live process',
+  );
+  expect(existsSync(marker)).toBe(true);
 });
 
 test('scratch removal handles read-only trees without following links', () => {
@@ -69,7 +112,8 @@ test('scratch removal handles read-only trees without following links', () => {
   chmodSync(join(nested, 'file'), 0o444);
   chmodSync(nested, 0o500);
   chmodSync(owned.path, 0o500);
-  owned.close(); owned.close();
+  owned.close();
+  owned.close();
   expect(existsSync(owned.path)).toBe(false);
   expect(existsSync(join(t.path, 'keep'))).toBe(true);
   const h = harness();
@@ -83,7 +127,9 @@ test('a failing test cleans forgotten fixture trees and its invocation scratch d
   const support = resolve(import.meta.dir, '../tools/goal/src/test-support.ts');
   const preload = resolve(import.meta.dir, '../tools/goal/src/test-environment.ts');
   writeFileSync(join(t.path, 'bunfig.toml'), `[test]\npreload = [${JSON.stringify(preload)}]\n`);
-  writeFileSync(join(t.path, 'failure.test.ts'), `
+  writeFileSync(
+    join(t.path, 'failure.test.ts'),
+    `
     import { test } from 'bun:test';
     import { writeFileSync, chmodSync } from 'node:fs';
     import { temporaryDirectory } from ${JSON.stringify(support)};
@@ -93,7 +139,8 @@ test('a failing test cleans forgotten fixture trees and its invocation scratch d
       chmodSync(t.path, 0o500);
       throw new Error('intentional fixture failure');
     });
-  `);
+  `,
+  );
   const result = spawnSync(process.execPath, ['test', './failure.test.ts'], { cwd: t.path, encoding: 'utf8' });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('intentional fixture failure');
@@ -108,11 +155,19 @@ test('workers and gates confine child runtime scratch and disable Node compile c
   expect(environment.NODE_DISABLE_COMPILE_CACHE).toBe('1');
   expect(environment.NODE_COMPILE_CACHE).toBe('');
   const runner = processGroupRunner();
-  const result = await runner([process.execPath, '-e', `
+  const result = await runner(
+    [
+      process.execPath,
+      '-e',
+      `
     const fs = require('node:fs');
     fs.writeFileSync(process.env.TMPDIR + '/runtime-marker', '');
     console.log(JSON.stringify([process.env.TMPDIR, process.env.NODE_DISABLE_COMPILE_CACHE]));
-  `], t.path, join(t.path, 'gate.log'));
+  `,
+    ],
+    t.path,
+    join(t.path, 'gate.log'),
+  );
   expect(result.passed).toBe(true);
   const [scratch, disabled] = JSON.parse(result.output.trim());
   expect(scratch.startsWith(join(t.path, '.temp/gate-tmp-'))).toBe(true);

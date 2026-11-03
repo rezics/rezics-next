@@ -85,9 +85,7 @@ alone is load evidence, as in the landing check; a reproducible assertion remain
 acceptance, root typecheck and the applicable individual reruns pass. This exception does not excuse transport,
 setup or cleanup failures and does not authorize a discretionary whole-suite run.
 
-## Check placement
-
-### Temporary files
+## Temporary files
 
 Workers use `.temp/worker-tmp` in their task worktree; deleting the worktree deletes their scratch files. Each gate,
 local check and test invocation gets a separate directory in its checkout's `.temp`. Remote checks use
@@ -95,9 +93,11 @@ local check and test invocation gets a separate directory in its checkout's `.te
 disabled in these environments, including tools such as Vite that enable it programmatically.
 `tools/goal` fixture helpers register teardown after every test, including failed tests, and make read-only
 directories writable before removing them. Fixture process teardown precedes directory deletion.
+These use Bun's [temp environment](https://bun.sh/docs/runtime/environment-variables) and
+[global test teardown](https://bun.sh/docs/test/lifecycle) interfaces.
 
-Decision: retain the pinned Bun runtime and confine runtime markers; expire inactive `.hm` markers after one hour,
-and recognized fixture, browser, randomized `.tmp` and Node cache entries after 24 hours.
+Decision: keep the pinned runtime, confine markers, expire inactive `.hm` entries after one hour and other recognized
+entries after 24 hours, and run maintenance with permission to inspect every process's `/proc` references.
 
 The control plane's maintenance timer should invoke `bun scripts/tmp-janitor.ts` hourly once available; use
 `--dry-run` to preview. The service needs permission to inspect `/proc`, including nondumpable user daemons; a
@@ -105,11 +105,11 @@ privileged service selects the owner's numeric UID with `--owner-uid=<uid>`. An 
 another UID. It examines only entries belonging to the selected UID with the patterns in
 `scripts/tmp-janitor.ts`. It checks both modification and metadata age, including descendants. It preserves
 unrecognized entries, top-level symlinks, foreign-owned descendants, and entries referenced by a live cwd, descriptor,
-memory mapping or inherited temp/cache environment. Failure to inspect a live process of the same UID refuses the
+memory mapping or inherited temp/cache environment. Failure to inspect a live process refuses the
 pass. Shared stack and memory lease directories are never janitor candidates. A stale globally shared compile cache
 with active users remains protected; new check and worker processes do not refill it.
 
-#### Cost: temporary cleanup
+### Cost: temporary cleanup
 
 - Touches: one `/tmp` directory listing, one process reference snapshot, and each eligible stale tree once.
 - Bound: linear in process references plus recognized entries and their descendants; active processes reserve
@@ -117,6 +117,8 @@ with active users remains protected; new check and worker processes do not refil
   an hourly pass bounds inactive recognized host leftovers to their retention period plus one hour.
 - Growth check: `scripts/tmp-janitor.test.ts` covers retention, ownership boundaries, live references, failed tests
   and read-only teardown. A full day of workstation load and timer integration remain integration checks.
+
+## Check placement
 
 `scripts/check-placement.ts` is the shared conservative classifier used by worker checks. Root and Web typecheck
 scripts, pure compiler and formatter commands, and explicit small unit selections are local. A small unit selection
