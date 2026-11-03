@@ -71,6 +71,16 @@ function currentHome(before: Observation, after: Observation): boolean {
   ));
 }
 
+/** Authentication binds the original actor object inside Access. Keep that
+ * object rather than reconstructing an account-shaped substitute. The closed
+ * principal fingerprint additionally detects mutation across released homes.
+ */
+function principalSignature(actor: Actor): string {
+  return actor.kind === 'anonymous' ? hash(['anonymous']) : hash([
+    actor.kind, actor.accountId, actor.clientId, actor.requestedBy, actor.authnEpoch, actor.scopes,
+  ]);
+}
+
 function route(id: string): number {
   const value = typeof id === 'string' && uuid.test(id) ? routeOf(id) : null;
   if (value === null) throw new TypeError('Invalid Realm Subject candidate identity');
@@ -203,19 +213,24 @@ export async function prepareRealmSubjectDisclosure(
   const request = validate(input);
   const started = Date.now();
   const context: RealmSubjectDisclosureContext = {
-    actor: supplied.actor.kind === 'account'
-      ? Object.freeze({ ...supplied.actor, scopes: Object.freeze([...supplied.actor.scopes]) })
-      : Object.freeze({ kind: 'anonymous' }),
+    actor: supplied.actor,
     deadline: Math.min(supplied.deadline, supplied.work.deadline, started + REALM_SUBJECT_DISCLOSURE_FRESH_MS),
     work: supplied.work,
   };
   if (!Number.isFinite(context.deadline)) throw new TypeError('A fixed disclosure deadline is required');
+  const principal = principalSignature(context.actor);
+  const requirePrincipal = () => {
+    if (principalSignature(context.actor) !== principal)
+      context.work.unavailable('Content Realm Subject original principal changed');
+    requireAccessDeadline(context.deadline);
+  };
   const prepared: (Prepared | RealmSubjectEvidence)[] = [];
   let parent: Observation | null = null;
   try {
-    requireAccessDeadline(context.deadline);
+    requirePrincipal();
     parent = await observeParent(dependencies, request.realmId, context);
     for (const candidate of request.candidates) {
+      requirePrincipal();
       if (!parent) { prepared.push({ state: 'withheld' }); continue; }
       const subject = await observeSubject(dependencies, candidate.subjectId, context);
       if (!subject) { prepared.push({ state: 'withheld' }); continue; }
@@ -237,9 +252,10 @@ export async function prepareRealmSubjectDisclosure(
   async function finish(): Promise<readonly RealmSubjectEvidence[]> {
     const results: RealmSubjectEvidence[] = [];
     try {
-      requireAccessDeadline(context.deadline);
+      requirePrincipal();
       const finalParent = parent ? await observeParent(dependencies, request.realmId, context) : null;
       for (let index = 0; index < prepared.length; index++) {
+        requirePrincipal();
         const item = prepared[index]!;
         if ('state' in item) { results.push(item); continue; }
         if (!finalParent || finalParent.signature !== item.parent.signature || !currentHome(item.parent, finalParent)) {
@@ -260,7 +276,7 @@ export async function prepareRealmSubjectDisclosure(
           anchors: [...source.anchors, ...finalParent.anchors, ...subject.anchors],
         } });
       }
-      requireAccessDeadline(context.deadline);
+      requirePrincipal();
       return Object.freeze(results.map((result) => Object.freeze(result)));
     } catch (error) {
       // No partial success after a dependency failure. In particular an absent
