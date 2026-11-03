@@ -177,6 +177,24 @@ test('Shared Collection items preserve exact occurrence editing and independent 
         })}"]`,
       )!.disabled,
     ).toBe(true);
+    const actionButtons = [
+      ...rows[1]!.querySelectorAll<HTMLElement>('[data-content-item-slot="actions"] [data-slot="button"]'),
+    ];
+    expect(actionButtons).toHaveLength(4);
+    const probe = new Window({ url: 'https://rezics.example/en', width: 700 });
+    const sheet = probe.document.createElement('style');
+    sheet.textContent = await editorActionStyles();
+    probe.document.head.append(sheet);
+    try {
+      for (const action of actionButtons) {
+        const button = probe.document.createElement('button');
+        button.className = action.className;
+        probe.document.body.append(button);
+        assertActionTarget(probe, button);
+      }
+    } finally {
+      await probe.happyDOM.close();
+    }
     await act(async () => user.click(selection));
     await act(async () => user.click(rows[1]!.querySelector('summary')!));
     await act(async () => user.type(note, '!'));
@@ -210,9 +228,6 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(destinations).toEqual([]);
     await act(async () => user.click(primary));
     expect(destinations).toEqual([href]);
-    const actionClassNames = [
-      ...rows[1]!.querySelectorAll<HTMLElement>('[data-content-item-slot="actions"] [data-slot="button"]'),
-    ].map((action) => action.className);
 
     await show(
       <CollectionMemberList
@@ -244,22 +259,17 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(subjects[0]!.querySelector('[data-slot="cover"]')?.getAttribute('data-ratio')).toBe('5:7');
     expect(subjects[1]!.querySelector('h3')?.textContent).toBe(m.library_subject_unavailable());
     expect(subjects[1]!.querySelector('a, button')).toBeNull();
-    const probe = new Window({ url: 'https://rezics.example/en', width: 700 });
-    const sheet = probe.document.createElement('style');
-    sheet.textContent = await editorActionStyles();
-    probe.document.head.append(sheet);
+    const subjectProbe = new Window({ url: 'https://rezics.example/en', width: 700 });
+    const subjectSheet = subjectProbe.document.createElement('style');
+    subjectSheet.textContent = await editorActionStyles();
+    subjectProbe.document.head.append(subjectSheet);
     try {
-      for (const className of [
-        ...actionClassNames,
-        subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!.className,
-      ]) {
-        const button = probe.document.createElement('button');
-        button.className = className;
-        probe.document.body.append(button);
-        assertActionTarget(probe, button);
-      }
+      const button = subjectProbe.document.createElement('button');
+      button.className = subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!.className;
+      subjectProbe.document.body.append(button);
+      assertActionTarget(subjectProbe, button);
     } finally {
-      await probe.happyDOM.close();
+      await subjectProbe.happyDOM.close();
     }
   } finally {
     await act(async () => root.unmount());
