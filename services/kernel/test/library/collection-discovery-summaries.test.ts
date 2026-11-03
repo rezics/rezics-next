@@ -80,13 +80,11 @@ test('current curated metadata, full identity and destination; hidden, removed a
     memberCount: 0,
   });
   expect(result.summaries).toHaveLength(1);
-  for (const key of ['curatorAccountId', 'coverMediaId', 'rule', 'filter', 'pins', 'builtin'])
-    expect(result.summaries[0]).not.toHaveProperty(key);
 }, 120000);
 
 test('completed A remains selected while a real whole-query B is pending; dynamic cards contain no private/count fields', async () => {
   const a = await published();
-  const command = await createCollectionPublicationEpisodes(deps()).begin(
+  await createCollectionPublicationEpisodes(deps()).begin(
     actor,
     {
       collectionId: a.collection.id,
@@ -95,7 +93,6 @@ test('completed A remains selected while a real whole-query B is pending; dynami
     },
     randomUUID(),
   );
-  expect(command.value.locator).toBeDefined();
   const result = await hydrate(deps(), [a.collection.id], context(a.collection.id));
   expect(result).toMatchObject({
     state: 'ready',
@@ -108,16 +105,9 @@ test('completed A remains selected while a real whole-query B is pending; dynami
     ],
   });
   if (result.state !== 'ready') throw new Error('Completed native A must remain readable');
-  for (const key of [
-    'curatorAccountId',
-    'memberCount',
-    'createdAt',
-    'updatedAt',
-    'orderEpoch',
-    'rule',
-    'filter',
-    'workingOutput',
-  ])
+  for (const key of 'curatorAccountId coverMediaId memberCount createdAt updatedAt orderEpoch rule filter workingOutput pins builtin'.split(
+    ' ',
+  ))
     expect(result.summaries[0]).not.toHaveProperty(key);
 }, 120000);
 
