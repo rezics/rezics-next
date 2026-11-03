@@ -24,6 +24,8 @@ An unmatched row can be explicitly assigned any currently readable canonical sub
 
 Each field distinguishes missing, empty/unknown, invalid, zero and a value as applicable. `fields` preserves every
 row leaf, `retained` explains fields without admission, and the original XML retains metadata and attributes.
+The existing upload's explicit date review and journal adoption contract is in
+[adopting imported consumption dates](library-import-consumption-dates.md).
 Importing a status is an explicit native entry command; it does not infer holdings, entitlements or public content.
 The native command's own effects, including its documented active-entry follow behavior, remain authoritative.
 

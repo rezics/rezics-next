@@ -12,6 +12,9 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { ProgressSessionJournalDate, ProgressSessionJournalPatch } from './progress-model.ts';
+import { ProgressConflictError } from './sessions.ts';
+import type { createSessionCommands, ProgressSessionJournalAdmission } from './sessions.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';
 import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
@@ -38,6 +41,55 @@ export type MalReviewInput = {
   replace: boolean;
   labels?: MalLabelSelection[];
 };
+export type MalDateField = 'startDate' | 'finishDate';
+export type MalDateAction = 'adopt' | 'clear';
+export type MalDateReviewInput = {
+  row: number;
+  occurrenceId: string;
+  startAction?: MalDateAction;
+  finishAction?: MalDateAction;
+};
+export type MalDateReviewField = {
+  action: MalDateAction | null;
+  status: 'already-equal' | 'ready' | 'conflict' | 'unsupported' | 'unknown' | 'not-selected' | 'clear';
+  sourceKind: MalRow['dates'][string]['kind'];
+  current: ProgressSessionJournalDate | null;
+  proposed: ProgressSessionJournalDate | null;
+  comparison: 'same' | 'different' | null;
+};
+export type MalDateReview = {
+  version: string;
+  importReviewVersion: string;
+  target: string;
+  occurrence: {
+    sessionId: string;
+    versionSubjectId: string | null;
+    profilePinDigest: string;
+  };
+  journalRevision: number;
+  profileCurrent: boolean;
+  startDate: MalDateReviewField;
+  finishDate: MalDateReviewField;
+};
+export type MalDateApplyInput = { confirm: true; rows: { row: number; version: string; fields: MalDateField[] }[] };
+export type MalDateFieldOutcome = {
+  field: MalDateField;
+  status: 'applied' | 'already-equal' | 'unknown' | 'unsupported' | 'not-selected' | 'stale' | 'failed';
+};
+export type MalDateOutcome = {
+  row: number;
+  version: string;
+  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
+  fields: MalDateFieldOutcome[];
+  receipt: { sessionId: string; revision: number; changed: boolean } | null;
+  reason: string | null;
+};
+export const MAL_DATE_LIMITS = {
+  rows: MAL_LIMITS.page,
+  fields: 2,
+  requestBytes: 16_384,
+  resultBytes: MAL_LABEL_LIMITS.outputBytes,
+} as const;
 export type MalApplyInput = { confirm: true; rows: { row: number; version: string; fields: string[] }[] };
 export type MalOutcome = {
   row: number;
@@ -79,13 +131,113 @@ type Document = {
   rows: MalRow[];
   reviews: Record<string, MalReview>;
   intents: Record<string, Intent>;
+  dateReviews: Record<string, MalDateReview>;
+  dateIntents: Record<string, DateIntent>;
   labelIntents?: Record<string, LabelIntent>;
   canceled: boolean;
 };
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
+type DateIntent = {
+  review: MalDateReview;
+  fields: MalDateField[];
+  key: string;
+  nativeRequestKey: string;
+  patch: ProgressSessionJournalPatch | null;
+  outcome?: MalDateOutcome;
+};
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  routeKey: Uint8Array;
+  journal: ReturnType<typeof createSessionCommands>;
+  clock?: KernelClock;
+};
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const missing = () => new ProblemError('not_found');
 const stale = () => new ProblemError('conflict');
+
+function journalDate(value: MalRow['dates'][string]): ProgressSessionJournalDate | null {
+  if (value.kind !== 'value' || typeof value.value !== 'string' || !value.precision) return null;
+  const parts = value.value.split('-').map(Number);
+  if (parts.length < 1 || parts.length > 3 || parts.some((part) => !Number.isInteger(part) || part < 1)) return null;
+  return {
+    year: parts[0]!,
+    ...(value.precision === 'month' || value.precision === 'day' ? { month: parts[1]! } : {}),
+    ...(value.precision === 'day' ? { day: parts[2]! } : {}),
+  };
+}
+
+function sameJournalDate(left: ProgressSessionJournalDate | null, right: ProgressSessionJournalDate | null) {
+  return (
+    left?.year === right?.year &&
+    left?.month === right?.month &&
+    left?.day === right?.day
+  );
+}
+
+function profilePinMatches(pin: unknown, source: MalReview['source']) {
+  if (source === null || typeof pin !== 'object' || pin === null || Array.isArray(pin)) return false;
+  const value = pin as Record<string, unknown>;
+  return (
+    value.provenance === 'profile' &&
+    value.releaseDigest === source.release &&
+    value.acceptingType === source.acceptingType
+  );
+}
+
+function dateReviewField(
+  source: MalRow['dates'][string],
+  current: ProgressSessionJournalDate | null,
+  action: MalDateAction | undefined,
+  profileCurrent: boolean,
+): MalDateReviewField {
+  const proposed = journalDate(source);
+  const comparison = proposed && current ? (sameJournalDate(proposed, current) ? 'same' : 'different') : null;
+  let status: MalDateReviewField['status'];
+  if (!profileCurrent) status = 'unsupported';
+  else if (action === 'clear') status = current === null ? 'already-equal' : 'clear';
+  else if (source.kind === 'missing' || source.kind === 'unknown') status = 'unknown';
+  else if (source.kind !== 'value' || proposed === null) status = 'unsupported';
+  else if (!action) status = 'not-selected';
+  else if (comparison === 'same') status = 'already-equal';
+  else status = current === null ? 'ready' : 'conflict';
+  return {
+    action: action ?? null,
+    status,
+    sourceKind: source.kind,
+    current,
+    proposed: action === 'clear' ? null : proposed,
+    comparison,
+  };
+}
+
+function sameReviewContext(
+  review: MalReview,
+  observation: {
+    target: string | null;
+    binding: Binding | null;
+    source: MalReview['source'];
+    current: Entry | null;
+    state: string | null;
+  },
+) {
+  return (
+    review.target === observation.target &&
+    review.state === observation.state &&
+    hash(review.source) === hash(observation.source) &&
+    hash(review.binding) === hash(observation.binding) &&
+    hash(review.current) ===
+      hash(
+        observation.current
+          ? {
+              state: observation.current.state,
+              revision: observation.current.revision,
+              incarnationId: observation.current.incarnationId,
+            }
+          : null,
+      )
+  );
+}
 
 /** One source's bounded composition of current Semantic observations and native Library commands. */
 export function createMalImport(deps: Dependencies) {
@@ -131,6 +283,8 @@ export function createMalImport(deps: Dependencies) {
     );
     const doc = result.rows[0]?.document;
     if (!doc) throw missing();
+    doc.dateReviews ??= {};
+    doc.dateIntents ??= {};
     return { ...a, doc };
   }
   async function mutate(
@@ -153,7 +307,14 @@ export function createMalImport(deps: Dependencies) {
         );
         const doc = found.rows[0]?.document;
         if (!doc) throw missing();
-        if (doc.canceled && operation !== 'cancel' && operation !== 'delete' && operation !== 'outcome') throw stale();
+        if (
+          doc.canceled &&
+          operation !== 'cancel' &&
+          operation !== 'delete' &&
+          operation !== 'outcome' &&
+          operation !== 'date-outcome'
+        )
+          throw stale();
         await change(doc, tx);
         if (operation === 'delete')
           await tx.query(`DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3`, [
@@ -196,7 +357,7 @@ export function createMalImport(deps: Dependencies) {
         );
         if (Number(count.rows[0]!.n) >= MAL_LIMITS.uploads)
           throw new ProblemError('conflict', { detail: 'Delete a retained MAL upload before uploading another' });
-        const doc: Document = { xml, rows, reviews: {}, intents: {}, canceled: false };
+        const doc: Document = { xml, rows, reviews: {}, intents: {}, dateReviews: {}, dateIntents: {}, canceled: false };
         if (Buffer.byteLength(JSON.stringify(doc)) > MAL_LIMITS.evidenceBytes)
           throw new ProblemError('invalid_request', { detail: 'MAL: retained evidence exceeds 12 MiB' });
         await tx.query(
@@ -269,6 +430,8 @@ export function createMalImport(deps: Dependencies) {
         candidates: observation.target ? [{ subjectId: observation.target }] : [],
         review: review ?? null,
         outcome: doc.intents[row.index]?.outcome ?? null,
+        dateReview: doc.dateReviews[row.index] ?? null,
+        dateOutcome: doc.dateIntents[row.index]?.outcome ?? null,
         labelOutcomes: doc.labelIntents?.[row.index]?.items.flatMap((i) => (i.outcome ? [i.outcome] : [])) ?? [],
       });
     }
@@ -321,6 +484,71 @@ export function createMalImport(deps: Dependencies) {
     const current = await load(actor, id, deadline);
     if (current.doc.reviews[input.row]?.version !== key) throw stale();
     return result;
+  }
+  async function reviewDates(actor: Actor, id: string, input: MalDateReviewInput, key: string, deadline: number) {
+    const { doc } = await load(actor, id, deadline),
+      row = doc.rows[input.row],
+      imported = doc.reviews[input.row];
+    if (!row || !imported || imported.skip || !imported.target || !imported.source) throw stale();
+    const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
+    if (
+      observation.target !== imported.target ||
+      observation.source === null ||
+      hash(observation.source) !== hash(imported.source) ||
+      hash(observation.binding) !== hash(imported.binding) ||
+      hash(observation.current ? { state: observation.current.state, revision: observation.current.revision, incarnationId: observation.current.incarnationId } : null) !==
+        hash(imported.current)
+    )
+      throw stale();
+    const fact = await journal.inspectSession(actor, input.occurrenceId);
+    if (fact.session.subjectId !== imported.target) throw missing();
+    const current = await journal.readSessionJournal(actor, input.occurrenceId);
+    const profileCurrent = profilePinMatches(fact.pin, observation.source);
+    const proposed: MalDateReview = {
+      version: key,
+      importReviewVersion: imported.version,
+      target: imported.target,
+      occurrence: {
+        sessionId: fact.session.id,
+        versionSubjectId: fact.session.versionSubjectId,
+        profilePinDigest: hash(fact.pin),
+      },
+      journalRevision: current.revision,
+      profileCurrent,
+      startDate: dateReviewField(row.dates.started!, current.startDate, input.startAction, profileCurrent),
+      finishDate: dateReviewField(row.dates.finished!, current.finishDate, input.finishAction, profileCurrent),
+    };
+    const result = await mutate(actor, id, key, 'date-review', input, (doc) => {
+      if (doc.reviews[input.row]?.version !== imported.version || malDigest(doc.rows[input.row]) !== malDigest(row)) throw stale();
+      const prior = doc.dateIntents[input.row];
+      if (prior && (!prior.outcome || ['applied', 'failed'].includes(prior.outcome.status))) throw stale();
+      delete doc.dateIntents[input.row];
+      doc.dateReviews[input.row] = proposed;
+    });
+    const refreshed = await load(actor, id, deadline);
+    if (refreshed.doc.dateReviews[input.row]?.version !== key) throw stale();
+    return result;
+  }
+  async function dateReviewCurrent(
+    actor: Actor,
+    row: MalRow,
+    imported: MalReview,
+    reviewed: MalDateReview,
+    deadline: number,
+  ) {
+    if (!reviewed.profileCurrent || reviewed.importReviewVersion !== imported.version) return false;
+    const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
+    if (!sameReviewContext(imported, observation)) return false;
+    const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
+    if (
+      fact.session.subjectId !== reviewed.target ||
+      fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
+      hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
+      !profilePinMatches(fact.pin, observation.source)
+    )
+      return false;
+    const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
+    return current.revision === reviewed.journalRevision;
   }
   async function applyLabels(
     actor: Actor,
@@ -652,6 +880,196 @@ export function createMalImport(deps: Dependencies) {
       stopped: outcomes.length < input.rows.length || !!outcomes.at(-1)?.remainingLabels?.length,
     };
   }
+  async function applyDates(
+    actor: Actor,
+    id: string,
+    input: MalDateApplyInput,
+    deadline: number,
+    signal: AbortSignal,
+    record: (value: CommandOutcome<unknown>) => void,
+  ) {
+    if (input.rows.length > MAL_DATE_LIMITS.rows) throw new ProblemError('invalid_request');
+    const outcomes: MalDateOutcome[] = [];
+    for (const selected of input.rows) {
+      if (signal.aborted || Date.now() + 100 >= deadline) break;
+      if (
+        selected.fields.length < 1 ||
+        selected.fields.length > MAL_DATE_LIMITS.fields ||
+        new Set(selected.fields).size !== selected.fields.length ||
+        selected.fields.some((field) => field !== 'startDate' && field !== 'finishDate')
+      )
+        throw new ProblemError('invalid_request');
+      const { doc } = await load(actor, id, deadline),
+        row = doc.rows[selected.row],
+        imported = doc.reviews[selected.row],
+        reviewed = doc.dateReviews[selected.row];
+      if (!row || !imported || !reviewed || reviewed.version !== selected.version || doc.canceled) throw stale();
+      let intent = doc.dateIntents[selected.row];
+      if (intent && (intent.review.version !== selected.version || hash(intent.fields) !== hash(selected.fields)))
+        throw new ProblemError('idempotency_conflict');
+      if (intent?.outcome && intent.outcome.status !== 'failed') {
+        outcomes.push(intent.outcome);
+        continue;
+      }
+
+      const key = intent?.key ?? `mal:${id}:${selected.row}:dates:${hash(reviewed.version)}`;
+      const nativeRequestKey = intent?.nativeRequestKey ?? `${key}:journal`;
+      const patch: ProgressSessionJournalPatch = { revision: reviewed.journalRevision };
+      const fieldOutcomes: MalDateFieldOutcome[] = selected.fields.map((field) => {
+        const decision = reviewed[field];
+        if (decision.status === 'unknown') return { field, status: 'unknown' };
+        if (decision.status === 'unsupported') return { field, status: 'unsupported' };
+        if (decision.status === 'not-selected') return { field, status: 'not-selected' };
+        if (decision.status === 'already-equal') return { field, status: 'already-equal' };
+        if (decision.status === 'clear') {
+          patch[field] = null;
+          return { field, status: 'applied' };
+        }
+        if ((decision.status === 'ready' || decision.status === 'conflict') && decision.action === 'adopt' && decision.proposed) {
+          patch[field] = decision.proposed;
+          return { field, status: 'applied' };
+        }
+        return { field, status: 'unsupported' };
+      });
+      const hasPatch = Object.hasOwn(patch, 'startDate') || Object.hasOwn(patch, 'finishDate');
+      if (!intent) {
+        let current = !reviewed.profileCurrent;
+        if (reviewed.profileCurrent)
+          current = await dateReviewCurrent(actor, row, imported, reviewed, deadline);
+        if (!current) {
+          const outcome: MalDateOutcome = {
+            row: selected.row,
+            version: selected.version,
+            status: 'stale',
+            fields: selected.fields.map((field) => ({ field, status: 'stale' })),
+            receipt: null,
+            reason: 'refresh-review',
+          };
+          intent = { review: reviewed, fields: selected.fields, key, nativeRequestKey, patch: null, outcome };
+          await mutate(actor, id, `${key}:intent`, 'date-intent', selected, (doc) => {
+            if (
+              doc.dateReviews[selected.row]?.version !== selected.version ||
+              doc.reviews[selected.row]?.version !== reviewed.importReviewVersion
+            )
+              throw stale();
+            doc.dateIntents[selected.row] ??= intent!;
+          });
+          outcomes.push(outcome);
+          continue;
+        }
+        intent = { review: reviewed, fields: selected.fields, key, nativeRequestKey, patch: hasPatch ? patch : null };
+        if (!hasPatch) intent.outcome = {
+          row: selected.row,
+          version: selected.version,
+          status: fieldOutcomes.some((field) => field.status === 'unsupported' || field.status === 'unknown')
+            ? 'unsupported'
+            : 'skipped',
+          fields: fieldOutcomes,
+          receipt: null,
+          reason: fieldOutcomes.some((field) => field.status === 'not-selected') ? 'date-not-selected' : null,
+        };
+        await mutate(actor, id, `${key}:intent`, 'date-intent', selected, (doc) => {
+          if (
+            doc.dateReviews[selected.row]?.version !== selected.version ||
+            doc.reviews[selected.row]?.version !== reviewed.importReviewVersion
+          )
+            throw stale();
+          doc.dateIntents[selected.row] ??= intent!;
+        });
+        if (intent.outcome) {
+          outcomes.push(intent.outcome);
+          continue;
+        }
+      }
+
+      if (!intent.patch) {
+        if (intent.outcome) outcomes.push(intent.outcome);
+        continue;
+      }
+      let outcome: MalDateOutcome;
+      try {
+        const accountId = owner(actor).accountId;
+        const result = await journal.patchSessionJournal(
+          actor,
+          intent.review.occurrence.sessionId,
+          intent.patch,
+          intent.nativeRequestKey,
+          {
+            identity: {
+              provider: 'mal',
+              uploadId: id,
+              row: selected.row,
+              importReviewVersion: intent.review.importReviewVersion,
+              dateReviewVersion: intent.review.version,
+              sourceDigest: malDigest(row),
+            },
+            assert: async (tx) => {
+              const found = await tx.query<{ document: Document }>(
+                `SELECT document FROM library.list_import_mal
+                 WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp() FOR UPDATE`,
+                [routeOf(accountId), accountId, id],
+              );
+              const current = found.rows[0]?.document;
+              if (!current || current.canceled) throw stale();
+              current.dateReviews ??= {};
+              current.dateIntents ??= {};
+              if (
+                current.dateReviews[selected.row]?.version !== intent!.review.version ||
+                current.reviews[selected.row]?.version !== intent!.review.importReviewVersion ||
+                malDigest(current.rows[selected.row]!) !== malDigest(row) ||
+                current.dateIntents[selected.row]?.key !== intent!.key ||
+                hash(current.dateIntents[selected.row]?.patch) !== hash(intent!.patch)
+              )
+                throw stale();
+            },
+          } satisfies ProgressSessionJournalAdmission,
+        );
+        record(result);
+        const receipt = result.value;
+        outcome = {
+          row: selected.row,
+          version: selected.version,
+          status: receipt.changed ? 'applied' : 'skipped',
+          fields: fieldOutcomes.map((field) =>
+            field.status === 'applied' && !receipt.changed ? { ...field, status: 'already-equal' } : field,
+          ),
+          receipt,
+          reason: receipt.changed ? null : 'already-equal',
+        };
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+        const staleError =
+          error instanceof ProgressConflictError ||
+          error instanceof LibraryNotFoundError ||
+          (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code));
+        outcome = {
+          row: selected.row,
+          version: selected.version,
+          status: staleError ? 'stale' : 'failed',
+          fields: fieldOutcomes.map((field) =>
+            field.status === 'applied' ? { ...field, status: staleError ? 'stale' : 'failed' } : field,
+          ),
+          receipt: null,
+          reason: staleError ? 'refresh-review' : 'native-command-unavailable-retry-original',
+        };
+      }
+      await mutate(actor, id, `${key}:outcome`, 'date-outcome', outcome, (doc) => {
+        const current = doc.dateIntents[selected.row];
+        if (!current || current.key !== intent!.key) throw stale();
+        current.outcome = outcome;
+      });
+      outcomes.push(outcome);
+    }
+    await authority(actor, deadline);
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS.resultBytes)
+      throw new ProblemError('invalid_request', { detail: 'MAL date outcomes exceed the encoded byte limit' });
+    return {
+      id,
+      outcomes,
+      remaining: input.rows.slice(outcomes.length).map((row) => row.row),
+      stopped: outcomes.length < input.rows.length,
+    };
+  }
   async function source(actor: Actor, id: string, deadline: number) {
     const { doc } = await load(actor, id, deadline);
     await authority(actor, deadline);
@@ -661,7 +1079,9 @@ export function createMalImport(deps: Dependencies) {
     preview,
     page,
     review,
+    reviewDates,
     apply,
+    applyDates,
     source,
     cancel: (actor: Actor, id: string, key: string) =>
       mutate(actor, id, key, 'cancel', null, (doc) => {

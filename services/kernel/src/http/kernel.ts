@@ -45,6 +45,7 @@ import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
+import { createSessionCommands } from '../library/sessions.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
@@ -464,6 +465,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
+  const journalCommands = createSessionCommands({
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
+  });
   const diary = diaryRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
@@ -641,6 +648,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
+    journal: journalCommands,
     access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
   });
   const aniList = aniListImportRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {

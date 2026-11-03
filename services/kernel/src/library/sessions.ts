@@ -57,6 +57,10 @@ import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
 type Client = CommandTransaction;
+export type ProgressSessionJournalAdmission = {
+  identity: unknown;
+  assert: (tx: CommandTransaction) => Promise<void>;
+};
 
 export class ProgressInvalidError extends Error {
   constructor(readonly field: string) {
@@ -405,6 +409,16 @@ export function createSessionCommands(config: Dependencies) {
   const readSession = (actor: Actor, sessionId: string) =>
     snapshot(actor, 'progress_session:read', (client, owner) => load(client, owner, sessionId));
 
+  const inspectSession = (actor: Actor, sessionId: string) =>
+    snapshot(actor, 'progress_session:read', async (client, owner) => {
+      const route = sameAccountRoute(owner.accountId, sessionId);
+      const session = await store.readSession(client, route, sessionId);
+      if (!session || session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+      const fact = await store.readSessionFact(client, route, sessionId);
+      if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+      return fact;
+    });
+
   const readSessionJournal = (actor: Actor, sessionId: string) =>
     snapshot(actor, 'progress_session:read', async (client, owner) => {
       const route = sameAccountRoute(owner.accountId, sessionId);
@@ -413,7 +427,13 @@ export function createSessionCommands(config: Dependencies) {
       return journal;
     });
 
-  async function patchSessionJournal(actor: Actor, sessionId: string, input: unknown, requestKey: string) {
+  async function patchSessionJournal(
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    admission?: ProgressSessionJournalAdmission,
+  ) {
     const owner = account(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId);
     const parsed = parseProgressSessionJournalPatch(input);
@@ -425,9 +445,10 @@ export function createSessionCommands(config: Dependencies) {
         action: 'progress_session:update',
         kind: 'progress_session.journal',
         requestKey,
-        input: { sessionId, patch },
+        input: { sessionId, patch, admission: admission?.identity ?? null },
       },
       async (tx) => {
+        await admission?.assert(tx);
         const current = await store.lockSessionJournal(tx, route, owner.accountId, sessionId);
         if (!current) throw new LibraryNotFoundError();
         if (current.revision !== patch.revision) throw new ProgressConflictError();
@@ -632,6 +653,7 @@ export function createSessionCommands(config: Dependencies) {
     reopenSession,
     retireSession,
     readSession,
+    inspectSession,
     readSessionJournal,
     patchSessionJournal,
     readPresentedSession,

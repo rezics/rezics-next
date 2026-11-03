@@ -57,8 +57,8 @@ export function malDate(raw: string | undefined): MalValue {
     mo = Number(m[2]),
     d = Number(m[3]);
   if (mo > 12 || d > 31) return { raw, kind: 'invalid' };
-  if (!y || (!mo && d)) return { raw, kind: 'unknown' };
-  if (!mo) return { raw, kind: 'value', value: m[1]!, precision: 'year' };
+  if (!y) return { raw, kind: 'invalid' };
+  if (!mo) return d ? { raw, kind: 'invalid' } : { raw, kind: 'value', value: m[1]!, precision: 'year' };
   if (!d) return { raw, kind: 'value', value: raw!.slice(0, 7), precision: 'month' };
   const days = [31, y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return d > days[mo - 1]! ? { raw, kind: 'invalid' } : { raw, kind: 'value', value: raw, precision: 'day' };
