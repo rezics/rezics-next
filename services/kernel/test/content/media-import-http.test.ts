@@ -342,9 +342,7 @@ test('focused native outcomes preserve current authorization and partition bound
   expect(replay.body).toEqual(result.body);
   const history = await call('GET', '/v1/media');
   expect(history.response.status).toBe(200);
-  const owned = (history.body as { entries: Array<Record<string, unknown>> }).entries.find(
-    (entry) => entry.id === id,
-  );
+  const owned = (history.body as { entries: Array<Record<string, unknown>> }).entries.find((entry) => entry.id === id);
   expect(owned).toMatchObject({
     id,
     purpose: 'cover',
