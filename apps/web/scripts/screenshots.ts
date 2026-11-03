@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { placeWebCheck } from './check-placement.ts';
+import { operatorEntry } from './operator-entry.ts';
 
 export { observeStorybook, settle };
 
@@ -369,7 +370,7 @@ export function createProgressReporter(
 }
 
 function usage(): string {
-  return 'Usage: bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>]... [--out <dir>]';
+  return 'Usage: bun run screenshots [--operator] [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>]... [--out <dir>]';
 }
 
 function unique<T>(values: readonly T[]): T[] {
@@ -1282,23 +1283,35 @@ async function captureScreenshots(options: Options): Promise<number> {
   return runCaptureLifecycle(options, productionRuntime);
 }
 
+/** Operator captures stay local; worker captures retain workspace output and placement rules. */
+export function screenshotExecution(
+  argv: readonly string[],
+  env: Record<string, string | undefined> = process.env,
+  inCheck?: () => boolean,
+) {
+  const entry = operatorEntry(argv, env, inCheck);
+  const options = parseOptions(entry.args);
+  const returned = workspaceRelative(options.out);
+  if (!entry.operator && !options.help && returned === undefined)
+    throw new Error('Web screenshots unavailable: --out must be inside the candidate workspace.');
+  return { ...entry, options, returned };
+}
+
 /** Routes capture before building or starting a browser; unsupported destinations fail closed. */
 export async function runScreenshots(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
-  const options = parseOptions(argv);
+  const { operator, options, returned } = screenshotExecution(argv);
   if (options.help) {
     process.stdout.write(`${usage()}\n`);
     return 0;
   }
-  const returned = workspaceRelative(options.out);
-  if (returned === undefined)
-    throw new Error('Web screenshots unavailable: --out must be inside the candidate workspace.');
+  if (operator) return captureScreenshots(options);
   return placeWebCheck(
     {
       label: 'web screenshots',
       root,
       cwd: app,
       command: screenshotCommand(argv, returned),
-      returns: [returned],
+      returns: [returned!],
     },
     async () => {
       return captureScreenshots(options);

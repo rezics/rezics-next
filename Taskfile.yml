@@ -1,0 +1,100 @@
+version: '3'
+
+dir: '{{.ROOT_DIR}}'
+dotenv: ['.temp/goal/goal.env']
+env:
+  PATH: '{{.ROOT_DIR}}/node_modules/.bin:{{.PATH}}'
+
+tasks:
+  default:
+    desc: List developer and operator commands
+    cmds: ['go-task --list']
+
+  dev:
+    desc: Start the local dev stack (Web, Auth pages, Kernel API and worker)
+    deps: [dev:web, dev:auth, dev:kernel, dev:worker]
+
+  dev:infra:
+    desc: Start the persistent development PostgreSQL and OpenSearch services
+    cmds:
+      - bun run --cwd services/kernel db up
+      - bun run --cwd services/kernel search up
+
+  dev:web:
+    desc: Start the public Web app on loopback (pass Vite flags after --)
+    cmds: ['bun run --cwd apps/web dev {{.CLI_ARGS}}']
+
+  dev:auth:
+    desc: Start Auth pages (requires configured Auth database and credentials)
+    cmds: ['bun run --cwd apps/auth dev {{.CLI_ARGS}}']
+
+  dev:kernel:
+    desc: Start the Kernel API with development database and search
+    deps: [dev:infra]
+    cmds: ['bun run --cwd services/kernel dev {{.CLI_ARGS}}']
+
+  dev:worker:
+    desc: Start the Kernel background worker with development database and search
+    deps: [dev:infra]
+    cmds: ['bun run --cwd services/kernel worker {{.CLI_ARGS}}']
+
+  storybook:
+    desc: Start local operator Storybook (pass --ui or --port after --)
+    cmds: ['bun run --cwd apps/web storybook --operator {{.CLI_ARGS}}']
+
+  storybook:build:
+    desc: Build static Web and UI Storybooks (STORYBOOK_OUTPUT_DIR selects output)
+    cmds: ['bun run --cwd apps/web storybook:build --operator']
+
+  screenshots:
+    desc: Capture local stories (--story, --locale, --theme, --width, --out after --)
+    cmds: ['bun run --cwd apps/web screenshots --operator {{.CLI_ARGS}}']
+
+  typecheck:
+    desc: Type-check affected workspaces through existing compiler placement
+    cmds: ['bun scripts/typecheck.ts {{.CLI_ARGS}}']
+
+  test:
+    desc: Run focused Web tests (paths relative to apps/web after --)
+    preconditions:
+      - sh: 'test -n {{.CLI_ARGS | shellQuote}}'
+        msg: 'Pass explicit test files after --.'
+    cmds: ['bun apps/web/scripts/focused.ts --private-network -- bun test {{.CLI_ARGS}}']
+
+  test:kernel:
+    desc: Run focused Kernel tests (paths relative to services/kernel after --)
+    preconditions:
+      - sh: 'test -n {{.CLI_ARGS | shellQuote}}'
+        msg: 'Pass explicit test files after --.'
+    cmds: ['bun run --cwd services/kernel check {{.CLI_ARGS}}']
+
+  test:auth:
+    desc: Run focused Auth tests (paths relative to services/auth after --)
+    preconditions:
+      - sh: 'test -n {{.CLI_ARGS | shellQuote}}'
+        msg: 'Pass explicit test files after --.'
+    cmds: ['bun run --cwd services/auth check {{.CLI_ARGS}}']
+
+  seed:cross-media:
+    desc: Seed cross-media data (pass dump, state, result, API and Auth flags after --)
+    cmds: ['bun scripts/datasets/cross-media-seed.ts {{.CLI_ARGS}}']
+
+  goal:service:install:
+    desc: Install and start the Goal user systemd services
+    cmds: ['bun tools/goal/src/cli.ts service install {{.CLI_ARGS}}']
+
+  goal:service:status:
+    desc: Show Goal service and maintenance timer state
+    cmds: ['bun tools/goal/src/cli.ts service status {{.CLI_ARGS}}']
+
+  goal:service:restart:
+    desc: Restart the Goal user systemd services
+    cmds: ['bun tools/goal/src/cli.ts service restart {{.CLI_ARGS}}']
+
+  goal:service:logs:
+    desc: Read Goal service logs from the user journal
+    cmds: ['bun tools/goal/src/cli.ts service logs {{.CLI_ARGS}}']
+
+  goal:cp-sync:
+    desc: Publish dev control-plane code (pass --dry-run or --rollback after --)
+    cmds: ['bun tools/goal/scripts/cp-sync.ts {{.CLI_ARGS}}']

@@ -19,6 +19,45 @@ Use this workflow:
 
 [Database restore](database-restore.md) owns isolated recovery, proof-key rotation and erasure replay before traffic.
 
+## Commands
+
+Run `go-task --list` at the repository root to discover developer and operator commands in
+[Taskfile.yml](../../Taskfile.yml). Tasks wrap the existing scripts and package scripts; those scripts continue to own
+setup, placement, cleanup and validation. go-task reads `.temp/goal/goal.env`, the same private EnvironmentFile used by
+the Goal systemd units, when present. Install the services through `go-task goal:service:install` from the main
+checkout as described in [Goal tooling](../../tools/goal/README.md). The pinned workspace Bun
+is first on the task PATH. Workspace `.env` files and Worker configuration keep their existing roles.
+
+Decision: Storybook and screenshot tasks select explicit local `--operator` mode, which refuses worker identities,
+test runtime and check-host execution; ordinary worker entries retain their existing placement and output rules.
+
+```sh
+go-task dev
+go-task storybook -- --port 6007
+go-task storybook -- --ui --port 6008
+STORYBOOK_OUTPUT_DIR="$PWD/.temp/storybook-static" go-task storybook:build
+go-task screenshots -- --story 'pages-subjects-missing-subject--*' --locale en --theme dark --width 390 --out '/tmp/review shots'
+go-task typecheck
+go-task test -- tests/screenshots-widths.test.ts
+go-task seed:cross-media -- --help
+go-task goal:service:status
+go-task goal:service:restart
+go-task goal:service:logs
+go-task goal:cp-sync -- --dry-run
+```
+
+Arguments after `--` pass through to the wrapped command, including repeated screenshot selectors, locales, themes
+and widths. Screenshot output defaults to `.temp/screenshots`; relative `--out` paths start at the repository root,
+and operators may choose an absolute directory elsewhere. Static builds include both the Web and UI catalogues and
+default to `apps/web/storybook-static`. Storybook stays on loopback. These local operator commands do not register
+worker checks. Use the existing package scripts from worker checks without `--operator`.
+
+`dev` starts Web, Auth pages, Kernel and its background worker; Kernel tasks first run the existing persistent
+development database and search setup. Configure Auth and service credentials through the existing workspace
+runbooks. Each component is also listed separately. Ctrl-C stops the foreground commands; persistent database and
+search containers remain available. Focused test tasks require explicit files, relative to their named workspace.
+`goal:cp-sync` and the service tasks retain the permissions and release rules in the Goal runbook.
+
 The coordinating role resolves cross-scope decisions and workflow defects. A manager owns its Goal's scope,
 contracts, briefs and acceptance. Workers implement briefed changes. Managers delegate implementation, including
 tooling changes, except an explicitly authorized emergency correction.

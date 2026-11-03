@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { requireWebCheckCustody } from './check-placement.ts';
+import { operatorEntry } from './operator-entry.ts';
 
 const webRoot = resolve(import.meta.dir, '..');
 const repoRoot = resolve(webRoot, '../..');
@@ -40,6 +41,7 @@ export function storybookLaunchPlan(
   env: Record<string, string | undefined> = process.env,
   roots: { web: string; ui: string } = { web: webRoot, ui: uiRoot },
 ): LaunchPlan {
+  args = operatorEntry(args, env).args;
   if (args[0] === '--app') {
     const forwarded = args.slice(1);
     const hosts = storybookHosts(forwarded);
