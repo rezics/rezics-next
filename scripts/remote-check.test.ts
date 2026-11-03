@@ -4728,7 +4728,15 @@ test('a quiet remote command reports every interval with at least one CPU second
     '/srv/rezics-check/sleep-pids',
   ];
   const result = fixture.execute(
-    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'a', hostRuntime(), 10),
+    runScript(
+      'remote-each-interval',
+      '/srv/rezics-check/runs/remote-each-interval',
+      '.',
+      command,
+      'a',
+      hostRuntime(),
+      10,
+    ),
     { PROGRESS_INCREMENT: '1200000' },
   );
   expect(result.status, result.stderr).toBe(0);
