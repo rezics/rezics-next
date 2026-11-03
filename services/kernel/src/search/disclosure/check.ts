@@ -192,7 +192,7 @@ export async function checkHits(
                     (clause.facet === 'statement' &&
                       (!!clause.qualifiers?.length ||
                         options?.spoilerThreshold !== undefined ||
-                        ('values' in clause && clause.inverse === true));
+                        ('values' in clause && clause.inverse === true)));
                   return Array.isArray(value) && sensitive;
                 }),
             };
