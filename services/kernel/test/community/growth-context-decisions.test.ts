@@ -39,10 +39,13 @@ for (const axis of axes)
         descriptions: { en: 'Fixed Global description' },
         aliases: { en: ['Fixed Global alias'] },
         statements: {
-          'schema:datePublished': [statement('schema:datePublished', {
-            time: '+2010-02-23T00:00:00Z', precision: 11,
-            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
-          })],
+          'schema:datePublished': [
+            statement('schema:datePublished', {
+              time: '+2010-02-23T00:00:00Z',
+              precision: 11,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            }),
+          ],
           'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
         },
       });
@@ -58,43 +61,89 @@ for (const axis of axes)
       await f.call('POST', '/v1/grants', 201, f.owner, {
         resource: { route: routeOf(selected.realm.realmId), id: selected.realm.realmId },
         subject: { kind: 'account', id: reader.actor.accountId },
-        actions: ['realm:read'], valid: '(,)',
+        actions: ['realm:read'],
+        valid: '(,)',
       });
       const subjectRoute = routeOf(book.id)!;
-      const template = (await f.db.admin.query<{ slot_id: string; statement: Record<string, unknown> }>(
-        'SELECT slot_id, statement FROM semantic.candidate WHERE route=$1 AND subject_id=$2 AND candidate_id=$3',
-        [subjectRoute, book.id, candidate],
-      )).rows[0]!;
+      const template = (
+        await f.db.admin.query<{ slot_id: string; statement: Record<string, unknown> }>(
+          'SELECT slot_id, statement FROM semantic.candidate WHERE route=$1 AND subject_id=$2 AND candidate_id=$3',
+          [subjectRoute, book.id, candidate],
+        )
+      ).rows[0]!;
       const population: Population = {
         name: `community-context-population-${book.id}`,
-        hotPartition: partitionOf(subjectRoute), hotShare: 1,
+        hotPartition: partitionOf(subjectRoute),
+        hotShare: 1,
         rows({ route }) {
-          const subject = newId(route), candidateId = newId(route);
+          const subject = newId(route),
+            candidateId = newId(route);
           const transaction = crypto.randomUUID();
           return {
-            'semantic.subject': [{ route, subject_id: subject, type: 'schema:Book',
-              recorded_transaction_id: transaction, current_release: bundledDigest }],
+            'semantic.subject': [
+              {
+                route,
+                subject_id: subject,
+                type: 'schema:Book',
+                recorded_transaction_id: transaction,
+                current_release: bundledDigest,
+              },
+            ],
             'semantic.revision': [1, 2].map((revision) => ({
-              route, subject_id: subject, revision, kind: revision === 1 ? 'create' : 'accept',
-              release: bundledDigest, recorded_transaction_id: crypto.randomUUID(),
+              route,
+              subject_id: subject,
+              revision,
+              kind: revision === 1 ? 'create' : 'accept',
+              release: bundledDigest,
+              recorded_transaction_id: crypto.randomUUID(),
             })),
-            'semantic.candidate': [{
-              route, subject_id: subject, candidate_id: candidateId, slot_id: template.slot_id,
-              property: 'schema:datePublished', rank: 'normal',
-              statement: { ...template.statement, id: candidateId },
-              release: bundledDigest, revision: 1, origin: 'compact',
-            }],
-            'semantic.acceptance': [{ route, subject_id: subject, context_id: context,
-              candidate_id: candidateId, head: 1, verdict: 'accept', revision: 2 }],
-            'semantic.acceptance_current': [{ route, subject_id: subject, context_id: context,
-              candidate_id: candidateId, slot_id: template.slot_id, head: 1, verdict: 'accept', revision: 2 }],
+            'semantic.candidate': [
+              {
+                route,
+                subject_id: subject,
+                candidate_id: candidateId,
+                slot_id: template.slot_id,
+                property: 'schema:datePublished',
+                rank: 'normal',
+                statement: { ...template.statement, id: candidateId },
+                release: bundledDigest,
+                revision: 1,
+                origin: 'compact',
+              },
+            ],
+            'semantic.acceptance': [
+              {
+                route,
+                subject_id: subject,
+                context_id: context,
+                candidate_id: candidateId,
+                head: 1,
+                verdict: 'accept',
+                revision: 2,
+              },
+            ],
+            'semantic.acceptance_current': [
+              {
+                route,
+                subject_id: subject,
+                context_id: context,
+                candidate_id: candidateId,
+                slot_id: template.slot_id,
+                head: 1,
+                verdict: 'accept',
+                revision: 2,
+              },
+            ],
           };
         },
       };
       let head: number | null = null;
       const decide = async (verb: 'accept' | 'reject') => {
         const { acceptance } = await f.call<{ acceptance: { head: number; decision: string } }>(
-          'POST', `${path}/candidates/${candidate}:${verb}`, 200, f.owner,
+          'POST',
+          `${path}/candidates/${candidate}:${verb}`,
+          200,
+          f.owner,
           { context, expected_head: head },
         );
         expect(acceptance).toMatchObject({ context, candidate, decision: verb, head: (head ?? 0) + 1 });
@@ -103,10 +152,15 @@ for (const axis of axes)
       let historyBaseline = 0;
       const grow = async (scale: number, previous: number) => {
         if (axis === 'history') {
-          if (previous === 0) historyBaseline = Number((await f.db.admin.query(
-            'SELECT count(*) AS count FROM semantic.acceptance WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND candidate_id=$4',
-            [subjectRoute, book.id, context, candidate],
-          )).rows[0].count);
+          if (previous === 0)
+            historyBaseline = Number(
+              (
+                await f.db.admin.query(
+                  'SELECT count(*) AS count FROM semantic.acceptance WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND candidate_id=$4',
+                  [subjectRoute, book.id, context, candidate],
+                )
+              ).rows[0].count,
+            );
           // Native verdicts grow this exact candidate/Context history and its command
           // log. Each pair ends accepted, preserving the fixed visible neighborhood.
           for (let ordinal = previous; ordinal < scale; ordinal++) {
@@ -127,50 +181,68 @@ for (const axis of axes)
           expect(result.rows[0]!.count).toBeGreaterThanOrEqual(scale);
         }
       };
-      await f.measure(`community ${visibility} Context local reject accept and Global fallback`, selected, axis, async () => {
-        for (const verb of ['reject', 'accept'] as const) {
-          await decide(verb);
-          const local = await read(context);
-          expect(local.context).toBe(context);
-          for (const field of ['id', 'type', 'labels', 'descriptions', 'aliases'] as const)
-            expect(local[field]).toEqual(global[field]);
-          expect(local.statements['schema:inLanguage']).toEqual(global.statements['schema:inLanguage']);
-          expect(local.statements['schema:datePublished'] ?? []).toEqual(
-            verb === 'reject' ? [] : global.statements['schema:datePublished'],
-          );
-          const page = await f.call<{ candidates: Candidate[] }>('GET', candidates(context), 200);
-          expect(page.candidates).toContainEqual(expect.objectContaining({
-            id: candidate, decision: verb === 'reject' ? 'rejected' : 'accepted', head,
-          }));
-          expect((await read(GLOBAL_CONTEXT)).statements).toEqual(global.statements);
-          expect(await f.call('GET', candidates(GLOBAL_CONTEXT), 200)).toEqual(globalCandidates);
-        }
-      }, grow);
-      await f.measure(`community ${visibility} Context denied decisions and protected reads`, selected, axis, async () => {
-        const before = await f.call('GET', candidates(context), 200);
-        for (const verb of ['accept', 'reject'] as const) {
-          const denied = await f.call('POST', `${path}/candidates/${candidate}:${verb}`, 403, reader,
-            { context, expected_head: head });
-          expect(denied).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
-        }
-        expect(await f.call('GET', candidates(context), 200)).toEqual(before);
-        expect((await read(context, reader)).statements).toEqual(global.statements);
-        if (visibility === 'protected') {
-          const unknown = newId(routeOf(context)!);
-          for (const actor of [null, f.outsider])
-            for (const endpoint of [(id: string) => `${path}?context=${id}`, candidates]) {
-              const known = await f.call<Record<string, unknown>>('GET', endpoint(context), 404, actor);
-              const missing = await f.call<Record<string, unknown>>('GET', endpoint(unknown), 404, actor);
-              const { request_id: _known, ...hidden } = known;
-              const { request_id: _missing, ...absent } = missing;
-              expect(hidden).toEqual(absent);
-              expect(hidden).toMatchObject({ code: 'not_found' });
-              expect(JSON.stringify(hidden)).not.toContain(book.labels.en!);
-            }
-        } else {
-          const local = await f.call<{ subject: Subject }>('GET', `${path}?context=${context}`, 200, null);
-          expect(local.subject.statements).toEqual(global.statements);
-        }
-      }, grow);
+      await f.measure(
+        `community ${visibility} Context local reject accept and Global fallback`,
+        selected,
+        axis,
+        async () => {
+          for (const verb of ['reject', 'accept'] as const) {
+            await decide(verb);
+            const local = await read(context);
+            expect(local.context).toBe(context);
+            for (const field of ['id', 'type', 'labels', 'descriptions', 'aliases'] as const)
+              expect(local[field]).toEqual(global[field]);
+            expect(local.statements['schema:inLanguage']).toEqual(global.statements['schema:inLanguage']);
+            expect(local.statements['schema:datePublished'] ?? []).toEqual(
+              verb === 'reject' ? [] : global.statements['schema:datePublished'],
+            );
+            const page = await f.call<{ candidates: Candidate[] }>('GET', candidates(context), 200);
+            expect(page.candidates).toContainEqual(
+              expect.objectContaining({
+                id: candidate,
+                decision: verb === 'reject' ? 'rejected' : 'accepted',
+                head,
+              }),
+            );
+            expect((await read(GLOBAL_CONTEXT)).statements).toEqual(global.statements);
+            expect(await f.call('GET', candidates(GLOBAL_CONTEXT), 200)).toEqual(globalCandidates);
+          }
+        },
+        grow,
+      );
+      await f.measure(
+        `community ${visibility} Context denied decisions and protected reads`,
+        selected,
+        axis,
+        async () => {
+          const before = await f.call('GET', candidates(context), 200);
+          for (const verb of ['accept', 'reject'] as const) {
+            const denied = await f.call('POST', `${path}/candidates/${candidate}:${verb}`, 403, reader, {
+              context,
+              expected_head: head,
+            });
+            expect(denied).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
+          }
+          expect(await f.call('GET', candidates(context), 200)).toEqual(before);
+          expect((await read(context, reader)).statements).toEqual(global.statements);
+          if (visibility === 'protected') {
+            const unknown = newId(routeOf(context)!);
+            for (const actor of [null, f.outsider])
+              for (const endpoint of [(id: string) => `${path}?context=${id}`, candidates]) {
+                const known = await f.call<Record<string, unknown>>('GET', endpoint(context), 404, actor);
+                const missing = await f.call<Record<string, unknown>>('GET', endpoint(unknown), 404, actor);
+                const { request_id: _known, ...hidden } = known;
+                const { request_id: _missing, ...absent } = missing;
+                expect(hidden).toEqual(absent);
+                expect(hidden).toMatchObject({ code: 'not_found' });
+                expect(JSON.stringify(hidden)).not.toContain(book.labels.en!);
+              }
+          } else {
+            const local = await f.call<{ subject: Subject }>('GET', `${path}?context=${context}`, 200, null);
+            expect(local.subject.statements).toEqual(global.statements);
+          }
+        },
+        grow,
+      );
     }, 1_800_000);
   }

@@ -229,9 +229,12 @@ export async function containerGrowthFixture() {
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_database, scale, previous) {
         // Additional native history writes may advance this home between scales.
-        positionBase = Number((await db.admin.query(
-          'SELECT position FROM core.partition WHERE partition_no=$1', [partitionOf(route)],
-        )).rows[0].position) - previous * 100;
+        positionBase =
+          Number(
+            (await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [partitionOf(route)]))
+              .rows[0].position,
+          ) -
+          previous * 100;
         await seed(db, population, { from: previous, to: scale });
         await additionalGrowth?.(scale, previous);
         // Count persisted data and fence the selected heads independently of the seed loop.
