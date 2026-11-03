@@ -1344,6 +1344,9 @@ writer, asset picker or upload/lifecycle engine here.
   complete cost ceiling can be claimed.
 - **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
   not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
-  exact pinned and concealed rules, host removal, existing CAS updates/readback, omission and management revocation. Connected
+  exact pinned and concealed rules, host removal, existing CAS updates/readback, omission, account switching,
+  management revocation, optional rules failure/recovery and source/authority changes during composition.
+  `realm-settings-page-media.test.ts` connects native avatar/banner publication and claims, sparse selection
+  and read-only effects. Connected
   GET growth at 256/1024/4096 for unrelated Realms, selected histories, optional media and authority
   histories, with all participating pools and runner phases, remains in the continuation brief.
