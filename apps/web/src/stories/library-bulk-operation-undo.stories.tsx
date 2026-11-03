@@ -55,11 +55,7 @@ function operation(action: BulkOperation['action'] = 'remove_from_library', targ
   };
 }
 
-function outcome(
-  ordinal: string,
-  subjectId: string,
-  deletion: BulkUndoOutcome['deletion'] = receipt,
-): BulkUndoOutcome {
+function outcome(ordinal: string, subjectId: string, deletion: BulkUndoOutcome['deletion'] = receipt): BulkUndoOutcome {
   return {
     ordinal,
     subjectId,
