@@ -108,29 +108,57 @@ work, created and mapped labels, assignment review, stale revision/incarnation r
 cancellation, owner denial and account erasure. Existing decoder and export tests continue to cover malformed,
 incomplete, duplicate and unsupported evidence; no export assertion is removed.
 
-Derived cost is `C_upload(U,N) + C_fixed-authority + C_identity-review(R) + C_native-effects(R,K) +
-C_journal/cleanup`: upload reads at most U=34 MiB, validates O(U+N) with N≤100,000, and inserts one root plus a
-bounded bulk child statement; each request performs fixed owner/admission checks; review does indexed per-item
-current identity/profile and native fact reads for R≤20; apply delegates up to R≤20 effects to the entry, label and
-assignment command owners (including nested History); journal writes address one `(route,account,upload,ordinal)`
-row; preview/results inspect at most 101 indexed rows; prune and erasure delete at most 100 child rows per step.
-Apply additionally performs one whole-selection authority transaction, one locked upload read and R addressed
-item reads before any effect. Each begin and acknowledgement/refusal repeats current caller authority and addressed
-upload/item reads and locks. Native command preparation, authorization/target locks, receipt lookup (including
-retries), writes, History/events, export fences and summaries remain charged to their existing owners and payers;
-no allowance increases. A retry pays the preflight plus each original receipt read again, rather than claiming
-zero-cost replay. Review costs both authority passes, current target/profile reads and up to R CAS writes.
+For a complete caller, use `C_decode(U,N) + C_archive_operations + C_review_targets +
+C_native_dispatches + C_serialization + C_cleanup`. Raw U≤34 MiB, compact evidence≤32 MiB, N≤100,000
+and depth≤32 remain unchanged. Producer pages of 16 rows/120,000 record bytes do not bound consumer
+preview/results: those read P+1≤101 complete retained items and return P≤100. Review/apply R≤20 and personal
+fields F≤2 do not replace the nested owners' profile, Entry, Session or History bounds.
 
-Retained bytes include the original compact evidence plus full canonical review JSON, native operand JSON,
-request keys and result JSON for each addressed item, bounded by the existing row/field/record caps. Wire work
-charges UTF-8 bytes of the complete serialized envelopes: coverage, evidence, review, revisions, results, escaping
-and punctuation, not just `recordBytes`. Preview/results process at most P+1 rows and serialize P; review/apply
-serialize at most R outcomes and all selected native operands. Cleanup charges its indexed 100-row key selection,
-full retained row/operand deletion, remaining-child probe and final root deletion, including each repeated caller
-check. No history scan or blanket reservation is introduced. These are source-derived bounds, not observed growth results. Performance review of unresolved composed bounds is
+For actual attempted calls, archive `operation()` invocations are bounded by
+`2*n_upload + n_status + n_preview + n_results + 2*n_review + n_assignment_mapping +
+n_apply + sum(R_apply) + sum(E_finished) + n_cancel + n_prune`.
+The two upload operations surround its native upload runner; each review has a root/item read pass and a locked
+CAS pass, plus an archive mapping lookup for each assignment target actually observed. Each apply adds one
+whole-selection preflight, one begin per reached selection, and one acknowledgement/refusal per finished dispatch.
+An already acknowledged item needs no new acknowledgement; an uncertain applying item dispatches its original
+native key/operands and pays native preparation/receipt reads again. Count retries and consumed failed attempts
+separately. Expired or cancelled early refusals may stop sooner; they never refund work already consumed.
+
+Every archive operation independently charges fresh exposure admission, caller authorization, operational
+transaction preparation, lifecycle/fence/authentication-epoch checks and its account observation. Its body adds
+addressed upload/item queries and locks: preflight locks the upload and reads R full items; begin and each finish
+lock/read both root and item, then persist the binding or outcome when needed. Review may evaluate 20 targets
+concurrently; each target's identity time, Subject/profile and current Entry/annotation or Session/journal reads
+are separate native terms, including repeated nested observations. Reported counts from the independent progress
+journey (ten steps, twenty-one archive operations and nine Session reads before native costs) are not universal
+constants for this Entry/label/annotation/journal caller.
+
+Price every actual native dispatch, including receipt replay, rather than only distinct successful creations.
+Include authorization/preparation/time, account/Subject currentness, locks, receipt lookups, trigger statements,
+History/events, export-source fences, summaries and all participating pools/runners. Existing owners and payers
+remain responsible; no allowance increases or blanket reservation is introduced.
+
+Retained bytes include compact evidence, full canonical review/native operands, request keys and result JSON.
+`readItem` obtains all four JSON payloads together even on preflight/replay: charge every actual acquisition and
+its simultaneous driver/bind, parsing, canonicalization and response buffers, plus up to 20 concurrent target
+observations. Charge UTF-8 bytes of complete serialized envelopes, including coverage, evidence, review,
+revisions, results, escaping and punctuation, rather than `recordBytes` alone. Preview/results acquire P+1 full
+items and serialize P; review/apply serialize their bounded selections/outcomes and exact native bindings.
+
+Prune and owned-graph erasure select indexed keys and physically delete at most 100 child rows per step, including
+all retained JSON/operands, triggers and bounded cascades. Charge the remaining-child probe and final root deletion
+only after children are exhausted, plus fresh caller checks per step; native effects and their History/receipt
+erasure remain separate owner terms. Seven-day expiry is eligibility, not proof of physical erasure. One retained
+upload per owner bounds neither global uploads nor selected native histories. These are source-derived bounds,
+not observed growth results. Performance review of unresolved composed bounds is
 requested. Native64/512/4096 observations for upload, first/deep/terminal pages, selected apply, stale refusal,
 original replay and cleanup remain deferred to integration; acceptance and broader native placement are also
 controller responsibilities.
+
+Decision: transport compatibility derives its maximum from mounted route limits and verifies that
+`MAX_HTTP_BODY_LIMIT` admits the raw archive and base64 Collection envelope. Ordinary `DEFAULT_BODY_LIMIT`, release
+`MAX_BODY_LIMIT`, per-route oversize rejection and ingress reservation release/reuse remain unchanged. Full shared
+runtime acceptance belongs to the controller's complete Kernel suite; focused checks do not replace it.
 
 ## Web ownership
 
