@@ -339,6 +339,18 @@ Behavior references: `legacy-final:packages/ui/src/components/document-body.tsx`
 
 ## Finding and inspecting returned revisions
 
+The [native page seam](post-history-lifetime.md#native-page-admission) checks the requested post, shared thread,
+unique revision identities and native maximum before any related reads. It preserves exact order, recorded
+units (including zero), original Subject keys and opaque continuation. Transport failure remains retryable at
+that same address; unavailable disclosure is not empty history. Its prepared caller still owns provenance,
+private no-store responses and retirement.
+
+Decision: use only the installed revisions/next response until Content publishes generated current-context
+and historical-enrichment variants. Current names are presentation, never immutable authorship; current votes
+cannot supply an absent recorded citation or denominator. The existing exact reader retains authorization and
+media inspection. Native context, historical scales and original/terminal target disclosure, one-page retention,
+comparison return and connected current-context stories remain integration gaps, not inferred capabilities.
+
 Post history uses a compact ordered list around the existing HistoryDisclosure and
 [history lifetime](post-history-lifetime.md#loaded-revision-inspection). Each summary contains only admitted
 author disclosure, actual revision/creation time, licence, availability and provenance presence. Loaded ordinals

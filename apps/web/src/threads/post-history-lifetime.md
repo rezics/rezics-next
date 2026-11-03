@@ -1,5 +1,40 @@
 # Immutable history reading lifetime
 
+## Native page admission
+
+The prepared `readPostHistory` server function delegates one explicit address to `loadPostHistoryPage`.
+The loader derives its types directly from the installed KernelClient revisions GET. Before any dependent
+identity, Subject, vote or media read, it checks the maximum 100 rows, requested post identity, shared thread
+identity and unique revision identities. An inconsistent page is unavailable; none of its keys can start a
+dependent read. It neither reorders rows nor repairs an inconsistent response.
+
+Decision: keep the installed revisions/next loader behind a typed page seam until the native current-context
+and exact-revision enrichment variants are published; do not fabricate optional browser fields.
+
+The installed `RevisionPageResponseSchema` and generated revisions GET still contain only revisions and next.
+They supply no admitted conversation/head context, author disclosure variant, historical question scale,
+original/terminal Subject proof, per-revision enrichment source or navigation advice. Existing optional joins
+and exact-reader media inspection remain in use. Their availability cannot establish those missing facts.
+This seam is a partial implementation: the current-context visit, removal of redundant joins, one-page
+replacement and comparison return still require the native publication and consumer continuation.
+
+### Cost
+
+- **Touches:** one revisions GET at default 20 with the prepared credential and exact opaque cursor. Admission
+  scans N revision identities once before the existing bounded optional page helpers. No current-head read,
+  cursor decoding, history walk or automatic retry supplies missing context.
+- **Bound:** the schema admits at most 100 revisions, 128 Subject keys and 32 media keys per revision. Native
+  document validation caps canonical bytes at 2 MiB per document: at most 40 MiB for 20 bodies and 200 MiB for
+  100, before metadata and transport serialization. UTF-8 canonical bytes already include multibyte text;
+  server-function escaping, parsed-object memory and the unpublished context/enrichment need separate bounds.
+  The existing disclosure still accumulates explicit pages; this loader does not claim bounded retained memory.
+- **Growth check:** supplied-client regressions consume 1/20/100 revisions with repeated maximum Subject/media
+  keys, preserve historical zero and native order, and reject cross-address/duplicate/oversized pages before
+  hydration. These checks do not establish producer scans, represented homes, currentness or native growth at
+  256/1024/4096. Full envelope bytes, O(N+K) enrichment projection and one retained page remain required.
+
+## Prepared reader and disclosure
+
 `ThreadReadingPost` still supplies the original post, viewer and `readAuthority` to `PostHistory`. The default
 disclosure observes the existing `QueryClientContext` session cache directly. It starts no query, polling,
 transport or identity survey. The route/caller binds each original post, cursor, locale, credential mode,

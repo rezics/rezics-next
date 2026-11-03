@@ -796,3 +796,19 @@ supported interfaces. Private provisioning is external; functional and visual ac
 Web now has a bounded in-memory own-draft inventory and a private selected-body inspection component behind a typed `OwnDraftReader` seam. It builds one O(N) index for at most 20 metadata rows, reads a body only after explicit selection, replaces rather than accumulates pages, and fences page/selection results by account, authentication epoch, caller epoch, locale, source and address.
 
 Decision: keep native list and selection calls behind the typed seam until Content publishes the generated `own_drafts.list` and `own_drafts.resume` client methods; do not turn native action paths into browser fetch URLs or mix browser-local text into server drafts. The signed-in `/drafts` route and navigation, existing-composer resume, save/publish/erase with readback, browser-local recovery choice, and connected command-state stories remain in `.temp/continuation/own-drafts-native-client.md`.
+
+## Current-context post history
+
+The [history reader contract](../../apps/web/src/threads/post-history-lifetime.md#native-page-admission) retains
+actual-reader provenance, exact-address return and recorded citation meaning. Native page identity and bounds
+are checked before related reads. Decision: keep the typed installed revisions/next seam until Content publishes
+its closed current-context and per-revision enrichment variants in KernelClient. The current base exposes neither
+those variants nor historical question scales, admitted conversation/head context or navigation advice.
+
+The remaining visit needs that native publication, one-page replacement, revision-keyed enrichment, original
+versus terminal target disclosure, exact/comparison return, retirement and connected localized stories. Existing
+author/mention/Subject/current-vote joins remain until the native envelope replaces them. Supplied-client tests
+cover only this page seam; frozen acceptance, native growth and phone/desktop inspection remain integration work.
+References inspected: the earlier Work history region, the other post History page and UnitRevisionHistory,
+and the current [page-needs audit](../research/page-needs-api-render-audit.md).
+Their restore/moderation actions supply no authority to this reader; no legacy code is ported.

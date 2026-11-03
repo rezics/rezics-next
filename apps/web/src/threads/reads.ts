@@ -12,17 +12,11 @@ import { kernelClient } from '../kernel/client';
 import { threadTitle } from './thread-href';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
 import type { PageAuthors } from '../identity/read';
-import { readPageAuthors } from '../identity/read';
-import { readDocumentMentions } from '../kernel/mentions';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
-import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
-import {
-  loadRevisionDocumentMedia,
-  revisionDocumentImageIds,
-  type RevisionDocumentMedia,
-} from './exact-revision-media';
+import { readAuthorRevisionVotes, readRevisionSubjects } from './revision-provenance';
+import { loadPostHistoryPage, type PostHistoryReadData } from './post-history-read';
 import type { ThreadDocumentMedia } from './document-media-read';
 import { loadNewThreadPage, type NewThreadPageResult } from './new-thread-read';
 import { loadReplyParent, validateReplyParentInput } from './reply-parent-read';
@@ -40,9 +34,6 @@ type ThreadResource = ReturnType<KernelClient['threads']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-type PostResource = ReturnType<KernelClient['posts']>;
-type PostRevisionPage = NonNullable<Awaited<ReturnType<PostResource['revisions']['get']>>['data']>;
-type PostRevision = PostRevisionPage['revisions'][number];
 export type { ThreadPost };
 
 export type BoardPageReaderOrigin =
@@ -245,20 +236,6 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
     return { viewerId, reactions: Object.fromEntries(values), reviewVotes: await reviewVotesRead };
   });
 
-type PostHistoryReadData =
-  | { available: false; transportFailed?: true }
-  | {
-      available: true;
-      revisions: PostRevision[];
-      next: string | null;
-      authors: PageAuthors;
-      mentions: DocumentMentions;
-      subjects: ThreadSubject[];
-      reviewVotes: RevisionVotes;
-      documentMedia: RevisionDocumentMedia;
-      now: string;
-    };
-
 export type PostHistoryReadEnvelope = HistoricalReadEnvelope<PostHistoryReadData>;
 
 export const readPostHistory = createServerFn({ method: 'GET' })
@@ -314,50 +291,7 @@ export const readPostHistory = createServerFn({ method: 'GET' })
       }
     }
     const actualReader = preparedReaderProvenance(authorization, subject);
-    const client = kernelClient();
-    let page: PostHistoryReadData;
-    try {
-      const options = {
-        query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
-        ...(authorization ? { headers: { authorization } } : {}),
-      };
-      const result = await client.posts({ id: data.postId }).revisions.get(options);
-      if (result.error || !result.data) page = { available: false };
-      else {
-        const revisions = result.data.revisions;
-        const documentMedia = await loadRevisionDocumentMedia(
-          client,
-          revisionDocumentImageIds(revisions),
-          authorization,
-        );
-        const [authors, mentions, subjects, reviewVotes] = await Promise.all([
-          readPageAuthors(
-            client,
-            revisions.map(({ authorId }) => authorId),
-          ),
-          readDocumentMentions(
-            client,
-            revisions.map(({ body }) => body),
-          ),
-          readRevisionSubjects(client, revisions),
-          readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
-        ]);
-        page = {
-          available: true,
-          revisions,
-          next: result.data.next,
-          authors,
-          mentions,
-          subjects,
-          reviewVotes,
-          documentMedia,
-          now: new Date().toISOString(),
-        };
-      }
-    } catch {
-      // Preserve actual-reader provenance even when the native transport fails.
-      page = { available: false, transportFailed: true };
-    }
+    const page = await loadPostHistoryPage(kernelClient(), data, { authorization, subject });
     return historicalReadEnvelope(data.binding as HistoricalReadBinding, actualReader, page);
   });
 
