@@ -68,6 +68,37 @@ caller binding, bounded continuation lifecycle, concurrent edits, terminal fence
 ## Personal facts and one Collection abstraction
 
 Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.
+Decision: Viewer entry lookup follows the installed Library read: exact subject entry first, then the current Content terminal only when the exact entry is absent.
+
+The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and
+`viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers. Every
+batch names its Rating question and carries at most 100 rows and 16 KiB of encoded input; a current fact page is
+capped at 64 KiB encoded. Row keys and requested subject IDs stay in caller order, including duplicate rows.
+Entry reads use one indexed `(route, account, subject)` batch, preferring the exact requested subject and falling
+back to the actual Content terminal only when that exact entry is absent. Unmerged identities reuse Rating's
+installed raw `readOwnVotes`; redirected identities use one indexed `counted_target` batch to select the actual
+canonical vote. Both return the viewer's native vote only; imported aggregates never enter this path. A
+present zero remains distinct from an absent or cleared vote, and an absent entry is distinct from an unavailable
+entry scope. Missing `library_entry:read`/`library_entry:list` or `rating:vote` authority is reported as unavailable.
+
+The consumer owns one repeatable-read client for account lifecycle, indexed entry rows and native own votes. Staged
+callers prepare bounded Content mappings and question meaning before acquiring that client, then revalidate the
+actor scopes and account authentication epoch, mapped terminal/epoch, and visible question revision, scale and
+meaning after release. Pending/unavailable identity and changed authority return unavailable; callers must withhold
+all facts if `viewerFactsCurrent` is false. The Content mapping seam double-collects supplied originals and their
+bounded source/control homes; it does not enumerate a viewer's Library. The Library list and Collection members
+HTTP consumers attach only a current fact page, and keep their existing private, no-store response policy. Search
+owns candidate admission, its final disclosure guard and response assembly; Web's Search and discovery interfaces
+remain unchanged for integration.
+
+For `N <= 100` admitted rows, the producer serializes at most 16 KiB of input and 64 KiB of returned fact page.
+Preparation and post-read currentness each call Content's double-collected bounded mapping reader; both also check
+the question when `rating:vote` is present, including current Realm question authority where applicable. The fact
+snapshot uses one account-home repeatable-read checkout, one indexed entry batch over at most 2N exact/fallback
+keys, and at most two indexed own-vote batches (raw exact IDs and redirected counted terminals); each Rating batch
+rechecks the same account lifecycle/scope on that client. There are no writes, locks, command receipts or cleanup
+steps in this read. Callers own their admission, final disclosure guard, retry policy and existing work payer; no
+fixed native latency or whole-journey acceptance cost has been measured here.
 
 [Personal AniList uploads](library-import-anilist.md) have mounted private preview, paged review, confirmed apply
 and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field

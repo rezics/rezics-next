@@ -1041,6 +1041,13 @@ input still admits the caller. The Map uses exact requested target keys and GET 
 clears and missing votes are absent, while zero remains a vote. It does not resolve redirects or select a controller,
 population or shelf membership. This internal helper adds no HTTP endpoint or scope.
 
+`readOwnCountedVotes(client, actor, questionId, targetIds)` is the bounded read for canonical pages. It seeks the
+same viewer/question through Rating's partial `(route,voter_id,question_id,counted_target)` index and returns only
+the viewer's current native counted vote for each supplied Content terminal. It accepts at most 100 IDs before
+dedupe, uses the caller's repeatable-read client, preserves zero and omits absent or cleared votes. The caller must
+resolve and revalidate Content identity and visible question meaning; this helper does not admit a result row or
+expose aggregate ratings.
+
 ### My ratings
 
 `GET /v1/me/rating-votes` (`rating.own_votes_page`) mounts the account-home native inventory under

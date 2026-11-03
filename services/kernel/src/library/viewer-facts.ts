@@ -1,0 +1,431 @@
+import type { Pool, PoolClient } from 'pg';
+import { t } from 'elysia';
+import { deadlineClient } from '../access/authenticate.ts';
+import { readAccount } from '../access/account-data.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { withConnection } from '../database/pool.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { readVisibleRatingQuestion, ratingQuestionIdentity, ratingQuestionView } from '../rating/question-directory.ts';
+import { readOwnCountedVotes, readOwnVotes } from '../rating/own-votes.ts';
+import { VOTE_SCOPE } from '../rating/votes.ts';
+import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
+import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import viewerEntries from './viewer-facts-entries.sql';
+
+export const MAX_VIEWER_FACTS_ROWS = 100;
+export const MAX_VIEWER_FACTS_INPUT_BYTES = 16_384;
+export const MAX_VIEWER_FACTS_RESPONSE_BYTES = 65_536;
+export const VIEWER_FACTS_SCOPE = 'library_entry:read';
+
+type Dependencies = { pool: Pool; access: Access };
+export type ViewerFactInput = Readonly<{ rowKey: string; subjectId: string }>;
+export type ViewerQuestion = Readonly<{
+  id: string;
+  revision: number;
+  grain: string;
+  scale: Readonly<{ min: number; max: number; displayStep: number }>;
+  meaning: string;
+}>;
+export type ViewerEntryFact =
+  | Readonly<{ state: 'present'; incarnationId: string | null; entryState: string | null; revision: number }>
+  | Readonly<{ state: 'absent' }>
+  | Readonly<{ state: 'unavailable'; reason: 'scope' }>;
+export type ViewerVoteFact =
+  | Readonly<{
+      state: 'present';
+      questionId: string;
+      questionRevision: number;
+      units: number;
+      revision: number;
+    }>
+  | Readonly<{ state: 'absent'; questionId: string; questionRevision: number }>
+  | Readonly<{ state: 'unavailable'; reason: 'scope' | 'question' }>;
+export type ViewerFact = Readonly<{
+  rowKey: string;
+  subjectId: string;
+  entry: ViewerEntryFact;
+  vote: ViewerVoteFact;
+}>;
+export type ViewerFactsPage =
+  | Readonly<{ state: 'current'; question: ViewerQuestion | null; rows: readonly ViewerFact[] }>
+  | Readonly<{
+      state: 'unavailable';
+      reason: 'identity' | 'currentness' | 'response_limit';
+      retryable: boolean;
+    }>;
+
+const closed = { additionalProperties: false } as const;
+const idSchema = t.String({ format: 'uuid' });
+const nullableStringSchema = t.Union([t.String(), t.Null()]);
+const viewerFactSchema = t.Object(
+  {
+    rowKey: t.String(),
+    subjectId: idSchema,
+    entry: t.Union([
+      t.Object(
+        {
+          state: t.Literal('present'),
+          incarnationId: t.Union([idSchema, t.Null()]),
+          entryState: nullableStringSchema,
+          revision: t.Integer({ minimum: 0 }),
+        },
+        closed,
+      ),
+      t.Object({ state: t.Literal('absent') }, closed),
+      t.Object({ state: t.Literal('unavailable'), reason: t.Literal('scope') }, closed),
+    ]),
+    vote: t.Union([
+      t.Object(
+        {
+          state: t.Literal('present'),
+          questionId: idSchema,
+          questionRevision: t.Integer({ minimum: 1 }),
+          units: t.Integer(),
+          revision: t.Integer({ minimum: 1 }),
+        },
+        closed,
+      ),
+      t.Object(
+        { state: t.Literal('absent'), questionId: idSchema, questionRevision: t.Integer({ minimum: 1 }) },
+        closed,
+      ),
+      t.Object(
+        { state: t.Literal('unavailable'), reason: t.Union([t.Literal('scope'), t.Literal('question')]) },
+        closed,
+      ),
+    ]),
+  },
+  closed,
+);
+
+/** Wire type for admitted Library and Collection rows; unready facts are omitted by those consumers. */
+export const viewerFactsResponseSchema = t.Object(
+  {
+    state: t.Literal('current'),
+    question: t.Union([
+      t.Object(
+        {
+          id: idSchema,
+          revision: t.Integer({ minimum: 1 }),
+          grain: t.String(),
+          scale: t.Object(
+            { min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) },
+            closed,
+          ),
+          meaning: t.String(),
+        },
+        closed,
+      ),
+      t.Null(),
+    ]),
+    rows: t.Array(viewerFactSchema, { maxItems: MAX_VIEWER_FACTS_ROWS }),
+  },
+  closed,
+);
+
+type MappingRecord = Readonly<{ subjectId: string; mapping: IdentityMapping }>;
+export type PreparedViewerFacts = Readonly<{
+  accountId: string;
+  actorIdentity: string;
+  questionId: string;
+  question: ViewerQuestion | null;
+  mappings: readonly MappingRecord[];
+  rows: readonly ViewerFactInput[];
+  canReadEntries: boolean;
+  canReadVotes: boolean;
+}>;
+
+type EntryRow = Awaited<ReturnType<typeof viewerEntries.run>>[number];
+type CountedVote = { units: number; revision: number; at: string };
+
+function unavailable(reason: Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']): ViewerFactsPage {
+  return { state: 'unavailable', reason, retryable: reason !== 'response_limit' };
+}
+
+function actorIdentity(actor: AccountActor): string {
+  return JSON.stringify([
+    actor.accountId,
+    actor.clientId,
+    actor.authnEpoch,
+    actor.requestedBy,
+    [...actor.scopes].sort(),
+  ]);
+}
+
+function validAccount(actor: Actor): actor is AccountActor {
+  return (
+    actor.kind === 'account' &&
+    routeOf(actor.accountId) !== null &&
+    Number.isSafeInteger(actor.authnEpoch) &&
+    actor.authnEpoch > 0
+  );
+}
+
+function questionView(question: NonNullable<Awaited<ReturnType<typeof readVisibleRatingQuestion>>>) {
+  const view = ratingQuestionView(question);
+  return {
+    id: view.id,
+    revision: view.revision,
+    grain: view.grain,
+    scale: view.scale,
+    meaning: question.meaning ?? view.label,
+  } satisfies ViewerQuestion;
+}
+
+function validateInput(rows: readonly ViewerFactInput[], questionId: string): ViewerFactInput[] {
+  if (!Array.isArray(rows) || rows.length > MAX_VIEWER_FACTS_ROWS || routeOf(questionId) === null)
+    throw new RangeError('Viewer facts require an explicit routed question and at most 100 rows');
+  const copied = rows.map((row) => {
+    if (
+      !row ||
+      typeof row.rowKey !== 'string' ||
+      row.rowKey.length === 0 ||
+      typeof row.subjectId !== 'string' ||
+      routeOf(row.subjectId) === null
+    )
+      throw new TypeError('Viewer facts rows require a row key and routed subject identity');
+    return Object.freeze({ rowKey: row.rowKey, subjectId: row.subjectId });
+  });
+  const bytes = new TextEncoder().encode(JSON.stringify({ questionId, rows: copied })).byteLength;
+  if (bytes > MAX_VIEWER_FACTS_INPUT_BYTES) throw new RangeError('Viewer facts input exceeds 16384 encoded bytes');
+  return copied;
+}
+
+function mappingMarker(mapping: IdentityMapping): string {
+  if (mapping.state === 'mapped') return JSON.stringify(['mapped', mapping.terminal, mapping.epoch.toString()]);
+  if (mapping.state === 'absent') return '["absent"]';
+  return JSON.stringify([mapping.state, mapping.state === 'pending' ? mapping.job.jobId : mapping.reason]);
+}
+
+function canonicalTarget(mapping: IdentityMapping, original: string): string | null {
+  if (mapping.state === 'mapped') return mapping.terminal;
+  if (mapping.state === 'absent') return original;
+  return null;
+}
+
+async function currentAccount(client: Pick<PoolClient, 'query'>, actor: AccountActor) {
+  const route = routeOf(actor.accountId)!;
+  await partitionReadClient(client, partitionOf(route));
+  const account = await readAccount(client, route, actor.accountId);
+  return Boolean(
+    account &&
+      account.kind === 'actor' &&
+      account.state === 'active' &&
+      !account.fenced &&
+      account.minimumAuthnEpoch <= BigInt(actor.authnEpoch),
+  );
+}
+
+/** Capture bounded Content identity and question meaning before the consumer checks out its read client. */
+export async function prepareViewerFacts(
+  dependencies: Dependencies,
+  actor: Actor,
+  inputRows: readonly ViewerFactInput[],
+  questionId: string,
+  deadline: number,
+): Promise<PreparedViewerFacts> {
+  if (!validAccount(actor)) throw new GrantDeniedError();
+  const rows = validateInput(inputRows, questionId);
+  const canReadEntries = actor.scopes.includes(VIEWER_FACTS_SCOPE) || actor.scopes.includes('library_entry:list');
+  const canReadVotes = actor.scopes.includes(VOTE_SCOPE);
+  const originals = [...new Set(rows.map((row) => row.subjectId))];
+  const [mappings, question] = await Promise.all([
+    readIdentityMappings(dependencies.pool, originals),
+    canReadVotes
+      ? readVisibleRatingQuestion(dependencies, actor, questionId, deadline, false)
+      : Promise.resolve(null),
+  ]);
+  const records = originals.map((subjectId, index) => ({ subjectId, mapping: mappings[index]! }));
+  return Object.freeze({
+    accountId: actor.accountId,
+    actorIdentity: actorIdentity(actor),
+    questionId,
+    question: question ? questionView(question) : null,
+    mappings: Object.freeze(records),
+    rows: Object.freeze(rows),
+    canReadEntries,
+    canReadVotes,
+  });
+}
+
+/** Read all private facts on the consumer's already-owned repeatable-read client. */
+export async function readViewerFacts(
+  client: Pick<PoolClient, 'query'>,
+  actor: AccountActor,
+  prepared: PreparedViewerFacts,
+): Promise<ViewerFactsPage> {
+  if (
+    actor.accountId !== prepared.accountId ||
+    actorIdentity(actor) !== prepared.actorIdentity ||
+    routeOf(actor.accountId) === null
+  )
+    return unavailable('currentness');
+  if (prepared.mappings.some(({ mapping }) => mapping.state === 'pending' || mapping.state === 'unavailable'))
+    return unavailable('identity');
+  if (!(await currentAccount(client, actor))) throw new GrantDeniedError();
+
+  const mappingByOriginal = new Map(prepared.mappings.map(({ subjectId, mapping }) => [subjectId, mapping]));
+  const targets = [...new Set(prepared.rows.map((row) => canonicalTarget(mappingByOriginal.get(row.subjectId)!, row.subjectId)))];
+  if (targets.some((target) => target === null)) return unavailable('identity');
+  const canonicalIds = targets as string[];
+  const entryIds = [...new Set([...prepared.rows.map((row) => row.subjectId), ...canonicalIds])];
+  const route = routeOf(actor.accountId)!;
+
+  let entryRows: EntryRow[] = [];
+  if (prepared.canReadEntries && entryIds.length) {
+    entryRows = await viewerEntries.run(client, {
+      route,
+      account_id: actor.accountId,
+      subject_ids: entryIds,
+    });
+  }
+  const entries = new Map(entryRows.map((row) => [row.subjectId, row]));
+
+  let directVotes = new Map<string, CountedVote>();
+  let canonicalVotes = new Map<string, CountedVote>();
+  if (prepared.canReadVotes && prepared.question) {
+    const directIds = [...new Set(
+      prepared.rows.flatMap((row) => {
+        const mapping = mappingByOriginal.get(row.subjectId)!;
+        return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [] : [row.subjectId];
+      }),
+    )];
+    const redirectedIds = [...new Set(
+      prepared.rows.flatMap((row) => {
+        const mapping = mappingByOriginal.get(row.subjectId)!;
+        return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [mapping.terminal] : [];
+      }),
+    )];
+    if (directIds.length) directVotes = await readOwnVotes(client, actor, prepared.questionId, directIds);
+    if (redirectedIds.length)
+      canonicalVotes = await readOwnCountedVotes(client, actor, prepared.questionId, redirectedIds);
+  }
+
+  const rows = prepared.rows.map((input): ViewerFact => {
+    const mapping = mappingByOriginal.get(input.subjectId)!;
+    const target = canonicalTarget(mapping, input.subjectId)!;
+    const rowEntry = entries.get(input.subjectId) ?? entries.get(target);
+    const entry = !prepared.canReadEntries
+      ? ({ state: 'unavailable', reason: 'scope' } as const)
+      : rowEntry
+        ? (() => {
+            const row = rowEntry;
+            return {
+              state: 'present',
+              incarnationId: row.incarnationId,
+              entryState: row.state,
+              revision: Number(row.revision),
+            } as const;
+          })()
+        : ({ state: 'absent' } as const);
+    const vote = !prepared.canReadVotes
+      ? ({ state: 'unavailable', reason: 'scope' } as const)
+      : !prepared.question
+        ? ({ state: 'unavailable', reason: 'question' } as const)
+        : (() => {
+            const own = mapping.state === 'mapped' && mapping.terminal !== input.subjectId
+              ? canonicalVotes.get(target)
+              : directVotes.get(input.subjectId);
+            return own
+              ? {
+                  state: 'present',
+                  questionId: prepared.question!.id,
+                  questionRevision: prepared.question!.revision,
+                  units: own.units,
+                  revision: own.revision,
+                } as const
+              : {
+                  state: 'absent',
+                  questionId: prepared.question!.id,
+                  questionRevision: prepared.question!.revision,
+                } as const;
+          })();
+    return { rowKey: input.rowKey, subjectId: input.subjectId, entry, vote };
+  });
+  const page: ViewerFactsPage = { state: 'current', question: prepared.question, rows };
+  if (new TextEncoder().encode(JSON.stringify(page)).byteLength > MAX_VIEWER_FACTS_RESPONSE_BYTES)
+    return unavailable('response_limit');
+  return page;
+}
+
+/** Recheck every authority term after the caller releases its account-home snapshot. */
+export async function viewerFactsCurrent(
+  dependencies: Dependencies,
+  actor: Actor,
+  prepared: PreparedViewerFacts,
+  deadline: number,
+): Promise<boolean> {
+  if (!validAccount(actor) || actor.accountId !== prepared.accountId || actorIdentity(actor) !== prepared.actorIdentity)
+    return false;
+  const accountCurrent = await withReadTransaction(dependencies.pool, async (client) =>
+    currentAccount(deadlineClient(client, deadline), actor),
+  );
+  if (!accountCurrent) return false;
+
+  const originals = prepared.mappings.map(({ subjectId }) => subjectId);
+  const mappings = await readIdentityMappings(dependencies.pool, originals);
+  if (
+    mappings.length !== prepared.mappings.length ||
+    mappings.some(
+      (mapping, index) =>
+        mapping.state === 'pending' ||
+        mapping.state === 'unavailable' ||
+        mappingMarker(mapping) !== mappingMarker(prepared.mappings[index]!.mapping),
+    )
+  )
+    return false;
+
+  if (prepared.question) {
+    const latest = await readVisibleRatingQuestion(dependencies, actor, prepared.questionId, deadline, false);
+    if (!latest) return false;
+    const current = questionView(latest);
+    if (
+      ratingQuestionIdentity({
+        revision: current.revision,
+        grain: current.grain,
+        minimumUnits: current.scale.min,
+        maximumUnits: current.scale.max,
+        stepUnits: current.scale.displayStep,
+      }) !==
+        ratingQuestionIdentity({
+          revision: prepared.question.revision,
+          grain: prepared.question.grain,
+          minimumUnits: prepared.question.scale.min,
+          maximumUnits: prepared.question.scale.max,
+          stepUnits: prepared.question.scale.displayStep,
+        }) ||
+      current.id !== prepared.question.id ||
+      current.meaning !== prepared.question.meaning
+    )
+      return false;
+  }
+  return true;
+}
+
+/** Convenience for Library and Collection consumers; Search can use the staged API above. */
+export async function readViewerFactsPage(
+  dependencies: Dependencies,
+  actor: Actor,
+  rows: readonly ViewerFactInput[],
+  questionId: string,
+  deadline: number,
+): Promise<ViewerFactsPage> {
+  const prepared = await prepareViewerFacts(dependencies, actor, rows, questionId, deadline);
+  const page = await withConnection(dependencies.pool, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const result = await readViewerFacts(client, actor, prepared);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+  if (page.state !== 'current') return page;
+  return (await viewerFactsCurrent(dependencies, actor, prepared, deadline)) ? page : unavailable('currentness');
+}

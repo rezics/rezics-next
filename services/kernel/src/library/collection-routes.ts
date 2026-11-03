@@ -18,6 +18,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
+import { viewerFactsResponseSchema } from './viewer-facts.ts';
 import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionPublications } from './collection-publication.ts';
@@ -858,6 +859,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                 ]),
               ),
               next: nullableString,
+              viewerFacts: t.Optional(viewerFactsResponseSchema),
             },
             closed,
           ),
@@ -869,13 +871,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        const result = await admission.run('normal', job, () =>
+        let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
             ? read().readMembers(actor, params.collectionId, query, job.deadline)
             : query.view === 'FULL'
               ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
+        if ('members' in result) result = await read().withViewerFacts(actor, result, job.deadline);
         if ('preparing' in result) {
           set.status = 202;
           set.headers['retry-after'] = '1';

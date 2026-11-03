@@ -50,6 +50,8 @@ import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } fr
 import { readCollectionSourceMembers } from './owner-index-members.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { readViewerFactsPage } from './viewer-facts.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -309,6 +311,7 @@ export function createCollectionReads(
     listAccountCollections,
     listMembers,
     readMembers,
+    withViewerFacts,
     readSitemapCollection,
     listSubjectCollections,
   };
@@ -657,6 +660,22 @@ export function createCollectionReads(
     return logical
       ? builtins.members(viewer, collectionId, { ...page, deadline })
       : listMembers(viewer, collectionId, page, deadline);
+  }
+
+  /** Attach private facts only after the consumer has admitted its member rows. */
+  async function withViewerFacts<T extends { members: readonly { subjectId: string; id?: string }[] }>(
+    viewer: Actor,
+    result: T,
+    deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
+  ) {
+    if (viewer.kind !== 'account' || result.members.length === 0) return result;
+    const rows = result.members.map((member, index) => ({
+      rowKey: member.id ?? String(index),
+      subjectId: member.subjectId,
+    }));
+    const facts = await readViewerFactsPage({ pool, access }, viewer, rows, STANDARD_QUESTION_ID, deadline);
+    if (facts.state !== 'current') return result;
+    return { ...result, viewerFacts: facts };
   }
 
   async function readDynamicMembers(

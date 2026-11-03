@@ -71,6 +71,8 @@ import {
   shelfTypesQuerySchema,
   shelfTypesSchema,
 } from './shelf-schemas.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.ts';
 
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
@@ -553,6 +555,16 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     const owner = account(actor);
     if (!owner.scopes.includes('library_entry:list')) throw new ProblemError('forbidden');
   };
+  async function withLibraryViewerFacts<T extends { libraryEntries: readonly { subjectId: string }[] }>(
+    viewer: Actor,
+    result: T,
+    deadline: number,
+  ) {
+    if (viewer.kind !== 'account' || result.libraryEntries.length === 0) return result;
+    const rows = result.libraryEntries.map((entry, index) => ({ rowKey: String(index), subjectId: entry.subjectId }));
+    const facts = await readViewerFactsPage(config(), viewer, rows, STANDARD_QUESTION_ID, deadline);
+    return facts.state === 'current' ? { ...result, viewerFacts: facts } : result;
+  }
   return app
     .post(
       '/v1/libraryEntryAnnotationCorrections',
@@ -686,6 +698,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               libraryEntries: t.Array(t.Union([shelfEntrySchema, embedded(entrySchema, subjectFields)])),
               scoreQuestion: t.Optional(shelfScoreQuestionSchema),
               next: nullable,
+              viewerFacts: t.Optional(viewerFactsResponseSchema),
             },
             closed,
           ),
@@ -693,7 +706,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         },
         detail: detail('library_entry.list', 'library_entry:list'),
       },
-      async ({ actor, query, admission, job }) => {
+      async ({ actor, query, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         account(actor);
         if (query.orderBy !== undefined) {
           shelfOwner(actor);
@@ -701,21 +715,23 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
             return command(() => shelves('listShelf').listShelf(actor, basicQuery(query)));
           });
-          return fullView(config(), actor, query.view, {
+          const response = await fullView(config(), actor, query.view, {
             libraryEntries: result.entries.map(shelfEntryView),
             ...(result.scoreQuestion ? { scoreQuestion: result.scoreQuestion } : {}),
             next: result.next,
           });
+          return withLibraryViewerFacts(actor, response, job.deadline);
         }
         if (query.direction !== undefined || query.type !== undefined) throw new ProblemError('invalid_request');
         const { orderBy: _orderBy, direction: _direction, type: _type, ...oldQuery } = query;
         const result = await admission.run('normal', job, () =>
           command(() => entries().listEntries(actor, basicQuery(oldQuery))),
         );
-        return fullView(config(), actor, query.view, {
+        const response = await fullView(config(), actor, query.view, {
           libraryEntries: result.entries.map(entryView),
           next: result.next,
         });
+        return withLibraryViewerFacts(actor, response, job.deadline);
       },
     )
     .get(

@@ -216,6 +216,13 @@ against the current live incarnation and profile, then restore it through a revi
 conflicts, retention and cost bounds. Focused HTTP and account-erasure coverage lives in `personal-http.test.ts` and
 `account-fact-purge.test.ts`.
 
+The bounded viewer-facts producer is installed at `services/kernel/src/library/viewer-facts.ts` and exposed through
+the generated client declarations. It returns caller-ordered entry incarnation/state/revision and the viewer's
+native own vote with explicit question revision, scale and meaning. Library list and Collection members attach a
+current private page; Search receives the staged producer and retains its admission, final disclosure and response
+assembly. Direct producer and consumer coverage is in `test/library/viewer-facts.test.ts`. Frozen acceptance and
+native growth remain integration checks; this inventory does not claim either outcome.
+
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
 immediately. The union includes live state, nonempty private annotations, reviewed source observations, effective
 labels, retained sessions/history and holdings; following, curated occurrences and published snapshots alone do not
