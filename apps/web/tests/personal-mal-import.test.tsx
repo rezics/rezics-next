@@ -19,9 +19,13 @@ for (const [key, value] of Object.entries({
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLInputElement: window.HTMLInputElement,
+  Element: window.Element,
   MouseEvent: window.MouseEvent,
   Event: window.Event,
   Node: window.Node,
+  MutationObserver: window.MutationObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 }))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
