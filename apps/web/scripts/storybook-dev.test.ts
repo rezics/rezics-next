@@ -43,6 +43,7 @@ test('starts the ordinary local app without test runtime or check admission', ()
   const finite = storybookLaunchPlan(['--app', '--port', '5000'], { REZICS_TEST_RUNTIME: '1' }, roots);
   expect(finite.kind).toBe('vite');
   expect(finite.args).toContain('5000');
+  expect(finite.args).not.toContain('3000');
 });
 
 test('refuses a non-loopback bind address', () => {

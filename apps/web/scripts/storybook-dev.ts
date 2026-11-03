@@ -49,12 +49,13 @@ export function storybookLaunchPlan(
       }
     }
     if (hosts.length === 0) forwarded.push('--host', '127.0.0.1');
+    const port = forwarded.some((arg) => arg === '--port' || arg.startsWith('--port=')) ? [] : ['--port', '3000'];
     return {
       // Existing finite test callers of `bun run dev` still require check custody.
       kind: env.REZICS_TEST_RUNTIME === '1' ? 'vite' : 'app',
       command: 'vite',
       cwd: roots.web,
-      args: ['--config', 'vite.config.ts', '--port', '3000', '--strictPort', ...forwarded],
+      args: ['--config', 'vite.config.ts', ...port, '--strictPort', ...forwarded],
     };
   }
 
