@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
+import type { Static } from 'typebox';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -106,46 +107,9 @@ export const SourceObservationReadResponseSchema = t.Object(
   closed,
 );
 
-export type SourceObservationPayload =
-  | Readonly<{
-      sourceAlias: string;
-      sourceRecordId: string;
-      scale: { min: number; max: number };
-      mean: number;
-      figures?: SourceObservation['figures'];
-      count: number;
-      asOf: string;
-      licence: string;
-      attribution: string;
-    }>
-  | Readonly<{ sourceAlias: string; sourceRecordId: string; count: 0; asOf: string }>;
-
-export type SourceObservationReadItem = Readonly<{
-  digest: string;
-  payloadVersion: typeof SOURCE_OBSERVATION_PAYLOAD_VERSION;
-  sourceAlias: string;
-  sourceRecordId: string;
-  asOf: string;
-  nativeOrder: string | null;
-  legacy: boolean;
-  provenance: Readonly<{ kind: 'unversioned'; digest: string }>;
-  payload: SourceObservationPayload;
-}>;
-
-export type SourceObservationReadResponse = Readonly<{
-  source: SourceProvider;
-  head: Readonly<{
-    digest: string | null;
-    state: 'empty' | 'published' | 'cleared';
-    observation: SourceObservationReadItem | null;
-  }>;
-  resolution: Readonly<{
-    put: Readonly<{ expectedObservation: string | null }>;
-    clear: Readonly<{ expectedObservation: string | null }>;
-  }>;
-  selectedObservation?: SourceObservationReadItem;
-  history?: Readonly<{ items: SourceObservationReadItem[]; nextCursor: string | null }>;
-}>;
+export type SourceObservationPayload = Static<typeof observationPayloadSchema>;
+export type SourceObservationReadItem = Static<typeof observationSchema>;
+export type SourceObservationReadResponse = Static<typeof SourceObservationReadResponseSchema>;
 
 type Dependencies = Readonly<{ pool: Pool; routeKey: Uint8Array; clock?: KernelClock }>;
 type MetaRow = Readonly<{
