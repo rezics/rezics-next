@@ -57,22 +57,30 @@ export async function openMemberCountFixture() {
   });
   roleReader = membership.roleReader;
   const work = await createWorkClient(db.url, sdkPool);
-  const runtime = await composeWork([createAccountsWorkModule({ realm: membership, access: production.access }), communityWorkModule], {
-    databaseUrl: db.url,
-    pool: sdkPool,
-    client: work,
-    clock,
-    executorId: `member-count-growth-${crypto.randomUUID()}`,
-    env: {
-      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
-      KERNEL_SESSION_KEYS: `1:${Buffer.from(tokens.keys.get(1)!).toString('base64url')}`,
-      AUTH_ISSUER: 'https://membership.auth.test',
-      AUTH_AUDIENCE: 'https://membership.api.test',
-      AUTH_JWKS_URL: 'https://membership.auth.test/.well-known/jwks.json',
+  const runtime = await composeWork(
+    [createAccountsWorkModule({ realm: membership, access: production.access }), communityWorkModule],
+    {
+      databaseUrl: db.url,
+      pool: sdkPool,
+      client: work,
+      clock,
+      executorId: `member-count-growth-${crypto.randomUUID()}`,
+      env: {
+        KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+        KERNEL_SESSION_KEYS: `1:${Buffer.from(tokens.keys.get(1)!).toString('base64url')}`,
+        AUTH_ISSUER: 'https://membership.auth.test',
+        AUTH_AUDIENCE: 'https://membership.api.test',
+        AUTH_JWKS_URL: 'https://membership.auth.test/.well-known/jwks.json',
+      },
     },
-  });
+  );
   const kernel = createKernel({
-    pool: db.pool, access: production.access, workClient: work, tokens, routeKey, clock,
+    pool: db.pool,
+    access: production.access,
+    workClient: work,
+    tokens,
+    routeKey,
+    clock,
     writeRate: createWriteRateLimiter({ secret: 'member-count-growth-native-write-rate-secret' }),
   });
   await runtime.launch();
@@ -81,7 +89,8 @@ export async function openMemberCountFixture() {
     const accountId = newId(route);
     await db.admin.query(
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-       VALUES($1,$2,'actor','active',$2)`, [route, accountId],
+       VALUES($1,$2,'actor','active',$2)`,
+      [route, accountId],
     );
     consent.set(accountId, granted);
     return { accountId, bearer: await production.mint(accountId, granted) };
@@ -91,10 +100,48 @@ export async function openMemberCountFixture() {
     const spaceId = newId(route);
     const revision = newId(route);
     return {
-      'community.space': [{ route, space_id: spaceId, state: 'active', head_revision_id: revision, created_at: created, creator }],
-      'community.space_revision': [{ route, space_id: spaceId, revision_id: revision, predecessor: null, title: 'Host', summary: '', created_at: created, author: creator }],
-      'community.realm': [{ route, realm_id: realmId, space_id: spaceId, state: 'active', visibility: 'public', context_id: GLOBAL_CONTEXT, head_revision_id: revision, created_at: created, creator }],
-      'community.realm_revision': [{ route, realm_id: realmId, revision_id: revision, predecessor: null, title: 'Realm', summary: '', visibility: 'public', context_id: GLOBAL_CONTEXT, created_at: created, author: creator }],
+      'community.space': [
+        { route, space_id: spaceId, state: 'active', head_revision_id: revision, created_at: created, creator },
+      ],
+      'community.space_revision': [
+        {
+          route,
+          space_id: spaceId,
+          revision_id: revision,
+          predecessor: null,
+          title: 'Host',
+          summary: '',
+          created_at: created,
+          author: creator,
+        },
+      ],
+      'community.realm': [
+        {
+          route,
+          realm_id: realmId,
+          space_id: spaceId,
+          state: 'active',
+          visibility: 'public',
+          context_id: GLOBAL_CONTEXT,
+          head_revision_id: revision,
+          created_at: created,
+          creator,
+        },
+      ],
+      'community.realm_revision': [
+        {
+          route,
+          realm_id: realmId,
+          revision_id: revision,
+          predecessor: null,
+          title: 'Realm',
+          summary: '',
+          visibility: 'public',
+          context_id: GLOBAL_CONTEXT,
+          created_at: created,
+          author: creator,
+        },
+      ],
       'access.resource_initialization': [
         { route, resource_id: spaceId, resource_type: 'community.space', creator_id: creator, initialized_at: created },
         { route, resource_id: realmId, resource_type: 'community.realm', creator_id: creator, initialized_at: created },
@@ -106,7 +153,16 @@ export async function openMemberCountFixture() {
     const actor = await account(scopes);
     const denied = await account(['realm:read']);
     const realmId = newId(route);
-    await seed(db, { name: `selected-${realmId}`, hotPartition: partitionOf(route), hotShare: 1, rows: () => realmRows(realmId, actor.accountId) }, { from: 0, to: 1 });
+    await seed(
+      db,
+      {
+        name: `selected-${realmId}`,
+        hotPartition: partitionOf(route),
+        hotShare: 1,
+        rows: () => realmRows(realmId, actor.accountId),
+      },
+      { from: 0, to: 1 },
+    );
     // The existing production fixture's initial public standing. This grants no
     // ownership to the selected member; Access still decides each command.
     await db.admin.query(
@@ -123,17 +179,21 @@ export async function openMemberCountFixture() {
       `SELECT c.count::integer,c.version::text,
         (SELECT count(*)::integer FROM community.realm_member m WHERE m.route=c.route AND m.realm_id=c.realm_id AND m.account_id=$3 AND upper_inf(m.valid)) AS open,
         (SELECT count(*)::integer FROM community.realm_member m WHERE m.route=c.route AND m.realm_id=c.realm_id AND m.account_id=$3 AND NOT upper_inf(m.valid)) AS retained
-       FROM community.realm_member_count c WHERE c.route=$1 AND c.realm_id=$2`, [route, s.realmId, s.accountId],
+       FROM community.realm_member_count c WHERE c.route=$1 AND c.realm_id=$2`,
+      [route, s.realmId, s.accountId],
     );
     assert.equal(result.rowCount, 1);
     return result.rows[0]!;
   }
 
   async function request(s: Selected, method: 'POST' | 'DELETE', key = crypto.randomUUID(), bearer = s.bearer) {
-    const response = await kernel.handle(new Request(`http://kernel.test/v1/realms/${s.realmId}/membership`, {
-      method, headers: { authorization: `Bearer ${bearer}`, 'idempotency-key': JSON.stringify(key) },
-    }));
-    return { status: response.status, body: await response.json() as { workflowId?: string } };
+    const response = await kernel.handle(
+      new Request(`http://kernel.test/v1/realms/${s.realmId}/membership`, {
+        method,
+        headers: { authorization: `Bearer ${bearer}`, 'idempotency-key': JSON.stringify(key) },
+      }),
+    );
+    return { status: response.status, body: (await response.json()) as { workflowId?: string } };
   }
 
   async function complete(workflowId: string) {
@@ -150,21 +210,47 @@ export async function openMemberCountFixture() {
 
   async function population(s: Selected, axis: Axis) {
     const otherRealm = newId(route);
-    await seed(db, { name: `other-${otherRealm}`, hotPartition: partitionOf(route), hotShare: 1, rows: () => realmRows(otherRealm, s.accountId) }, { from: 0, to: 1 });
+    await seed(
+      db,
+      {
+        name: `other-${otherRealm}`,
+        hotPartition: partitionOf(route),
+        hotShare: 1,
+        rows: () => realmRows(otherRealm, s.accountId),
+      },
+      { from: 0, to: 1 },
+    );
     return async (scale: number, previous: number) => {
-      await seed(db, {
-        name: `${axis}-${s.realmId}`, hotPartition: partitionOf(route), hotShare: 1,
-        rows: ({ ordinal }) => {
-          const realmId = axis === 'unrelated Realms' ? newId(route) : axis === 'unrelated members' ? otherRealm : s.realmId;
-          const history = axis === 'selected retained history';
-          const start = new Date(Date.parse(created) + ordinal * 2000).toISOString();
-          const end = new Date(Date.parse(created) + ordinal * 2000 + 1000).toISOString();
-          return {
-            ...(axis === 'unrelated Realms' ? realmRows(realmId, s.accountId) : {}),
-            'community.realm_member': [{ route, realm_id: realmId, account_id: history ? s.accountId : newId(route), role: 'member', valid: history ? `[${start},${end})` : `[${created},)`, reservation_id: newId(route), transaction_id: newId(route) }],
-          };
+      await seed(
+        db,
+        {
+          name: `${axis}-${s.realmId}`,
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ ordinal }) => {
+            const realmId =
+              axis === 'unrelated Realms' ? newId(route) : axis === 'unrelated members' ? otherRealm : s.realmId;
+            const history = axis === 'selected retained history';
+            const start = new Date(Date.parse(created) + ordinal * 2000).toISOString();
+            const end = new Date(Date.parse(created) + ordinal * 2000 + 1000).toISOString();
+            return {
+              ...(axis === 'unrelated Realms' ? realmRows(realmId, s.accountId) : {}),
+              'community.realm_member': [
+                {
+                  route,
+                  realm_id: realmId,
+                  account_id: history ? s.accountId : newId(route),
+                  role: 'member',
+                  valid: history ? `[${start},${end})` : `[${created},)`,
+                  reservation_id: newId(route),
+                  transaction_id: newId(route),
+                },
+              ],
+            };
+          },
         },
-      }, { from: previous, to: scale });
+        { from: previous, to: scale },
+      );
     };
   }
 
@@ -191,10 +277,21 @@ export async function openMemberCountFixture() {
   }
 
   return {
-    db, selected, state, request, command, complete, population, rejectPublication,
-    advance() { time += 1000; },
+    db,
+    selected,
+    state,
+    request,
+    command,
+    complete,
+    population,
+    rejectPublication,
+    advance() {
+      time += 1000;
+    },
     async close() {
-      try { await runtime.shutdown(); } finally {
+      try {
+        await runtime.shutdown();
+      } finally {
         await work.close();
         await db.close();
       }
