@@ -631,9 +631,9 @@ Content's owner-wide identity-currentness producer is an explicit unbound port; 
 503 unavailable even after installation. The viewer-facts overlay is independent. Whole public traversal after
 binding the native producer, complete merge/lifecycle currentness and controller native growth remain outstanding
 in `.temp/continuation/personal-score-currentness.md`. Existing date-order assertions are unchanged.
-Archive Entry/label confirmation uses generated upload/preview/review/apply methods and explicit per-item
+Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
-`services/kernel/test/library/library-archive-merge.test.ts`; the typed transport journey is
-`packages/client/tests/library-archive-merge.test.ts`. The canonical Web archive consumer8bb owns file/recovery UI
-integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
+`services/kernel/test/library/library-archive-merge.test.ts`. Regenerating the retained client declarations and
+installing their typed transport journey remain required before Web file admission. The canonical Web archive
+consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.

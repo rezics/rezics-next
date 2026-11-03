@@ -76,11 +76,12 @@ continue to report per-item `current_conflict`/`unresolved` for Entry/label work
 A refresh cannot change an applying/acknowledged item. Those items keep their original key and canonical operands;
 accepted receipts can be retried after cancellation, while expiry/pruning never undoes native effects.
 
-The generated `KernelClient.libraryArchiveMerges` owns upload, preview, review and apply. Upload's declared body is
+The route producer declares the revised `KernelClient.libraryArchiveMerges` upload, preview, review and apply contract. Upload's declared body is
 `{manifest: Record<string,unknown>, records: Record<string,unknown>[]}`; ingress still preserves raw bytes and the
 strict bounded decoder alone admits the artifact. Web's canonical archive consumer8bb retains the existing
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
-a handwritten client, proxy cast or alternate upload route.
+a handwritten client, proxy cast or alternate upload route. Generated declarations must be regenerated before
+Web admits a file; the retained client declarations still describe ordinal-only apply and cannot confirm this review.
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results
