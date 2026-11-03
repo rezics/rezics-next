@@ -127,6 +127,21 @@ $$;
 
 
 --
+-- Name: change_space_discovery_dependencies(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.change_space_discovery_dependencies() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM community.refresh_space_discovery_dependencies(
+    COALESCE(NEW.route,OLD.route),COALESCE(NEW.space_id,OLD.space_id));
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: create_realm_member_count(); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -641,6 +656,42 @@ BEGIN
     ON CONFLICT DO NOTHING;
   END IF;
   RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: refresh_space_discovery_dependencies(integer, uuid); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.refresh_space_discovery_dependencies(r integer, id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE dependencies jsonb[] := ARRAY[
+  '{"kind":"exposure","group":"search"}'::jsonb,
+  '{"kind":"exposure","group":"search_advanced"}'::jsonb
+]; carried record;
+BEGIN
+  -- Serialize initialization and native changes on the retained owner, including
+  -- removed owners. An old seed cannot replace a concurrently committed head.
+  PERFORM 1 FROM community.space WHERE route=r AND space_id=id FOR UPDATE;
+  IF NOT FOUND THEN RETURN; END IF;
+  SELECT h.context_id, v.presentation INTO carried
+    FROM community.realm h JOIN community.realm_revision v
+      ON v.route=h.route AND v.realm_id=h.realm_id AND v.revision_id=h.head_revision_id
+    WHERE h.route=r AND h.space_id=id;
+  IF FOUND THEN
+    dependencies := array_append(dependencies,
+      jsonb_build_object('kind','context','id',carried.context_id));
+    IF carried.presentation->>'avatarMediaId' IS NOT NULL THEN
+      dependencies := array_append(dependencies,
+        jsonb_build_object('kind','media','id',carried.presentation->>'avatarMediaId'));
+    END IF;
+  END IF;
+  DELETE FROM community.space_discovery_dependency
+    WHERE route=r AND space_id=id AND NOT (dependency=ANY(dependencies));
+  INSERT INTO community.space_discovery_dependency(dependency,route,space_id)
+    SELECT d,r,id FROM unnest(dependencies) d ON CONFLICT DO NOTHING;
 END;
 $$;
 
@@ -1397,6 +1448,77 @@ CREATE TABLE community.space_address_claim (
 
 
 --
+-- Name: space_discovery_dependency_key; Type: SEQUENCE; Schema: community; Owner: -
+--
+
+CREATE SEQUENCE community.space_discovery_dependency_key
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: space_discovery_dependency; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_dependency (
+    dependency jsonb NOT NULL,
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    ordinal bigint DEFAULT nextval('community.space_discovery_dependency_key'::regclass) NOT NULL,
+    CONSTRAINT space_discovery_dependency_ordinal_check CHECK ((ordinal > 0)),
+    CONSTRAINT space_discovery_dependency_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: space_discovery_dependency_install; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_dependency_install (
+    partition_no integer NOT NULL,
+    cursor_route integer NOT NULL,
+    cursor_id uuid NOT NULL,
+    cut_route integer NOT NULL,
+    cut_id uuid NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT space_discovery_dependency_install_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: space_discovery_frontier; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_frontier (
+    partition_no integer NOT NULL,
+    obligation text NOT NULL,
+    invalidation jsonb NOT NULL,
+    state text DEFAULT 'preparing'::text NOT NULL,
+    cut bigint,
+    cursor bigint DEFAULT 0 NOT NULL,
+    examined bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT space_discovery_frontier_check CHECK (((cursor >= 0) AND (examined >= 0) AND ((cut IS NULL) OR (cursor <= cut)))),
+    CONSTRAINT space_discovery_frontier_check1 CHECK (((state <> ALL (ARRAY['draining'::text, 'settled'::text])) OR (cut IS NOT NULL))),
+    CONSTRAINT space_discovery_frontier_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT space_discovery_frontier_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'unavailable'::text, 'draining'::text, 'settled'::text])))
+);
+
+
+--
+-- Name: space_discovery_frontier_wake; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.space_discovery_frontier_wake (
+    route integer NOT NULL,
+    space_id uuid NOT NULL,
+    obligation text NOT NULL
+);
+
+
+--
 -- Name: space_discovery_population; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -1729,6 +1851,38 @@ ALTER TABLE ONLY community.space_address_claim
 
 
 --
+-- Name: space_discovery_dependency_install space_discovery_dependency_install_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_dependency_install
+    ADD CONSTRAINT space_discovery_dependency_install_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: space_discovery_dependency space_discovery_dependency_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_dependency
+    ADD CONSTRAINT space_discovery_dependency_pkey PRIMARY KEY (dependency, route, space_id);
+
+
+--
+-- Name: space_discovery_frontier space_discovery_frontier_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_frontier
+    ADD CONSTRAINT space_discovery_frontier_pkey PRIMARY KEY (partition_no, obligation);
+
+
+--
+-- Name: space_discovery_frontier_wake space_discovery_frontier_wake_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_frontier_wake
+    ADD CONSTRAINT space_discovery_frontier_wake_pkey PRIMARY KEY (route, space_id, obligation);
+
+
+--
 -- Name: space_discovery_population space_discovery_population_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -1870,6 +2024,34 @@ CREATE UNIQUE INDEX realm_member_open ON community.realm_member USING btree (rou
 --
 
 CREATE INDEX realm_member_reservation ON community.realm_member USING btree (route, realm_id, account_id, reservation_id);
+
+
+--
+-- Name: space_discovery_dependency_install_pending; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_dependency_install_pending ON community.space_discovery_dependency_install USING btree (partition_no) WHERE (NOT complete);
+
+
+--
+-- Name: space_discovery_dependency_owner; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_dependency_owner ON community.space_discovery_dependency USING btree (route, space_id);
+
+
+--
+-- Name: space_discovery_dependency_page; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE UNIQUE INDEX space_discovery_dependency_page ON community.space_discovery_dependency USING btree (dependency, ordinal) INCLUDE (route, space_id);
+
+
+--
+-- Name: space_discovery_frontier_pending; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX space_discovery_frontier_pending ON community.space_discovery_frontier USING btree (partition_no, obligation) WHERE (state = ANY (ARRAY['preparing'::text, 'draining'::text]));
 
 
 --
@@ -2055,6 +2237,20 @@ CREATE TRIGGER realm_revision_votes BEFORE INSERT ON community.realm_revision FO
 
 
 --
+-- Name: realm realm_space_discovery_dependencies; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER realm_space_discovery_dependencies AFTER INSERT OR DELETE OR UPDATE ON community.realm DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION community.change_space_discovery_dependencies();
+
+
+--
+-- Name: space space_discovery_dependencies; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER space_discovery_dependencies AFTER INSERT OR UPDATE ON community.space DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION community.change_space_discovery_dependencies();
+
+
+--
 -- Name: space space_discovery_population; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -2175,6 +2371,22 @@ ALTER TABLE ONLY community.realm_revision
 
 ALTER TABLE ONLY community.realm
     ADD CONSTRAINT realm_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id);
+
+
+--
+-- Name: space_discovery_dependency space_discovery_dependency_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_dependency
+    ADD CONSTRAINT space_discovery_dependency_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
+
+
+--
+-- Name: space_discovery_frontier_wake space_discovery_frontier_wake_route_space_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.space_discovery_frontier_wake
+    ADD CONSTRAINT space_discovery_frontier_wake_route_space_id_fkey FOREIGN KEY (route, space_id) REFERENCES community.space(route, space_id) ON DELETE CASCADE;
 
 
 --
