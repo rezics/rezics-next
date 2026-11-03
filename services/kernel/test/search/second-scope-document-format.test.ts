@@ -127,18 +127,14 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
     ),
   ).toThrow();
   expect(() =>
-    secondScopeDiscoveryDocumentActions(
-      registry,
-      collectionObservation,
-      [{ ...reviewKey, owner: 'commerce' } as unknown as SecondScopeDiscoveryKey],
-    ),
+    secondScopeDiscoveryDocumentActions(registry, collectionObservation, [
+      { ...reviewKey, owner: 'commerce' } as unknown as SecondScopeDiscoveryKey,
+    ]),
   ).toThrow();
   expect(() =>
     parseDiscoveryDocumentKey(registry, 'discovery-v1:%73pace:018f0000-0000-7000-8000-00a000000001'),
   ).toThrow();
-  expect(() =>
-    parseDiscoveryDocumentKey(registry, 'discovery-v1:space:not-a-native-id'),
-  ).toThrow();
+  expect(() => parseDiscoveryDocumentKey(registry, 'discovery-v1:space:not-a-native-id')).toThrow();
 
   const [spaceAction] = secondScopeDiscoveryDocumentActions(registry, contentObservation, [spaceKey]);
   if (!spaceAction || spaceAction.op !== 'index') throw new Error('Expected a Space document');
@@ -146,7 +142,5 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
   expect(() => validateDiscoveryDocumentFormat(registry, privateField)).toThrow();
   expect(() => parseDiscoveryHitKey(registry, { _id: spaceAction.id, _source: privateField })).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, document_format: 1 })).toThrow();
-  expect(() =>
-    validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'commerce' }),
-  ).toThrow();
+  expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'commerce' })).toThrow();
 });
