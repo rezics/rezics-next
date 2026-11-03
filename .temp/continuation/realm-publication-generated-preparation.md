@@ -30,14 +30,14 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - realm-publication-current-review.test.tsx
   placement: default
   tests:
-    - "An explicitly selected work reads one installed generated native preparation and distinguishes no publication, adopted, rejected and withdrawn heads before explicit decisions."
+    - 'An explicitly selected work reads one installed generated native preparation and distinguishes no publication, adopted, rejected and withdrawn heads before explicit decisions.'
     - Populated and concealed optional presentation use the actual generated producer variants without retaining picker or former disclosure as native presentation.
     - At 1/10/20 admitted detail fields projection is linear with fixed request components and byte limits derived from the installed producer.
     - 409/412 requires explicit reinspection then a separately confirmed fresh action; unknown writes retain the exact original command despite read-only inspection.
