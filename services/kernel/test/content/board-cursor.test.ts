@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import {
   decodeBoardCursor,
+  decodeBoardRankCursor,
   encodeBoardCursor,
+  encodeBoardRankCursor,
   normalizeBoardQuery,
   type BoardCursorBinding,
 } from '../../src/content/board-cursor.ts';
@@ -23,6 +25,7 @@ const binding: BoardCursorBinding = {
   boardId: '01890f3e-7c00-7000-8000-000000000001',
   query: 'red fox',
   sort: 'newest',
+  pinRevision: '9',
   viewer: { kind: 'account', accountId: viewerAccountId },
 };
 const after = { createdAt: '2026-10-25T11:59:58.123456Z', threadId: '01890f3e-7c00-7000-8000-000000000003' };
@@ -33,7 +36,8 @@ const expectedCoreBinding: CursorBinding = {
     query: binding.query,
     sort: binding.sort,
     viewer: viewerAccountId,
-    representation: 'pinned-section-v1',
+    representation: 'pinned-cohort-v2',
+    pinRevision: binding.pinRevision,
   },
 };
 
@@ -43,11 +47,12 @@ test('a board cursor binds board, normalized query, sort, verified viewer and cu
 
   expect(normalizeBoardQuery('  red fox\n')).toBe('red fox');
   expect(decodeBoardCursor(ring, binding, token, 7, now)).toEqual({ ok: true, epoch: 7, after });
-  expect(decodeCursor(ring, expectedCoreBinding, token, now)).toEqual({
-    ok: true,
-    epoch: 7,
-    after: [after.createdAt, after.threadId],
-  });
+  const core = decodeCursor(ring, expectedCoreBinding, token, now);
+  expect(core).toMatchObject({ ok: true, epoch: 7 });
+  if (!core.ok) throw new Error('Expected signed cursor');
+  expect(core.after[0]).toBe(ring.current);
+  expect(JSON.stringify(core.after)).not.toContain(after.threadId);
+  expect(JSON.stringify(core.after)).not.toContain(after.createdAt);
   const oldToken = encodeCursor(
     ring,
     {
@@ -62,6 +67,7 @@ test('a board cursor binds board, normalized query, sort, verified viewer and cu
   for (const other of [
     { ...binding, boardId: '01890f3e-7c00-7000-8000-000000000004' },
     { ...binding, query: 'blue fox' },
+    { ...binding, pinRevision: '10' },
     { ...binding, sort: 'oldest' as const },
     { ...binding, viewer: { kind: 'anonymous' as const } },
     { ...binding, viewer: { kind: 'account' as const, accountId: '01890f3e-7c00-7000-8000-000000000005' } },
@@ -94,7 +100,7 @@ test('board cursors use core signing, key rotation, tamper detection and the tru
 });
 
 test('malformed signed board keysets and authored input are rejected without decoder exceptions', () => {
-  const scope = `cursor\0board.threads.list\0{"boardId":${JSON.stringify(binding.boardId)},"query":"red fox","representation":"pinned-section-v1","sort":"newest","viewer":${JSON.stringify(viewerAccountId)}}`;
+  const scope = `cursor\0board.threads.list\0{"boardId":${JSON.stringify(binding.boardId)},"pinRevision":"9","query":"red fox","representation":"pinned-cohort-v2","sort":"newest","viewer":${JSON.stringify(viewerAccountId)}}`;
   const malformed = [
     [],
     [after.createdAt],
@@ -114,4 +120,17 @@ test('malformed signed board keysets and authored input are rejected without dec
 
   expect(() => decodeBoardCursor(ring, binding, 'not a cursor', 7, now)).not.toThrow();
   expect(decodeBoardCursor(ring, binding, 'not a cursor', 7, now)).toEqual({ ok: false, reason: 'invalid' });
+});
+
+test('ranked continuations retain exact rank, hidden boundaries and the same pin revision', () => {
+  for (const sort of ['active', 'hot'] as const) {
+    const ranked = { ...binding, sort };
+    const position = { rank: 0.12345678901234567, threadId: after.threadId };
+    const token = encodeBoardRankCursor(ring, ranked, 7, position, now);
+    expect(decodeBoardRankCursor(rotated, ranked, token, 7, now)).toEqual({ ok: true, epoch: 7, after: position });
+    expect(decodeBoardRankCursor(ring, { ...ranked, pinRevision: '11' }, token, 7, now).ok).toBe(false);
+    expect(decodeBoardRankCursor(ring, { ...ranked, sort: sort === 'hot' ? 'active' : 'hot' }, token, 7, now).ok).toBe(
+      false,
+    );
+  }
 });

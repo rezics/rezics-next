@@ -19,7 +19,7 @@ export const BOARD_EVENTS = {
       threadId: UUID,
       actorId: UUID,
       pinned: Type.Boolean(),
-      pinPosition: Type.Union([Type.Integer({ minimum: 1, maximum: 3 }), Type.Null()]),
+      pinPosition: Type.Union([Type.Integer({ minimum: 1, maximum: 5 }), Type.Null()]),
     },
     { additionalProperties: false },
   ),
