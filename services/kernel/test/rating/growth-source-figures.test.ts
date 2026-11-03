@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { SOURCE_OBSERVATION_READ_MAX_BYTES } from '../../src/rating/source-observation-read.ts';
 import { SOURCE_STATISTICS_MAX_BODY_BYTES } from '../../src/rating/source-figures.ts';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
 import { createSourceStatisticIsolationFixture } from './source-statistic-isolation-fixture.ts';
@@ -24,6 +25,7 @@ const body = {
   },
 };
 const path = (id: string) => `/v1/subjects/${id}/source-statistics`;
+const observationPath = (id: string) => `${path(id)}/bangumi/observations`;
 async function json(response: Response, status = 200): Promise<any> {
   const text = await response.text();
   if (response.status !== status) throw new Error(`Expected ${status}, received ${response.status}: ${text}`);
@@ -44,7 +46,14 @@ function prefixPlans(value: unknown, seen: Set<string>): void {
     expect(node['Index Cond']).toContain('route');
     expect(node['Index Cond']).toContain('subject_id');
     if (relation !== 'source_statistic') expect(node['Index Cond']).toContain('source');
-    if (relation === 'source_statistic_observation') expect(node['Index Cond']).toContain('digest');
+    if (relation === 'source_statistic_observation') {
+      const index = String(node['Index Name']);
+      if (index === 'source_statistic_observation_legacy_order_idx') {
+        expect(node['Index Cond']).toContain('source');
+      } else {
+        expect(node['Index Cond']).toMatch(/digest|local_order/);
+      }
+    }
     expect((node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']).toBeLessThanOrEqual(2);
   }
   for (const child of Object.values(node)) {
@@ -65,6 +74,7 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
     await json(await write(selected, 'bangumi', body));
     await json(await write(selected, 'vndb', { ...body, figures: undefined }));
     let historyHead: string | undefined;
+    let historyFigures: unknown = body.figures;
     for (const dimension of ['heads', 'history']) {
       const name = `source figures fixed bins independent ${dimension}`;
       const report = await checkGrowth(fixture.database, {
@@ -77,9 +87,15 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
         byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         indexProbes: 128,
         counted: {
-          read: (value) => ({ bodyBytes: (value as { bodyBytes: number }).bodyBytes }),
-          limits: { bodyBytes: SOURCE_STATISTICS_MAX_BODY_BYTES },
-          bounds: { bodyBytes: 'constant' },
+          read: (value) => ({
+            bodyBytes: (value as { bodyBytes: number }).bodyBytes,
+            inspectionBytes: (value as { inspectionBytes: number }).inspectionBytes,
+          }),
+          limits: {
+            bodyBytes: SOURCE_STATISTICS_MAX_BODY_BYTES,
+            inspectionBytes: SOURCE_OBSERVATION_READ_MAX_BYTES * 2,
+          },
+          bounds: { bodyBytes: 'constant', inspectionBytes: 'constant' },
         },
         grow: async (_db, scale, previous) => {
           for (let i = previous; i < scale; i++) {
@@ -94,6 +110,7 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
                 figures: { ...body.figures, rank: { unit: 'subjects', position: i + 1 } },
               };
               historyHead = (await json(await write(history, 'bangumi', changed))).observation.digest;
+              historyFigures = changed.figures;
             }
           }
         },
@@ -116,7 +133,37 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
           const text = await response.text();
           expect(JSON.parse(text)).toHaveLength(2);
           expect(JSON.parse(text)[0].figures).toEqual(body.figures);
-          return { bodyBytes: Buffer.byteLength(text, 'utf8') };
+          const inspectionSubject = dimension === 'history' ? history : selected;
+          const expectedFigures = dimension === 'history' ? historyFigures : body.figures;
+          const inspectionResponse = await fixture.request('GET', observationPath(inspectionSubject) + '?history=true', {
+            actor: fixture.actors.importer,
+          });
+          expect(inspectionResponse.status).toBe(200);
+          const inspectionText = await inspectionResponse.text();
+          const inspection = JSON.parse(inspectionText);
+          expect(inspection.head.state).toBe('published');
+          expect(inspection.head.observation.payload.figures).toEqual(expectedFigures);
+          expect(inspection.history.items).toHaveLength(1);
+          let inspectionBytes = Buffer.byteLength(inspectionText, 'utf8');
+          if (dimension === 'history') {
+            const nextCursor = inspection.history.nextCursor;
+            expect(nextCursor).toBeString();
+            const nextResponse = await fixture.request(
+              'GET',
+              `${observationPath(inspectionSubject)}?cursor=${encodeURIComponent(nextCursor)}`,
+              { actor: fixture.actors.importer },
+            );
+            expect(nextResponse.status).toBe(200);
+            const nextText = await nextResponse.text();
+            const next = JSON.parse(nextText);
+            expect(next.history.items).toHaveLength(1);
+            expect(BigInt(next.history.items[0].nativeOrder)).toBeLessThan(BigInt(inspection.history.items[0].nativeOrder));
+            inspectionBytes += Buffer.byteLength(nextText, 'utf8');
+          }
+          return {
+            bodyBytes: Buffer.byteLength(text, 'utf8'),
+            inspectionBytes,
+          };
         },
       });
       const relations = [

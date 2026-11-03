@@ -15,5 +15,9 @@ CREATE UNIQUE INDEX source_statistic_observation_local_order_idx
   ON rating.source_statistic_observation (route, subject_id, source, local_order DESC)
   WHERE local_order IS NOT NULL;
 
+CREATE INDEX source_statistic_observation_legacy_order_idx
+  ON rating.source_statistic_observation (route, subject_id, source, digest DESC)
+  WHERE local_order IS NULL;
+
 -- migrate:down
 -- Forward only: native ordering and payload version metadata are part of retained provenance.

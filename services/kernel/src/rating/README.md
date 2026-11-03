@@ -902,6 +902,33 @@ separately from native figures. Their optional provenance fields remain source-c
 **Bangumi source-figure reader** follow-on: provider label, exact alias/record provenance, scale/asOf and UI tests.
 Imports owns **Source observation CAS refresh** using this exact positive/clear digest contract.
 
+#### Immutable source observation inspection
+
+`GET /v1/subjects/{id}/source-statistics/{source}/observations` is a protected importer read requiring the existing
+`source_statistic:write` action. Every response includes the exact current head, including an empty slot or a clear
+tombstone, and the `expectedObservation` values accepted by the existing put and clear CAS writers. `?digest=`
+selects that exact retained digest and returns it as `selectedObservation` without replacing it with today's head.
+`?history=true` starts a signed one-row keyset page; `?cursor=` continues it. Native rows descend by committed
+per-subject/provider `nativeOrder`, not provider `asOf`; the bounded lookahead determines `nextCursor`. Retained
+observations without native order remain marked `legacy: true` with `nativeOrder: null` and are traversed by their
+stored digest. `payloadVersion` is explicit, and `provenance` labels the content digest as unversioned provider
+provenance. The exported response schema is the actual route DTO for the generated Imports API43 and Web clients.
+
+Decision: inspection always includes the current head; an optional digest resolves that exact retained observation,
+while signed history uses descending committed local order and marks legacy rows as unversioned.
+
+Inspection reuses current Subject and source-tuple fence reads before and after payload hydration. A guessed digest
+cannot disclose an alias or retained payload outside the existing write authorization, current Subject identity and
+facts-fence rules. The response is capped at 68,000 serialized bytes and each immutable payload is independently
+checked against its stored digest and the 32,768-byte payload limit. The endpoint performs no write, receipt lookup,
+provider request, ballot read or source-history sort.
+
+#### Operation Cost: source-observation inspection
+
+- Touches: one existing Access authorization and before/final Subject identity checks; exact reads perform at most four metadata queries across initial/final head and digest checks, while history performs at most six across initial/final head, native page and legacy page queries. Payload hydration reads at most two immutable observation rows or one lazily adopted current scalar row. Up to three distinct source tuples receive both anchored fence snapshots (six fence observations total).
+- Bound: every observation query binds route, Subject and provider. Exact lookup uses the observation primary key; native history uses `(route, subject_id, source, local_order DESC)` and legacy history uses its partial `(route, subject_id, source, digest DESC)` index, each with a page of one and one lookahead row. Payload bytes are at most 32,768 per immutable row and the serialized DTO is at most 68,000 bytes. No full-history sort or receipt/actor data enters the DTO.
+- Growth check: `test/rating/growth-source-figures.test.ts` holds page size and payload shape fixed while growing unrelated provider heads and selected observation history independently at 256/1024/4096; it captures both first/deep pages, response bytes, participating pools and strict ordered-prefix plans. Controller native acceptance owns execution.
+
 #### Operation Cost: source-statistic list
 
 - Touches: at most two current statistic rows including their bounded figure JSON, each provider's two anchored tuple-fact snapshots, a second local

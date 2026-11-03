@@ -1277,6 +1277,13 @@ CREATE UNIQUE INDEX source_statistic_observation_local_order_idx ON rating.sourc
 
 
 --
+-- Name: source_statistic_observation_legacy_order_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX source_statistic_observation_legacy_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, digest DESC) WHERE (local_order IS NULL);
+
+
+--
 -- Name: aggregate_component_target_population_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
