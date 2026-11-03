@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { createElement } from 'react';
@@ -27,10 +27,11 @@ import {
   measureClassificationVisit,
   retireClassificationSnapshot,
 } from '../src/features/pages/subject-classification-assessment-controller';
-import { ClassificationAssessmentView } from '../src/features/pages/subject-classification-assessment-view';
-import { providerStatisticLabel, readRatings, type Statistic } from '../src/features/pages/subject-ratings';
-import { RatingsView } from '../src/features/pages/subject-ratings-view';
-import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
+import { providerStatisticLabel, readRatings, GLOBAL, QUESTION, type Statistic } from '../src/features/pages/subject-ratings';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ClassificationAssessmentView } = await import('../src/features/pages/subject-classification-assessment-view');
+const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
 
 const subjectId = '00000000-0000-8000-8000-000000000010';
 const associationId = '00000000-0000-8000-8000-000000000011';
