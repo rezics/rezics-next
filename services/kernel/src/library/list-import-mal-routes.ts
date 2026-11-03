@@ -10,9 +10,11 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { createSessionCommands } from './sessions.ts';
 import { createMalImport } from './list-import-mal.ts';
 import { MAL_LIMITS } from './list-import-mal-parser.ts';
 import { MAL_LABEL_LIMITS } from './list-import-mal-tags.ts';
+import { MAL_DATE_LIMITS } from './list-import-mal.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' }),
@@ -41,6 +43,7 @@ const detail = (name: string) => ({
 const result = t.Object({ id }, closed);
 type Page = Awaited<ReturnType<ReturnType<typeof createMalImport>['page']>>;
 type Applied = Awaited<ReturnType<ReturnType<typeof createMalImport>['apply']>>;
+type DateApplied = Awaited<ReturnType<ReturnType<typeof createMalImport>['applyDates']>>;
 
 export function malImportRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -49,6 +52,7 @@ export function malImportRoutes(
     access: () => Access;
     routeKey: Uint8Array;
     tokens: KeyRing;
+    journal: ReturnType<typeof createSessionCommands>;
     clock?: KernelClock;
   },
 ) {
@@ -181,6 +185,69 @@ export function malImportRoutes(
           if (new Set(body.rows.map((r) => r.row)).size !== body.rows.length) throw new ProblemError('invalid_request');
           return admission.run('normal', job, () =>
             service().apply(actor, params.id, body, job.deadline, request.signal, (v) => session.record(v)),
+          );
+        }),
+    )
+    .post(
+      '/v1/libraryImports/mal/:id/dates/review',
+      {
+        params,
+        headers,
+        body: t.Object(
+          {
+            row,
+            occurrenceId: id,
+            startAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+            finishAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+          },
+          closed,
+        ),
+        response: { 200: result, ...failures },
+        detail: { ...detail('dates.review'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+      },
+      async ({ actor, params, body, headers, job, admission, session, set }) =>
+        safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
+          const command = await admission.run('normal', job, () =>
+            service().reviewDates(actor, params.id, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
+          );
+          session.record(command);
+          return command.value;
+        }),
+    )
+    .post(
+      '/v1/libraryImports/mal/:id/dates/apply',
+      {
+        params,
+        body: t.Object(
+          {
+            confirm: t.Literal(true),
+            rows: t.Array(
+              t.Object(
+                {
+                  row,
+                  version: t.String({ minLength: 1, maxLength: 1024 }),
+                  fields: t.Array(
+                    t.Union([t.Literal('startDate'), t.Literal('finishDate')]),
+                    { minItems: 1, maxItems: MAL_DATE_LIMITS.fields, uniqueItems: true },
+                  ),
+                },
+                closed,
+              ),
+              { minItems: 1, maxItems: MAL_DATE_LIMITS.rows, uniqueItems: true },
+            ),
+          },
+          closed,
+        ),
+        response: { 200: t.Unsafe<DateApplied>(t.Any()), ...failures },
+        detail: { ...detail('dates.apply'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+      },
+      async ({ actor, params, body, request, job, admission, session, set }) =>
+        safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
+          if (new Set(body.rows.map((r) => r.row)).size !== body.rows.length) throw new ProblemError('invalid_request');
+          return admission.run('normal', job, () =>
+            service().applyDates(actor, params.id, body, job.deadline, request.signal, (value) => session.record(value)),
           );
         }),
     )
