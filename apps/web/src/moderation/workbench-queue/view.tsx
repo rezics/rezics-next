@@ -240,8 +240,8 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                 key={queue}
                 type="button"
                 variant="ghost"
-              id={`workbench-queue-${queue}`}
-              aria-current={!search.history && search.queue === queue ? 'page' : undefined}
+                id={`workbench-queue-${queue}`}
+                aria-current={!search.history && search.queue === queue ? 'page' : undefined}
                 className={`${control} rounded-none border-b-2 ${search.queue === queue ? 'border-primary font-semibold' : 'border-transparent'}`}
                 onClick={() =>
                   onSearch(

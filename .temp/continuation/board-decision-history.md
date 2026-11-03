@@ -1,28 +1,26 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/moderation/workbench-history",
-    "apps/web/src/moderation/workbench-history.md",
-    "apps/web/src/moderation/workbench-queue/read.ts",
-    "apps/web/src/moderation/workbench-queue/scope.ts",
-    "apps/web/src/moderation/workbench-queue/view.tsx",
-    "apps/web/src/routes/moderation/workbench.tsx",
-    "apps/web/messages",
-    "apps/web/tests/workbench-history.test.tsx",
-    "docs/goals/web.md"
-  ],
-  "riskAreas": [],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 650,
-    "files": 9
-  },
-  "acceptance": "Consume the actual delivered Content private board history method and complete the native list, decision detail, current-target, sparse cursor, disclosure retirement, and recovery journeys without inventing an endpoint or reconstructing history."
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/moderation/workbench-history',
+      'apps/web/src/moderation/workbench-history.md',
+      'apps/web/src/moderation/workbench-queue/read.ts',
+      'apps/web/src/moderation/workbench-queue/scope.ts',
+      'apps/web/src/moderation/workbench-queue/view.tsx',
+      'apps/web/src/routes/moderation/workbench.tsx',
+      'apps/web/messages',
+      'apps/web/tests/workbench-history.test.tsx',
+      'docs/goals/web.md',
+    ],
+  'riskAreas': [],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 650, 'files': 9 },
+  'acceptance': 'Consume the actual delivered Content private board history method and complete the native list, decision detail, current-target, sparse cursor, disclosure retirement, and recovery journeys without inventing an endpoint or reconstructing history.',
 }
 ---
 

@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
-import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } from '../src/moderation/workbench-history';
+import {
+  openWorkbenchHistory,
+  returnFromWorkbenchHistory,
+  WorkbenchHistoryUnavailable,
+} from '../src/moderation/workbench-history';
 import { workbenchSearch } from '../src/moderation/workbench-queue/scope';
 
 test('history keeps a board and queue cursor while preserving a separate opaque history cursor', () => {
@@ -21,7 +25,12 @@ test('history keeps a board and queue cursor while preserving a separate opaque 
   expect(history.historyCursor).toBe('native:cursor/opaque?x');
 
   const returned = returnFromWorkbenchHistory(history);
-  expect(returned).toMatchObject({ board: 'board/one', queue: 'appeals', cursor: 'case.cursor:opaque', historyReturn: true });
+  expect(returned).toMatchObject({
+    board: 'board/one',
+    queue: 'appeals',
+    cursor: 'case.cursor:opaque',
+    historyReturn: true,
+  });
   expect(returned.history).toBeUndefined();
   expect(returned.historyCursor).toBeUndefined();
 });

@@ -4,13 +4,7 @@ import { m } from '../../paraglide/messages.js';
 const control =
   'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-export function WorkbenchHistoryUnavailable({
-  onReturn,
-  onRetry,
-}: {
-  onReturn: () => void;
-  onRetry?: () => void;
-}) {
+export function WorkbenchHistoryUnavailable({ onReturn, onRetry }: { onReturn: () => void; onRetry?: () => void }) {
   return (
     <section className="space-y-3" aria-labelledby="workbench-history-heading">
       <h2 id="workbench-history-heading" className="text-xl font-semibold">
