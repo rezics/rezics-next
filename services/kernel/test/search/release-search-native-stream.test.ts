@@ -12,7 +12,7 @@ import {
   type ReleaseGroupingBasis,
   type ReleaseGroupingRequest,
 } from '../../src/search/release-search-grouping.ts';
-import type { IndexedSubject, NativeWorkLinkEvidence } from '../../src/search/source.ts';
+import { subjectPartition, type IndexedSubject, type NativeWorkLinkEvidence } from '../../src/search/source.ts';
 
 const request: ReleaseGroupingRequest = {
   releaseDigest: 'active',
@@ -26,7 +26,8 @@ const request: ReleaseGroupingRequest = {
 };
 
 async function fixture() {
-  const id = (index: number) => `00000000-0000-8000-8000-00000000000${index}`;
+  const id = (index: number) =>
+    index === 0 ? '00000000-0000-8000-8000-001000000000' : `10000000-0000-8000-8000-${String(index).padStart(12, '0')}`;
   const subjects: IndexedSubject[] = Array.from({ length: 7 }, (_, index) => ({
     id: id(index),
     type: index === 0 ? 'work' : index === 6 ? 'other' : 'edition',
@@ -66,6 +67,7 @@ async function fixture() {
   ]);
   const reservations: ReleaseSearchCandidateReservation[] = [];
   const reads: string[][] = [];
+  const observedHomes: Readonly<Record<string, readonly { partition: number; position: string }[]>>[] = [];
   let basis: ReleaseGroupingBasis = {
     releaseDigest: 'active',
     epoch: 'all-source-cuts',
@@ -76,11 +78,16 @@ async function fixture() {
   const pools: ReleaseSearchCandidatePool[] = [0, 1].map((index) => ({
     id: `pool-${index}`,
     names: {
-      observe: async () => ({ generation: String(index), homes: index ? [] : [home] }),
-      read: async ({ after, limit }) => ({
-        home,
+      observe: async () => ({
+        generation: String(index),
+        homes: subjects.some(({ id }) => subjectPartition(id) === index)
+          ? [{ ...home, partition: index }]
+          : [],
+      }),
+      read: async ({ partition, after, limit }) => ({
+        home: { ...home, partition },
         candidates: subjects
-          .filter(({ id }) => after === null || id > after.id)
+          .filter(({ id }) => subjectPartition(id) === partition && (after === null || id > after.id))
           .slice(0, limit)
           .map(({ id, securityRevision }) => ({ id, securityRevision, name: id })),
       }),
@@ -89,7 +96,7 @@ async function fixture() {
       read: async (partition, ids) => ({
         partition,
         position: 0n,
-        subjects: subjects.filter(({ id }) => ids.includes(id)),
+        subjects: subjects.filter(({ id }) => subjectPartition(id) === partition && ids.includes(id)),
       }),
       readCompleteWorkLinks: async (_partition, ids) => {
         reads.push([...ids]);
@@ -102,7 +109,13 @@ async function fixture() {
     reserve: (value: ReleaseSearchCandidateReservation) => {
       reservations.push(value);
     },
-    observe: async () => basis,
+    observe: async ({ homesByPool }: {
+      deadline: number;
+      homesByPool: Readonly<Record<string, readonly { partition: number; position: string }[]>>;
+    }) => {
+      observedHomes.push(structuredClone(homesByPool));
+      return basis;
+    },
   };
   const release: FilterRelease = {
     types: {
@@ -120,6 +133,7 @@ async function fixture() {
     links,
     reads,
     reservations,
+    observedHomes,
     pools,
     streams,
     cut,
@@ -155,6 +169,10 @@ test('complete native ownership classifies distinct works and ungroupable releas
   expect(
     f.reservations.some(({ pool, authorityObservations }) => pool === 'pool-1' && authorityObservations === 1),
   ).toBe(true);
+  expect(f.observedHomes[0]).toEqual({
+    'pool-0': [{ partition: 0, position: '0' }],
+    'pool-1': [{ partition: 1, position: '0' }],
+  });
 });
 
 test('children seek independently through rejected names and bind progress to their work and complete request', async () => {
@@ -219,9 +237,9 @@ test('missing complete evidence fails closed and dispatch reservation failures p
 
 test('a complete relation does not establish remote ownership when its canonical target is concealed', async () => {
   const f = await fixture();
-  const owner = f.pools[0]!.source.read;
+  const owner = f.pools[1]!.source.read;
   let targetReads = 0;
-  f.pools[0]!.source.read = async (partition, ids) => {
+  f.pools[1]!.source.read = async (partition, ids) => {
     const snapshot = await owner(partition, ids);
     if (!ids.includes(f.id(0))) return snapshot;
     targetReads++;
