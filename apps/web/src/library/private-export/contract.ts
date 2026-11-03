@@ -1,4 +1,4 @@
-/** Native private Library export caps, verified against the installed generated contract. */
+/** Private Library export bounds admitted from the native owner contract. */
 export const EXPORT_PAGE_ROWS = 16;
 export const EXPORT_ROW_BYTES = 65_536;
 export const EXPORT_PAGE_RECORD_BYTES = 120_000;
@@ -7,8 +7,9 @@ export const EXPORT_STREAM_BYTES = 32 * 1024 * 1024;
 export const EXPORT_CURSOR_CHARS = 4_096;
 export const EXPORT_TTL_MINUTES = 15;
 export const EXPORT_FORMAT = 'https://rezics.com/formats/library-export';
-export const EXPORT_VERSION = 2 as const;
+export const EXPORT_VERSION = 3 as const;
 export const EXPORT_V2_COVERAGE = 'private-library-owner-facts-v2' as const;
+export const EXPORT_V3_COVERAGE = 'private-library-owner-facts-v3' as const;
 export const EXPORT_PRIVACY = 'private';
 export const EXPORT_COMPLETENESS = 'supported-native-facts';
 export const SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -31,12 +32,15 @@ export const EXPORT_SECTIONS_V1 = [
 ] as const;
 
 export const EXPORT_SECTIONS_V2 = [...EXPORT_SECTIONS_V1, 'annotations', 'provenance', 'journals'] as const;
+export const EXPORT_SECTIONS_V3 = [...EXPORT_SECTIONS_V2] as const;
 
 /** Historical alias retained for callers that need the original version 1 coverage. */
 export const EXPORT_SECTIONS = EXPORT_SECTIONS_V1;
-export type ExportVersion = 1 | 2;
+export type ExportVersion = 1 | 2 | 3;
 export type ExportSectionV1 = (typeof EXPORT_SECTIONS_V1)[number];
-export type ExportSection = (typeof EXPORT_SECTIONS_V2)[number];
+export type ExportSectionV2 = (typeof EXPORT_SECTIONS_V2)[number];
+export type ExportSectionV3 = (typeof EXPORT_SECTIONS_V3)[number];
+export type ExportSection = ExportSectionV2 | ExportSectionV3;
 export type ExportState = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
 export type ExportJson = string | number | boolean | null | ExportJson[] | { readonly [key: string]: ExportJson };
 export type ExportRecord = { readonly section: ExportSection; readonly [key: string]: ExportJson };
@@ -71,10 +75,16 @@ export type ExportCoverageV1 = ExportCoverageCommon & {
 export type ExportCoverageV2 = ExportCoverageCommon & {
   version: 2;
   coverage: typeof EXPORT_V2_COVERAGE;
-  sections: ExportSection[];
+  sections: ExportSectionV2[];
 };
 
-export type ExportCoverage = ExportCoverageV1 | ExportCoverageV2;
+export type ExportCoverageV3 = ExportCoverageCommon & {
+  version: 3;
+  coverage: typeof EXPORT_V3_COVERAGE;
+  sections: ExportSectionV3[];
+};
+
+export type ExportCoverage = ExportCoverageV1 | ExportCoverageV2 | ExportCoverageV3;
 export type ExportStatus = ExportCoverage & { state: ExportState; first: string | null };
 
 export type ExportSectionTotal = { rows: number; recordBytes: number };
@@ -86,7 +96,12 @@ export type ExportManifestV2 = ExportCoverageV2 & {
   recordBytes: number;
   sectionTotals: ExportSectionTotals;
 };
-export type ExportManifest = ExportManifestV1 | ExportManifestV2;
+export type ExportManifestV3 = ExportCoverageV3 & {
+  rows: number;
+  recordBytes: number;
+  sectionTotals: ExportSectionTotals;
+};
+export type ExportManifest = ExportManifestV1 | ExportManifestV2 | ExportManifestV3;
 
 export type ExportPage = {
   exportId: string;
@@ -173,7 +188,8 @@ export function exportCoverage(value: ExportCoverage): ExportCoverage {
     fullExport: false as const,
   };
   if (value.version === 1) return { ...common, version: 1, sections: [...value.sections] };
-  return { ...common, version: 2, coverage: value.coverage, sections: [...value.sections] };
+  if (value.version === 2) return { ...common, version: 2, coverage: value.coverage, sections: [...value.sections] };
+  return { ...common, version: 3, coverage: value.coverage, sections: [...value.sections] };
 }
 
 export function sameExportCoverage(left: ExportCoverage, right: ExportCoverage): boolean {
@@ -191,6 +207,7 @@ export function sameExportCoverage(left: ExportCoverage, right: ExportCoverage):
   )
     return false;
   if (left.version === 2 && (right.version !== 2 || left.coverage !== right.coverage)) return false;
+  if (left.version === 3 && (right.version !== 3 || left.coverage !== right.coverage)) return false;
   const leftKeys = Object.keys(left.omissions);
   const rightKeys = Object.keys(right.omissions);
   return (
@@ -254,8 +271,12 @@ export function isExportCoverage(value: unknown): value is ExportCoverage {
     return false;
   if (value.version === 1)
     return !Object.hasOwn(value, 'coverage') && exactSections(value.sections, EXPORT_SECTIONS_V1);
+  if (value.version === 2)
+    return value.coverage === EXPORT_V2_COVERAGE && exactSections(value.sections, EXPORT_SECTIONS_V2);
   return (
-    value.version === 2 && value.coverage === EXPORT_V2_COVERAGE && exactSections(value.sections, EXPORT_SECTIONS_V2)
+    value.version === 3 &&
+    value.coverage === EXPORT_V3_COVERAGE &&
+    exactSections(value.sections, EXPORT_SECTIONS_V3)
   );
 }
 
@@ -273,11 +294,16 @@ function validCount(value: unknown, maximum: number): value is number {
   return Number.isSafeInteger(value) && typeof value === 'number' && value >= 0 && value <= maximum;
 }
 
-function validSectionTotals(value: unknown, rows: number, recordBytes: number): value is ExportSectionTotals {
-  if (!isObject(value) || Object.keys(value).length !== EXPORT_SECTIONS_V2.length) return false;
+function validSectionTotals(
+  value: unknown,
+  rows: number,
+  recordBytes: number,
+  sections: readonly string[],
+): value is ExportSectionTotals {
+  if (!isObject(value) || Object.keys(value).length !== sections.length) return false;
   let totalRows = 0;
   let totalBytes = 0;
-  for (const section of EXPORT_SECTIONS_V2) {
+  for (const section of sections) {
     if (!Object.hasOwn(value, section)) return false;
     const total = value[section];
     if (
@@ -298,14 +324,19 @@ export function isExportManifest(value: unknown): value is ExportManifest {
   if (!validCount(manifest.rows, EXPORT_STREAM_RECORDS) || !validCount(manifest.recordBytes, EXPORT_STREAM_BYTES))
     return false;
   if (manifest.version === 1) return !Object.hasOwn(value, 'sectionTotals');
-  return validSectionTotals(manifest.sectionTotals, manifest.rows, manifest.recordBytes);
+  return validSectionTotals(
+    manifest.sectionTotals,
+    manifest.rows,
+    manifest.recordBytes,
+    manifest.version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3,
+  );
 }
 
 export function isExportRecord(value: unknown): value is ExportRecord {
   return (
     isObject(value) &&
     typeof value.section === 'string' &&
-    (EXPORT_SECTIONS_V2 as readonly string[]).includes(value.section) &&
+    (EXPORT_SECTIONS_V3 as readonly string[]).includes(value.section) &&
     isJson(value)
   );
 }

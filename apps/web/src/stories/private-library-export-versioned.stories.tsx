@@ -6,7 +6,14 @@ import {
   EXPORT_PRIVACY,
   EXPORT_COMPLETENESS,
   EXPORT_SECTIONS_V1,
+  EXPORT_SECTIONS_V2,
+  EXPORT_SECTIONS_V3,
+  EXPORT_V2_COVERAGE,
+  EXPORT_V3_COVERAGE,
+  type ExportSectionTotals,
   type ExportManifestV1,
+  type ExportManifestV2,
+  type ExportManifestV3,
 } from '../library/private-export/contract';
 import { ExportCoverage } from '../library/private-export/coverage';
 import { ExportTerminal } from '../library/private-export/states';
@@ -59,14 +66,70 @@ const v1Manifest: ExportManifestV1 = {
   recordBytes: 80,
 };
 
-export const Version2Coverage: Story = {
+const zeroSectionTotals = Object.fromEntries(
+  EXPORT_SECTIONS_V3.map((section) => [section, { rows: 0, recordBytes: 0 }]),
+) as ExportSectionTotals;
+
+const v2Manifest: ExportManifestV2 = {
+  ...v1Manifest,
+  version: 2,
+  coverage: EXPORT_V2_COVERAGE,
+  sections: [...EXPORT_SECTIONS_V2],
+  omissions: {
+    ...v1Manifest.omissions,
+    reimport: 'V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance unsupported',
+  },
+  rows: 0,
+  recordBytes: 0,
+  sectionTotals: zeroSectionTotals,
+};
+
+const v3Manifest: ExportManifestV3 = {
+  ...v1Manifest,
+  version: 3,
+  coverage: EXPORT_V3_COVERAGE,
+  sections: [...EXPORT_SECTIONS_V3],
+  omissions: {
+    ...v1Manifest.omissions,
+    reimport: 'V1/V2 recovery only; V3 assessment and V4 provider evidence unsupported',
+  },
+  rows: 0,
+  recordBytes: 0,
+  sectionTotals: zeroSectionTotals,
+};
+
+export const Version3Coverage: Story = {
   name: 'New capture coverage (illustrative)',
   parameters: {
-    docs: { description: { story: 'Illustrative version 2 coverage; no native response was recorded.' } },
+    docs: { description: { story: 'Illustrative version 3 coverage; no native response was recorded.' } },
   },
   render: () => (
     <Shell>
       <ExportCoverage busy={false} locked={false} previousDisposition={null} onCapture={() => {}} />
+    </Shell>
+  ),
+};
+
+export const StoredVersion2Replay: Story = {
+  name: 'Stored version 2 replay (illustrative)',
+  parameters: {
+    docs: {
+      description: {
+        story: 'Stored version 2 retains its original coverage and cursor; no native response was recorded.',
+      },
+    },
+  },
+  render: () => (
+    <Shell>
+      <ExportReady
+        empty
+        saveFailed={false}
+        bytesLost
+        manifest={v2Manifest}
+        busy={false}
+        onDownload={() => {}}
+        onReplay={() => {}}
+      />
     </Shell>
   ),
 };
@@ -96,12 +159,71 @@ export const StoredVersion1Replay: Story = {
   ),
 };
 
-export const Version2ManifestRefusal: Story = {
-  name: 'Version 2 manifest refusal (illustrative)',
+export const Version3Assessment: Story = {
+  name: 'Version 3 assessment coverage (illustrative)',
   parameters: {
     docs: {
       description: {
-        story: 'Illustrative refusal after a version 2 manifest mismatch. No native response was recorded.',
+        story:
+          'The V3 manifest counts all 17 sections, including empty journals. Its native journal records carry assessment revision 1 and units 0 through 20 or null; missing assessment in V1/V2 remains absent. No native response was recorded.',
+      },
+    },
+  },
+  render: () => (
+    <Shell>
+      <ExportReady
+        empty
+        saveFailed={false}
+        bytesLost={false}
+        manifest={v3Manifest}
+        busy={false}
+        onDownload={() => {}}
+        onReplay={() => {}}
+      />
+    </Shell>
+  ),
+};
+
+export const Version3SaveRetry: Story = {
+  name: 'Version 3 exact save retry (illustrative)',
+  parameters: {
+    docs: { description: { story: 'The completed V3 bytes remain available after a local save failure.' } },
+  },
+  render: () => (
+    <Shell>
+      <ExportReady
+        empty
+        saveFailed
+        bytesLost={false}
+        manifest={v3Manifest}
+        busy={false}
+        onDownload={() => {}}
+        onReplay={() => {}}
+      />
+    </Shell>
+  ),
+};
+
+export const Version3FinalTotalsRefusal: Story = {
+  name: 'Version 3 final totals refusal (illustrative)',
+  parameters: {
+    docs: { description: { story: 'Mismatched final section totals produce no artifact.' } },
+  },
+  render: () => (
+    <Shell>
+      <ExportTerminal stage="unavailable" />
+      <p>{m.library_export_no_reimport()}</p>
+    </Shell>
+  ),
+};
+
+export const Version4Unavailable: Story = {
+  name: 'Version 4 provider evidence unavailable',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'No compatible V4 producer manifest or generated request is installed. The visit stays unavailable and offers no evidence file or write action.',
       },
     },
   },

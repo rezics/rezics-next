@@ -13,27 +13,17 @@ import {
   type ExportUnknown,
 } from './contract';
 
-type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
-type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
-type PageResource = {
-  get: (options: { query: { cursor: string }; headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type IdResource = {
-  get: (options: { headers: NativeHeaders }) => Promise<NativeResult>;
-  delete: (body: undefined, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-  pages?: PageResource;
-};
-export type LibraryExportSurface = ((params: { id: string }) => IdResource) & {
-  post: (body: undefined, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
+type NativeResult = { data: unknown; error: unknown; status: number };
+type NativeHeaders = Record<string, string> & { authorization: string };
+type NativeWriteHeaders = NativeHeaders & { 'idempotency-key': string };
+export type LibraryExportSurface = KernelClient['libraryExports'];
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function asSurface(value: unknown): LibraryExportSurface | undefined {
-  if (typeof value !== 'function') return undefined;
-  const surface = value as LibraryExportSurface;
+function asSurface(surface: LibraryExportSurface): LibraryExportSurface | undefined {
+  if (typeof surface !== 'function') return undefined;
   if (typeof surface.post !== 'function') return undefined;
   try {
     const resource = surface({ id: '00000000-0000-4000-8000-000000000000' });
@@ -47,7 +37,7 @@ function asSurface(value: unknown): LibraryExportSurface | undefined {
 
 /** Use only the mounted generated `libraryExports` surface; absent methods stay unavailable. */
 export function nativeLibraryExport(client: KernelClient): LibraryExportSurface | undefined {
-  return asSurface(Reflect.get(client, 'libraryExports'));
+  return asSurface(client.libraryExports);
 }
 
 function publicDetail(detail: unknown): string | undefined {
@@ -82,6 +72,10 @@ function outcomeOf(status: number, body: unknown, command: ExportCommand): Expor
   return failure(status, body);
 }
 
+function errorBody(value: unknown): unknown {
+  return record(value) && Object.hasOwn(value, 'value') ? value.value : value;
+}
+
 async function withSession(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -105,10 +99,13 @@ export function kernelExportPort(
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
 ): ExportPort {
-  const headers = (authorization: string, key?: string): NativeHeaders => ({
-    authorization,
-    ...(key ? { 'idempotency-key': quotedIdempotencyKey(key) } : {}),
-  });
+  function headers(authorization: string): NativeHeaders;
+  function headers(authorization: string, key: string): NativeWriteHeaders;
+  function headers(authorization: string, key?: string): NativeHeaders | NativeWriteHeaders {
+    return key
+      ? { authorization, 'idempotency-key': quotedIdempotencyKey(key) }
+      : { authorization };
+  }
   async function call<T>(
     command: ExportCommand,
     send: (surface: LibraryExportSurface, authorization: string) => Promise<NativeResult>,
@@ -120,7 +117,7 @@ export function kernelExportPort(
     if (!surface) return { kind: 'unavailable' };
     try {
       const result = await send(surface, session.authorization);
-      if (result.error) return outcomeOf(result.status, result.error.value, command);
+      if (result.error) return outcomeOf(result.status, errorBody(result.error), command);
       const value = read(result.data);
       if (!value) return { kind: 'unavailable' };
       return value;
@@ -133,7 +130,7 @@ export function kernelExportPort(
     async create(command) {
       return call(
         command,
-        (surface, authorization) => surface.post(undefined, { headers: headers(authorization, command.key) }),
+        (surface, authorization) => surface.post({ headers: headers(authorization, command.key) }),
         (data) => (isExportStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
       );
     },
@@ -149,7 +146,8 @@ export function kernelExportPort(
         command,
         (surface, authorization) => {
           const pages = surface({ id: command.exportId }).pages;
-          if (!pages) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
+          if (!pages)
+            return Promise.resolve({ data: null, status: 503, error: { value: { code: 'unavailable' } } });
           return pages.get({ query: { cursor: command.cursor }, headers: headers(authorization) });
         },
         (data) => (isExportPage(data) ? ({ kind: 'page' as const, page: data } as const) : undefined),
@@ -158,8 +156,7 @@ export function kernelExportPort(
     async cancel(command) {
       return call(
         command,
-        (surface, authorization) =>
-          surface({ id: command.exportId }).delete(undefined, { headers: headers(authorization) }),
+        (surface, authorization) => surface({ id: command.exportId }).delete({ headers: headers(authorization) }),
         (data) => (isExportStatus(data) ? ({ kind: 'cancelled' as const, status: data } as const) : undefined),
       );
     },

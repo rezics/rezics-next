@@ -57,11 +57,12 @@ export function ExportReady({
           ))}
         </ul>
       </div>
+      <p>{m.library_export_no_reimport()}</p>
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">{m.library_export_sections_heading()}</h2>
         <ul className="list-disc space-y-2 pl-6">
           {manifest.sections.map((section) => {
-            const total = manifest.version === 2 ? manifest.sectionTotals[section] : null;
+            const total = manifest.version === 1 ? null : manifest.sectionTotals[section];
             return (
               <li key={section}>
                 {exportSectionLabel(section)}

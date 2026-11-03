@@ -4,6 +4,7 @@ import {
   EXPORT_ROW_BYTES,
   EXPORT_SECTIONS_V1,
   EXPORT_SECTIONS_V2,
+  EXPORT_SECTIONS_V3,
   EXPORT_STREAM_BYTES,
   EXPORT_STREAM_RECORDS,
   artifactFilename,
@@ -33,7 +34,8 @@ export class ExportAssembly {
     if (this.version !== null && this.version !== version) return { kind: 'invalid' };
     this.version = version;
     if (this.sectionTotals.size === 0) {
-      const sections = version === 1 ? EXPORT_SECTIONS_V1 : EXPORT_SECTIONS_V2;
+      const sections =
+        version === 1 ? EXPORT_SECTIONS_V1 : version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
       for (const section of sections) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
     }
     return null;
@@ -46,9 +48,14 @@ export class ExportAssembly {
     let pageBytes = 0;
     const pageTotals = new Map<string, SectionCount>();
     for (const record of records) {
-      if (!isExportRecord(record) || !this.sectionTotals.has(record.section)) return { kind: 'invalid' };
+      if (
+        !isExportRecord(record) ||
+        !this.sectionTotals.has(record.section) ||
+        !recordMatchesVersion(record, version)
+      )
+        return { kind: 'invalid' };
       const recordBytes = encodedRecordBytes(record);
-      if (version === 2 && recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
+      if (version !== 1 && recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
       pageBytes += recordBytes;
       const sectionTotal = pageTotals.get(record.section) ?? { rows: 0, recordBytes: 0 };
       sectionTotal.rows += 1;
@@ -77,8 +84,9 @@ export class ExportAssembly {
     if (this.version !== manifest.version || manifest.rows !== this.records || manifest.recordBytes !== this.bytes)
       return { kind: 'invalid' };
 
-    if (manifest.version === 2) {
-      for (const section of EXPORT_SECTIONS_V2) {
+    if (manifest.version !== 1) {
+      const sections = manifest.version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
+      for (const section of sections) {
         const actual = this.sectionTotals.get(section);
         const declared = manifest.sectionTotals[section];
         if (!actual || declared.rows !== actual.rows || declared.recordBytes !== actual.recordBytes)
@@ -136,6 +144,26 @@ export class ExportAssembly {
     this.sectionTotals.clear();
     this.artifact = null;
   }
+}
+
+function recordMatchesVersion(record: ExportRecord, version: ExportVersion): boolean {
+  if (record.section !== 'journals') return true;
+  const journal = record.journal;
+  if (!journal || typeof journal !== 'object' || Array.isArray(journal)) return false;
+  const value = journal as Record<string, unknown>;
+  const hasAssessment = Object.hasOwn(value, 'assessment');
+  if (version !== 3) return !hasAssessment;
+  const assessment = value.assessment;
+  if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) return false;
+  const details = assessment as Record<string, unknown>;
+  const units = details.units;
+  return (
+    Object.keys(details).length === 2 &&
+    Object.hasOwn(details, 'meaningRevision') &&
+    Object.hasOwn(details, 'units') &&
+    details.meaningRevision === 1 &&
+    (units === null || (typeof units === 'number' && Number.isInteger(units) && units >= 0 && units <= 20))
+  );
 }
 
 export function deliverLocalFile(file: ExportArtifact): boolean {

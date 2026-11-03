@@ -316,10 +316,16 @@ distinct from public Collection ItemList export and from personal-list import wr
 native coverage, creates only on explicit intent, traverses pages sequentially, assembles a local versioned JSON
 file after the final manifest, and offers download, save retry, replay of the original first cursor, cancellation and
 deliberate restart. Native storage, fences, expiry, limits and admission stay with Commerce. Missing typed methods
-render unavailable. Decision: new captures use version 2; stored version 1 captures keep their original coverage,
-manifest fields and cursors, while version 2 annotations, provenance and journals remain illustrative in stories until
-recorded. Bind the installed `libraryExports` surface when present; do not add a second export engine or copy missing
-fields from other private reads. The [Web consumer guide](../../apps/web/src/library/private-export/README.md) and
+or unsupported versions render unavailable. Decision: new captures use version 3, with the version 2 inventory and
+section totals, and each journal assessment preserves `meaningRevision: 1` and `units` from 0 through 20 or `null`.
+Stored version 1
+and 2 captures retain their original sections, record shapes, manifest fields, byte accounting and cursor epochs;
+missing legacy assessments remain absent. Provider evidence stays unavailable until Commerce publishes the exact V4
+coverage, section order, manifest, cursor epoch and generated request. A V3 capture with provider sections is not
+accepted as V4. Version 3 assessments and version 4 provider evidence remain unsupported by archive recovery, and
+downloading them grants no vote, journal, label or progress action. Bind only the installed `libraryExports` surface;
+do not add a second export engine or copy missing fields from other private reads. The
+[Web consumer guide](../../apps/web/src/library/private-export/README.md) and
 [personal Library export](../library-export.md) describe the visit and native contract.
 
 ### Personal Collection archive recovery
