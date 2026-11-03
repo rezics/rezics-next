@@ -8,6 +8,7 @@ import type {
 import { createLibraryDriver } from './outcome-driver.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import { json, publish, setGate, unavailable, write } from './native-conformance.ts';
+import { createNativeShelvesGrowthFixture } from './native-shelves-growth-fixture.ts';
 import { costOf } from '../../support/growth.ts';
 
 const timestamp = (column: string) => `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
@@ -19,6 +20,12 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
     await publish(world, await compileCatalogue(sources));
     const database = world.native.reader;
     const accounts = Object.values(world.accounts).map((account) => account.id);
+    const growth = createNativeShelvesGrowthFixture(world, {
+      type: profileTypes.book,
+      trackAccount(accountId) {
+        if (!accounts.includes(accountId)) accounts.push(accountId);
+      },
+    });
     const driver: LibraryShelvesDriver = {
       accounts: world.accounts,
       unknownSubjectId: world.unknown.subjectId,
@@ -166,8 +173,8 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
       async settle() {
         await world.settle();
       },
-      async seed() {
-        return unavailable('production-shaped shelf growth fixture with admitted owner heads/counters');
+      async seed(input) {
+        await growth.seed(input);
       },
       async measure(operation) {
         const measured = await world.native.capture(operation);
