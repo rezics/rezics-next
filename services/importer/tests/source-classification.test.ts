@@ -341,6 +341,22 @@ test('interrupted delivery resumes the sealed body and key; older dates stay ref
   }
 });
 
+test('production converter withholds classification from dump payload until admitted facts exist', () => {
+  const input = { external_id: 'v123', record_revision: '7', record: vn().payload };
+  expect(registration.convert(input, { source: 'vndb' }).sourceClassification).toBeUndefined();
+  expect(
+    registration.convert(input, { source: 'vndb', sourceClassification: admittedFacts() }).sourceClassification,
+  ).toMatchObject({ state: 'available', value: { kind: 'observation', confidence: 2.4 } });
+  expect(
+    registration.convert(input, {
+      source: 'vndb',
+      sourceClassification: admittedFacts({
+        licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
+      }),
+    }).sourceClassification,
+  ).toEqual({ state: 'unavailable', reason: 'unadmitted' });
+});
+
 test('unadmitted licences, missing association and absent admission have zero native classification effects', async () => {
   for (const options of [
     { admit: false as const },
