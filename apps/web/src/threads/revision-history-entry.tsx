@@ -10,6 +10,9 @@ import { exactRevisionHref } from './exact-revision-href';
 import { revisionDocumentImage } from './exact-revision-media';
 import { RevisionProvenance } from './revision-provenance-view';
 import { CopyDiscussionLink } from './copy-discussion-link';
+import { HistoryNativeProvenance } from './post-history-current-context';
+import { HistoryComparisonReader } from './post-history-current-comparison';
+import type { HistoryRevisionContext } from './post-history-lifetime';
 import type { HistoryPage } from './post-history-lifetime';
 import type { PageAuthor } from '../identity/read';
 import {
@@ -145,9 +148,10 @@ export function RevisionSummaryRow({
   onInspect,
   onCollapse,
   onNavigate,
+  isCurrent,
 }: {
   summary: RevisionSummary;
-  entry: { revision: Revision; documentMedia: HistoryPage['documentMedia'] };
+  entry: { revision: Revision; documentMedia: HistoryPage['documentMedia']; native?: HistoryRevisionContext };
   expanded: boolean;
   active: boolean;
   triggerId: string;
@@ -162,6 +166,7 @@ export function RevisionSummaryRow({
   onInspect: () => void;
   onCollapse: () => void;
   onNavigate: () => void;
+  isCurrent: () => boolean;
 }) {
   const locale = getLocale();
   const headingId = `${triggerId}-heading`;
@@ -260,7 +265,13 @@ export function RevisionSummaryRow({
           {summary.scored ? (
             <li>{m.revision_history_rating_recorded()}</li>
           ) : review ? (
-            <li>{m.thread_provenance_unscored()}</li>
+            <li>
+              {entry.native
+                ? entry.native.reviewState === 'unavailable'
+                  ? m.post_history_score_failed()
+                  : m.post_history_score_concealed()
+                : m.thread_provenance_unscored()}
+            </li>
           ) : null}
         </ul>
         {expanded && active ? (
@@ -319,8 +330,12 @@ export function RevisionSummaryRow({
               documentMedia={entry.documentMedia}
               subjects={subjects}
               currentVote={currentVote}
-              review={review}
+              review={entry.native ? false : review}
             />
+            {entry.native ? <HistoryNativeProvenance native={entry.native} review={review} /> : null}
+            {entry.native?.comparison ? (
+              <HistoryComparisonReader comparison={entry.native.comparison} isCurrent={isCurrent} />
+            ) : null}
             <footer className="space-y-2 border-t border-border/60 pt-3">
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
                 <a href={href} target="_blank" rel="noopener noreferrer" className={historyAction}>

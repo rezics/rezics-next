@@ -346,7 +346,8 @@ that same address; unavailable disclosure is not empty history. Its prepared cal
 private no-store responses and retirement.
 
 Decision: consume the generated closed history page context as the authority for current presentation and
-revision-keyed enrichment; exact and admitted comparison links open in a separate tab to retain selection and focus.
+revision-keyed enrichment; exact links open in a separate tab, while admitted comparisons reuse the exact reader
+inside the selected inspector and return focus to their trigger.
 Current names never change immutable authorship, and current votes cannot replace recorded citations or scales.
 Concealed, absent and failed context retain their native meanings; failed context retries the same history address.
 
@@ -371,7 +372,7 @@ Summary projection is O(N) small metadata records for N supplied revisions. Gene
 within 240 code points; documents are neither flattened nor duplicated. Inspection state is constant in N.
 The original disclosure owns one replacing page, authors/mentions/media, exact failed-cursor retry and
 continuation focus. Starting a cursor request synchronously clears the former rows, labels, media and selection;
-a failed request keeps only its exact address. Author and mention keys share at most two deduplicated public
+a failed request keeps only its exact address. Generated native enrichment needs no follow-up hydration; legacy author and mention keys share bounded public
 identity batches, and the selected inspector shows the immutable revision and author account references. The presentation is keyed by its connection and retires with the session, account, read authority,
 QueryClient, route and locale. Returning through an A–B–A identity change cannot restore old disclosure.
 
