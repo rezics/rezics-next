@@ -1935,7 +1935,7 @@ def artifact_bytes(entry):
         with (entry / '.cache-bytes').open() as record:
             value = record.read(64).strip()
         return int(value) if re.fullmatch(r'[0-9]{1,30}', value) else None
-    except OSError:
+    except (OSError, UnicodeError):
         return None
 
 
@@ -2072,7 +2072,7 @@ def evict_artifacts(cache):
         if state['namespace'] == 2:
             disk = shutil.disk_usage(cache)
             bound = max(0, min(disk.total // 10, state['bytes'] + disk.free - disk.total // 10))
-            candidates = sorted(state['known'] + state['legacy']) if state['bytes'] > bound else state['legacy']
+            candidates = sorted(state['known'] + state['legacy'], key=lambda item: item[0]) if state['bytes'] > bound else state['legacy']
             for last_use, device, inode, name, size in candidates[:8]:
                 if time.monotonic() >= deadline - 1:
                     break
@@ -2103,11 +2103,15 @@ def schedule_maintenance(root):
     # systemd owns a singleton timer/service outside the completed run's scope. Its program is independent of run files.
     # --no-block waits only for registration, never a sweep; failure cannot change the command's status.
     try:
+        import base64, zlib
+        encoded = base64.b64encode(zlib.compress(Path(__file__).read_bytes())).decode('ascii')
+        # ExecStart expands dollars and percent specifiers; carry source as inert encoded bytes instead.
+        program = 'import base64,zlib;exec(zlib.decompress(base64.b64decode(' + repr(encoded) + ')))'
         subprocess.run(['systemd-run', '--unit=rezics-check-cache-maintenance', '--collect', '--no-block',
             '--on-active=1s', '--on-unit-inactive=60s', '--timer-property=RemainAfterElapse=no',
             '-p', 'RuntimeMaxSec=3s', '-p', 'TimeoutStopSec=1s', '-p', 'KillMode=control-group',
             '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
-            'python3', '-c', Path(__file__).read_text(), 'sweep', str(root.parent.parent / 'dependency-artifacts')],
+            'python3', '-c', program, 'sweep', str(root.parent.parent / 'dependency-artifacts')],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1, cwd=root)
     except (OSError, subprocess.TimeoutExpired):
         pass

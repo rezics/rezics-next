@@ -7017,6 +7017,7 @@ test('maintenance resumes bounded legacy batches, preserves entry locks and neve
     writeFileSync(join(entry, 'legacy'), 'unknown bytes');
     utimesSync(entry, 1, 1);
   }
+  writeFileSync(join(entries[1]!, '.cache-bytes'), Buffer.from([255]));
   const holder = Bun.spawn(['flock', entries[0] + '.lock', 'sh', '-c', 'echo LOCKED; cat'], {
     stdin: 'pipe',
     stdout: 'pipe',
@@ -7090,6 +7091,9 @@ test('slow interrupted deletion releases coordination, preserves warm reuse and 
   const fixture = preparationFixture();
   const run = fixture.create();
   expect(run.execute().status).toBe(0);
+  const request = readFileSync(join(run.run, 'maintenance-request'), 'utf8').trim().split('\n');
+  rmSync(join(run.run, '.temp/check-host/prepare.py'));
+  sweepArtifacts(fixture.directory, request[request.indexOf('python3') + 2]!);
   const cache = join(fixture.directory, 'dependency-artifacts');
   const garbage = join(cache, '.garbage', 'interrupted');
   mkdirSync(garbage, { recursive: true });
@@ -7114,6 +7118,9 @@ def install():`,
     const warm = fixture.create();
     expect(warm.execute().status).toBe(0);
     expect(warm.artifacts().cache).toBe('hit');
+    const publisher = fixture.create({ source: 'published during slow maintenance' });
+    expect(publisher.execute().status).toBe(0);
+    expect(publisher.artifacts().cache).toBe('miss');
     child.kill('SIGKILL');
     await child.exited;
     const offset = `
@@ -7335,10 +7342,12 @@ test('fresh source edits reuse verified native packages while source-dependent l
   const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
   manifest.nativeChecks.reverse();
   writeFileSync(manifestFile, JSON.stringify(manifest));
+  utimesSync(join(nativeCache, nativeEntry), 1, 1);
   const edited = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'unrelated prose edit' });
   const result = edited.execute();
   expect(result.status, result.stderr).toBe(0);
   expect(edited.artifacts()).toMatchObject({ cache: 'miss', nativeCache: 'hit' });
+  expect(statSync(join(nativeCache, nativeEntry)).mtimeMs).toBeGreaterThan(1000);
   expect(readFileSync(join(edited.run, 'generated/source.txt'), 'utf8')).toBe('unrelated prose edit');
   expect(fixture.events().filter((event) => event.startsWith('install:'))).toHaveLength(2);
   expect(fixture.events().filter((event) => event === 'download:1.20261023.1')).toHaveLength(1);
