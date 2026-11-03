@@ -51,8 +51,7 @@ export type ConversationActivitySource = Readonly<{
 }>;
 
 export type ConversationActivityReplyCount = Readonly<
-  | { kind: 'exact'; value: number }
-  | { kind: 'lower-bound'; value: number }
+  { kind: 'exact'; value: number } | { kind: 'lower-bound'; value: number }
 >;
 export type ConversationActivityWitness = Readonly<{
   threadId: string;
@@ -89,7 +88,10 @@ export type ConversationActivityBatch = Readonly<{
     deadline: number,
   ): Promise<readonly ConversationActivitySelection[]>;
 }>;
-export { CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE, repairConversationActivityPage } from './conversation-activity-repair.ts';
+export {
+  CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE,
+  repairConversationActivityPage,
+} from './conversation-activity-repair.ts';
 
 export function toConversationActivityReplyCount(count: bigint | string): ConversationActivityReplyCount {
   const value = typeof count === 'bigint' ? count : BigInt(count);
@@ -178,7 +180,10 @@ function activitySelection(
 
 /** Factory bound at the consumer's selected native key set, before labels/actions are hydrated. */
 export function createConversationActivityBatch(pool: Pool): ConversationActivityBatch {
-  async function select(threadIds: readonly string[], deadline: number): Promise<readonly ConversationActivitySelection[]> {
+  async function select(
+    threadIds: readonly string[],
+    deadline: number,
+  ): Promise<readonly ConversationActivitySelection[]> {
     if (threadIds.length > CONVERSATION_ACTIVITY_BATCH_LIMIT)
       throw new RangeError('Conversation activity accepts at most 100 raw keys');
     const unique = [...new Set(threadIds)];
@@ -234,7 +239,9 @@ export function createConversationActivityBatch(pool: Pool): ConversationActivit
       if (selected.length > CONVERSATION_ACTIVITY_BATCH_LIMIT)
         throw new RangeError('Conversation activity accepts at most 100 raw keys');
       const current = await select(
-        selected.filter((item): item is ConversationActivityCurrent => item.status === 'current').map(({ threadId }) => threadId),
+        selected
+          .filter((item): item is ConversationActivityCurrent => item.status === 'current')
+          .map(({ threadId }) => threadId),
         deadline,
       );
       const byThread = new Map(current.map((item) => [item.threadId, item]));
@@ -489,21 +496,20 @@ async function adjustActivityCoverage(
     const contributedAt = row.saved_contributed_at ?? row.publication_at;
     const opening = row.previous_opening ?? row.post_id === row.first_post_id;
     const previousPublic = row.previous_public_eligible ?? false;
-    const change =
-      changes.get(`${postRoute}:${row.thread_id}`) ?? {
-        route: postRoute,
-        threadId: row.thread_id,
-        boardId: row.board_id,
-        threadSecurityRevision: row.thread_security_revision,
-        boardSecurityRevision: row.board_security_revision,
-        threadVisibility: row.thread_visibility,
-        threadAvailability: row.thread_availability,
-        boardVisibility: row.board_visibility,
-        delta: 0,
-        added: [],
-        removedLatest: false,
-        needsRepair: false,
-      };
+    const change = changes.get(`${postRoute}:${row.thread_id}`) ?? {
+      route: postRoute,
+      threadId: row.thread_id,
+      boardId: row.board_id,
+      threadSecurityRevision: row.thread_security_revision,
+      boardSecurityRevision: row.board_security_revision,
+      threadVisibility: row.thread_visibility,
+      threadAvailability: row.thread_availability,
+      boardVisibility: row.board_visibility,
+      delta: 0,
+      added: [],
+      removedLatest: false,
+      needsRepair: false,
+    };
     if (!opening && previousPublic !== publicEligible) change.delta += publicEligible ? 1 : -1;
     if (publicEligible && !contributedAt) change.needsRepair = true;
     if (publicEligible && !previousPublic && contributedAt) change.added.push({ postId, at: contributedAt });
@@ -531,8 +537,7 @@ async function adjustActivityCoverage(
     changes.set(`${postRoute}:${row.thread_id}`, change);
   }
 
-  for (const change of changes.values())
-    await applyActivityChange(client, change, identity);
+  for (const change of changes.values()) await applyActivityChange(client, change, identity);
 }
 
 async function openingSummary(client: AccessClient, route: number, threadId: string): Promise<ActivitySummary | null> {
@@ -555,12 +560,22 @@ async function applyActivityChange(
   identity: Readonly<{ epoch: number; position: bigint; eventSeq: number }>,
 ): Promise<void> {
   if (change.needsRepair || !change.boardId || !change.threadSecurityRevision || !change.boardSecurityRevision) {
-    await invalidateActivityCoverage(client, [change.threadId], { ...identity, partition: partitionOf(change.route) }, true);
+    await invalidateActivityCoverage(
+      client,
+      [change.threadId],
+      { ...identity, partition: partitionOf(change.route) },
+      true,
+    );
     return;
   }
   const summary = await openingSummary(client, change.route, change.threadId);
   if (!summary) {
-    await invalidateActivityCoverage(client, [change.threadId], { ...identity, partition: partitionOf(change.route) }, true);
+    await invalidateActivityCoverage(
+      client,
+      [change.threadId],
+      { ...identity, partition: partitionOf(change.route) },
+      true,
+    );
     return;
   }
   const { rows: boardRows } = await client.query<{ generation: string }>(
@@ -579,13 +594,23 @@ async function applyActivityChange(
     change.threadAvailability !== 'available' ||
     change.boardVisibility !== 'published'
   ) {
-    await invalidateActivityCoverage(client, [change.threadId], { ...identity, partition: partitionOf(change.route) }, true);
+    await invalidateActivityCoverage(
+      client,
+      [change.threadId],
+      { ...identity, partition: partitionOf(change.route) },
+      true,
+    );
     return;
   }
   if (change.delta === 0 && change.added.length === 0 && !change.removedLatest) return;
   const replyCount = BigInt(summary.coverage_reply_count) + BigInt(change.delta);
   if (replyCount < 0n) {
-    await invalidateActivityCoverage(client, [change.threadId], { ...identity, partition: partitionOf(change.route) }, true);
+    await invalidateActivityCoverage(
+      client,
+      [change.threadId],
+      { ...identity, partition: partitionOf(change.route) },
+      true,
+    );
     return;
   }
   let latestAt = summary.coverage_latest_at;
@@ -593,7 +618,9 @@ async function applyActivityChange(
   if (change.removedLatest) {
     const { rows } = await client.query<{ post_id: string; contributed_at: string }>(
       latestContribution.sql,
-      latestContribution.params.map((name) => ({ route: change.route, thread_id: change.threadId })[name as 'route' | 'thread_id']),
+      latestContribution.params.map(
+        (name) => ({ route: change.route, thread_id: change.threadId })[name as 'route' | 'thread_id'],
+      ),
     );
     latestAt = rows[0]?.contributed_at ?? null;
     latestPostId = rows[0]?.post_id ?? null;
@@ -610,7 +637,12 @@ async function applyActivityChange(
     }
   }
   if (latestAt === null || latestPostId === null) {
-    await invalidateActivityCoverage(client, [change.threadId], { ...identity, partition: partitionOf(change.route) }, true);
+    await invalidateActivityCoverage(
+      client,
+      [change.threadId],
+      { ...identity, partition: partitionOf(change.route) },
+      true,
+    );
     return;
   }
   await client.query(
@@ -664,7 +696,11 @@ export function createConversationActivityEffect(pool: Pool): Effect {
         await invalidateActivityCoverage(client, [input.threadId!], identity);
         return;
       }
-      if (event.type === 'com.rezics.content.post.created.v1' || event.type === 'com.rezics.content.revision.created.v1') return;
+      if (
+        event.type === 'com.rezics.content.post.created.v1' ||
+        event.type === 'com.rezics.content.revision.created.v1'
+      )
+        return;
       if (input.postIds.length) {
         await adjustActivityCoverage(client, input, identity);
         return;

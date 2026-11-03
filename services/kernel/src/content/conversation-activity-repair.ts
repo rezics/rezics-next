@@ -216,7 +216,7 @@ async function repairSourcePage(
     `UPDATE content.conversation_activity_repair_frontier
         SET after_route=$2, after_thread_id=$3, complete=$4
       WHERE partition_no=$1`,
-    [partitionNo, hasMore ? last?.route ?? null : null, hasMore ? last?.thread_id ?? null : null, !hasMore],
+    [partitionNo, hasMore ? (last?.route ?? null) : null, hasMore ? (last?.thread_id ?? null) : null, !hasMore],
   );
   return { scannedThreads: page.length, sourceComplete: !hasMore };
 }
@@ -268,7 +268,10 @@ async function seedOpenings(
 async function repairBoardPage(
   client: AccessClient,
   partitionNo: number,
-): Promise<Pick<ConversationActivityRepairPage, 'scannedThreads' | 'repairedPosts' | 'completedThreads' | 'more'> | null> {
+): Promise<Pick<
+  ConversationActivityRepairPage,
+  'scannedThreads' | 'repairedPosts' | 'completedThreads' | 'more'
+> | null> {
   const { rows } = await client.query<BoardFrontier>(
     `SELECT route, board_id, generation::text, source_epoch, source_position::text,
             source_event_seq, after_thread_id
@@ -313,8 +316,14 @@ async function repairBoardPage(
          FROM unnest($1::integer[], $2::uuid[]) AS selected(route, thread_id)
         WHERE opening.route=selected.route AND opening.thread_id=selected.thread_id AND opening.opening
           AND opening.coverage_board_generation::text IS DISTINCT FROM $3`,
-      [page.map((thread) => thread.route), page.map((thread) => thread.thread_id), board.generation,
-        board.source_epoch, board.source_position, board.source_event_seq],
+      [
+        page.map((thread) => thread.route),
+        page.map((thread) => thread.thread_id),
+        board.generation,
+        board.source_epoch,
+        board.source_position,
+        board.source_event_seq,
+      ],
     );
   }
   const hasMore = threads.length > CONVERSATION_ACTIVITY_REPAIR_PAGE_SIZE;
@@ -323,7 +332,7 @@ async function repairBoardPage(
     `UPDATE content.conversation_activity_board_frontier
         SET after_thread_id=$3, complete=$4
       WHERE route=$1 AND board_id=$2`,
-    [board.route, board.board_id, hasMore ? last?.thread_id ?? null : null, !hasMore],
+    [board.route, board.board_id, hasMore ? (last?.thread_id ?? null) : null, !hasMore],
   );
   return { scannedThreads: page.length, repairedPosts: 0, completedThreads: 0, more: hasMore };
 }
@@ -389,7 +398,8 @@ async function repairThreadPage(
   const afterCreatedAt = resumed ? opening.repair_after_created_at : null;
   const afterPostId = resumed ? opening.repair_after_post_id : null;
   const sourceEpoch = resumed && opening.repair_source_epoch !== null ? opening.repair_source_epoch : epoch;
-  const sourcePosition = resumed && opening.repair_source_position !== null ? opening.repair_source_position : position.toString();
+  const sourcePosition =
+    resumed && opening.repair_source_position !== null ? opening.repair_source_position : position.toString();
   let replyCount = resumed ? BigInt(opening.coverage_reply_count) : 0n;
   let latestAt = resumed ? opening.coverage_latest_at : null;
   let latestPostId = resumed ? opening.coverage_latest_post_id : null;
@@ -512,7 +522,9 @@ function isLater(
   currentAt: string | null,
   currentId: string | null,
 ): boolean {
-  return currentAt === null || candidateAt > currentAt || (candidateAt === currentAt && candidateId > (currentId ?? ''));
+  return (
+    currentAt === null || candidateAt > currentAt || (candidateAt === currentAt && candidateId > (currentId ?? ''))
+  );
 }
 
 async function boardGeneration(client: AccessClient, route: number, boardId: string): Promise<string> {
