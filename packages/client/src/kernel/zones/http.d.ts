@@ -1847,7 +1847,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2073,7 +2073,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2217,7 +2217,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };

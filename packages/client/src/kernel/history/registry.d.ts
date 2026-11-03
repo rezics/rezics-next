@@ -1,6 +1,7 @@
 import type { CommandTransaction } from '../command/command.ts';
 import type { AccountReference, HistoryLocator } from './locator.ts';
 import { type HistoryArtifactType } from './contracts.ts';
+import type { HistoryReceivingContext } from './receiving.ts';
 export type HistoryBarrier = Readonly<{
     accountId: string;
     accountRoute: number;
@@ -23,7 +24,7 @@ export type HistoryOwner = Readonly<{
     artifactType: HistoryArtifactType;
     version: 1;
     /** Reads exact native consumer obligations in the source transaction. Never a workflow-status test. */
-    readiness(tx: CommandTransaction, artifact: HistoryArtifact, barrier: HistoryBarrier): Promise<HistoryReadiness>;
+    readiness(tx: CommandTransaction, artifact: HistoryArtifact, barrier: HistoryBarrier, context?: HistoryReceivingContext): Promise<HistoryReadiness>;
 }>;
 /** Required producer families, independently of which ones happen to have artifacts today. */
 export declare const HISTORY_PRODUCER_FAMILIES: readonly ["access", "commerce", "community", "content", "library", "rating", "semantic", "zones", "imports"];

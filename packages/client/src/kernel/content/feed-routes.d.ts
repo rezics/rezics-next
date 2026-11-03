@@ -1840,7 +1840,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2066,7 +2066,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2210,7 +2210,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };
@@ -5186,6 +5186,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         kind: import("typebox").TOptional<import("typebox").TString>;
+        spaceId: import("typebox").TOptional<import("typebox").TString>;
+        ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     transform: unknown;
     response: {
@@ -5504,6 +5506,20 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>>>;
         }>;
         403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -5899,6 +5915,17 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
         409: {
             type: unknown;
             title: unknown;
@@ -6253,6 +6280,17 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail: unknown;
             errors: unknown;
         };
+        404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
         409: {
             type: unknown;
             title: unknown;
@@ -6293,6 +6331,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             kind: import("typebox").TOptional<import("typebox").TString>;
+            spaceId: import("typebox").TOptional<import("typebox").TString>;
+            ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
         }>;
         transform: unknown;
         response: {
@@ -6624,6 +6664,20 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
+            404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             409: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -6706,6 +6760,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         limit?: number;
         cursor?: string;
         kind?: string;
+        spaceId?: string;
+        ratingQuestionId?: string;
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -7015,6 +7071,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         kind: import("typebox").TOptional<import("typebox").TString>;
+        spaceId: import("typebox").TOptional<import("typebox").TString>;
+        ratingQuestionId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     transform: ({ request, set }: Omit<{
         server: import("elysia").Server | null;
@@ -7335,6 +7393,17 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 errors: unknown;
             };
             403: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            404: {
                 type: unknown;
                 title: unknown;
                 status: number;
@@ -7699,6 +7768,17 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail: unknown;
                 errors: unknown;
             };
+            404: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
             409: {
                 type: unknown;
                 title: unknown;
@@ -7740,6 +7820,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 limit?: string;
                 cursor?: string;
                 kind?: string;
+                spaceId?: string;
+                ratingQuestionId?: string;
             } & {
                 [key: string]: unknown;
             };
@@ -8063,6 +8145,17 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     detail: unknown;
                     errors: unknown;
                 };
+                404: {
+                    type: unknown;
+                    title: unknown;
+                    status: number;
+                    code: unknown;
+                    retryable: unknown;
+                    effect_status: "not_applicable" | "not_applied";
+                    request_id: string;
+                    detail: unknown;
+                    errors: unknown;
+                };
                 409: {
                     type: unknown;
                     title: unknown;
@@ -8114,6 +8207,8 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             limit?: string;
             cursor?: string;
             kind?: string;
+            spaceId?: string;
+            ratingQuestionId?: string;
         };
         params: {};
         headers: Record<string, string | undefined>;
@@ -8437,6 +8532,20 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             }>>>;
         }>;
         403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;

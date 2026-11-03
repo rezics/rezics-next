@@ -12,7 +12,13 @@ export type ReportTarget = Readonly<{
 }> | Readonly<{
     kind: 'post';
     id: PostId;
+}> | Readonly<{
+    kind: 'subject';
+    id: string;
 }>;
+export declare const CATALOGUE_REPORT_PAGE_LIMIT = 50;
+export declare const SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE = 4;
+export declare const CATALOGUE_REPORT_SNAPSHOT_CEILING: number;
 export type ReportSelection = Readonly<{
     status?: 'all' | 'pending' | 'resolved';
     targetKind?: 'all' | ReportTarget['kind'];
@@ -75,4 +81,25 @@ export declare function reportReadView(report: ReportView): ReportReadView;
 export declare function listTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ReportView>>;
 /** Additive selection adapter; the original native list contract retains its defaults. */
 export declare function listSelectedTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number, selection?: ReportSelection): Promise<Page<ReportView>>;
+export declare function listCatalogueReports(dependencies: ReportDependencies, context: ReadContext, cursor?: string, limit?: number, selection?: ReportSelection): Promise<Readonly<{
+    entries: readonly Readonly<{
+        id: ReportId;
+        partition: number;
+        target: ReportTarget;
+        revisionId: RevisionId | null;
+        reason: string;
+        evidence: string | null;
+        createdAt: string;
+        outcome: 'actioned' | 'dismissed' | null;
+        resolvedAt: string | null;
+        transactionId: string;
+        reporterId: string | null;
+    }>[];
+    nextCursor: string | null;
+    anchor: Readonly<{
+        partition: import("../partition/partition.ts").Partition;
+        epoch: number;
+        position: bigint;
+    }>;
+}>>;
 export {};

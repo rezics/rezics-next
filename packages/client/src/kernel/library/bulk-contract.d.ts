@@ -3,7 +3,7 @@ import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord, DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
 import type { WriteRateContext, WriteRateDecision, WriteRateFamily } from '../access/write-rate.ts';
-import type { Access, Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryDeletion, EntryState } from './entry-model.ts';
@@ -102,6 +102,9 @@ export type OutcomeView = Readonly<{
     state: TargetState;
     reason: BulkReason | null;
     resultingMemberId: string | null;
+    /** Original native removal evidence; null when no bound evidence is available. */
+    deletion: EntryDeletion | null;
+    memberDeletion: NonNullable<TargetEvidence['memberDeletion']> | null;
 }>;
 export type OutcomeQuery = {
     limit?: number;
@@ -130,6 +133,8 @@ export type SubjectTarget = Readonly<{
     subjectId: string;
     requestedSubjectId: string | null;
     expected: EntryExpectation;
+    /** Exact destination for add_to_collection targets; absent for other subject actions. */
+    collectionId?: string;
 }>;
 /** Exact native row stamps, captured together. member_revision alone does not cover note/order edits. */
 export type OccurrenceExpectation = Readonly<{
@@ -216,6 +221,8 @@ export type TargetCommand = Readonly<{
     sourceDigest: string;
     target: ImmutableTarget;
     receipt: ReceiptLocator;
+    /** Original command basis, checked against the durable initiator at the attempt time. */
+    identity: Readonly<Pick<AccountActor, 'clientId' | 'requestedBy'>>;
     chunkIndex: number;
     deadline: number;
 }>;
@@ -346,7 +353,7 @@ export declare function captureCollectionPage(_dependencies: BulkDependencies, _
 export declare function acknowledgeOccurrencePage(_dependencies: BulkDependencies, _page: OccurrencePage): Promise<Checkpoint>;
 export declare function executeStatusTarget(_dependencies: BulkDependencies, _command: TargetCommand): Promise<AttemptResult>;
 export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
-export declare function executeCollectionAddTarget(_dependencies: BulkDependencies, _command: TargetCommand): Promise<AttemptResult>;
+export { executeCollectionAddTarget } from './collection-bulk-add.ts';
 export declare function executeCollectionRemoveTarget(dependencies: BulkDependencies, command: TargetCommand): Promise<AttemptResult>;
 /** Private source-bound accounting; can recover prior commits after revocation,
  * cannot restore an initiator, issue personal effects or disclose target data.

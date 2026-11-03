@@ -38,6 +38,7 @@ export type RealmErasureSuccessionInput = Readonly<{
     resource: Resource;
     accountId: string;
 }>;
+export type RealmErasureSuccessionQualification = 'owner-or-replay' | 'not-owner';
 export type RealmErasureSuccessionSource = Readonly<{
     route: number;
     accountId: string;
@@ -92,6 +93,9 @@ export declare function createRealmOwnershipCommands(config: {
     access: Access;
     clock?: () => Date;
 }): {
+    qualifyErasureSuccession: (input: RealmErasureSuccessionInput, context: Readonly<{
+        deadline: number;
+    }>) => Promise<RealmErasureSuccessionQualification>;
     prepareErasureSuccession: (attempt: CommandAttempt, input: RealmErasureSuccessionInput) => Promise<PreparedRealmErasureSuccession>;
     applyErasureSuccession: (tx: CommandTransaction, proof?: PreparedRealmErasureSuccession) => Promise<RealmErasureSuccessionResult>;
     erasureSuccessionAuthorization: (input: RealmErasureSuccessionInput) => RealmErasureSuccessionAuthorization;

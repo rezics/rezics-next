@@ -1,7 +1,10 @@
 import type { Pool, PoolClient } from 'pg';
 import { type OperationalTransaction } from '../command/operational.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { WorkClient } from '../work/client.ts';
+import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
 /** The eight native axes. This allocation belongs only to the operational History producer. */
-export declare const OPERATIONAL_WORK_AXES: readonly ['candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks', 'nativePoints', 'witnessKeys', 'statements', 'bytes'];
+export { OPERATIONAL_WORK_AXES };
 export type OperationalWorkCost = Readonly<Record<(typeof OPERATIONAL_WORK_AXES)[number], number>>;
 export declare function sumOperationalWork(...parts: readonly OperationalWorkCost[]): OperationalWorkCost;
 export declare const OPERATIONAL_WORK_COST: Readonly<{
@@ -53,9 +56,33 @@ export declare function operationalWorkDeadlineClient(client: PoolClient, deadli
 export type OperationalWorkOriginal = Readonly<{
     pool: Pool;
     deadline: number;
+    workClient?: WorkClient;
 }>;
+declare const CHILD_PRICES: Readonly<{
+    resolve: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    verify: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    receive: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    replay: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    retirement: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    registration: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+    attempt: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+}>;
+type FundedPhase = keyof typeof CHILD_PRICES;
+/** Already allocated children of one caller original. Retry is additional work, never a refill. */
+export type OperationalWorkChildren = Readonly<Record<FundedPhase | 'retry', NativeCollectionWork>>;
 export declare function attachOperationalWorkOriginal(tx: OperationalTransaction, original: OperationalWorkOriginal): void;
 export declare function openOperationalWorkOriginal(pool: Pool, deadline: number): OperationalWorkOriginal;
+/** Trusted parent composition: the complete History child, including retries, transfers and rollback,
+ * is charged before dispatch. A failed or unused child never returns this allocation to its parent. */
+export declare function fundOperationalWorkOriginal(parent: NativeCollectionWork, pool: Pool, workClient: WorkClient, deadline: number): OperationalWorkOriginal;
+/** Bind the native executor to prepaid caller children without creating a balance from a subtotal.
+ * No I/O or charge occurs here. Each phase dispatches its exported price before its native work;
+ * failed prefixes retain that charge. Additional attempts use only the original retry allocation.
+ * The native executor keeps its absolute deadline policy, with no additional attempt-count cap.
+ */
+export declare function fundOperationalWorkChildren(children: OperationalWorkChildren, pool: Pool, workClient: WorkClient, deadline: number): OperationalWorkOriginal;
+/** Executor entry, before time, Access, checkout or BEGIN. Contention retains this same original. */
+export declare function claimOperationalWorkOriginal(original: OperationalWorkOriginal, pool: Pool, workClient: WorkClient, deadline: number): OperationalWorkOriginal;
 export declare function debitOperationalWork(original: OperationalWorkOriginal, amount: OperationalWorkCost): void;
 export declare function debitOperationalWorkAttempt(original: OperationalWorkOriginal): void;
 declare const transfer: unique symbol;
@@ -68,4 +95,3 @@ export declare function finishOperationalWorkTransfers(tx: OperationalTransactio
 export declare function consumeOperationalWorkTransfer(pool: Pool, token: OperationalWorkTransfer, phase: OperationalWorkPhase, custodyId: string): Readonly<{
     deadline: number;
 }>;
-export {};

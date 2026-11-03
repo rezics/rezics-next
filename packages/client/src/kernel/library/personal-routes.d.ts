@@ -3,6 +3,7 @@ import { type KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { type ShelfReads } from './shelf-contract.ts';
 type Dependencies = {
     routeKey: Uint8Array;
@@ -11,6 +12,7 @@ type Dependencies = {
     access: () => Access;
     clock?: KernelClock;
     shelves?: () => ShelfReads;
+    shelfTypeDigest?: ShelfTypeDigest;
 };
 /** Private account-owned library transport. Domain commands retain authorization and receipts. */
 export declare function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -1848,7 +1850,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2074,7 +2076,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2218,7 +2220,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };

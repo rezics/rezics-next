@@ -2150,7 +2150,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2376,7 +2376,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2520,7 +2520,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };
@@ -5488,6 +5488,42 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             primaryType?: string;
                         };
                     };
+                } | {
+                    action: "add_to_collection";
+                    collectionId: string;
+                    selection: {
+                        kind: "explicit";
+                        targets: {
+                            subjectId: string;
+                        }[];
+                    } | {
+                        kind: "query";
+                        filter: {
+                            state?: string;
+                            primaryType?: string;
+                        };
+                    };
+                } | {
+                    action: "remove_from_library";
+                    selection: {
+                        kind: "explicit";
+                        targets: {
+                            subjectId: string;
+                        }[];
+                    } | {
+                        kind: "query";
+                        filter: {
+                            state?: string;
+                            primaryType?: string;
+                        };
+                    };
+                } | {
+                    action: "remove_from_collection";
+                    collectionId: string;
+                    selection: {
+                        kind: "occurrences";
+                        memberIds: string[];
+                    };
                 };
                 params: {};
                 query: unknown;
@@ -5799,6 +5835,16 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     state: "applied" | "cancelled" | "conflict" | "denied" | "failed" | "no_effect" | "pending" | "reconciling";
                                     reason: "authority_lost" | "cancel_requested" | "collection_full" | "deadline" | "dependency_unavailable" | "evidence_missing" | "execution_expired" | "incarnation_mismatch" | "invalid_subject" | "missing_target" | "revision_mismatch" | "target_denied" | null;
                                     resultingMemberId: string | null;
+                                    deletion: {
+                                        deletionId: string;
+                                        revision: number;
+                                        restoreUntil: string;
+                                    } | null;
+                                    memberDeletion: {
+                                        deletionId: string;
+                                        revision: number;
+                                        purgeAfter: string;
+                                    } | null;
                                 }[];
                                 next: string | null;
                             };

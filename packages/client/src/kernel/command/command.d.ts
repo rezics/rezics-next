@@ -216,7 +216,7 @@ export declare class TooManyEventsError extends Error {
     readonly count: number;
     constructor(partition: number, count: number);
 }
-type LegacyCommandOptions = {
+export type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
     basis?: CommandBasis;

@@ -1841,7 +1841,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2067,7 +2067,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2211,7 +2211,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };

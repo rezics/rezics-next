@@ -1,4 +1,4 @@
-import { type OperationalWorkCost } from '../history/operational-work-budget.ts';
+import type { OperationalWorkCost } from '../history/operational-work-budget.ts';
 export declare const SELECTED_AXES: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
 export type SelectedCost = OperationalWorkCost & Readonly<{
     engineRequests: number;

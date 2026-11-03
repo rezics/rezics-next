@@ -1,5 +1,5 @@
 import type { Source } from '@rezics/definitions/bulk';
-import type { Release } from '@rezics/definitions';
+import type { KindCataloguePin, Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime, CommandTransaction } from '../command/command.ts';
 import type { SourceFenceTuple } from '../content/source-fences.ts';
@@ -234,6 +234,9 @@ export type PublicFilterConsumer = Readonly<{
     /** null only when that consumer has no meaning/read-definition dependency. */
     meaningDigest: string | null;
     readDefinition: string | null;
+    /** Complete independent catalogue identity. New native registrations always persist
+     * null or a canonical pin. Absence is accepted only for old non-mixed consumers. */
+    catalogue?: KindCataloguePin | null;
 }>;
 /** Native retained consistent cut, NOT a wall clock, UUID order, head vector or permission certificate. */
 export type PrivacyReductionStart = Readonly<{

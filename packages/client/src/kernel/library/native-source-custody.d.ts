@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
 /** Lookup hints only. Native records, not possession of this value, establish custody. */
@@ -143,11 +143,17 @@ export interface NativeLibrarySourceCustody {
         work: WorkReceipt;
     }>;
 }
+/** Structural native bind validation only; this grants no Source or original authority. */
+export declare function validateNativeIdentitySource(identity: NativeSourceIdentity): void;
+/** Literal reached capture/basis declarations; no table-prefix or arbitrary observer callback. */
+export declare function nativeSourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined;
+export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
 /** Existing-owner raw dependency capture. No identity, canonical Source, permission or destination authority. */
-export declare function createNativeLibrarySourceCustody({ pool, clock: _clock, }: {
+export declare function createNativeLibrarySourceCustody(options: {
     pool: Pool;
     clock?: KernelClock;
 }): NativeLibrarySourceCustody;
+export declare function createNativeLibrarySourceCustodyWithWork(pool: Pool, work: NativeCollectionWork): NativeLibrarySourceCustody;
 /** Fixed local cleanup budget; composed discovery and retirement share one receipt and command deadline. */
 export declare function retireNativeCollectionCapturePage(client: CommandTransaction, input: {
     accountId: string;

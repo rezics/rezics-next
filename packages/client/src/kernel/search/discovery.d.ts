@@ -131,7 +131,7 @@ export type DiscoveryPage = {
 export type DiscoveryRequest = SearchRequest & {
     representation: 'discovery-v1';
     kindCursor?: string;
-    /** Native Home selection. Search must retain this exact Space population. */
+    /** Exact native Home selection; callers must also supply its opened population. */
     spaceId?: string;
 };
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */

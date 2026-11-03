@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+export { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
 export type AccountDiscoveryReductionHead = Readonly<{
     partition: number;
     epoch: number;
@@ -24,10 +25,6 @@ export type AccountDiscoveryEnrollment = AccountDiscoveryReductionHead & Readonl
     receipt: string | null;
     complete: boolean;
 }>;
-/** The ordinary outbox checkpoint pins the original creation/change window.
- * It is retained until native Source/copy retirement, never advanced by a query.
- */
-export declare function publicFilterCreationConsumer(bootstrap: string): string;
 /** Enrol one bounded page of the immutable compiler closure in its writer home.
  * Account writers and enrollment take population -> Source head -> enrollment.
  * No registration-home transaction is held across this operation. The original

@@ -128,7 +128,7 @@ export declare function providerReviewSchemas(app: ReturnType<typeof subjectRout
         };
         release: string;
         revision: number;
-        decision: "accepted" | "rejected" | null;
+        decision: "abstained" | "accepted" | "rejected" | null;
         head: number | null;
         rank: "deprecated" | "normal" | "preferred" | null;
     }>;
@@ -1983,7 +1983,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2209,7 +2209,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2353,7 +2353,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };
@@ -3683,7 +3683,7 @@ export declare function providerReviewQueueRoutes(app: ReturnType<typeof subject
                                 };
                                 release: string;
                                 revision: number;
-                                decision: "accepted" | "rejected" | null;
+                                decision: "abstained" | "accepted" | "rejected" | null;
                                 head: number | null;
                                 rank: "deprecated" | "normal" | "preferred" | null;
                             };

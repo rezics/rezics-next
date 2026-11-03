@@ -145,7 +145,7 @@ export declare const RevisionDetailSchema: import("typebox").TObject<{
         mode: import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"replace">, import("typebox").TLiteral<"suppress">]>;
         selection: import("typebox").TArray<import("typebox").TObject<{
             candidate: import("typebox").TString;
-            rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">]>;
+            rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
         }>>;
     }>]>;
 }>;
@@ -1991,7 +1991,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2217,7 +2217,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2361,7 +2361,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };

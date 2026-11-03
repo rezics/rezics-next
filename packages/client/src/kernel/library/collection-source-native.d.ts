@@ -4,7 +4,7 @@ import { type CommandTransaction, type AuthoritativeTime } from '../command/comm
 import { type Access, type Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey } from './collection-source-order.ts';
@@ -76,6 +76,8 @@ export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+export declare const nativeCollectionPartitionMetadataSQL = "SELECT partition_no AS \"partitionNo\", write_state AS \"writeState\", epoch, position::text AS position FROM core.partition WHERE partition_no=$1";
+export declare function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined;
 export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options): Promise<{
     metadata: Readonly<Ref & {
         curatorAccountId: string | null;
@@ -136,6 +138,35 @@ export declare function readNativeCollectionMetadata(pool: Pool, ref: Ref, optio
 } & {
     work: WorkReceipt;
 }>;
+export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Ref, options: Options, work: NativeCollectionWork): Promise<{
+    metadata: Readonly<Ref & {
+        curatorAccountId: string | null;
+        state: 'active' | 'deleted';
+        visibility: 'private' | 'unlisted' | 'public';
+        membershipKind: 'curated' | 'dynamic';
+        revision: number;
+        createdAt: string;
+        sourceGeneration: string;
+        builtinKind: 'everything' | 'state' | null;
+        releaseDigest: string | null;
+        profileId: string | null;
+        stateSetId: string | null;
+        stateId: string | null;
+        ruleRevision?: string | null;
+        ruleReleaseDigest?: string | null;
+        ruleReady?: boolean;
+    } & {
+        incarnation: string;
+        stamp: ListingStamp;
+        factFence: string | null;
+        authority: 'curated' | 'private_builtin' | 'activated_output' | 'unavailable_output';
+        /** Selected explicit COMPLETE membership only; never a private working generation. */
+        outputGeneration: string | null;
+        outputPublication: CollectionOutputPublication | null;
+    }> | null;
+} & {
+    work: WorkReceipt;
+}>;
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
 export declare function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options): Promise<{
     identity: NativeSourceIdentity | null;
@@ -167,11 +198,25 @@ export declare function readNativeCollectionRawOrdinalPage(pool: Pool, metadata:
 } & {
     work: WorkReceipt;
 }>;
-export declare function readNativeCollectionRawPage(pool: Pool, metadata: NativeCollectionMetadata, input: Options & {
+type RawPageInput = Options & {
     driver: CanonicalRangeKey['driver'];
     after: CanonicalRangeKey | null;
     limit: number;
-}): Promise<{
+};
+export declare function readNativeCollectionRawPage(pool: Pool, metadata: NativeCollectionMetadata, input: RawPageInput): Promise<{
+    rows: {
+        key: {
+            storedSubjectId: string;
+            factId: string;
+            driver: "copy" | "entry" | "label" | "member" | "output" | "session";
+        };
+    }[];
+    after: CanonicalRawKey | null;
+    exhausted: boolean;
+} & {
+    work: WorkReceipt;
+}>;
+export declare function readNativeCollectionRawPageWithWork(pool: Pool, metadata: NativeCollectionMetadata, input: RawPageInput, work: NativeCollectionWork): Promise<{
     rows: {
         key: {
             storedSubjectId: string;

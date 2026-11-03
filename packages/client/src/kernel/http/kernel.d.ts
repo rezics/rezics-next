@@ -25,6 +25,7 @@ import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -59,6 +60,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     search?: SearchService;
     /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
     shelves?: ShelfNativeReadBindings;
+    /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
+    shelfTypeDigest?: ShelfTypeDigest;
     discovery?: import('../search/discovery-service.ts').DiscoverySearch;
     /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
     reports?: {

@@ -7,6 +7,8 @@ export type MixedDiscoveryRequest = DiscoveryRequest & {
     };
     kindCountLeaf?: number;
 };
+/** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
+export declare function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscoveryRequest;
 /** Admission precedes any native enumeration. Saved/private domains remain closed here. */
 export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, registry: DiscoveryRegistry, release: FilterRelease): {
     text: import("./text.ts").TextNode | undefined;
@@ -23,9 +25,9 @@ export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, re
         filter: DiscoveryFilterDocument | null;
         sort: "id" | "name" | "relevance";
         limit: number;
-        languages: readonly string[];
+        languages: string[];
         descriptions: boolean;
-        properties: readonly string[];
+        properties: string[];
         kindLimit: number;
         kindCountLeaf: number | null;
         spaceId: string | null;

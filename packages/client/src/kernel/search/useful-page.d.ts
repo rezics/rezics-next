@@ -56,4 +56,6 @@ export declare function collectRetainedUsefulPage<T>(options: {
     }>>;
     check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;
     canonicalId: (value: T) => string;
+    /** Persist the actual prefix, including rejects and duplicates, before any refill. */
+    consume?: (continuation: SearchConsumedWindow) => Promise<void>;
 }): Promise<RetainedUsefulPage<T>>;

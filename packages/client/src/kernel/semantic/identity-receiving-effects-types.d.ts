@@ -70,3 +70,30 @@ export type IdentityReceivingCaptureInput = NativeSourceCaptureWork & Readonly<{
     limit: number;
 }>;
 export type IdentityReceivingCaptureResult = Awaited<ReturnType<NativeLibrarySourceCustody['capturePage']>> | Awaited<ReturnType<NativeLibrarySourceCustody['finishCapture']>>;
+/** Search owns these declarations. A Library capture can never stand in for its native plan. */
+import type { SearchIdentityReceivingSelection, SearchIdentityReceivingSource, SearchIdentityReceivingHold } from '../search/identity-receiving-native-contract.ts';
+export type { SearchIdentityReceivingSelection, SearchIdentityReceivingSource, SearchIdentityReceivingHold, SearchIdentityReceivingNative, SearchIdentityReceivingContext, SearchIdentityReceivingResult, } from '../search/identity-receiving-native-contract.ts';
+/** Semantic's Search branch retains the entire original owner binding, never a Library identity. */
+export type SearchIdentityReceivingBinding = Readonly<{
+    job: IdentityJobRef;
+    original: string;
+    effectKey: string;
+    owner: string;
+    step: 'search-canonical-index';
+    version: 1;
+    scopeDigest: string;
+    source: SearchIdentityReceivingSource;
+}>;
+export type SearchIdentityReceivingRecord = SearchIdentityReceivingBinding & Readonly<{
+    plan: IdentityNativeReceipt;
+    sourceHold: IdentityNativeReceipt;
+    receipt: IdentityNativeReceipt;
+    nativeHold: SearchIdentityReceivingHold;
+    applied: Readonly<{
+        receipt: IdentityNativeReceipt;
+        frontier: IdentityFrontier;
+    }> | null;
+}>;
+export type NativeIdentityReceivingBinding = IdentityReceivingBinding | SearchIdentityReceivingBinding;
+export type NativeIdentityReceivingRecord = IdentityReceivingRecord | SearchIdentityReceivingRecord;
+export type NativeIdentityReceivingSelection = IdentityReceivingSelection | SearchIdentityReceivingSelection;

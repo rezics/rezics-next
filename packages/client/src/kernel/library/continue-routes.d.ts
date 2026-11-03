@@ -1907,7 +1907,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2133,7 +2133,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2277,7 +2277,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };
@@ -5252,6 +5252,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
+        spaceId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     transform: unknown;
     response: {
@@ -5642,6 +5643,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
+            spaceId: import("typebox").TOptional<import("typebox").TString>;
         }>;
         transform: unknown;
         response: {
@@ -5812,6 +5814,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         limit?: number;
         cursor?: string;
         view?: "BASIC" | "FULL";
+        spaceId?: string;
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -5835,6 +5838,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
+        spaceId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     transform: ({ request, set }: Omit<{
         server: import("elysia").Server | null;
@@ -6085,6 +6089,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                 limit?: string;
                 cursor?: string;
                 view?: string;
+                spaceId?: string;
             } & {
                 [key: string]: unknown;
             };
@@ -6221,6 +6226,7 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             limit?: string;
             cursor?: string;
             view?: string;
+            spaceId?: string;
         };
         params: {};
         headers: Record<string, string | undefined>;

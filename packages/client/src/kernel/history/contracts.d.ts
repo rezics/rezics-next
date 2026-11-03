@@ -254,6 +254,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.content.reaction.changed.v1': EventClassification;
     'com.rezics.content.report-reporter.erased.v1': EventClassification;
     'com.rezics.content.report-reporter.projected.v1': EventClassification;
+    'com.rezics.content.catalogue-report.projected.v1': EventClassification;
     'com.rezics.content.report-target.projected.v1': EventClassification;
     'com.rezics.content.report.created.v1': EventClassification;
     'com.rezics.content.report.evidence-erased.v1': EventClassification;
@@ -308,6 +309,8 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
         roles: readonly [];
     }>;
     'com.rezics.rating.eligibility.changed.v1': EventClassification;
+    'com.rezics.rating.identity-repair.page.v1': EventClassification;
+    'com.rezics.rating.identity-work.changed.v1': EventClassification;
     'com.rezics.rating.population.pending.v1': Readonly<{
         kind: 'non-personal';
         roles: readonly [];

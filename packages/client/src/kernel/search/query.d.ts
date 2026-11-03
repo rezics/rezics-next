@@ -98,6 +98,9 @@ export type KindSnapshot = {
         after: string | null;
     };
 };
+/** Four live entries, covering the three-generation admission cap. Eviction drops cache ownership only. */
+export declare const CURRENT_METADATA_RETENTION = 4;
+export declare function retainCurrent<K, V>(cache: Map<K, V>, key: K, create: () => V): V;
 /** Mutable injected releases have no identity authority. Native callers supply the immutable release digest. */
 export declare function kindDigest(release: FilterRelease): string;
 /** Own every row and label map; request work is one direct lookup plus at most eight rows. */

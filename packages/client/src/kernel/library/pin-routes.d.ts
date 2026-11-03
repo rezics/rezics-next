@@ -1844,7 +1844,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2070,7 +2070,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2214,7 +2214,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };

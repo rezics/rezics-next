@@ -5,7 +5,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { DiscoverySearch } from '../search/discovery-service.ts';
 import type { SearchService } from '../search/service-scope.ts';
-import { type FeedPage } from './feed-contract.ts';
+import { type FeedPage, type FeedSelection } from './feed-contract.ts';
 export type FeedDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
@@ -25,6 +25,8 @@ export declare const FEED_DISCOVERY_CANDIDATES_PER_RESULT = 6;
 export declare const FEED_DISCOVERY_FIXED_CANDIDATES = 3;
 export declare const FEED_ACCOUNT_BATCH_LIMIT = 100;
 export declare const FEED_AUTHOR_KEYS_PER_CANDIDATE = 3;
+export declare const FEED_SPACE_FIXED_KEYS = 4;
+export declare const FEED_SPACE_BOARD_KEYS_PER_CANDIDATE = 1;
 export declare const feedCandidateBound: (discovery: number, following: number, continued: boolean) => number;
 export declare function createFeedReads(deps: FeedDependencies): {
     list(actor: Actor, query: {
@@ -32,7 +34,5 @@ export declare function createFeedReads(deps: FeedDependencies): {
         limit?: number;
         cursor?: string;
         kind?: string;
-        spaceId?: string;
-        ratingQuestionId?: string;
-    }, deadline: number, languages: readonly string[]): Promise<FeedPage>;
+    } & FeedSelection, deadline: number, languages: readonly string[]): Promise<FeedPage>;
 };

@@ -52,10 +52,6 @@ export declare function readCollectionSourceWorkState(pool: Pool, work: ScopeWor
     generation: string;
     observation: CollectionSourceObservation;
     definition: Readonly<{
-        definition: import("./members-preparation.ts").PreparationDefinition;
-        sourceIdentity: NativeSourceIdentity;
-        observation: CollectionSourceObservation;
-    }> | Readonly<{
         releaseDigest: string;
         audience: string;
         sourceIdentity: NativeSourceIdentity;
@@ -63,6 +59,10 @@ export declare function readCollectionSourceWorkState(pool: Pool, work: ScopeWor
         identityObservation: import("../semantic/identity-scope-types.ts").IdentityScopeObservation;
         repairReceipt: import("../semantic/identity-epoch-contract.ts").IdentityNativeReceipt;
         custody: import("./native-source-custody.ts").NativeSourceCustody;
+    }> | Readonly<{
+        definition: import("./members-preparation.ts").PreparationDefinition;
+        sourceIdentity: NativeSourceIdentity;
+        observation: CollectionSourceObservation;
     }> | import("./collection-publication-work-admission.ts").CollectionPublicationWorkDefinition;
     work: import("./collection-source.ts").WorkReceipt;
 }>;

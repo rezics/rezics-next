@@ -1,3 +1,4 @@
+import type { KindCataloguePin } from '@rezics/definitions';
 import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -128,6 +129,7 @@ export interface PublicFilterCustody {
         physicalTarget: string;
         consumerGeneration: string;
         projectionGeneration: string;
+        catalogue?: KindCataloguePin | null;
     }>, search: OpenSearch, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'registered';
         registration: CustodyRegistration;

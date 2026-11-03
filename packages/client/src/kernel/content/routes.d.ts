@@ -1840,7 +1840,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
@@ -2066,7 +2066,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
                                 })[];
@@ -2210,7 +2210,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         mode: "inherit" | "replace" | "suppress";
                                         selection: {
                                             candidate: string;
-                                            rank: "normal" | "preferred";
+                                            rank: "deprecated" | "normal" | "preferred";
                                         }[];
                                     };
                                 };
@@ -6265,7 +6265,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             post: {
                 body: {
                     target: {
-                        kind: "board" | "post" | "thread";
+                        kind: "board" | "post" | "subject" | "thread";
                         id: string;
                     };
                     revisionId?: string;
@@ -6513,7 +6513,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             cursor?: string;
                             limit?: string | number;
                             status?: "all" | "pending" | "resolved";
-                            targetKind?: "all" | "board" | "post" | "thread";
+                            targetKind?: "all" | "board" | "post" | "subject" | "thread";
                             order?: "newest" | "oldest";
                         };
                         headers: unknown;
@@ -6636,7 +6636,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             cursor?: string;
                             limit?: string | number;
                             status?: "all" | "pending" | "resolved";
-                            targetKind?: "all" | "board" | "post" | "thread";
+                            targetKind?: "all" | "board" | "post" | "subject" | "thread";
                             order?: "newest" | "oldest";
                         };
                         headers: unknown;
@@ -6759,7 +6759,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             cursor?: string;
                             limit?: string | number;
                             status?: "all" | "pending" | "resolved";
-                            targetKind?: "all" | "board" | "post" | "thread";
+                            targetKind?: "all" | "board" | "post" | "subject" | "thread";
                             order?: "newest" | "oldest";
                         };
                         headers: unknown;
@@ -6864,6 +6864,248 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         };
                         error: never;
                     };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                reports: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            status?: "all" | "pending" | "resolved";
+                            targetKind?: "all" | "board" | "post" | "subject" | "thread";
+                            order?: "newest" | "oldest";
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                next: string | null;
+                                reports: Readonly<{
+                                    id: import("./model.ts").ReportId;
+                                    partition: number;
+                                    target: import("./reports.ts").ReportTarget;
+                                    revisionId: import("./model.ts").RevisionId | null;
+                                    reason: string;
+                                    evidence: string | null;
+                                    createdAt: string;
+                                    outcome: 'actioned' | 'dismissed' | null;
+                                    resolvedAt: string | null;
+                                    transactionId: string;
+                                    reporterId: string | null;
+                                }>[];
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        catalogue: {
+            reports: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: {
+                        cursor?: string;
+                        status?: "all" | "pending" | "resolved";
+                        targetKind?: "all" | "board" | "post" | "subject" | "thread";
+                        order?: "newest" | "oldest";
+                        limit?: string | number;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            next: string | null;
+                            reports: Readonly<{
+                                id: import("./model.ts").ReportId;
+                                partition: number;
+                                target: import("./reports.ts").ReportTarget;
+                                revisionId: import("./model.ts").RevisionId | null;
+                                reason: string;
+                                evidence: string | null;
+                                createdAt: string;
+                                outcome: 'actioned' | 'dismissed' | null;
+                                resolvedAt: string | null;
+                                transactionId: string;
+                                reporterId: string | null;
+                            }>[];
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        500: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
                 };
             };
         };
@@ -9906,6 +10148,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 posts: {
                     post: {
                         body: {
+                            visibility?: "draft" | "published";
                             body: import("@rezics/document").DocumentSnapshot;
                             licence: string;
                             parentId?: string | null;
@@ -10631,6 +10874,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 revisions: {
                     post: {
                         body: {
+                            visibility?: "draft" | "published";
                             body: import("@rezics/document").DocumentSnapshot;
                             licence?: string;
                             subjectIds?: string[];

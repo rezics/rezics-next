@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Partition } from '../partition/partition.ts';
 import type { CursorResult } from '../tokens/cursor.ts';
@@ -201,7 +202,7 @@ export interface ShelfTypeKeys {
     continue(write: ShelfWrite, reservation: ShelfTypeReservation): Promise<ShelfTypeResolution>;
 }
 /** Native factory; caller admission remains tied to the live owner transaction. */
-export declare function createShelfTypeKeys(): ShelfTypeKeys;
+export declare function createShelfTypeKeys(options?: ShelfTypeKeysOptions): ShelfTypeKeys;
 /** One bounded statement set: at most `limit + 1` entry rows and one active-session probe per returned entry. */
 export type ShelfRows = {
     entries: ShelfEntry[];

@@ -247,5 +247,16 @@ export declare function readNativePublicFilterRepairStart(binding: PublicFilterS
 }> | null>;
 /** A private factory association locates the native body; it cannot grant coverage or open a PIT. */
 export declare function advanceNativePublicFilterPreparation(binding: PublicFilterSourceBinding, input: NativePreparationInput, context: PublicFilterConsumerContext): Promise<NativePublicFilterPreparation | null>;
+export declare class PublicFilterSourceDefinitionError extends Error {
+    readonly reason: PublicFilterBindingFailure['reason'];
+    constructor(reason: PublicFilterBindingFailure['reason']);
+}
+/** Load only an existing immutable read definition. The optional byte cap lets native callers
+ * debit a fixed upper bound before the retained capture and dependency keys are read.
+ */
+export declare function readPublicFilterSourceDefinition(id: string, db: Pool, routeDigest: string, maxBytes?: number): Promise<Readonly<{
+    definition: PublicFilterSourceDefinition;
+    bytes: number;
+}>>;
 /** Native Source-owned registration; the origin association only locates the constructor configuration. */
 export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;

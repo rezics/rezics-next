@@ -98,18 +98,21 @@ export declare const CONTENT_EVENTS: {
         threadId: Type.TString;
         authorId: Type.TString;
     }>;
+    readonly 'com.rezics.content.catalogue-report.projected.v1': Type.TObject<{
+        reportId: Type.TString;
+    }>;
     readonly 'com.rezics.content.report.resolved.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
     readonly 'com.rezics.content.report.created.v1': Type.TObject<{
         reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
         targetId: Type.TString;
         revisionId: Type.TOptional<Type.TString>;
     }>;
     readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
         reportId: Type.TString;
-        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">, Type.TLiteral<"subject">]>;
         targetId: Type.TString;
     }>;
     readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
@@ -152,6 +155,16 @@ export declare const CONTENT_EVENTS: {
         actorId: Type.TString;
     }>;
     readonly 'com.rezics.content.post.created.v1': Type.TObject<{
+        placeId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
+        subjectIds: Type.TArray<Type.TString>;
+        activityAt: Type.TString;
+        threadId: Type.TString;
+        itemId: Type.TString;
+        revisionId: Type.TString;
+        actorId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.post.published.v1': Type.TObject<{
         placeId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;
         subjectIds: Type.TArray<Type.TString>;

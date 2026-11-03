@@ -40,12 +40,22 @@ export type AgentIdentitySDKReceivingObservation = Pending | Readonly<{
 /** A released check or copied SDK receipt cannot authorize native History readiness. */
 export declare const IDENTITY_HISTORY_HANDOFF_UNAVAILABLE = "identity-source-history-durable-handoff-unavailable";
 export declare const AGENT_IDENTITY_SDK_OBSERVATION_COST: Readonly<{
-    rows: number;
-    points: number;
-    statements: number;
-    bytes: number;
-    engineRequests: number;
+    rows: 3;
+    points: 2;
+    statements: 1;
+    bytes: 8192;
+    engineRequests: 0;
 }>;
+export declare const AGENT_IDENTITY_RECEIVING_ARTIFACT_COST: Readonly<{
+    rows: 69;
+    points: 69;
+    statements: 4;
+    bytes: 24576;
+    engineRequests: 0;
+}>;
+/** Released physical inventory observation. Pay its complete local body before acquiring
+ * the receiving checkout; the returned address and roles still confer no cleanup custody. */
+export declare function readAgentIdentityReceivingArtifact(pool: Pool, custodyId: string, context: HistoryReceivingContext): Promise<HistoryArtifact | null>;
 export type AgentIdentitySDKWriterObservation = Pending | Readonly<{
     state: 'observed';
     writer: SdkWriterState;
@@ -84,23 +94,18 @@ export declare function retireAgentIdentitySDKWork(pool: Pool, client: WorkClien
 /** Native expected address returned by the original Source producer. It is persisted
  * only after that producer has reconstructed and locked it, and re-resolved by the
  * original native function on every later History transition. */
-export type AgentIdentityHistoryAuthority = Readonly<Record<string, unknown>>;
+export type AgentIdentityHistoryAuthority = import('../semantic/identity-source-consumer-custody.ts').IdentitySourceHistoryAuthority;
 export type AgentIdentityHistoryReadiness = Readonly<{
     binding: AgentIdentitySDKReceivingBinding;
     writer: SdkWriterState;
 }>;
-/** Agreed producer port, removed from optional admission when Source is installed.
- * An uninstalled producer is refused before History SQL, never emulated locally. */
+/** Delegate to the installed Source producer's native handoff and authority type. */
 export declare function lockAgentIdentityHistoryHandoff(tx: CommandTransaction, client: WorkClient, stage: AgentIdentityRetirementStage, binding: AgentIdentitySDKReceivingBinding, writer: SdkWriterState, phase: 'readiness' | 'closure'): Promise<Readonly<{
     state: 'pending';
     gap: string;
 }> | Readonly<{
     state: 'guarded';
-    handoff: Readonly<{
-        sourceAuthority: AgentIdentityHistoryAuthority;
-        binding: AgentIdentitySDKReceivingBinding;
-        writer: SdkWriterState;
-    }>;
+    handoff: import("../semantic/identity-source-consumer-custody.ts").IdentitySourceHistoryHandoff;
 }>>;
 export declare const AGENT_IDENTITY_HISTORY_GUARD_COST: Readonly<{
     rows: number;
