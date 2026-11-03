@@ -110,19 +110,34 @@ function crashBeforeAcknowledgement(pool: Pool): Pool {
 
 test('a complete empty tuple witness is explicit; imported tuple fences retire its current Space witness', async () => {
   const { space } = await call('POST', '/v1/spaces', { title: 'Tuple witness Space' });
+  const home = partitionOf(routeOf(space.spaceId)!);
+  while (await initializeSpaceDiscoveryDependencies(system.database.pool, home, 1)) {
+    /* Finish the captured native installation cut before asserting global readiness. */
+  }
+  const origin = (position: string) => ({
+    partition: home,
+    epoch: 1,
+    position,
+    eventId: crypto.randomUUID(),
+    type: 'com.rezics.search.source-tuple.changed.v1',
+    resourceId: space.spaceId,
+  });
   const source = spaceDiscoverySource({ pool: system.database.pool, access: system.access });
   await registerSpaceDiscoveryTupleProducer(system.database.pool, {
     generation: 'space-source-test-generation',
     cut: 'space-source-test-cut',
+    complete: true,
   });
   const empty = await publishSpaceDiscoveryTupleWitness(system.database.pool, {
     spaceId: space.spaceId,
     spaceRevision: space.headRevisionId,
     realmId: null,
     realmRevision: null,
+    producerGeneration: 'space-source-test-generation',
     producerEpoch: '1',
     sourcePosition: '1',
     tuples: [],
+    origin: origin('1'),
   });
   expect(empty.state).toBe('ready');
   expect(empty.tuples).toEqual([]);
@@ -144,18 +159,59 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     spaceRevision: space.headRevisionId,
     realmId: null,
     realmRevision: null,
+    producerGeneration: 'space-source-test-generation',
     producerEpoch: '1',
     sourcePosition: '2',
     tuples: [tuple],
+    origin: origin('2'),
   });
   expect(changed.state).toBe('preparing');
-  const home = partitionOf(routeOf(space.spaceId)!);
+  await expect(
+    publishSpaceDiscoveryTupleWitness(system.database.pool, {
+      spaceId: space.spaceId,
+      spaceRevision: space.headRevisionId,
+      realmId: null,
+      realmRevision: null,
+      producerGeneration: 'space-source-test-generation',
+      producerEpoch: '1',
+      sourcePosition: '3',
+      tuples: [],
+      origin: origin('3'),
+    }),
+  ).rejects.toThrow('Space tuple witness repair is pending');
   while (await repairSpaceDiscoveryTupleWitness(system.database.pool, home, space.spaceId, 1)) {
     /* Resume exact tuple-home work in bounded pages. */
   }
-  expect(await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).toMatchObject([
-    { state: 'ready', tuples: [tuple] },
-  ]);
+  expect((await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId)).toMatchObject({
+    state: 'ready',
+    tuples: [tuple],
+  });
+  await expect(
+    publishSpaceDiscoveryTupleWitness(system.database.pool, {
+      spaceId: space.spaceId,
+      spaceRevision: space.headRevisionId,
+      realmId: null,
+      realmRevision: null,
+      producerGeneration: 'space-source-test-generation',
+      producerEpoch: '0',
+      sourcePosition: '9',
+      tuples: [tuple],
+      origin: origin('9'),
+    }),
+  ).rejects.toThrow('Stale Space tuple producer position');
+  await expect(
+    publishSpaceDiscoveryTupleWitness(system.database.pool, {
+      spaceId: space.spaceId,
+      spaceRevision: space.headRevisionId,
+      realmId: null,
+      realmRevision: null,
+      producerGeneration: 'space-source-test-generation',
+      producerEpoch: '1',
+      sourcePosition: '0',
+      tuples: [tuple],
+      origin: origin('4'),
+    }),
+  ).rejects.toThrow('Stale Space tuple producer position');
 
   const governance = await contentGovernanceCredential(system);
   await takedownSourceFence(
@@ -177,9 +233,10 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
   expect(
     (await events(home)).some((event) => event.type === SPACE_DISCOVERY_INVALIDATED && event.subject === space.spaceId),
   ).toBe(true);
-  expect(await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).toMatchObject([
-    { state: 'unavailable', tuples: [] },
-  ]);
+  expect((await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId)).toMatchObject({
+    state: 'unavailable',
+    tuples: [],
+  });
 }, 120_000);
 
 test('shared native Context changes drain sparse retained identities, survive restart and converge with live edits and removal', async () => {
@@ -237,8 +294,8 @@ test('shared native Context changes drain sparse retained identities, survive re
     /* raw bounded installation pages */
   }
   expect(await source.dependencies()).toMatchObject({
-    state: 'unavailable',
-    capabilities: { 'source-fence': 'unavailable' },
+    state: 'preparing',
+    capabilities: { 'source-fence': 'preparing' },
   });
   const hydrate = (ids: string[]) =>
     readSpaceDiscoverySummaries({ pool, access: system.access }, ids, { deadline: Date.now() + 30_000 });
@@ -301,7 +358,7 @@ test('shared native Context changes drain sparse retained identities, survive re
   expect([...current.keys()]).toEqual([owners[1].space.spaceId]);
 }, 120_000);
 
-test('native Search exposure wakes include standalone Spaces; source tuples stay unavailable without their producer', async () => {
+test('native exposure wakes include standalone Spaces; tuple fences wait for complete source witnesses', async () => {
   const governance = await contentGovernanceCredential(system);
   const { space } = await call('POST', '/v1/spaces', { title: 'Standalone exposure dependency' });
   await call('POST', '/v1/platform/exposure/search:close', {}, undefined, governance.bearer);
@@ -339,6 +396,6 @@ test('native Search exposure wakes include standalone Spaces; source tuples stay
       e.type === SPACE_DISCOVERY_INVALIDATED && (e.data as SpaceDiscoveryInvalidation).origin.eventId === native.id,
   )!;
   const key = (await openSpaceDiscoveryFrontier(system.database.pool, scope))!;
-  expect(await drainSpaceDiscoveryFrontier(system.database.pool, key)).toBe('unavailable');
-  expect(await drainSpaceDiscoveryFrontier(system.database.pool, key)).toBe('unavailable');
+  expect(await drainSpaceDiscoveryFrontier(system.database.pool, key)).toBe('preparing');
+  expect(await drainSpaceDiscoveryFrontier(system.database.pool, key)).toBe('preparing');
 }, 120_000);

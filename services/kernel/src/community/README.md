@@ -195,9 +195,9 @@ registration, source reader or hydration implementation are added here.
 `spaceDiscoverySource().dependencies()` exposes explicit preparation/capability state for registration;
 `readSpaceDiscoveryFrontier` reports native acknowledgement and exact decimal progress independently of relay delivery.
 
-Decision: index native carried-Realm Context and selected avatar keys plus the existing Search route exposure
-groups `search` and `search_advanced`; retain source-fence obligations as unavailable until a native Space tuple
-producer connects, since Realm icons explicitly prohibit imported provenance.
+Decision: expose tuple-fence readiness only after Search registers an explicit source generation/cut and publishes an
+exact current witness for every retained Space; an empty Search page never proves that a Space has no source tuples.
+Realm icons still do not carry imported provenance.
 
 Deferred native Space/Realm writer triggers update only that retained Space's inverse keys in the same transaction
 as its native change. Removed and protected identities retain dependencies. Context selection and optional avatar
@@ -218,6 +218,24 @@ obligation/Space deduplication and event commit together in the Space home. Only
 compare-and-set advance the cursor or settle the obligation. Concurrent or restarted drains cannot double count
 progress or duplicate wakes after command receipts expire. There is no cross-partition or cross-epoch scalar clock.
 
+The native source-tuple producer records the exact Space and Realm heads, producer generation/epoch/source position,
+and up to 50 source tuples for each retained Space. A missing witness is unavailable, including for a Space with no
+Realm or no imported dependencies. Tuple inverse rows live in the source tuple's partition; current Space
+references, expected tuples and resumable work stay with the Space. A revision trigger advances the Space witness
+generation and queues removal of both acknowledged references and tuples whose earlier edge work may already have
+committed. Tuple-home upserts and removals compare that generation, so delayed work cannot restore a retired edge.
+The default supervisor repairs at most 50 exact tuple edges per page and acknowledges them separately at the Space
+home. Readiness includes the captured dependency installation and per-partition tuple witness counters; it is never
+derived from an empty inverse.
+
+`spaceDiscoverySource().tupleWitnesses(partition, ids)` reads the complete native tuple capability. It compares two
+current Space/Realm owner rounds, reads Content source fences before and after, then checks the exact capability
+generation and cut again. A moved owner, changed witness, unavailable source partition or fenced tuple withholds
+the whole tuple witness. Search must apply this before publishing and during final hydration. The existing Search
+adapter still needs an owner method such as `currentSourceTupleWitnesses(spaceKeys)` that returns the authoritative
+current Space/Realm revisions, tuple list, producer generation/epoch/source position and an explicit complete bit;
+eligibility pages cannot supply those facts.
+
 Dependency removal may delete an unexamined inverse key; the native change's own direct wake rehydrates that Space.
 Insertions behind a captured cursor, including late commits and changes during initialization, are covered by their
 own committed native change events. New inverse keys beyond the cut are likewise covered by that live relay. Old,
@@ -232,6 +250,48 @@ obligations are retained without acknowledgement. Frontiers, inverse keys and wa
 they must not be pruned using the shorter command-receipt lifetime. Native runtime costs, Search convergence and main
 promotion remain distinct integration verification obligations. Focused cases live in
 `test/community/space-discovery-dependencies.test.ts`.
+
+#### Cost: tuple capability readiness
+
+- Touches: One aggregate query reads the fixed 4,096 dependency-install rows, the fixed 4,096 per-partition tuple counters and the singleton producer row; it does not join native resource partitions.
+- Bound: 8,193 summary rows and one statement, with at most about 1 MB of aggregate text input from the schema's fixed UUID/position widths and 20-digit counters, plus PostgreSQL tuple/index overhead.
+- Growth check: Space count, tuple history and unrelated scopes do not increase these row or byte bounds; the partition count is fixed at 4,096.
+
+#### Cost: source producer registration
+
+- Touches: One partition-0 `runCommand` performs its standard receipt, partition fence and eventless command path; the callback locks and upserts one singleton producer row.
+- Bound: At most two producer-row statements, one 128-character generation, one 256-character cut, and the standard fixed Kernel command overhead.
+- Growth check: The singleton is independent of Space and source-tuple population.
+
+#### Cost: per-Space tuple witness publication
+
+- Touches: One producer point read and one Space-home `runCommand` lock the Space head and witness, read current references plus pending tuple work, replace the exact expected tuple set, queue tuple-home edges, and emit one direct Space invalidation with the producer's original source event.
+- Bound: At most 50 expected tuples, 50 current references and no outstanding prior edge jobs; the callback performs at most 160 SQL statements and stores at most 50 expected rows plus 100 edge-work rows. Each source id is at most 1,024 UTF-8 bytes.
+- Growth check: Publication work depends only on the selected Space's current and pending tuples; unrelated Spaces and retained inverse history are not read.
+
+#### Cost: tuple witness repair locator
+
+- Touches: One ordered seek on `space_discovery_tuple_work_pending` returns a single Space key with outstanding work.
+- Bound: One statement and one locator row; no tuple or Space history is scanned.
+- Growth check: The partial work index keeps locator work independent of completed Space witnesses and unrelated Spaces.
+
+#### Cost: tuple witness repair page
+
+- Touches: One Space-home query selects at most 50 work rows; each row runs one tuple-home inverse upsert and one Space-home acknowledgement in separate `runCommand` transactions.
+- Bound: At most 50 edge rows and 100 command transactions per invocation, plus 50 fixed command/transaction overheads on each side; each acknowledgement is bounded to the selected Space and work key.
+- Growth check: Unrelated inverse edges and retired tuple history are not examined. Tuple-home paging uses its active partial index; the 50-row limit remains fixed as unrelated Spaces grow.
+
+#### Cost: current tuple witness read
+
+- Touches: Two exact owner rounds cover at most 100 requested Spaces, two grouped current-fence reads cover at most 5,000 tuples, and two capability observations scan the fixed install/counter summaries.
+- Bound: Each owner contributes at most 50 tuples; each source-fence statement carries at most 100. In the worst spread, each fence round reads at most 5,000 tuple identities across at most 4,096 tuple homes, with one anchor per home; total selected owner/reference/fence rows stay below 20,200, before fixed transaction and index overhead.
+- Growth check: Work is bounded by the 100-key interface and 50-tuple witness limit, not by source-fence table history, unrelated Spaces or unrelated tuples.
+
+#### Cost: source-fence frontier page
+
+- Touches: One readiness observation, one active tuple-inverse prefix page, at most 50 current Space wakes and one progress acknowledgement.
+- Bound: The page examines no more than 50 active inverse rows through its captured ordinal cut. Each wake is a separate exact Space-home command; the source-fence cut uses the tuple-home partial index.
+- Growth check: Retired inverse tombstones are excluded from the active page index, and unrelated source tuples do not extend the selected prefix.
 
 ## Space commands and reads
 

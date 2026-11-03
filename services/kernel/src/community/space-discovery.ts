@@ -14,6 +14,17 @@ import {
   spaceDiscoveryDependencyReadiness,
   type SpaceDiscoveryDependencyReadiness,
 } from './space-discovery-dependencies.ts';
+import {
+  publishSpaceDiscoveryTupleWitness,
+  readSpaceDiscoveryTupleWitnesses,
+  registerSpaceDiscoveryTupleProducer,
+  type SpaceDiscoveryTupleWitness,
+  type SpaceDiscoveryTupleWitnessInput,
+} from './space-discovery-source-fences.ts';
+export type {
+  SpaceDiscoveryTupleWitness,
+  SpaceDiscoveryTupleWitnessInput,
+} from './space-discovery-source-fences.ts';
 
 const spaceTypes = [
   'created',
@@ -220,6 +231,12 @@ export type SpaceDiscoveryDependencies = Readonly<{
 export interface SpaceDiscoverySource {
   /** Dependency capability is separate from census and current hydration. */
   dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
+  /** Exact Content source-fence provenance for selected current Space keys. */
+  tupleWitnesses?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, SpaceDiscoveryTupleWitness>>;
+  /** Explicit source-owner census cut; an empty page is never registration evidence. */
+  registerTupleProducer?(input: Readonly<{ generation: string; cut: string; complete: true }>): Promise<void>;
+  /** Producer seam for an authoritative owner's exact current tuple witness. */
+  publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
   read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
   /** Internal generation census of retained native candidates, including ineligible identities. */
   count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
@@ -229,6 +246,13 @@ export interface SpaceDiscoverySource {
     after: SpaceDiscoveryKey | null,
     limit: number,
   ): Promise<SpaceDiscoverySnapshot & Readonly<{ next: SpaceDiscoveryKey | null }>>;
+}
+
+/** Concrete native factory result with the complete source-tuple capability. */
+export interface SpaceDiscoveryTupleSource extends SpaceDiscoverySource {
+  tupleWitnesses: NonNullable<SpaceDiscoverySource['tupleWitnesses']>;
+  registerTupleProducer: NonNullable<SpaceDiscoverySource['registerTupleProducer']>;
+  publishTupleWitness: NonNullable<SpaceDiscoverySource['publishTupleWitness']>;
 }
 
 function partitionKey(partition: number) {
@@ -251,10 +275,21 @@ function keys(ids: readonly string[], partition?: number): SpaceDiscoveryKey[] {
 export function spaceDiscoverySource(
   deps: SpaceDiscoveryDependencies,
   context?: Readonly<{ deadline: number }>,
-): SpaceDiscoverySource {
+): SpaceDiscoveryTupleSource {
   const deadline = () => context?.deadline ?? Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
   return {
     dependencies: () => spaceDiscoveryDependencyReadiness(deps.pool),
+    tupleWitnesses(partition, ids) {
+      partitionKey(partition);
+      const requested = keys(ids, partition);
+      return readSpaceDiscoveryTupleWitnesses(deps.pool, requested.map(({ id }) => id));
+    },
+    registerTupleProducer(input) {
+      return registerSpaceDiscoveryTupleProducer(deps.pool, input);
+    },
+    publishTupleWitness(input) {
+      return publishSpaceDiscoveryTupleWitness(deps.pool, input);
+    },
     async read(partition, ids) {
       partitionKey(partition);
       const requested = keys(ids, partition);
