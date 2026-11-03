@@ -129,6 +129,10 @@ function CurrentSalesRead({
   const observation = client.getQueryState(queryKey)?.dataUpdateCount;
   // Count successful observations, including responses equal to their predecessor.
   const source = useMemo(() => ({}), [value, observation]);
+  const sourceIsCurrent = () =>
+    origin.isCurrent() &&
+    client.getQueryState(queryKey)?.dataUpdateCount === observation &&
+    client.getQueryData(queryKey) === value;
   if (hydrated && !origin.isCurrent())
     return (
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
@@ -139,7 +143,7 @@ function CurrentSalesRead({
     <CreatorSalesPage
       page={page}
       source={source}
-      isCurrent={origin.isCurrent}
+      isCurrent={sourceIsCurrent}
       locale={locale}
       {...(cursor === undefined ? {} : { cursor })}
     />
