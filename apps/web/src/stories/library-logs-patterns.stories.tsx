@@ -7,12 +7,21 @@ import { readPublishedLog } from '../library/logs-server';
 import { setHoldingsLogStory } from '../kernel/fake/library-holdings-history';
 import recording from '../kernel/recorded/library-published-log.json';
 import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/shell';
 import { PatternStory, pagePaths } from './page';
 
 const meta = {
   title: 'Patterns/Library/Published log',
   tags: ['autodocs'],
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Owner delete confirmation, receipt Undo, restore and restore-refused outcomes are constructed consumer examples of the existing published-log action lifecycle inside PatternStory plus the shared AppShell at the public-log path. They are not the actual /logs/$id route, native owner authorization or recorded deletion. Signed-in and signed-out public reading stay on library-log. Keyboard, visual and native provenance remain unmeasured.',
+      },
+    },
+  },
   beforeEach() {
     setHoldingsLogStory(true);
     return () => setHoldingsLogStory(false);
@@ -31,16 +40,19 @@ function LogPattern() {
 function renderLog() {
   return (
     <PatternStory visitor="Signed In" path={pagePaths['library-log']}>
-      <Suspense fallback={null}>
-        <div className="p-4">
+      <AppShell>
+        <Suspense fallback={null}>
           <LogPattern />
-        </div>
-      </Suspense>
+        </Suspense>
+      </AppShell>
     </PatternStory>
   );
 }
+async function logMain(canvasElement: HTMLElement) {
+  return within(await within(canvasElement).findByRole('main'));
+}
 async function remove(canvasElement: HTMLElement) {
-  const view = within(canvasElement);
+  const view = await logMain(canvasElement);
   await userEvent.click(await view.findByRole('button', { name: m.library_logs_delete() }));
   await userEvent.click(await view.findByRole('button', { name: m.library_logs_confirm_delete() }));
   await view.findByText(m.library_logs_deleted());
@@ -48,13 +60,13 @@ async function remove(canvasElement: HTMLElement) {
 export const Snapshot: Story = {
   render: renderLog,
   play: async ({ canvasElement }) => {
-    await within(canvasElement).findByText(recording.publishedLog.note);
+    await (await logMain(canvasElement)).findByText(recording.publishedLog.note);
   },
 };
 export const ConfirmDelete: Story = {
   render: renderLog,
   play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
+    const view = await logMain(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.library_logs_delete() }));
     await view.findByRole('button', { name: m.library_logs_confirm_delete() });
   },
@@ -63,14 +75,14 @@ export const Deleted: Story = {
   render: renderLog,
   play: async ({ canvasElement }) => {
     await remove(canvasElement);
-    await expect(within(canvasElement).findByRole('button', { name: m.editor_undo() })).resolves.toBeVisible();
+    await expect((await logMain(canvasElement)).findByRole('button', { name: m.editor_undo() })).resolves.toBeVisible();
   },
 };
 export const Restored: Story = {
   render: renderLog,
   play: async ({ canvasElement }) => {
     await remove(canvasElement);
-    const view = within(canvasElement);
+    const view = await logMain(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.editor_undo() }));
     await view.findByText(recording.publishedLog.note);
     await view.findByRole('button', { name: m.library_logs_delete() });
@@ -84,7 +96,7 @@ export const RestoreRefused: Story = {
   render: renderLog,
   play: async ({ canvasElement }) => {
     await remove(canvasElement);
-    const view = within(canvasElement);
+    const view = await logMain(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.editor_undo() }));
     await expect(view.findByRole('alert')).resolves.toHaveTextContent(m.library_logs_write_failed());
     await view.findByText(m.library_logs_deleted());
