@@ -42,7 +42,7 @@ export function createVndbLabelAdoption(config: Config) {
     body: (tx: CommandTransaction, account: AccountActor) => Promise<T>) {
     const account = owner(actor);
     return runner.ownAccount(actor, { action: 'library_entry:update', kind: `library.vndb.labels.${kind}`, requestKey: key, input },
-      async (tx) => ({ value: await body(tx, account) }));
+      async (tx) => ({ value: await body(tx, account), events: [] }));
   }
   async function readPlan(client: Client, account: AccountActor, id: string, lock = false) {
     const found = await client.query<VndbLabelPlan>(
@@ -170,6 +170,11 @@ export function createVndbLabelAdoption(config: Config) {
         `SELECT upload_id FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3
          AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`, tuple(a, id));
       if (!active.rows[0]) throw stale();
+      const encoded = await tx.query<{ oversized: boolean }>(
+        `SELECT octet_length($1::jsonb::text)>16384 OR EXISTS(
+           SELECT 1 FROM jsonb_array_elements($2::jsonb) o WHERE octet_length(o::text)>4096
+         ) AS oversized`, [JSON.stringify(mappings), JSON.stringify(operands.map(i => i.operand))]);
+      if (encoded.rows[0]?.oversized) throw invalid();
       for (const selected of choice.rows) {
         const found = await tx.query<{ review_id: string }>(
           `SELECT decisions->$4->>'reviewId' AS review_id FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
