@@ -34,9 +34,10 @@ retains the original text, including numeric spellings that JSON parsing cannot 
 stay absent, null is unknown, zero stays zero, invalid values stay visible. Scores require separately declared
 POINT_100, POINT_10_DECIMAL, POINT_10, POINT_5 or POINT_3; omission means unknown scale. Scores and advanced
 components never create votes or aggregates. Progress keeps episodes (ANIME), chapters (MANGA), unknown measures
-and volumes separate. Repeat, priority, custom membership, notes, privacy, precise/partial dates, updatedAt and all
+and volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all
 unrecognized fields are retained, never applied. Unknown date components are not filled. Private notes are not
-reviews; custom/private lists are not public Collections. No holdings, entitlements or labels are inferred.
+reviews; custom/private lists are not public Collections. No holdings, entitlements or labels are inferred. Explicitly selected supported custom membership can be adopted
+through the independent [private-label review](library-import-anilist-labels.md).
 
 Limits: 1,048,576 UTF-8 upload bytes, JSON depth 24, 200 rows (65,536 bytes/128 fields each, 100-character field names),
 8,192-byte group metadata, valid Unicode without NUL, five retained uploads per owner, 20 rows per
@@ -51,6 +52,9 @@ finish after cancellation. `complete:false` leaves remaining confirmations resum
 remove or native account erasure; the account-leading store is erased in 100-key pages with the Library owned graph.
 Receipts/events contain locators and outcomes only, never uploads, raw notes or review evidence. These stores have
 no public Search projection. Read and update Library scopes are required. Shared history minimization retains its existing native owner responsibilities.
+
+Private-label evidence, review/apply methods, normalization, bounds and per-item outcomes are specified in
+[custom-list label adoption](library-import-anilist-labels.md).
 
 Web uses these actual mounted methods (examples below are constructed, not execution evidence):
 
@@ -88,7 +92,8 @@ present and otherwise shows unavailable.
 
 Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
 the explicit UUID submitted to `review.subjectId` is identity. Apply defaults to preserving local facts
-(`replace:false`). Only admitted `status` is selectable. Missing `scoreFormat` stays unknown scale and is never
+(`replace:false`). Only admitted `status` is selectable in state review. The independent `reviewLabels`/`applyLabels` methods
+adopt explicitly selected retained custom membership without changing state/progress choices. Missing `scoreFormat` stays unknown scale and is never
 converted into native enjoyment. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated
 client snapshot may omit this surface; missing methods render unavailable rather than a local parser.
 

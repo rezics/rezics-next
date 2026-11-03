@@ -26,6 +26,7 @@ import {
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
+import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
 import { setLabelAssignment } from './label-assignment-store.ts';
 import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './label-assignment-lifecycle-store.ts';
 import { admitShelfRead } from './shelf-admission.ts';
@@ -124,6 +125,7 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
+    guard?: AniListLabelGuard,
   ) {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
@@ -132,7 +134,7 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed },
+      input: { labelId, ...parsed, ...(guard ? { importReview: guard } : {}) },
       requestKey: key,
     };
     const execute = async (
@@ -150,6 +152,14 @@ export function createLabelAssignmentCommands(deps: {
       };
       const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
       if (operation === 'assign') {
+        if (guard) {
+          await assertAniListLabel(tx, account, guard);
+          const label = (await tx.query<{ revision: number }>(
+            'SELECT revision FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE',
+            [route, account.accountId, labelId],
+          )).rows[0];
+          if (!label || label.revision !== guard.labelRevision) throw new LibraryConflictError();
+        }
         const result = await setLabelAssignment(tx, tuple, context);
         switch (result.kind) {
           case 'not_found':
@@ -159,9 +169,9 @@ export function createLabelAssignmentCommands(deps: {
           case 'migration_required':
             throw new ProblemError('index_not_ready');
           case 'existing':
-            return noEffect(minimal(result.assignment));
+            return noEffect({ ...minimal(result.assignment), ...(guard ? { unchanged: true } : {}) });
           case 'applied':
-            return { value: minimal(result.assignment), events: events(account, labelId) };
+            return { value: { ...minimal(result.assignment), ...(guard ? { unchanged: false } : {}) }, events: events(account, labelId) };
         }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
@@ -196,12 +206,17 @@ export function createLabelAssignmentCommands(deps: {
       }
     };
     if (operation === 'unassign') return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
-    return runner.ownAccountPrepared(
+    return (guard ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
         async prepare(attempt) {
           try {
+            if (guard) {
+              const prepared = await prepareAniListLabel(deps, account, guard, attempt.time);
+              if (prepared.error !== undefined) throw prepared.error;
+              return { subjectId: guard.subjectId };
+            }
             const resolved = await withRequestDeadline(deadline, () =>
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
@@ -216,9 +231,9 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string) {
-    return (await mutate(actor, labelId, value, key, 'assign')) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal>
+  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, guard?: AniListLabelGuard) {
+    return (await mutate(actor, labelId, value, key, 'assign', guard)) as import('../command/command.ts').CommandOutcome<
+      ReturnType<typeof minimal> & { unchanged?: boolean }
     >;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {

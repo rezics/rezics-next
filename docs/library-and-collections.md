@@ -43,6 +43,9 @@ caller binding, bounded continuation lifecycle, concurrent edits, terminal fence
 and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field
 remains visible private evidence. This replaces the AniList personal-import deferral only, not other sources or sync.
 
+Retained AniList custom-list membership has an independent [explicit private-label adoption](library-import-anilist-labels.md)
+review within that producer; default display groups and unsupported tags never imply assignments.
+
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.

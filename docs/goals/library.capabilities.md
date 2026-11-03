@@ -54,7 +54,10 @@ runtime IDs or viewport-suffix IDs are claimed.
 
 Personal AniList portability: `test/library/list-import-anilist.test.ts` exercises the mounted preview/review/apply
 composition with persisted native authority and subjects. The [source contract](../library-import-anilist.md) owns
-shape, mapping, retained losses, bounds and Web responses; broader frozen acceptance remains an integration check.
+shape, mapping, retained losses, bounds and Web responses. Independent custom-list label adoption is specified in
+[the label adoption contract](../library-import-anilist-labels.md) and covered by
+`test/library/list-import-anilist-labels.test.ts`; native64/512/4096 complete-caller growth remains deferred.
+The label methods are producer composition; Web325 remains the complete AniList interface; broader frozen acceptance remains an integration check.
 
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.

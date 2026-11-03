@@ -18,15 +18,17 @@ import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import { readEntry } from './entry-store.ts';
+import { createAniListLabelAdoption, type AniListLabelReview, type AniListLabelWork } from './list-import-anilist-labels.ts';
+import { aniListLabelEvidence, ANILIST_LABEL_LIMITS } from './list-import-anilist-label-evidence.ts';
 import { ANILIST_LIMITS, AniListInputError, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
-type Match = {
+export type AniListMatch = {
   state: 'matched' | 'ambiguous' | 'unmatched' | 'unavailable';
   candidates: string[];
   fingerprint: string;
 };
-type Observation = {
+export type AniListObservation = {
   subjectId: string;
   epoch: string;
   pin: unknown;
@@ -37,8 +39,8 @@ type Observation = {
 export type AniListReviewInput = { subjectId?: string; skip?: boolean; fields: string[]; replace?: boolean };
 type Review = {
   id: string;
-  match: Match;
-  observation: Observation | null;
+  match: AniListMatch;
+  observation: AniListObservation | null;
   input: AniListReviewInput;
   commandKey: string;
   clientId: string;
@@ -49,7 +51,11 @@ export type AniListOutcome = {
   status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
   retained: string[];
 };
-type Stored = { source: AniListRow; review?: Review; started?: boolean; outcome?: AniListOutcome };
+export type AniListStored = {
+  source: AniListRow; review?: Review; started?: boolean; outcome?: AniListOutcome;
+  labelReview?: AniListLabelReview; labelWork?: Record<number, AniListLabelWork>;
+};
+type Stored = AniListStored;
 type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
 const hash = (v: unknown) => createHash('sha256').update(canonicalize(v)!).digest('hex');
 const role: Record<string, string> = {
@@ -81,7 +87,7 @@ export function createAniListImport(deps: Dependencies) {
     const check = await accessCheck(
       access,
       account,
-      'library_entry:update',
+      'library_entry:read',
       { route, id: account.accountId },
       { pool, deadline: deadlineFor(5000) },
     );
@@ -124,7 +130,7 @@ export function createAniListImport(deps: Dependencies) {
       return row.payload;
     });
   }
-  async function match(actor: Actor, row: AniListRow): Promise<Match> {
+  async function match(actor: Actor, row: AniListRow): Promise<AniListMatch> {
     const candidates: string[] = [],
       claims: unknown[] = [];
     let unavailable = false;
@@ -161,7 +167,7 @@ export function createAniListImport(deps: Dependencies) {
       fingerprint: hash(claims),
     };
   }
-  async function observe(actor: Actor, subjectId: string): Promise<Observation | null> {
+  async function observe(actor: Actor, subjectId: string): Promise<AniListObservation | null> {
     const at = await withConnection(pool, (client) => mintReadTime(client, clock));
     const observed = await readLibraryProfileSourceObservation(
       { pool, access, actor, at, deadline: deadlineFor(5000) },
@@ -186,7 +192,7 @@ export function createAniListImport(deps: Dependencies) {
       proposedState: null,
     };
   }
-  function propose(observation: Observation | null, row: AniListRow) {
+  function propose(observation: AniListObservation | null, row: AniListRow) {
     if (observation) {
       const desired = role[String(row.evidence.status)];
       const choices = observation.states.filter((s) => desired !== undefined && s.role === desired);
@@ -311,10 +317,12 @@ export function createAniListImport(deps: Dependencies) {
         matching.state === 'matched'
           ? propose(await observe(actor, matching.candidates[0]!), row.payload.source)
           : null;
-      rows.push({ ordinal: row.ordinal, ...row.payload, match: matching, proposal: observation });
+      rows.push({ ordinal: row.ordinal, ...row.payload, labelEvidence: aniListLabelEvidence(row.payload.source), match: matching, proposal: observation });
     }
     await snapshot(actor, async () => undefined);
-    return { header, rows, next: raw.length === 20 ? raw[raw.length - 1]!.ordinal : null };
+    const result = { header, rows, next: raw.length === 20 ? raw[raw.length - 1]!.ordinal : null };
+    if (Buffer.byteLength(JSON.stringify(result)) > ANILIST_LABEL_LIMITS.pageBytes) throw new AniListInputError();
+    return result;
   }
   async function review(actor: Actor, id: string, ordinal: number, input: AniListReviewInput, key: string) {
     if (input.fields.some((field) => !field.isWellFormed() || field.includes('\0'))) throw new AniListInputError();
@@ -336,7 +344,7 @@ export function createAniListImport(deps: Dependencies) {
     };
     const saved = await save(actor, id, ordinal, 'review', key, input, (current) => {
       if (current.started) throw new LibraryConflictError();
-      return { source: current.source, review: value };
+      return { ...current, review: value, outcome: undefined };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -439,7 +447,7 @@ export function createAniListImport(deps: Dependencies) {
       if (status !== 'failed')
         await save(actor, id, confirmation.ordinal, 'finish', reviewed.commandKey, outcome, (row) => {
           if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-          return status === 'stale' && !row.started ? { source: row.source } : { ...row, outcome };
+          return status === 'stale' && !row.started ? { ...row, review: undefined, started: undefined, outcome: undefined } : { ...row, outcome };
         });
       outcomes.push(outcome);
     }
@@ -478,5 +486,6 @@ export function createAniListImport(deps: Dependencies) {
     );
     return { cancelled: true };
   }
-  return { preview, page, review, apply, cancel };
+  const labelAdoption = createAniListLabelAdoption({ ...deps, load, snapshot, match, observe });
+  return { preview, page, review, apply, cancel, ...labelAdoption };
 }
