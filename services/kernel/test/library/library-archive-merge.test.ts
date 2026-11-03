@@ -167,7 +167,20 @@ beforeAll(async () => {
       startDate: { year: 2004, month: 2 },
       finishDate: { year: 2021, month: 6, day: 7 },
       reflection: '  A historical private reflection.\n',
+      assessment: { units: 14 },
     },
+    key(),
+  );
+  const repeatedSourceSession = await sessions.startSession(
+    source.actor,
+    { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' },
+    key(),
+  );
+  repeatedSourceSessionId = repeatedSourceSession.value.id;
+  await sessions.patchSessionJournal(
+    source.actor,
+    repeatedSourceSessionId,
+    { revision: 0, reflection: 'A separate occurrence fact.', assessment: { units: 0 } },
     key(),
   );
   const targetSession = await sessions.startSession(
@@ -179,16 +192,34 @@ beforeAll(async () => {
   await sessions.patchSessionJournal(
     main.actor,
     targetSessionId,
-    { revision: 0, startDate: { year: 2019 }, finishDate: { year: 2020, month: 3 }, assessment: { units: 13 } },
+    {
+      revision: 0,
+      startDate: { year: 2019 },
+      finishDate: { year: 2020, month: 3 },
+      reflection: 'Keep target reflection unless explicitly changed.',
+      assessment: { units: 8 },
+    },
+    key(),
+  );
+  const repeatedTargetSession = await sessions.startSession(
+    main.actor,
+    { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' },
+    key(),
+  );
+  repeatedTargetSessionId = repeatedTargetSession.value.id;
+  await sessions.patchSessionJournal(
+    main.actor,
+    repeatedTargetSessionId,
+    { revision: 0, assessment: { units: 20 } },
     key(),
   );
   const targetLabels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
   await targetLabels.createLabel(main.actor, { name: 'my chosen label' }, key());
 
   const created = await json(await send(source, 'POST', '/v1/libraryExports'));
-  // A retained V2 capture uses the real historical producer; new captures remain V3.
+  // Read the V3 schema from the installed producer while V4 provider sections stay unsupported.
   await f.pool.query(
-    'UPDATE library.library_export SET format_version=2 WHERE route=$1 AND account_id=$2 AND export_id=$3',
+    'UPDATE library.library_export SET format_version=3 WHERE route=$1 AND account_id=$2 AND export_id=$3',
     [routeOf(source.actor.accountId), source.actor.accountId, created.exportId],
   );
   const captured = await json(await send(source, 'GET', `/v1/libraryExports/${created.exportId}`));
@@ -209,6 +240,12 @@ beforeAll(async () => {
   expect(records.filter((row) => row.section === 'entries')).toHaveLength(2);
   expect(records.filter((row) => row.section === 'labels')).toHaveLength(2);
   expect(records.filter((row) => row.section === 'assignments')).toHaveLength(1);
+  expect(records.filter((row) => row.section === 'journals')).toHaveLength(2);
+  expect(artifact.manifest.version).toBe(3);
+  expect(artifact.manifest.recordBytes).toBe(
+    records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row), 'utf8'), 0),
+  );
+  expect(Object.keys(artifact.manifest.sectionTotals as Record<string, unknown>)).toHaveLength(17);
 }, 120_000);
 
 afterAll(async () => {
@@ -217,7 +254,7 @@ afterAll(async () => {
 
 test('the actual installed archive is privately reviewed, explicitly merged and replayed through native commands', async () => {
   const wrong = framed(artifact.records);
-  expect(wrong.manifest.version).toBe(2);
+  expect(wrong.manifest.version).toBe(3);
   const acceptedArchive = await upload(main, wrong);
   const id = acceptedArchive.uploadId as string;
   expect((await send(main, 'POST', mergePath, { records: artifact.records })).status).toBe(400);
@@ -244,7 +281,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       expect.objectContaining({ section: 'holdings', treatment: 'retained-unsupported' }),
       expect.objectContaining({ section: 'collections', treatment: 'retained-unsupported' }),
       expect.objectContaining({ section: 'annotations', treatment: 'requires-explicit-mapping', rows: 1 }),
-      expect.objectContaining({ section: 'journals', treatment: 'requires-explicit-mapping', rows: 1 }),
+      expect.objectContaining({ section: 'journals', treatment: 'requires-explicit-mapping', rows: 2 }),
       expect.objectContaining({ section: 'provenance', treatment: 'retained-unsupported', rows: 1 }),
     ]),
   );
@@ -255,6 +292,9 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const assignment = rows.find((row) => row.section === 'assignments')!;
   const annotation = rows.find((row) => row.section === 'annotations' && row.evidence.subjectId === subjects[0])!;
   const journalItem = rows.find((row) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId)!;
+  const repeatedJournalItem = rows.find(
+    (row) => row.section === 'journals' && row.evidence.sessionId === repeatedSourceSessionId,
+  )!;
   const provenance = rows.find((row) => row.section === 'provenance')!;
   expect(provenance.status).toBe('unsupported');
   expect(provenance.evidence.observation.privacy).toEqual({ status: 'known', meaning: 'source_visible' });
@@ -279,7 +319,14 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
           kind: 'journal',
           subjectId: subjects[0],
           sessionId: targetSessionId,
-          fields: { startDate: 'set', finishDate: 'preserve', reflection: 'set' },
+          fields: { startDate: 'set', finishDate: 'preserve', reflection: 'set', assessment: 'set' },
+        },
+        {
+          ordinal: repeatedJournalItem.ordinal,
+          kind: 'journal',
+          subjectId: subjects[0],
+          sessionId: repeatedTargetSessionId,
+          fields: { assessment: 'set' },
         },
       ],
     }),
@@ -307,11 +354,18 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const refreshed = await previewAll(main, id);
   const reviewedAnnotation = refreshed.records.find((row: any) => row.ordinal === annotation.ordinal)!;
   const reviewedJournal = refreshed.records.find((row: any) => row.ordinal === journalItem.ordinal)!;
+  const reviewedRepeatedJournal = refreshed.records.find((row: any) => row.ordinal === repeatedJournalItem.ordinal)!;
   expect(reviewedAnnotation.reviewRevision).toBe(
     initialReview.reviewed.find((row: any) => row.ordinal === annotation.ordinal).reviewRevision + 1,
   );
   expect(reviewedAnnotation.review.fields).toEqual({ note: 'set', priority: 'clear' });
-  expect(reviewedJournal.review.fields).toEqual({ startDate: 'set', finishDate: 'preserve', reflection: 'set' });
+  expect(reviewedJournal.review.fields).toEqual({
+    startDate: 'set',
+    finishDate: 'preserve',
+    reflection: 'set',
+    assessment: 'set',
+  });
+  expect(reviewedRepeatedJournal.review.fields).toEqual({ assessment: 'set' });
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
   const currentEntry = await f.commands.readEntry(main.actor, subjects[0]);
@@ -363,6 +417,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
   const sessionBefore = await sessions.readSession(main.actor, targetSessionId);
   const journalBefore = await sessions.readSessionJournal(main.actor, targetSessionId);
+  const repeatedJournalBefore = await sessions.readSessionJournal(main.actor, repeatedTargetSessionId);
   const progressChangesBefore = await f.pool.query<{ count: string }>(
     'SELECT count(*)::text AS count FROM library.progress_change WHERE route=$1 AND account_id=$2 AND session_id=$3',
     [routeOf(main.actor.accountId), main.actor.accountId, targetSessionId],
@@ -385,7 +440,11 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
 
   const appliedFacts = await json(
     await send(main, 'POST', `${mergePath}/${id}/apply`, {
-      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+      items: [
+        ...selected([annotation.ordinal], 2).items,
+        { ordinal: journalItem.ordinal, reviewRevision: reviewedJournal.reviewRevision },
+        { ordinal: repeatedJournalItem.ordinal, reviewRevision: reviewedRepeatedJournal.reviewRevision },
+      ],
     }),
   );
   expect(appliedFacts.applied).toMatchObject([
@@ -397,9 +456,10 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       status: 'accepted',
       result: {
         outcome: 'accepted',
-        fields: { startDate: 'accepted', finishDate: 'preserved', reflection: 'accepted' },
+        fields: { startDate: 'accepted', finishDate: 'preserved', reflection: 'accepted', assessment: 'accepted' },
       },
     },
+    { status: 'accepted', result: { outcome: 'accepted', fields: { assessment: 'accepted' } } },
   ]);
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).note).toBe('Recovered owner note');
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).priority).toBeNull();
@@ -408,9 +468,15 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     startDate: { year: 2004, month: 2 },
     finishDate: { year: 2020, month: 3 },
     reflection: '  A historical private reflection.\n',
-    assessment: { meaningRevision: 1, units: 13 },
+    assessment: { meaningRevision: 1, units: 14 },
   });
   expect(recoveredJournal.finishDate).toEqual(journalBefore.finishDate);
+  expect(recoveredJournal.revision).toBe(journalBefore.revision + 1);
+  const recoveredRepeatedJournal = await sessions.readSessionJournal(main.actor, repeatedTargetSessionId);
+  expect(recoveredRepeatedJournal).toMatchObject({
+    revision: repeatedJournalBefore.revision + 1,
+    assessment: { meaningRevision: 1, units: 0 },
+  });
   const journalAudit = await f.pool.query<{ createdAt: string }>(
     `SELECT to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAt"
      FROM core.receipt
@@ -435,10 +501,49 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(progressChangesAfter.rows[0]?.count).toBe(progressChangesBefore.rows[0]?.count);
   const replayedFacts = await json(
     await send(main, 'POST', `${mergePath}/${id}/apply`, {
-      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+      items: [
+        ...selected([annotation.ordinal], 2).items,
+        { ordinal: journalItem.ordinal, reviewRevision: reviewedJournal.reviewRevision },
+        { ordinal: repeatedJournalItem.ordinal, reviewRevision: reviewedRepeatedJournal.reviewRevision },
+      ],
     }),
   );
   expect(replayedFacts.applied).toEqual(appliedFacts.applied);
+  const journalRequest = await f.pool.query<{
+    native_request_key: string;
+    patch: Record<string, unknown>;
+  }>(
+    `SELECT native_request_key,native_operands->'patch' AS patch FROM library.library_archive_merge_item
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [routeOf(main.actor.accountId), main.actor.accountId, id, journalItem.ordinal],
+  );
+  expect(journalRequest.rows[0]).toMatchObject({
+    native_request_key: `archive-merge-${id.replaceAll('-', '')}-${journalItem.ordinal}-${reviewedJournal.reviewRevision}`,
+    patch: {
+      revision: journalBefore.revision,
+      startDate: { year: 2004, month: 2 },
+      reflection: '  A historical private reflection.\n',
+      assessment: { units: 14 },
+    },
+  });
+  await sessions.patchSessionJournal(
+    main.actor,
+    targetSessionId,
+    { revision: recoveredJournal.revision, reflection: 'a later local correction' },
+    key(),
+  );
+  await f.pool.query(
+    `UPDATE library.library_archive_merge_item SET status='applying',result=NULL
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [routeOf(main.actor.accountId), main.actor.accountId, id, journalItem.ordinal],
+  );
+  const checkpointReplay = await json(
+    await send(main, 'POST', `${mergePath}/${id}/apply`, {
+      items: [{ ordinal: journalItem.ordinal, reviewRevision: reviewedJournal.reviewRevision }],
+    }),
+  );
+  expect(checkpointReplay.applied[0]).toEqual(appliedFacts.applied[1]);
+  expect((await sessions.readSessionJournal(main.actor, targetSessionId)).reflection).toBe('a later local correction');
 
   const nativeLabels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
   const labelKey = `archive-merge-${id.replaceAll('-', '')}-${labelTwo.ordinal}-1`;
@@ -516,6 +621,71 @@ test('unknown archived state remains readable but cannot enter the current profi
   expect(
     (await previewAll(unknownStateOwner, id)).records.find((row: any) => row.ordinal === entry.ordinal).status,
   ).toBe('unsupported');
+});
+
+test('V3 unknown and V2 absent assessments stay inert while an explicit archived null clears', async () => {
+  const sourceRow = artifact.records.find((row) => row.section === 'journals')!;
+  const cases: { version: 2 | 3; journal: Record<string, unknown>; expected: 'unsupported' | 'accepted' }[] = [
+    {
+      version: 3,
+      journal: { ...(sourceRow.journal as Record<string, unknown>), assessment: { meaningRevision: 2, units: 14 } },
+      expected: 'unsupported',
+    },
+    {
+      version: 2,
+      journal: Object.fromEntries(
+        Object.entries(sourceRow.journal as Record<string, unknown>).filter(([name]) => name !== 'assessment'),
+      ),
+      expected: 'unsupported',
+    },
+    {
+      version: 3,
+      journal: { ...(sourceRow.journal as Record<string, unknown>), assessment: { meaningRevision: 1, units: null } },
+      expected: 'accepted',
+    },
+  ];
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  for (const c of cases) {
+    const owner = await f.identity([...exportScopes, 'account:delete']);
+    const target = (
+      await sessions.startSession(owner.actor, { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' }, key())
+    ).value;
+    await sessions.patchSessionJournal(owner.actor, target.id, { revision: 0, assessment: { units: 17 } }, key());
+    const manifest = {
+      ...artifact.manifest,
+      version: c.version,
+      coverage: `private-library-owner-facts-v${c.version}`,
+    };
+    const id = (
+      await upload(
+        owner,
+        framed([{ ...sourceRow, journal: c.journal }], manifest),
+      )
+    ).uploadId as string;
+    const row = (await previewAll(owner, id)).records.find((item: any) => item.section === 'journals')!;
+    expect(row.evidence.journal).toEqual(c.journal);
+    await json(
+      await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [
+          {
+            ordinal: row.ordinal,
+            kind: 'journal',
+            subjectId: subjects[0],
+            sessionId: target.id,
+            fields: { assessment: 'set' },
+          },
+        ],
+      }),
+    );
+    const reviewed = (await previewAll(owner, id)).records.find((item: any) => item.ordinal === row.ordinal)!;
+    const applied = await json(
+      await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal], reviewed.reviewRevision)),
+    );
+    expect(applied.applied[0].status).toBe(c.expected);
+    expect((await sessions.readSessionJournal(owner.actor, target.id)).assessment).toEqual(
+      c.expected === 'accepted' ? null : { meaningRevision: 1, units: 17 },
+    );
+  }
 });
 
 test('refreshed label mappings require the new confirmation and retain accepted operands on retry', async () => {

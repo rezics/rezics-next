@@ -37,8 +37,8 @@ export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
 export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
-/** The archive recovery consumer shares the installed V1 and V2 section vocabulary. */
-export type LibraryExportSection = LibraryExportSectionV2;
+/** V2/V3 share the archive consumer inventory; V4 provider sections remain unsupported for recovery. */
+export type LibraryExportSection = LibraryExportSectionV2 | LibraryExportSectionV3;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
   return version === 1
@@ -225,5 +225,8 @@ export function libraryExportManifest(
   };
 }
 
-/** The native archive decoder recognizes completed V1 and V2 manifests; V3 assessment import is not installed. */
-export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;
+/** The native archive decoder recognizes the exact completed V1, V2, and V3 manifests. */
+export type LibraryArchiveManifest =
+  | LibraryExportFinalManifestV1
+  | LibraryExportFinalManifestV2
+  | LibraryExportFinalManifestV3;

@@ -113,6 +113,7 @@ const reviewItem = t.Union([
           startDate: t.Optional(fieldChoice),
           finishDate: t.Optional(fieldChoice),
           reflection: t.Optional(fieldChoice),
+          assessment: t.Optional(fieldChoice),
         },
         closed,
       ),
