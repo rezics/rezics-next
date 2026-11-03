@@ -5,7 +5,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
-import { readableSubjects } from '../library/subject-anchor.ts';
+import { readableSubjects, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
@@ -81,6 +81,15 @@ function mappingKey(mapping: IdentityMapping): string | null {
 }
 function key(row: Key) { return `${row.questionId}:${row.targetId}`; }
 
+async function visibleSources(deps: Dependencies, actor: Actor, sources: readonly string[]) {
+  try {
+    return new Set(await readableSubjects(deps, actor, sources));
+  } catch (error) {
+    if (error instanceof SubjectIdentityUnavailableError) throw new AccessUnavailableError('contention');
+    throw error;
+  }
+}
+
 /** Supplied exact keys only; each question home is released before native Realm Access preparation. */
 async function questions(deps: Dependencies, actor: Actor, ids: readonly string[], deadline: number) {
   const groups = new Map<number, string[]>();
@@ -144,7 +153,7 @@ export function createOwnVotesReader(deps: Dependencies) {
       const initial = new Map(sources.map((id, i) => [id, mappings[i]!]));
       // Force typed identity failures to fail the whole page, including withheld-only batches.
       for (const mapping of mappings) mappingKey(mapping);
-      const visible = new Set(await readableSubjects(deps, owner, sources));
+      const visible = await visibleSources(deps, owner, sources);
       const initialQuestions = await questions(deps, owner, questionIds, deadline);
       const terminals = [...new Set(mappings.flatMap((mapping) =>
         mapping.state === 'mapped' && visible.has(mapping.original) ? [mapping.terminal] : []))];
@@ -156,7 +165,7 @@ export function createOwnVotesReader(deps: Dependencies) {
       await requireRelease();
       const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, terminals);
       const finalQuestions = await questions(deps, owner, questionIds, deadline);
-      const finalVisible = new Set(await readableSubjects(deps, owner, sources));
+      const finalVisible = await visibleSources(deps, owner, sources);
       const finalMappings = await identityEpochStore.readMappings(deps.pool, sources);
       const final = new Map(sources.map((id, i) => [id, finalMappings[i]!]));
       for (const mapping of finalMappings) mappingKey(mapping);

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
+import { decodeSession } from '../../src/tokens/session.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { communityFixtureRuntime } from '../community/community-driver.ts';
@@ -52,6 +53,15 @@ test('My ratings returns the current native vote and uses its original command f
   const changed = await fixture.request('PUT', row.actions.put, { key, body: { units: 12 } });
   await body(changed);
   expect(changed.headers.get(SESSION_HEADER)).toBeTruthy();
+  const components = decodeSession(
+    { current: 1, keys: new Map([[1, new Uint8Array(32).fill(27)]]) },
+    `account:${fixture.actorId}`, changed.headers.get(SESSION_HEADER)!,
+  );
+  const receipt = (await fixture.database.admin.query(
+    'SELECT partition_no, epoch, position FROM core.receipt WHERE principal_id=$1 AND idempotency_key=$2',
+    [fixture.actorId, key],
+  )).rows[0];
+  expect(components).toContainEqual({ partition: receipt.partition_no, epoch: receipt.epoch, position: BigInt(receipt.position) });
   // Discard the first response, then retry the exact original command and read back.
   const replay = await fixture.request('PUT', row.actions.put, { key, body: { units: 12 } });
   expect(await body(replay)).toMatchObject({ units: 12, revision: 2 });
@@ -78,10 +88,8 @@ test('a suppressed raw page keeps continuation; dependency failure retries the s
   const viewer = native.globalVoters[0]!;
   const stranger = native.globalVoters[1]!;
   expect(await body(await native.request(pagePath, stranger))).toMatchObject({ votes: [], next: null });
-  const targets = [];
   for (let index = 0; index < 22; index++) {
     const id = await fixture.createSubject({ type: 'schema:Book', labels: { en: `Remembered ${index}` } });
-    targets.push(id);
     await native.vote(id, viewer, index % 21);
   }
   const first = await body(await native.request(pagePath, viewer));
