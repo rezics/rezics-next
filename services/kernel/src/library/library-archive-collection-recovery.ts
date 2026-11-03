@@ -891,8 +891,6 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const owner = await admit(actor, ['collection:create', 'collection:update']);
     abortIfRequested(signal);
     const root = await load(owner, uploadId);
-    if (root.state === 'expired' || root.state === 'cancelled' || root.state === 'complete' || root.state === 'partial')
-      throw conflict();
     if (
       !UUID.test(input.collectionId) ||
       !Array.isArray(input.selectedOccurrenceIds) ||
@@ -913,7 +911,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       if (root.reviewRequestDigest !== requestDigest) throw new ProblemError('idempotency_conflict');
       return reviewResponse(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
     }
-    if (root.state === 'applying' || root.nativeCollectionId) throw conflict();
+    if (
+      (root.state !== 'preview' && root.state !== 'reviewed') ||
+      root.nativeCollectionId !== null ||
+      root.lastAddedMemberId !== null ||
+      root.inflightAction !== null ||
+      root.leaseId !== null ||
+      root.cancelRequested
+    )
+      throw conflict();
     const selected = await deps.pool.query<{
       id: string;
       subjectId: string | null;
@@ -1090,22 +1096,38 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           review_id: string | null;
           review_key: string | null;
           review_request_digest: string | null;
+          native_collection_id: string | null;
+          last_added_member_id: string | null;
+          inflight_action: RecoveryRoot['inflightAction'];
+          lease_id: string | null;
+          cancel_requested: boolean;
         }>(
-          `SELECT state,review_epoch::text,review_id::text,review_key,review_request_digest
+          `SELECT state,review_epoch::text,review_id::text,review_key,review_request_digest,
+             native_collection_id::text,last_added_member_id::text,inflight_action,lease_id::text,cancel_requested
            FROM library.collection_archive_recovery
            WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
           [root.route, owner.accountId, uploadId],
         );
         const latest = current.rows[0];
-        if (!latest || latest.state === 'applying' || latest.state === 'cancelled' || latest.state === 'expired')
-          throw conflict();
+        if (!latest) throw conflict();
         if (latest.review_key === requestKey) {
           if (latest.review_request_digest !== requestDigest) throw new ProblemError('idempotency_conflict');
           await connection.query('COMMIT');
           return;
         }
-        if (Number(latest.review_epoch) !== root.reviewEpoch) throw conflict();
-        if (latest.review_id && latest.review_id === reviewId) throw conflict();
+        // Apply may accept native effects without advancing the review epoch. Admit replacement only
+        // against the same review with no admitted or unresolved effects, under this root's row lock.
+        if (
+          (latest.state !== 'preview' && latest.state !== 'reviewed') ||
+          Number(latest.review_epoch) !== root.reviewEpoch ||
+          latest.review_id !== root.reviewId ||
+          latest.native_collection_id !== null ||
+          latest.last_added_member_id !== null ||
+          latest.inflight_action !== null ||
+          latest.lease_id !== null ||
+          latest.cancel_requested
+        )
+          throw conflict();
         await connection.query(
           `UPDATE library.collection_archive_recovery_record AS recovery_record SET review_id=$4,selected=true,
              target_subject_id=u.target_subject_id,add_state=u.add_state,note_state=u.note_state,

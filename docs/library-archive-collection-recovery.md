@@ -71,6 +71,12 @@ primary-key/indexed UUID operand. Across review mapping, apply preflight and nat
 resolution is bounded by at most `3R` addressed checks. The selected review snapshot and outcomes are also capped at
 1,000 rows.
 
+Each review attempt repeats up to `R` current Subject resolutions and, when eligible, one current pin page of at
+most 100 pins. After these calls finish, replacement uses one indexed root read with a row lock and compares the
+original review ID/epoch and native-effect identity before writing at most `R` selected occurrence records and one
+root. A losing attempt writes neither. This adds constant root-guard work, no selected-record scan or native
+command reservation; original native operation keys and receipts remain unchanged.
+
 One apply call performs at most 25 recovery steps. Total selected work is independently bounded by `3R + 2` native
 command attempts: one Collection create, one member insertion, one note command and one ordering command per
 occurrence, plus at most one Collection pin. Replays use the original stable native operation keys and receipts and
@@ -91,6 +97,12 @@ occurrences. Cancellation admits no new step after the current in-flight native 
 resulting Collection ID and accepted member IDs remain visible through owner-only outcomes. Retries after a lost
 acknowledgement replay the same create/member/note/order/pin receipt and IDs. A refreshed review increments the
 review epoch and changes the confirmation digest; an older confirmation cannot authorize work.
+
+Replacement is admitted only against the current locked preview/reviewed root with the originally observed review
+ID and epoch, no native destination or accepted member checkpoint, no in-flight action or lease, and no cancellation.
+A delayed review cannot reopen complete/partial recovery or reset admitted or unresolved native effects. Distinct
+simultaneous replacements cannot both win. An exact review request-key retry returns current owner-authorized status,
+including after apply or cancellation; a different payload with that key remains an idempotency conflict.
 
 Private evidence expires after 24 hours. Reads, preview, review, apply and cancellation are owner-only and recheck
 current account standing. `collection_archive_recovery` joins the existing terminal owned-graph erasure phase with
