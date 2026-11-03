@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { mintReadTime, noEffect } from '../command/command.ts';
@@ -50,7 +51,7 @@ export type AniListOutcome = {
 };
 type Stored = { source: AniListRow; review?: Review; started?: boolean; outcome?: AniListOutcome };
 type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
-const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+const hash = (v: unknown) => createHash('sha256').update(canonicalize(v)!).digest('hex');
 const role: Record<string, string> = {
   CURRENT: 'active',
   PLANNING: 'planned',
