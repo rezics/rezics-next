@@ -1,17 +1,36 @@
-import { deadlineClient } from '../access/authenticate.ts';
-import { readRealmOwnershipRoles, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
-import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Actor, type AccessClient } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
-import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms.ts';
-import { createRealmParticipationCheck } from './participation.ts';
-import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
-import bindingRead from './container-lifecycle-binding.sql';
-import membershipRead from './own-realms-membership.sql';
+import { deadlineClient } from "../access/authenticate.ts";
+import {
+  readRealmOwnershipRoles,
+  REALM_OWNER_ROLE,
+} from "../access/realm-ownership.ts";
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+} from "../command/command.ts";
+import { discardConnection, withConnection } from "../database/pool.ts";
+import { ProblemError } from "../http/problem.ts";
+import { readPartition } from "../partition/partition.ts";
+import {
+  accessCheck,
+  type Actor,
+  type AccessClient,
+} from "../request/access.ts";
+import { partitionOf, routeOf } from "../route/route.ts";
+import {
+  sameOwnRealmMembership,
+  type OwnRealmMembership,
+  type OwnRealmsDependencies,
+} from "./own-realms.ts";
+import { createRealmParticipationCheck } from "./participation.ts";
+import {
+  readRealm,
+  readRealmSettingsHead,
+  realmReadEligibility,
+} from "./realm.ts";
+import { spaceReadEligibility } from "./space.ts";
+import bindingRead from "./container-lifecycle-binding.sql";
+import membershipRead from "./own-realms-membership.sql";
 
 export type RealmViewerInput = Readonly<{
   actor: Actor;
@@ -20,25 +39,36 @@ export type RealmViewerInput = Readonly<{
   /** The original inventory selection, never a refreshed substitute. */
   selected?: OwnRealmMembership;
 }>;
-const prohibited = (reason: 'not_authorized' | 'not_member' | 'signed_out' | 'governance_read_only') =>
-  ({ state: 'prohibited', reason }) as const;
-const command = (method: 'GET' | 'DELETE', path: string, expectedStatus: 200 | 202) =>
-  ({ state: 'available', method, path, body: null, expectedStatus }) as const;
-const retry = () => new ProblemError('transaction_retry_exhausted');
+const prohibited = (
+  reason:
+    "not_authorized" | "not_member" | "signed_out" | "governance_read_only",
+) => ({ state: "prohibited", reason }) as const;
+const command = (
+  method: "GET" | "DELETE",
+  path: string,
+  expectedStatus: 200 | 202,
+) =>
+  ({ state: "available", method, path, body: null, expectedStatus }) as const;
+const retry = () => new ProblemError("transaction_retry_exhausted");
 
 /** Native viewer observation shared by inventory and independent home assemblers.
  * Each handle captures actual source and episode values. finish re-prepares native
  * authority and returns the final values, or null on concealment. It never reserves
  * a command and never holds a checkout across another owner's observation.
  */
-export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, 'pool' | 'access' | 'clock'>) {
+export function createRealmViewerObservation(
+  deps: Pick<OwnRealmsDependencies, "pool" | "access" | "clock">,
+) {
   const participation = createRealmParticipationCheck(deps);
   return async (input: RealmViewerInput) => {
     const { actor, realmId, deadline } = input;
-    const selected = input.selected ? Object.freeze({ ...input.selected }) : undefined;
+    const selected = input.selected
+      ? Object.freeze({ ...input.selected })
+      : undefined;
     const identity = JSON.stringify(actor);
     const requireIdentity = () => {
-      if (JSON.stringify(actor) !== identity) throw new ProblemError('authentication_required');
+      if (JSON.stringify(actor) !== identity)
+        throw new ProblemError("authentication_required");
     };
     const route = routeOf(realmId);
     if (route === null) return null;
@@ -54,30 +84,43 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
       const disclose = await accessCheck(
         deps.access,
         actor,
-        'realm:read',
+        "realm:read",
         { ...resource, eligibility: realmReadEligibility(resource) },
         context,
       );
-      const manage = await accessCheck(deps.access, actor, 'realm:manage', resource, context);
-      const leave = await accessCheck(deps.access, actor, 'realm:join', resource, context);
+      const manage = await accessCheck(
+        deps.access,
+        actor,
+        "realm:manage",
+        resource,
+        context,
+      );
+      const leave = await accessCheck(
+        deps.access,
+        actor,
+        "realm:join",
+        resource,
+        context,
+      );
       const discloseHost = await accessCheck(
         deps.access,
         actor,
-        'space:read',
+        "space:read",
         { ...host, eligibility: spaceReadEligibility(host) },
         context,
       );
       const observed = await withConnection(deps.pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
         let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
         try {
           time = await mintReadTime(client, deps.clock);
           const at = authoritativeTimeValue(time);
           const home = await readPartition(client, partitionOf(route));
-          if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+          if (!home || home.writeState === "moved")
+            throw new ProblemError("partition_unavailable");
           if (!(await disclose(client, time))) {
-            await client.query('COMMIT');
+            await client.query("COMMIT");
             return null;
           }
           const realm = await readRealmSettingsHead(client, realmId, at);
@@ -86,9 +129,16 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
             subject: null,
             at,
           });
-          if (!realm || !source || realm.spaceId !== host.id) throw retry();
+          if (
+            !realm ||
+            !source ||
+            realm.spaceId !== host.id ||
+            realm.headRevisionId !== initial.headRevisionId ||
+            source.head_revision_id !== initial.headRevisionId
+          )
+            throw retry();
           const row =
-            actor.kind === 'account'
+            actor.kind === "account"
               ? await membershipRead.run(client, {
                   route,
                   realm_id: realmId,
@@ -96,15 +146,27 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
                   at,
                 })
               : null;
-          if (row && (row.since === null || !Number.isFinite(Date.parse(row.since))))
-            throw new ProblemError('dependency_unavailable');
-          const membership = row ? { ...row, since: row.since!, epoch: home.epoch } : null;
-          if (selected && (!membership || !sameOwnRealmMembership(selected, membership))) throw retry();
+          if (
+            row &&
+            (row.since === null || !Number.isFinite(Date.parse(row.since)))
+          )
+            throw new ProblemError("dependency_unavailable");
+          const membership = row
+            ? { ...row, since: row.since!, epoch: home.epoch }
+            : null;
+          if (
+            selected &&
+            (!membership || !sameOwnRealmMembership(selected, membership))
+          )
+            throw retry();
           const mayManage = await manage(client, time);
-          const mayLeave = actor.kind === 'account' && membership !== null && (await leave(client, time));
+          const mayLeave =
+            actor.kind === "account" &&
+            membership !== null &&
+            (await leave(client, time));
           // Direct-role data only selects the writer's invariant. It grants nothing.
           const roles =
-            mayLeave && actor.kind === 'account'
+            mayLeave && actor.kind === "account"
               ? await readRealmOwnershipRoles(client, {
                   resource,
                   accountId: actor.accountId,
@@ -113,7 +175,7 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
               : [];
           const owner = roles.some((role) => role.role === REALM_OWNER_ROLE);
           const hostReadable = mayManage && (await discloseHost(client, time));
-          await client.query('COMMIT');
+          await client.query("COMMIT");
           return {
             realm,
             source: {
@@ -129,31 +191,36 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
             },
             membership,
             actions: {
-              state: 'current' as const,
-              enter: command('GET', `/v1/realms/${realmId}`, 200),
+              state: "current" as const,
+              enter: command("GET", `/v1/realms/${realmId}`, 200),
               manage: realm.governanceReadOnly
-                ? prohibited('governance_read_only')
+                ? prohibited("governance_read_only")
                 : mayManage && hostReadable
-                  ? command('GET', `/v1/realms/${realmId}/settings`, 200)
-                  : prohibited('not_authorized'),
+                  ? command("GET", `/v1/realms/${realmId}/settings`, 200)
+                  : prohibited("not_authorized"),
               leave:
-                actor.kind !== 'account'
-                  ? prohibited('signed_out')
+                actor.kind !== "account"
+                  ? prohibited("signed_out")
                   : !membership
-                    ? prohibited('not_member')
+                    ? prohibited("not_member")
                     : !mayLeave
-                      ? prohibited('not_authorized')
+                      ? prohibited("not_authorized")
                       : owner
                         ? {
-                            state: 'unavailable' as const,
-                            reason: 'owner_invariant_observation_unavailable' as const,
+                            state: "unavailable" as const,
+                            reason:
+                              "owner_invariant_observation_unavailable" as const,
                           }
-                        : command('DELETE', `/v1/realms/${realmId}/membership`, 202),
+                        : command(
+                            "DELETE",
+                            `/v1/realms/${realmId}/membership`,
+                            202,
+                          ),
             },
           };
         } catch (error) {
           try {
-            await connection.query('ROLLBACK');
+            await connection.query("ROLLBACK");
           } catch (rollbackError) {
             discardConnection(connection, rollbackError as Error);
           }
@@ -163,26 +230,29 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
         }
       });
       if (!observed) return null;
-      const allowed = await participation(deps.pool as unknown as AccessClient, { realmId, actor });
+      const allowed = await participation(
+        deps.pool as unknown as AccessClient,
+        { realmId, actor },
+      );
       requireIdentity();
       return {
         ...observed,
         viewer: {
-          readability: 'allowed' as const,
+          readability: "allowed" as const,
           membership: observed.membership
             ? {
-                state: 'member' as const,
+                state: "member" as const,
                 since: new Date(observed.membership.since).toISOString(),
                 reservationId: observed.membership.reservationId,
                 transactionId: observed.membership.transactionId,
               }
             : {
-                state: 'none' as const,
+                state: "none" as const,
                 since: null,
                 reservationId: null,
                 transactionId: null,
               },
-          participation: allowed ? ('allowed' as const) : ('denied' as const),
+          participation: allowed ? ("allowed" as const) : ("denied" as const),
         },
       };
     };
@@ -191,12 +261,24 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
     // Keep comparison values private: a consumer cannot refresh or mutate its
     // exposed observation into becoming the original source witness.
     const expectedSource = { ...current.source };
-    const expectedMembership = current.membership ? { ...current.membership } : null;
+    const expectedMembership = current.membership
+      ? { ...current.membership }
+      : null;
     const expectedParticipation = current.viewer.participation;
     const expectedActions = JSON.stringify(current.actions);
     return {
       current,
       async finish() {
+        requireIdentity();
+        // Re-enter through the ordinary native reader after dependent hydration.
+        // Its original head is a witness, never a refreshed selection.
+        const readable = await readRealm(deps, actor, realmId, context);
+        if (!readable) return null;
+        if (
+          readable.headRevisionId !== initial.headRevisionId ||
+          readable.spaceId !== initial.spaceId
+        )
+          throw retry();
         const final = await round();
         if (!final) return null;
         const a = expectedSource,
@@ -222,4 +304,6 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
   };
 }
 
-export type RealmViewerObservation = NonNullable<Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>>;
+export type RealmViewerObservation = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>
+>;

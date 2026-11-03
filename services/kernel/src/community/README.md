@@ -1028,6 +1028,9 @@ Realm/Space revision/lifecycle/partition source references, selected reservation
 ordinary readability, participation and action advice. `finish()` re-prepares native Access and returns
 those actual final values, or null for concealment; changed readable source, episode or advice throws
 `transaction_retry_exhausted`. Comparison values and the original selection are captured privately.
+The first advice round must still match the locating read's original Realm head; a concurrent
+revision cannot refresh that witness. `finish()` performs a second complete ordinary `readRealm`
+before the final source round, returning null on concealment and refusing a changed readable head.
 An assembler must finish after its dependent observations and serialize the final values. This is a
 released observation protocol, not an atomic cross-home snapshot or a command reservation.
 
@@ -1055,6 +1058,11 @@ remain failed requests, never an empty inventory. Revocation returns the native 
 failure or conceals the entry; readable source or episode change returns the retry problem and retains
 the caller's original cursor. Optional image unavailability remains independent of supported actions.
 
+The public client exports `OwnRealmsPage`, `OwnRealmItem` and `RealmViewerActions` from
+`packages/client/src/index.ts`, derived from the installed `account.realms` response, without a
+parallel DTO declaration. The native factory remains a Kernel composition export; it is not a
+browser authority or an HTTP client factory.
+
 The independent Realm-home assembler has not installed this factory. The current Web inventory formatter
 still admits only realmId/name, and its shared phone/desktop view has no action or recovery control for
 this advice; installed backend advice alone does not close that experience gap.
@@ -1066,8 +1074,8 @@ this advice; installed backend advice alone does not close that experience gap.
   and partition checks plus at most four released scan transactions. Inverse traversal uses the physical
   `(route, account_id, kind = realm, group_id > after)` prefix and full-key ordering. Every confirmation uses
   `(route, realm_id, account_id)` with `upper_inf(valid)` before the exact Realm head and revision joins. There
-  are R selection and S final membership observations, each with its own partition/control round. Hydration adds one locating ordinary Realm read, then two viewer source rounds and two
-  participation checks per initially readable selected item. Each source round prepares/evaluates ordinary
+  are R selection and S final membership observations, each with its own partition/control round. Hydration adds two complete ordinary Realm reads, two viewer source rounds and two
+  independently timed participation checks per initially readable selected item. Each source round prepares/evaluates ordinary
   Realm read, plain manage, plain join (leave), and carrying Space read on native resources, with one
   released REPEATABLE READ transaction, authoritative time, partition read, Realm head, exact lifecycle
   binding, exact membership episode and, when leave is authorized, five native direct-role key probes.
@@ -1078,16 +1086,22 @@ this advice; installed backend advice alone does not close that experience gap.
   Nested Access prepares, account/session checks, container bindings, native membership proofs, ban checks and
   optional media/currentness are charged to their producers, including denied, empty, changed and retry attempts.
 - **Bound:** F <= 80, R <= F, S <= 20, H <= S. Account selection/finalization has at most six transactions,
-  twelve point observations, four inverse statements and twelve BEGIN/COMMIT controls. Confirmation has at most
+  twelve readiness/partition data statements, four inverse statements and twelve BEGIN/COMMIT controls:
+  28 local statements in total. Confirmation has at most
   100 released snapshots, 100 partition reads, 100 full-key membership/head statements and 200 controls; each
-  statement addresses at most one open interval, head and exact revision. Failed attempts repeat these terms,
+  statement addresses at most one open interval, head and exact revision. Each of R+S confirmations
+  contributes four statements, including its two transaction controls, up to 400 in total. Failed attempts repeat these terms,
   never increase F to fill disclosure. Presentation and Access retain their native admitted bounds; this is not
   a fitted ceiling on their physical work. Realm producers admit 1024 title and 4096 summary code points: at most
   4096/16384 UTF-8 source bytes, 6144/24576 JSON string-content bytes with JSON.stringify escaping, and 4096/16384
   bytes of UTF-16 character storage, before object overhead and each retained copy. Twenty items therefore admit
   409600 source bytes or 614400 JSON text bytes for these two fields alone. UUIDs add 36 ASCII bytes per occurrence;
-  dates and enum punctuation are fixed. Image summaries admit two slots and twelve variants per slot, but their
-  credit/placeholder and optional rules have separate producer caps and intermediate copies. Their full wire/bind,
+  dates and enum punctuation are fixed. Image summaries admit two slots and twelve variants per slot. The existing ordinary media
+  producer guards thumbhash at 32 raw bytes before base64 encoding (44 ASCII bytes) and accepts
+  only a seven-byte hexadecimal average color; invalid optional metadata is null. This is the
+  shared settings producer, not another My Realms media producer. Variant fields retain that
+  producer's descriptor admission bounds; credit is null and performs no credit-account lookup.
+  Optional rules and media still have separate source snapshots and intermediate copies. Their full wire/bind,
   retained-memory, executor/control/fence, warm/cold release and runner terms remain unproved; do not substitute the
   output size or a LIMIT for those bounds. Viewer hydration adds at most 40 source transactions and 80 BEGIN/COMMIT controls,
   40 time reads, 40 partition reads, 40 Realm head reads, 40 Realm/Space bindings, 40 membership statements
