@@ -138,8 +138,7 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
             await apply();
             if (skipped) return;
             const observed = await observeCoverageHome(options.pool, partition);
-            if (observed.pending !== 0n)
-              throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            if (observed.pending !== 0n) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const next = await store.outcome(guard, slot.id, {
               outcome: 'visible',
               source: observed.source,

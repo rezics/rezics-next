@@ -144,17 +144,16 @@ async function coverHome(
   };
   const enrolled = await store.enroll(guard, slot);
   if (!enrolled) unavailable();
-  const visible = await store.outcome(
-    { ...guard, revision: enrolled.revision },
-    slot.id,
-    { outcome: 'visible', source: observed.source, fence: observed.fence },
-  );
+  const visible = await store.outcome({ ...guard, revision: enrolled.revision }, slot.id, {
+    outcome: 'visible',
+    source: observed.source,
+    fence: observed.fence,
+  });
   if (!visible) {
-    await store.settleNoWrite(
-      { ...guard, revision: enrolled.revision },
-      slot.id,
-      { outcome: 'aborted', checkpoint: 'pending' },
-    );
+    await store.settleNoWrite({ ...guard, revision: enrolled.revision }, slot.id, {
+      outcome: 'aborted',
+      checkpoint: 'pending',
+    });
     unavailable();
   }
   if (!(await store.complete({ ...guard, revision: visible.revision }, slot.id, 'advanced'))) unavailable();
