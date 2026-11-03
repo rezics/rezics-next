@@ -1055,7 +1055,9 @@ async function captureInternal<T>(
       if (!record.requiresNativePlan || record.errorCode !== null) continue;
       const owners = record.background ? backgroundPlanOwners : foregroundPlanOwners;
       if (!owners.has(record.index))
-        throw new Error(`Successful ${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan`);
+        throw new Error(
+          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}`,
+        );
     }
     const run = measuredRun.getStore();
     if (run) {
