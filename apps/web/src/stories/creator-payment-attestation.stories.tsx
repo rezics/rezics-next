@@ -87,7 +87,7 @@ function CreatorPaymentScenario({
   }
 
   async function submit() {
-    if (attempt.result?.kind === 'saved' || attempt.result?.kind === 'conflict') return;
+    if (terminal(attempt)) return;
     await attempt.submit(reference, execute, isCurrent);
     if (isCurrent() && attempt.result?.kind === 'saved') await refreshEvidence();
   }
@@ -124,6 +124,10 @@ function CreatorPaymentScenario({
       )}
     </>
   );
+}
+
+function terminal(attempt: CreatorPaymentAttempt) {
+  return attempt.result?.kind === 'saved' || attempt.result?.kind === 'conflict';
 }
 
 function render({
