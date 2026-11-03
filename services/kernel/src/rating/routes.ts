@@ -21,6 +21,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
 import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './question-authoring.ts';
 import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
+import { updateQuestionLabel, readQuestionLabel, readQuestionLabelHistory } from './question-label.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
@@ -28,6 +29,11 @@ import {
   RatingAggregateResponseSchema,
   RatingPopulationPageResponseSchema,
   RatingQuestionCreateInputSchema,
+  RatingQuestionLabelInputSchema,
+  RatingQuestionLabelResultSchema,
+  RatingQuestionLabelSchema,
+  RatingQuestionLabelHistoryQuerySchema,
+  RatingQuestionLabelHistorySchema,
   RatingQuestionDirectoryQuerySchema,
   RatingQuestionDirectoryResponseSchema,
   RatingQuestionResponseSchema,
@@ -372,6 +378,64 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
         set.status = 201;
         return outcome.value;
+      },
+    )
+    .put(
+      '/v1/rating-questions/:questionId/label',
+      {
+        params: t.Object({ questionId: id }, closed), headers,
+        body: RatingQuestionLabelInputSchema,
+        response: { 200: withHeaders(RatingQuestionLabelResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }), ...failures },
+        detail: {
+          operationId: 'rating.question_label_put', 'x-action': 'realm:manage', 'x-exposure': 'public',
+          'x-resource-types': ['community.realm'], 'x-rate-limit': writeRate, security: bearer,
+        },
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        requireRoutableIds(params.questionId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const outcome = await admission.run('normal', job, () => command(() => updateQuestionLabel(
+          config(), actor, { ...body, questionId: params.questionId }, { idempotencyKey: key, deadline: job.deadline },
+        )));
+        session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
+        return outcome.value;
+      },
+    )
+    .get(
+      '/v1/rating-questions/:questionId/labels',
+      {
+        params: t.Object({ questionId: id }, closed), query: RatingQuestionLabelHistoryQuerySchema,
+        transform: ({ request }) => {
+          const parameters = new URL(request.url).searchParams;
+          for (const name of parameters.keys())
+            if (!['limit', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
+              throw new ProblemError('invalid_request');
+        },
+        response: { 200: RatingQuestionLabelHistorySchema, ...aggregateFailures },
+        detail: { ...publicReadDetail('rating.question_label_history', 'realm:read'), 'x-resource-types': ['community.realm'] },
+      },
+      async ({ actor, params, query, admission, job }) => {
+        requireRoutableIds(params.questionId);
+        return admission.run('normal', job, () => readQuestionLabelHistory(config(), actor, {
+          questionId: params.questionId, limit: query.limit ?? 20, ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        }, job.deadline));
+      },
+    )
+    .get(
+      '/v1/rating-questions/:questionId/labels/:labelRevision',
+      {
+        params: t.Object({ questionId: id, labelRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_647, multipleOf: 1 }) }, closed),
+        response: { 200: RatingQuestionLabelSchema, ...aggregateFailures },
+        detail: { ...publicReadDetail('rating.question_label_get', 'realm:read'), 'x-resource-types': ['community.realm'] },
+      },
+      async ({ actor, params, admission, job }) => {
+        requireRoutableIds(params.questionId);
+        const label = await admission.run('normal', job, () => readQuestionLabel(
+          config(), actor, params.questionId, params.labelRevision, job.deadline,
+        ));
+        if (!label) throw new ProblemError('not_found');
+        return label;
       },
     )
     .get(

@@ -251,8 +251,9 @@ Decision: `owner_id` remains the creating account; separate `realm_id` records R
 `{ meaning, label, grain, scale: { min, max, displayStep } }` with `Idempotency-Key`. `meaning` is the exact
 immutable opinion being asked (1–2,000 Unicode code points); `label` is its distinct nonblank display name
 (1–200 code points). Text is retained exactly, including intentional whitespace, and rejects NUL. Grain is
-`work`, `release`, `episode` or `character`. A changed meaning, label, grain or scale requires a new identity.
-This slice exposes no editing, retirement or Global authoring command. Native Realm lifecycle and grants keep
+`work`, `release`, `episode` or `character`. A changed meaning, grain or scale requires a new identity.
+Creation wording stays immutable; the separate caption command below corrects presentation. This slice exposes
+no retirement or Global authoring command. Native Realm lifecycle and grants keep
 their existing owners.
 
 The creator must be a current authenticated account with ordinary native `realm:manage` authority on that
@@ -264,7 +265,7 @@ that Realm's route. `owner_id` records the creator, rather than a Realm ID or pe
 digest binds principal, operation and the complete definition; changed inputs with the same key conflict.
 
 Success, including an authorized exact replay, returns HTTP `201` with
-`{ id, realmId, meaning, revision: 1, label, grain, scale }` and ordinary session progress. Meaning, provenance,
+`{ id, realmId, meaning, revision: 1, label, canonicalLabel: label, labelRevision: 1, grain, scale }` and ordinary session progress. Meaning, provenance,
 revision and scale persist together. A database trigger rejects changes to authored definitions. Existing
 legacy definitions retain their previous representation and the seeded standard question remains unchanged.
 
@@ -277,7 +278,7 @@ bounds only after that capability is delivered. A definition is never proof of r
 custom-question rank publication remains with its separate owner.
 
 `GET /v1/rating-questions/{id}` refreshes the exact selected definition. Legacy definitions keep their exact wire
-shape; Realm definitions add `realmId` and `meaning`. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
+shape; Realm definitions add `realmId`, `meaning`, `canonicalLabel` and `labelRevision`; `label` is the current caption. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
 uses the existing `{ ratingQuestions, next }` capability with explicit native Realm selection. It does not merge
 or infer Realm choices from Global pages. Its opaque continuation binds the exact selection, limit and every
 verified viewer/credential authority field, with sorted distinct scopes, the existing 15-minute expiry and
@@ -317,6 +318,79 @@ Focused outcomes live in `test/rating/realm-question-authoring.test.ts`: native 
 replay, changed-input conflict, persisted author/provenance, point/selection refresh, binary and `0..10` scales,
 protected/ban denial, current vote admission and manage loss before replay. Physical growth is unmeasured;
 the dev verifier owns clause measurements and broader acceptance after integration.
+
+### Question caption maintenance
+
+Decision: label revision 1 resolves immutable creation wording; separate caption heads start at 1, corrections
+append from 2, and point/directory views expose `canonicalLabel` alongside current `label` without changing
+measurement metadata or directory cursor epoch.
+
+`updateQuestionLabel(deps, actor, { questionId, expectedLabelRevision, label }, context)` is mounted at
+`PUT /v1/rating-questions/{questionId}/label` with `Idempotency-Key`. A signed-in currently authorized Realm
+curator supplies an exact integer presentation revision and a nonblank caption of at most 200 Unicode code
+points, with no NUL. Original bytes, including whitespace, are retained. The result is
+`{ questionId, labelRevision, label }` plus ordinary session progress. There is no operator shortcut, inferred
+ownership, Global/standard authoring or permission formula. The native Realm `realm:manage` decision and current
+question/Realm readability run before receipt lookup on every attempt, including retry after revocation. Missing
+and concealed questions both return `404`; a readable question without manage returns `403`. The existing
+producer's released preparation proof and evidence deadline govern command races; no metadata checkout spans
+native Access preparation. The question and active Realm are validated in that native preparation. A lost or
+erased question cannot be recreated by receipt replay.
+
+The question-home command locks one presentation head, compares the expected label revision, inserts one
+immutable revision, advances its separate head and records its ordinary receipt and registered
+`com.rezics.rating.question.label-changed.v1` event atomically. A conflicting head returns `409` with no state
+change. Reusing a key for changed input returns `422`; an ambiguous response retries the exact same body/key.
+Even an identical caption appends a revision when explicitly submitted at the correct head. The event contains
+only question/Realm IDs and presentation revision, never caption text or copied profiles.
+
+`readQuestionLabel` (`GET /v1/rating-questions/{id}/labels/{labelRevision}`) resolves exact retained bytes.
+`readQuestionLabelHistory` (`GET /v1/rating-questions/{id}/labels?limit=1..20&cursor=...`) returns
+`{ labels, next }`, with each label `{ questionId, labelRevision, label, at, author }`. Revision 1 reads the
+canonical creation label and creator directly from the immutable question; its timestamp is null because the
+producer did not retain one. Corrections retain exact author ID and authoritative command time. Authors use
+Access's current `readPublicIdentities` allowlist, including deleted identity tombstones and absent/pending
+identity omission (`author: null`), with no profile copies. Exact caption references identify the question and
+presentation revision, independently of author/account history.
+
+History is ascending, with a signed initial revision ceiling, strict consumed-revision keyset and at most 20
+consumed rows plus one unconsumed lookahead. Tokens bind viewer credential/session authority, question, Realm,
+limit and ceiling through the existing 15-minute seal; another viewer, question or limit cannot reuse them.
+Appending later captions does not extend an existing traversal. Every request refreshes current question/Realm
+disclosure before reading and again after provenance hydration, releasing each anchored observation before the
+next checkout. Ban, concealment, question loss and account/session fences remain current native decisions;
+old tokens and exact references grant no disclosure authority. Failures propagate as unavailable, never as empty
+history. Retention follows the native question: revisions persist independently of author profile lifecycle,
+remain concealed with that question/Realm, and cascade only if the native question is physically removed. This
+command introduces no deletion, retirement, author-history restoration or lifecycle jobs.
+
+`question-read.sql` keeps canonical `label` and measurement `revision` unchanged and adds separate
+`presentationLabel`/`labelRevision`. Existing actual callers (`votes.ts`, `aggregate-read.ts`,
+`public-figure-http.ts`, and `question-directory.ts`) retain canonical measurement fields. Only
+`ratingQuestionView` selects the latest caption for HTTP point/directory presentation and also emits
+`canonicalLabel`; immutable meaning, scale, grain, population and vote units never change. Frozen rank/prior
+references must continue using canonical measurement metadata. Directory pages retain the producer's fresh
+observation/keyset contract and epoch 1; caption changes neither rebuild aggregates/populations nor invalidate
+selection tokens. Latest captions come from a head point join, without history scans or public discovery copies.
+
+#### Operation Cost
+
+- **Touches:** command: bounded native question/Realm authorization, one head lock, one revision insert, one
+  head update and ordinary receipt/event; current point/directory: one head primary-key join per question;
+  exact caption: two disjoint revision-1/retained-revision point branches; history: one question-home indexed
+  `(question_id, revision)` keyset plus the revision-1 point, followed by current account presentation and final
+  disclosure. All observations release before checking out another home.
+- **Bound:** history consumes at most 20 labels, one lookahead and 20 distinct author point hydrations; exact
+  reads hydrate at most one author. SQL pushes the limit into the correction branch before union ordering.
+  No per-request census, refill or all-partition scan; command rows and statements are constant. Index descent
+  grows logarithmically with retained captions; full traversal grows by page count. Directory costs retain
+  their existing 20-row budget with one additional local head seek per row.
+- **Growth check:** `test/rating/question-label.test.ts` pins the connected native outcome and bounded keyset
+  behavior. Physical clause/growth measurements remain the dev verifier's work; no custom rank cost is inferred.
+
+`rating/events.ts` changes outside the declared paths to register the caption event; `test/kernel.test.ts`
+adds the three mounted paths to the exhaustive typed native route contract. No existing behavior assertion is
+removed. `db/rating/schema.sql` records the additive migration snapshot.
 
 ## Protected Realm rank source
 

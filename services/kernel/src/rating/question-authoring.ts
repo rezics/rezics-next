@@ -123,6 +123,8 @@ export async function createRealmRatingQuestion(
           meaning: body.meaning,
           revision: 1,
           label: body.label,
+          canonicalLabel: body.label,
+          labelRevision: 1,
           grain: body.grain,
           scale: body.scale,
         },

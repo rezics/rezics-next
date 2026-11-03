@@ -22,6 +22,8 @@ export const RatingQuestionResponseSchema = t.Object(
     id,
     revision,
     realmId: t.Optional(id),
+    canonicalLabel: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+    labelRevision: t.Optional(revision),
     meaning: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
     label: t.String({ minLength: 1, maxLength: 200 }),
     grain,
@@ -165,3 +167,37 @@ export const SourceStatisticResponseSchema = t.Object(
 );
 
 export const SourceStatisticListResponseSchema = t.Array(SourceStatisticResponseSchema);
+
+
+export const RatingQuestionLabelInputSchema = strictContentSchema(t.Object({
+  expectedLabelRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
+  label: t.String({ minLength: 1, maxLength: 200 }),
+}, closed));
+
+export const RatingQuestionLabelResultSchema = t.Object({
+  questionId: id, labelRevision: revision, label: t.String({ minLength: 1, maxLength: 200 }),
+}, closed);
+
+const labelAuthor = t.Union([
+  t.Object({ id, kind: t.Union([t.Literal('actor'), t.Literal('organization')]), state: t.Literal('deleted') }, closed),
+  t.Object({
+    id, kind: t.Union([t.Literal('actor'), t.Literal('organization')]), state: t.Literal('active'),
+    handle: t.Union([t.String(), t.Null()]), displayName: t.Union([t.String(), t.Null()]),
+    automated: t.Boolean(), operatorId: t.Union([id, t.Null()]),
+  }, closed),
+  t.Null(),
+]);
+
+export const RatingQuestionLabelSchema = t.Object({
+  ...RatingQuestionLabelResultSchema.properties,
+  at: t.Union([t.String({ format: 'date-time' }), t.Null()]), author: labelAuthor,
+}, closed);
+
+export const RatingQuestionLabelHistoryQuerySchema = t.Object({
+  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1, default: 20 })),
+  cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+}, closed);
+
+export const RatingQuestionLabelHistorySchema = t.Object({
+  labels: t.Array(RatingQuestionLabelSchema, { maxItems: 20 }), next: t.Union([t.String(), t.Null()]),
+}, closed);

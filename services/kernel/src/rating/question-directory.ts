@@ -26,6 +26,8 @@ export type RatingQuestionView = {
   scale: { min: number; max: number; displayStep: number };
   realmId?: string;
   meaning?: string;
+  canonicalLabel?: string;
+  labelRevision?: number;
 };
 
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
@@ -40,6 +42,8 @@ export function ratingQuestionView(row: {
   stepUnits: number;
   realmId?: string | null;
   meaning?: string | null;
+  presentationLabel?: string | null;
+  labelRevision?: number | null;
 }): RatingQuestionView {
   const grain = row.grain;
   if (grain !== 'work' && grain !== 'release' && grain !== 'episode' && grain !== 'character')
@@ -47,10 +51,10 @@ export function ratingQuestionView(row: {
   return {
     id: row.id,
     revision: row.revision,
-    label: row.label,
+    label: row.presentationLabel ?? row.label,
     grain,
     scale: { min: row.minimumUnits, max: row.maximumUnits, displayStep: row.stepUnits },
-    ...(row.realmId == null ? {} : { realmId: row.realmId, meaning: row.meaning! }),
+    ...(row.realmId == null ? {} : { realmId: row.realmId, meaning: row.meaning!, canonicalLabel: row.label, labelRevision: row.labelRevision ?? 1 }),
   };
 }
 
