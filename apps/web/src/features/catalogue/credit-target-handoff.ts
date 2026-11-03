@@ -114,7 +114,7 @@ function decode(token: string, value: unknown): CreditTargetHandoff | undefined 
     !Array.isArray(item.admittedTypes) ||
     !item.admittedTypes.length ||
     !item.admittedTypes.every(
-      (type) => creditIdentityTypes.includes(type as CreditIdentityType) && item.targets.includes(type),
+      (type) => creditIdentityTypes.includes(type as CreditIdentityType) && (item.targets as unknown[]).includes(type),
     ) ||
     typeof item.citation !== 'string' ||
     item.citation.length > 8192 ||
@@ -198,8 +198,12 @@ export function recordCreatedCreditIdentity(
     return undefined;
   }
   value.createdId = id;
-  value.identity = identity && value.admittedTypes.includes(identity.type) && validIdentity(identity, id) ? identity : undefined;
-  value.phase = value.identity ? 'ready' : 'creating';
+  const createdIdentity = identity && value.admittedTypes.includes(identity.type) && validIdentity(identity, id)
+    ? identity
+    : undefined;
+  if (createdIdentity) value.identity = createdIdentity;
+  else delete value.identity;
+  value.phase = createdIdentity ? 'ready' : 'creating';
   return persist(value) ? value : undefined;
 }
 

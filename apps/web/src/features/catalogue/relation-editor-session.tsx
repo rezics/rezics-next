@@ -30,7 +30,7 @@ function RelationEditorSessionLive({
   const { state } = useSession();
   const router = useRouter();
   const [creditHandoff, setCreditHandoff] = useState<CreditTargetHandoff>();
-  const activeHandoff = useRef<string>();
+  const activeHandoff = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!creditHandoffToken) {
       setCreditHandoff(undefined);

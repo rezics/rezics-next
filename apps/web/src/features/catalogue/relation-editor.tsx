@@ -215,7 +215,7 @@ function RelationEditorLive({
   const [ownConsent, setOwnConsent] = useState(false);
   const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
   const [createdCreditIdentity, setCreatedCreditIdentity] = useState<CreatedCreditIdentity>();
-  const restoredHandoff = useRef<string>();
+  const restoredHandoff = useRef<string | undefined>(undefined);
   const nativeSession = useRef<string | undefined>(undefined);
   if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
