@@ -104,6 +104,65 @@ const selectedAppealSchema = t.Object(
   },
   { additionalProperties: false },
 );
+// Illustrative closed wire values; native outcomes are exercised by the journey tests.
+const exampleSource = { partition: 0, epoch: 1, position: '12' };
+const exampleAppeal = {
+  id: '01900000-0000-7000-8000-000000000001',
+  decisionId: '01900000-0000-7000-8000-000000000002',
+  appellantId: '01900000-0000-7000-8000-000000000003',
+  appellantIdentity: { state: 'available', kind: 'actor', handle: 'reader', displayName: 'Reader', automated: false },
+  statement: 'Please reconsider the decision.',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  decision: {
+    statement: 'Policy violation.',
+    target: { kind: 'post', id: '01900000-0000-7000-8000-000000000004' },
+  },
+  targetContext: {
+    state: 'available',
+    destination: {
+      kind: 'thread',
+      id: '01900000-0000-7000-8000-000000000005',
+      boardId: '01900000-0000-7000-8000-000000000006',
+    },
+  },
+  canResolve: true,
+  resolutionCommand: {
+    operationId: 'moderation_appeal.resolve',
+    method: 'POST',
+    path: '/v1/moderation-appeals/01900000-0000-7000-8000-000000000001:resolve',
+  },
+  source: exampleSource,
+};
+const examplePage = {
+  appeals: [exampleAppeal],
+  next: null,
+  provenance: {
+    actorId: '01900000-0000-7000-8000-000000000007',
+    session: { clientId: 'moderation-client', authnEpoch: 1 },
+    source: exampleSource,
+  },
+};
+const reviewExamples = [
+  examplePage,
+  { ...examplePage, appeals: [] },
+  { ...examplePage, appeals: [{ ...exampleAppeal, targetContext: { state: 'concealed' } }] },
+  {
+    ...examplePage,
+    appeals: [
+      { ...exampleAppeal, appellantIdentity: { state: 'unavailable' }, targetContext: { state: 'unavailable' } },
+    ],
+  },
+  { ...examplePage, appeals: [{ ...exampleAppeal, canResolve: false }] },
+  {
+    ...examplePage,
+    appeals: [],
+    selectedAppeal: {
+      ...exampleAppeal,
+      canResolve: false,
+      resolution: { outcome: 'upheld', statement: 'Reviewed independently.', resolvedAt: '2026-01-02T00:00:00.000Z' },
+    },
+  },
+];
 const readFailures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -229,7 +288,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
               { additionalProperties: false },
             ),
           },
-          { additionalProperties: false },
+          { additionalProperties: false, examples: reviewExamples },
         ),
         privateHeaders,
       ),

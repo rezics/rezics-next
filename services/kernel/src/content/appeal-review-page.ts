@@ -35,6 +35,25 @@ export type AppealReviewTargetContext =
   | Readonly<{ state: 'unavailable' }>;
 export type AppealReviewTarget = Readonly<{ kind: 'board' | 'thread' | 'post'; id: string }>;
 export type AppealReviewReadContext = Readonly<{ actor: Actor; deadline: number }>;
+export type AppealReviewTargetObservation = Readonly<{
+  /** Repeats ordinary native disclosure for precisely the originally prepared keys. */
+  verify(): Promise<ReadonlyMap<string, AppealReviewTargetContext>>;
+}>;
+
+/** Foreign preparation is not permission to serialize a destination later. The
+ * final result comes from a fresh ordinary disclosure, after the caller's final
+ * identity, case and action observations. No source checkout spans these phases.
+ */
+export async function observeAppealReviewTargetContexts(
+  deps: AppealReviewDependencies,
+  reviewTargets: readonly AppealReviewTarget[],
+  context: AppealReviewReadContext,
+): Promise<AppealReviewTargetObservation> {
+  if (reviewTargets.length > 101) throw new RangeError('At most 100 appeal rows and one exact selection');
+  const selected = [...new Map(reviewTargets.map((target) => [targetKey(target), { ...target }])).values()];
+  await readAppealReviewTargetContexts(deps, selected, context);
+  return { verify: () => readAppealReviewTargetContexts(deps, selected, context) };
+}
 
 type TargetLocation = Readonly<{
   kind: string;
