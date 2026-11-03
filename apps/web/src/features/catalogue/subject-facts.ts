@@ -17,6 +17,8 @@ export type FactsCurrent = Extract<EditorRead, { ok: true }>;
 export type FactResult = ProposalResult | { ok: false; reason: 'uncertain' };
 export type FactCommand = ProposalCommand & { session?: string | undefined };
 export type FactDraft = {
+  /** Stable local identity for this draft in the current visit; never an array index. */
+  holder?: string;
   property: string;
   source: string | null;
   baseline: StatementInput | null;
@@ -26,6 +28,15 @@ export type FactDraft = {
   command?: FactCommand | undefined;
   result?: FactResult | undefined;
 };
+export type ChangedFactView = {
+  holder: string;
+  property: string;
+  source: string | null;
+  statement: StatementInput;
+  baseline: StatementInput | null;
+};
+export type FactOutcomeKind = 'proposed' | 'selected' | 'refused' | 'uncertain' | 'editable';
+export type ChangedSetReview = { status: 'closed' } | { status: 'current' | 'stale'; fingerprint: string };
 export type FactsTransport = {
   read: () => Promise<EditorRead>;
   propose: (command: FactCommand) => Promise<FactResult>;
@@ -48,6 +59,7 @@ export function stageFact(read: FactsCurrent, property: string, source: string |
   if (source && !selected) return null;
   const baseline = selected ? statementInput(selected) : null;
   return {
+    holder: crypto.randomUUID(),
     property,
     source,
     baseline,
@@ -80,6 +92,58 @@ export function factLocked(draft: FactDraft): boolean {
   return (
     !!draft.result && (draft.result.ok || draft.result.reason === 'uncertain' || draft.result.reason === 'unavailable')
   );
+}
+export function factHolder(draft: Pick<FactDraft, 'holder' | 'property'>): string {
+  return draft.holder ?? draft.property;
+}
+/** Writable for a new local edit or evidence copy; sealed command bodies stay untouched. */
+export function factWritable(draft: FactDraft): boolean {
+  return !factLocked(draft) && !draft.command;
+}
+export function includedChanges(drafts: FactDraft[]): FactDraft[] {
+  return drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+}
+export function changedSetFingerprint(drafts: FactDraft[]): string {
+  return canonical(
+    includedChanges(drafts).map((draft) => ({
+      holder: factHolder(draft),
+      property: draft.property,
+      source: draft.source,
+      included: draft.included,
+      statement: draft.statement,
+    })),
+  );
+}
+export function projectChangedSet(drafts: FactDraft[]): ChangedFactView[] {
+  return includedChanges(drafts).map((draft) => ({
+    holder: factHolder(draft),
+    property: draft.property,
+    source: draft.source,
+    statement: draft.statement,
+    baseline: draft.baseline,
+  }));
+}
+export function advanceChangedSetReview(
+  review: ChangedSetReview,
+  fingerprint: string,
+  jumpBack = false,
+): ChangedSetReview {
+  if (!fingerprint) return { status: 'closed' };
+  if (jumpBack) return { status: 'stale', fingerprint };
+  if (review.status === 'stale') return review;
+  return { status: 'current', fingerprint };
+}
+export function factOutcome(draft: FactDraft, read?: FactsCurrent): FactOutcomeKind | null {
+  if (draft.result?.ok) {
+    if (!read || !draft.submission) return 'proposed';
+    const selected = read.public.subject.statements[draft.property] ?? [];
+    return selected.some((statement) => canonical(statementInput(statement)) === canonical(draft.submission!.statement))
+      ? 'selected'
+      : 'proposed';
+  }
+  if (!draft.result) return draft.included && factChanged(draft) ? 'editable' : null;
+  if (draft.result.reason === 'uncertain' || draft.result.reason === 'unavailable') return 'uncertain';
+  return 'refused';
 }
 
 export function factCommandInput(value: unknown): FactCommand | { invalid: true } {

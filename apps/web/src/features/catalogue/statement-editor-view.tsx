@@ -580,6 +580,8 @@ export function StatementFields({
   localDraft = false,
   stablePartAddresses = false,
   creation = false,
+  reuse,
+  focusReference,
 }: {
   feedback?: StatementFeedback | undefined;
   draft: StatementInput;
@@ -596,6 +598,13 @@ export function StatementFields({
   stablePartAddresses?: boolean;
   /** Use creation copy for the primary value heading. */
   creation?: boolean;
+  reuse?:
+    | {
+        disabled?: boolean;
+        onReuse: (index: number, keyboard: boolean) => void;
+      }
+    | undefined;
+  focusReference?: { index: number; nonce: number } | undefined;
 }) {
   const o = { locale: locale as never };
   const lifetime = useEditorLifetime();
@@ -625,6 +634,18 @@ export function StatementFields({
     target?.focus();
   });
   const addReference = useRef<HTMLButtonElement>(null);
+  const referenceGroups = useRef<HTMLFieldSetElement[]>([]);
+  referenceGroups.current = [];
+  useLayoutEffect(() => {
+    if (!focusReference) return;
+    const group = referenceGroups.current[focusReference.index];
+    if (!lifetime.active() || !group?.isConnected || group.closest('[hidden], [inert]')) return;
+    const target =
+      [...group.querySelectorAll<HTMLElement>('input:not([type="hidden"]), textarea, select, [role="combobox"]')].find(
+        (control) => !control.matches(':disabled, [aria-disabled="true"]') && !control.closest('[hidden], [inert]'),
+      ) ?? group;
+    target.focus();
+  }, [focusReference?.index, focusReference?.nonce]);
   const removalFocus = useRef<{ focus: () => void; isConnected: boolean } | null>(null);
   const cancelFocus = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<number | null>(null);
@@ -962,6 +983,9 @@ export function StatementFields({
         {draft.references.map((reference, index) => (
           <fieldset
             key={identity(reference).key}
+            ref={(node) => {
+              if (node) referenceGroups.current[index] = node;
+            }}
             data-statement-addition={identity(reference).key}
             tabIndex={-1}
             className={`${sectionClassName} border border-border bg-card p-4`}
@@ -1031,6 +1055,18 @@ export function StatementFields({
                 })
               }
             />
+            {reuse && reference.parts.length > 0 && (
+              <Button
+                className={actionClassName}
+                type="button"
+                variant="outline"
+                disabled={reuse.disabled}
+                aria-label={`${m.facts_reuse_reference({}, o)} · ${m.correction_references({}, o)} ${index + 1}`}
+                onClick={(event) => reuse.onReuse(index, event.detail === 0)}
+              >
+                {m.facts_reuse_reference({}, o)}
+              </Button>
+            )}
             {identity(reference).added && (
               <>
                 <Button

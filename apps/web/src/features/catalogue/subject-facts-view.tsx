@@ -28,13 +28,30 @@ import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } fr
 import type { EditorRead } from './statement-editor';
 import { presentStatementViolations, type StatementFeedback } from './statement-validation-presentation';
 import {
+  applyReuse,
+  captureReuse,
+  cloneReferenceGroup,
+  type ReuseCapture,
+  type ReuseRefusal,
+  type ReuseSource,
+} from './reference-reuse';
+import { ReferenceReusePanel } from './reference-reuse-view';
+import { FactsChangedReview, FactsResultBoard } from './subject-facts-review';
+import {
+  advanceChangedSetReview,
+  changedSetFingerprint,
   factChanged,
   factGroups,
+  factHolder,
   factLimit,
   factLocked,
+  factWritable,
+  includedChanges,
+  projectChangedSet,
   sealFacts,
   sendFacts,
   stageFact,
+  type ChangedSetReview,
   type FactDraft,
   type FactsCurrent,
   type FactsTransport,
@@ -309,6 +326,8 @@ function FactField({
   href,
   editorHref,
   onReview,
+  onReuse,
+  focusReference,
 }: {
   property: string;
   read: FactsCurrent;
@@ -322,6 +341,8 @@ function FactField({
   href: string;
   editorHref?: string | undefined;
   onReview: (address: ReviewAddress) => void;
+  onReuse?: ((index: number, keyboard: boolean) => void) | undefined;
+  focusReference?: { index: number; nonce: number } | undefined;
 }) {
   const o = { locale: locale as never };
   const visible = useCurrentReadingVisible();
@@ -493,7 +514,13 @@ function FactField({
           </div>
         ) : (
           <div className="min-w-0 space-y-4 border-t border-border pt-4">
-            <ContentItemHeading id={privateHeadingId} tabIndex={-1} level={4} className="text-base font-semibold">
+            <ContentItemHeading
+              id={privateHeadingId}
+              data-fact-holder={factHolder(draft)}
+              tabIndex={-1}
+              level={4}
+              className="text-base font-semibold"
+            >
               {m.facts_private({}, o)}
               {draft.source && (
                 <>
@@ -518,6 +545,10 @@ function FactField({
                   }
                   guideReturn={`${href}/edit`}
                   {...(editorHref ? { guideReturn: editorHref } : {})}
+                  reuse={
+                    onReuse && factWritable(draft) ? { disabled: busy || locked, onReuse } : undefined
+                  }
+                  focusReference={focusReference}
                 />
               </fieldset>
             )}
@@ -710,6 +741,16 @@ function SubjectFactsLive({
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(initialReview);
+  const [changedReview, setChangedReview] = useState<ChangedSetReview>({ status: 'closed' });
+  const [reuse, setReuse] = useState<{
+    source: ReuseSource;
+    selected: string[];
+    capture: ReuseCapture;
+    applied: { holder: string; property: string; index: number }[];
+    refused: { holder: string; property: string; reason: ReuseRefusal }[];
+    trigger: HTMLButtonElement | null;
+  } | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number } | null>(null);
   const running = useRef(false);
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
@@ -748,7 +789,17 @@ function SubjectFactsLive({
     if (!editable()) return;
     setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
   }
-  const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  const changed = includedChanges(drafts);
+  const fingerprint = changedSetFingerprint(drafts);
+  const nextReview = advanceChangedSetReview(changedReview, fingerprint);
+  if (
+    nextReview.status !== changedReview.status ||
+    (nextReview.status !== 'closed' &&
+      changedReview.status !== 'closed' &&
+      nextReview.fingerprint !== changedReview.fingerprint)
+  )
+    setChangedReview(nextReview);
+  const unsealed = changed.some((draft) => !draft.command);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   // Inclusion controls the next batch, never ownership of an unfinished assertion.
   // Observing these drafts must not validate, seal or send a proposal.
@@ -773,6 +824,8 @@ function SubjectFactsLive({
       setBusy(false);
       setDrafts([]);
       setReviewing(undefined);
+      setChangedReview({ status: 'closed' });
+      setReuse(null);
     },
     undefined,
     undefined,
@@ -786,10 +839,22 @@ function SubjectFactsLive({
         : previous,
     );
   }
+  function openHolder(holder: string, index?: number) {
+    if (index != null) setFocusCopy({ holder, index, nonce: Date.now() });
+    const heading = document.querySelector<HTMLElement>(`[data-fact-holder="${CSS.escape(holder)}"]`);
+    heading?.focus();
+    heading?.scrollIntoView?.({ block: 'center' });
+  }
+  function jumpTo(holder: string) {
+    if (!lifetime.active()) return;
+    setChangedReview(advanceChangedSetReview(changedReview, fingerprint, true));
+    openHolder(holder);
+  }
   async function submit() {
     if (!lifetime.active()) return;
     if (!current || running.current || !changed.length) return;
     if (staleDraft) return;
+    if (unsealed && changedReview.status !== 'current') return;
     running.current = true;
     const sealed = sealFacts(current.public.subject.id, current.release, drafts);
     setDrafts(sealed);
@@ -956,6 +1021,34 @@ function SubjectFactsLive({
                         onReview={(address) => {
                           if (lifetime.active()) setReviewing(address);
                         }}
+                        onReuse={(index) => {
+                          if (!lifetime.active() || !editable()) return;
+                          const draft = drafts.find((item) => item.property === property);
+                          const group = draft?.statement.references[index];
+                          if (!draft || !group) return;
+                          const source = {
+                            holder: factHolder(draft),
+                            property: draft.property,
+                            groupIndex: index,
+                            snapshot: cloneReferenceGroup(group),
+                          };
+                          setReuse({
+                            source,
+                            selected: [],
+                            capture: captureReuse(source, drafts),
+                            applied: [],
+                            refused: [],
+                            trigger:
+                              document.activeElement instanceof HTMLButtonElement ? document.activeElement : null,
+                          });
+                        }}
+                        focusReference={
+                          focusCopy && drafts.find((item) => item.property === property)
+                            ? factHolder(drafts.find((item) => item.property === property)!) === focusCopy.holder
+                              ? focusCopy
+                              : undefined
+                            : undefined
+                        }
                         onStage={(source) => {
                           if (!lifetime.active()) return;
                           const draft = stageFact(current, property, source);
@@ -971,6 +1064,16 @@ function SubjectFactsLive({
                     ))}
                   </section>
                 ))}
+              {changedReview.status !== 'closed' && (
+                <FactsChangedReview
+                  items={projectChangedSet(drafts)}
+                  read={current}
+                  locale={locale}
+                  stale={changedReview.status === 'stale'}
+                  onJump={jumpTo}
+                />
+              )}
+              <FactsResultBoard drafts={drafts} read={current} locale={locale} />
               <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5">
                 <ContentItemHeading level={2} className="text-lg font-semibold">
                   {m.facts_selection({ count: changed.length, limit: factLimit }, o)}
@@ -978,16 +1081,69 @@ function SubjectFactsLive({
                 <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
                 {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
                 {busy && <p role="status">{m.correction_saving({}, o)}</p>}
-                <Button
-                  type="submit"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                  disabled={busy || !changed.length}
-                >
-                  {m.facts_submit({}, o)}
-                </Button>
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                    disabled={busy || !changed.length}
+                    onClick={() => lifetime.active() && setChangedReview({ status: 'current', fingerprint })}
+                  >
+                    {m.facts_review({}, o)}
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                    disabled={busy || !changed.length || (unsealed && changedReview.status !== 'current')}
+                  >
+                    {m.facts_submit({}, o)}
+                  </Button>
+                </div>
               </ContentItemFrame>
             </fieldset>
           </form>
+          {reuse && (
+            <ReferenceReusePanel
+              source={reuse.source}
+              drafts={drafts}
+              selected={reuse.selected}
+              read={current}
+              locale={locale}
+              capture={reuse.capture}
+              applied={reuse.applied}
+              refused={reuse.refused}
+              onSelected={(selected) => lifetime.active() && setReuse({ ...reuse, selected, applied: [], refused: [] })}
+              onRefresh={() => {
+                if (!lifetime.active()) return;
+                const origin = drafts.find((draft) => factHolder(draft) === reuse.source.holder);
+                const group = origin?.statement.references[reuse.source.groupIndex];
+                if (!origin || !group) return;
+                const source = { ...reuse.source, snapshot: cloneReferenceGroup(group) };
+                setReuse({
+                  ...reuse,
+                  source,
+                  capture: captureReuse(source, drafts),
+                  applied: [],
+                  refused: [],
+                });
+              }}
+              onApply={() => {
+                if (!lifetime.active() || !editable()) return;
+                const result = applyReuse(drafts, reuse.source, reuse.selected, current.release);
+                setDrafts(result.drafts);
+                setReuse({ ...reuse, applied: result.applied, refused: result.refused });
+                setChangedReview({ status: 'stale', fingerprint: changedSetFingerprint(result.drafts) });
+                const first = result.applied[0];
+                if (first) openHolder(first.holder, first.index);
+              }}
+              onCancel={() => {
+                const trigger = reuse.trigger;
+                setReuse(null);
+                if (lifetime.active() && trigger?.isConnected) trigger.focus();
+              }}
+              onOpen={(holder, index) => lifetime.active() && openHolder(holder, index)}
+            />
+          )}
           {profileRelations}
           {(!profile || admitted.has(reviewing?.property ?? '')) && (
             <>

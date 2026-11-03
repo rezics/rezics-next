@@ -268,6 +268,12 @@ Connected examples use synthetic native-shaped payloads through production adapt
 `PageStory`. Existing native subject/candidate APIs are bound through the current BFF; execution of the plays,
 normal Web captures and native integration acceptance remain pending. There is no new missing producer adapter.
 
+## Browser flow: cited fact correction review and evidence reuse
+
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Album, Manga and Game classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path.
+
+Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
+
 ## Narrative story arcs
 
 The Contribute menu opens `/catalogue/story-arc`; an existing `wd:Q2620972` Subject also offers its
