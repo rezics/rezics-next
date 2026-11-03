@@ -308,7 +308,7 @@ an unreadable custom question's citation while retaining the ordinarily readable
 propagates. Standard citations retain their existing behavior. Content's `reads.ts` and
 `review-context-eligibility.ts`, plus Rating's internal aggregate metadata export, change outside the declared
 paths solely to close those provenance boundaries. Search controls, query/partition coordination, Web interfaces,
-membership repair and custom rank publication are separate deliveries.
+membership repair and custom rank publication have separate owners; the latter integrates below.
 
 `test/kernel.test.ts` adds the new command to the exhaustive typed route contract while retaining every existing
 route assertion. This is outside the declared paths because the kernel contract must include every mounted route.
@@ -332,8 +332,9 @@ of partition-local pages and Search rating controls; Web owns the remaining Cont
 
 Decision: eligible selected questions use the released integer vote range (0–20 inclusive); custom means and
 scores use that question's stored units, while the standard question retains its 0–10 display units.
-The producer loads the exact current directory question by key at its home, checks native `definitions:read`
-authority before and after traversal, and returns its `{ id, revision, label, grain, scale }` as `question`.
+The producer uses `readVisibleRatingQuestion` before and after traversal: one exact question-home read followed
+by its native provenance authority (Realm readability for Realm questions, `definitions:read` otherwise).
+It returns `ratingQuestionView` as `question`, including Realm provenance and meaning when present.
 Out-of-range scales return `invalid_request`; absent or denied questions return `not_found`. Global remains
 invalid as a Realm selection. Question revision, grain and exact scale are frozen with both publication and
 its same-question, same-Realm prior, included in the ordered index prefix and cursor binding. Changing a
@@ -417,11 +418,11 @@ Operation Cost:
   `(partition_no, question_id, population_id, question_identity, prior_generation)` of `realm_rank_score_idx`, then the strict
   descending `(score, subject_id)` seek; native Realm and subject authority/identity probes.
 - Bound: `limit` is 1–100. One candidate query reads at most `limit` rows and releases at most that many figures.
-  At most `limit` current subject checks, two Realm checks and two question authority/key reads run. Both prior reads and generation reads are
+  At most `limit` current subject checks, two selected-Realm checks and two question authority/key reads run. Both prior reads and generation reads are
   point operations. Each consumed rank row adds one exact figure-key probe for its pending mark, and each prior
   observation adds one population pending-jobs probe. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
   history replay or population expansion. B-tree descent grows logarithmically; authority retains its existing
-  bounded native cost. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
+  bounded native cost. Each Realm question authority check adds one current provenance-Realm read. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
   Prior checks sum at most sixteen population-home shards after an anchored question-key read. Custom publication
   reuses pages of at most 500 subject snapshots, each summing at most sixteen shards; prior republish traverses
   `(question_id, population_id, target_id)` by its existing indexed strict subject keyset, at most 501 rows
