@@ -45,7 +45,7 @@ export async function diaryRows(
   return (
     await client.query<DiaryRow>(
       `SELECT ${columns} FROM library.progress_session
-     WHERE route=$1 AND account_id=$2
+     WHERE route=$1 AND account_id=$2 AND state <> 'retired'
      ${after ? 'AND (started_at, session_id) < ($3::timestamptz, $4::uuid)' : ''}
      ORDER BY started_at DESC, session_id DESC LIMIT $${after ? 5 : 3}`,
       parameters,

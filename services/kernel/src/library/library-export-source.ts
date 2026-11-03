@@ -21,7 +21,7 @@ const queries = {
   sessions: `SELECT session_id::text AS key, session_id,subject_id,version_subject_id,mode,unit,total::text,
     amount::text,locator,position::text,completed_unit_count,state,revision,library_profile_pin,
     started_at::text,completed_at::text,last_changed_at::text
-    FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id > $3::uuid
+    FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2 AND session_id > $3::uuid
     ORDER BY session_id LIMIT 16`,
   holdings: `SELECT copy_id::text AS key,copy_id,subject_id,kind,status,library_profile_pin,kind_profile_pin,
     status_profile_pin,location,source,acquired_on::text,disposed_on::text,note,revision,created_at::text,updated_at::text
@@ -110,7 +110,7 @@ export async function readExportSourcePage(
         : occurrences
           ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
              AND state='active' AND membership_kind='curated' AND collection_id>$3::uuid ORDER BY collection_id LIMIT 1`
-          : `SELECT session_id AS id FROM library.progress_session WHERE route=$1 AND account_id=$2
+          : `SELECT session_id AS id FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2
              AND session_id>$3::uuid ORDER BY session_id LIMIT 1`;
       seek.parent =
         (
@@ -137,10 +137,12 @@ export async function readExportSourcePage(
            WHERE route=$1 AND id=$2 AND account_id=$4 ORDER BY i LIMIT 16`
       : section === 'units'
         ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
-           WHERE route=$1 AND session_id=$2 AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT 16`
+           WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
+             AND p.session_id=$2 AND p.state <> 'retired') AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT 16`
         : section === 'history'
           ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
-             WHERE route=$1 AND session_id=$2 AND change_no>$3::integer ORDER BY change_no LIMIT 16`
+             WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
+               AND p.session_id=$2 AND p.state <> 'retired') AND change_no>$3::integer ORDER BY change_no LIMIT 16`
           : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
              FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL
              AND member_id>$3::uuid ORDER BY member_id LIMIT 16`;
@@ -149,7 +151,7 @@ export async function readExportSourcePage(
       route,
       seek.parent,
       seek.after || (mal ? '-1' : section === 'history' ? '0' : occurrences ? ZERO : ''),
-      ...(mal ? [accountId] : []),
+      ...(mal || section === 'units' || section === 'history' ? [accountId] : []),
     ]);
   }
   const records: ExportRecord[] = [];

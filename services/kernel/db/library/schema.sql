@@ -6542,7 +6542,7 @@ CREATE INDEX progress_session_active ON library.progress_session USING btree (ro
 -- Name: progress_session_diary_seek; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX progress_session_diary_seek ON library.progress_session USING btree (route, account_id, started_at DESC, session_id DESC);
+CREATE INDEX progress_session_diary_seek ON library.progress_session USING btree (route, account_id, started_at DESC, session_id DESC) WHERE (state <> 'retired'::text);
 
 
 --

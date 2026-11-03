@@ -76,3 +76,5 @@ partial indexes. Account-erasure seeks retain the all-session owner index and vi
 This is source derivation, not measured growth. Controller placement must measure actual nested statements,
 examined rows/buffers, bytes, refusals/replays and cleanup at 64/512/4096 live and retired repeats and unrelated owners;
 failed preparation or absent counters is unmeasured.
+
+Shared journal reads and fresh edits return not found after retirement; an admitted journal command still replays its original receipt. Diary pages use the live-session seek index, and native exports exclude retired sessions and their units/history even when continuing an already selected parent. The installed consumption and reported-year statistics triggers remove completed contributions when state changes, without rewriting journal values.

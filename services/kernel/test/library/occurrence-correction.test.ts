@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { entryKey, createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { exportSections, initialExportSeek, readExportSourcePage } from '../../src/library/library-export-source.ts';
 
 let native: NativeProfileFixture;
 let owner: NativeProfileFixture['owner'];
@@ -57,12 +58,17 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   const repeat = (await send('POST', `/v1/progressSessions/${repeatStart.id}:complete`, { revision: 1 }))
     .progressSession;
   const path = `/v1/progressSessions/${first.id}`;
+  const journalKey = entryKey();
+  const journalBody = { revision: 0, finishDate: { year: 2024 }, reflection: 'Retain original private meaning' };
+  const journalReceipt = await send('PATCH', `${path}/journal`, journalBody, 200, journalKey);
+  const journal = await send('GET', `${path}/journal`);
   const record = (await send('POST', `${path}:record`, { revision: 1, amount: '10' })).progressSession;
   expect(record.state).toBe('active'); // A full amount is not completion.
   const completed = (await send('POST', `${path}:complete`, { revision: 2 })).progressSession;
   const publicLog = (await send('POST', '/v1/publishedLogs', { sessionId: first.id, note: 'Captured' }, 201))
     .publishedLog;
   const before = await native.inspect(owner.actor.accountId);
+  expect((await send('GET', '/v1/libraryConsumptionSummary')).completedOccurrences).toBe('3');
   await send('POST', `${path}:reopen`, { revision: 2 }, 409);
   const foreign = await native.identity(scopes, undefined, routeOf(owner.actor.accountId)!);
   await send('POST', `${path}:reopen`, { revision: 3 }, 404, entryKey(), foreign.bearer);
@@ -70,6 +76,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   const reopened = await send('POST', `${path}:reopen`, { revision: 3 }, 200, key);
   expect(reopened.progressSession).toEqual({ ...completed, state: 'active', completedAt: null, revision: 4 });
   expect(await send('POST', `${path}:reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
+  expect(await send('GET', `${path}/journal`)).toEqual(journal);
   await send('POST', `${path}:reopen`, { revision: 4 }, 400);
   expect((await native.inspect(owner.actor.accountId)).entries).toEqual(before.entries);
   await send('POST', `${path}:record`, { revision: 4, amount: '7' });
@@ -86,7 +93,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   expect(await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 2 }, 200, retireKey)).toEqual(
     retired,
   );
-  for (const suffix of ['', '/changes', '/completedUnits'])
+  for (const suffix of ['', '/changes', '/completedUnits', '/journal'])
     await send('GET', `/v1/progressSessions/${duplicate.id}${suffix}`, undefined, 404);
   await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 3 }, 404);
   await send('POST', '/v1/publishedLogs', { sessionId: duplicate.id }, 404);
@@ -103,6 +110,31 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   expect(ids.sort()).toEqual([first.id, repeat.id].sort());
   expect((await send('GET', `/v1/progressSessions/${repeat.id}`)).progressSession).toEqual(repeat);
   await send('POST', `${path}:retire`, { revision: 5 });
+  await send('GET', `${path}/journal`, undefined, 404);
+  await send('PATCH', `${path}/journal`, { revision: 1, reflection: null }, 404);
+  expect(await send('PATCH', `${path}/journal`, journalBody, 200, journalKey)).toEqual(journalReceipt);
+  expect((await send('GET', '/v1/libraryDiary?limit=1')).occurrences.map((row: { id: string }) => row.id)).toEqual([
+    repeat.id,
+  ]);
+  expect(await send('GET', '/v1/libraryConsumptionSummary')).toMatchObject({
+    completedOccurrences: '1',
+    distinctCompletedSubjects: '1',
+    repeatOccurrences: '0',
+  });
+  for (const section of ['sessions', 'history'] as const) {
+    const page = await readExportSourcePage(
+      native.pool,
+      routeOf(owner.actor.accountId)!,
+      owner.actor.accountId,
+      {
+        ...initialExportSeek(),
+        section: exportSections.indexOf(section),
+        parent: section === 'history' ? first.id : '',
+      },
+      new Date().toISOString(),
+    );
+    expect(page.records.map((row) => row.session_id)).toEqual(section === 'sessions' ? [repeat.id] : []);
+  }
   expect((await send('GET', `/v1/publishedLogs/${publicLog.id}`)).publishedLog).toEqual(publicLog);
   const after = await native.inspect(owner.actor.accountId);
   expect(after.entries).toEqual(beforeRetirement.entries);
