@@ -92,6 +92,9 @@ import {
 } from './bulk-occurrence-remove';
 import { BulkOccurrenceRemoveJourneyControls, BulkOccurrenceRemoveReview } from './bulk-occurrence-remove-review';
 import { bulkStatusSender } from './bulk-status';
+import { FilteredOccurrenceRemoval, filteredOccurrenceRemovalManifest } from './bulk-filtered-occurrence-removal';
+import { filteredOccurrenceRemovalSender } from './bulk-filtered-occurrence-removal-server';
+import { FilteredOccurrenceRemovalReview } from './bulk-filtered-occurrence-removal-view';
 import { readBulkOperation } from './bulk-operation-recovery-server';
 import { receiveUndoEvidence } from './bulk-operation-undo-evidence';
 import {
@@ -422,6 +425,9 @@ function CollectionPageLifetime({
   const [bulkOccurrenceRemove, setBulkOccurrenceRemove] = useState<BulkOccurrenceRemoveJourney | null>(null);
   const [bulkOccurrenceRemoveRevision, setBulkOccurrenceRemoveRevision] = useState(0);
   const bulkOccurrenceRemoveRef = useRef<BulkOccurrenceRemoveJourney | null>(null);
+  const [filteredRemoval, setFilteredRemoval] = useState<FilteredOccurrenceRemoval | null>(null);
+  const [, refreshFilteredRemoval] = useState(0);
+  const filteredRemovalRef = useRef<FilteredOccurrenceRemoval | null>(null);
   const nativeUndoKeys = useRef(new Map<string, string>());
   // The edit session owns its read revision, even if a background read replaces the reader page.
   const editorPage = useRef<EditableCollectionPage | null>(null);
@@ -471,10 +477,15 @@ function CollectionPageLifetime({
   useEffect(
     () => () => {
       bulkOccurrenceRemoveRef.current?.retire();
+      filteredRemovalRef.current?.retire();
     },
     [],
   );
   useEffect(() => {
+    if (filteredRemovalRef.current?.retireIfStale()) {
+      filteredRemovalRef.current = null;
+      setFilteredRemoval(null);
+    }
     const journey = bulkOccurrenceRemoveRef.current;
     if (!journey?.retireIfStale()) return;
     bulkOccurrenceRemoveRef.current = null;
@@ -1204,6 +1215,32 @@ function CollectionPageLifetime({
     }
   }
 
+  function previewFilteredOccurrenceRemoval() {
+    if (!owner || !isCurrent('collection_member.batch_remove') ||
+      !admission.current('library_operation.preview') || pending || draftFrozen || conflict ||
+      memberDraftChanged || transfer !== null || bulkOccurrenceRemoveRef.current || filteredRemovalRef.current ||
+      page.filterStatus || page.filterIgnored?.length || (page.filterActive && !page.filter)) return;
+    const viewer = session.state === 'signed-in' ? session.subject : null;
+    if (!viewer) return;
+    try {
+      const requestHeaders = Object.fromEntries(new Headers({
+        ...headers('collection_member.batch_remove'), 'accept-language': getLocale(), 'content-type': 'application/json',
+      }).entries());
+      const manifest = filteredOccurrenceRemovalManifest(
+        { id: page.id, title: page.title }, page.filter, viewer, requestHeaders, filteredOccurrenceRemovalSender,
+      );
+      const journey = new FilteredOccurrenceRemoval(manifest, {
+        context: () => admission.retained() && admission.observed() && current(),
+        read: () => isCurrent() && admission.current('library_operation.get') && admission.current('library_operation.outcomes'),
+        preview: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview'),
+        confirm: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm'),
+      }, address => readBulkOperation({ data: address }), () => refreshFilteredRemoval(value => value + 1));
+      filteredRemovalRef.current = journey;
+      setFilteredRemoval(journey);
+      void journey.preview().then(ok => { if (ok) void journey.read(); });
+    } catch { setFailure(m.library_filtered_occurrence_remove_unavailable()); }
+  }
+
   function previewSelectedOccurrenceRemoval() {
     if (
       !isCurrent('collection_member.batch_remove') ||
@@ -1484,6 +1521,17 @@ function CollectionPageLifetime({
         {page.viewerActions?.state === 'unavailable' ? (
           <p role="status">{m.library_collection_actions_unavailable()}</p>
         ) : null}
+        {owner && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
+          <Button type="button" variant="outline" className="my-3" onClick={previewFilteredOccurrenceRemoval}
+            disabled={pending || draftFrozen || conflict || memberDraftChanged || transfer !== null ||
+              !!bulkOccurrenceRemove || !!filteredRemoval || !!page.filterStatus || !!page.filterIgnored?.length ||
+              (!!page.filterActive && !page.filter)}>
+            {m.library_filtered_occurrence_remove_action()}
+          </Button>
+        ) : null}
+        {filteredRemoval && isCurrent() ? <FilteredOccurrenceRemovalReview journey={filteredRemoval}
+          canPreview={isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview')}
+          canConfirm={isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm')} /> : null}
         <AlertDialog
           open={deletion !== null}
           onOpenChange={(open, details) => {

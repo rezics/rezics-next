@@ -15,7 +15,11 @@ export type CollectionOperation =
   | Extract<GatedOperation, `collection.${string}` | `collection_member.${string}`>
   | 'collection_member.restore'
   | 'collection_member.batch_remove'
-  | 'collection_member.transfer';
+  | 'collection_member.transfer'
+  | 'library_operation.preview'
+  | 'library_operation.confirm'
+  | 'library_operation.get'
+  | 'library_operation.outcomes';
 type Session = ReturnType<typeof useSession>;
 const preview = new QueryClient();
 const idle = () => () => {};
@@ -188,7 +192,7 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
         : operation;
     return (
       observed() &&
-      (operation === 'collection.get' || !!actual.csrfToken) &&
+      (['collection.get', 'library_operation.get', 'library_operation.outcomes'].includes(operation) || !!actual.csrfToken) &&
       operationIsAdmitted(exposedOperation, actual.admitted)
     );
   };
