@@ -50,6 +50,9 @@ Use an ordinary provisioned automated account, first-party client, owner-only pr
 permissions in the [importer runbook](../services/importer/README.md#command-line), plus `subject:read`.
 This command does not grant permissions or accept/adopt candidates. The existing importer owns private SQLite
 state, source fences, immutable operation keys, metadata attribution, proposal reconciliation and VNDB statistics.
+Equal-date VNDB observation corrections and rebinding stay in `run_aggregate_operations` until
+`rezics-import observations --resolve`; exit 6 is that operator choice, and a successful clear keeps its native
+head. Decision: observation-conflict is RunStatus plus CLI exit 6; CAS never overrides an older date.
 All catalogue writes use the normal import transport. Dedicated `bangumi_cross_media` and `vndb_cross_media`
 aliases keep this subset's membership independent of a complete provider import. Reuse the same state file for
 idempotent retries; keep both extracted snapshots unchanged during selection. Missing input and invalid conversion

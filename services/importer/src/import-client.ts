@@ -30,9 +30,12 @@ import {
   type ImportSourceRecordMetadataResult,
   type ImportSourceStatisticValue,
   type ImportSourceStatisticClearValue,
+  type ImportSourceStatisticFigure,
+  type ImportPublicFigure,
 } from './import-contract.ts';
 
 type SubjectAPI = ReturnType<KernelClient['subjects']>;
+type StatisticPoint = ReturnType<ReturnType<SubjectAPI['source-statistics']>>;
 export type ReviewedSubjectRead = NonNullable<Awaited<ReturnType<SubjectAPI['get']>>['data']>;
 export type ReviewedCandidatePage = NonNullable<Awaited<ReturnType<SubjectAPI['candidates']['get']>>['data']>;
 type CandidateAPI = ReturnType<SubjectAPI['candidates']>;
@@ -145,14 +148,23 @@ function statisticAlias(body: Record<string, unknown>): void {
     ensure(typeof body.sourceAlias === 'string' && /^[a-z][a-z0-9_-]{0,31}(?![\s\S])/.test(body.sourceAlias));
 }
 
+function observationToken(body: Record<string, unknown>): void {
+  if (!Object.hasOwn(body, 'expectedObservation')) return;
+  ensure(
+    body.expectedObservation === null ||
+      (typeof body.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(body.expectedObservation)),
+  );
+}
+
 function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
   const value = snapshot(input, BODY_BYTES);
   ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
   const body = value as Record<string, unknown>;
   statisticAlias(body);
+  observationToken(body);
   ensure(
     Object.keys(body)
-      .filter((key) => key !== 'sourceAlias')
+      .filter((key) => key !== 'sourceAlias' && key !== 'expectedObservation')
       .sort()
       .join(',') === 'asOf,attribution,count,licence,mean,scale,sourceRecordId',
   );
@@ -353,6 +365,34 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(isImportSourceRecordMetadataResult(reply.body));
     return reply.body;
   }
+function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceStatisticValue): ImportSourceStatisticFigure {
+  const value = snapshot(body, RESPONSE_BYTES);
+  ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+  const row = value as Record<string, unknown>;
+  delete row.expectedObservation;
+  const observation = row.observation;
+  const { expectedObservation: _expected, ...fields } = request as ImportSourceStatisticValue & {
+    expectedObservation?: string | null;
+  };
+  const expected = JSON.parse(JSON.stringify({ source, ...fields })) as Record<string, unknown>;
+  delete expected.expectedObservation;
+  if (expected.sourceAlias === source) delete expected.sourceAlias;
+  if (observation !== undefined) {
+    ensure(
+      typeof observation === 'object' &&
+        observation !== null &&
+        !Array.isArray(observation) &&
+        Object.keys(observation).sort().join(',') === 'digest,kind' &&
+        (observation as { kind: unknown }).kind === 'unversioned' &&
+        typeof (observation as { digest: unknown }).digest === 'string' &&
+        /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
+    );
+    expected.observation = observation;
+  }
+  ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(row)), expected));
+  return row as ImportSourceStatisticFigure;
+}
+
   async function writeSourceStatistic(
     input: {
       subjectId: string;
@@ -361,7 +401,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<ImportSourceStatisticFigure> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const body = sourceStatisticBody(input.value);
     const reply = await response(
@@ -369,16 +409,14 @@ export function createImportTransport(options: ImportTransportOptions) {
         client
           .subjects({ id: input.subjectId })
           ['source-statistics']({ source: input.source })
-          .put(body, {
+          .put(body as Parameters<StatisticPoint['put']>[0], {
             headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
             ...fetchOptions(signal),
           }),
       200,
       signal,
     );
-    const expected = JSON.parse(JSON.stringify({ source: input.source, ...body }));
-    if (expected.sourceAlias === input.source) delete expected.sourceAlias;
-    ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(reply.body)), expected));
+    return statisticFigure(reply.body, input.source, body);
   }
   async function clearSourceStatistic(
     input: {
@@ -393,9 +431,10 @@ export function createImportTransport(options: ImportTransportOptions) {
     const value = snapshot(input.value, BODY_BYTES) as Record<string, unknown>;
     ensure(value !== null && typeof value === 'object' && !Array.isArray(value));
     statisticAlias(value);
+    observationToken(value);
     ensure(
       Object.keys(value)
-        .filter((key) => key !== 'sourceAlias')
+        .filter((key) => key !== 'sourceAlias' && key !== 'expectedObservation')
         .sort()
         .join(',') === 'asOf,count,sourceRecordId',
     );
@@ -414,7 +453,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         client
           .subjects({ id: input.subjectId })
           ['source-statistics']({ source: input.source })
-          .$clear.post(value as ImportSourceStatisticClearValue, {
+          .$clear.post(value as Parameters<StatisticPoint['$clear']['post']>[0], {
             headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
             ...fetchOptions(signal),
           }),
@@ -625,6 +664,60 @@ export function createImportTransport(options: ImportTransportOptions) {
     );
     return reply.body as ReviewedAdoption;
   }
+  async function readSourceStatistics(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<readonly ImportSourceStatisticFigure[]> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const reply = await response(
+      () => client.subjects({ id: input.subjectId })['source-statistics'].get(fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const list = snapshot(reply.body, RESPONSE_BYTES);
+    ensure(Array.isArray(list) && list.length <= 2);
+    return list.map((row) => {
+      ensure(typeof row === 'object' && row !== null && !Array.isArray(row));
+      const value = row as Record<string, unknown>;
+      ensure(value.source === 'vndb' || value.source === 'bangumi');
+      statisticAlias(value);
+      const observation = value.observation;
+      if (observation !== undefined) {
+        ensure(
+          typeof observation === 'object' &&
+            observation !== null &&
+            !Array.isArray(observation) &&
+            Object.keys(observation).sort().join(',') === 'digest,kind' &&
+            (observation as { kind: unknown }).kind === 'unversioned' &&
+            typeof (observation as { digest: unknown }).digest === 'string' &&
+            /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
+        );
+      }
+      ensure(typeof value.sourceRecordId === 'string' && typeof value.asOf === 'string' && typeof value.count === 'number');
+      return value as ImportSourceStatisticFigure;
+    });
+  }
+  async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const reply = await response(
+      () => client.subjects({ id: input.subjectId }).figure.get(fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const body = snapshot(reply.body, RESPONSE_BYTES);
+    ensure(typeof body === 'object' && body !== null && !Array.isArray(body) && 'figure' in body);
+    const figure = (body as { figure: unknown }).figure;
+    ensure(typeof figure === 'object' && figure !== null && !Array.isArray(figure));
+    const value = figure as Record<string, unknown>;
+    ensure(
+      typeof value.count === 'number' &&
+        Number.isSafeInteger(value.count) &&
+        value.count >= 0 &&
+        (value.state === 'ready' || value.state === 'insufficient_data' || value.state === 'updating') &&
+        (value.mean === null || typeof value.mean === 'number'),
+    );
+    return figure as ImportPublicFigure;
+  }
   return {
     readReviewedSubject,
     reviewedCandidates,
@@ -636,6 +729,8 @@ export function createImportTransport(options: ImportTransportOptions) {
     fence,
     writeSourceStatistic,
     clearSourceStatistic,
+    readSourceStatistics,
+    readPublicFigure,
     refreshCover,
     media,
     importFromUrl,

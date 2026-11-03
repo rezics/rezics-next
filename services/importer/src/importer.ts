@@ -22,6 +22,23 @@ import type {
   SourceRegistration,
 } from './import-contract.ts';
 import { ImportTransportError } from './import-client.ts';
+import {
+  DIGEST,
+  ObservationConflictError,
+  ObservationRefusedError,
+  aggregateOperationId,
+  classifyObservation,
+  effectiveAlias,
+  headFromClear,
+  headFromStatistic,
+  intendedPayload,
+  observationDigest,
+  parseObservationReason,
+  type IntendedObservation,
+  type ObservationHeadRead,
+  type ObservationReason,
+  type RetainedObservationHead,
+} from './source-observation.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
@@ -101,7 +118,12 @@ type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
 type Write = <T>(operation: () => Promise<T>) => Promise<T>;
 // Platform policy per logical write and run, independent of width recovery.
 const MAX_WRITE_INVOCATIONS = 8;
-type Planned = { kind: Kind; deferredCover: boolean; conversion?: ImportConversion };
+type Planned = {
+  kind: Kind;
+  deferredCover: boolean;
+  conversion?: ImportConversion;
+  observationConflict?: boolean;
+};
 
 // Native source keys are not normalized into different record identities. Compound
 // planner identities are hashed so their printable public keys remain bounded.
@@ -610,6 +632,335 @@ export class Importer {
     }
   }
 
+  private async readObservationHead(
+    owner: Owner,
+    subjectId: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<ObservationHeadRead> {
+    const read = this.options.transport.readSourceStatistics;
+    const retained = this.session.store.retainedAggregateHead(owner.source, subjectId);
+    if (!read) return retained ? { kind: 'head', head: retained } : { kind: 'absent' };
+    try {
+      const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
+      const row = rows.find((item) => item.source === 'vndb');
+      if (row && typeof row.sourceRecordId === 'string' && typeof row.asOf === 'string')
+        return { kind: 'head', head: headFromStatistic(subjectId, row) };
+      return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+    } catch (error) {
+      if (
+        error instanceof ImportTransportError &&
+        (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 503)
+      )
+        return { kind: 'unavailable', status: error.status, code: error.code };
+      throw error;
+    }
+  }
+
+  private async confirmObservation(
+    subjectId: string,
+    intended: IntendedObservation,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<{ head: RetainedObservationHead | null; figure: unknown; figureUnavailable: boolean }> {
+    const read = this.options.transport.readSourceStatistics;
+    let head: RetainedObservationHead | null = null;
+    if (read) {
+      try {
+        const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
+        const row = rows.find((item) => item.source === 'vndb');
+        if (row) head = headFromStatistic(subjectId, row);
+      } catch {
+        return { head: null, figure: null, figureUnavailable: true };
+      }
+    }
+    if (intended.kind === 'clear' && !head) head = headFromClear(subjectId, intended);
+    let figure: unknown = null;
+    let figureUnavailable = false;
+    const readFigure = this.options.transport.readPublicFigure;
+    if (readFigure) {
+      try {
+        figure = await write(() => readFigure.call(this.options.transport, { subjectId }, signal));
+      } catch {
+        figureUnavailable = true;
+      }
+    }
+    return { head, figure, figureUnavailable };
+  }
+
+  private async deliverObservation(
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedObservation,
+    commandKey: string,
+    requestBytes: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<'delivered' | 'conflict'> {
+    const body = JSON.parse(requestBytes) as Record<string, unknown>;
+    try {
+      if (intended.kind === 'write') {
+        const put = this.options.transport.writeSourceStatistic;
+        if (!put) throw new Error('Source statistic transport is unavailable');
+        await write(() =>
+          put.call(
+            this.options.transport,
+            { subjectId, source: 'vndb', value: body as never, idempotencyKey: commandKey },
+            signal,
+          ),
+        );
+      } else {
+        const clear = this.options.transport.clearSourceStatistic;
+        if (!clear) throw new Error('Source statistic clear transport is unavailable');
+        await write(() =>
+          clear.call(
+            this.options.transport,
+            { subjectId, source: 'vndb', value: body as never, idempotencyKey: commandKey },
+            signal,
+          ),
+        );
+      }
+      return 'delivered';
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 409) return 'conflict';
+      throw error;
+    }
+  }
+
+  private async applyObservation(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedObservation,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<boolean> {
+    const store = this.session.store;
+    const operationId = aggregateOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
+    const existing = store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id);
+    const commandKey = operationKey(
+      owner,
+      `${run.id}:source-statistic${intended.kind === 'clear' ? '-clear' : ''}:${hash(JSON.stringify(intendedPayload(intended)))}`,
+    );
+    const requestBytes = JSON.stringify(intendedPayload(intended));
+    if (existing?.status === 'delivered' && existing.operationId === operationId) return true;
+    if (existing?.status === 'uncertain' || existing?.status === 'prepared') {
+      const sealed = existing.requestBytes;
+      const key = existing.commandKey;
+      store.markAggregate(run, existing.operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(owner, subjectId, intended, key, sealed, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, existing.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        throw new ObservationConflictError(existing.operationId, 'cas-mismatch');
+      }
+      const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
+      const head =
+        intended.kind === 'clear' ? headFromClear(subjectId, intended) : (confirmed.head ?? headFromStatistic(subjectId, { source: 'vndb', ...intended, licence: 'ODbL-1.0', attribution: 'VNDB' } as never));
+      store.retainAggregateHead(owner.source, { ...head, subjectId });
+      store.markAggregate(run, existing.operationId, {
+        status: 'delivered',
+        reviewedHead: head,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      this.progress(signal)?.onAcknowledgedEffects?.(1);
+      return true;
+    }
+    if (existing?.status === 'conflict' || existing?.status === 'refused') {
+      const reason = parseObservationReason(existing.nativeReason) ?? (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
+      if (existing.status === 'refused') throw new ObservationRefusedError(existing.operationId, reason);
+      throw new ObservationConflictError(existing.operationId, reason);
+    }
+    const head = await this.readObservationHead(owner, subjectId, signal, write);
+    if (head.kind === 'unavailable')
+      throw new ImportTransportError(head.status, undefined, head.code);
+    const decision = classifyObservation(intended, subjectId, head);
+    if (decision.action === 'identical') return true;
+    const reviewed = head.kind === 'head' ? head.head : null;
+    if (decision.action === 'refused' || decision.action === 'conflict') {
+      store.prepareAggregate(run, {
+        operationId,
+        recordKey: owner.external_id,
+        subjectId,
+        sourceAlias: effectiveAlias(intended.sourceAlias),
+        intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: reviewed,
+        status: decision.action === 'refused' ? 'refused' : 'conflict',
+        nativeReason: decision.reason,
+      });
+      if (decision.action === 'refused') throw new ObservationRefusedError(operationId, decision.reason);
+      throw new ObservationConflictError(operationId, decision.reason);
+    }
+    store.prepareAggregate(run, {
+      operationId,
+      recordKey: owner.external_id,
+      subjectId,
+      sourceAlias: effectiveAlias(intended.sourceAlias),
+      intended,
+      commandKey,
+      requestBytes,
+      reviewedHead: reviewed,
+      status: 'prepared',
+    });
+    try {
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(owner, subjectId, intended, commandKey, requestBytes, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, operationId, { status: 'conflict', nativeReason: 'concurrent-head' });
+        throw new ObservationConflictError(operationId, 'concurrent-head');
+      }
+    } catch (error) {
+      if (error instanceof ObservationConflictError) throw error;
+      if (error instanceof Interrupted) throw error;
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw error;
+    }
+    const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
+    const retained =
+      intended.kind === 'clear'
+        ? headFromClear(subjectId, intended)
+        : (confirmed.head ?? {
+            provider: 'vndb' as const,
+            sourceAlias: effectiveAlias(intended.sourceAlias),
+            sourceRecordId: intended.sourceRecordId,
+            asOf: intended.asOf,
+            count: intended.count,
+            cleared: false,
+            digest: observationDigest(subjectId, intended),
+            ...(intended.kind === 'write' ? { scale: intended.scale, mean: intended.mean } : {}),
+          });
+    store.retainAggregateHead(owner.source, { ...retained, subjectId });
+    store.markAggregate(run, operationId, {
+      status: 'delivered',
+      reviewedHead: retained,
+      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+    });
+    this.progress(signal)?.onAcknowledgedEffects?.(1);
+    return true;
+  }
+
+  async pageObservationConflicts(source: string, after?: string, limit = 20) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return { operations: [], next: null as string | null };
+    return this.session.store.pageUnresolvedAggregates(run, { ...(after ? { after } : {}), limit });
+  }
+
+  observationDetail(source: string, operationId: string) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return null;
+    return this.session.store.aggregateOperation(run, operationId);
+  }
+
+  async resolveObservation(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal = this.shutdown.signal,
+  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
+      throw new TypeError('Observation resolution requires exact operation and reviewed digests');
+    const ownership = this.session.acquire(source);
+    if (ownership === 'busy') return { status: 'busy', operationId };
+    const write: Write = (operation) => operation();
+    try {
+      const run = this.session.store.activeRun(source);
+      if (!run) return { status: 'unknown', operationId };
+      const prior = this.session.store.aggregateOperation(run, operationId);
+      if (!prior) return { status: 'unknown', operationId };
+      if (prior.status === 'delivered' || prior.status === 'superseded')
+        return { status: 'delivered', operationId: prior.operationId };
+      if (prior.status === 'uncertain' || prior.status === 'prepared')
+        return { status: 'resume', operationId };
+      if (prior.status === 'refused' || parseObservationReason(prior.nativeReason) === 'older-date')
+        return { status: 'refused', operationId };
+      if (prior.reviewedHead?.digest !== reviewedObservation) return { status: 'conflict', operationId };
+      const owner = { source, external_id: prior.recordKey };
+      const omissions = await this.fences(owner, signal);
+      if (prior.kind === 'write' && omissions.some((omission) => omission.field_group === 'facts'))
+        return { status: 'conflict', operationId };
+      const head = await this.readObservationHead(owner, prior.subjectId, signal, write);
+      if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+      const currentDigest = head.kind === 'head' ? head.head.digest : null;
+      if (currentDigest !== reviewedObservation) {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: head.kind === 'head' ? head.head : null,
+        });
+        return { status: 'conflict', operationId };
+      }
+      const decision = classifyObservation(prior.intended, prior.subjectId, head);
+      if (decision.action === 'identical') {
+        this.session.store.markAggregate(run, operationId, { status: 'delivered', reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead });
+        return { status: 'delivered', operationId };
+      }
+      if (decision.action === 'refused') {
+        this.session.store.markAggregate(run, operationId, { status: 'refused', nativeReason: decision.reason });
+        return { status: 'refused', operationId };
+      }
+      const expectedObservation = reviewedObservation;
+      const successorId = aggregateOperationId({
+        runId: run.id,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        intended: prior.intended,
+        expectedObservation,
+      });
+      const commandKey = operationKey(
+        owner,
+        `${run.id}:source-statistic${prior.kind === 'clear' ? '-clear' : ''}:cas:${expectedObservation}`,
+      );
+      const requestBytes = JSON.stringify({ ...intendedPayload(prior.intended), expectedObservation });
+      const successor = this.session.store.supersedeWithSuccessor(run, operationId, {
+        operationId: successorId,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        sourceAlias: prior.sourceAlias,
+        intended: prior.intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: head.kind === 'head' ? head.head : null,
+        expectedObservation,
+        status: 'prepared',
+      });
+      this.session.store.markAggregate(run, successor.operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(
+        owner,
+        prior.subjectId,
+        prior.intended,
+        successor.commandKey,
+        successor.requestBytes,
+        signal,
+        write,
+      );
+      if (result === 'conflict') {
+        this.session.store.markAggregate(run, successor.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        return { status: 'conflict', operationId: successor.operationId };
+      }
+      const confirmed = await this.confirmObservation(prior.subjectId, prior.intended, signal, write);
+      const retained =
+        prior.kind === 'clear'
+          ? headFromClear(prior.subjectId, prior.intended)
+          : (confirmed.head ?? headFromStatistic(prior.subjectId, { source: 'vndb', ...prior.intended } as never));
+      this.session.store.retainAggregateHead(source, { ...retained, subjectId: prior.subjectId });
+      this.session.store.markAggregate(run, successor.operationId, {
+        status: 'delivered',
+        reviewedHead: retained,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      return { status: 'delivered', operationId: successor.operationId };
+    } finally {
+      this.session.release(ownership);
+    }
+  }
+
   private async plan(
     registration: SourceRegistration,
     run: Run,
@@ -701,51 +1052,13 @@ export class Importer {
       }
     }
     if (subject && conversion?.sourceStatistic && !omissions.some((o) => o.field_group === 'facts')) {
-      const { source, ...value } = conversion.sourceStatistic;
-      const writeSourceStatistic = this.options.transport.writeSourceStatistic;
-      if (!writeSourceStatistic) throw new Error('Source statistic transport is unavailable');
-      await write(() =>
-        writeSourceStatistic.call(
-          this.options.transport,
-          {
-            subjectId: subject,
-            source,
-            value,
-            idempotencyKey: operationKey(
-              owner,
-              `${run.id}:source-statistic:${hash(JSON.stringify(conversion.sourceStatistic))}`,
-            ),
-          },
-          signal,
-        ),
-      );
-      if (signal.aborted) throw new Interrupted('Import was interrupted');
-      this.progress(signal)?.onAcknowledgedEffects?.(1);
-      statisticWritten = true;
+      const { source: _source, expectedObservation: _token, ...value } = conversion.sourceStatistic;
+      statisticWritten = await this.applyObservation(run, owner, subject, { kind: 'write', ...value }, signal, write);
     }
     // Removal addresses only this exact binding and remains permitted behind a facts fence.
     if (subject && conversion?.sourceStatisticClear) {
-      const { source, ...value } = conversion.sourceStatisticClear;
-      const clear = this.options.transport.clearSourceStatistic;
-      if (!clear) throw new Error('Source statistic clear transport is unavailable');
-      await write(() =>
-        clear.call(
-          this.options.transport,
-          {
-            subjectId: subject,
-            source,
-            value,
-            idempotencyKey: operationKey(
-              owner,
-              `${run.id}:source-statistic-clear:${hash(JSON.stringify(conversion.sourceStatisticClear))}`,
-            ),
-          },
-          signal,
-        ),
-      );
-      if (signal.aborted) throw new Interrupted('Import was interrupted');
-      this.progress(signal)?.onAcknowledgedEffects?.(1);
-      statisticWritten = true;
+      const { source: _source, expectedObservation: _token, ...value } = conversion.sourceStatisticClear;
+      statisticWritten = await this.applyObservation(run, owner, subject, { kind: 'clear', ...value }, signal, write);
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();
@@ -1226,6 +1539,7 @@ export class Importer {
       if (resumed && !(await this.drain(run, signal, 'resumed')))
         return finish('bulk-failed', 'Durable operations remain unresolved');
       let failed = false;
+      let observationConflict = false;
       let after: string | undefined;
       for (;;) {
         const page = store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
@@ -1261,6 +1575,8 @@ export class Importer {
               return planned;
             } catch (error) {
               if (error instanceof Interrupted) throw error;
+              if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+                return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
               return 'failed';
             }
           },
@@ -1269,8 +1585,11 @@ export class Importer {
           const outcome = outcomes[index];
           if (outcome === 'failed') failed = true;
           else if (outcome) {
-            if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
-            observe(outcome.kind, page[index]!.row.recordKey);
+            if (outcome.observationConflict) observationConflict = true;
+            else {
+              if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
+              observe(outcome.kind, page[index]!.row.recordKey);
+            }
           }
         }
         if (page.length) after = page.at(-1)!.row.recordKey;
@@ -1307,6 +1626,8 @@ export class Importer {
               return planned;
             } catch (error) {
               if (error instanceof Interrupted) throw error;
+              if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+                return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
               return 'failed';
             }
           },
@@ -1314,6 +1635,7 @@ export class Importer {
         for (let index = 0; index < outcomes.length; index++) {
           const outcome = outcomes[index]!;
           if (outcome === 'failed') failed = true;
+          else if (outcome.observationConflict) observationConflict = true;
           else observe(outcome.kind, page[index]!.recordKey);
         }
         if (page.length) after = page.at(-1)!.recordKey;
@@ -1325,7 +1647,13 @@ export class Importer {
       const deferredMedia = options.progress?.onPhase?.('deferred-media');
       if (deferredMedia !== undefined) await deferredMedia;
       if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
-      if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
+      if (observationConflict || store.hasObservationConflicts(run)) {
+        const conflict = options.progress?.onPhase?.('observation-conflict');
+        if (conflict !== undefined) await conflict;
+        return finish('observation-conflict', 'Source observation requires explicit operator resolution');
+      }
+      if (failed || store.hasUnresolvedAggregates(run))
+        return finish('bulk-failed', 'Durable operations remain unresolved');
       const finalizing = options.progress?.onPhase?.('finalizing');
       if (finalizing !== undefined) await finalizing;
       let final = store.finalize(run, 100);
@@ -1335,6 +1663,8 @@ export class Importer {
         final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
       );
     } catch (error) {
+      if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+        return finish('observation-conflict', 'Source observation requires explicit operator resolution');
       return finish(
         error instanceof Interrupted ? 'interrupted' : 'bulk-failed',
         error instanceof Interrupted ? error.message : 'Import operations remain unresolved',

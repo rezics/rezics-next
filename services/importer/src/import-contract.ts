@@ -14,10 +14,23 @@ export type ImportSourceRecord = ImportSourceRecordMetadataCommand['metadata'];
 
 // Consume the installed generated client bodies for both statistic operations.
 type SourceStatisticsClient = ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']>;
-export type ImportSourceStatisticValue = Readonly<Parameters<SourceStatisticsClient['put']>[0]>;
+type GeneratedStatisticValue = Readonly<Parameters<SourceStatisticsClient['put']>[0]>;
+type GeneratedClearValue = Readonly<Parameters<SourceStatisticsClient['$clear']['post']>[0]>;
+type GeneratedStatisticList = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']['get']>>['data']
+>;
+type GeneratedPublicFigure = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjects']>['figure']['get']>>['data']
+>;
+/** Content's observation CAS is additive on the generated VNDB bodies. */
+export type ImportObservationToken = Readonly<{ expectedObservation?: string | null }>;
+export type ImportSourceStatisticValue = GeneratedStatisticValue & ImportObservationToken;
 export type ImportSourceStatistic = ImportSourceStatisticValue & Readonly<{ source: 'vndb' }>;
-export type ImportSourceStatisticClearValue = Readonly<Parameters<SourceStatisticsClient['$clear']['post']>[0]>;
+export type ImportSourceStatisticClearValue = GeneratedClearValue & ImportObservationToken;
 export type ImportSourceStatisticClear = ImportSourceStatisticClearValue & Readonly<{ source: 'vndb' }>;
+export type ImportSourceStatisticFigure = GeneratedStatisticList[number] &
+  Readonly<{ observation?: { kind: 'unversioned'; digest: string } }>;
+export type ImportPublicFigure = GeneratedPublicFigure extends { figure: infer Figure } ? Figure : GeneratedPublicFigure;
 
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
@@ -47,7 +60,15 @@ export interface ImportTransport {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<void>;
+  ): Promise<ImportSourceStatisticFigure>;
+  readSourceStatistics?(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<readonly ImportSourceStatisticFigure[]>;
+  readPublicFigure?(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<ImportPublicFigure>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
@@ -79,7 +100,14 @@ export type RunOptions = Readonly<{
 
 export type { ConversionDiagnosticPhase, SanitizedConversionDiagnostic } from './conversion-diagnostics.ts';
 
-export type RunStatus = 'committed' | 'invalid-dump' | 'mass-disappearance' | 'bulk-failed' | 'interrupted' | 'busy';
+export type RunStatus =
+  | 'committed'
+  | 'invalid-dump'
+  | 'mass-disappearance'
+  | 'bulk-failed'
+  | 'interrupted'
+  | 'busy'
+  | 'observation-conflict';
 
 /** Per-record state acknowledges one source record; a baseline describes the whole completed source run. */
 export type RunResult = Readonly<{
@@ -118,7 +146,8 @@ export type ImportProgressPhase =
   | 'busy'
   | 'interrupted'
   | 'denied'
-  | 'failed';
+  | 'failed'
+  | 'observation-conflict';
 
 export type ImportProgressKind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportMediaProgress = 'deferred' | 'rejected';

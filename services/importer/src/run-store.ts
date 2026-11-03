@@ -10,6 +10,12 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkBatch, checkResult } from './accepted-checks.ts';
 import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord } from './import-contract.ts';
+import {
+  SOURCE_OBSERVATION_PAGE_MAX,
+  type AggregateOperationStatus,
+  type IntendedObservation,
+  type RetainedObservationHead,
+} from './source-observation.ts';
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 import {
@@ -116,7 +122,27 @@ export const RUN_TABLES = [
   'run_envelopes',
   'run_conversion_diagnostics',
   'run_conversion_diagnostic_records',
+  'run_aggregate_operations',
+  'run_aggregate_heads',
 ] as const;
+
+export type AggregateOperation = Readonly<{
+  operationId: string;
+  recordKey: string;
+  subjectId: string;
+  provider: 'vndb';
+  sourceAlias: string;
+  sourceRecordId: string;
+  kind: IntendedObservation['kind'];
+  commandKey: string;
+  requestBytes: string;
+  intended: IntendedObservation;
+  reviewedHead: RetainedObservationHead | null;
+  expectedObservation: string | null;
+  status: AggregateOperationStatus;
+  nativeReason: string | null;
+  outcome: unknown;
+}>;
 
 function fail(): never {
   throw new TypeError('Invalid run-store input');
@@ -402,6 +428,23 @@ export class RunStore<Projection = BatchStatement[]> {
         PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_conversion_diagnostics_phase_review
         ON run_conversion_diagnostics(source,run_id,phase,record_key) WHERE diagnostic_count>0`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_aggregate_operations (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+        record_key TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
+        source_alias TEXT NOT NULL, source_record_id TEXT NOT NULL, kind TEXT NOT NULL,
+        command_key TEXT NOT NULL, request_bytes TEXT NOT NULL, intended_json TEXT NOT NULL,
+        reviewed_head_json TEXT, expected_observation TEXT, status TEXT NOT NULL,
+        native_reason TEXT, outcome_json TEXT,
+        PRIMARY KEY(source, run_id, operation_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_aggregate_pending
+        ON run_aggregate_operations(source, run_id, operation_id)
+        WHERE status IN ('prepared','uncertain','conflict','refused')`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_aggregate_record
+        ON run_aggregate_operations(source, run_id, record_key, operation_id)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_aggregate_heads (
+        source TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
+        digest TEXT NOT NULL, head_json TEXT NOT NULL,
+        PRIMARY KEY(source, subject_id, provider)) WITHOUT ROWID`);
     } catch (error) {
       db.close();
       throw error;
@@ -799,12 +842,265 @@ export class RunStore<Projection = BatchStatement[]> {
           JSON.parse(entry.projection_json).sourceKind !== 'vndb' ||
           JSON.parse(entry.row_json).state !== 'present' ||
           entry.cover_pending ||
+          this.unresolvedAggregate(run, key) ||
           !this.get('SELECT record_key FROM run_acknowledged WHERE source=? AND record_key=?', run.source, key)
         )
           throw new Error('Statistic refresh requires an existing present VNDB record without deferred work');
       }
       this.resolve(run, entry);
     });
+  }
+  private parseAggregate(row: {
+    operation_id: string;
+    record_key: string;
+    subject_id: string;
+    provider: string;
+    source_alias: string;
+    source_record_id: string;
+    kind: string;
+    command_key: string;
+    request_bytes: string;
+    intended_json: string;
+    reviewed_head_json: string | null;
+    expected_observation: string | null;
+    status: string;
+    native_reason: string | null;
+    outcome_json: string | null;
+  }): AggregateOperation {
+    return {
+      operationId: row.operation_id,
+      recordKey: row.record_key,
+      subjectId: row.subject_id,
+      provider: 'vndb',
+      sourceAlias: row.source_alias,
+      sourceRecordId: row.source_record_id,
+      kind: row.kind as IntendedObservation['kind'],
+      commandKey: row.command_key,
+      requestBytes: row.request_bytes,
+      intended: JSON.parse(row.intended_json) as IntendedObservation,
+      reviewedHead: row.reviewed_head_json ? (JSON.parse(row.reviewed_head_json) as RetainedObservationHead) : null,
+      expectedObservation: row.expected_observation,
+      status: row.status as AggregateOperationStatus,
+      nativeReason: row.native_reason,
+      outcome: row.outcome_json ? JSON.parse(row.outcome_json) : null,
+    };
+  }
+  prepareAggregate(run: Run, input: {
+    operationId: string;
+    recordKey: string;
+    subjectId: string;
+    sourceAlias: string;
+    intended: IntendedObservation;
+    commandKey: string;
+    requestBytes: string;
+    reviewedHead: RetainedObservationHead | null;
+    expectedObservation?: string | null;
+    status: AggregateOperationStatus;
+    nativeReason?: string | null;
+  }): AggregateOperation {
+    validateRun(run);
+    identifier(input.operationId, 64, /^[0-9a-f]{64}$/u);
+    keyId(input.recordKey);
+    identifier(input.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(input.commandKey, 255, /^[\x20-\x7e]+$/u);
+    if (input.intended.kind !== 'write' && input.intended.kind !== 'clear') fail();
+    const intendedJson = boundedJson(input.intended, 65536);
+    const requestBytes = boundedJson(JSON.parse(input.requestBytes), 65536);
+    const headJson = input.reviewedHead ? boundedJson(input.reviewedHead, 65536) : null;
+    this.transaction(() => {
+      this.write(
+        `INSERT INTO run_aggregate_operations(
+          source,run_id,operation_id,record_key,subject_id,provider,source_alias,source_record_id,kind,
+          command_key,request_bytes,intended_json,reviewed_head_json,expected_observation,status,native_reason,outcome_json)
+        VALUES(?,?,?,?,?,'vndb',?,?,?,?,?,?,?,?,?,?,NULL)
+        ON CONFLICT(source,run_id,operation_id) DO UPDATE SET
+          status=excluded.status, native_reason=excluded.native_reason,
+          reviewed_head_json=excluded.reviewed_head_json, expected_observation=excluded.expected_observation,
+          request_bytes=CASE WHEN run_aggregate_operations.status IN ('uncertain','delivered')
+            THEN run_aggregate_operations.request_bytes ELSE excluded.request_bytes END,
+          command_key=CASE WHEN run_aggregate_operations.status IN ('uncertain','delivered')
+            THEN run_aggregate_operations.command_key ELSE excluded.command_key END`,
+        run.source,
+        run.id,
+        input.operationId,
+        input.recordKey,
+        input.subjectId,
+        input.sourceAlias,
+        input.intended.sourceRecordId,
+        input.intended.kind,
+        input.commandKey,
+        requestBytes,
+        intendedJson,
+        headJson,
+        input.expectedObservation ?? null,
+        input.status,
+        input.nativeReason ?? null,
+      );
+    });
+    return this.aggregateOperation(run, input.operationId)!;
+  }
+  markAggregate(
+    run: Run,
+    operationId: string,
+    update: {
+      status: AggregateOperationStatus;
+      nativeReason?: string | null;
+      expectedObservation?: string | null;
+      requestBytes?: string;
+      commandKey?: string;
+      reviewedHead?: RetainedObservationHead | null;
+      outcome?: unknown;
+    },
+  ): AggregateOperation {
+    validateRun(run);
+    identifier(operationId, 64, /^[0-9a-f]{64}$/u);
+    this.transaction(() => {
+      const current = this.get<{ status: string; request_bytes: string; command_key: string }>(
+        'SELECT status, request_bytes, command_key FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?',
+        run.source,
+        run.id,
+        operationId,
+      );
+      if (!current) fail();
+      const sealed = current.status === 'uncertain' || current.status === 'delivered';
+      this.write(
+        `UPDATE run_aggregate_operations SET status=?, native_reason=?, expected_observation=?,
+          request_bytes=?, command_key=?, reviewed_head_json=?, outcome_json=?
+        WHERE source=? AND run_id=? AND operation_id=?`,
+        update.status,
+        update.nativeReason ?? null,
+        update.expectedObservation === undefined ? null : update.expectedObservation,
+        sealed ? current.request_bytes : (update.requestBytes ?? current.request_bytes),
+        sealed ? current.command_key : (update.commandKey ?? current.command_key),
+        update.reviewedHead === undefined
+          ? this.get<{ reviewed_head_json: string | null }>(
+              'SELECT reviewed_head_json FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?',
+              run.source,
+              run.id,
+              operationId,
+            )!.reviewed_head_json
+          : update.reviewedHead
+            ? boundedJson(update.reviewedHead, 65536)
+            : null,
+        update.outcome === undefined ? null : boundedJson(update.outcome, 65536),
+        run.source,
+        run.id,
+        operationId,
+      );
+    });
+    return this.aggregateOperation(run, operationId)!;
+  }
+  supersedeWithSuccessor(
+    run: Run,
+    priorId: string,
+    successor: Parameters<RunStore['prepareAggregate']>[1],
+  ): AggregateOperation {
+    return this.transaction(() => {
+      this.markAggregate(run, priorId, { status: 'superseded' });
+      return this.prepareAggregate(run, successor);
+    });
+  }
+  aggregateOperation(run: Run, operationId: string): AggregateOperation | null {
+    validateRun(run);
+    identifier(operationId, 64, /^[0-9a-f]{64}$/u);
+    const row = this.get<Parameters<RunStore['parseAggregate']>[0]>(
+      `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+        command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+        native_reason, outcome_json
+       FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?`,
+      run.source,
+      run.id,
+      operationId,
+    );
+    return row ? this.parseAggregate(row) : null;
+  }
+  unresolvedAggregate(run: Run, recordKey: string): AggregateOperation | null {
+    validateRun(run);
+    keyId(recordKey);
+    const row = this.get<Parameters<RunStore['parseAggregate']>[0]>(
+      `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+        command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+        native_reason, outcome_json
+       FROM run_aggregate_operations
+       WHERE source=? AND run_id=? AND record_key=? AND status IN ('prepared','uncertain','conflict','refused')
+       ORDER BY operation_id LIMIT 1`,
+      run.source,
+      run.id,
+      recordKey,
+    );
+    return row ? this.parseAggregate(row) : null;
+  }
+  pageUnresolvedAggregates(
+    run: Run,
+    input: { after?: string; limit?: number } = {},
+  ): { operations: AggregateOperation[]; next: string | null } {
+    validateRun(run);
+    const limit = input.limit ?? SOURCE_OBSERVATION_PAGE_MAX;
+    if (!Number.isInteger(limit) || limit < 1 || limit > SOURCE_OBSERVATION_PAGE_MAX) fail();
+    if (input.after !== undefined) identifier(input.after, 64, /^[0-9a-f]{64}$/u);
+    const rows = this.all<Parameters<RunStore['parseAggregate']>[0]>(
+      input.after
+        ? `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+            command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+            native_reason, outcome_json
+           FROM run_aggregate_operations
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') AND operation_id>?
+           ORDER BY operation_id LIMIT ?`
+        : `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+            command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+            native_reason, outcome_json
+           FROM run_aggregate_operations
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused')
+           ORDER BY operation_id LIMIT ?`,
+      ...(input.after ? [run.source, run.id, input.after, limit] : [run.source, run.id, limit]),
+    );
+    const operations = rows.map((row) => this.parseAggregate(row));
+    return { operations, next: operations.length === limit ? operations.at(-1)!.operationId : null };
+  }
+  hasUnresolvedAggregates(run: Run): boolean {
+    validateRun(run);
+    return Boolean(
+      this.get(
+        `SELECT operation_id FROM run_aggregate_operations
+         WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') LIMIT 1`,
+        run.source,
+        run.id,
+      ),
+    );
+  }
+  hasObservationConflicts(run: Run): boolean {
+    validateRun(run);
+    return Boolean(
+      this.get(
+        `SELECT operation_id FROM run_aggregate_operations
+         WHERE source=? AND run_id=? AND status IN ('conflict','refused') LIMIT 1`,
+        run.source,
+        run.id,
+      ),
+    );
+  }
+  retainAggregateHead(source: string, head: RetainedObservationHead & { subjectId: string }): void {
+    sourceId(source);
+    identifier(head.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    this.write(
+      `INSERT INTO run_aggregate_heads(source,subject_id,provider,digest,head_json) VALUES(?,?,?,?,?)
+       ON CONFLICT(source,subject_id,provider) DO UPDATE SET digest=excluded.digest, head_json=excluded.head_json`,
+      source,
+      head.subjectId,
+      'vndb',
+      head.digest,
+      boundedJson(head, 65536),
+    );
+  }
+  retainedAggregateHead(source: string, subjectId: string): RetainedObservationHead | null {
+    sourceId(source);
+    identifier(subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    const row = this.get<{ head_json: string }>(
+      'SELECT head_json FROM run_aggregate_heads WHERE source=? AND subject_id=? AND provider=?',
+      source,
+      subjectId,
+    );
+    return row ? (JSON.parse(row.head_json) as RetainedObservationHead) : null;
   }
   /** Private record plan; every dispatch still uses the portable one-envelope contract. */
   prepare(
@@ -1297,7 +1593,8 @@ export class RunStore<Projection = BatchStatement[]> {
       const g = this.generation(run, true);
       if (g.status === 'complete') return 'complete';
       if (!['ready', 'finalizing'].includes(g.status)) throw new Error('Run cannot finalize');
-      if (g.classified !== g.expected || g.resolved !== g.expected) return 'incomplete';
+      if (g.classified !== g.expected || g.resolved !== g.expected || this.hasUnresolvedAggregates(run))
+        return 'incomplete';
       const entries = this.all<Entry>(
         `SELECT * FROM run_entries WHERE source=? AND run_id=? AND record_key>?
         ORDER BY record_key LIMIT ?`,

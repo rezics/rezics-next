@@ -79,6 +79,45 @@ source rights or cover permission. Other subsystem journals are outside this vie
 Decision: inspection accepts an exact configured source ID, defaults to the active generation or completed baseline,
 and selects pending-envelope or deferred-cover pages explicitly.
 
+## Resolve VNDB source-observation conflicts
+
+A newer same-binding VNDB statistic still imports automatically. An equal-date correction, record rebinding or
+alias rebinding stops that exact aggregate operation with a durable explanation and leaves the source run
+uncommitted. Exit code 6 is this observation-conflict outcome; it is not an authorization failure, invalid dump
+or permission to discard unrelated pending work. An older observation date is refused: CAS cannot override date
+order, so supply corrected authoritative input.
+
+```sh
+bun services/importer/src/cli.ts observations --help
+bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb
+bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb --operation <64-hex>
+bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb --operation <64-hex> \
+  --resolve --reviewed-observation <64-hex-head> --api <https-origin> --account-key <path> \
+  --account <uuid> --client <client-id> --auth <https-origin>
+```
+
+Pages list at most 20 unresolved aggregate operations, keyed by stable operation ids. Detail shows the intended
+record, alias, date, count, scale, mean or explicit clear, the readable retained head and the native reason.
+A source figure is independent of a REZICS vote. If the live head no longer matches the reviewed digest, inspect
+again. Resolution rereads current fences and authority, seals `expectedObservation` onto a successor intent, and
+does not rewrite dates or escalate credentials. Uncertain deliveries resume through the ordinary import command
+with the original body and key; a timeout is not a definitive conflict. A successful clear retains its native
+observation head even when no public figure is visible.
+
+Decision: observation-conflict is RunStatus plus CLI exit 6; same-date dump refreshes wait for explicit
+resolution; local digests use kernel `sourceObservation`; generated client fields `expectedObservation` and
+`observation` are an additive seam.
+
+Indexed custody lives in `run_aggregate_operations` (primary key `source,run_id,operation_id`;
+`run_aggregate_pending` on unresolved statuses; `run_aggregate_record` on `record_key`) and
+`run_aggregate_heads` (`source,subject_id,provider`). Each eligible record does one indexed journal
+lookup/prepare, one GET of `/v1/subjects/{id}/source-statistics`, three fence checks per
+`fences()` pass (facts/summary/cover; two passes once the subject exists), one native PUT or
+`:clear` for a newly prepared intent, and after delivery one list GET plus one public figure GET.
+Retries and explicit resolutions are extra transitions R. Work is O(N+A+R). A conflict page is
+`SELECT ... WHERE status IN ('prepared','uncertain','conflict','refused') AND operation_id>? ORDER BY operation_id LIMIT P`
+with P≤20. Unrelated retained history is not scanned per record.
+
 After inspection, return to the existing authorized import command and provide a complete input and the usual
 credentials. For the built-in Wikidata source, the invocation shape is:
 
@@ -108,7 +147,8 @@ not mean the current catalogue was read. `selectedCatalogue` is always `not-read
 candidate acceptance, public selection or readback.
 
 Phases are `acquiring`, `materializing`, `staging`, `resuming`, `reconciling`, `deferred-media` and `finalizing`;
-terminal phases identify committed, invalid, mass-disappearance, busy, interrupted, denied or failed outcomes.
+terminal phases identify committed, invalid, mass-disappearance, busy, interrupted, denied, failed or
+observation-conflict outcomes.
 Progress contains no account credentials, request bodies, raw record keys, provider text, URLs or private error
 bodies. A broken sink stops this invocation through the existing cancellation path and reports a sanitized output
 failure. SIGINT and SIGTERM preserve the durable journal and original pending request. Rerun the ordinary import
@@ -318,7 +358,7 @@ for unchanged refresh and interrupted work: reopen checks current tuple fences b
 The [connected native journey](../kernel/test/imports/wikidata-rich-cli.test.ts) and its
 [evidence notes](../../docs/research/imports-audit/wikidata-rich-cli.md) cover this operator flow.
 
-The account key must be a regular private-JWK file readable only by its owner (for example, mode `0600` or `0400`); symlinks, non-files, and group- or world-accessible files are refused before network access. Dump paths must also open as regular files. Both file opens use nonblocking acquisition followed by descriptor-based regular-file checks, so FIFO paths are rejected without waiting for a writer, reading content, opening SQLite, or contacting Auth or the API; key opens retain symlink protection and the existing mode and 16 KiB limits. The focused [FIFO subprocess cases](tests/cli-special-files.test.ts) exercise the actual CLI with no writer for dump and key paths, checking exit 2, closed handles and no state or network effects. Their child deadline is a liveness guard, not a performance claim; admitted regular-file byte bounds and the existing native CLI receipts remain separate evidence. The importer keeps the bearer only in memory, renews it 60 seconds before expiry, and renews and replays once after an API 401. Bangumi, Open Library, and Wikidata request six registered scopes. VNDB requests those six plus `source_statistic:write` for its aggregate rating. The account needs the fixed Global Context grants `subject:create`, `subject:batch_write`, `source_fence:read`, and `media:import_from_url`; a VNDB account also needs `source_statistic:write`. Platform staff put the importer actor on the `service` tier once through `setRateTier`, before the first large import. The VNDB token must carry `subject:create`, `subject:batch_write`, `source_statistic:write`, `statement:propose`, `source_fence:read`, `media:import_from_url`, and `media:read_reservation`; other sources omit `source_statistic:write`. `statement:propose` comes from the standing grant every active account has, and `media:read_reservation` lets the importer read the status of media it imported. Provision the account, client, key, grants, and tier outside the CLI.
+The account key must be a regular private-JWK file readable only by its owner (for example, mode `0600` or `0400`); symlinks, non-files, and group- or world-accessible files are refused before network access. Dump paths must also open as regular files. Both file opens use nonblocking acquisition followed by descriptor-based regular-file checks, so FIFO paths are rejected without waiting for a writer, reading content, opening SQLite, or contacting Auth or the API; key opens retain symlink protection and the existing mode and 16 KiB limits. The focused [FIFO subprocess cases](tests/cli-special-files.test.ts) exercise the actual CLI with no writer for dump and key paths, checking exit 2, closed handles and no state or network effects. Their child deadline is a liveness guard, not a performance claim; admitted regular-file byte bounds and the existing native CLI receipts remain separate evidence. The importer keeps the bearer only in memory, renews it 60 seconds before expiry, and renews and replays once after an API 401. Bangumi, Open Library, and Wikidata request six registered scopes. VNDB requests those six plus `source_statistic:write` and `subject:read` for its aggregate rating and observation head. The account needs the fixed Global Context grants `subject:create`, `subject:batch_write`, `source_fence:read`, and `media:import_from_url`; a VNDB account also needs `source_statistic:write` and `subject:read`. Platform staff put the importer actor on the `service` tier once through `setRateTier`, before the first large import. The VNDB token must carry `subject:create`, `subject:batch_write`, `source_statistic:write`, `subject:read`, `statement:propose`, `source_fence:read`, `media:import_from_url`, and `media:read_reservation`; other sources omit `source_statistic:write`. VNDB `subject:read` is required to GET the current observation head. `statement:propose` comes from the standing grant every active account has, and `media:read_reservation` lets the importer read the status of media it imported. Provision the account, client, key, grants, and tier outside the CLI.
 
 For compressed files, use an operator-owned, trusted decompressor and enable shell `pipefail` so a decompressor error cannot look like a complete dump:
 

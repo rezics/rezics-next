@@ -134,6 +134,9 @@ async function fixture() {
   return {
     writes,
     batches,
+    get importer() {
+      return importer;
+    },
     fail(value: typeof failure) {
       failure = value;
     },
@@ -172,18 +175,33 @@ async function fixture() {
   };
 }
 
+async function resolveOpen(f: Awaited<ReturnType<typeof fixture>>) {
+  const pending = await f.importer.pageObservationConflicts('vndb');
+  expect(pending.operations.length).toBeGreaterThan(0);
+  const resolved = await f.importer.resolveObservation(
+    'vndb',
+    pending.operations[0]!.operationId,
+    pending.operations[0]!.reviewedHead!.digest,
+  );
+  expect(resolved.status).toBe('delivered');
+}
+
 test('zero clear and unknown omission retain exact semantic candidates, unchanged reopen sends no statistic', async () => {
   const f = await fixture();
   try {
     expect((await f.run(record(2, 700))).status).toBe('committed');
     const batches = structuredClone(f.batches);
+    expect((await f.run(record(0, null))).status).toBe('observation-conflict');
+    await resolveOpen(f);
     expect((await f.run(record(0, null))).status).toBe('committed');
-    expect(JSON.parse(f.writes.at(-1)!.bytes)).toEqual({ sourceRecordId: 'v123', count: 0, asOf: '2026-10-25' });
+    expect(JSON.parse(f.writes.at(-1)!.bytes)).toMatchObject({ sourceRecordId: 'v123', count: 0, asOf: '2026-10-25' });
     expect(f.batches).toEqual(batches);
     await f.reopen();
     const requests = f.writes.length;
     expect((await f.run(record(0, null))).status).toBe('committed');
     expect(f.writes).toHaveLength(requests);
+    expect((await f.run(record(2, 700))).status).toBe('observation-conflict');
+    await resolveOpen(f);
     expect((await f.run(record(2, 700))).status).toBe('committed');
     const positiveRequests = f.writes.length;
     expect((await f.run(record())).status).toBe('committed');
@@ -191,6 +209,8 @@ test('zero clear and unknown omission retain exact semantic candidates, unchange
     expect(f.writes).toHaveLength(positiveRequests);
     expect(f.batches).toEqual(batches);
     expect((await f.run(record(0))).status).toBe('invalid-dump');
+    expect((await f.run(record(0, 0))).status).toBe('observation-conflict');
+    await resolveOpen(f);
     expect((await f.run(record(0, 0))).status).toBe('committed');
     expect(f.writes.at(-1)!.method).toBe('POST');
   } finally {
@@ -198,13 +218,12 @@ test('zero clear and unknown omission retain exact semantic candidates, unchange
   }
 });
 
-test('uncertain and denied zero retain complete baseline; reopened sealed run reuses exact clear bytes/key', async () => {
+test('uncertain and denied first write retain complete absence; reopened sealed run reuses exact bytes/key', async () => {
   const f = await fixture();
   try {
-    expect((await f.run(record(2, 700))).status).toBe('committed');
     const baseline = f.baseline();
     f.fail('lost');
-    expect((await f.run(record(0, null))).status).toBe('bulk-failed');
+    expect((await f.run(record(2, 700))).status).toBe('bulk-failed');
     expect(f.baseline()).toEqual(baseline);
     const pending = f.writes.at(-1)!;
     await f.reopen();
@@ -229,6 +248,8 @@ test('facts fence suppresses positive publication but allows removal of the exac
     const requests = f.writes.length;
     expect((await f.run(record(3, 800))).status).toBe('committed');
     expect(f.writes).toHaveLength(requests);
+    expect((await f.run(record(0, null))).status).toBe('observation-conflict');
+    await resolveOpen(f);
     expect((await f.run(record(0, null))).status).toBe('committed');
     expect(f.writes.at(-1)!.method).toBe('POST');
   } finally {

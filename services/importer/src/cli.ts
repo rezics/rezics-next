@@ -29,6 +29,7 @@ import {
 } from './credentials.ts';
 import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
+import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
 import {
@@ -114,6 +115,11 @@ function usage(): string {
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
+    '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
+    '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
+    '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
+    '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
     'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --help',
   ].join('\n');
 }
@@ -289,6 +295,15 @@ function diagnostic(
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+  if (Array.isArray(argv) && argv[0] === 'observations')
+    return runObservationsCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      ...(options.testOrigin ? { testOrigin: options.testOrigin } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'observations')
+    return { code: 0, stdout: `${observationsUsage()}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'preview')
     return runPreviewCli(argv.slice(1), {
       ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
@@ -353,7 +368,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       authOrigin: config.auth,
       scopes:
         config.source === 'vndb'
-          ? VNDB_IMPORTER_SCOPES
+          ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
           : config.source === 'bangumi'
             ? [...IMPORTER_SCOPES, 'subject:read']
             : IMPORTER_SCOPES,
@@ -461,6 +476,10 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       track(() => importTransport.clearSourceStatistic(input, signal)),
     writeSourceStatistic: (input: Parameters<NonNullable<typeof importTransport.writeSourceStatistic>>[0]) =>
       track(() => importTransport.writeSourceStatistic(input, signal)),
+    readSourceStatistics: (input: Parameters<typeof importTransport.readSourceStatistics>[0]) =>
+      track(() => importTransport.readSourceStatistics(input, signal)),
+    readPublicFigure: (input: Parameters<typeof importTransport.readPublicFigure>[0]) =>
+      track(() => importTransport.readPublicFigure(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       readFence(() =>
         importTransport.fence(
@@ -718,6 +737,7 @@ function progressTerminal(
   if (output.code === 3) return { phase: 'mass-disappearance', outcome: 'mass-disappearance' };
   if (output.code === 4) return { phase: 'denied', outcome: 'denied' };
   if (output.code === 5) return { phase: 'busy', outcome: 'busy' };
+  if (output.code === 6) return { phase: 'observation-conflict', outcome: 'observation-conflict' };
   return { phase: 'failed', outcome: 'failed' };
 }
 
@@ -756,6 +776,17 @@ function resultFor(
       code: 130,
       stdout: '',
       stderr: diagnostic('Import interrupted; durable state is retained for resume.', counts, run.skipped),
+      openHandles: 0,
+    };
+  if (run.status === 'observation-conflict')
+    return {
+      code: 6,
+      stdout: '',
+      stderr: diagnostic(
+        'Source observation requires explicit operator resolution. Use rezics-import observations to inspect and resolve.',
+        counts,
+        run.skipped,
+      ),
       openHandles: 0,
     };
   if (httpStatus === 401 || httpStatus === 403)

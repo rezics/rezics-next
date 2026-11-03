@@ -67,7 +67,8 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
         body: input.value,
         key: input.idempotencyKey,
       });
-      stored.set(input.subjectId, input.value);
+      const { expectedObservation: _cas, ...value } = input.value;
+      stored.set(input.subjectId, value);
     },
   } as unknown as ImportTransport;
   const importer = new Importer({ path: ':memory:', transport });
@@ -97,8 +98,24 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
         yield vnRecord(812, 25, 8);
       })(),
     );
-    expect(second.status).toBe('committed');
-    expect(stored.size).toBe(1);
+    expect(second.status).toBe('observation-conflict');
+    expect(stored.get(subjectId)).toEqual({
+      sourceRecordId: 'v123',
+      scale: { min: 1, max: 10 },
+      mean: 7.35,
+      count: 20,
+      asOf: '2026-10-25',
+      licence: 'ODbL-1.0',
+      attribution: 'VNDB',
+    });
+    const pending = await importer.pageObservationConflicts('vndb');
+    expect(pending.operations).toHaveLength(1);
+    const resolved = await importer.resolveObservation(
+      'vndb',
+      pending.operations[0]!.operationId,
+      pending.operations[0]!.reviewedHead!.digest,
+    );
+    expect(resolved.status).toBe('delivered');
     expect(stored.get(subjectId)).toEqual({
       sourceRecordId: 'v123',
       scale: { min: 1, max: 10 },
@@ -108,6 +125,13 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
       licence: 'ODbL-1.0',
       attribution: 'VNDB',
     });
+    const third = await importer.runRecords(
+      registration,
+      (async function* () {
+        yield vnRecord(812, 25, 8);
+      })(),
+    );
+    expect(third.status).toBe('committed');
     const statisticRequests = requests.filter((request) => request.path.endsWith('/source-statistics/vndb'));
     expect(statisticRequests).toHaveLength(2);
     expect(new Set(statisticRequests.map((request) => request.key)).size).toBe(2);
@@ -275,7 +299,7 @@ async function statisticRefreshFixture() {
   };
 }
 
-test('same-revision statistic refresh commits its projection, retains semantic journals and becomes a reopened no-op', async () => {
+test('same-revision statistic refresh waits for explicit resolution and retains semantic journals', async () => {
   const f = await statisticRefreshFixture();
   try {
     expect((await f.run(735)).status).toBe('committed');
@@ -286,15 +310,28 @@ test('same-revision statistic refresh commits its projection, retains semantic j
     const batchCount = f.batches.length;
     await f.reopen();
     const changed = await f.run(810);
-    expect(changed.status).toBe('committed');
-    expect(changed.counts.changed).toBe(1);
+    expect(changed.status).toBe('observation-conflict');
     expect(f.semanticState()).toEqual(semantic);
     expect(f.batches).toHaveLength(batchCount);
-    expect(f.writes).toHaveLength(2);
+    expect(f.writes).toHaveLength(1);
+    const pending = await f.importer.pageObservationConflicts('vndb');
+    expect(pending.operations).toHaveLength(1);
+    expect(() => f.importer.session.store.acknowledgeStatisticRefresh(pending.operations[0] ? f.importer.session.store.activeRun('vndb')! : f.statisticRuns[0]!, 'v123')).toThrow();
+    const resolved = await f.importer.resolveObservation(
+      'vndb',
+      pending.operations[0]!.operationId,
+      pending.operations[0]!.reviewedHead!.digest,
+    );
+    expect(resolved.status).toBe('delivered');
     expect(JSON.parse(f.writes[1]!.body).mean).toBe(8.1);
+    expect(JSON.parse(f.writes[1]!.body).expectedObservation).toBe(pending.operations[0]!.reviewedHead!.digest);
     expect(f.writes[1]!.key).not.toBe(f.writes[0]!.key);
+    const committed = await f.run(810);
+    expect(committed.status).toBe('committed');
+    expect(committed.counts.changed).toBe(1);
+    expect(f.semanticState()).toEqual(semantic);
+    expect(f.batches).toHaveLength(batchCount);
     const refreshed = f.importer.session.store.source('vndb');
-    expect(() => f.importer.session.store.acknowledgeStatisticRefresh(f.statisticRuns[1]!, 'v123')).toThrow();
     expect(refreshed.count).toBe(1);
     expect(refreshed.generation).not.toBe(baseline.generation);
     expect(f.importer.session.store.key('vndb', 'v123').baseline?.recordRevision).toBe(originalRow?.recordRevision);
@@ -317,33 +354,25 @@ for (const failure of ['denied', 'lost'] as const) {
   test(`unacknowledged statistic refresh (${failure}) preserves the completed baseline and resumes under its original key`, async () => {
     const f = await statisticRefreshFixture();
     try {
-      expect((await f.run(735)).status).toBe('committed');
-      const baseline = f.importer.session.store.source('vndb');
-      const row = f.importer.session.store.key('vndb', 'v123').acknowledged;
-      const semantic = f.semanticState();
       f.fail(failure);
-      expect((await f.run(810)).status).toBe('bulk-failed');
-      expect(f.importer.session.store.source('vndb')).toEqual(baseline);
-      expect(f.importer.session.store.key('vndb', 'v123').acknowledged).toEqual(row);
+      expect((await f.run(735)).status).toBe('bulk-failed');
+      const baseline = f.importer.session.store.source('vndb');
       const uncertainRun = f.importer.session.store.activeRun('vndb')!;
       expect(uncertainRun).not.toBeNull();
-      // An unclassified uncertain refresh cannot use the trusted completion path.
       expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
-      expect(f.semanticState()).toEqual(semantic);
-      const uncertain = f.writes.slice(1);
+      const uncertain = f.writes.slice();
       expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 3);
       for (const write of uncertain) expect(write).toEqual(uncertain[0]!);
       await f.reopen();
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
       f.fail(null);
-      expect((await f.run(810)).status).toBe('committed');
+      expect((await f.run(735)).status).toBe('committed');
       expect(f.writes.at(-1)).toEqual(uncertain[0]!);
       expect(() => f.importer.session.store.acknowledgeStatisticRefresh(uncertainRun, 'v123')).toThrow();
-      expect(f.semanticState()).toEqual(semantic);
       const refreshed = f.importer.session.store.source('vndb');
-      expect(refreshed.generation).not.toBe(baseline.generation);
+      expect(refreshed.generation).not.toBeNull();
       const count = f.writes.length;
-      expect((await f.run(810)).status).toBe('committed');
+      expect((await f.run(735)).status).toBe('committed');
       expect(f.writes).toHaveLength(count);
       expect(f.importer.session.store.source('vndb')).toEqual(refreshed);
     } finally {

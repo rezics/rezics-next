@@ -9,7 +9,8 @@ export type ImportProgressOutcome =
   | 'busy'
   | 'interrupted'
   | 'denied'
-  | 'failed';
+  | 'failed'
+  | 'observation-conflict';
 
 export type ImportProgressCounts = Readonly<{
   inputBytes: number;
