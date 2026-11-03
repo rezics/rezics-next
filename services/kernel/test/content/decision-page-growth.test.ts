@@ -78,23 +78,39 @@ function assertExactSourcePlans(captures: readonly Capture[]): void {
   expect(plans.length, 'the native source query has physical plan evidence').toBeGreaterThan(0);
 
   for (const { sql, nodes } of plans) {
-    expect(sql).toMatch(/LEFT JOIN\s+content\.moderation_appeal\s+a\s+ON\s+a\.route\s*=\s*d\.route\s+AND\s+a\.decision_id\s*=\s*d\.decision_id/i);
-    expect(sql).toMatch(/LEFT JOIN\s+content\.board\s+b\s+ON\s+d\.target_kind\s*=\s*'board'\s+AND\s+b\.route\s*=\s*d\.route\s+AND\s+b\.board_id\s*=\s*d\.target_id/i);
-    expect(sql).toMatch(/LEFT JOIN\s+content\.thread\s+t\s+ON\s+d\.target_kind\s*=\s*'thread'\s+AND\s+t\.route\s*=\s*d\.route\s+AND\s+t\.thread_id\s*=\s*d\.target_id/i);
-    expect(sql).toMatch(/LEFT JOIN\s+content\.post\s+p\s+ON\s+d\.target_kind\s*=\s*'post'\s+AND\s+p\.route\s*=\s*d\.route\s+AND\s+p\.post_id\s*=\s*d\.target_id/i);
-    expect(sql).toMatch(/LEFT JOIN\s+content\.thread\s+parent\s+ON\s+d\.target_kind\s*=\s*'post'\s+AND\s+parent\.route\s*=\s*p\.route\s+AND\s+parent\.thread_id\s*=\s*p\.thread_id/i);
+    expect(sql).toMatch(
+      /LEFT JOIN\s+content\.moderation_appeal\s+a\s+ON\s+a\.route\s*=\s*d\.route\s+AND\s+a\.decision_id\s*=\s*d\.decision_id/i,
+    );
+    expect(sql).toMatch(
+      /LEFT JOIN\s+content\.board\s+b\s+ON\s+d\.target_kind\s*=\s*'board'\s+AND\s+b\.route\s*=\s*d\.route\s+AND\s+b\.board_id\s*=\s*d\.target_id/i,
+    );
+    expect(sql).toMatch(
+      /LEFT JOIN\s+content\.thread\s+t\s+ON\s+d\.target_kind\s*=\s*'thread'\s+AND\s+t\.route\s*=\s*d\.route\s+AND\s+t\.thread_id\s*=\s*d\.target_id/i,
+    );
+    expect(sql).toMatch(
+      /LEFT JOIN\s+content\.post\s+p\s+ON\s+d\.target_kind\s*=\s*'post'\s+AND\s+p\.route\s*=\s*d\.route\s+AND\s+p\.post_id\s*=\s*d\.target_id/i,
+    );
+    expect(sql).toMatch(
+      /LEFT JOIN\s+content\.thread\s+parent\s+ON\s+d\.target_kind\s*=\s*'post'\s+AND\s+parent\.route\s*=\s*p\.route\s+AND\s+parent\.thread_id\s*=\s*p\.thread_id/i,
+    );
 
     const indexed = (relation: string, key: string) =>
       nodes.some((node) => {
         const label = [node['Relation Name'], node['Alias'], node['Index Name']].join(' ');
         const condition = String(node['Index Cond'] ?? '');
-        return /Index/.test(String(node['Node Type'])) &&
+        return (
+          /Index/.test(String(node['Node Type'])) &&
           label.includes(relation) &&
           /route/i.test(condition) &&
-          new RegExp(key, 'i').test(condition);
+          new RegExp(key, 'i').test(condition)
+        );
       });
-    expect(indexed('moderation_decision', 'decision_id'), 'decision lookup uses the full home and selected key').toBe(true);
-    expect(indexed('moderation_appeal', 'decision_id'), 'appeal residual uses the full home and decision key').toBe(true);
+    expect(indexed('moderation_decision', 'decision_id'), 'decision lookup uses the full home and selected key').toBe(
+      true,
+    );
+    expect(indexed('moderation_appeal', 'decision_id'), 'appeal residual uses the full home and decision key').toBe(
+      true,
+    );
     expect(indexed('board', 'board_id'), 'board residual uses the full home and board key').toBe(true);
     expect(indexed('thread', 'thread_id'), 'thread residual uses the full home and thread key').toBe(true);
     expect(indexed('post', 'post_id'), 'post residual uses the full home and post key').toBe(true);
