@@ -30,6 +30,10 @@ published native aggregate counts including zero, excludes suppressed counts and
 absent when the native page omits them. Native order and raw cursors survive sparse pages and selected promotion;
 duplicate keys, mismatched association operands and oversized pages are rejected rather than repaired.
 
+Decision: a browser-safe validator mirrors the closed native source union and rejects the whole page on unknown
+fields or malformed context before presentation; successful validation preserves the supplied row identities and
+does not grant account or command admission. Aggregate observations must retain the original association key.
+
 Decision: disclosed Subject/Concept links use the existing localized Subject helper with a neutral slug so private
 labels never enter browser URLs. Only native disclosed identities supply those links; native API hrefs are ignored.
 
@@ -62,8 +66,10 @@ also retire inspection controls and delayed focus. Choosing a disclosed row carr
   per-row reads, accumulation, sorting, searching or refill.
 - **Bound:** native raw page 20 plus at most one selected promotion, cursor 4096 characters, at most one selected
   editor/intent and no retained page history. Native identity/type/property bounds are 256 characters, label 2000,
-  release 128, href 128 and digests 64. The producer caps serialized response bytes at 1,048,576. The installed generated
-  binding must validate the closed native union and enforce the response byte limit before browser admission.
+  release 128, href 128 and digests 64. The producer and source presentation cap serialized UTF-8 response bytes at
+  1,048,576; the presentation validates the closed native union, including absent, suppressed and published aggregates.
+  Revision and generation strings remain native positive decimals within that total byte cap. The installed generated
+  binding must apply this validation before browser admission and bind the current account and observation separately.
 - **Growth check:** vary 1/10/20 raw rows, optional selected row 21, and bounded labels; the authored regression
   preserves exact order and original keys. Indexing and presentation are O(N), and selection uses one exact-pair
   lookup. One HTTP request is not constant native work. Native physical rows, authorization, nested Semantic

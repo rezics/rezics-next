@@ -77,3 +77,81 @@ test('current summary destinations preserve original association keys and the se
   row.subject.label = '界'.repeat(350_000);
   expect(() => indexOwnClassifications(page, frontier)).toThrow('Invalid classification frontier');
 });
+
+test('the closed native union rejects unknown and malformed private context before rendering any row', () => {
+  const invalid: unknown[] = [null, [], { ...classificationsPage(), history: [] }];
+  for (const [field, changes] of [
+    ['viewer', { extra: 'concealed' }],
+    ['inventory', { complete: true }],
+    ['own', { pending: 'complete' }],
+    ['subject', { label: 'x'.repeat(2001) }],
+    ['target', { id: 'not-an-id' }],
+    ['association', { qualifiersDigest: 'reconstruct-me' }],
+    ['actions', { state: 'allowed' }],
+    ['aggregate', { supportCount: 0 }],
+  ] as const) {
+    const page = classificationsPage();
+    const row = page.items[0]!;
+    const holder = field === 'viewer' || field === 'inventory' ? page : row;
+    const record = holder as unknown as Record<string, object>;
+    record[field] = { ...record[field], ...changes };
+    invalid.push(page);
+  }
+  invalid.push(classificationsPage([{ ...classificationRow(), state: 'future' } as never]));
+  for (const page of invalid) {
+    expect(() => indexOwnClassifications(page, frontier)).toThrow();
+    const html = renderToStaticMarkup(
+      <OwnClassificationsWorkspace
+        state="ready"
+        page={page as never}
+        frontier={frontier}
+        locale="en"
+        isCurrent={() => true}
+        onRetry={async () => {}}
+        onNext={() => {}}
+      />,
+    );
+    expect(html).not.toContain('Own-page subject');
+    expect(html).not.toContain('href=');
+  }
+});
+
+test('native aggregate absence, suppression and published zero remain distinct and keep the original row', () => {
+  const row = classificationRow();
+  const zero = {
+    associationId: row.associationId,
+    state: 'published' as const,
+    pending: 'unknown' as const,
+    supportCount: 0,
+    opposeCount: 0,
+    falsePositiveCount: 0,
+    supportFraction: null,
+    asOf: '2026-11-04T00:00:00Z',
+    generation: '1',
+  };
+  for (const aggregate of [null, row.aggregate, zero]) {
+    const page = classificationsPage([{ ...row, aggregate }]);
+    expect([...indexOwnClassifications(page, frontier).values()][0]).toBe(page.items[0]);
+  }
+  expect(() =>
+    indexOwnClassifications(classificationsPage([{ ...row, aggregate: { ...zero, supportCount: -1 } }]), frontier),
+  ).toThrow();
+  expect(() =>
+    indexOwnClassifications(
+      classificationsPage([{ ...row, aggregate: { ...zero, associationId: subjectId } }]),
+      frontier,
+    ),
+  ).toThrow();
+});
+
+test('the response cap counts UTF-8 bytes and admits the exact boundary', () => {
+  const page = classificationsPage();
+  const row = page.items[0]!;
+  if (row.state !== 'available') throw new Error('Expected disclosed fixture');
+  row.subject.label = '界';
+  const bytes = new TextEncoder().encode(JSON.stringify(page)).length;
+  page.inventory.generation = '1'.repeat(1_048_576 - bytes + 1);
+  expect(indexOwnClassifications(page, frontier).size).toBe(1);
+  page.inventory.generation += '1';
+  expect(() => indexOwnClassifications(page, frontier)).toThrow('Invalid classification frontier');
+});

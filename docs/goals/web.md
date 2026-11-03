@@ -580,6 +580,8 @@ remain required before this journey is complete; source, generated delivery and 
 separate facts.
 Decision: mounted classification admission prepares the exact paired frontier afresh and retires late results on
 credential/exposure episodes; the unpublished Client seam still returns no rows or command authority.
+Decision: source presentation rejects the whole page unless its closed native union and UTF-8 byte cap validate;
+validation preserves original row identities and supplies no account or command admission.
 
 ### Shared navigation and subject purchase entry
 

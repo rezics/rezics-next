@@ -1,4 +1,5 @@
 import type { ClassificationFrontier, ClassificationKey, OwnClassificationsPage } from './types';
+import { nativeClassificationsPage } from './native-page';
 
 export const OWN_CLASSIFICATIONS_OPERATION = 'classification_ballot.own_page';
 export const OWN_CLASSIFICATIONS_SOURCE = 'content.classification-ballot-own-page.v1';
@@ -48,9 +49,9 @@ export function classificationAddressKey(frontier: ClassificationFrontier | null
 }
 
 /** Page replacement only. Selected promotion and omission belong to Content; never refill or deduplicate. */
-export function indexOwnClassifications(page: OwnClassificationsPage, frontier: ClassificationFrontier) {
+export function indexOwnClassifications(value: unknown, frontier: ClassificationFrontier) {
+  const page = nativeClassificationsPage(value);
   if (
-    new TextEncoder().encode(JSON.stringify(page)).length > 1_048_576 ||
     page.items.length > (frontier.selected ? 21 : 20) ||
     (page.next !== null && (page.next.length === 0 || page.next.length > 4096)) ||
     (page.traversal === 'more') !== (page.next !== null)
@@ -58,16 +59,13 @@ export function indexOwnClassifications(page: OwnClassificationsPage, frontier: 
     throw new Error('Invalid classification frontier');
   const result = new Map<string, OwnClassificationsPage['items'][number]>();
   for (const row of page.items) {
-    if (
-      row.state === 'withheld' &&
-      (row.subject !== null || row.target !== null || row.association !== null || row.aggregate !== null)
-    )
-      throw new Error('Disclosed context on a withheld classification');
     const key = classificationPair(row);
     if (result.has(key)) throw new Error('Duplicate original classification key');
     if (
       row.state === 'available' &&
-      (row.association.subjectId !== row.subjectId || row.association.associationId !== row.associationId)
+      (row.association.subjectId !== row.subjectId ||
+        row.association.associationId !== row.associationId ||
+        (row.aggregate !== null && row.aggregate.associationId !== row.associationId))
     )
       throw new Error('Mismatched original classification key');
     result.set(key, row);
