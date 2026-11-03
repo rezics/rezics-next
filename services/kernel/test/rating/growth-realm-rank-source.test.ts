@@ -53,7 +53,7 @@ test('Derived native protected Realm rank page cost at 256/1024/4096 rows, inclu
           expect(withheld.candidates).toEqual([]);
           expect(withheld.next).toBeString(); // No refill; a consumed full batch retains a legitimate cursor.
           expect(await fixture.page({ ...fixture.request, cursor: withheld.next! })).toEqual(terminal);
-          expect(terminal).toEqual({ candidates: [], next: null });
+          expect(terminal).toEqual({ question: first.question, candidates: [], next: null });
           expect(vacant).toEqual(terminal);
         },
       });
