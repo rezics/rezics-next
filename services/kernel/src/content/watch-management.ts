@@ -1,5 +1,5 @@
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { principalCommandIdentity, runCommand } from '../command/command.ts';
+import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -187,6 +187,7 @@ export async function removeWatch(
       const current = result.rows[0];
       if (current && current.revision !== input.expectedRevision) throw new ProblemError('conflict');
       await declareWatchHistory(tx, 'content.watch.remove', owner, !!current);
+      if (!current) return noEffect({ removed: true });
       if (current) {
         await tx.query(
           input.kind === 'thread'

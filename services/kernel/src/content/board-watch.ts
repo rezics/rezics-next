@@ -1,4 +1,4 @@
-import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -86,7 +86,7 @@ export async function setBoardWatch(
       const current = result.rows[0] ?? { watching: false, revision: 0 };
       if (current.revision !== input.expectedRevision) throw new ProblemError('conflict');
       await declareWatchHistory(tx, 'content.board.watch', owner, current.watching !== input.watching);
-      if (current.watching === input.watching) return { value: current, events: [] };
+      if (current.watching === input.watching) return noEffect(current);
       const revision = current.revision + 1;
       await tx.query(
         `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
