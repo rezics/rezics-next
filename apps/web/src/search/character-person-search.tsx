@@ -14,7 +14,6 @@ import {
   characterPersonHref,
   characterPersonRequest,
   type CharacterPersonForm as CharacterPersonFormState,
-  type CharacterPersonSearch,
   type ParsedCharacterPersonSearch,
 } from './character-person';
 
