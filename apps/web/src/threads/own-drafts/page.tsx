@@ -231,18 +231,24 @@ export function OwnDraftsPage({
           </a>
         </p>
         <p className="text-sm text-muted-foreground">
-          {m.own_drafts_language({}, { locale })}: {selection.entry.language ?? m.own_drafts_language_unknown({}, { locale })}
-          {' · '}{m.own_drafts_licence({}, { locale })}: {selection.entry.licence}
+          {m.own_drafts_language({}, { locale })}:{' '}
+          {selection.entry.language ?? m.own_drafts_language_unknown({}, { locale })}
+          {' · '}
+          {m.own_drafts_licence({}, { locale })}: {selection.entry.licence}
         </p>
         <p className="text-sm text-muted-foreground">
           {m.own_drafts_revision({}, { locale })}: {selection.entry.revisionId}
         </p>
         {selection.state === 'loading' ? <p role="status">{m.own_drafts_opening_selection({}, { locale })}</p> : null}
-        {selection.state === 'concealed' ? <p role="status">{m.own_drafts_selection_unavailable({}, { locale })}</p> : null}
+        {selection.state === 'concealed' ? (
+          <p role="status">{m.own_drafts_selection_unavailable({}, { locale })}</p>
+        ) : null}
         {selection.state === 'stale' ? (
           <div className="space-y-2" role="status">
             <p>{m.own_drafts_stale_selection({}, { locale })}</p>
-            <Button type="button" className={control} onClick={restart}>{m.own_drafts_restart({}, { locale })}</Button>
+            <Button type="button" className={control} onClick={restart}>
+              {m.own_drafts_restart({}, { locale })}
+            </Button>
           </div>
         ) : null}
         {selection.state === 'unavailable' ? (
@@ -256,24 +262,36 @@ export function OwnDraftsPage({
         {selection.state === 'ready' ? (
           <article className="min-w-0 rounded-lg border border-border p-4 [overflow-wrap:anywhere]">
             <h2 className="sr-only">{m.own_drafts_body_heading({}, { locale })}</h2>
-            <pre className="whitespace-pre-wrap font-sans">{documentText(documentForInspection(selection.selection))}</pre>
+            <pre className="whitespace-pre-wrap font-sans">
+              {documentText(documentForInspection(selection.selection))}
+            </pre>
             <section className="mt-5 space-y-2" aria-label={m.own_drafts_subjects({}, { locale })}>
               <h3 className="font-medium">{m.own_drafts_subjects({}, { locale })}</h3>
               {selection.entry.subjectIds.length ? (
                 <ul className="flex flex-wrap gap-2">
                   {selection.entry.subjectIds.map((id) => (
-                    <li key={id}><a className="underline" href={`/subjects/${id}`}>{id}</a></li>
+                    <li key={id}>
+                      <a className="underline" href={`/subjects/${id}`}>
+                        {id}
+                      </a>
+                    </li>
                   ))}
                 </ul>
-              ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+              ) : (
+                <p>{m.own_drafts_no_references({}, { locale })}</p>
+              )}
             </section>
             <section className="mt-4 space-y-2" aria-label={m.own_drafts_media({}, { locale })}>
               <h3 className="font-medium">{m.own_drafts_media({}, { locale })}</h3>
               {selection.entry.mediaIds.length ? (
                 <ul className="flex flex-wrap gap-2">
-                  {selection.entry.mediaIds.map((id) => <li key={id}>{id}</li>)}
+                  {selection.entry.mediaIds.map((id) => (
+                    <li key={id}>{id}</li>
+                  ))}
                 </ul>
-              ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+              ) : (
+                <p>{m.own_drafts_no_references({}, { locale })}</p>
+              )}
             </section>
           </article>
         ) : null}
@@ -290,8 +308,12 @@ export function OwnDraftsPage({
         <div className="space-y-2" role="alert">
           <p>{m.own_drafts_unavailable({}, { locale })}</p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className={control} onClick={retryPage}>{m.own_drafts_retry({}, { locale })}</Button>
-            <Button type="button" variant="outline" className={control} onClick={restart}>{m.own_drafts_restart({}, { locale })}</Button>
+            <Button type="button" className={control} onClick={retryPage}>
+              {m.own_drafts_retry({}, { locale })}
+            </Button>
+            <Button type="button" variant="outline" className={control} onClick={restart}>
+              {m.own_drafts_restart({}, { locale })}
+            </Button>
           </div>
         </div>
       ) : null}
@@ -317,8 +339,10 @@ export function OwnDraftsPage({
                     </a>
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {m.own_drafts_language({}, { locale })}: {entry.language ?? m.own_drafts_language_unknown({}, { locale })}
-                    {' · '}{m.own_drafts_licence({}, { locale })}: {entry.licence}
+                    {m.own_drafts_language({}, { locale })}:{' '}
+                    {entry.language ?? m.own_drafts_language_unknown({}, { locale })}
+                    {' · '}
+                    {m.own_drafts_licence({}, { locale })}: {entry.licence}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {m.own_drafts_saved_at({}, { locale })}{' '}

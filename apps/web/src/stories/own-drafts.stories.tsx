@@ -2,7 +2,13 @@ import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
-import type { OwnDraftEntry, OwnDraftIdentity, OwnDraftLocale, OwnDraftPageData, OwnDraftReader } from '../threads/own-drafts/model';
+import type {
+  OwnDraftEntry,
+  OwnDraftIdentity,
+  OwnDraftLocale,
+  OwnDraftPageData,
+  OwnDraftReader,
+} from '../threads/own-drafts/model';
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const threadId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
@@ -37,11 +43,18 @@ function entry(overrides: Partial<OwnDraftEntry> = {}): OwnDraftEntry {
   };
 }
 
-function nativePage(drafts: readonly OwnDraftEntry[], state: OwnDraftPageData['state'] = 'ready', next: string | null = null): OwnDraftPageData {
+function nativePage(
+  drafts: readonly OwnDraftEntry[],
+  state: OwnDraftPageData['state'] = 'ready',
+  next: string | null = null,
+): OwnDraftPageData {
   return { state, viewer: { accountId, authnEpoch: 7 }, drafts, next };
 }
 
-type StoryArgs = { locale: OwnDraftLocale; scenario: 'ready' | 'empty' | 'preparing' | 'sparse' | 'concealed' | 'denied' };
+type StoryArgs = {
+  locale: OwnDraftLocale;
+  scenario: 'ready' | 'empty' | 'preparing' | 'sparse' | 'concealed' | 'denied';
+};
 
 function readerFor(scenario: StoryArgs['scenario']): OwnDraftReader {
   return {
@@ -51,17 +64,20 @@ function readerFor(scenario: StoryArgs['scenario']): OwnDraftReader {
       if (scenario === 'preparing') return nativePage([entry()], 'preparing');
       if (scenario === 'sparse' && request.cursor) return nativePage([entry({ documentKind: 'reply', title: null })]);
       if (scenario === 'sparse') return nativePage([], 'ready', 'opaque-native-cursor');
-      return nativePage([entry(), entry({
-        id: '0192f3a0-6c1e-7b2a-9d4e-000000000007',
-        documentKind: 'reply',
-        title: null,
-        actions: {
-          resume: `/v1/accounts/${accountId}/drafts/0192f3a0-6c1e-7b2a-9d4e-000000000007?threadId=${threadId}`,
-          edit: null,
-          publish: null,
-          erase: null,
-        },
-      })]);
+      return nativePage([
+        entry(),
+        entry({
+          id: '0192f3a0-6c1e-7b2a-9d4e-000000000007',
+          documentKind: 'reply',
+          title: null,
+          actions: {
+            resume: `/v1/accounts/${accountId}/drafts/0192f3a0-6c1e-7b2a-9d4e-000000000007?threadId=${threadId}`,
+            edit: null,
+            publish: null,
+            erase: null,
+          },
+        }),
+      ]);
     },
     async resume(request) {
       if (scenario === 'concealed') return 'concealed';

@@ -71,10 +71,7 @@ export type OwnDraftReadFailure = 'unavailable' | 'denied' | 'concealed' | 'stal
  */
 export type OwnDraftReader = Readonly<{
   list: (request: OwnDraftPageRequest, signal: AbortSignal) => Promise<OwnDraftPageData | OwnDraftReadFailure>;
-  resume: (
-    request: OwnDraftSelectionRequest,
-    signal: AbortSignal,
-  ) => Promise<OwnDraftSelection | OwnDraftReadFailure>;
+  resume: (request: OwnDraftSelectionRequest, signal: AbortSignal) => Promise<OwnDraftSelection | OwnDraftReadFailure>;
 }>;
 
 export type OwnDraftIndex = Readonly<{
