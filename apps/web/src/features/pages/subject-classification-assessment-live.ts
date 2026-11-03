@@ -46,7 +46,7 @@ export function useClassificationAssessmentVisit(input: {
     if (next !== snapshot) setSnapshot(next);
     incarnation.current += 1;
     const visit = incarnation.current;
-    if (!selected || input.session !== 'signed-in' && input.session !== 'signed-out') return;
+    if (!selected || (input.session !== 'signed-in' && input.session !== 'signed-out')) return;
     if (input.session === 'signed-out') return;
     const transport = input.transport;
     const identity = selected;

@@ -627,5 +627,6 @@ export function admitSourceObservationDate(value: unknown): value is string {
 }
 
 export function sessionActor(request: Request): { reader: string | null; subject: string | null } {
-  return { reader: sessionSubject(request), subject: sessionSubject(request) };
+  const actor = sessionSubject(request) ?? null;
+  return { reader: actor, subject: actor };
 }

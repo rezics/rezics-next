@@ -169,7 +169,7 @@ function pendingOwn(command: ClassificationCommand, revision: string | null = nu
     return {
       associationId: command.identity.associationId,
       hasBallot: false,
-      assessment: null as const,
+      assessment: null,
       falsePositive: false,
       revision,
       pending: true,

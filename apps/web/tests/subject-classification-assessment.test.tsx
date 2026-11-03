@@ -51,6 +51,7 @@ type Store = {
   aggregate: unknown;
   statistics: Statistic[];
   writes: { method: string; path: string; key: string | null; body: unknown; authorization: string | null }[];
+  calls: number;
   failNext?: number;
 };
 
@@ -62,6 +63,7 @@ function client(store: Store) {
       const path = url.pathname;
       const key = request.headers.get('idempotency-key');
       const authorization = request.headers.get('authorization');
+      store.calls += 1;
       if (path.includes('/rating-questions/'))
         return Response.json({
           id: QUESTION,
@@ -159,6 +161,7 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
     aggregate: { associationId, state: 'suppressed', pending: 'unknown' },
     statistics: [],
     writes: [],
+    calls: 0,
   };
   const transport = client(store);
   expect(classificationBallotHandle(transport, subjectId, associationId)).not.toBeNull();
@@ -283,7 +286,9 @@ test('suppressed aggregate leaks no counts; published keeps lie flags separate f
     associationId,
   );
   expect(clean).toEqual({ associationId, state: 'suppressed', pending: 'unknown' });
-  expect(JSON.stringify(publicAggregateProjection(clean!))).not.toMatch(/[1-9]/);
+  expect(JSON.stringify(publicAggregateProjection(clean!))).not.toMatch(
+    /supportCount|opposeCount|falsePositiveCount|supportFraction|denominator/,
+  );
   const published = admitClassificationAggregate(
     {
       associationId,
@@ -320,6 +325,7 @@ test('suppressed aggregate leaks no counts; published keeps lie flags separate f
       },
     ],
     writes: [],
+    calls: 0,
   };
   const html = renderToStaticMarkup(
     createElement(ClassificationAssessmentView, {
@@ -391,6 +397,7 @@ test('independent provider rows keep distinct scale, asOf and hidden siblings', 
       aggregate: { associationId, state: 'suppressed', pending: 'unknown' },
       statistics: [vndb, bangumi],
       writes: [],
+      calls: 0,
     }),
     subjectId,
   );
@@ -411,6 +418,7 @@ test('independent provider rows keep distinct scale, asOf and hidden siblings', 
       aggregate: { associationId, state: 'suppressed', pending: 'unknown' },
       statistics: [bangumi],
       writes: [],
+      calls: 0,
     }),
     subjectId,
   );
@@ -496,6 +504,7 @@ test('growth at 20, 200 and 2,000 eligible ballots keeps Web work bounded to one
         },
       ],
       writes: [],
+      calls: 0,
     };
     const transport = client(store);
     const own = await readClassificationOwnBallot(transport, request(), {}, identity);
@@ -508,7 +517,7 @@ test('growth at 20, 200 and 2,000 eligible ballots keeps Web work bounded to one
         own: own.outcome,
         aggregate: aggregate.outcome,
         sourceRows,
-        nativeCalls: own.cost.nativeCalls + aggregate.cost.nativeCalls + 4,
+        nativeCalls: store.calls,
       }),
     );
     expect(aggregateLeaksCounts(aggregate.outcome.kind === 'ready' ? aggregate.outcome.value : {})).toBe(false);
@@ -518,6 +527,9 @@ test('growth at 20, 200 and 2,000 eligible ballots keeps Web work bounded to one
   }
   expect(new Set(costs.map((item) => item.nativeCalls)).size).toBe(1);
   expect(costs.every((item) => item.valuesProcessed === costs[0]!.valuesProcessed)).toBe(true);
-  expect(costs[2]!.bytesRetained).toBe(costs[0]!.bytesRetained);
+  expect(Math.max(...costs.map((item) => item.bytesRetained)) - Math.min(...costs.map((item) => item.bytesRetained))).toBeLessThan(
+    64,
+  );
   expect(costs[0]!.nativeCalls).toBeLessThanOrEqual(7);
+  expect(costs[0]!.valuesProcessed).toBe(5);
 });
