@@ -112,11 +112,15 @@ function dependenciesForDisclosure(dependencies: InboxDependencies) {
   };
 }
 
-function unreadSql(): string {
+function unacknowledgedSql(): string {
   return `NOT EXISTS (
            SELECT 1 FROM content.notice_ack AS ack
            WHERE ack.route=n.route AND ack.account_id=n.recipient_id AND ack.notice_id=n.notice_id
-         ) AND (s.seen_notice_id IS NULL OR
+         )`;
+}
+
+function unreadSql(): string {
+  return `${unacknowledgedSql()} AND (s.seen_notice_id IS NULL OR
            (n.created_at,n.notice_id) > (s.seen_created_at,s.seen_notice_id))`;
 }
 
@@ -154,23 +158,22 @@ export async function listNoticeInbox(
   }
   const candidateLimit = Math.min(input.limit * CANDIDATE_FACTOR, 200);
   const rows = await withConnection(dependencies.pool, async (client) => {
+    const values: unknown[] = [accountRoute, accountId];
+    let seek = '';
+    if (after !== null) {
+      values.push(after[0], after[1]);
+      seek = 'AND (n.created_at,n.notice_id) < ($3::timestamptz,$4::uuid)';
+    }
+    values.push(candidateLimit);
     const result = await client.query(
       `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
               n.source_id, n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
               ${unreadSql()} AS unread
        FROM content.notice AS n
        LEFT JOIN content.notice_seen AS s ON s.route=n.route AND s.account_id=n.recipient_id
-       WHERE n.route=$1 AND n.recipient_id=$2 AND
-         (NOT $3::boolean OR (n.created_at,n.notice_id) < ($4::timestamptz,$5::uuid))
-       ORDER BY n.created_at DESC,n.notice_id DESC LIMIT $6`,
-      [
-        accountRoute,
-        accountId,
-        after !== null,
-        after?.[0] ?? 'infinity',
-        after?.[1] ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-        candidateLimit,
-      ],
+       WHERE n.route=$1 AND n.recipient_id=$2 ${seek}
+       ORDER BY n.created_at DESC,n.notice_id DESC LIMIT $${values.length}`,
+      values,
     );
     return result.rows as NoticeCandidate[];
   });
@@ -230,20 +233,49 @@ export async function countUnreadNotices(
   const accountRoute = route(accountId);
   await assertCurrentInboxViewer(dependencies, accountId);
   const rows = await withConnection(dependencies.pool, async (client) => {
-    const result = await client.query(
-      `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
-              n.source_id, n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
-              true AS unread
-       FROM content.notice AS n
-       LEFT JOIN content.notice_seen AS s ON s.route=n.route AND s.account_id=n.recipient_id
-       WHERE n.route=$1 AND n.recipient_id=$2 AND ${unreadSql()}
-      ORDER BY n.created_at,n.notice_id LIMIT $3`,
-      [accountRoute, accountId, SUMMARY_CANDIDATE_LIMIT + 1],
-    );
-    return result.rows as NoticeCandidate[];
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const frontierResult = await client.query(
+        `SELECT seen_created_at, seen_notice_id
+         FROM content.notice_seen WHERE route=$1 AND account_id=$2`,
+        [accountRoute, accountId],
+      );
+      const frontier = frontierResult.rows[0] as
+        | { seen_created_at: Date; seen_notice_id: string }
+        | undefined;
+      const values: unknown[] = [accountRoute, accountId];
+      let seek = '';
+      if (frontier) {
+        values.push(frontier.seen_created_at, frontier.seen_notice_id);
+        seek = 'AND (n.created_at,n.notice_id) > ($3::timestamptz,$4::uuid)';
+      }
+      values.push(SUMMARY_CANDIDATE_LIMIT + 1);
+      const limit = `$${values.length}`;
+      const result = await client.query(
+        `WITH raw_candidates AS MATERIALIZED (
+           SELECT n.route,n.recipient_id,n.notice_id,n.kind,n.created_at,
+                  n.created_at::text AS created_at_key,
+                  n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id
+           FROM content.notice AS n
+           WHERE n.route=$1 AND n.recipient_id=$2 ${seek}
+           ORDER BY n.created_at,n.notice_id LIMIT ${limit}
+         )
+         SELECT n.notice_id,n.kind,n.created_at,n.created_at_key,
+                n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,
+                ${unacknowledgedSql()} AS unread
+         FROM raw_candidates AS n
+         ORDER BY n.created_at,n.notice_id`,
+        values,
+      );
+      await client.query('COMMIT');
+      return result.rows as NoticeCandidate[];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
   });
   const truncated = rows.length > SUMMARY_CANDIDATE_LIMIT;
-  const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT);
+  const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT).filter((row) => row.unread);
   const visible = await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, candidates, {
     includeActors: false,
   });

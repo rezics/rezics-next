@@ -20,7 +20,18 @@ test('unread summary keeps one visible result as acknowledged and seen prefixes 
     ).find((candidate) => candidate.name === 'content_reply_notice');
     expect(effect).toBeDefined();
     await effect!.run(envelope.events.find(Boolean)!);
+    const reply = await native.db.admin.query<{ notice_id: string }>(
+      `SELECT notice_id FROM content.notice
+       WHERE route=$1 AND recipient_id=$2 AND kind='reply' AND source_id=$3`,
+      [route, recipient, post.id],
+    );
+    expect(reply.rows).toHaveLength(1);
+    await native.db.admin.query(
+      'UPDATE content.notice SET created_at=$3 WHERE route=$1 AND notice_id=$2',
+      [route, reply.rows[0]!.notice_id, new Date('2026-10-01T00:10:00Z')],
+    );
 
+    const candidateStatements: string[] = [];
     for (const [size, previous] of [[256, 0], [4096, 256]] as const) {
       const addedPerKind = (size - previous) / 2;
       const seenIds = Array.from({ length: addedPerKind }, () => newId(route));
@@ -53,15 +64,40 @@ test('unread summary keeps one visible result as acknowledged and seen prefixes 
         expect(summary.status).toBe(200);
         expect(summary.value).toMatchObject({
           count: 1,
-          capped: true,
-          basis: 'current-visible-lower-bound',
+          capped: size === 4096,
+          basis: size === 4096 ? 'current-visible-lower-bound' : 'current-visible-unread',
         });
-        expect(trace.records.some((record) => record.statement.includes('WITH raw_candidates AS MATERIALIZED'))).toBe(
-          true,
+        candidateStatements.push(
+          trace.records.find((record) => record.statement.includes('FROM content.notice AS n'))?.statement ?? '',
         );
       } finally {
         await trace.close();
       }
+    }
+    expect(candidateStatements.every((statement) => statement.includes('WITH raw_candidates AS MATERIALIZED'))).toBe(
+      true,
+    );
+
+    const trace = observeSql(native.db.pool);
+    try {
+      const path = `/v1/accounts/${recipient}/notifications?limit=1`;
+      const first = await native.call(recipient, 'GET', path);
+      expect(first.status).toBe(200);
+      expect(first.value.next).toEqual(expect.any(String));
+      const resumed = await native.call(
+        recipient,
+        'GET',
+        `${path}&cursor=${encodeURIComponent(first.value.next)}`,
+      );
+      expect(resumed.status).toBe(200);
+      const pages = trace.records.filter(
+        (record) => record.statement.includes('FROM content.notice AS n') && record.statement.includes('DESC LIMIT'),
+      );
+      expect(pages).toHaveLength(2);
+      expect(pages[0]!.statement).not.toContain('NOT $3::boolean');
+      expect(pages[1]!.statement).toContain('(n.created_at,n.notice_id) < ($3::timestamptz,$4::uuid)');
+    } finally {
+      await trace.close();
     }
   } finally {
     await native.close();
