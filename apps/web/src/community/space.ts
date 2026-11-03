@@ -9,7 +9,12 @@ import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
 import { formatMyRealmsInventory, type MyRealmsInventoryLink } from './my-realms-native';
-import type { NativeRealmHomePage } from './realm-home-native';
+import {
+  bindNativeRealmHomeOperations,
+  nativeRealmHomeShelves,
+  presentNativeRealmHome,
+  type NativeRealmHomePage,
+} from './realm-home-native';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -59,7 +64,7 @@ export type RealmHome = {
   credentialMode?: ReadCredentialMode;
   /** Null when signed out. */
   viewer: { state: MemberState; idempotencyKey: string } | null;
-  /** The mounted home currently supplies only anonymous or unavailable viewer/actions. */
+  /** The mounted home supplies viewer standing and action advice from the same native observation. */
   nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
 };
 
@@ -67,6 +72,8 @@ export type SpacePageData = {
   space: { id: string; title: string; summary: string; banner?: CoverSummary | null };
   /** Null when the Space carries no Realm, or the viewer may not read the one it carries. */
   realm: RealmHome | null;
+  /** Keeps an absent carrier distinct from a concealed or unavailable one without exposing its identity. */
+  realmCarrier?: 'absent' | 'concealed' | 'available' | 'unavailable';
 };
 
 /** Attach localized names for the first semantic type shown beneath each published subject. */
@@ -211,7 +218,7 @@ async function readViewer(
   return { state: denied ? 'banned' : state, idempotencyKey: crypto.randomUUID() };
 }
 
-/** The public Realm content. Personal membership is loaded separately after hydration. */
+/** Legacy fixture reader. Default route reads use the composed native home operation below. */
 async function readHome(
   client: KernelClient,
   realm: NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'],
@@ -279,28 +286,33 @@ function shelfFailure(result: Result<unknown>): { kind: 'denied' | 'unavailable'
   return result.error || status === undefined || status >= 400 || !result.data ? { kind: 'unavailable' } : null;
 }
 
-export type ShelfReadInput = { realmId: string; cursor?: string; credentialMode: ReadCredentialMode };
+export type ShelfReadInput = {
+  realmId: string;
+  cursor?: string;
+  credentialMode: ReadCredentialMode;
+  languages?: string[];
+};
 
 /** Continue exactly one native list, retaining its own reader-bound cursor and fixed page size. */
-export function loadRealmShelfPageWithOrigin(
+export function loadLegacyRealmShelfPageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: ShelfReadInput & { list: 'boards' },
 ): Promise<PreparedRead<ShelfPage<RealmBoard>>>;
-export function loadRealmShelfPageWithOrigin(
+export function loadLegacyRealmShelfPageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: ShelfReadInput & { list: 'publications' },
 ): Promise<PreparedRead<ShelfPage<PublishedSubject>>>;
-export function loadRealmShelfPageWithOrigin(
+export function loadLegacyRealmShelfPageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: ShelfReadInput & { list: 'boards' | 'publications' },
 ): Promise<PreparedRead<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>>>;
-export async function loadRealmShelfPageWithOrigin(
+export async function loadLegacyRealmShelfPageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -381,7 +393,49 @@ export async function loadRealmShelfPage(
   sessionEnv: Partial<SessionEnv>,
   input: ShelfReadInput & { list: 'boards' | 'publications' },
 ): Promise<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>> {
-  return (await loadRealmShelfPageWithOrigin(client, request, sessionEnv, input)).value;
+  return (await loadLegacyRealmShelfPageWithOrigin(client, request, sessionEnv, input)).value;
+}
+
+/** Default shelf reads use the mounted home operations and retain the raw reader-bound cursor. */
+export function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' },
+): Promise<PreparedRead<ShelfPage<RealmBoard>>>;
+export function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'publications' },
+): Promise<PreparedRead<ShelfPage<PublishedSubject>>>;
+export function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' | 'publications' },
+): Promise<PreparedRead<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>>>;
+export async function loadRealmShelfPageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' | 'publications'; languages?: string[] },
+): Promise<PreparedRead<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>>> {
+  let readerOrigin: ReaderOrigin = { kind: 'unidentified', reason: 'session-preparation-failed' };
+  try {
+    const prepared = await session(request, sessionEnv, input.credentialMode);
+    readerOrigin = prepared.readerOrigin;
+    const operations = bindNativeRealmHomeOperations(client, prepared.auth);
+    const shelves = nativeRealmHomeShelves(operations, {
+      realmId: input.realmId,
+      languages: input.languages ?? ['en'],
+    });
+    const cursor = input.cursor ? { cursor: input.cursor } : {};
+    const value = input.list === 'boards' ? await shelves.boards(cursor) : await shelves.publications(cursor);
+    return { value, readerOrigin };
+  } catch {
+    return { value: { kind: 'unavailable' }, readerOrigin };
+  }
 }
 
 /** The signed-in reader's membership state, loaded only by a browser personal query. */
@@ -389,11 +443,8 @@ export async function loadRealmMembership(client: KernelClient, realmId: string,
   return readViewer(client, realmId, auth);
 }
 
-/**
- * Reads the page of one Space address: the address, then the Space, then — only when the Space names a Realm this
- * viewer may read — the Realm, its boards, its publications and the viewer's standing together.
- */
-export async function loadSpacePageWithOrigin(
+/** The legacy value helper remains for story fixtures; route server actions use the composed read below. */
+async function loadLegacySpacePageWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -425,7 +476,48 @@ export async function loadSpacePageWithOrigin(
   };
 }
 
-/** Original return contract retained for callers that do not need reader admission. */
+/** Default route read: resolve the Space first, then consume its mounted native Realm home once. */
+export async function loadSpacePageWithOrigin(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { address: string; languages?: string[] },
+  credentialMode: ReadCredentialMode = 'session',
+): Promise<PreparedRead<SpacePageData>> {
+  const prepared = await session(request, sessionEnv, credentialMode);
+  const { auth } = prepared;
+  const { spaceId } = readCommunity(await client.spaceAddresses({ address: input.address }).get(auth));
+  const { space } = readCommunity(await client.spaces({ spaceId }).get(auth));
+  const extendedSpace = space as typeof space & { banner?: CoverSummary | null };
+  const base = {
+    id: space.spaceId,
+    title: space.title,
+    summary: space.summary,
+    ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}),
+  };
+  if (!space.realmId)
+    return { value: { space: base, realm: null, realmCarrier: 'absent' }, readerOrigin: prepared.readerOrigin };
+  const operations = bindNativeRealmHomeOperations(client, auth);
+  const result = await operations.home({ realmId: space.realmId, languages: input.languages ?? ['en'] });
+  const status = statusOf(result);
+  const body = isRecord(result.error) ? (isRecord(result.error.value) ? result.error.value : result.error) : undefined;
+  if (isPlatformClosedProblem(status, body)) readCommunity(result);
+  if (status === 403 || status === 404)
+    return { value: { space: base, realm: null, realmCarrier: 'concealed' }, readerOrigin: prepared.readerOrigin };
+  if (result.error || status === undefined || status >= 400 || result.data == null)
+    return { value: { space: base, realm: null, realmCarrier: 'unavailable' }, readerOrigin: prepared.readerOrigin };
+  const page = presentNativeRealmHome(result.data, {
+    realmId: space.realmId,
+    spaceId: space.spaceId,
+    languages: input.languages ?? ['en'],
+    credentialMode,
+    expectedSpaceHeadRevisionId: space.headRevisionId,
+    banner: extendedSpace.banner,
+  });
+  return { value: { ...page, realmCarrier: 'available' }, readerOrigin: prepared.readerOrigin };
+}
+
+/** Original value helper retained for fixtures that exercise the pre-composed producer. */
 export async function loadSpacePage(
   client: KernelClient,
   request: Request,
@@ -433,7 +525,7 @@ export async function loadSpacePage(
   input: { address: string },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<SpacePageData> {
-  return (await loadSpacePageWithOrigin(client, request, sessionEnv, input, credentialMode)).value;
+  return (await loadLegacySpacePageWithOrigin(client, request, sessionEnv, input, credentialMode)).value;
 }
 
 /**
@@ -444,7 +536,7 @@ export async function locateRealmWithOrigin(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { realmId: string },
+  input: { realmId: string; languages?: string[] },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<PreparedRead<Located>> {
   const prepared = await session(request, sessionEnv, credentialMode);
@@ -453,21 +545,49 @@ export async function locateRealmWithOrigin(
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
   if (space.address)
     return { value: { kind: 'redirect', address: space.address }, readerOrigin: prepared.readerOrigin };
-  const home = await readHome(client, realm, auth, credentialMode, space);
+  const extendedSpace = space as typeof space & { banner?: CoverSummary | null };
+  const operations = bindNativeRealmHomeOperations(client, auth);
+  const result = await operations.home({ realmId: realm.realmId, languages: input.languages ?? ['en'] });
+  const status = statusOf(result);
+  const body = isRecord(result.error) ? (isRecord(result.error.value) ? result.error.value : result.error) : undefined;
+  if (isPlatformClosedProblem(status, body)) readCommunity(result);
+  if (status === 403 || status === 404)
+    return {
+      value: {
+        kind: 'page',
+        page: {
+          space: { id: space.spaceId, title: space.title, summary: space.summary, ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}) },
+          realm: null,
+          realmCarrier: 'concealed',
+        },
+      },
+      readerOrigin: prepared.readerOrigin,
+    };
+  if (result.error || status === undefined || status >= 400 || result.data == null)
+    return {
+      value: {
+        kind: 'page',
+        page: {
+          space: { id: space.spaceId, title: space.title, summary: space.summary, ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}) },
+          realm: null,
+          realmCarrier: 'unavailable',
+        },
+      },
+      readerOrigin: prepared.readerOrigin,
+    };
+  const home = presentNativeRealmHome(result.data, {
+    realmId: realm.realmId,
+    spaceId: space.spaceId,
+    languages: input.languages ?? ['en'],
+    credentialMode,
+    expectedSpaceHeadRevisionId: space.headRevisionId,
+    expectedRealmHeadRevisionId: realm.headRevisionId,
+    banner: extendedSpace.banner,
+  });
   return {
     value: {
       kind: 'page',
-      page: {
-        space: {
-          id: space.spaceId,
-          title: space.title,
-          summary: space.summary,
-          ...((space as typeof space & { banner?: CoverSummary | null }).banner
-            ? { banner: (space as typeof space & { banner?: CoverSummary | null }).banner }
-            : {}),
-        },
-        realm: home,
-      },
+      page: { ...home, realmCarrier: 'available' },
     },
     readerOrigin: prepared.readerOrigin,
   };

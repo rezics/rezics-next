@@ -80,14 +80,14 @@ first-render producer/SSR contract remains deferred.
 
 Decision: Web will not mark the composed Realm-home visit available until `RealmHomePage` carries the native current viewer observation and `@rezics/client` exposes the generated declaration for its mounted operation; the existing separate reads do not establish that assembly.
 
-The prepared consumer in `realm-home-native.ts` accepts one mounted home response and independent native shelf
+The prepared consumer in `realm-home-native.ts` validates one mounted home response and independent native shelf
 operations. It preserves disclosed publication summaries and raw cursors without Subject reads, refill or inferred
-unavailable-row counts. Its current protocol admits only the producer's anonymous/unavailable viewer states; the
-presentation's former join projection cannot admit commands. `SpacePage` renders this explicit native observation
-through the shared header and shelves without mounting the separate membership, claim or management readers.
+unavailable-row counts. It never assembles standing from separate reads. Membership and each command are rendered
+only from their own explicit native advice; denied, banned, orphaned and unavailable advice stay distinct. The retained
+Kernel producer still returns anonymous/unavailable advice, and Client generation still omits these three operations.
+Until that delivery lands, the default Web route uses one narrow typed route seam and fails closed when advice is absent.
 
-Decision: retain the default route until the composed viewer and generated operations arrive; keep the prepared
-native consumer injectable and unavailable-only in the meantime.
+Decision: default Space and Realm routes consume the composed home now; Client generation can replace the narrow local operation seam without changing the prepared consumer.
 
 A native page replacement remounts the entire presentation and both shelves. Credential, locale, route or prepared
 operation replacement permanently retires the old page, including pending continuations, until a new response is

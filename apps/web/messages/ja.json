@@ -1242,6 +1242,7 @@
   "realm_leave": "退会する",
   "realm_membership_label": "メンバーシップ",
   "realm_membership_unavailable": "現在、メンバー状態を読み込めません。",
+  "realm_native_access_denied": "現在のアクセス権では、このRealmへの参加やメンバー登録はできません。",
   "realm_protected_note": "このコミュニティを読めるのはメンバーだけで、あなたもその一人です。",
   "realm_published_empty": "まだ何も公開されていません。",
   "realm_published_heading": "公開された項目",

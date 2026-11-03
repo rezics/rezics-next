@@ -1242,6 +1242,7 @@
   "realm_leave": "退出",
   "realm_membership_label": "成員身分",
   "realm_membership_unavailable": "目前無法讀取成員狀態。",
+  "realm_native_access_denied": "你目前的權限不允許參與或加入此 Realm。",
   "realm_protected_note": "只有成員能閱讀這個社群，而你就是其中一員。",
   "realm_published_empty": "這裡還沒有發布任何內容。",
   "realm_published_heading": "已發布的條目",

@@ -19,8 +19,16 @@ export type NativeRealmHomePage = {
   presentation: Omit<CommunityPresentation, 'join'>;
   boards: NativeRealmBoardPage;
   publications: NativeRealmPublicationPage;
-  viewer: { state: 'anonymous' | 'unavailable' };
-  actions: Readonly<Record<'participate' | 'join' | 'leave' | 'claim' | 'manage', 'sign-in' | 'unavailable'>>;
+  viewer:
+    | { state: 'anonymous' }
+    | { state: 'member'; membership: 'none' | 'pending' | 'member' }
+    | { state: 'denied' | 'banned' | 'orphaned' | 'unavailable' };
+  actions: Readonly<
+    Record<
+      'participate' | 'join' | 'leave' | 'claim' | 'manage',
+      'sign-in' | 'admitted' | 'denied' | 'banned' | 'orphaned' | 'unavailable'
+    >
+  >;
 };
 export type NativeRealmBoardPage = Window<{
   id: string;
@@ -52,6 +60,33 @@ export type NativeRealmHomeOperations = {
   }): Promise<Result<NativeRealmPublicationPage>>;
 };
 
+type NativeRealmHomeRoute = {
+  home: {
+    get(input: { query: { languages: string[] }; headers?: Record<string, string> }): Promise<Result<NativeRealmHomePage>>;
+  };
+  boardShelf: {
+    get(input: { query: { cursor?: string }; headers?: Record<string, string> }): Promise<Result<NativeRealmBoardPage>>;
+  };
+  publicationShelf: {
+    get(input: {
+      query: { languages: string[]; cursor?: string };
+      headers?: Record<string, string>;
+    }): Promise<Result<NativeRealmPublicationPage>>;
+  };
+};
+
+/** The mounted endpoints exist on Kernel; this narrow seam bridges them until Client generation lands. */
+export function bindNativeRealmHomeOperations(client: KernelClient, auth: Record<string, never> | { headers: { authorization: string } }): NativeRealmHomeOperations {
+  const route = (realmId: string) => client.realms({ realmId }) as unknown as NativeRealmHomeRoute;
+  return {
+    home: ({ realmId, languages }) => route(realmId).home.get({ query: { languages }, ...auth }),
+    boardShelf: ({ realmId, cursor }) =>
+      route(realmId).boardShelf.get({ query: cursor ? { cursor } : {}, ...auth }),
+    publicationShelf: ({ realmId, languages, cursor }) =>
+      route(realmId).publicationShelf.get({ query: { languages, ...(cursor ? { cursor } : {}) }, ...auth }),
+  };
+}
+
 function boards(page: NativeRealmBoardPage, realmId: string): RealmBoard[] {
   if (page.items.length > 20 || page.items.some((item) => item.realmId !== realmId))
     throw new Error('Realm home board source changed');
@@ -80,12 +115,19 @@ function publications(page: NativeRealmPublicationPage, realmId: string): Publis
   }));
 }
 
-/** One mounted home response, without attempting to upgrade its unavailable viewer observation. */
-export async function readNativeRealmHome(
-  operations: NativeRealmHomeOperations,
-  input: { realmId: string; spaceId: string; languages: string[]; credentialMode: ReadCredentialMode },
-): Promise<SpacePageData> {
-  const page = readCommunity(await operations.home({ realmId: input.realmId, languages: input.languages }));
+/** Validates the single composed observation before mapping its native shelves and viewer advice. */
+export function presentNativeRealmHome(
+  page: NativeRealmHomePage,
+  input: {
+    realmId: string;
+    spaceId: string;
+    languages: string[];
+    credentialMode: ReadCredentialMode;
+    expectedSpaceHeadRevisionId?: string;
+    expectedRealmHeadRevisionId?: string;
+    banner?: CoverSummary | null;
+  },
+): SpacePageData {
   if (
     page.realm.state !== 'active' ||
     page.realm.realmId !== input.realmId ||
@@ -98,9 +140,14 @@ export async function readNativeRealmHome(
     page.presentation.contextId !== page.realm.contextId ||
     page.presentation.name !== page.realm.title ||
     page.presentation.description !== page.realm.summary ||
-    !['anonymous', 'unavailable'].includes(page.viewer.state) ||
+    (input.expectedSpaceHeadRevisionId !== undefined &&
+      page.space.headRevisionId !== input.expectedSpaceHeadRevisionId) ||
+    (input.expectedRealmHeadRevisionId !== undefined &&
+      page.realm.headRevisionId !== input.expectedRealmHeadRevisionId) ||
+    !['anonymous', 'member', 'denied', 'banned', 'orphaned', 'unavailable'].includes(page.viewer.state) ||
     (['participate', 'join', 'leave', 'claim', 'manage'] as const).some(
-      (action) => page.actions[action] !== (page.viewer.state === 'anonymous' ? 'sign-in' : 'unavailable'),
+      (action) =>
+        !['sign-in', 'admitted', 'denied', 'banned', 'orphaned', 'unavailable'].includes(page.actions[action]),
     )
   )
     throw new Error('Realm home source changed');
@@ -109,7 +156,12 @@ export async function readNativeRealmHome(
     ...{ community: { ...page.presentation, join: { membership: 'unknown', action: null } } },
   });
   return {
-    space: { id: page.space.spaceId, title: page.space.title, summary: page.space.summary },
+    space: {
+      id: page.space.spaceId,
+      title: page.space.title,
+      summary: page.space.summary,
+      ...(input.banner ? { banner: input.banner } : {}),
+    },
     realm: {
       id: page.realm.realmId,
       title: page.realm.title,
@@ -126,6 +178,23 @@ export async function readNativeRealmHome(
       nativeObservation: { viewer: page.viewer, actions: page.actions },
     },
   };
+}
+
+/** One mounted home response, without upgrading its viewer advice from another read. */
+export async function readNativeRealmHome(
+  operations: NativeRealmHomeOperations,
+  input: {
+    realmId: string;
+    spaceId: string;
+    languages: string[];
+    credentialMode: ReadCredentialMode;
+    expectedSpaceHeadRevisionId?: string;
+    expectedRealmHeadRevisionId?: string;
+    banner?: CoverSummary | null;
+  },
+): Promise<SpacePageData> {
+  const page = readCommunity(await operations.home({ realmId: input.realmId, languages: input.languages }));
+  return presentNativeRealmHome(page, input);
 }
 
 function failure(result: Result<unknown>): ShelfPage<never> | null {

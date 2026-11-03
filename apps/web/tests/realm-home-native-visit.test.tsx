@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
 import type { SpacePageData } from '../src/community/space';
+import type { KernelClient } from '@rezics/client';
 import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
 
@@ -29,7 +30,10 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
-const { readNativeRealmHome, nativeRealmHomeShelves } = await import('../src/community/realm-home-native');
+const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } = await import(
+  '../src/community/realm-home-native'
+);
+const { loadSpacePageWithOrigin } = await import('../src/community/space');
 const { SpacePage } = await import('../src/community/space-page');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
   await import('../src/community/space-page-lifetime');
@@ -120,6 +124,94 @@ const operations: NativeRealmHomeOperations = {
     return { status: 200, data: { items: [], next: null } };
   },
 };
+
+test('default Space reads bind the composed home after address resolution and preserve concealed versus failed carriers', async () => {
+  const calls: string[] = [];
+  let homeStatus = 200;
+  const client = {
+    spaceAddresses: () => ({
+      get: async () => {
+        calls.push('address');
+        return { status: 200, data: { spaceId: id(2) } };
+      },
+    }),
+    spaces: () => ({
+      get: async () => {
+        calls.push('space');
+        return {
+          status: 200,
+          data: {
+            space: {
+              spaceId: id(2),
+              realmId: id(1),
+              headRevisionId: id(4),
+              title: 'Carrying Space',
+              summary: '',
+            },
+          },
+        };
+      },
+    }),
+    realms: () => ({
+      home: {
+        get: async ({ query }: { query: { languages: string[] } }) => {
+          calls.push(`home:${query.languages.join(',')}`);
+          return homeStatus === 200 ? { status: 200, data: fixture() } : { status: homeStatus, error: { status: homeStatus } };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const request = new Request('https://site.test/en/spaces/realm');
+  const loaded = await loadSpacePageWithOrigin(
+    client,
+    request,
+    {},
+    { address: 'realm', languages: ['en', 'ja'] },
+    'anonymous',
+  );
+  expect(calls).toEqual(['address', 'space', 'home:en,ja']);
+  expect(loaded.value.realmCarrier).toBe('available');
+  expect(loaded.value.realm?.nativeObservation?.viewer.state).toBe('unavailable');
+
+  homeStatus = 404;
+  expect(
+    (await loadSpacePageWithOrigin(client, request, {}, { address: 'realm' }, 'anonymous')).value.realmCarrier,
+  ).toBe('concealed');
+  homeStatus = 503;
+  expect(
+    (await loadSpacePageWithOrigin(client, request, {}, { address: 'realm' }, 'anonymous')).value.realmCarrier,
+  ).toBe('unavailable');
+});
+
+test('Client operation seam binds home, raw shelf cursors and selected languages to one prepared reader', async () => {
+  const requests: unknown[] = [];
+  const client = {
+    realms: ({ realmId }: { realmId: string }) => ({
+      home: { get: async (input: unknown) => (requests.push(['home', realmId, input]), { status: 200, data: fixture() }) },
+      boardShelf: {
+        get: async (input: unknown) =>
+          (requests.push(['boardShelf', realmId, input]), { status: 200, data: { items: [], next: null } }),
+      },
+      publicationShelf: {
+        get: async (input: unknown) =>
+          (requests.push(['publicationShelf', realmId, input]), { status: 200, data: { items: [], next: null } }),
+      },
+    }),
+  } as unknown as KernelClient;
+  const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
+  await bound.home({ realmId: id(1), languages: ['zh-Hant', 'en'] });
+  await bound.boardShelf({ realmId: id(1), cursor: 'boards-raw' });
+  await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
+  expect(requests).toEqual([
+    ['home', id(1), { query: { languages: ['zh-Hant', 'en'] }, headers: { authorization: 'Bearer prepared' } }],
+    ['boardShelf', id(1), { query: { cursor: 'boards-raw' }, headers: { authorization: 'Bearer prepared' } }],
+    [
+      'publicationShelf',
+      id(1),
+      { query: { languages: ['ja'], cursor: 'publications-raw' }, headers: { authorization: 'Bearer prepared' } },
+    ],
+  ]);
+});
 const Frame = createContext<ReactNode>(null);
 const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
 const host = document.createElement('main');
@@ -299,6 +391,47 @@ test('anonymous advice remains localized and a missing or replaced carrier never
   await expect(
     readNativeRealmHome({ ...operations, home: async () => ({ status: 404 }) }, input),
   ).rejects.toBeDefined();
+});
+
+test('member actions render only from admitted native advice and denied, banned and orphaned viewers stay distinct', async () => {
+  native = fixture(0);
+  native.viewer = { state: 'member', membership: 'member' };
+  native.actions = {
+    participate: 'admitted',
+    join: 'unavailable',
+    leave: 'admitted',
+    claim: 'unavailable',
+    manage: 'admitted',
+  };
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.textContent).toContain(m.realm_state_member());
+  expect(host.textContent).toContain(m.realm_leave());
+  expect(host.textContent).toContain(m.community_manage());
+  expect(host.textContent).not.toContain(m.realm_join());
+
+  for (const state of ['denied', 'banned', 'orphaned'] as const) {
+    native = fixture(0);
+    native.viewer = { state };
+    native.actions = {
+      participate: state,
+      join: state,
+      leave: state,
+      claim: state,
+      manage: state,
+    };
+    await paint(await readNativeRealmHome(operations, input));
+    const message =
+      state === 'denied'
+        ? m.realm_native_access_denied()
+        : state === 'banned'
+          ? m.realm_banned()
+          : m.realm_claim_orphaned();
+    expect(host.textContent).toContain(message);
+    expect(host.textContent).not.toContain(m.realm_join());
+    expect(host.textContent).not.toContain(m.realm_leave());
+    expect(host.textContent).not.toContain(m.community_manage());
+    expect(host.querySelector(`[data-member-state="${state}"]`)).not.toBeNull();
+  }
 });
 
 test('route admission retires native media and pending shelves on nested source replacement', async () => {

@@ -1242,6 +1242,7 @@
   "realm_leave": "Verlassen",
   "realm_membership_label": "Mitgliedschaft",
   "realm_membership_unavailable": "Der Mitgliedsstatus kann derzeit nicht geladen werden.",
+  "realm_native_access_denied": "Dein aktueller Zugriff erlaubt keine Teilnahme oder Mitgliedschaft in diesem Realm.",
   "realm_protected_note": "Nur Mitglieder können diese Community lesen, und du gehörst dazu.",
   "realm_published_empty": "Hier wurde noch nichts veröffentlicht.",
   "realm_published_heading": "Veröffentlichte Einträge",

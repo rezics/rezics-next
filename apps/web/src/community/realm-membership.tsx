@@ -19,6 +19,8 @@ import {
   type RealmLeaveRecoveryState,
 } from './realm-leave-recovery';
 import { RealmLeaveRecovery, type RealmLeaveCheck } from './realm-leave-recovery.tsx';
+import type { NativeRealmHomePage } from './realm-home-native';
+import { useSpacePageLifetime } from './space-page-lifetime';
 
 type MembershipOperation = {
   caller: RealmMembershipCaller;
@@ -40,14 +42,28 @@ export function RealmMembership({
   spaceId,
   memberLabel,
   admittedAction,
+  nativeObservation,
 }: {
   realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
   returnTo: string;
   spaceId?: string;
   memberLabel?: string;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
+  nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
 }) {
   const { state: session, csrfToken, subject } = useSession();
+  if (nativeObservation)
+    return (
+      <NativeMembership
+        realmId={realm.id}
+        returnTo={returnTo}
+        spaceId={spaceId}
+        observation={nativeObservation}
+        session={session}
+        subject={subject}
+        csrfToken={csrfToken}
+      />
+    );
   if (session === 'unknown' || session === 'unavailable') return null;
   if (session === 'signed-out') {
     if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
@@ -86,6 +102,116 @@ export function RealmMembership({
       admittedAction={admittedAction}
       {...(spaceId ? { spaceId } : {})}
     />
+  );
+}
+
+function NativeMembership({
+  realmId,
+  returnTo,
+  spaceId,
+  observation,
+  session,
+  subject,
+  csrfToken,
+}: {
+  realmId: string;
+  returnTo: string;
+  spaceId?: string;
+  observation: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
+  session: ReturnType<typeof useSession>['state'];
+  subject: string | null;
+  csrfToken: string | null;
+}) {
+  const router = useRouter();
+  const client = useQueryClient();
+  const lifetime = useSpacePageLifetime();
+  const currentObservation = useRef(observation);
+  currentObservation.current = observation;
+  const source = observation;
+  const [busy, setBusy] = useState(false);
+  const [resultState, setResultState] = useState<'refused' | 'unavailable' | null>(null);
+  const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string } | null>(null);
+  const current = () => currentObservation.current === source && (!lifetime || lifetime.current());
+  const action = source.actions.leave === 'admitted' ? 'leave' : source.actions.join === 'admitted' ? 'join' : null;
+  const signIn = source.viewer.state === 'anonymous' && source.actions.join === 'sign-in';
+  const message = (() => {
+    if (source.viewer.state === 'banned' || source.actions.participate === 'banned') return m.realm_banned();
+    if (source.viewer.state === 'orphaned' || source.actions.participate === 'orphaned') return m.realm_claim_orphaned();
+    if (source.viewer.state === 'denied' || source.actions.participate === 'denied') return m.realm_native_access_denied();
+    if (source.viewer.state === 'unavailable' || source.actions.participate === 'unavailable')
+      return m.realm_membership_unavailable();
+    if (source.actions.participate === 'sign-in') return m.realm_sign_in_to_join();
+    if (source.actions.participate === 'admitted' && source.viewer.state === 'member') {
+      return source.viewer.membership === 'pending'
+        ? m.realm_state_pending()
+        : source.viewer.membership === 'member'
+          ? m.realm_state_member()
+          : null;
+    }
+    return null;
+  })();
+
+  async function submit() {
+    if (!action || busy || !current() || session !== 'signed-in' || !subject || !csrfToken) return;
+    const previous = attempt.current;
+    const command = previous?.action === action ? previous : { action, idempotencyKey: crypto.randomUUID() };
+    attempt.current = command;
+    setBusy(true);
+    setResultState(null);
+    const stillCurrent = () => current() && attempt.current === command;
+    try {
+      const result = await changeRealmMembership({
+        data: { realmId, action: command.action, idempotencyKey: command.idempotencyKey },
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
+      if (!stillCurrent()) return;
+      if (result.outcome === 'accepted') {
+        if (spaceId) await client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
+        if (!stillCurrent()) return;
+        await client.invalidateQueries({ queryKey: ['my-realms'] });
+        if (!stillCurrent()) return;
+        await router.invalidate();
+        if (!stillCurrent()) return;
+        attempt.current = null;
+      } else setResultState(result.outcome === 'refused' ? 'refused' : 'unavailable');
+    } catch {
+      if (stillCurrent()) setResultState('unavailable');
+    } finally {
+      if (stillCurrent()) setBusy(false);
+    }
+  }
+
+  if (!message && !action && !signIn && !resultState) return null;
+  return (
+    <section
+      aria-label={m.realm_membership_label()}
+      className="flex min-w-0 flex-wrap items-center gap-3"
+      data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
+      data-native-advice={source.actions.participate}
+    >
+      {message ? <p role="status" className="max-w-prose text-sm text-muted-foreground">{message}</p> : null}
+      {signIn ? (
+        <Button
+          className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
+          render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
+        >
+          {m.realm_sign_in_to_join()}
+        </Button>
+      ) : action ? (
+        <Button
+          className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
+          disabled={busy || session !== 'signed-in' || !subject || !csrfToken || !current()}
+          onClick={() => void submit()}
+        >
+          {busy ? m.realm_membership_checking() : action === 'join' ? m.realm_join() : m.realm_leave()}
+        </Button>
+      ) : null}
+      {resultState ? (
+        <p role="status" className="max-w-prose text-sm text-muted-foreground">
+          {resultState === 'refused' && action === 'leave' ? m.realm_leave_refused() : m.realm_membership_unavailable()}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

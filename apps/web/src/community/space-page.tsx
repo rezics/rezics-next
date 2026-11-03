@@ -389,79 +389,13 @@ export function SpacePage(props: {
   if (native && (retired.current.has(props.page) || (lifetime && !lifetime.matchesPage(props.page)))) return null;
   return (
     <AuthoringDepartureBoundary>
-      {native && props.page.realm ? (
-        <NativeSpaceHome
-          key={`native:${source.current.revision}:${lifetime?.scopeKey ?? 'standalone'}`}
-          page={props.page as SpacePageData & { realm: RealmHome }}
-          operations={props.nativeOperations}
-          signedOut={state === 'signed-out'}
-        />
-      ) : (
-        <SpaceHome
-          key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
-          {...props}
-          viewer={viewer}
-          signedOut={state === 'signed-out'}
-        />
-      )}
-    </AuthoringDepartureBoundary>
-  );
-}
-
-/** The current mounted producer never admits membership, claim, management or publication commands. */
-function NativeSpaceHome({
-  page,
-  operations,
-  signedOut,
-}: {
-  page: SpacePageData & { realm: RealmHome };
-  operations: NativeRealmHomeOperations | undefined;
-  signedOut: boolean;
-}) {
-  const location = useLocation();
-  const locale = getLocale();
-  const shelves = useMemo(
-    () =>
-      operations
-        ? nativeRealmHomeShelves(operations, { realmId: page.realm.id, languages: requestLanguages(locale) })
-        : {
-            boards: async () => ({ kind: 'unavailable' as const }),
-            publications: async () => ({ kind: 'unavailable' as const }),
-          },
-    [operations, page.realm.id, locale],
-  );
-  const transport = useMemo<RealmShelfTransport>(
-    () => ({ ...shelves, change: async () => ({ kind: 'denied' }) }),
-    [shelves],
-  );
-  const advice = page.realm.nativeObservation!;
-  return (
-    <article className="max-w-5xl space-y-10 text-foreground">
-      <RealmHomeHeader
-        realm={page.realm}
-        space={page.space}
-        participation={
-          <section aria-label={m.realm_membership_label()} className="flex min-w-0 flex-wrap gap-3">
-            {signedOut && advice.viewer.state === 'anonymous' && advice.actions.join === 'sign-in' ? (
-              <Button
-                className="h-auto min-h-11 max-w-full whitespace-normal"
-                render={
-                  <a href={`/auth/sign-in?return_to=${encodeURIComponent(location.publicHref.split(/[?#]/, 1)[0]!)}`} />
-                }
-              >
-                {m.realm_sign_in_to_join()}
-              </Button>
-            ) : (
-              <p role="status" className="text-sm text-muted-foreground">
-                {m.realm_membership_unavailable()}
-              </p>
-            )}
-          </section>
-        }
+      <SpaceHome
+        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
+        {...props}
+        viewer={viewer}
+        signedOut={state === 'signed-out'}
       />
-      {page.realm.continuity?.governanceReadOnly ? <p role="status">{m.container_lifecycle_orphaned()}</p> : null}
-      <RealmShelf realm={page.realm} transport={transport} frozen />
-    </article>
+    </AuthoringDepartureBoundary>
   );
 }
 
@@ -471,6 +405,7 @@ function SpaceHome({
   realmAppearance,
   lifecycleAdapter,
   realmClaimAdapter,
+  nativeOperations,
   viewer,
   signedOut,
 }: Parameters<typeof SpacePage>[0] & { viewer: string | null; signedOut: boolean }) {
@@ -485,6 +420,22 @@ function SpaceHome({
     pageSource: RealmClaimSnapshot | null | undefined;
   } | null>(null);
   const realmId = page.realm?.id;
+  const nativeObservation = page.realm?.nativeObservation;
+  const locale = getLocale();
+  const nativeShelves = useMemo(
+    () =>
+      nativeOperations && page.realm
+        ? nativeRealmHomeShelves(nativeOperations, {
+            realmId: page.realm.id,
+            languages: requestLanguages(locale),
+          })
+        : null,
+    [nativeOperations, page.realm?.id, locale],
+  );
+  const nativeShelfTransport = useMemo<RealmShelfTransport | undefined>(
+    () => (nativeShelves ? { ...nativeShelves, change: async () => ({ kind: 'denied' }) } : undefined),
+    [nativeShelves],
+  );
   const pageSource = page.realm?.continuity;
   const claimRead = claim?.realmId === realmId && claim?.pageSource === pageSource ? claim?.read : null;
   const onClaimRead = useCallback(
@@ -512,6 +463,7 @@ function SpaceHome({
   const realmRemoved = spaceRemoved || realmRestricted === 'removed';
   const readable = claimRead?.kind !== 'denied' && claimRead?.kind !== 'closed';
   const frozen =
+    nativeObservation?.viewer.state === 'orphaned' ||
     realmRestricted === 'orphaned' ||
     (claimRead
       ? claimRead.kind !== 'ready' || claimRead.snapshot.governanceReadOnly
@@ -525,6 +477,7 @@ function SpaceHome({
   const management = useMemo(() => ({ entered, report }), [entered, report]);
   const setup = useSpaceSetupRead(page.space.id);
   const orphaned =
+    nativeObservation?.viewer.state === 'orphaned' ||
     realmRestricted === 'orphaned' ||
     (claimRead?.kind === 'ready'
       ? claimRead.snapshot.ownershipState === 'orphaned'
@@ -532,12 +485,15 @@ function SpaceHome({
   const managementRestricted = realmRemoved || orphaned || !readable;
   const setupAdmitted =
     !managementRestricted && setup?.kind === 'ready' && Object.values(setup.permitted).some(Boolean);
+  const nativeManageAdmitted = nativeObservation?.actions.manage === 'admitted' && !orphaned;
   const admitted =
     viewer !== null &&
-    (setupAdmitted ||
-      admissions['space-lifecycle'] ||
-      (!orphaned && admissions['realm-lifecycle']) ||
-      (!managementRestricted && (admissions.appearance || admissions.bans)));
+    (nativeObservation
+      ? nativeManageAdmitted
+      : setupAdmitted ||
+        admissions['space-lifecycle'] ||
+        (!orphaned && admissions['realm-lifecycle']) ||
+        (!managementRestricted && (admissions.appearance || admissions.bans)));
   const presentationCurrent =
     !realmRemoved &&
     readable &&
@@ -559,11 +515,13 @@ function SpaceHome({
       ) : (
         <FollowTargetControl targetId={page.space.id} />
       )}
-      {page.realm && !realmRemoved && readable && !frozen ? (
+      {page.realm && !realmRemoved &&
+      (nativeObservation ? true : readable && !frozen) ? (
         <RealmMembership
           realm={page.realm}
           spaceId={page.space.id}
           returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+          {...(nativeObservation ? { nativeObservation } : {})}
         />
       ) : null}
     </section>
@@ -577,7 +535,13 @@ function SpaceHome({
     previewSrc ??
     (banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined);
   return (
-    <article className="max-w-5xl space-y-10 text-foreground">
+    <article
+      className="max-w-5xl space-y-10 text-foreground"
+      {...(page.realmCarrier ? { 'data-realm-carrier': page.realmCarrier } : {})}
+    >
+      {page.realmCarrier === 'unavailable' ? (
+        <p role="status" className="text-sm text-muted-foreground">{m.realm_shelf_unavailable()}</p>
+      ) : null}
       {showCommunity && page.realm ? (
         <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
       ) : (
@@ -622,9 +586,11 @@ function SpaceHome({
         isCurrentSource={() => catalogueRevision.current === catalogueVersion}
       />
       {page.realm && !realmRemoved && readable ? (
-        <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} />
+        <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} transport={nativeShelfTransport} />
       ) : null}
-      {page.realm && !realmRemoved ? (
+      {page.realm &&
+      !realmRemoved &&
+      (!nativeObservation || nativeObservation.actions.claim === 'admitted') ? (
         <RealmClaimPanel
           realmId={page.realm.id}
           initial={page.realm.continuity ?? null}
@@ -660,7 +626,7 @@ function SpaceHome({
           {entered && !managementRestricted && page.realm ? (
             <RealmMembersEntry realmId={page.realm.id} appearance={admissions.appearance === true} setup={setup} />
           ) : null}
-          {viewer && page.realm ? (
+          {viewer && page.realm && (!nativeObservation || (entered && nativeManageAdmitted)) ? (
             <div hidden={managementRestricted} inert={managementRestricted} className="min-w-0 space-y-8">
               {realmAppearance ?? <RealmAppearancePanel realmId={page.realm.id} />}
               {realmManagement ?? <RealmBansPanel realmId={page.realm.id} />}

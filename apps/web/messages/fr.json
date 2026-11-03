@@ -1242,6 +1242,7 @@
   "realm_leave": "Quitter",
   "realm_membership_label": "Adhésion",
   "realm_membership_unavailable": "Le statut d’adhésion est indisponible pour le moment.",
+  "realm_native_access_denied": "Votre accès actuel ne permet pas de participer à ce Realm ni d’en devenir membre.",
   "realm_protected_note": "Seuls les membres peuvent lire cette communauté, et vous en faites partie.",
   "realm_published_empty": "Rien n'a encore été publié ici.",
   "realm_published_heading": "Fiches publiées",

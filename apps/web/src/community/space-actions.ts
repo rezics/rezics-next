@@ -161,7 +161,7 @@ export const readSpacePage = createServerFn({ method: 'GET' })
       kernelClient(),
       request,
       env as Partial<SessionEnv>,
-      data,
+      { ...data, languages: requestLanguages(requestLocale(request) ?? 'en') },
       data.credentialMode,
     );
     return {
@@ -179,7 +179,7 @@ export const locateRealmPage = createServerFn({ method: 'GET' })
       kernelClient(),
       request,
       env as Partial<SessionEnv>,
-      data,
+      { ...data, languages: requestLanguages(requestLocale(request) ?? 'en') },
       data.credentialMode,
     );
     const located = result.value;
@@ -361,9 +361,11 @@ export const readRealmBoards = createServerFn({ method: 'GET' })
   .validator(validateShelf)
   .handler(async ({ data }): Promise<ShelfPage<RealmBoard> & { readerOrigin: ReaderOrigin }> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const result = await loadRealmShelfPageWithOrigin(kernelClient(), getRequest(), env as Partial<SessionEnv>, {
+    const request = getRequest();
+    const result = await loadRealmShelfPageWithOrigin(kernelClient(), request, env as Partial<SessionEnv>, {
       ...data,
       list: 'boards',
+      languages: requestLanguages(requestLocale(request) ?? 'en'),
     });
     return { ...result.value, readerOrigin: result.readerOrigin };
   });
@@ -376,6 +378,7 @@ export const readRealmPublications = createServerFn({ method: 'GET' })
     const result = await loadRealmShelfPageWithOrigin(kernelClient(), request, env as Partial<SessionEnv>, {
       ...data,
       list: 'publications',
+      languages: requestLanguages(requestLocale(request) ?? 'en'),
     });
     if (result.value.kind !== 'page') return { ...result.value, readerOrigin: result.readerOrigin };
     const { typeNames } = await import('../subject/definitions');
