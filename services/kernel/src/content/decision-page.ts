@@ -128,6 +128,7 @@ export async function readDecisionPage(
 ) {
   const actor = context.actor;
   if (actor.kind !== 'account') return null;
+  const authorization = request.headers.get('authorization');
   return composeModerationDecision(deps, id, context, async (source) => {
     const identity = await identityWitness(deps, actor, context.deadline);
     const affectedAuthor = source.target_kind !== 'board' && source.author_account_id === actor.accountId;
@@ -177,6 +178,7 @@ export async function readDecisionPage(
           JSON.stringify(initialContext) === JSON.stringify(currentContext) ? currentContext : { state: 'unavailable' };
         // Reuse the actual request authenticator, including native session floors,
         // assignment/client constraints and bearer expiry. Never reconstruct Actor.
+        if (request.headers.get('authorization') !== authorization) return false;
         let currentActor: Actor;
         try {
           currentActor = await actorOf(deps.access, request, { pool: deps.pool, deadline: context.deadline });
@@ -194,6 +196,7 @@ export async function readDecisionPage(
         return identity !== null && identity === (await identityWitness(deps, actor, context.deadline));
       },
       async value(client, finalSource) {
+        if (request.headers.get('authorization') !== authorization) throw new ProblemError('not_found');
         try {
           verifiedBearerExpiry(deps.access, observedActor, { pool: deps.pool, deadline: context.deadline });
         } catch (error) {
