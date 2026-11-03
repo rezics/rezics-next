@@ -99,3 +99,5 @@ before claiming the growth outcome complete.
 
 Read sources: installed `list-import-vndb.ts`, parser/row and admission types, native label/assignment commands,
 reservation SQL, the Library erasure graph, and `.reference/INDEX.md` (no VNDB adapter entry).
+
+The mounted service return types define the receiving seam. Refreshing generated KernelClient declarations remains pending the base compiler repairs; this increment does not claim generated-client integration or executed growth evidence.

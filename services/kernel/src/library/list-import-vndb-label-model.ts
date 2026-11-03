@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 
 export const VNDB_LABEL_LIMITS = {
   rows: 8, mappings: 8, items: 64, page: 8, selectionBytes: 16384, sourceNameBytes: 1024, applyMs: 5000,
@@ -18,7 +19,7 @@ export const vndbLabelChoiceSchema = t.Object({
     ]),
   }, closed), { minItems: 1, maxItems: 8 }),
 }, closed);
-export type VndbLabelChoice = typeof vndbLabelChoiceSchema.static;
+export type VndbLabelChoice = Static<typeof vndbLabelChoiceSchema>;
 export type LabelIdentity = { id: string; revision: number };
 export type VndbLabelMapping = VndbLabelChoice['mappings'][number] & {
   label: LabelIdentity | null;
