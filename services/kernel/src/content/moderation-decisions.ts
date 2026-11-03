@@ -202,26 +202,31 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
         if (!row) throw new Error('Moderation decision source missing');
         return row;
       });
-      if (decision.board_id === null || decision.author_account_id === null) return;
-      const boardRoute = routeOf(decision.board_id);
+      const boardId = decision.board_id;
+      const decidedAt = decision.decided_at;
+      if (boardId === null) return;
+      if (decidedAt === null) throw new Error('Moderation decision timestamp missing');
+      const boardRoute = routeOf(boardId);
       if (boardRoute === null) throw new TypeError('Invalid moderation history board');
       // The source snapshot is released before projecting references onto the board partition.
       await writeOnRoute(pool, boardRoute, deadline, (client) =>
         projectHistory.run(client, {
           route: boardRoute,
-          board_id: decision.board_id,
+          board_id: boardId,
           decision_id: decision.decision_id,
           target_kind: decision.target_kind,
           target_id: decision.target_id,
-          decided_at: decision.decided_at,
+          decided_at: decidedAt,
         }),
       );
-      const recipientRoute = routeOf(decision.author_account_id)!;
+      const authorAccountId = decision.author_account_id;
+      if (authorAccountId === null) return;
+      const recipientRoute = routeOf(authorAccountId)!;
       await writeOnRoute(pool, recipientRoute, deadline, async (client) => {
-        if (await notificationAllowed(client, { recipient: decision.author_account_id, kind: 'moderation_decision' }))
+        if (await notificationAllowed(client, { recipient: authorAccountId, kind: 'moderation_decision' }))
           await writeNotices(client, [
             {
-              recipientId: decision.author_account_id,
+              recipientId: authorAccountId,
               noticeId: newId(recipientRoute),
               kind: 'moderation_decision',
               actorId: null,
@@ -230,7 +235,7 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
               decisionId: decision.decision_id,
               reportId: null,
               sourceId: decision.decision_id,
-              createdAt: new Date(decision.decided_at),
+              createdAt: new Date(decidedAt),
             },
           ]);
       });
