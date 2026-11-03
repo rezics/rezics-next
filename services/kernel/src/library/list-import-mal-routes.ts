@@ -72,6 +72,7 @@ export function malImportRoutes(
       },
       async ({ actor, body, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().preview(actor, body.xml, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
           );
@@ -112,20 +113,36 @@ export function malImportRoutes(
       {
         params,
         headers,
-        body: t.Object({ row, target: t.Union([id, t.Null()]), skip: t.Boolean(), replace: t.Boolean(),
-          labels: t.Optional(t.Array(t.Object({
-            value: t.Integer({ minimum: 0, maximum: MAL_LABEL_LIMITS.values - 1 }),
-            target: t.Union([
-              t.Object({ labelId: id, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed),
-              t.Object({ name: t.String({ maxLength: 1024 }) }, closed),
-            ]),
-          }, closed), { maxItems: MAL_LABEL_LIMITS.values })),
-        }, closed),
+        body: t.Object(
+          {
+            row,
+            target: t.Union([id, t.Null()]),
+            skip: t.Boolean(),
+            replace: t.Boolean(),
+            labels: t.Optional(
+              t.Array(
+                t.Object(
+                  {
+                    value: t.Integer({ minimum: 0, maximum: MAL_LABEL_LIMITS.values - 1 }),
+                    target: t.Union([
+                      t.Object({ labelId: id, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed),
+                      t.Object({ name: t.String({ maxLength: 1024 }) }, closed),
+                    ]),
+                  },
+                  closed,
+                ),
+                { maxItems: MAL_LABEL_LIMITS.values },
+              ),
+            ),
+          },
+          closed,
+        ),
         response: { 200: result, ...failures },
         detail: detail('review'),
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().review(actor, params.id, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
           );

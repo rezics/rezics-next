@@ -221,10 +221,21 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, malLabelFence?: MalLabelFence) {
-    return (await mutate(actor, labelId, value, key, 'assign', malLabelFence)) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal>
-    >;
+  async function assignLabel(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    key: string,
+    malLabelFence?: MalLabelFence,
+  ) {
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'assign',
+      malLabelFence,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal>>;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
     return (await mutate(actor, labelId, value, key, 'unassign')) as import('../command/command.ts').CommandOutcome<{

@@ -62,7 +62,12 @@ const events = (owner: AccountActor, labelId: string) => [
 ];
 
 /** Native private catalogue; receipts contain identity and revision only. */
-export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRing; clock?: KernelClock; access?: Access }) {
+export function createPersonalLabelCommands(config: {
+  pool: Pool;
+  tokens: KeyRing;
+  clock?: KernelClock;
+  access?: Access;
+}) {
   const { pool, tokens } = config;
   const clock = config.clock ?? systemClock;
   const runner = createLibraryCommandRunner({ pool, clock });
@@ -131,20 +136,29 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
     };
     if (!malLabelFence) return run(actor, 'library_label.create', { name: parsed.name }, key, body);
     if (!config.access) throw new TypeError('MAL label adoption requires Subject access');
-    const access = config.access, deadline = deadlineFor(5000);
-    return runner.ownAccountPrepared(actor, {
-      action: 'library_entry:update', kind: 'library_label.create', requestKey: key,
-      input: { name: parsed.name, malLabelFence },
-      async prepare(attempt) {
-        try {
-          await prepareMalLabelFence({ pool, access }, owner, malLabelFence, attempt.time, deadline);
-          return { error: undefined };
-        } catch (error) { return { error }; }
+    const access = config.access,
+      deadline = deadlineFor(5000);
+    return runner.ownAccountPrepared(
+      actor,
+      {
+        action: 'library_entry:update',
+        kind: 'library_label.create',
+        requestKey: key,
+        input: { name: parsed.name, malLabelFence },
+        async prepare(attempt) {
+          try {
+            await prepareMalLabelFence({ pool, access }, owner, malLabelFence, attempt.time, deadline);
+            return { error: undefined };
+          } catch (error) {
+            return { error };
+          }
+        },
       },
-    }, async (tx, command, prepared) => {
-      if (prepared.error !== undefined) throw prepared.error;
-      return body(tx, command);
-    });
+      async (tx, command, prepared) => {
+        if (prepared.error !== undefined) throw prepared.error;
+        return body(tx, command);
+      },
+    );
   }
 
   async function renameLabel(actor: Actor, labelId: string, input: unknown, key: string) {

@@ -30,8 +30,7 @@ export function malTagEvidence(row: Pick<MalRow, 'fields'>): MalTagEvidence {
   const base = { grammar: 'mal-comma-v1' as const, values: [], reason: null };
   if (!Object.hasOwn(row.fields, 'my_tags')) return { ...base, kind: 'missing' };
   const raw = row.fields.my_tags!;
-  if (typeof raw !== 'string' || !raw.isWellFormed())
-    return { ...base, kind: 'invalid', reason: 'invalid-text' };
+  if (typeof raw !== 'string' || !raw.isWellFormed()) return { ...base, kind: 'invalid', reason: 'invalid-text' };
   if (raw === '') return { ...base, kind: 'empty', raw };
   if (Buffer.byteLength(raw) > MAL_LABEL_LIMITS.sourceBytes)
     return { ...base, kind: 'unsupported', reason: 'source-byte-limit' };
@@ -41,15 +40,15 @@ export function malTagEvidence(row: Pick<MalRow, 'fields'>): MalTagEvidence {
   const tokens = raw.split(',');
   if (tokens.length > MAL_LABEL_LIMITS.values)
     return { ...base, kind: 'unsupported', raw, reason: 'source-value-limit' };
-  if (tokens.some((v) => v.trim() === ''))
-    return { ...base, kind: 'invalid', raw, reason: 'empty-delimited-value' };
+  if (tokens.some((v) => v.trim() === '')) return { ...base, kind: 'invalid', raw, reason: 'empty-delimited-value' };
   const seen = new Map<string, number>();
   return {
     ...base,
     kind: 'supported',
     raw,
     values: tokens.map((raw, index) => {
-      const value = raw.trim(), duplicateOf = seen.get(value) ?? null;
+      const value = raw.trim(),
+        duplicateOf = seen.get(value) ?? null;
       if (duplicateOf === null) seen.set(value, index);
       return { index, raw, value, duplicateOf };
     }),

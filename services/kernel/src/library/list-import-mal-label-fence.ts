@@ -32,12 +32,14 @@ export async function prepareMalLabelFence(
   at: AuthoritativeTime,
   deadline: number,
 ) {
-  const observation = await readLibraryProfileSourceObservation(
-    { ...deps, actor, at, deadline }, fence.subject,
-  );
-  if (!observation || observation.source.subjectId !== fence.subject ||
+  const observation = await readLibraryProfileSourceObservation({ ...deps, actor, at, deadline }, fence.subject);
+  if (
+    !observation ||
+    observation.source.subjectId !== fence.subject ||
     String(observation.anchor.identityEpoch) !== fence.epoch ||
-    observation.anchor.acceptingType !== fence.acceptingType) throw new LibraryConflictError();
+    observation.anchor.acceptingType !== fence.acceptingType
+  )
+    throw new LibraryConflictError();
   if (fence.binding) {
     const b = fence.binding;
     const claim = await deadlineClient(deps.pool, deadline).query<{ subject_id: string }>(
@@ -51,11 +53,7 @@ export async function prepareMalLabelFence(
 /** Fresh effects serialize with refreshed review, cancellation, removal and expiry.
  * This reads one upload key and one addressed label key, never owner-wide labels/history.
  */
-export async function assertMalLabelFence(
-  tx: Pick<PoolClient, 'query'>,
-  actor: AccountActor,
-  fence: MalLabelFence,
-) {
+export async function assertMalLabelFence(tx: Pick<PoolClient, 'query'>, actor: AccountActor, fence: MalLabelFence) {
   const route = routeOf(actor.accountId)!;
   const found = await tx.query<{
     row: MalRow;
@@ -74,16 +72,25 @@ export async function assertMalLabelFence(
     [route, actor.accountId, fence.id, fence.row, String(fence.row)],
   );
   const current = found.rows[0];
-  if (!current || current.version !== fence.version || current.source_digest !== fence.sourceDigest ||
-    current.selection_digest !== fence.selectionDigest || current.subject !== fence.subject ||
-    malDigest(current.row) !== fence.sourceDigest) throw new LibraryConflictError();
+  if (
+    !current ||
+    current.version !== fence.version ||
+    current.source_digest !== fence.sourceDigest ||
+    current.selection_digest !== fence.selectionDigest ||
+    current.subject !== fence.subject ||
+    malDigest(current.row) !== fence.sourceDigest
+  )
+    throw new LibraryConflictError();
   if (fence.label) {
     const label = await tx.query<{ revision: number; name: string }>(
       `SELECT revision,normalized_name AS name FROM library.personal_label
        WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`,
       [route, actor.accountId, fence.label.id],
     );
-    if (label.rows[0]?.revision !== fence.label.revision ||
-      (fence.label.name !== undefined && label.rows[0]?.name !== fence.label.name)) throw new LibraryConflictError();
+    if (
+      label.rows[0]?.revision !== fence.label.revision ||
+      (fence.label.name !== undefined && label.rows[0]?.name !== fence.label.name)
+    )
+      throw new LibraryConflictError();
   }
 }
