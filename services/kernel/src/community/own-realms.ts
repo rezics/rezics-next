@@ -78,6 +78,8 @@ export async function observeOwnRealmMembership(
     const member = await confirmMembership.run(client, {
       route, realm_id: realmId, account_id: actor.accountId, at: context.at,
     });
+    if (member && (member.since === null || !Number.isFinite(Date.parse(member.since))))
+      throw new ProblemError('dependency_unavailable');
     return member && { ...member, epoch: partition.epoch };
   });
 }

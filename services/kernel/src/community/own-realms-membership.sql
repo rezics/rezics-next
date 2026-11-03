@@ -21,4 +21,5 @@ JOIN head h ON h.realm_id = m.realm_id
 JOIN community.realm_revision r
   ON r.route = :route::integer AND r.realm_id = h.realm_id AND r.revision_id = h.head_revision_id
 WHERE m.role = 'member' AND (m.valid @> :at::timestamptz) IS TRUE
-  AND r.created_at <= :at::timestamptz;
+  AND r.created_at <= :at::timestamptz
+LIMIT 1;
