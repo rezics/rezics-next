@@ -8,12 +8,14 @@ import {
   type EntitlementStoryMode,
   type MappedEntitlementStoryMode,
 } from '../kernel/fake/entitlements';
-import { EntitlementPage } from '../checkout/entitlement-page';
-import { ContentEditionPage } from '../content-editions/edition-view';
+import {
+  resetEntitlementReaderUnavailable,
+  setEntitlementReaderUnavailableEditionId,
+} from '../kernel/fake/entitlement-reader-unavailable';
 import { benefitReaderHref, capturedBenefit } from '../checkout/benefit';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, PatternStory } from './page';
+import { PageStory } from './page';
 
 const meta = {
   title: 'Pages/Commerce/Entitlement',
@@ -174,22 +176,24 @@ export const MappedDisputed: Story = {
   },
 };
 export const ReaderUnavailable: Story = {
-  name: 'Active capture, reader unavailable (component)',
-  render: () => (
-    <PatternStory visitor="Signed In" path={`/entitlements/${mappedEntitlement.id}`}>
-      <div className="space-y-12">
-        <EntitlementPage page={{ kind: 'ready', data: mappedEntitlement }} locale={getLocale()} />
-        <ContentEditionPage
-          editionId={fixedEditionTerms.benefit.resource.id}
-          page={{ state: 'unavailable', status: 503, reason: 'source' }}
-        />
-      </div>
-    </PatternStory>
-  ),
+  name: 'Mapped entitlement opens unavailable reader',
+  beforeEach: () => {
+    setEntitlementReaderUnavailableEditionId(fixedEditionTerms.benefit.resource.id);
+    return resetEntitlementReaderUnavailable;
+  },
+  render: () => <EntitlementStory mode="mapped" />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await canvas.findByText(m.benefit_reader_notice());
+    const link = await canvas.findByRole('link', { name: m.benefit_open_reader() });
+    await expect(link).toHaveAttribute(
+      'href',
+      benefitReaderHref(capturedBenefit(fixedEditionTerms, mappedEntitlement.targetSubjectId), true, getLocale()),
+    );
+    await userEvent.click(link);
+    await canvas.findByRole('heading', { level: 1, name: m.content_edition_heading() });
     await canvas.findByText(m.content_edition_unavailable());
+    await expect(canvas.queryByRole('heading', { level: 1, name: m.entitlements_detail_heading() })).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.order_receipt() })).toBeNull();
     await expect(canvasElement.querySelector('[data-slot="document-body"]')).toBeNull();
   },
 };
