@@ -256,7 +256,11 @@ function parseJson(value: unknown, label: string, maxBytes: number): unknown {
   }
 }
 
-function parseRecordRow(value: unknown, source: string, key: string): {
+function parseRecordRow(
+  value: unknown,
+  source: string,
+  key: string,
+): {
   state: 'present' | 'vanished';
   recordRevision: string;
   converterRevision: string;
@@ -325,7 +329,12 @@ function parseOmissions(value: unknown): string[] {
   return [...groups].sort();
 }
 
-function parseCommandGroups(value: unknown, commandCount: unknown, remaining: unknown, maximum: number): FieldOperationSummary[] {
+function parseCommandGroups(
+  value: unknown,
+  commandCount: unknown,
+  remaining: unknown,
+  maximum: number,
+): FieldOperationSummary[] {
   const total = integer(commandCount, 'command count', 0);
   const unresolved = integer(remaining, 'unresolved command count', 0);
   if (total > maximum) throw new InspectionFailure('Malformed journal row: command count exceeds its stored bound.');
@@ -349,8 +358,7 @@ function parseCommandGroups(value: unknown, commandCount: unknown, remaining: un
     const settled = integer(counts[1], 'command group settled count');
     const invalid = integer(counts[2], 'command group invalid count');
     if (invalid !== 0) throw new InspectionFailure('Malformed journal row: command delivery state is unsupported.');
-    if (groupUnresolved + settled === 0)
-      throw new InspectionFailure('Malformed journal value: empty command group.');
+    if (groupUnresolved + settled === 0) throw new InspectionFailure('Malformed journal value: empty command group.');
     seen += groupUnresolved + settled;
     pending += groupUnresolved;
     groups.push({
@@ -392,18 +400,25 @@ function cursorDecode(value: string, request: InspectionRequest, runId: string):
   } catch {
     throw new InspectionFailure('Cursor is malformed or noncanonical.', 2);
   }
-  const keys = request.page === 'pending' ? ['v', 'source', 'run', 'kind', 'record', 'envelope'] : ['v', 'source', 'run', 'kind', 'record'];
+  const keys =
+    request.page === 'pending'
+      ? ['v', 'source', 'run', 'kind', 'record', 'envelope']
+      : ['v', 'source', 'run', 'kind', 'record'];
   const result = exactObject(cursor, keys, 'cursor');
-  if (
-    result.v !== 1 ||
-    result.source !== request.source ||
-    result.run !== runId ||
-    result.kind !== request.page
-  )
+  if (result.v !== 1 || result.source !== request.source || result.run !== runId || result.kind !== request.page)
     throw new InspectionFailure('Cursor belongs to a different source, generation or page.', 2);
-  if (typeof result.record !== 'string' || bytes(result.record) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(result.record))
+  if (
+    typeof result.record !== 'string' ||
+    bytes(result.record) > MAX_RECORD_KEY_BYTES ||
+    !RECORD_KEY.test(result.record)
+  )
     throw new InspectionFailure('Cursor record ordering key is invalid.', 2);
-  if (request.page === 'pending' && (!Number.isInteger(result.envelope) || (result.envelope as number) < 0 || (result.envelope as number) >= MAX_ENVELOPES))
+  if (
+    request.page === 'pending' &&
+    (!Number.isInteger(result.envelope) ||
+      (result.envelope as number) < 0 ||
+      (result.envelope as number) >= MAX_ENVELOPES)
+  )
     throw new InspectionFailure('Cursor envelope ordering key is invalid.', 2);
   return result;
 }
@@ -417,20 +432,29 @@ function phaseFor(status: string): 'acquiring' | 'validated/sealed' | 'finalizin
 }
 
 function resumeGuidance(status: string, activeWork: readonly ('applying' | 'deferred')[]): string {
-  if (status === 'staging') return 'The existing importer requires a complete validated input before it can resume; incomplete acquisition is discarded by its ordinary workflow.';
+  if (status === 'staging')
+    return 'The existing importer requires a complete validated input before it can resume; incomplete acquisition is discarded by its ordinary workflow.';
   if (status === 'ready' && activeWork.includes('applying'))
     return `The existing importer rechecks current authority and replays each retained request with its original command keys and bytes${activeWork.includes('deferred') ? '; deferred covers also remain pending' : ''}; unresolved authority or ownership failures remain in force.`;
   if (status === 'ready' && activeWork.includes('deferred'))
     return 'Deferred covers remain pending; the existing importer rechecks current authority, fences and source registration before continuing.';
-  if (status === 'ready') return 'The existing importer rechecks current authority, input integrity, source registration and fences before ordinary continuation.';
-  if (status === 'finalizing') return 'The existing importer continues the retained baseline finalization cursor after ordinary source ownership admission.';
-  if (status === 'mass-disappearance') return 'This generation did not advance the baseline; ordinary resume needs a complete input and deliberate review of the existing disappearance threshold.';
-  if (status === 'invalid-input') return 'This generation did not advance the baseline; ordinary resume requires a complete valid input.';
-  if (status === 'complete') return 'This generation is the retained completed baseline; a later import still uses ordinary ownership and current authority checks.';
+  if (status === 'ready')
+    return 'The existing importer rechecks current authority, input integrity, source registration and fences before ordinary continuation.';
+  if (status === 'finalizing')
+    return 'The existing importer continues the retained baseline finalization cursor after ordinary source ownership admission.';
+  if (status === 'mass-disappearance')
+    return 'This generation did not advance the baseline; ordinary resume needs a complete input and deliberate review of the existing disappearance threshold.';
+  if (status === 'invalid-input')
+    return 'This generation did not advance the baseline; ordinary resume requires a complete valid input.';
+  if (status === 'complete')
+    return 'This generation is the retained completed baseline; a later import still uses ordinary ownership and current authority checks.';
   return 'The stored status is not recognized by this inspector; resume behavior is not inferred and the existing importer remains responsible for admission.';
 }
 
-function sameFile(left: Awaited<ReturnType<FileHandle['stat']>>, right: Awaited<ReturnType<FileHandle['stat']>>): boolean {
+function sameFile(
+  left: Awaited<ReturnType<FileHandle['stat']>>,
+  right: Awaited<ReturnType<FileHandle['stat']>>,
+): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
@@ -456,10 +480,12 @@ export class InspectionStore {
       const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
       descriptor = await open(path, flags);
       const identity = await descriptor.stat();
-      if (!identity.isFile()) throw new InspectionFailure(`State path is not a regular file: ${JSON.stringify(path)}.`, 2);
+      if (!identity.isFile())
+        throw new InspectionFailure(`State path is not a regular file: ${JSON.stringify(path)}.`, 2);
       database = new Database(path, { readonly: true, create: false, strict: true });
       const afterOpen = await stat(path);
-      if (!sameFile(identity, afterOpen)) throw new InspectionFailure('State path changed while it was being opened.', 2);
+      if (!sameFile(identity, afterOpen))
+        throw new InspectionFailure('State path changed while it was being opened.', 2);
       store = new InspectionStore(path, descriptor, database);
       descriptor = undefined;
       database = undefined;
@@ -472,15 +498,22 @@ export class InspectionStore {
       if (error instanceof InspectionFailure) throw error;
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code === 'ENOENT') throw new InspectionFailure(`State file does not exist: ${JSON.stringify(path)}.`, 2);
-      if (code === 'ELOOP') throw new InspectionFailure(`State path must not be a symbolic link: ${JSON.stringify(path)}.`, 2);
+      if (code === 'ELOOP')
+        throw new InspectionFailure(`State path must not be a symbolic link: ${JSON.stringify(path)}.`, 2);
       if (
         code === 'SQLITE_BUSY' ||
         code === 'SQLITE_LOCKED' ||
         (error instanceof Error && /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message))
       )
         throw new InspectionFailure('State database is busy or locked; retry the local inspection.', 1);
-      if (error instanceof Error && /not a database|unable to open database|database disk image is malformed/i.test(error.message))
-        throw new InspectionFailure(`State file is not a supported readable SQLite database: ${JSON.stringify(path)}.`, 2);
+      if (
+        error instanceof Error &&
+        /not a database|unable to open database|database disk image is malformed/i.test(error.message)
+      )
+        throw new InspectionFailure(
+          `State file is not a supported readable SQLite database: ${JSON.stringify(path)}.`,
+          2,
+        );
       throw new InspectionFailure(`Unable to open state file ${JSON.stringify(path)}${code ? ` (${code})` : ''}.`, 2);
     }
   }
@@ -489,18 +522,51 @@ export class InspectionStore {
     const required: Record<string, readonly string[]> = {
       run_sources: ['source', 'sequence', 'lease_run', 'generation', 'present_count'],
       run_generations: [
-        'source', 'id', 'seq', 'lease', 'status', 'threshold', 'prior', 'supplied', 'survivors', 'invalid',
-        'classified', 'resolved', 'expected', 'changed', 'prepared', 'cursor',
+        'source',
+        'id',
+        'seq',
+        'lease',
+        'status',
+        'threshold',
+        'prior',
+        'supplied',
+        'survivors',
+        'invalid',
+        'classified',
+        'resolved',
+        'expected',
+        'changed',
+        'prepared',
+        'cursor',
       ],
       run_entries: [
-        'source', 'run_id', 'record_key', 'row_json', 'projection_json', 'kind', 'resolved', 'bytes', 'keys_json',
-        'omissions_json', 'pending', 'remaining', 'cover_pending',
+        'source',
+        'run_id',
+        'record_key',
+        'row_json',
+        'projection_json',
+        'kind',
+        'resolved',
+        'bytes',
+        'keys_json',
+        'omissions_json',
+        'pending',
+        'remaining',
+        'cover_pending',
       ],
       run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
       run_commands: ['source', 'run_id', 'command_key', 'record_key', 'field_group', 'op', 'envelope_index', 'done'],
       run_payloads: ['source', 'command_key', 'body'],
       run_envelopes: [
-        'source', 'run_id', 'record_key', 'envelope_index', 'multi', 'bytes', 'keys_json', 'remaining', 'pending',
+        'source',
+        'run_id',
+        'record_key',
+        'envelope_index',
+        'multi',
+        'bytes',
+        'keys_json',
+        'remaining',
+        'pending',
       ],
     };
     for (const [table, columns] of Object.entries(required)) {
@@ -509,10 +575,14 @@ export class InspectionStore {
         .get('table', table) as { found: number } | null;
       if (!found) throw new InspectionFailure(`Unsupported importer state schema: table ${table} is missing.`);
       const actual = new Set(
-        this.database.query(`PRAGMA table_info(${table})`).all().map((row) => (row as { name: string }).name),
+        this.database
+          .query(`PRAGMA table_info(${table})`)
+          .all()
+          .map((row) => (row as { name: string }).name),
       );
       const missing = columns.find((column) => !actual.has(column));
-      if (missing) throw new InspectionFailure(`Unsupported importer state schema: column ${table}.${missing} is missing.`);
+      if (missing)
+        throw new InspectionFailure(`Unsupported importer state schema: column ${table}.${missing} is missing.`);
     }
     for (const [index, table] of [
       ['run_envelope_pending', 'run_envelopes'],
@@ -545,12 +615,17 @@ export class InspectionStore {
         // Preserve the original bounded read failure.
       }
       if (error instanceof InspectionFailure) throw error;
-      if (error instanceof Error && /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message))
+      if (
+        error instanceof Error &&
+        /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message)
+      )
         throw new InspectionFailure('State database is busy or locked; retry the local inspection.');
       if (error instanceof Error && /malformed JSON/i.test(error.message))
         throw new InspectionFailure('Malformed journal data: a stored command key list is not valid JSON.');
       if (error instanceof Error && /no such (?:table|column)|no query solution|no such index/i.test(error.message))
-        throw new InspectionFailure('Unsupported importer state schema: a required journal field or index is unavailable.');
+        throw new InspectionFailure(
+          'Unsupported importer state schema: a required journal field or index is unavailable.',
+        );
       throw new InspectionFailure('Malformed or unavailable importer journal data; no state was changed.');
     }
   }
@@ -563,7 +638,11 @@ export class InspectionStore {
       throw new InspectionFailure('A cursor or page size requires --page pending|covers.', 2);
     if (request.page !== undefined && request.page !== 'pending' && request.page !== 'covers')
       throw new InspectionFailure('Page must be pending or covers.', 2);
-    if (request.page !== undefined && request.limit !== undefined && (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > MAX_PAGE_SIZE))
+    if (
+      request.page !== undefined &&
+      request.limit !== undefined &&
+      (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > MAX_PAGE_SIZE)
+    )
       throw new InspectionFailure('Page size must be an integer from 1 through 100.', 2);
     if (request.cursor !== undefined && request.page === undefined)
       throw new InspectionFailure('A cursor requires a page selector.', 2);
@@ -579,10 +658,14 @@ export class InspectionStore {
       throw new InspectionFailure('Malformed journal row: source identity does not match its lookup key.');
     const presentCount = source ? integer(source.present_count, 'run_sources.present_count') : null;
     const liveGeneration = source?.lease_run === null || source?.lease_run === undefined ? null : source.lease_run;
-    const baselineGeneration = source?.generation === null || source?.generation === undefined ? null : source.generation;
+    const baselineGeneration =
+      source?.generation === null || source?.generation === undefined ? null : source.generation;
     if (liveGeneration !== null) validGeneration(liveGeneration);
     if (baselineGeneration !== null) validGeneration(baselineGeneration);
-    if (source && (typeof source.sequence !== 'number' || !Number.isSafeInteger(source.sequence) || source.sequence < 0))
+    if (
+      source &&
+      (typeof source.sequence !== 'number' || !Number.isSafeInteger(source.sequence) || source.sequence < 0)
+    )
       throw new InspectionFailure('Malformed journal row: source sequence is not a bounded integer.');
 
     let selectedId: string | null = null;
@@ -601,9 +684,10 @@ export class InspectionStore {
     if (selectedId !== null && !source)
       throw new InspectionFailure(`No source state exists for ${JSON.stringify(request.source)}.`);
 
-    const baseline = source && baselineGeneration !== null
-      ? { generation: baselineGeneration, presentCount: presentCount!, empty: presentCount === 0 }
-      : null;
+    const baseline =
+      source && baselineGeneration !== null
+        ? { generation: baselineGeneration, presentCount: presentCount!, empty: presentCount === 0 }
+        : null;
     const sourceState: InspectionDocument['sourceState'] = !source
       ? 'absent'
       : liveGeneration !== null
@@ -620,7 +704,8 @@ export class InspectionStore {
     }
     let page: InspectionDocument['page'] = null;
     if (request.page !== undefined) {
-      if (selectedId === null) throw new InspectionFailure('There is no active generation or completed baseline to page.', 2);
+      if (selectedId === null)
+        throw new InspectionFailure('There is no active generation or completed baseline to page.', 2);
       const runId = selectedId;
       const limit = request.limit ?? DEFAULT_PAGE_SIZE;
       const cursor = request.cursor === undefined ? null : cursorDecode(request.cursor, request, runId);
@@ -645,7 +730,10 @@ export class InspectionStore {
       .get('table', 'import_owners') as { found: number } | null;
     if (!table) return 'unavailable';
     const columns = new Set(
-      this.database.query('PRAGMA table_info(import_owners)').all().map((row) => (row as { name: string }).name),
+      this.database
+        .query('PRAGMA table_info(import_owners)')
+        .all()
+        .map((row) => (row as { name: string }).name),
     );
     if (!columns.has('source')) return 'unavailable';
     const row = this.database.query('SELECT 1 AS found FROM import_owners WHERE source=? LIMIT 1').get(source);
@@ -660,7 +748,10 @@ export class InspectionStore {
   ): NonNullable<InspectionDocument['generation']> {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
     const hasSkipped = new Set(
-      this.database.query('PRAGMA table_info(run_generations)').all().map((row) => (row as { name: string }).name),
+      this.database
+        .query('PRAGMA table_info(run_generations)')
+        .all()
+        .map((row) => (row as { name: string }).name),
     ).has('skipped');
     const skipped = hasSkipped ? 'skipped' : 'NULL AS skipped';
     const row = this.database
@@ -669,13 +760,22 @@ export class InspectionStore {
         FROM run_generations WHERE source=? AND id=?`,
       )
       .get(source, id) as GenerationRow | null;
-    if (!row) throw new InspectionFailure(`No generation ${JSON.stringify(id)} exists for source ${JSON.stringify(source)}.`, 2);
-    if (row.id !== id) throw new InspectionFailure('Malformed journal row: generation identity does not match its lookup key.');
+    if (!row)
+      throw new InspectionFailure(
+        `No generation ${JSON.stringify(id)} exists for source ${JSON.stringify(source)}.`,
+        2,
+      );
+    if (row.id !== id)
+      throw new InspectionFailure('Malformed journal row: generation identity does not match its lookup key.');
     const status = safeStatus(row.status);
     if (sourceRow?.lease_run === id && !['staging', 'ready', 'finalizing'].includes(status))
-      throw new InspectionFailure(`Malformed journal row: source points to non-active generation ${JSON.stringify(id)}.`);
+      throw new InspectionFailure(
+        `Malformed journal row: source points to non-active generation ${JSON.stringify(id)}.`,
+      );
     if (sourceRow?.generation === id && status !== 'complete')
-      throw new InspectionFailure(`Malformed journal row: baseline points to non-completed generation ${JSON.stringify(id)}.`);
+      throw new InspectionFailure(
+        `Malformed journal row: baseline points to non-completed generation ${JSON.stringify(id)}.`,
+      );
     const priorMembership = nullableInteger(row.prior, 'run_generations.prior');
     const supplied = nullableInteger(row.supplied, 'run_generations.supplied');
     const survivors = nullableInteger(row.survivors, 'run_generations.survivors');
@@ -699,9 +799,11 @@ export class InspectionStore {
       .get(source, id, source, id) as { pending: unknown; covers: unknown };
     const activeWork: ('applying' | 'deferred')[] = [];
     if (work.pending === 1) activeWork.push('applying');
-    else if (work.pending !== 0) throw new InspectionFailure('Malformed journal row: pending-work indicator is not boolean.');
+    else if (work.pending !== 0)
+      throw new InspectionFailure('Malformed journal row: pending-work indicator is not boolean.');
     if (work.covers === 1) activeWork.push('deferred');
-    else if (work.covers !== 0) throw new InspectionFailure('Malformed journal row: deferred-cover indicator is not boolean.');
+    else if (work.covers !== 0)
+      throw new InspectionFailure('Malformed journal row: deferred-cover indicator is not boolean.');
     return {
       id,
       status,
@@ -825,13 +927,21 @@ export class InspectionStore {
       )
       .all(source, runId, afterRecord, limit + 1) as CoverPageRow[];
     const hasMore = fetched.length > limit;
-    const rows = fetched.slice(0, limit).map((row) => ({
-      recordKey: this.pageKey(row.record_key),
-      classification: this.classification(row.kind),
-      unresolvedCommands: integer(row.remaining, 'run_entries.remaining'),
-      fieldOperations: parseCommandGroups(row.command_groups, row.command_count, row.remaining, MAX_RECORD_COMMANDS),
-      omittedFieldGroups: parseOmissions(row.omissions_json),
-    } satisfies DeferredCoverSummary));
+    const rows = fetched.slice(0, limit).map(
+      (row) =>
+        ({
+          recordKey: this.pageKey(row.record_key),
+          classification: this.classification(row.kind),
+          unresolvedCommands: integer(row.remaining, 'run_entries.remaining'),
+          fieldOperations: parseCommandGroups(
+            row.command_groups,
+            row.command_count,
+            row.remaining,
+            MAX_RECORD_COMMANDS,
+          ),
+          omittedFieldGroups: parseOmissions(row.omissions_json),
+        }) satisfies DeferredCoverSummary,
+    );
     const last = rows.at(-1);
     return {
       kind,
@@ -940,15 +1050,10 @@ export class InspectionStore {
           key: String(command.command_key),
           fieldGroup: command.field_group as InspectionEnvelope['commands'][number]['fieldGroup'],
           operation: command.op as InspectionEnvelope['commands'][number]['operation'],
-          delivery:
-            command.done === 0
-              ? 'unresolved'
-              : omitted
-                ? 'settled-with-fence-omission'
-                : 'acknowledged',
+          delivery: command.done === 0 ? 'unresolved' : omitted ? 'settled-with-fence-omission' : 'acknowledged',
         } as const;
       });
-      if (unresolved !== envelopeRemaining || (raw.pending === 1) !== (envelopeRemaining > 0))
+      if (unresolved !== envelopeRemaining || (raw.pending === 1) !== envelopeRemaining > 0)
         throw new InspectionFailure('Malformed journal row: envelope delivery flags and command rows disagree.');
       commands.push(...envelopeCommands);
       envelopes.push({

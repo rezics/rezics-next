@@ -89,9 +89,18 @@ test('read-only inspection pages bounded work, binds cursors, and drills into or
     const before = fixture.database
       .query('SELECT status,lease,prepared,resolved FROM run_generations WHERE source=? AND id=?')
       .get(source, run.id);
-    const firstPending = await runImportCli(
-      ['inspect', '--state', fixture.path, '--source', source, '--page', 'pending', '--limit', '20', '--json'],
-    );
+    const firstPending = await runImportCli([
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--page',
+      'pending',
+      '--limit',
+      '20',
+      '--json',
+    ]);
     expect(firstPending.code).toBe(0);
     expect(firstPending.stderr).toBe('');
     expect(firstPending.openHandles).toBe(0);
@@ -104,14 +113,31 @@ test('read-only inspection pages bounded work, binds cursors, and drills into or
     };
     expect(pendingDocument.baseline).toEqual({ generation: baselineRun.id, presentCount: 1, empty: false });
     expect(pendingDocument.selection).toEqual({ kind: 'active', generation: run.id });
-    expect(pendingDocument.generation).toMatchObject({ status: 'ready', phase: 'validated/sealed', counts: { skipped: 3 } });
+    expect(pendingDocument.generation).toMatchObject({
+      status: 'ready',
+      phase: 'validated/sealed',
+      counts: { skipped: 3 },
+    });
     expect(pendingDocument.page.rows).toHaveLength(20);
     expect(pendingDocument.page.end).toBe('more');
 
     const secondPending = await runImportCli([
-      'inspect', '--state', fixture.path, '--source', source, '--page', 'pending', '--limit', '20', '--cursor', pendingDocument.page.nextCursor, '--json',
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--page',
+      'pending',
+      '--limit',
+      '20',
+      '--cursor',
+      pendingDocument.page.nextCursor,
+      '--json',
     ]);
-    const secondPendingDocument = JSON.parse(secondPending.stdout) as { page: { rows: { recordKey: string }[]; end: string; nextCursor?: string } };
+    const secondPendingDocument = JSON.parse(secondPending.stdout) as {
+      page: { rows: { recordKey: string }[]; end: string; nextCursor?: string };
+    };
     expect(secondPending.code).toBe(0);
     expect(secondPendingDocument.page.rows.map((row) => row.recordKey)).toEqual(['Q0018', 'Q0019', 'Q0020', 'Q0021']);
     expect(secondPendingDocument.page.rows).toHaveLength(4);
@@ -119,30 +145,77 @@ test('read-only inspection pages bounded work, binds cursors, and drills into or
     expect(secondPendingDocument.page.nextCursor).toBeUndefined();
 
     const firstCovers = await runImportCli([
-      'inspect', '--state', fixture.path, '--source', source, '--page', 'covers', '--limit', '20', '--json',
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--page',
+      'covers',
+      '--limit',
+      '20',
+      '--json',
     ]);
-    const firstCoverPage = JSON.parse(firstCovers.stdout) as { page: { rows: { recordKey: string }[]; end: string; nextCursor: string } };
+    const firstCoverPage = JSON.parse(firstCovers.stdout) as {
+      page: { rows: { recordKey: string }[]; end: string; nextCursor: string };
+    };
     expect(firstCovers.code).toBe(0);
     expect(firstCoverPage.page.rows).toHaveLength(20);
     expect(firstCoverPage.page.end).toBe('more');
     const lastCovers = await runImportCli([
-      'inspect', '--state', fixture.path, '--source', source, '--page', 'covers', '--limit', '20', '--cursor', firstCoverPage.page.nextCursor, '--json',
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--page',
+      'covers',
+      '--limit',
+      '20',
+      '--cursor',
+      firstCoverPage.page.nextCursor,
+      '--json',
     ]);
-    const lastCoverPage = JSON.parse(lastCovers.stdout) as { page: { rows: { recordKey: string }[]; end: string; nextCursor?: string } };
+    const lastCoverPage = JSON.parse(lastCovers.stdout) as {
+      page: { rows: { recordKey: string }[]; end: string; nextCursor?: string };
+    };
     expect(lastCovers.code).toBe(0);
     expect(lastCoverPage.page.rows).toHaveLength(2);
     expect(lastCoverPage.page.end).toBe('end');
     expect(lastCoverPage.page.nextCursor).toBeUndefined();
 
     const crossGeneration = await runImportCli([
-      'inspect', '--state', fixture.path, '--source', source, '--generation', baselineRun.id, '--page', 'pending', '--cursor', pendingDocument.page.nextCursor, '--json',
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--generation',
+      baselineRun.id,
+      '--page',
+      'pending',
+      '--cursor',
+      pendingDocument.page.nextCursor,
+      '--json',
     ]);
     expect(crossGeneration.code).toBe(2);
     expect(JSON.parse(crossGeneration.stdout).error).toContain('different source, generation or page');
 
-    const exact = await runImportCli(['inspect', '--state', fixture.path, '--source', source, '--record', 'Q-MULTI', '--json']);
+    const exact = await runImportCli([
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--record',
+      'Q-MULTI',
+      '--json',
+    ]);
     const exactDocument = JSON.parse(exact.stdout) as {
-      record: { found: boolean; envelopes: { index: number; delivery: string; byteLength: number; sha256: string; commands: unknown[] }[] };
+      record: {
+        found: boolean;
+        envelopes: { index: number; delivery: string; byteLength: number; sha256: string; commands: unknown[] }[];
+      };
     };
     expect(exact.code).toBe(0);
     expect(exactDocument.record.found).toBe(true);
@@ -151,7 +224,16 @@ test('read-only inspection pages bounded work, binds cursors, and drills into or
     expect(exactDocument.record.envelopes.every((item) => item.delivery === 'unresolved')).toBe(true);
     expect(exact.stdout).not.toContain('Private request body sentinel');
 
-    const settled = await runImportCli(['inspect', '--state', fixture.path, '--source', source, '--record', 'Q-SETTLED', '--json']);
+    const settled = await runImportCli([
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      source,
+      '--record',
+      'Q-SETTLED',
+      '--json',
+    ]);
     expect(JSON.parse(settled.stdout).record).toMatchObject({
       found: true,
       resolved: true,
@@ -187,23 +269,33 @@ test('inspection rejects absent, unsupported, malformed and hostile local state 
 
     const aborted = new AbortController();
     aborted.abort();
-    const cancelled = await runImportCli(
-      ['inspect', '--state', fixture.path, '--source', 'wikidata', '--json'],
-      { signal: aborted.signal },
-    );
+    const cancelled = await runImportCli(['inspect', '--state', fixture.path, '--source', 'wikidata', '--json'], {
+      signal: aborted.signal,
+    });
     expect(cancelled.code).toBe(130);
     expect(cancelled.openHandles).toBe(0);
 
     let signalReads = 0;
     const cancelledAfterOpen = await runImportCli(
       ['inspect', '--state', fixture.path, '--source', 'wikidata', '--json'],
-      { signal: { get aborted() { return ++signalReads > 1; } } as AbortSignal },
+      {
+        signal: {
+          get aborted() {
+            return ++signalReads > 1;
+          },
+        } as AbortSignal,
+      },
     );
     expect(cancelledAfterOpen.code).toBe(130);
     expect(cancelledAfterOpen.openHandles).toBe(0);
 
     const hostile = await runImportCli([
-      'inspect', '--state', fixture.path, '--source', `wikidata\u001b[31m`, '--json',
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      `wikidata\u001b[31m`,
+      '--json',
     ]);
     expect(hostile.code).toBe(2);
     expect(hostile.stdout).not.toContain('\u001b');
@@ -284,7 +376,16 @@ test('malformed page journal data is reported as unavailable instead of an empty
       .query('UPDATE run_envelopes SET keys_json=? WHERE source=? AND run_id=? AND record_key=?')
       .run('{broken', 'wikidata', run.id, 'Q1');
 
-    const result = await runImportCli(['inspect', '--state', fixture.path, '--source', 'wikidata', '--page', 'pending', '--json']);
+    const result = await runImportCli([
+      'inspect',
+      '--state',
+      fixture.path,
+      '--source',
+      'wikidata',
+      '--page',
+      'pending',
+      '--json',
+    ]);
     expect(result.code).toBe(1);
     expect(result.openHandles).toBe(0);
     expect(JSON.parse(result.stdout).error).toContain('Malformed journal data');

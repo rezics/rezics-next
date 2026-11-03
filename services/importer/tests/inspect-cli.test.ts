@@ -6,9 +6,9 @@ test('inspection help is self-contained and rejects every import-only option', a
   expect(() =>
     parseInspectionArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--account-key', 'account.key']),
   ).toThrow('Unknown, import-only or repeated inspection flag');
-  expect(() =>
-    parseInspectionArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--limit', '20']),
-  ).toThrow('--limit requires --page');
+  expect(() => parseInspectionArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--limit', '20'])).toThrow(
+    '--limit requires --page',
+  );
   expect(() =>
     parseInspectionArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--page', 'pending', '--limit', '020']),
   ).toThrow('integer from 1 through 100');

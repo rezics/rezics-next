@@ -51,7 +51,8 @@ function boundedArguments(argv: readonly string[]): void {
     if (typeof argument !== 'string' || argument.length > MAX_ARGUMENT_BYTES || argument.includes('\0'))
       throw new UsageFailure('Inspection arguments exceed the supported size.');
     totalBytes += Buffer.byteLength(argument, 'utf8');
-    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES) throw new UsageFailure('Inspection arguments exceed the supported size.');
+    if (totalBytes > MAX_TOTAL_ARGUMENT_BYTES)
+      throw new UsageFailure('Inspection arguments exceed the supported size.');
   }
 }
 
@@ -70,7 +71,8 @@ export function parseInspectionArgs(argv: readonly string[]): ParsedInspectionAr
       json = true;
       continue;
     }
-    if (!valueFlags.has(flag) || values.has(flag)) throw new UsageFailure('Unknown, import-only or repeated inspection flag.');
+    if (!valueFlags.has(flag) || values.has(flag))
+      throw new UsageFailure('Unknown, import-only or repeated inspection flag.');
     const value = argv[++index];
     if (value === undefined || value.length === 0 || value.startsWith('--'))
       throw new UsageFailure(`Inspection flag ${flag} requires one value.`);
@@ -86,7 +88,11 @@ export function parseInspectionArgs(argv: readonly string[]): ParsedInspectionAr
   const request: ParsedInspectionArgs['request'] = { source };
   const generation = values.get('--generation');
   if (generation !== undefined) {
-    if (Buffer.byteLength(generation, 'utf8') > 32 || !/^[1-9][0-9]*$/u.test(generation) || !Number.isSafeInteger(Number(generation)))
+    if (
+      Buffer.byteLength(generation, 'utf8') > 32 ||
+      !/^[1-9][0-9]*$/u.test(generation) ||
+      !Number.isSafeInteger(Number(generation))
+    )
       throw new UsageFailure('--generation must be a positive stored generation ID.');
     request.generation = generation;
   }
@@ -94,7 +100,9 @@ export function parseInspectionArgs(argv: readonly string[]): ParsedInspectionAr
   if (record !== undefined) {
     if (
       Buffer.byteLength(record, 'utf8') > 512 ||
-      !/^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u.test(record)
+      !/^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u.test(
+        record,
+      )
     )
       throw new UsageFailure('--record must be an exact native source record key.');
     request.record = record;
@@ -106,7 +114,8 @@ export function parseInspectionArgs(argv: readonly string[]): ParsedInspectionAr
   }
   const limitValue = values.get('--limit');
   if (limitValue !== undefined) {
-    if (!/^(?:[1-9][0-9]{0,2})$/u.test(limitValue)) throw new UsageFailure('--limit must be an integer from 1 through 100.');
+    if (!/^(?:[1-9][0-9]{0,2})$/u.test(limitValue))
+      throw new UsageFailure('--limit must be an integer from 1 through 100.');
     const limit = Number(limitValue);
     if (limit > 100) throw new UsageFailure('--limit must be an integer from 1 through 100.');
     if (request.page === undefined) throw new UsageFailure('--limit requires --page pending|covers.');
@@ -121,14 +130,16 @@ export function parseInspectionArgs(argv: readonly string[]): ParsedInspectionAr
 }
 
 function jsonSafe(value: unknown): string {
-  return JSON.stringify(value).replace(/[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu, (character) =>
-    `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
+  return JSON.stringify(value).replace(
+    /[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
+    (character) => `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
   );
 }
 
 function terminalString(value: string): string {
-  return JSON.stringify(value).replace(/[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu, (character) =>
-    `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
+  return JSON.stringify(value).replace(
+    /[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
+    (character) => `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
   );
 }
 
@@ -136,7 +147,9 @@ function count(value: number | null, whenUnknown = 'unknown'): string {
   return value === null ? whenUnknown : String(value);
 }
 
-function commandOperations(value: readonly { fieldGroup: string; operation: string; unresolved: number; settled: number }[]): string {
+function commandOperations(
+  value: readonly { fieldGroup: string; operation: string; unresolved: number; settled: number }[],
+): string {
   return value.length
     ? value
         .map((item) => `${item.fieldGroup}/${item.operation}: unresolved ${item.unresolved}, settled ${item.settled}`)
@@ -178,9 +191,7 @@ function renderEnvelope(envelope: InspectionEnvelope): string[] {
     `    #${envelope.index}: ${envelope.delivery}; ${envelope.byteLength} bytes; SHA-256 ${envelope.sha256}${envelope.multiEnvelope ? '; multi-envelope record' : ''}`,
   ];
   for (const command of envelope.commands) {
-    lines.push(
-      `      ${terminalString(command.key)} ${command.fieldGroup}/${command.operation}: ${command.delivery}`,
-    );
+    lines.push(`      ${terminalString(command.key)} ${command.fieldGroup}/${command.operation}: ${command.delivery}`);
   }
   return lines;
 }
@@ -203,7 +214,11 @@ function renderPage(page: NonNullable<InspectionDocument['page']>): string[] {
       );
     }
   }
-  lines.push(page.end === 'more' ? `More work is available. Next cursor: ${page.nextCursor}` : 'End of this live page; no next cursor.');
+  lines.push(
+    page.end === 'more'
+      ? `More work is available. Next cursor: ${page.nextCursor}`
+      : 'End of this live page; no next cursor.',
+  );
   lines.push(
     'Each page is one short consistent read. A writer can settle work between invocations; absence from a later page is not evidence that this view observed delivery.',
   );
@@ -220,12 +235,10 @@ function resumeInvocation(source: string, status: string): string[] {
 }
 
 export function renderInspection(document: InspectionDocument): string {
-  const lines = [
-    `Source: ${terminalString(document.source)}`,
-    `Source state: ${document.sourceState}`,
-  ];
+  const lines = [`Source: ${terminalString(document.source)}`, `Source state: ${document.sourceState}`];
   if (document.sourceState === 'absent') lines.push('No state exists for this source identifier.');
-  if (document.sourceState === 'uninitialized') lines.push('State exists, but there is no active generation or completed baseline.');
+  if (document.sourceState === 'uninitialized')
+    lines.push('State exists, but there is no active generation or completed baseline.');
   if (document.baseline) {
     lines.push(
       `Completed baseline: generation ${terminalString(document.baseline.generation)}, present records ${document.baseline.presentCount}${document.baseline.empty ? ' (recognized empty completed source)' : ''}.`,
@@ -234,7 +247,9 @@ export function renderInspection(document: InspectionDocument): string {
     lines.push('Completed baseline: none recorded.');
   }
   if (document.selection)
-    lines.push(`Viewed generation: ${terminalString(document.selection.generation)} (${document.selection.kind} selection).`);
+    lines.push(
+      `Viewed generation: ${terminalString(document.selection.generation)} (${document.selection.kind} selection).`,
+    );
   if (document.generation) {
     const generation = document.generation;
     lines.push(`Stored status: ${terminalString(generation.status)}; phase: ${generation.phase}.`);
@@ -246,13 +261,17 @@ export function renderInspection(document: InspectionDocument): string {
     lines.push(`  supplied records: ${count(generation.counts.supplied)}`);
     lines.push(`  surviving prior members: ${count(generation.counts.survivors)}`);
     lines.push(`  skipped records: ${count(generation.counts.skipped)}`);
-    lines.push(`  invalid input flag: ${generation.counts.invalidInputFlag === null ? 'unknown' : generation.counts.invalidInputFlag ? 'set' : 'not set'}`);
+    lines.push(
+      `  invalid input flag: ${generation.counts.invalidInputFlag === null ? 'unknown' : generation.counts.invalidInputFlag ? 'set' : 'not set'}`,
+    );
     lines.push(`  classified: ${count(generation.counts.classified)}`);
     lines.push(`  resolved: ${count(generation.counts.resolved)}`);
     lines.push(`  expected after sealing: ${count(generation.counts.expected, 'not set during acquisition')}`);
     lines.push(`  prepared records: ${count(generation.counts.prepared)}`);
     if (document.baseline)
-      lines.push('Retained progress belongs to the viewed generation; it does not replace the completed baseline until ordinary finalization succeeds.');
+      lines.push(
+        'Retained progress belongs to the viewed generation; it does not replace the completed baseline until ordinary finalization succeeds.',
+      );
     lines.push(`Resume behavior: ${generation.resume}`);
   }
   lines.push(`Ownership row present: ${document.ownershipRow}; this is not a liveness or lease-capability check.`);
@@ -269,8 +288,9 @@ function errorMessage(error: unknown): { code: number; message: string } {
 }
 
 function terminalSafeMessage(value: string): string {
-  return value.replace(/[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu, (character) =>
-    `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
+  return value.replace(
+    /[\u007f-\u009f\u2028-\u202e\u2066-\u2069]/gu,
+    (character) => `\\u${character.codePointAt(0)!.toString(16).padStart(4, '0')}`,
   );
 }
 
@@ -279,7 +299,10 @@ function requestedJson(argv: readonly string[]): boolean {
 }
 
 /** Read-only inspection route. It does not construct credentials, transport or importer objects. */
-export async function runInspectCli(argv: readonly string[], options: InspectCliOptions = {}): Promise<InspectCliResult> {
+export async function runInspectCli(
+  argv: readonly string[],
+  options: InspectCliOptions = {},
+): Promise<InspectCliResult> {
   const jsonRequested = requestedJson(argv);
   let parsed: ParsedInspectionArgs | 'help';
   try {
@@ -288,8 +311,18 @@ export async function runInspectCli(argv: readonly string[], options: InspectCli
   } catch (error) {
     const detail = errorMessage(error);
     if (jsonRequested)
-      return { code: detail.code, stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`, stderr: '', openHandles: 0 };
-    return { code: detail.code, stdout: '', stderr: `${terminalSafeMessage(detail.message)}\n${USAGE}\n`, openHandles: 0 };
+      return {
+        code: detail.code,
+        stdout: `${jsonSafe({ version: 1, error: detail.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
+    return {
+      code: detail.code,
+      stdout: '',
+      stderr: `${terminalSafeMessage(detail.message)}\n${USAGE}\n`,
+      openHandles: 0,
+    };
   }
 
   let store: InspectionStore | undefined;
@@ -306,7 +339,12 @@ export async function runInspectCli(argv: readonly string[], options: InspectCli
   }
   if (failure) {
     if (parsed.json)
-      return { code: failure.code, stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`, stderr: '', openHandles: 0 };
+      return {
+        code: failure.code,
+        stdout: `${jsonSafe({ version: 1, error: failure.message })}\n`,
+        stderr: '',
+        openHandles: 0,
+      };
     return { code: failure.code, stdout: '', stderr: `${terminalSafeMessage(failure.message)}\n`, openHandles: 0 };
   }
   try {
