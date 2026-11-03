@@ -130,11 +130,7 @@ export async function createNativeCatalogueWorkPartsFixture(): Promise<NativeCat
       'rezics:storyArc': [
         {
           value: { type: 'value', content: firstArc.id },
-          qualifiers: [
-            snak('rezics:firstPart', '1'),
-            snak('rezics:lastPart', '2'),
-            snak('schema:position', '1'),
-          ],
+          qualifiers: [snak('rezics:firstPart', '1'), snak('rezics:lastPart', '2'), snak('schema:position', '1')],
           references: [
             { parts: [snak('schema:url', `https://example.org/work-parts/${marker}/arc/one`)] },
             { parts: [snak('schema:url', `https://example.org/work-parts/${marker}/arc/two`)] },
