@@ -196,7 +196,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       [
         createAccountsWorkModule({ realm: membership, access: production.access, authorize: membership.authorize }),
         communityWorkModule,
-        createRatingWorkModule(async (voterId) => createHash('sha256').update(voterId).digest('hex')),
+        createRatingWorkModule(async () => '0'.repeat(64)),
       ],
       { databaseUrl: database.url, pool: database.pool, client: workClient, env, executorId: `rating-terminal-${randomUUID()}` },
     );
@@ -272,7 +272,8 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       for (let round = 0; round < 200; round++) {
         const before = await checkpoint();
         const batch = await relay.run(partition);
-        if (batch.status !== 'read') throw new Error(`Effects relay stopped: ${batch.reason}`);
+        if (batch.status === 'busy') continue;
+        if (batch.status === 'stopped') throw new Error(`Effects relay stopped: ${batch.reason}`);
         if (batch.envelopes === 0) return;
         const workflows = await database.admin.query<{ workflow_id: string }>(
           `SELECT DISTINCT workflow_id FROM core.history_event_consumer

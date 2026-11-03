@@ -5,7 +5,7 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { checkGrowth, measure, seed, type Population } from '../support/growth.ts';
 import { id, openTerminalGrowthFixture, type TerminalGrowthFixture } from './support/growth-segment-terminal-fixture.ts';
 
-const scales = [256, 1024, 4096] as const;
+const scales: [number, number, number] = [256, 1024, 4096];
 let fixture: TerminalGrowthFixture;
 
 beforeAll(async () => {
