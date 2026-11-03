@@ -23,7 +23,8 @@ export async function revision(result: ApiResult<Post>, visibility: 'draft' | 'p
 export async function publicationDriverFixture() {
   const driver = await createContentNotificationDriver();
   const people = await driver.provision();
-  const options = (actor = people.replier) => ({ actor, key: JSON.stringify(crypto.randomUUID()) });
+  let serial = 0;
+  const options = (actor = people.replier) => ({ actor, key: JSON.stringify(`notification-${++serial}`) });
   return {
     driver,
     people,
