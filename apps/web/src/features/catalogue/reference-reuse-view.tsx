@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -73,8 +73,7 @@ export function ReferenceReusePanel({
     pageText(read.release.properties[source.property]?.labels, locale).text || m.subject_value_unlabelled({}, o);
   const targets = drafts.filter((draft) => factHolder(draft) !== source.holder);
   return (
-    <ContentItemFrame
-      as="section"
+    <section
       data-fact-reuse
       aria-labelledby={titleId}
       className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5"
@@ -193,6 +192,6 @@ export function ReferenceReusePanel({
           {m.facts_reuse_apply({}, o)}
         </Button>
       </div>
-    </ContentItemFrame>
+    </section>
   );
 }
