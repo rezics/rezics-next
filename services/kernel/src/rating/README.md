@@ -395,6 +395,21 @@ revisions persist independently of author profile lifecycle, remain concealed wi
 only if the native question is physically removed. This command introduces no deletion, retirement, author-history
 restoration or lifecycle jobs.
 
+Exact caption reads retain their original question, revision rows and author observations through the same
+released hydration and final source checks. If their home epoch changes, they return unavailable; history
+returns `stale_cursor` so its caller can explicitly restart. Neither path falls back to an older caption.
+
+The mounted consumer uses `createKernelClient(origin, options).ratingQuestions({ questionId })`: `label.put`
+takes `{ expectedLabelRevision, label }` and `Idempotency-Key`; `labels.get({ query: { limit, cursor? } })`
+returns the closed `{ labels, next }` DTO; `labels({ labelRevision }).get()` resolves an exact caption.
+`@rezics/client` exports `QuestionLabelInput`, `QuestionLabelResult`, `QuestionLabel`, `QuestionLabelHistory`
+and `QuestionLabelHistoryQuery` from those mounted declarations. Each label contains
+`{ questionId, labelRevision, label, at, author }`; author is the active identity allowlist, a deleted tombstone
+or null. A populated result may have a continuation; `{ labels: [], next: null }` is an admitted empty result,
+never a concealed question (`404`) or failed dependency (`503`). Retry a failed read with the exact query;
+only `409 stale_cursor` requires an explicit first-page restart. After correction, refresh current display and
+history independently of measurement revision; replace retained rows and cursors when viewer authority changes.
+
 `question-read.sql` keeps canonical `label` and measurement `revision` unchanged and adds separate
 `presentationLabel`/`labelRevision`. Existing actual callers (`votes.ts`, `aggregate-read.ts`,
 `public-figure-http.ts`, and `question-directory.ts`) retain canonical measurement fields. Only
@@ -408,9 +423,9 @@ selection tokens. Latest captions come from a head point join, without history s
 
 - **Touches:** command: bounded native question/Realm authorization, one head lock, one revision insert, one
   head update and ordinary receipt/event; current point/directory: one head primary-key join per question;
-  exact caption: two disjoint revision-1/retained-revision point branches; history: two question-home indexed
+  exact caption: two observations of the disjoint revision-1/retained-revision point branches; history: two question-home indexed
   `(question_id, revision)` keysets and question points, current question/Realm disclosure at both ends, and a
-  final home epoch point. Up to 20 author IDs each use two released account-home identity reads. The read has no
+  final home epoch point. Exact reads also finish their question and home observations. Up to 20 author IDs each use two released account-home identity reads. The read has no
   runner phase; the existing writer retains its single registered event path.
 - **Bound:** Each raw page returns at most 21 label rows and only 20 consumed authors are hydrated, twice; source
   materialization is at most 42 label rows and 40 identity results, with one partition row per anchored read.
@@ -420,9 +435,14 @@ selection tokens. Latest captions come from a head point join, without history s
   per-request census, refill, all-partition scan or invisible MVCC estimate is included. Index descent grows
   logarithmically with retained captions; full traversal grows by page count. Directory costs retain their
   existing 20-row budget with one additional local head seek per row.
-- **Growth check:** `test/rating/question-label.test.ts` pins the connected native journey, current author
-  disclosure, dependency retry and home-epoch retirement. Three-scale physical history growth remains part of the
-  controller's deferred acceptance; no custom rank cost is inferred.
+- **Growth check:** `test/rating/question-label.test.ts` covers the connected native journey, exact-caption
+  author privacy, current author disclosure, same-query identity/source retry and epoch retirement during final
+  source disclosure. Physical native proof remains required for independent unrelated and selected
+  identity/source/authority histories at 256/1024/4096 with fixed keys, homes, admitted byte caps and page limits.
+  This includes actual Access preparations/evaluations, SQL and transaction controls, physical plans and rows,
+  foreign pools, materialized/retained/serialized UTF-8 bytes, registered command/effect phases and cold retries;
+  the local row bounds above do not establish those all-pool costs. Controller acceptance retains this original
+  connected journey and its missing growth outcomes; no custom rank cost is inferred.
 
 Decision: a native question-home epoch change returns `409 stale_cursor`, while same-epoch caption appends preserve
 the captured ceiling.

@@ -9,7 +9,7 @@ import { resourceAuthorization } from '../access/index.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandTime, principalCommandIdentity, runCommand } from '../command/command.ts';
 import realmRead from '../community/realm-read.sql';
-import { partitionReadClient, partitionReadClientObservation } from '../database/read-snapshot.ts';
+import { partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -147,10 +147,13 @@ type AuthorObservation = {
   epochs: Map<number, number>;
 };
 
-type LabelPageObservation = {
+type LabelObservation = {
   partition: Partition;
   question: NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
   rows: LabelRow[];
+};
+
+type LabelPageObservation = LabelObservation & {
   after: number;
   ceiling: number;
 };
@@ -242,7 +245,7 @@ function labelValues(rows: LabelRow[], authors: Map<string, PublicIdentity>): Qu
 }
 
 async function observeLabelPage(
-  deps: Dependencies,
+  deps: Dependencies & { tokens: KeyRing },
   input: { questionId: string; limit: number },
   deadline: number,
   binding: CursorBinding,
@@ -294,10 +297,52 @@ async function observeQuestionHome(deps: Dependencies, questionId: string, deadl
   });
 }
 
-/** Hydrate only consumed provenance through the current account allowlist, never
- * copied profiles. Every author checkout is independently anchored and released. */
-async function presentLabels(deps: Dependencies, rows: LabelRow[], deadline: number): Promise<QuestionLabel[]> {
-  return labelValues(rows, (await observeAuthors(deps, rows, deadline)).identities);
+async function finishLabelSource(
+  deps: Dependencies,
+  actor: Actor,
+  questionId: string,
+  deadline: number,
+  initial: LabelObservation,
+  latest: LabelObservation,
+  continuation: boolean,
+): Promise<void> {
+  const currentQuestion = await readableRealmQuestion(deps, actor, questionId, deadline);
+  if (
+    !sameQuestionDefinition(initial.question, latest.question) ||
+    !sameQuestionDefinition(initial.question, currentQuestion)
+  )
+    throw new ProblemError('not_found');
+  const finalHome = await observeQuestionHome(deps, questionId, deadline);
+  if (
+    latest.partition.partitionNo !== initial.partition.partitionNo ||
+    latest.partition.epoch !== initial.partition.epoch ||
+    finalHome.partitionNo !== initial.partition.partitionNo ||
+    finalHome.epoch !== initial.partition.epoch
+  ) {
+    if (continuation) throw new ProblemError('stale_cursor');
+    throw new CommandUnavailableError('fenced', initial.partition.partitionNo);
+  }
+  if (!sameLabelRows(initial.rows, latest.rows))
+    throw new CommandUnavailableError('fenced', initial.partition.partitionNo);
+}
+
+async function observeExactLabel(
+  deps: Dependencies,
+  questionId: string,
+  revision: number,
+  deadline: number,
+): Promise<LabelObservation> {
+  return withReadTransaction(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, deadline);
+    const bound = await partitionReadClientObservation(bounded, partitionOf(routeOf(questionId)!));
+    const question = await questionRead.run(bound.client, { question_id: questionId });
+    if (!question || question.realmId === null) throw new ProblemError('not_found');
+    return {
+      partition: bound.partition,
+      question,
+      rows: await exactRead.run(bound.client, { question_id: questionId, revision }),
+    };
+  });
 }
 
 /** Exact captions are distinct from both creation wording and today's head. */
@@ -310,15 +355,14 @@ export async function readQuestionLabel(
 ): Promise<QuestionLabel | null> {
   if (!Number.isInteger(revision) || revision < 1 || revision > 2_147_483_647)
     throw new ProblemError('invalid_request');
-  await readableRealmQuestion(deps, actor, questionId, deadline);
-  const rows = await withReadTransaction(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await partitionReadClient(bounded, partitionOf(routeOf(questionId)!));
-    return exactRead.run(bounded, { question_id: questionId, revision });
-  });
-  const labels = await presentLabels(deps, rows, deadline);
-  await readableRealmQuestion(deps, actor, questionId, deadline);
-  return labels[0] ?? null;
+  const question = await readableRealmQuestion(deps, actor, questionId, deadline);
+  const initial = await observeExactLabel(deps, questionId, revision, deadline);
+  if (!sameQuestionDefinition(question, initial.question)) throw new ProblemError('not_found');
+  const firstAuthors = await observeAuthors(deps, initial.rows, deadline);
+  const latestAuthors = await observeAuthors(deps, initial.rows, deadline);
+  const latest = await observeExactLabel(deps, questionId, revision, deadline);
+  await finishLabelSource(deps, actor, questionId, deadline, initial, latest, false);
+  return labelValues(initial.rows, currentAuthors(firstAuthors, latestAuthors))[0] ?? null;
 }
 
 /** Bounded ascending history, with a signed initial ceiling. A continuation never
@@ -355,18 +399,7 @@ export async function readQuestionLabelHistory(
     after: initial.after,
     ceiling: initial.ceiling,
   });
-  const currentQuestion = await readableRealmQuestion(deps, actor, input.questionId, deadline);
-  if (
-    !sameQuestionDefinition(initial.question, finalSource.question) ||
-    !sameQuestionDefinition(initial.question, currentQuestion)
-  )
-    throw new ProblemError('not_found');
-  if (initial.partition.epoch !== finalSource.partition.epoch) throw new ProblemError('stale_cursor');
-  if (!sameLabelRows(initial.rows, finalSource.rows))
-    throw new CommandUnavailableError('fenced', initial.partition.partitionNo);
-  const finalHome = await observeQuestionHome(deps, input.questionId, deadline);
-  if (finalHome.partitionNo !== initial.partition.partitionNo || finalHome.epoch !== initial.partition.epoch)
-    throw new ProblemError('stale_cursor');
+  await finishLabelSource(deps, actor, input.questionId, deadline, initial, finalSource, true);
   const labels = labelValues(consumed, authors);
   const last = consumed.at(-1)?.labelRevision;
   return {
