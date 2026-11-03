@@ -3016,3 +3016,19 @@ current Source/physical binding, bounded execution, final publication and prepar
 return a useful retained page. The callback, locator and allocation declaration confer none of those authorities.
 
 Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.
+
+## Canonical episode completion
+
+[Canonical episode progress](../../../../docs/library-episode-progress.md) owns the exact native checklist contract,
+limits, lifecycle and Web integration. Decision: canonical episode completions are a separate per-session fact set,
+independent of scalar/manual progress; exact canonical IDs and direct `schema:isPartOf` membership admit additions,
+while correction and clear survive catalogue removal. `episode-progress.ts` and `episode-source.ts` mount through
+`progress-routes.ts`. They use persisted Semantic Subjects, current selected/disclosed relationships and released
+profiles; the Semantic producer interface is requested and the current adapter uses `readSubject`.
+
+`progress_episode` retains only owner-session/episode identity and completion time; `episode_completed_count` is
+an internal bounded counter, never generic progress or catalogue size. Both stay in the owner's native session
+transaction. Existing scalar, cursor, manual sparse units, generic history and published snapshots retain their
+meaning. Canonical IDs are exposed only by the bounded owner reader under current source disclosure. The existing
+100-child session erasure page now shares its budget between manual and canonical children, and session deletion
+checks both. The focused mounted journey is `test/library/episode-progress.test.ts`.

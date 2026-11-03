@@ -433,3 +433,13 @@ and font readiness; a recorded response or source export is not a screenshot or 
 Specification, native driver, implementation exposure, user-case acceptance at a recorded revision, and promotion
 remain separate stages. Existing wrappers and source exports establish inventory only. Native results, screenshot
 artifacts, measurements and promotion are pending integration evidence on its recorded commit.
+
+## Canonical episode completion capability
+
+Owners can independently mark canonical episodes 1 and 3 while 2 stays unmarked, with specials and rereads kept
+separate. The mounted `progress_session.episodes` and `progress_session.record_episodes` operations use persisted
+Episode Subjects and admitted direct parent relationships; generic progress retains its existing meaning.
+[Exact shapes, limits and lifecycle](../library-episode-progress.md) include private bounded inspection, catalogue
+withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity.
+Focused native scenarios: `services/kernel/test/library/episode-progress.test.ts`. Broader frozen integration
+acceptance remains controller-owned; source presence is not an acceptance result.

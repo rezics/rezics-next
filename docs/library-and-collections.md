@@ -450,3 +450,12 @@ verification without foreign IO, receiving/custody/fence placement, every interm
 verification, and exact nested SQL/cost bounds. The live-copy gate supplies none of that missing effects seal. The
 existing SDK/Source/Account/Library/History retirement chain and the held original producer/consumer dependencies
 remain as qualified in the [owner dependency contract](../services/kernel/src/library/README.md#identity-retirement-dependency-retained).
+
+## Canonical episode facts
+
+[Canonical episode progress](library-episode-progress.md) defines the installed authenticated per-session checklist.
+Canonical completions are separate personal facts over real Episode Subject IDs and admitted direct parent
+relationships. They preserve noncontiguous holes, specials and rereads without converting scalar amounts or manual
+unit tokens. Catalogue order/membership/visibility changes never rewrite these rows; bounded owner reads redact
+concealed identities, and correction/clear survives missing current catalogue support. Native session/profile,
+receipt, revision and terminal fences apply. Web's existing canonical checklist consumes that exact contract.
