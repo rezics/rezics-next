@@ -32,7 +32,7 @@ export interface FileSystem {
   remove(path: string): void;
 }
 export interface Dependencies {
-  policy?: ControlPolicy;
+  policy?: ControlPolicy | undefined;
   run(argv: string[]): Promise<Result>;
   files: FileSystem;
   uid(): number;

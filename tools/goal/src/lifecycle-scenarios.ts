@@ -329,7 +329,7 @@ export function assertLifecycleComplete(report: {
 }
 
 export async function runNamedLifecycleRegressions(options: {
-  policy?: ControlPolicy;
+  policy?: ControlPolicy | undefined;
   root: string;
   artifactDirectory?: string;
   deadline: number;
