@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 /** A visit belongs to one admitted Subject source, reader, Context, route and native reaction target. */
 export function useSubjectCommunityLifetime(input: {
@@ -9,6 +9,9 @@ export function useSubjectCommunityLifetime(input: {
   source: string;
   targetId: string;
   ready: boolean;
+  locale?: string;
+  credentialEpoch?: string | null;
+  exposure?: string;
 }) {
   const identity = JSON.stringify([
     input.subjectId,
@@ -18,15 +21,25 @@ export function useSubjectCommunityLifetime(input: {
     input.source,
     input.targetId,
     input.ready,
+    input.locale,
+    input.credentialEpoch,
+    input.exposure,
   ]);
-  const visit = useRef({ identity, generation: 0 });
+  const visit = useRef({ identity, generation: 0, active: false });
   if (visit.current.identity !== identity) {
-    visit.current = { identity, generation: visit.current.generation + 1 };
+    visit.current = { identity, generation: visit.current.generation + 1, active: false };
   }
-  const generation = visit.current.generation;
+  const owned = visit.current;
+  useLayoutEffect(() => {
+    owned.active = true;
+    return () => {
+      // Cleanup belongs to this visit, even when a newer visit has the same URL.
+      owned.active = false;
+    };
+  }, [owned]);
   return {
-    key: JSON.stringify([identity, generation]),
+    key: JSON.stringify([identity, owned.generation]),
     reader: input.reader,
-    isCurrent: () => visit.current.identity === identity && visit.current.generation === generation,
+    isCurrent: () => input.ready && visit.current === owned && owned.active,
   };
 }

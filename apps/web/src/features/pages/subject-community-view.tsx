@@ -13,7 +13,7 @@ import { StreamHeading } from './view-heading';
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
-const actionClass = `${linkClass} ${linkColor} text-sm font-medium hover:underline`;
+const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 /** Shared by the real overview, full views and Patterns. Every state keeps a stable heading and region. */
 export function SubjectCommunityRegion({

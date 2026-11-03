@@ -44,6 +44,7 @@ function deferred<T>() {
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { SubjectCommunityInteractions } = await import('../src/features/pages/subject-community-interactions');
+const { useSubjectCommunityLifetime } = await import('../src/features/pages/subject-community-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -148,4 +149,53 @@ test('mounted community reactions make no initial reads and discard writes after
       .filter((button) => button.getAttribute('aria-pressed') === 'true')
       .map((button) => button.textContent),
   ).toEqual([`${m.reaction_insightful()}4`]);
+});
+
+test('community visits retire on replacement and unmount without reviving a previous matching URL', async () => {
+  type Input = Parameters<typeof useSubjectCommunityLifetime>[0];
+  let current!: ReturnType<typeof useSubjectCommunityLifetime>;
+  function Probe({ input }: { input: Input }) {
+    current = useSubjectCommunityLifetime(input);
+    return null;
+  }
+  const input: Input = {
+    subjectId: 'subject',
+    contextId: 'context',
+    reader: 'reader',
+    route: '/reviews?cursor=one',
+    source: 'observation',
+    targetId: 'thread',
+    ready: true,
+    locale: 'en',
+    credentialEpoch: 'csrf-one',
+    exposure: 'public',
+  };
+  const show = async (value: Input) => act(async () => root.render(<Probe input={value} />));
+  for (const replacement of [
+    { subjectId: 'other' },
+    { contextId: 'realm' },
+    { reader: 'another' },
+    { route: '/discussion?cursor=two' },
+    { source: 'new observation' },
+    { targetId: 'other-thread' },
+    { ready: false },
+    { locale: 'fr' },
+    { credentialEpoch: 'csrf-two' },
+    { exposure: 'private' },
+  ]) {
+    await show(input);
+    const retired = current;
+    expect(retired.isCurrent()).toBe(true);
+    await show({ ...input, ...replacement });
+    expect(retired.isCurrent()).toBe(false);
+    await show(input);
+    expect(current.isCurrent()).toBe(true);
+    expect(retired.isCurrent()).toBe(false);
+  }
+  const unmounted = current;
+  await act(async () => root.render(null));
+  expect(unmounted.isCurrent()).toBe(false);
+  await show(input);
+  expect(current.isCurrent()).toBe(true);
+  expect(unmounted.isCurrent()).toBe(false);
 });

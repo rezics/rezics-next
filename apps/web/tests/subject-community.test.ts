@@ -122,7 +122,7 @@ test('current hidden, unavailable and closed reads are distinct from empty, and 
     expect(html).not.toContain('88');
     expect(requests).toHaveLength(1);
   }
-  for (const next of ['opaque-native-cursor', null]) {
+  for (const next of ['opaque-native-cursor', 'x'.repeat(4096), null]) {
     const { client } = fixture((request) => (isCommunity(request) ? Response.json({ threads: [], next }) : undefined));
     const data = await readSubjectCommunity(client, communitySubject.id, ['discussion'], true);
     const html = renderToStaticMarkup(
@@ -170,10 +170,26 @@ test('only public available summaries and one author batch leave the reader; cur
   expect(identities).toHaveLength(1);
   expect(new URL(identities[0]!.url).searchParams.get('ids')).toBe(communityAuthor.id);
   requests.length = 0;
-  expect(
-    (await readSubjectCommunity(client, communitySubject.id, ['review'], true, 'x'.repeat(2049))).regions.review?.state,
-  ).toBe('unavailable');
+  for (const cursor of ['', 'x'.repeat(4097)])
+    expect(
+      (await readSubjectCommunity(client, communitySubject.id, ['review'], true, cursor)).regions.review?.state,
+    ).toBe('unavailable');
   expect(requests).toHaveLength(0);
+  for (const next of ['', 'x'.repeat(4097)]) {
+    const invalid = fixture((request) => (isCommunity(request) ? Response.json({ threads: [], next }) : undefined));
+    expect((await readSubjectCommunity(invalid.client, communitySubject.id, ['review'])).regions.review?.state).toBe(
+      'unavailable',
+    );
+  }
+  const cursor = 'x'.repeat(4096);
+  const observed = fixture();
+  const first = await readSubjectCommunity(observed.client, communitySubject.id, ['review'], true, cursor);
+  const second = await readSubjectCommunity(observed.client, communitySubject.id, ['review'], true, cursor);
+  expect(
+    observed.requests.filter(isCommunity).map((request) => new URL(request.url).searchParams.get('cursor')),
+  ).toEqual([cursor, cursor]);
+  expect(first.sourceKey).toBeString();
+  expect(first.sourceKey).not.toBe(second.sourceKey);
 });
 
 test('ordinary discussion creation keeps the chosen subject and review conflicts retain the author-owned native target', async () => {

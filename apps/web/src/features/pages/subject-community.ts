@@ -35,6 +35,9 @@ export type SubjectCommunity = {
 
 export const COMMUNITY_PREVIEW_LIMIT = 5;
 export const COMMUNITY_PAGE_LIMIT = 20;
+export const COMMUNITY_CURSOR_LIMIT = 4096;
+const validCursor = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= COMMUNITY_CURSOR_LIMIT;
 
 /** Template placement opens a region; no Semantic Context or publication pointer selects a Content place. */
 export function communityKinds(nodes: readonly unknown[]): CommunityKind[] {
@@ -150,7 +153,7 @@ export async function readSubjectCommunity(
   const limit = paged ? COMMUNITY_PAGE_LIMIT : COMMUNITY_PREVIEW_LIMIT;
   const entries = await Promise.all(
     [...new Set(kinds)].map(async (kind): Promise<[CommunityKind, CommunityRegion]> => {
-      if (cursor !== undefined && (!paged || cursor.length > 2048)) return [kind, { state: 'unavailable' }];
+      if (cursor !== undefined && (!paged || !validCursor(cursor))) return [kind, { state: 'unavailable' }];
       try {
         const result = await client.subjects({ id: subjectId }).threads.get({
           query: { place: GLOBAL, kind, limit, ...(cursor !== undefined ? { cursor } : {}) },
@@ -176,6 +179,7 @@ export async function readSubjectCommunity(
     authors: await readPageAuthors(client, authorIds),
     now: new Date().toISOString(),
     reader: requestedReader ?? null,
+    sourceKey: crypto.randomUUID(),
   };
 }
 
@@ -218,7 +222,7 @@ export function composedCommunityRegion(
     !isRecord(read.body) ||
     !Array.isArray(read.body.threads) ||
     read.body.threads.length > expected.limit ||
-    (read.body.next !== null && typeof read.body.next !== 'string')
+    (read.body.next !== null && !validCursor(read.body.next))
   )
     return { state: 'unavailable' };
   try {
@@ -266,11 +270,8 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
         now: new Date().toISOString(),
         reader,
         contextId: loaded.page.context?.id ?? null,
-        sourceKey: JSON.stringify([
-          loaded.page.subject,
-          loaded.page.context?.id ?? null,
-          loaded.page.requestedRealm ?? null,
-        ]),
+        // An observation replacement retires its visit even at an identical URL.
+        sourceKey: crypto.randomUUID(),
       },
     },
   };
@@ -302,10 +303,5 @@ export async function withSubjectCommunity(
     loaded.page.requestedReader ?? null,
   );
   community.contextId = loaded.page.context?.id ?? null;
-  community.sourceKey = JSON.stringify([
-    loaded.page.subject,
-    loaded.page.context?.id ?? null,
-    loaded.page.requestedRealm ?? null,
-  ]);
   return { ...loaded, page: { ...loaded.page, community } };
 }

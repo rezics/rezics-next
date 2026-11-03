@@ -32,6 +32,7 @@ export function SubjectCommunityInteractions({
     source,
     targetId: thread.id,
     ready,
+    locale,
   });
   const reaction: FeedActionBarProps['reaction'] = ready
     ? {
