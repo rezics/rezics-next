@@ -1266,6 +1266,8 @@ export function postEditFailureText(failure: EditFailure): string {
 type InlinePostEditorProps = {
   initialBody: DocumentSnapshot;
   initialMediaIds?: readonly string[];
+  /** Optional original native reader admission, separate from the editor's session lifetime. */
+  inspectionAdmission?: { authority: object; current: () => boolean };
   revisionId: string;
   idempotencyKey: string;
   containerId: string;
@@ -1290,6 +1292,7 @@ export function InlinePostEditor(props: InlinePostEditorProps) {
 function InlinePostEditorContent({
   initialBody,
   initialMediaIds = [],
+  inspectionAdmission,
   revisionId: initialRevisionId,
   idempotencyKey,
   containerId,
@@ -1304,6 +1307,20 @@ function InlinePostEditorContent({
   const [body, setBody] = useState(initialBody);
   const initialBodyRef = useRef(initialBody);
   const bodyRef = useRef(body);
+  const draftRevision = useRef(0);
+  const [inspectionRevision, setInspectionRevision] = useState(0);
+  const [inspectionReady, setInspectionReady] = useState(true);
+
+  function invalidateInspection() {
+    draftRevision.current++;
+    setInspectionRevision(draftRevision.current);
+  }
+
+  function inspectionPending() {
+    if (!lifetime.current()) return;
+    setInspectionReady(false);
+    invalidateInspection();
+  }
   const [revisionId, setRevisionId] = useState(initialRevisionId);
   const [failure, setFailure] = useState<EditFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
@@ -1356,6 +1373,8 @@ function InlinePostEditorContent({
 
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
+    setInspectionReady(true);
+    invalidateInspection();
     bodyRef.current = next;
     setBody(next);
     pruneCopiedImages(next);
@@ -1400,6 +1419,7 @@ function InlinePostEditorContent({
         const uploaded = await mediaUpload.copy(source, id);
         if (!current()) return;
         const next = replaceImageSource(bodyRef.current, source, uploaded.src);
+        invalidateInspection();
         bodyRef.current = next;
         setBody(next);
         setFailure((failure) => {
@@ -1460,6 +1480,7 @@ function InlinePostEditorContent({
     if (!lifetime.current()) return;
     const next = withoutImage(bodyRef.current, id);
     pruneCopiedImages(next);
+    invalidateInspection();
     bodyRef.current = next;
     setBody(next);
     setFailure((current) =>
@@ -1474,6 +1495,7 @@ function InlinePostEditorContent({
     // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
     if (target.classList.contains('ProseMirror')) return;
     const next = fromPlainText(target.innerText, 'blocks');
+    invalidateInspection();
     bodyRef.current = next;
     setBody(next);
   }
@@ -1547,6 +1569,8 @@ function InlinePostEditorContent({
     editorPendingRef.current = 0;
     updatePending();
     initialBodyRef.current = current.body;
+    invalidateInspection();
+    setInspectionReady(true);
     bodyRef.current = current.body;
     setBody(current.body);
     ownedMediaIds.current = new Set(current.mediaIds);
@@ -1617,6 +1641,8 @@ function InlinePostEditorContent({
             key={revisionId}
             value={body}
             onChange={updateBody}
+            onSnapshotPending={inspectionPending}
+            onSnapshotError={inspectionPending}
             label={m.thread_reply_body_label()}
             labels={labels}
             lookupMention={lookupPostMention}
@@ -1640,6 +1666,20 @@ function InlinePostEditorContent({
         ) : null}
         <EditConflictRecovery
           current={failure?.reason === 'stale' && !editIntent.current.unresolved ? failure.currentPost : undefined}
+          presentation={{
+            body,
+            revision: inspectionRevision,
+            authority: inspectionAdmission?.authority ?? lifetime,
+            signal: lifetime.controller.signal,
+            inspectable: inspectionReady && (inspectionAdmission?.current() ?? true),
+            read: () =>
+              lifetime.current() &&
+              (inspectionAdmission?.current() ?? true) &&
+              !submittingRef.current &&
+              !editIntent.current.unresolved
+                ? { body: bodyRef.current, revision: draftRevision.current }
+                : null,
+          }}
           onReplace={replaceWithCurrent}
           returningFocus={() => editorRoot.current?.querySelector<HTMLElement>('[role="textbox"]') ?? null}
         />

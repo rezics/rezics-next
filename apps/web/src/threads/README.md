@@ -50,11 +50,52 @@ optional [browser-only writing recovery](#browser-only-writing-recovery). Unsave
 retry still need the departure guard. Inline edits remain current-visit-only. The guard does not create, replay or
 alter a write command or its authority.
 
-Stale-edit recovery previews only the admitted current snapshot without extra reads; Keep editing returns focus to
-the unchanged local body, and only explicit replacement with an available body resets the base and settled command
-intent. The preview uses unavailable image placeholders rather than inventing media authority. A missing or erased
-current body cannot replace the draft. Replacement retires local uploads before mounting the delivered revision.
-Unknown outcomes retain recovery of the original immutable command.
+A definitive edit precondition conflict exposes **Review current version** using only the current-post result
+returned by that edit. The inline editor opts into paired inspection: **Your retained draft** and **Current version**
+are separate, independently labelled readings. Phone panels stack; desktop panels share a bounded dialog without
+horizontal page overflow. They are neither a merge nor a native revision history. The supplied current licence,
+creation time and revision time appear only when present; no author or change attribution is inferred.
+
+Each document has a local, paged section index, a complete reader and an optional selected-section reader through
+`DocumentBody`. A selected section references its original block, including all text, rather than an excerpt.
+Labels contain at most 96 Unicode code points and never disclose spoiler text, component payloads or image labels.
+A label is navigation, not a truncated document. Image placeholders are inert because the conflict result supplies
+no exact media disclosure; no media, revision or neighbouring-post request fills this reading. Installed codec
+admission refuses unsupported snapshots and documents above the smaller installed native/editor limit of
+2,097,152 UTF-8 JSON bytes. Oversize content is explicitly unavailable, never silently shortened or repaired.
+
+The optional `presentation` port on `EditConflictRecovery` supplies a draft reference, monotonic local revision,
+original authoring authority, abort signal, snapshot readiness and a synchronous read guard. Callers without it retain
+the single-current-reader visit. The composer increments that revision before editor snapshot publication, on snapshot
+failure and on every body/media-reference replacement. It retains ownership of the rich editor, media recovery,
+file tools, local recovery and immutable command preparation. The route supplies the original post-reader admission
+through `inspectionAdmission`; a new reader/session cannot reuse the original visit even if its displayed identity
+looks the same. The original caller's guard is consulted before replacement, section navigation, spoiler disclosure
+and return focus. No alternate session or content read is created.
+
+Opening binds the exact conflict result object, post/thread/revision/security identity, current-body and media-list
+references, licence, authority, signal and retained draft revision/reference. Changed writing, pending snapshots,
+a replaced result or a retired admission permanently invalidates that visit and clears both readings. Reopening
+uses the still-admitted conflict result afresh; it does not refresh the native post. Missing and erased current bodies
+remain unavailable while the draft stays editable under its existing admission. Unknown delivery never opens this
+visit: it retains the exact original key and immutable payload for retry/readback in its existing owner.
+
+**Keep editing**, cancellation and Escape change no draft value, selection, media recovery or command intent. Return
+restores the originating editor selection where supported, falling back to its Review button if needed; a newer
+outside pointer/focus action wins. Closing frees document projections. Retirement cancels selection/focus state and
+late callbacks. **Replace draft with current** is the existing destructive confirmation: it only replaces local
+writing through the original owner callback, retires discarded uploads and resets the settled command with a fresh
+key and returned base revision. Replacement submits nothing and adopts no native revision. Only the existing
+explicit **Save changes** prepares the next command.
+
+Projection performs bounded codec/byte admission and one O(B + N) node walk; it retains only two original document
+references, bounded labels/offsets and constant-size visit data. Each index page mounts ten section controls, so the
+paired dialog mounts at most twenty. Each side mounts one reader, either the full document or one complete selected
+block. Paging starts zero requests; opening review adds zero reads and local replacement adds zero writes.
+
+Decision: opening Review explicitly opens both full readings; selecting an index entry shows that entire section,
+and **Read full document** restores the complete reader without changing either writing.
+
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
 
 ## Author erasure caller lifetime

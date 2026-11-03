@@ -995,6 +995,13 @@ export function ThreadReadingPost({
         <InlinePostEditor
           initialBody={post.body}
           initialMediaIds={post.mediaIds}
+          inspectionAdmission={{
+            authority: editOwner.current?.lifetime ?? lifetime,
+            current: () => {
+              const owner = editOwner.current;
+              return !!owner && owner.lifetime.isCurrent(owner.ticket);
+            },
+          }}
           revisionId={post.revisionId}
           idempotencyKey={editKey}
           containerId={post.threadId}

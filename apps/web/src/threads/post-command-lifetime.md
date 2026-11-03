@@ -23,11 +23,36 @@ content-free placeholder, original opening-title behavior and measured minimum h
 or restore deadline. Dirty editor state and its Composer-owned departure, upload and submission protocol remain
 inside the mounted `InlinePostEditor`; the route caller fences only the supplied write and success callbacks.
 
-The composed regression is
-[`post-command-lifetime.test.tsx`](../../tests/post-command-lifetime.test.tsx). It uses the real `ThreadReadingPost`,
-`QueryClient`, `InlinePostEditor`, `ContentActions`, Undo toast and deferred existing action/page-refresh boundaries.
-It is authored but **UNRUN** under the current implementation check policy. The foreground web typecheck is the
-only permitted check for this source attempt; native, browser and full acceptance remain integration obligations.
+## Edit conflict inspection
+
+A definitive native edit precondition refusal may supply a current-post result to the still-mounted editor. Only that
+result, after the original command caller's post-await check, can open conflict inspection. Transport uncertainty
+retains the exact sealed command/key for existing retry/readback; an unavailable send or read is never promoted into
+a conflict, and inspection does not settle an uncertain command.
+
+`InlinePostEditor` receives the route's optional `inspectionAdmission` identity and synchronous original-caller guard.
+It narrowly binds its retained body reference, monotonic draft revision, installed snapshot readiness and session
+abort signal to the optional presentation port in `EditConflictRecovery`. Existing callers without this port keep
+the single-current-reader behavior. Neither port grants upload or command authority. The recovery journey owns
+paired readers, local indexes, disclosure visits, the replacement snapshot and return focus; the editor continues to
+own its draft, selection, media repairs and immutable command preparation.
+
+Replacement requires the original admitted conflict object, exact current post/thread/revision/security identity,
+body/media references and licence, the original reader/session admission, and the exact retained draft revision and
+reference. It also requires an available body admitted by the installed document codec within the native/editor byte
+ceiling. A pending/failed editor snapshot, body edit, media-reference change, replaced result, missing/erased body or
+reader retirement prevents replacement. Invalidation clears private projections and cannot be reversed by restoring
+an earlier value. A new review may use the existing current result only while its original admission still holds.
+
+The destructive replacement button confirms discarding local writing; the existing owner callback alone retires
+uploads, updates the local base revision and resets the settled key. It sends nothing. Keep editing and Escape leave
+the draft and command untouched, including media recovery and supported editor selection. Return focus checks the
+original caller and any newer outside interaction. Closing clears readings; retirement also clears pending return
+state. Late section, spoiler, replacement and focus callbacks cannot act on the retired visit.
+
+The composed regressions are [`post-command-lifetime.test.tsx`](../../tests/post-command-lifetime.test.tsx),
+[`post-edit-conflict-recovery.test.tsx`](../../tests/post-edit-conflict-recovery.test.tsx) and
+[`19-edit-conflict-inspection.test.tsx`](../../tests/19-edit-conflict-inspection.test.tsx).
 
 ## Cost
 
