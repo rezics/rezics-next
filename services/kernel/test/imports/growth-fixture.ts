@@ -1241,7 +1241,7 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
         options.scenario === 'new' || options.scenario === 'vanished-page'
           ? `g-${scenarioSource}-${scenarioSequence}`
           : options.source;
-      await population.seed({ catalogueRecords: options.n, historyRows: options.history });
+      await population.seed({ catalogueRecords: options.n, historyRows: options.history }, ownedSource);
       fixturePartitions.clear();
       fixturePartitions.add(String(partitionOf(accountRoute)));
       fixturePartitions.add(String(population.population.hotPartition));

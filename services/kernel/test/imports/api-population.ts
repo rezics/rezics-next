@@ -1,14 +1,14 @@
-import { createHash } from 'node:crypto';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { derivedId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { seed, placement, type Population } from '../support/growth.ts';
-import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
+import { createGrowthLedgerPopulation } from './growth-ledger-population.ts';
 import type { Source } from '../../../../specs/imports-api-driver.ts';
 import type { ApiRuntime } from './api-runtime.ts';
 
 /** Performance data only: disjoint native keys, one placement algorithm at every scale. */
 export function createApiPopulation(runtime: ApiRuntime) {
+  const seedLedger = createGrowthLedgerPopulation(runtime.importer.session.store.database);
   let catalogue = 0;
   let history = 0;
   let revisionHistory = 0;
@@ -102,11 +102,10 @@ export function createApiPopulation(runtime: ApiRuntime) {
   ];
   return {
     population,
-    async seed(input: { catalogueRecords: number; historyRows: number }) {
+    async seed(input: { catalogueRecords: number; historyRows: number }, ledgerSource = 'bangumi') {
       return runtime.time(`seed: ${input.catalogueRecords}/${input.historyRows}`, async () => {
         // Repeated growth checks start at their first scale again. Remove only
         // this population's disjoint setup keys before growing the next sample.
-        const db = runtime.importer.session.store.database;
         // Native revisions are immutable. A new growth sequence appends its own
         // disjoint range, retaining all history from the preceding sequence.
         if (input.historyRows < revisionHistory) {
@@ -120,8 +119,6 @@ export function createApiPopulation(runtime: ApiRuntime) {
               r,
               stableId(r, `subject:${ordinal}:${i}`),
             ]);
-          for (const source of ['bangumi', 'seed-other'])
-            db.query('DELETE FROM run_members WHERE source=? AND record_key=?').run(source, String(1000000 + ordinal));
         }
         for (let ordinal = input.historyRows; ordinal < history; ordinal++) {
           const { route } = placement(population, ordinal);
@@ -130,8 +127,6 @@ export function createApiPopulation(runtime: ApiRuntime) {
               'DELETE FROM editorial.write_basis WHERE partition_no=$1 AND transaction_id=$2',
               [partitionOf(r), stableId(r, `basis:${ordinal}:${i}`)],
             );
-          for (const source of ['bangumi', 'seed-other'])
-            db.query('DELETE FROM run_generations WHERE source=? AND id=?').run(source, String(1000000 + ordinal));
         }
         catalogue = Math.min(catalogue, input.catalogueRecords);
         history = Math.min(history, input.historyRows);
@@ -142,50 +137,9 @@ export function createApiPopulation(runtime: ApiRuntime) {
         });
         if (input.historyRows > 0) historySubjects = true;
         revisionHistory = input.historyRows;
-        const registration = createSourceRegistration('bangumi', { source: 'bangumi', converterRevision: 'seed-v1' });
-        db.transaction(() => {
-          for (let ordinal = catalogue; ordinal < input.catalogueRecords; ordinal++) {
-            const record = unrelatedRecord('bangumi', ordinal) as { id: number };
-            const converted = registration.convert(
-              { external_id: String(record.id), record_revision: null, record },
-              { source: 'bangumi' },
-            );
-            for (const source of ['bangumi', 'seed-other']) {
-              const row = {
-                source,
-                recordKey: String(record.id),
-                recordRevision: 'unversioned',
-                digest: converted.digest,
-                converter_revision: 'seed-v1',
-                state: 'vanished',
-              };
-              db.query('INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES(?,?,?,?,?)').run(
-                source,
-                row.recordKey,
-                0,
-                0,
-                JSON.stringify(row),
-              );
-            }
-          }
-          for (let ordinal = history; ordinal < input.historyRows; ordinal++) {
-            for (const source of ['bangumi', 'seed-other'])
-              db.query(
-                'INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior) VALUES(?,?,?,?,?,?,?)',
-              ).run(
-                source,
-                String(1000000 + ordinal),
-                1000000 + ordinal,
-                createHash('sha256').update(String(ordinal)).digest('hex').slice(0, 48),
-                'abandoned',
-                0.2,
-                0,
-              );
-          }
-        })();
+        seedLedger(input, ledgerSource);
         catalogue = Math.max(catalogue, input.catalogueRecords);
         history = Math.max(history, input.historyRows);
-        db.exec('ANALYZE');
         return { unrelatedRecord };
       });
     },

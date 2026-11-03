@@ -1,6 +1,33 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { RunStore } from '../../../importer/src/run-store.ts';
+import { createGrowthLedgerPopulation } from './growth-ledger-population.ts';
+
+test('growth seeds unrelated keys and history in the measured source without replacing its active run', () => {
+  const store = new RunStore(':memory:');
+  try {
+    const populate = createGrowthLedgerPopulation(store.database);
+    const run = store.begin('growth-source');
+    const count = (table: 'run_members' | 'run_generations', source: string) =>
+      (store.database.query(`SELECT count(*) AS n FROM ${table} WHERE source=?`).get(source) as { n: number }).n;
+    for (const axis of ['catalogueRecords', 'historyRows'] as const)
+      for (const scale of [32, 128, 512]) {
+        const input = { catalogueRecords: 32, historyRows: 32, [axis]: scale };
+        populate(input, 'growth-source');
+        expect(count('run_members', 'growth-source')).toBe(input.catalogueRecords);
+        expect(count('run_generations', 'growth-source')).toBe(input.historyRows + 1);
+        expect(store.activeRun('growth-source')).toEqual(run);
+      }
+    populate({ catalogueRecords: 128, historyRows: 128 }, 'g-new-1');
+    expect(count('run_members', 'g-new-1')).toBe(128);
+    expect(count('run_generations', 'g-new-1')).toBe(128);
+    expect(count('run_generations', 'growth-source')).toBe(513);
+    expect(count('run_members', 'bangumi')).toBe(0);
+  } finally {
+    store.close();
+  }
+});
 
 // Keep explicit cold overrides out of imports' growth journeys.
 test('imports growth checks measure every scale warm', () => {
