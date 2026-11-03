@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { runImportCli } from '../src/cli.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
-test('ordinary Bangumi registration discards ignored fields without visiting them across serialized transitions', () => {
+test('ordinary Bangumi registration converts named 3/6 records and keeps identity-only ignored seams', () => {
   const registration = createSourceRegistration('bangumi');
   const context = { source: 'bangumi', subjectId: '00000000-0000-4000-8000-000000000001' };
   const convert = (record: unknown) =>
@@ -14,7 +14,7 @@ test('ordinary Bangumi registration discards ignored fields without visiting the
   const seen: string[] = [];
   for (const type of [3, 6]) {
     const record = { id: 71001, type };
-    for (const field of ['name', 'name_cn', 'summary', 'images', 'tags', 'user_posts', 'reviews']) {
+    for (const field of ['name_cn', 'summary', 'images', 'tags', 'user_posts', 'reviews']) {
       Object.defineProperty(record, field, {
         enumerable: true,
         get() {
@@ -30,16 +30,28 @@ test('ordinary Bangumi registration discards ignored fields without visiting the
     expect(ignored.mediaImportIntents).toEqual([]);
     expect(convert(JSON.parse(JSON.stringify(ignored.normalized)))).toEqual(ignored);
     expect(ignored.digest).not.toBe(initial.digest);
+    const named = convert({
+      id: 71001,
+      type,
+      name: type === 3 ? 'The Observatory Soundtrack' : 'The Cartographer Live Action',
+      date: '2024-04-01',
+      platform: type === 6 ? 'movie' : '0',
+    });
+    expect(named.outcome).toBe('converted');
+    expect(named.proposals.some((proposal) => proposal.op === 'create')).toBe(false);
+    expect(named.proposals.length).toBeGreaterThan(0);
+    expect(named.digest).not.toBe(ignored.digest);
+    expect(convert(JSON.parse(JSON.stringify(named.normalized)))).toEqual(named);
   }
   expect(seen).toEqual([]);
   const returned = convert({ id: 71001, type: 1, name: 'The Cartographer’s Book: Revised' });
-  expect(registration.converter_revision).toBe('bangumi@4');
+  expect(registration.converter_revision).toBe('bangumi@5');
   expect(returned.digest).not.toBe(initial.digest);
   expect(returned.proposals).toHaveLength(2);
   expect(convert(JSON.parse(JSON.stringify(returned.normalized)))).toEqual(returned);
   for (const proposal of returned.proposals) {
     expect(proposal.op).toBe('propose');
-    expect(proposal.source).toMatchObject({ source: 'bangumi', external_id: '71001', converter_revision: 'bangumi@4' });
+    expect(proposal.source).toMatchObject({ source: 'bangumi', external_id: '71001', converter_revision: 'bangumi@5' });
   }
 });
 
@@ -89,7 +101,7 @@ test('ordinary Bangumi CLI seals the whole transition input before any Auth or p
         }) as unknown as typeof fetch,
       },
     );
-    expect(revisions).toEqual(['bangumi@4']);
+    expect(revisions).toEqual(['bangumi@5']);
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
     expect(requests).toEqual([]);

@@ -66,7 +66,7 @@ test('source-only Bangumi change publishes fresh digest without inventing a fiel
     if (!after) throw new Error('Missing refreshed baseline');
     expect(after.digest).not.toBe(before.digest);
     expect(after.recordRevision).toBe('unversioned');
-    expect(after.converter_revision).toBe('bangumi@4');
+    expect(after.converter_revision).toBe('bangumi@5');
     expect(importer.session.bindings.claim(owner)).toEqual(claim);
     const fresh = sent
       .slice(offset)

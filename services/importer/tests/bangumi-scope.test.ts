@@ -17,7 +17,7 @@ import { runImportCli as runCli } from '../src/cli.ts';
 
 const registration = createSourceRegistration('bangumi');
 const types = [1, 2, 4, 3, 6];
-const skipped = ['3', '6'];
+const created = ['1', '2', '3', '4', '6'];
 const marker = 'PRIVATE_SCOPE_MARKER';
 function dump(withImages = true, changed = false) {
   return (
@@ -107,18 +107,20 @@ function remote() {
 function completed(result: ImportRunResult, counts?: ImportRunResult['counts']) {
   expect(result.status).toBe('committed');
   // Additive per-run count, independent of the existing reconciliation categories.
-  expect(result).toHaveProperty('skipped', 2);
+  expect(result).toHaveProperty('skipped', 0);
   if (counts) expect(result.counts).toEqual(counts);
 }
 function scope(f: ReturnType<typeof remote>, importer: Importer, images = true) {
-  expect([...f.subjects.keys()].sort()).toEqual(['1', '2', '4']);
-  expect(f.media.size).toBe(images ? 3 : 0);
-  expect(f.requests.filter((command) => skipped.includes(command.source.external_id))).toEqual([]);
-  expect(f.mediaRequests.filter((key) => skipped.includes(key))).toEqual([]);
+  expect([...f.subjects.keys()].sort()).toEqual(created);
+  expect(f.media.size).toBe(images ? 5 : 0);
+  expect(f.requests.map((command) => command.source.external_id).sort()).toEqual(
+    expect.arrayContaining(created),
+  );
+  expect(f.mediaRequests.sort()).toEqual(images ? created : []);
   const source = importer.session.store.source(registration.source);
   expect(source.count).toBe(5);
   expect(source.generation).not.toBeNull();
-  for (const key of skipped) {
+  for (const key of created) {
     const state = importer.session.store.key(registration.source, key);
     expect(state.baseline).toEqual(state.acknowledged);
     expect(state.baseline?.state).toBe('present');
@@ -208,7 +210,7 @@ for (const crash of ['remote success', 'finalization'] as const) {
   });
 }
 
-test('CLI executes actual acquisition and prints skipped=2 on each same-input invocation', async () => {
+test('CLI executes actual acquisition and prints skipped=0 on each same-input invocation', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-cli-'));
   const keyPath = join(directory, 'account-key.json'),
     f = remote();
@@ -266,15 +268,60 @@ test('CLI executes actual acquisition and prints skipped=2 on each same-input in
       });
       expect(result.code).toBe(0);
       expect(consumed).toBe(true);
-      expect(result.stdout).toMatch(/\bskipped=2\b/);
+      expect(result.stdout).toMatch(/\bskipped=0\b/);
       expect(result.stdout + result.stderr).not.toContain(marker);
       expect(result.openHandles).toBe(0);
-      expect([...f.subjects.keys()].sort()).toEqual(['1', '2', '4']);
-      expect(f.requests.filter((command) => skipped.includes(command.source.external_id))).toEqual([]);
+      expect([...f.subjects.keys()].sort()).toEqual(created);
+      expect(f.requests.map((command) => command.source.external_id).sort()).toEqual(expect.arrayContaining(created));
       if (previousEffects !== undefined) expect(f.effects).toHaveLength(previousEffects);
       previousEffects = f.effects.length;
     }
   } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test('a prior ignored identity-only 3/6 baseline refreshes to typed conversion without disappearance', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'bangumi-scope-refresh-'));
+  const path = join(directory, 'state.sqlite'),
+    f = remote();
+  const importer = new Importer({ path, ...f });
+  async function* identityOnly() {
+    yield* bytes(
+      `${JSON.stringify({ id: 3, type: 3 })}\n${JSON.stringify({ id: 6, type: 6 })}\n${JSON.stringify({
+        id: 1,
+        type: 1,
+        name: 'Book',
+      })}\n`,
+    );
+  }
+  try {
+    const ignored = await importer.runDump(registration, identityOnly());
+    expect(ignored.status).toBe('committed');
+    expect(ignored.skipped).toBe(2);
+    expect(ignored.counts).toEqual({ new: 3, changed: 0, unchanged: 0, vanished: 0 });
+    expect([...f.subjects.keys()]).toEqual(['1']);
+    expect(importer.session.store.key(registration.source, '3').baseline?.state).toBe('present');
+    const named = bytes(
+      `${JSON.stringify({ id: 3, type: 3, name: 'Soundtrack', date: '2024-04-01' })}\n${JSON.stringify({
+        id: 6,
+        type: 6,
+        name: 'Live film',
+        platform: 'movie',
+      })}\n${JSON.stringify({ id: 1, type: 1, name: 'Book' })}\n`,
+    );
+    const refreshed = await importer.runDump(registration, named);
+    expect(refreshed.status).toBe('committed');
+    expect(refreshed.skipped).toBe(0);
+    expect(refreshed.counts).toEqual({ new: 0, changed: 2, unchanged: 1, vanished: 0 });
+    expect([...f.subjects.keys()].sort()).toEqual(['1', '3', '6']);
+    const music = f.effects.filter((command) => command.source.external_id === '3');
+    expect(music.some((command) => command.op === 'create' && command.subject.type === 'schema:MusicAlbum')).toBe(true);
+    const film = f.effects.filter((command) => command.source.external_id === '6');
+    expect(film.some((command) => command.op === 'create' && command.subject.type === 'schema:Movie')).toBe(true);
+    expect(importer.session.store.source(registration.source).count).toBe(3);
+  } finally {
+    await importer.close();
     rmSync(directory, { recursive: true });
   }
 });
