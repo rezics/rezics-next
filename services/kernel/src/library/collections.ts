@@ -77,9 +77,11 @@ import {
   insertSavedCollection,
   parseCollectionRule,
   prepareCollectionRuleAuthority,
+  prepareCollectionRuleWrite,
   updateSavedCollectionRule,
   type AdmittedCollectionRule,
   type CollectionRule,
+  type PreparedCollectionRuleWrite,
 } from './collection-rules.ts';
 
 const MAX_MEMBER_COUNT = 2_147_483_647;
@@ -631,7 +633,7 @@ export function createCollectionCommands(config: {
           context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
         });
     const failures = new WeakMap<object, ProblemError | null>();
-    const rules = new WeakMap<AuthoritativeTime, { rule: AdmittedCollectionRule; checks: readonly AccessCheck[] }>();
+    const rules = new WeakMap<AuthoritativeTime, PreparedCollectionRuleWrite>();
     const authorization: typeof normalAccess = {
       ...normalAccess,
       async prepare(attempt) {
@@ -644,17 +646,16 @@ export function createCollectionCommands(config: {
         try {
           await prepareMembers?.(attempt.time);
           if (rule) {
-            const admitted = await admitCollectionRule(pool, rule);
-            rules.set(attempt.time, {
-              rule: admitted,
-              checks: await prepareCollectionRuleAuthority(
+            rules.set(
+              attempt.time,
+              await prepareCollectionRuleWrite(
                 config,
                 owner,
-                admitted.filter,
+                rule,
                 attempt,
                 deadlineFor(WORK_STEP_DEADLINE_MS),
               ),
-            });
+            );
           }
         } catch (error) {
           if (!(error instanceof ProblemError)) throw error;
@@ -708,6 +709,8 @@ export function createCollectionCommands(config: {
           await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
           const failure = failures.get(command.time);
           if (failure) throw failure;
+          const preparedRule = rules.get(command.time);
+          if (preparedRule?.failure) throw preparedRule.failure;
           if (kind !== 'library.collection.order.repair.begin' && kind !== 'library.collection.delete') {
             for (const id of [
               ...new Set([collectionId, ...(destinationCollectionId ? [destinationCollectionId] : [])]),
@@ -719,7 +722,7 @@ export function createCollectionCommands(config: {
             {
               transactionId: command.transactionId,
               time: authoritativeTimeValue(command.time),
-              ...(rules.get(command.time) ? { rule: rules.get(command.time)!.rule } : {}),
+              ...(preparedRule?.rule ? { rule: preparedRule.rule } : {}),
             },
             route,
           );

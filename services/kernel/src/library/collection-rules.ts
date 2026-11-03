@@ -82,6 +82,38 @@ export async function admitCollectionRule(pool: Pool, rule: CollectionRule): Pro
   }
 }
 
+export type PreparedCollectionRuleWrite = Readonly<{
+  rule: AdmittedCollectionRule | null;
+  failure: ProblemError | null;
+  checks: readonly AccessCheck[];
+}>;
+
+/** An exact retry needs current authority, but need not admit a new meaning or perform another CAS. */
+export async function prepareCollectionRuleWrite(
+  config: { pool: Pool; access: Access },
+  actor: AccountActor,
+  rule: CollectionRule,
+  attempt: CommandAttempt,
+  deadline: number,
+): Promise<PreparedCollectionRuleWrite> {
+  let admitted: AdmittedCollectionRule | null = null;
+  let failure: ProblemError | null = null;
+  try {
+    admitted = await admitCollectionRule(config.pool, rule);
+  } catch (error) {
+    if (!(error instanceof ProblemError)) throw error;
+    // The editor reads an expanded AST. If a caller supplies an unresolved saved operand, its complete
+    // private dependency set is unknown: it cannot disclose a receipt by authorizing only visible leaves.
+    if ([...walkFilter(rule.filter)].some((node) => 'saved' in node)) throw error;
+    failure = error;
+  }
+  return {
+    rule: admitted,
+    failure,
+    checks: await prepareCollectionRuleAuthority(config, actor, admitted?.filter ?? rule.filter, attempt, deadline),
+  };
+}
+
 /** Prepare the actual private-family checks before the owning transaction takes its connection. */
 export async function prepareCollectionRuleAuthority(
   config: { pool: Pool; access: Access },

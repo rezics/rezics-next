@@ -41,6 +41,7 @@ import type { OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import { withAdmittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import scopeQuery from './owner-filter-native-binding-scope.sql';
 import activeQuery from '../semantic/definitions-active.sql';
+import releaseExists from '../semantic/definitions-exists.sql';
 import ownerFenceQuery from './owner-filter-native-binding-fence.sql';
 import { compileCurrentOwnerFilter, currentOwnerClauseKey } from '../search/current-filter-plan.ts';
 import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
@@ -376,6 +377,31 @@ async function privateAuthority(
   );
 }
 
+/** Historical meaning is independent of current authority. Only a matching saved Source may retain it. */
+async function revalidateMeaning(
+  dependencies: Dependencies,
+  admission: CollectionMemberAdmission,
+  metadata: NativeCollectionMetadata,
+  deadline: number,
+  work: NativeCollectionWork,
+) {
+  if (admission.releaseDigest === null) return;
+  const retained = readNativeCollectionMemberAdmission(admission)?.retainedMeaning && metadata.ruleReady;
+  if (retained && metadata.ruleReleaseDigest !== admission.releaseDigest) throw ownerFilterUnavailable();
+  // Immutable bodies were checked during admission; an indexed existence point detects missing pins.
+  // Caller-supplied queries and other Sources still bind the active release.
+  const [current] = await withConnection(dependencies.pool, (client) =>
+    ownerFilterQuery<{ digest: string }>(
+      deadlineClient(client, deadline),
+      work,
+      retained ? releaseExists : activeQuery,
+      retained ? { route: 0, digest: admission.releaseDigest } : { route: 0 },
+      { nativeRows: 4, bytes: 256 },
+    ),
+  );
+  if (current?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
+}
+
 export async function revalidateNativeOwnerFilter(
   binding: OwnerFilterReadBinding,
   work: NativeCollectionWork,
@@ -391,18 +417,7 @@ async function revalidateWorkingOwnerFilter(
   if (!saved || work.receipt().reservationId !== binding.input.allowance.reservationId) throw ownerFilterUnavailable();
   const { dependencies, admission, metadata, attempt } = saved;
   const { actor, at, deadline } = binding.input;
-  if (admission.releaseDigest !== null) {
-    const [active] = await withConnection(dependencies.pool, (client) =>
-      ownerFilterQuery<{ digest: string }>(
-        deadlineClient(client, deadline),
-        work,
-        activeQuery,
-        { route: 0 },
-        { nativeRows: 4, bytes: 256 },
-      ),
-    );
-    if (active?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
-  }
+  await revalidateMeaning(dependencies, admission, metadata, deadline, work);
   if (attempt) {
     commandAttemptDeadline(attempt);
     await ownerFilterBounded(work, { nativeRows: 8, nativePoints: 2, statements: 2, bytes: 2048 }, () =>
@@ -516,23 +531,12 @@ export async function bindNativeOwnerFilterRead(
               ownerFilterAccessContext(dependencies, deadline, attempt),
             ),
           );
-        if (admission.releaseDigest !== null) {
-          const [active] = await withConnection(dependencies.pool, (client) =>
-            ownerFilterQuery<{ digest: string }>(
-              deadlineClient(client, deadline),
-              work,
-              activeQuery,
-              { route: 0 },
-              { nativeRows: 4, bytes: 256 },
-            ),
-          );
-          if (active?.digest !== admission.releaseDigest) throw ownerFilterUnavailable();
-        }
         const current = await work.compose((allowance) =>
           readNativeCollectionMetadata(dependencies.pool, { route, collectionId }, { deadline, allowance }),
         );
         const metadata = current.metadata;
         if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
+        await revalidateMeaning(dependencies, admission, metadata, deadline, work);
         if (
           admission.owner &&
           (actor.kind !== 'account' ||
