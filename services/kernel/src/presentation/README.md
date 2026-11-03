@@ -44,11 +44,10 @@ owned body without evaluating accessors or serialization hooks; caller objects r
 fresh on each attempt and before receipt replay; the executor retains receipt-byte and basis ownership. Trusted
 bootstrap captures its potential body before the initial pointer read and defers an invalid-body error until needed,
 so an already-active setup still returns after one pointer read without writing. This adds bounded in-memory work
-only, with no additional SQL, cache entries, authority decisions or command frames. Commerce catalogue and Access
+only, with no additional SQL, cache entries, authority decisions or command frames. Commerce catalogue, the Semantic Global Context anchor, and Access
 identity-bridge maps initialize without reading unfinished module bindings so these native files can load; Global
 Context identity and bridge behavior stay the same. The connected invocation cases
-in `test/presentation/profile-invocation-custody.test.ts` are authored but unrun; native, growth and browser proof
-remain deferred for this change. Compiler evidence alone does not establish those outcomes.
+in `test/presentation/profile-invocation-custody.test.ts` exercise native bootstrap and publish/activate custody. Compiler evidence alone does not establish those outcomes.
 
 The six frozen [page outcomes](../../../../specs/pages-outcomes.test.ts) have a real persona/API receipt, and the
 [Workers host cases](../../../../apps/web/tests/pages-workers.host.test.ts) have actual workerd HTTP rendering and

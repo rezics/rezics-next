@@ -170,7 +170,6 @@ beforeAll(async () => {
   const actions = new Map(actionCatalogue(initial));
   for (const [action, value] of LIFECYCLE_ACTIONS) actions.set(action, value);
   actions.set('account:manage', { anonymous: false });
-  access = admittedAccess({ actions });
   kernel = createKernel({
     pool,
     routeKey,
@@ -178,7 +177,7 @@ beforeAll(async () => {
     receiptKeys,
     clock,
     requestDeadlineMs: 30_000,
-    access: () => access,
+    access: (config) => (access = admittedAccess({ ...config, actions })),
     writeRate: {
       async spend() {
         return { allowed: true };
