@@ -509,8 +509,7 @@ denials in the record's transaction. Both mutations use `Idempotency-Key`. Unban
 restores membership. Independent grants remain intact and become readable on the next
 request with the original bearer, without rejoining or regranting.
 `GET /v1/realms/{realmId}/bans` requires `realm:ban` and returns
-current records ordered by account ID, with an opaque cursor bound to the Realm,
-viewer, limit and partition epoch. A record's `actor` is null once the moderator's account is erased. Denials stay on the Realm; content writes must check
+current records ordered by account ID. Its review envelope is described below. A record's `actor` is null once the moderator's account is erased. Denials stay on the Realm; content writes must check
 Realm participation directly, and public reads remain open.
 
 The Space home exposes Realm ban management through these native endpoints. Its personal current-ban list
@@ -520,6 +519,107 @@ The ban response's non-null `workflowId` means removal was queued, not completed
 completion status, so refreshing it cannot prove settlement. Unban permits later admission under the Realm's
 ordinary rules without restoring membership or changing follows; existing removal work may still be pending.
 A role-conflict response asks for genuine owner/moderator role removal before another ban attempt.
+
+### Current ban review page
+
+`listBans` remains the producer for `GET /v1/realms/{realmId}/bans`. Existing `items` and `next` consumers keep
+all four native record fields. `account` and `moderator` present only Accounts' current bounded public identity
+projection. A concealed/deleted/missing identity has the label `Account`, the operational account key and no
+link; the ban remains visible. A native null actor stays null, including after moderator erasure. No biography,
+operator identity, authentication state, private profile or former handle enters presentation. Accounts continues
+to decide disclosure; Realm moderation never broadens its public identity projection.
+
+Decision: `selectedAccountId` is an optional exact current observation independent of list continuation; context
+requires both ordinary Realm and host Space reads, and a changed observation withholds the whole page for exact retry.
+
+The default limit is 20, maximum 100. `selected` is `not-requested`, `current` with the actual current ban, or
+`absent` with the exact account key and its permitted presentation. Absence is operational absence after native
+ban admission, including after unban. The effective instant and internal transaction identity qualify the current
+episode; replacing it during hydration cannot substitute a new reason or moderator. There is no receipt/history
+lookup. The selection does not enter cursor binding and never moves the raw window or `next`. Continuations bind
+Realm, limit, viewer, client, delegation, authentication epoch, native partition epoch and Realm/Space lifecycle
+and source epochs. Invalid or stale cursors retain the native typed errors. Retry uses exactly the same cursor and
+selected key; an explicit restart omits the cursor. No count is inferred from exhaustion.
+
+`viewer.unban` identifies `realm.unban`, its actual `realm:ban` action and Realm resource. Its viewer binding
+includes account, client, delegation and authentication epoch. Each row's `unban` identifies that exact account
+and observed effective instant for confirmation. This advice is a current observation, never a permission token
+or optimistic mutation. The existing command always reauthorizes. A failed required read returns a native error,
+never a successful empty page or uncertain permission. `removal.state:unavailable` explicitly means this read
+cannot establish workflow completion; the ban receipt remains the only existing workflow-reference disclosure.
+Unban restores neither membership nor grants. Reading never retries a write or generates an idempotency key.
+
+`context` is `available` with the current Realm/Space titles only when both installed ordinary readers permit
+it, or `concealed`. Source failure withholds the page. Realm/Space lifecycle and heads, raw page including
+lookahead, optional exact selection, caller standing/session epoch, permitted identities and ordinary read
+observations are checked again after hydration. Empty pages use the same final protocol. Preparation releases
+all foreign homes before Realm checkout. This is a sequence of current native observations across homes, not an
+atomic cross-home snapshot. A later command still needs a new inspection and its normal native admission.
+
+The existing Web reader/control and its caller lifetime retain list, selected-write uncertainty and cursor
+recovery. The installed client derives the response/query from `ban-review-page-schemas.ts` through mounted
+`realm.bans`; `BanReviewPage`, `BanReviewPageItem`, `BanReviewIdentity` and `BanReviewPageQuery` are the native
+DTO exports. Populated, erased identity, empty/current absence, unavailable and intervening change outcomes
+are exercised in `test/community/ban-review-page.test.ts`. Rendered review belongs to the existing Web owner.
+The private-name fallback reference is `legacy-final:apps/web/features/realm/roster.ts`; refusal/exact receipt
+references are `legacy-final:apps/web/features/realm-appeal/{ban-read,reading}.ts`. The other behavior reference
+is `apps/web/features/realms/{realm-members.tsx,data/membership-preconditions.ts}` in the older Rezics checkout.
+These supply user behavior only; current native commands retain authority.
+
+#### Cost: current ban selection and inspection
+
+- Touches: two released native time preparations and two Realm read-only snapshots. Each snapshot performs the
+  existing full `realm:ban` admission, partition point, active Realm/host source point, one p+1 open-key window
+  and s optional exact current-ban seek, where p<=100 and s is zero or one. The final window is compared in full,
+  including lookahead and internal episode; no historical fill or write is dispatched. SQL adds BEGIN/COMMIT
+  per snapshot; errors charge the attempted work and ROLLBACK/release. Native Access preparation/formula work
+  and its authoritative clock/fence and candidate caps remain additional owner costs, not zero-cost callbacks.
+- Bound: source points return at most one row each; raw windows examine at most p+1 partial-btree current keys
+  plus p+1 exact temporal payload keys; inspection examines one current key plus one temporal payload key.
+  Across both rounds this is 2(p+2s+1) current/payload pairs, independent of closed intervals. Payload reason is
+  at most 1024 Unicode scalars (4096 UTF-8 or 6146 JSON-string bytes). `realm_ban_current` already covers the
+  needed native route/Realm/account/interval key; materialized tuple seeks prevent a temporal history scan.
+  Cursors admit 4096 bytes of wire text. Each attempt makes one window, never scans old rows to fill it or
+  retries a command; an explicit read retry pays the complete read again.
+- Growth check: `test/community/ban-review-page.test.ts` pins mounted bounds and readback; native physical
+  selection plans and independent retained-history growth are in `test/community/ban-review-page-growth.test.ts`.
+
+#### Cost: ban identities and currentness
+
+- Touches: two installed `readPublicIdentities` rounds on real routed account homes, each with at most 2p+2
+  IDs before deduplication, in owner batches of at most 100. The projection internally groups exact IDs by route.
+  Caller standing adds two installed full-key Account-state reads, one row each. Delegator/assignment, grants,
+  roles and session ceiling remain in both native Access admissions. Each helper checkout/driver statement and
+  runner acquisition/release is charged, including cold release and failures; this page introduces no Auth HTTP,
+  broad account query, callback pool, membership reader or workflow-status probe.
+- Bound: for k<=202 deduplicated identities and h represented routes, each round has at most
+  sum(ceil(k_home/100))<=k native identity statements/points, returning <=k rows. Each full dependency row admits
+  26624 JSON UTF-8 bytes (4096-scalar display name, 64-ASCII handle, fixed IDs/state/kind and public fields).
+  Two retained dependency rounds cost <=2k*26624 bytes before map/canonical copies. Output deliberately omits
+  authentication/operator fields. JSON repeats a permitted label/name and repeated moderators at most twice
+  per returned row; 101 records including selection, reason and controls fit the admitted 12 MiB serialized
+  response cap. This cap includes JSON escaping; it is not a character or sample-size estimate. Inputs, maps,
+  canonical comparisons and response strings each retain their own bounded copy; no dependent payload is free.
+- Growth check: `test/community/ban-review-page.test.ts` uses native Accounts and failure/change barriers;
+  `test/community/ban-review-page-growth.test.ts` fixes represented homes and text while growing unrelated and
+  historical bans. Native identity and authority plans remain required at integration, including missing-plan refusal.
+
+#### Cost: optional context and serialization
+
+- Touches: two released optional context preparations, each using the installed Realm/Space ordinary read
+  eligibility, its native Access preparation and formula, one read-only checkout and current source comparison.
+  Only permitted context adds the one exact Realm-head/Space-head title query. Each round mints/releases its
+  native read time; every branch pays executed controls and release. Serialization compares complete current
+  observations, projects permitted fields and seals at most one continuation, with no SQL, remote read or write.
+- Bound: each context round selects one Realm identity/head and one Space identity/head through the installed
+  eligibility helpers, then at most one title row. Each title has <=1024 Unicode scalars, at most 4096 UTF-8 bytes
+  or 6146 escaped JSON-string bytes; full title dependency admits 16384 JSON bytes. These two rounds add <=4
+  title keys and <=2 title rows. Native protected-ban/actor/principal checks and native Access candidate work
+  are additional bounded owner terms. Output serialization is O(p+k) bounded copies within the 12 MiB response
+  budget; denied/stale/unavailable paths serialize only the existing problem. No optional reader failure invents
+  an empty operational list or skips a raw key.
+- Growth check: `test/community/ban-review-page.test.ts` covers denied/current/changed pages and exact retry;
+  `test/community/ban-review-page-growth.test.ts` supplies strict native plan coverage for the new key paths.
 
 The same ban precedence applies to non-public boards and their descendants in a public
 Realm, whether the independent grant names an account, an organization role or a

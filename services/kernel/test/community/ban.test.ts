@@ -554,7 +554,11 @@ test.serial(
     ).toBe(204);
     expect(await denials(realm, member)).toEqual([]);
     expect(await openMemberships(realm.realmId, member.accountId)).toEqual([]);
-    expect((await call('GET', path, { bearer: mod.bearer })).value).toEqual({ items: [], next: null });
+    expect((await call('GET', path, { bearer: mod.bearer })).value).toMatchObject({
+      items: [],
+      next: null,
+      selected: { state: 'not-requested' },
+    });
     expect(
       (await call('GET', `/v1/realms/${realm.realmId}/participation`, { bearer: member.bearer })).response.status,
     ).toBe(204);
