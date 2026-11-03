@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
+import type { SessionEnv } from '../src/session/client';
 import {
   captureCollectionExport,
   CollectionExportAttempt,
@@ -132,4 +133,51 @@ test('curated filters and invalid captures refuse instead of falling back to an 
     validateCollectionExportCapture({ ...capture, population: [capture.population[0], capture.population[0]] }),
   ).toThrow();
   expect(captureCollectionExport({ ...page, provenance: undefined })).toBeNull();
+});
+
+test('native logical zero exports empty without writes and refuses stale or invented identities', async () => {
+  const source = native();
+  const curated = await source.page();
+  expect(captureCollectionExport({ ...curated, revision: 0 })).toBeNull();
+  expect(() => validateCollectionExportCapture({ ...captureCollectionExport(curated), revision: 0 })).toThrow();
+  const collection = {
+    id: 'logical-everything', curatorAccountId: 'owner', membershipKind: 'dynamic',
+    builtinKind: 'everything', builtin: { kind: 'everything' }, revision: 0,
+    title: null, description: null, visibility: 'private',
+  };
+  let status = 200;
+  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
+    const req = new Request(input, init);
+    expect(req.method).toBe('GET');
+    expect(req.headers.get('authorization')).toBe('Bearer owner-token');
+    const path = new URL(req.url).pathname;
+    if (path.endsWith('/members')) return Response.json(status === 200 ? { members: [], next: null } : {}, { status });
+    if (path.endsWith('/follow')) return Response.json({ following: false });
+    return Response.json({ collection });
+  } });
+  const env = {
+    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: 'unused',
+    SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential: async () => ({
+      status: 'active', subject: 'owner', accessToken: 'owner-token', csrfToken: null,
+    }) }) },
+  } as unknown as SessionEnv;
+  const request = new Request('https://rezics.com/collections/logical-everything', {
+    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+  });
+  const page = await loadEditableCollectionPage(client, request, env, { id: collection.id });
+  const capture = captureCollectionExport(page);
+  expect(capture).not.toBeNull();
+  if (!capture) throw new Error('Expected logical export capture');
+  expect(validateCollectionExportCapture(capture)).toEqual(capture);
+  const result = await loadCollectionExport(client, request, env, capture, context);
+  expect(result.state).toBe('complete');
+  if (result.state !== 'complete') throw new Error('Expected empty export');
+  expect(JSON.parse(result.file.text)).toMatchObject({ numberOfItems: 0, itemListElement: [] });
+  expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, viewerId: 'foreign' } })).toBeNull();
+  expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, logicalBuiltin: undefined } })).toBeNull();
+  collection.revision = 1;
+  expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'changed' });
+  status = 503;
+  expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'unavailable' });
 });
