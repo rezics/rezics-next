@@ -209,8 +209,14 @@ export const CountsInLocale: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const japanese = within(canvas.getByRole('region', { name: 'Japanese' }));
-    await expect(japanese.getByRole('button', { name: `Like ${new Intl.NumberFormat('ja').format(12_000)}` })).toBeVisible();
-    await expect(japanese.getByRole('button', { name: `Insightful ${new Intl.NumberFormat('ja').format(10_000)}` })).toBeVisible();
+    const compact = new Intl.NumberFormat('ja', { notation: 'compact' });
+    const exact = new Intl.NumberFormat('ja');
+    await expect(
+      japanese.getByRole('button', { name: `Like ${compact.format(12_000)} (${exact.format(12_000)})` }),
+    ).toBeVisible();
+    await expect(
+      japanese.getByRole('button', { name: `Insightful ${compact.format(10_000)} (${exact.format(10_000)})` }),
+    ).toBeVisible();
     const german = within(canvas.getByRole('region', { name: 'German' }));
     await expect(german.getByRole('button', { name: 'Like 12.000' })).toBeVisible();
     await expect(german.getByRole('button', { name: 'Insightful 10.000' })).toBeVisible();

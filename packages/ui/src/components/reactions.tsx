@@ -182,6 +182,12 @@ function formatExactCount(locale: string, count: number): string {
   return new Intl.NumberFormat(locale).format(count);
 }
 
+function formatAccessibleCount(locale: string, count: number): string {
+  const compact = formatCount(locale, count);
+  const exact = formatExactCount(locale, count);
+  return compact === exact ? compact : `${compact} (${exact})`;
+}
+
 // Pressed text is ink blue (`--primary`). Brand red is a mark and never colors text.
 const chipClass = cn(
   buttonVariants({ variant: 'outline', size: 'sm' }),
@@ -404,7 +410,7 @@ export const Reactions = (props: ReactionsProps) => {
         >
           {voteArrow('upvote')}
           <output
-            aria-label={formatExactCount(props.locale, score)}
+            aria-label={formatAccessibleCount(props.locale, score)}
             aria-live="polite"
             className="min-w-8 px-1 text-center text-sm font-semibold tabular-nums"
           >
@@ -420,7 +426,7 @@ export const Reactions = (props: ReactionsProps) => {
         const pressed = shown.value === kind;
         const formatted = formatCount(props.locale, count);
         const Icon = reactionIcons[kind];
-        const name = `${labels[kind]} ${formatExactCount(props.locale, count)}`;
+        const name = `${labels[kind]} ${formatAccessibleCount(props.locale, count)}`;
         if (signedOut) {
           return (
             <span
@@ -477,7 +483,7 @@ export const Reactions = (props: ReactionsProps) => {
                 const count = shown.counts[kind] ?? 0;
                 return (
                   <Button
-                    aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
+                    aria-label={`${labels[kind]} ${formatAccessibleCount(props.locale, count)}`}
                     aria-pressed={pressed}
                     className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
                     disabled={disabled}

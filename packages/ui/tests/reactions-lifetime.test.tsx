@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { applyReactionChange, reactionKinds } from '../src/components/reactions.tsx';
 
 const packageRoot = join(import.meta.dir, '..');
 const tempRoot = join(packageRoot, '../../.temp');
+const packageRequire = createRequire(import.meta.url);
 
 type PanelName = 'primary' | 'secondary';
 type CallOutcome = 'resolve' | 'reject';
@@ -25,9 +27,9 @@ declare global {
 
 function entrySource(componentPath: string): string {
   return `
-import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { flushSync } from 'react-dom';
+import React, { useState } from ${JSON.stringify(packageRequire.resolve('react'))};
+import { createRoot } from ${JSON.stringify(packageRequire.resolve('react-dom/client'))};
+import { flushSync } from ${JSON.stringify(packageRequire.resolve('react-dom'))};
 import { Reactions } from ${JSON.stringify(componentPath)};
 
 const reactionKinds = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
@@ -232,7 +234,7 @@ test('shared Reactions serialize original choices and retire every obsolete visi
       collapse: 1,
     });
     const japaneseLike = primary.getByRole('button', {
-      name: `Like ${new Intl.NumberFormat('ja').format(12_000)}`,
+      name: `Like ${new Intl.NumberFormat('ja', { notation: 'compact' }).format(12_000)} (${new Intl.NumberFormat('ja').format(12_000)})`,
     });
     await japaneseLike.waitFor({ state: 'visible' });
     expect(await japaneseLike.getAttribute('class')).not.toContain('max-sm:hidden');

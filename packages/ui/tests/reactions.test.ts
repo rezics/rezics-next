@@ -39,6 +39,7 @@ test('reactions hold one kind per person, update optimistically and roll back on
       'Clear Reaction: passed',
       'Counts In Locale: passed',
       'Failed Change Rolls Back: passed',
+      'Menu Open Phone: passed',
       'Replace Reaction: passed',
       'Signed Out: passed',
     ]);
