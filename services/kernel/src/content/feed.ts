@@ -42,6 +42,17 @@ export type FeedDependencies = {
   discovery?: DiscoverySearch;
   search?: SearchService;
 };
+
+/** The native factory and mounted route share this query and response contract. */
+export type FeedReadQuery = {
+  stream?: 'home' | 'following';
+  limit?: number;
+  cursor?: string;
+  kind?: string;
+} & FeedSelection;
+export type FeedReads = {
+  list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>;
+};
 // Native producer bounds from docs/feeds.md; one round, without refill.
 export const FEED_PAGE_LIMIT = 20;
 export const FEED_CANDIDATE_LIMIT = 160;
@@ -85,7 +96,7 @@ const sourceState = (error: unknown): FeedSourceState => {
   return 'unavailable';
 };
 
-export function createFeedReads(deps: FeedDependencies) {
+export function createFeedReads(deps: FeedDependencies): FeedReads {
   const activities = createFeedActivityStore(deps);
   let follows: ReturnType<typeof createFollowActivitySource> | undefined;
   const followSource = async () =>
@@ -217,7 +228,7 @@ export function createFeedReads(deps: FeedDependencies) {
   return {
     async list(
       actor: Actor,
-      query: { stream?: 'home' | 'following'; limit?: number; cursor?: string; kind?: string } & FeedSelection,
+      query: FeedReadQuery,
       deadline: number,
       languages: readonly string[],
     ): Promise<FeedPage> {

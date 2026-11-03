@@ -42,6 +42,12 @@ export type KernelClient = Omit<ReturnType<typeof treaty<ClientApp>>['v1'], 'sub
 export type KernelSubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
+/** Home and Following use the installed feedItems response, including native reaction freshness. */
+export type FeedPage = Routes['feedItems']['get']['response'][200];
+export type FeedItem = FeedPage['feedItems'][number];
+export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
+export type { FeedContentSummary, FeedReactionCounts, FeedReactionTarget } from './kernel/content/feed-contract.ts';
+
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {
