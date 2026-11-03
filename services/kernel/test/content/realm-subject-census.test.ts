@@ -39,8 +39,12 @@ test.serial(
       routeKey: world.routeKey,
       realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
     };
-    const context = () => ({ deadline: deadline(), idempotencyKey: crypto.randomUUID() });
-    const board = await world.directBoard();
+    const context = () => ({
+      deadline: deadline(),
+      idempotencyKey: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    });
+    const board = await world.directBoard(world.conceptId);
     const reviewConcept = await world.subject('skos:Concept', world.schemeId);
     const reviews = await createBoard(
       dependencies,
