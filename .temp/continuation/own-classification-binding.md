@@ -36,8 +36,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/own-classification-assessments-journey.test.tsx
@@ -47,10 +47,10 @@ acceptance:
     - tests/composed-account-navigation-targets.test.tsx
   placement: default
   tests:
-    - "A signed-in person reaches their private current retained classification assessments from existing personal navigation, inspects an admitted exact association, changes an admitted ballot or withdraws it, and returns to the same native frontier with current focus."
-    - "Native available, withheld, empty, sparse continuation, selected promotion, dependency unavailable, revoked and moved-home outcomes preserve original immutable keys and never infer complete account history or public permission."
-    - "Native action advice and current browser admission gate writes; withheld withdrawal reveals no concealed labels or links, visible binding mismatch never promises withdrawal, and exact uncertain clear retries preserve method, operands, credentials and key before distinct supported readback."
-    - "Account, credential and CSRF episode, delegation, scope, locale, cursor, selected association, exposure and source replacement retire private rows, editors, intents and late effects; unknown acknowledgements cannot be silently refreshed away."
+    - 'A signed-in person reaches their private current retained classification assessments from existing personal navigation, inspects an admitted exact association, changes an admitted ballot or withdraws it, and returns to the same native frontier with current focus.'
+    - 'Native available, withheld, empty, sparse continuation, selected promotion, dependency unavailable, revoked and moved-home outcomes preserve original immutable keys and never infer complete account history or public permission.'
+    - 'Native action advice and current browser admission gate writes; withheld withdrawal reveals no concealed labels or links, visible binding mismatch never promises withdrawal, and exact uncertain clear retries preserve method, operands, credentials and key before distinct supported readback.'
+    - 'Account, credential and CSRF episode, delegation, scope, locale, cursor, selected association, exposure and source replacement retire private rows, editors, intents and late effects; unknown acknowledgements cannot be silently refreshed away.'
   failing: true
 ---
 
