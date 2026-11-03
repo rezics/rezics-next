@@ -107,7 +107,7 @@ export function createRealmScopeSource(input: {
       work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1, nativeRows: 1, bytes: 262144 });
       const release = await input.release();
       if (!release) notReady();
-      const admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), release.release, new Set());
+      const admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), release.release, new Set(), { owner: true });
       const plan = compileCurrentRealmFilter(admitted);
       if (!plan.leaves.some((leaf) => leaf.kind === 'realm')) throw new TypeError('Missing Realm condition');
       const observations = new Map<string, RealmSubjectObservation>();

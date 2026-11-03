@@ -1034,8 +1034,9 @@ export function admitDiscoveryFilter(
   filter: DiscoveryFilterDocument,
   release: FilterRelease,
   kinds: ReadonlySet<string>,
+  options?: Pick<FilterAdmissionOptions, 'owner'>,
 ): DiscoveryFilterDocument {
-  return admitConstructed(filter, release, { kinds }, constructionFor(release));
+  return admitConstructed(filter, release, { ...options, kinds }, constructionFor(release));
 }
 
 export function validateDiscoveryFilter(
