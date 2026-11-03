@@ -1,8 +1,9 @@
-WITH input AS NOT MATERIALIZED (
-  SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :source::text AS source,
-         p.epoch::text AS "subjectEpoch"
-  FROM core.partition AS p
-  WHERE p.partition_no = (:route::integer >> 4)
+WITH request AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :source::text AS source
+), input AS NOT MATERIALIZED (
+  SELECT request.route, request.subject_id, request.source, p.epoch::text AS "subjectEpoch"
+  FROM request
+  JOIN core.partition AS p ON p.partition_no = (request.route >> 4)
 ), retained AS (
   SELECT head.digest, observation.source_alias AS "sourceAlias",
          observation.source_record_id AS "sourceRecordId", observation.as_of::text AS "asOf",

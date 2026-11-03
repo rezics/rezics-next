@@ -1,9 +1,12 @@
-WITH input AS NOT MATERIALIZED (
+WITH request AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :source::text AS source,
          :cursor_order::bigint AS cursor_order, :cursor_digest::text AS cursor_digest,
-         :ceiling_order::bigint AS ceiling_order, p.epoch::text AS "subjectEpoch"
-  FROM core.partition AS p
-  WHERE p.partition_no = (:route::integer >> 4)
+         :ceiling_order::bigint AS ceiling_order
+), input AS NOT MATERIALIZED (
+  SELECT request.route, request.subject_id, request.source, request.cursor_order,
+         request.cursor_digest, request.ceiling_order, p.epoch::text AS "subjectEpoch"
+  FROM request
+  JOIN core.partition AS p ON p.partition_no = (request.route >> 4)
 ), boundary AS (
   SELECT (input.cursor_order IS NULL AND input.cursor_digest IS NULL) OR EXISTS (
     SELECT 1 FROM rating.source_statistic_observation AS retained
