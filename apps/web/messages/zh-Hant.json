@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "此間隔適用於同一帳號在此看板上的新討論與回覆。編輯不受限制。顯示的時間僅供參考，看板規則仍為準。",
   "slow_mode_setting_legend": "看板發文間隔",
   "slow_mode_unavailable": "無法讀取此看板的發文間隔。",
-  "slow_mode_unknown": "間隔變更結果不明。重試會使用原來的請求。"
+  "slow_mode_unknown": "間隔變更結果不明。重試會使用原來的請求。",
+  "collection_discovery_nav": "探索合集",
+  "collection_discovery_heading": "瀏覽公開合集",
+  "collection_discovery_intro": "瀏覽策展者已公開的合集。",
+  "collection_discovery_loading": "正在載入公開合集…",
+  "collection_discovery_preparing": "公開合集探索功能正在準備中，請稍後重試。",
+  "collection_discovery_empty": "目前沒有可瀏覽的公開合集。",
+  "collection_discovery_page_empty": "本頁沒有合集。請繼續查看下一頁。",
+  "collection_discovery_denied": "公開合集探索請求遭到拒絕。",
+  "collection_discovery_continuation_refused": "無法開啟此合集頁面。請從頭開始瀏覽公開合集。",
+  "collection_discovery_unavailable": "無法載入公開合集。",
+  "collection_discovery_retry": "重試",
+  "collection_discovery_restart": "重新開始",
+  "collection_discovery_restart_required": "此續頁已失效。請從第一頁重新開始。",
+  "collection_discovery_more": "更多合集"
 }

@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "此间隔适用于同一账号在此看板上的新主题和回复。编辑不受限制。显示的时间仅供参考，看板规则仍为准。",
   "slow_mode_setting_legend": "看板发帖间隔",
   "slow_mode_unavailable": "无法读取此看板的发帖间隔。",
-  "slow_mode_unknown": "间隔更改结果未知。重试会使用原来的请求。"
+  "slow_mode_unknown": "间隔更改结果未知。重试会使用原来的请求。",
+  "collection_discovery_nav": "发现合集",
+  "collection_discovery_heading": "浏览公开合集",
+  "collection_discovery_intro": "浏览创建者已公开的合集。",
+  "collection_discovery_loading": "正在加载公开合集…",
+  "collection_discovery_preparing": "公开合集发现功能正在准备中，请稍后重试。",
+  "collection_discovery_empty": "目前没有可浏览的公开合集。",
+  "collection_discovery_page_empty": "本页没有合集。请继续查看下一页。",
+  "collection_discovery_denied": "公开合集浏览请求被拒绝。",
+  "collection_discovery_continuation_refused": "此合集页面无法打开。请从头开始浏览公开合集。",
+  "collection_discovery_unavailable": "无法加载公开合集。",
+  "collection_discovery_retry": "重试",
+  "collection_discovery_restart": "从头开始",
+  "collection_discovery_restart_required": "此续页已失效。请从第一页重新开始。",
+  "collection_discovery_more": "更多合集"
 }

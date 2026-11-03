@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "この間隔は、このボードでの同一アカウントによる新規スレッドと返信に適用されます。編集は対象外です。表示時刻は目安であり、ボードの判定が優先されます。",
   "slow_mode_setting_legend": "ボードの投稿間隔",
   "slow_mode_unavailable": "このボードの投稿間隔は利用できません。",
-  "slow_mode_unknown": "間隔の変更結果は不明です。再試行は元のリクエストを使います。"
+  "slow_mode_unknown": "間隔の変更結果は不明です。再試行は元のリクエストを使います。",
+  "collection_discovery_nav": "コレクションを探す",
+  "collection_discovery_heading": "公開コレクションを探す",
+  "collection_discovery_intro": "公開されたコレクションを閲覧できます。",
+  "collection_discovery_loading": "公開コレクションを読み込んでいます…",
+  "collection_discovery_preparing": "公開コレクションの検索を準備しています。少ししてから再試行してください。",
+  "collection_discovery_empty": "公開中のコレクションはまだありません。",
+  "collection_discovery_page_empty": "このページにコレクションはありません。次のページを表示してください。",
+  "collection_discovery_denied": "公開コレクションのリクエストは拒否されました。",
+  "collection_discovery_continuation_refused": "このページを開けません。最初から公開コレクションを探してください。",
+  "collection_discovery_unavailable": "公開コレクションを読み込めませんでした。",
+  "collection_discovery_retry": "再試行",
+  "collection_discovery_restart": "最初から見る",
+  "collection_discovery_restart_required": "この続きは利用できません。最初のページからやり直してください。",
+  "collection_discovery_more": "さらに表示"
 }

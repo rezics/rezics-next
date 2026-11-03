@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "Cet intervalle s’applique aux nouveaux sujets et réponses d’un compte sur ce forum. Les modifications ne sont pas limitées. Les horaires affichés sont indicatifs ; le forum reste autoritatif.",
   "slow_mode_setting_legend": "Intervalle de publication du forum",
   "slow_mode_unavailable": "L’intervalle de publication de ce forum est indisponible.",
-  "slow_mode_unknown": "Le résultat du changement d’intervalle est inconnu. Un nouvel essai conserve la requête d’origine."
+  "slow_mode_unknown": "Le résultat du changement d’intervalle est inconnu. Un nouvel essai conserve la requête d’origine.",
+  "collection_discovery_nav": "Découvrir les collections",
+  "collection_discovery_heading": "Découvrir les collections publiques",
+  "collection_discovery_intro": "Parcourez les collections que leurs curateurs ont rendues publiques.",
+  "collection_discovery_loading": "Chargement des collections publiques…",
+  "collection_discovery_preparing": "La découverte des collections publiques est en préparation. Réessayez dans un instant.",
+  "collection_discovery_empty": "Aucune collection publique n’est disponible pour le moment.",
+  "collection_discovery_page_empty": "Il n’y a aucune collection sur cette page. Passez à la suivante pour continuer.",
+  "collection_discovery_denied": "La demande de collections publiques a été refusée.",
+  "collection_discovery_continuation_refused": "Cette page de collections a été refusée. Recommencez depuis la première page.",
+  "collection_discovery_unavailable": "Impossible de charger les collections publiques.",
+  "collection_discovery_retry": "Réessayer",
+  "collection_discovery_restart": "Recommencer",
+  "collection_discovery_restart_required": "Cette suite n’est plus disponible. Reprenez depuis la première page.",
+  "collection_discovery_more": "Plus de collections"
 }

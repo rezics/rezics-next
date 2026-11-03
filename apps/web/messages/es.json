@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "Este intervalo se aplica a hilos y respuestas nuevos de una cuenta en este tablón. Las ediciones no están limitadas. Los tiempos mostrados son orientativos; el tablón sigue siendo autoritativo.",
   "slow_mode_setting_legend": "Intervalo de publicación del tablón",
   "slow_mode_unavailable": "El intervalo de publicación de este tablón no está disponible.",
-  "slow_mode_unknown": "Se desconoce el resultado del cambio de intervalo. El reintento conserva la solicitud original."
+  "slow_mode_unknown": "Se desconoce el resultado del cambio de intervalo. El reintento conserva la solicitud original.",
+  "collection_discovery_nav": "Explorar colecciones",
+  "collection_discovery_heading": "Explorar colecciones públicas",
+  "collection_discovery_intro": "Explora las colecciones que sus curadores han hecho públicas.",
+  "collection_discovery_loading": "Cargando colecciones públicas…",
+  "collection_discovery_preparing": "La búsqueda de colecciones públicas se está preparando. Inténtalo de nuevo en un momento.",
+  "collection_discovery_empty": "Aún no hay colecciones públicas disponibles.",
+  "collection_discovery_page_empty": "No hay colecciones en esta página. Continúa para ver la siguiente.",
+  "collection_discovery_denied": "Se rechazó la solicitud de colecciones públicas.",
+  "collection_discovery_continuation_refused": "No se pudo abrir esta página de colecciones. Vuelve al inicio para explorar.",
+  "collection_discovery_unavailable": "No se pudieron cargar las colecciones públicas.",
+  "collection_discovery_retry": "Reintentar",
+  "collection_discovery_restart": "Volver al inicio",
+  "collection_discovery_restart_required": "Esta continuación ya no está disponible. Empieza desde la primera página.",
+  "collection_discovery_more": "Más colecciones"
 }

@@ -5024,5 +5024,19 @@
   "slow_mode_setting_help": "이 간격은 이 게시판에서 한 계정의 새 스레드와 답글에 적용됩니다. 편집은 제한되지 않습니다. 표시된 시각은 안내일 뿐이며 게시판이 권한을 결정합니다.",
   "slow_mode_setting_legend": "게시판 게시 간격",
   "slow_mode_unavailable": "이 게시판의 게시 간격을 사용할 수 없습니다.",
-  "slow_mode_unknown": "간격 변경 결과를 알 수 없습니다. 다시 시도하면 원래 요청을 유지합니다."
+  "slow_mode_unknown": "간격 변경 결과를 알 수 없습니다. 다시 시도하면 원래 요청을 유지합니다.",
+  "collection_discovery_nav": "컬렉션 둘러보기",
+  "collection_discovery_heading": "공개 컬렉션 둘러보기",
+  "collection_discovery_intro": "공개된 컬렉션을 살펴보세요.",
+  "collection_discovery_loading": "공개 컬렉션을 불러오는 중…",
+  "collection_discovery_preparing": "공개 컬렉션 탐색을 준비하고 있습니다. 잠시 후 다시 시도하세요.",
+  "collection_discovery_empty": "아직 둘러볼 수 있는 공개 컬렉션이 없습니다.",
+  "collection_discovery_page_empty": "이 페이지에는 컬렉션이 없습니다. 다음 페이지를 계속 살펴보세요.",
+  "collection_discovery_denied": "공개 컬렉션 요청이 거부되었습니다.",
+  "collection_discovery_continuation_refused": "이 컬렉션 페이지를 열 수 없습니다. 처음부터 다시 둘러보세요.",
+  "collection_discovery_unavailable": "공개 컬렉션을 불러오지 못했습니다.",
+  "collection_discovery_retry": "다시 시도",
+  "collection_discovery_restart": "처음부터 보기",
+  "collection_discovery_restart_required": "이 페이지 이어보기는 더 이상 사용할 수 없습니다. 첫 페이지부터 다시 시작하세요.",
+  "collection_discovery_more": "더 보기"
 }

@@ -5085,5 +5085,19 @@
   "slow_mode_setting_help": "This interval applies to new threads and replies from one account on this board. Edits are not limited. Displayed times are guidance; the board remains authoritative.",
   "slow_mode_setting_legend": "Board posting interval",
   "slow_mode_unavailable": "This board’s posting interval is unavailable.",
-  "slow_mode_unknown": "The interval change result is unknown. Retry keeps the original request."
+  "slow_mode_unknown": "The interval change result is unknown. Retry keeps the original request.",
+  "collection_discovery_nav": "Discover Collections",
+  "collection_discovery_heading": "Browse public Collections",
+  "collection_discovery_intro": "Explore Collections their curators have made public.",
+  "collection_discovery_loading": "Loading public Collections…",
+  "collection_discovery_preparing": "Public Collection discovery is being prepared. Try again in a moment.",
+  "collection_discovery_empty": "No public Collections are available yet.",
+  "collection_discovery_page_empty": "There are no Collections on this page. Continue to see the next page.",
+  "collection_discovery_denied": "The public Collections request was refused.",
+  "collection_discovery_continuation_refused": "This Collection page was refused. Start over to browse public Collections.",
+  "collection_discovery_unavailable": "Public Collections could not be loaded.",
+  "collection_discovery_retry": "Retry",
+  "collection_discovery_restart": "Start over",
+  "collection_discovery_restart_required": "This continuation is no longer available. Start from the first page.",
+  "collection_discovery_more": "More Collections"
 }

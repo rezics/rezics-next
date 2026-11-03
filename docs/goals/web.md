@@ -89,6 +89,13 @@ independent rather than making shared files or unfinished producer delivery into
   `/spaces/{address}` when the address is readable, Realm title as carrier text only. Search has not registered
   review or Space discovery kinds and Content has not delivered Space feed rows; those remain named pending
   producer bindings. Missing author, excerpt, image and rating stay omitted.
+- **Collection discovery.** Add native public Collection hits to existing Search and mixed Home rows, with the
+  supplied title, description and canonical destination. A dedicated localized `/collections` route browses the
+  native Collection-kind page and links to the existing public Collection route. Membership and private rule facts
+  are not row enrichment; the page contract is [Public Collection discovery](../../apps/web/src/library/public-collection-discovery.md).
+- **Review and Space discovery.** Add native review and Space hits through the same consumers. A review keeps its
+  native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
+  meaning. A Realm-backed Space does not become a second Realm hit.
 - **Moderator workbench.** Compose existing board and catalogue queues, decisions and appeals behind one navigation
   entry. Select one authorized queue at a time, with its own filters, cursor, evidence and native resolution actions.
   This adds no aggregate case search or platform-wide appeal adjudication.
