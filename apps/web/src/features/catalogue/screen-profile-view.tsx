@@ -42,7 +42,7 @@ import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
-import { CharacterClassifications, classificationFields } from './character-profile-classification';
+import { ScreenClassificationReview } from './screen-classification-review';
 import { EditorFailure } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
 import {
@@ -780,17 +780,13 @@ function ScreenCorrection({
               <details hidden={!visible} className="min-w-0 rounded-xl border border-border p-4" open>
                 {visible && <summary className={screenSummaryClassName}>{m.screen_classification({}, o)}</summary>}
                 <AuthoringDepartureBoundary>
-                  <CharacterClassifications
-                    properties={classificationFields(
-                      privateCurrent.release,
-                      privateCurrent.public.subject.type,
-                      screenGroups(privateCurrent.release, privateCurrent.public.subject.type).classification,
-                    )}
+                  <ScreenClassificationReview
                     read={privateCurrent}
                     locale={locale}
                     search={search}
                     transport={transport.facts}
                     review={transport.review}
+                    observe={observe}
                   />
                 </AuthoringDepartureBoundary>
               </details>

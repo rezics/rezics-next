@@ -163,8 +163,17 @@ is not a selected classification. Current assertions, other languages, qualifier
 drafting. Name maps link to the actual terms adapter; an unavailable native producer stays unavailable. Original text
 links to the existing authored editor with explicit language and licence. No candidate is presented as current
 publication.
-Decision: Character classification changed-set review and evidence reuse are opt-in on this Character caller so Album,
-Manga, Screen, StoryArc and add-on writers that share the field control keep immediate per-field confirmation.
+Decision: Character and Screen profile classification corrections opt into the shared changed-set review and evidence
+reuse controls. Album, Manga, StoryArc and add-on callers keep immediate per-field confirmation.
+
+## Browser flow: Screen classification correction
+
+On an existing Movie, TVSeries, TVSeason or Episode, the Screen profile offers only classification properties admitted
+by that subject's current emitted type. The existing classification controls coordinate the complete changed set,
+allow deliberate independent copies of complete citation groups, and propose each holder separately. Editing one
+holder leaves its siblings and their outcomes intact. Candidate acceptance and selection remain explicit native
+decisions. After selection, the exact current subject read updates both the classification values and the Screen
+profile reader through its existing observe path; a proposal alone does not change current values.
 
 Appearances and credits are statements on the selected existing work. The existing relation editor retains separate
 emitted properties, the native `wdt:P453` character qualifier and exact target/key slots, credited names, roles,
