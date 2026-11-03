@@ -46,12 +46,12 @@ test('Collection rule editor Pages stories have a genuine existing page shell ma
   }
   expect(scenarios.ActualCreate).toContain('<PageStory visitor="Signed In" path="/library/rules/new" />');
   expect(scenarios.ActualCreate).toContain('pageReady');
-  expect(scenarios.ActualCreate).toContain("name: m.library_collection_create()");
+  expect(scenarios.ActualCreate).toContain('name: m.library_collection_create()');
   expect(scenarios.ActualCreate).toContain('toBeInvalid()');
   expect(scenarios.ActualReady).toContain('path={`/collections/${savedRuleReadyId}/rule`}');
-  expect(scenarios.ActualReady).toContain("name: m.library_rule_edit()");
+  expect(scenarios.ActualReady).toContain('name: m.library_rule_edit()');
   expect(scenarios.ActualReady).toContain("main.querySelector('form')");
-  expect(scenarios.ActualReady).toContain("name: m.library_rule_members()");
+  expect(scenarios.ActualReady).toContain('name: m.library_rule_members()');
   expect(scenarios.PrivateUnavailable).toContain('path={`/collections/${savedRuleUnavailableId}/rule`}');
   for (const [name, message] of [
     ['Denied', 'library_rule_denied'],
@@ -65,7 +65,7 @@ test('Collection rule editor Pages stories have a genuine existing page shell ma
     expect(scenario).toContain("queryByRole('link', { name: m.library_rule_members() })");
     expect(scenario).toContain('userEvent.click');
   }
-  expect(fake).toContain("status: 200, rule: savedRule");
+  expect(fake).toContain('status: 200, rule: savedRule');
   expect(fake).toContain("code: 'dependency_unavailable'");
   expect(fake).not.toMatch(/members:\s*\[/);
   expect(story).toContain('choices: unavailableRuleChoices()');
