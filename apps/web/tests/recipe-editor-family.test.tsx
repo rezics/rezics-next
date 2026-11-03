@@ -543,10 +543,15 @@ test('Recipe creation and current correction share complete frames with independ
       typeLabel: 'Diet',
       cover: null,
     };
+    const pickedTitle = (scope: HTMLElement) =>
+      [...scope.querySelectorAll<HTMLInputElement>('input, [role="combobox"]')].some(
+        (node) => node.value === selectedDiet.title,
+      ) || scope.textContent?.includes(selectedDiet.title);
     const retiredPicker = picker(diet);
     await act(async () => retiredPicker([selectedDiet]));
+    expect(pickedTitle(diet)).toBe(true);
     await act(async () => retiredPicker([]));
-    expect(diet.textContent).toContain(selectedDiet.title);
+    expect(pickedTitle(diet)).toBe(true);
     for (const scope of [a, b]) associations(scope);
     expect(input(methodA, m.catalogue_create_language()).id).not.toBe(input(methodB, m.catalogue_create_language()).id);
     expect(input(methodA, m.subject_source_licence()).id).not.toBe(input(methodB, m.subject_source_licence()).id);
@@ -568,7 +573,8 @@ test('Recipe creation and current correction share complete frames with independ
     await cite(methodA, longCitation);
     await cancelRemoval(methodA);
     await reviewRecipe(a);
-    await until(() => !!within(a).queryByRole('button', { name: m.catalogue_create_review_new() }));
+    await click(a, m.recipe_title());
+    await until(() => within(a).queryAllByRole('button', { name: m.catalogue_create_review_new() }).length > 0);
     expect(posts(creation, '/subjects')).toHaveLength(0);
     await click(a, m.catalogue_create_review_new());
     await until(() => within(a).queryAllByRole('button', { name: m.correction_retry() }).length > 0);
