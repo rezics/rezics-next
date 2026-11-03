@@ -1,9 +1,14 @@
 import {
   admitFilter,
+  admitDiscoveryFilter,
   FilterError,
+  parseDiscoveryFilter,
   parseFilter,
+  positiveDiscoveryFilter,
   positiveFilter,
   relationFacetProperty,
+  type DiscoveryFilterDocument,
+  type FilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
 import { randomUUID } from 'node:crypto';
@@ -92,6 +97,8 @@ export type SearchRequest = {
   languages?: string[];
   properties?: string[];
 };
+
+type SearchFilterDocument = FilterDocument | DiscoveryFilterDocument;
 
 export type PublicSearchPage = {
   subjects: PublicSearchHit[];
@@ -194,6 +201,24 @@ function containsOwnerPredicate(value: unknown): boolean {
   return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsOwnerPredicate));
 }
 
+function containsRealmPredicate(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'realm')) return true;
+  if ('not' in node && containsRealmPredicate(node.not)) return true;
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsRealmPredicate));
+}
+
+function containsUnsupportedDiscoveryLeaf(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'kind') || Object.hasOwn(node, 'ratingQuestion')) return true;
+  if ('not' in node && containsUnsupportedDiscoveryLeaf(node.not)) return true;
+  return ['and', 'or'].some((key) =>
+    Array.isArray(node[key]) && node[key].some(containsUnsupportedDiscoveryLeaf),
+  );
+}
+
 function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
   const allowance = work.remaining();
   const remaining = allowance.remaining;
@@ -294,9 +319,12 @@ function validate(request: SearchRequest) {
     throw error;
   }
 
-  let filter;
+  let filter: SearchFilterDocument | undefined;
   try {
-    if (request.filter !== undefined) filter = parseFilter(request.filter);
+    if (request.filter !== undefined) {
+      const discovery = parseDiscoveryFilter(request.filter);
+      filter = containsRealmPredicate(discovery) ? discovery : parseFilter(request.filter);
+    }
   } catch (error) {
     if (error instanceof FilterError)
       throw new ProblemError(error.problem, {
@@ -528,7 +556,7 @@ export function createSearchService({
 
   async function admitQuery(
     text: ReturnType<typeof parseText> | undefined,
-    filter: ReturnType<typeof parseFilter> | undefined,
+    filter: SearchFilterDocument | undefined,
     current?: FilterRelease,
     nativeOrder = false,
   ) {
@@ -537,7 +565,12 @@ export function createSearchService({
       const active = current ?? (await release());
       if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       try {
-        admitted = admitFilter(filter, active, containsOwnerPredicate(filter) ? { owner: true } : undefined);
+        if (containsRealmPredicate(filter)) {
+          if (containsUnsupportedDiscoveryLeaf(filter)) unsupported('/filter');
+          admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), { owner: true });
+        } else {
+          admitted = admitFilter(filter as FilterDocument, active, containsOwnerPredicate(filter) ? { owner: true } : undefined);
+        }
       } catch (error) {
         if (error instanceof FilterError)
           throw new ProblemError(error.problem, {
@@ -551,7 +584,10 @@ export function createSearchService({
       !nativeOrder &&
       (text || admitted) &&
       !(text && positiveText(text)) &&
-      !(admitted && positiveFilter(admitted))
+      !(admitted &&
+        (containsRealmPredicate(admitted)
+          ? positiveDiscoveryFilter(admitted as DiscoveryFilterDocument)
+          : positiveFilter(admitted as FilterDocument)))
     )
       unsupported(text ? '/text' : '/filter');
     return admitted;
@@ -631,7 +667,8 @@ export function createSearchService({
         await ordered.finalize();
         return response;
       }
-      const scopedRequest = admitted !== undefined && containsOwnerPredicate(admitted);
+      const realmScopedRequest = admitted !== undefined && containsRealmPredicate(admitted);
+      const scopedRequest = admitted !== undefined && (containsOwnerPredicate(admitted) || realmScopedRequest);
       let scope: ReturnType<typeof createSearchScopeForService> | undefined;
       let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
       let scopeWork: ScopeWork | undefined;
@@ -640,19 +677,28 @@ export function createSearchService({
         if (!options) throw indexNotReady();
         scope = createSearchScopeForService(service, options);
         scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
-        const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
-        preparedScope = await sourceRequest(() =>
-          scope!.prepare(admitted!, {
-            releaseDigest: native?.digest ?? kindDigest(current!),
-            ...(nativeOrder ? { nativeOrder, pageSize: limit } : {}),
-            allowance: scopeWork!.remaining(),
-          }),
-        );
-        scopeWork.native(scope.work(preparedScope));
+        if (realmScopedRequest) {
+          if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
+          const realm = await sourceRequest(() =>
+            scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining()),
+          );
+          scopeWork.native(realm.work);
+          // population_ready is only a prefix/evaluation preparation handle. This
+          // Search path cannot yet turn it into complete retained canonical pages.
+          throw indexNotReady();
+        } else {
+          const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
+          preparedScope = await sourceRequest(() =>
+            scope!.prepare(admitted as FilterDocument, {
+              releaseDigest: native?.digest ?? kindDigest(current!),
+              ...(nativeOrder ? { nativeOrder, pageSize: limit } : {}),
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          scopeWork.native(scope.work(preparedScope));
+        }
       }
-      const cursorRequest = preparedScope
-        ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
-        : bindingRequest;
+      const cursorRequest = preparedScope ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis) : bindingRequest;
       const binding = { operation: 'subjects.search', request: cursorRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
@@ -718,7 +764,7 @@ export function createSearchService({
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const compiledFilter =
-        admitted && !preparedScope ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
+        admitted && !preparedScope ? compileFilter(admitted as FilterDocument, { prefix: 'f', relationOverflow: true }) : undefined;
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
@@ -952,7 +998,7 @@ export function createSearchService({
       const capturePlan = {
         ...plan,
         generation,
-        filterDocument: preparedScope ? undefined : admitted,
+        filterDocument: preparedScope ? undefined : (admitted as FilterDocument | undefined),
         text,
         pageSize: limit,
         size: Math.min(200, 2 * limit + 1),

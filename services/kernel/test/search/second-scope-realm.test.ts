@@ -8,6 +8,7 @@ import {
   type RealmSubjectMembership,
 } from '../../src/search/realm-scope.ts';
 import { scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
+import { createSearchService } from '../../src/search/service.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createRealmSubjectSource, type RealmSubjectDisclosure } from '../../src/content/realm-subject-source.ts';
 
@@ -157,6 +158,49 @@ test('unknown and withheld membership cannot establish a tautological Realm OR',
     f.memberships([membership]);
     expect((await f.scope.evaluate(scope, [other], allowance())).values).toEqual(['not_proven']);
   }
+});
+
+test('public Search routes a Realm request through its registered service scope and request reader', async () => {
+  const reader = { deadline: Date.now() + 60_000 } as LeafOptions;
+  const resolved: string[] = [];
+  const readers: LeafOptions[] = [];
+  const realmSubjects: RealmSubjectSource = {
+    async resolve(id, options) {
+      resolved.push(id);
+      readers.push(options);
+      return { state: 'unavailable' };
+    },
+    async current() {
+      return 'current';
+    },
+    async prefix() {
+      return { subjects: [], after: null, exhausted: true };
+    },
+    async match(_observation, subjects) {
+      return subjects.map(() => 'unknown');
+    },
+  };
+  const service = createSearchService({
+    pool: {} as Pool,
+    client: {} as never,
+    prefix: 'realm-reader',
+    source: {} as never,
+    realmSubjects,
+    cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
+    release: async () => release,
+  });
+  await expect(
+    service.search(
+      'anonymous',
+      { filter: leaf },
+      Date.now(),
+      { digest: '1', release },
+      { deadline: reader.deadline, scope: reader, complete: async () => {} },
+    ),
+  ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+  expect(resolved).toEqual([realm]);
+  expect(readers).toHaveLength(1);
+  expect(readers[0]).toBe(reader);
 });
 
 test('the Content factory without live composition stays unavailable, including under OR', async () => {
