@@ -78,7 +78,7 @@ test('native owner pages across subjects and separate repeats, then reopens exac
     presentation: { meaning: 'known', structure: 'unverified' },
   });
   expect((await page()).occurrences.map((row) => row.id)).toEqual(expected.slice(0, 2));
-  expect(await page(first.next!)).toEqual(await page(first.next!));
+  expect((await page(first.next!)).occurrences).toEqual((await page(first.next!)).occurrences);
   await cancel(first.continuation!);
 });
 

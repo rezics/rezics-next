@@ -2210,8 +2210,8 @@ CREATE TABLE library.diary_navigation (
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     CONSTRAINT diary_navigation_caller_check CHECK ((length(caller) = 64)),
+    CONSTRAINT diary_navigation_check CHECK ((expires_at > created_at)),
     CONSTRAINT diary_navigation_epoch_check CHECK ((epoch > 0)),
-    CONSTRAINT diary_navigation_expires_at_check CHECK ((expires_at > created_at)),
     CONSTRAINT diary_navigation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT diary_navigation_slot_check CHECK (((slot >= 0) AND (slot <= 7)))
 );
