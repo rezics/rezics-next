@@ -17,6 +17,7 @@ test("post history and exact revision reads keep their compatible route addresse
   const authorId = "019a1b2c-3d4e-7f00-8a00-000000000003";
   const questionId = "019a1b2c-3d4e-7f00-8a00-000000000004";
   const subjectId = "019a1b2c-3d4e-7f00-8a00-000000000005";
+  const headRevisionId = "019a1b2c-3d4e-7f00-8a00-000000000008";
   const createdAt = "2026-11-04T00:00:00Z";
   const threadId = "019a1b2c-3d4e-7f00-8a00-000000000006";
   const boardId = "019a1b2c-3d4e-7f00-8a00-000000000007";
@@ -175,7 +176,7 @@ test("post history and exact revision reads keep their compatible route addresse
   const page = history.data!.page;
   expect(page.conversation.kind).toBe("review");
   expect(page.board.purpose).toBe("reviews");
-  expect(page.head.revisionId).toBe(revisionId);
+  expect(page.head.revisionId).toBe(headRevisionId);
   expect(page.authors.items[0]).toEqual({ id: authorId, state: "concealed" });
   const author = page.authors.items[0]!;
   if (author.state === "concealed") {
@@ -204,6 +205,9 @@ test("post history and exact revision reads keep their compatible route addresse
     summary: null,
   });
   expect(page.navigation.exact).toEqual([{ postId, revisionId }]);
+  expect(page.navigation.compareToHead).toEqual([
+    { postId, fromRevisionId: revisionId, toRevisionId: headRevisionId },
+  ]);
   expect(page.currentness.reviewScores).toBe("current");
   expect(page.retry).toEqual({ state: "none" });
   expect(revision.data?.editionIdentity?.subjects[0]?.kind).toBe("withheld");
