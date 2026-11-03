@@ -111,35 +111,45 @@ export async function createMembershipGrowthFixture() {
       const read = await readBatch(growth.pool, {
         consumer,
         partition: sourcePartition,
-        apply: async (batch) => { envelopes.push(...batch); },
+        apply: async (batch) => {
+          envelopes.push(...batch);
+        },
       });
       if (read.status !== 'read')
-        throw new Error(`Native membership setup source: ${read.status}${read.status === 'stopped' ? ` ${read.reason}` : ''}`);
+        throw new Error(
+          `Native membership setup source: ${read.status}${read.status === 'stopped' ? ` ${read.reason}` : ''}`,
+        );
     }
     const registered: Effect[] = [];
     client = await createWorkClient(growth.url, growth.openPool({ max: 4 }));
     // Native Auth has completed its identities; Content now owns this fixture's executor.
     await DBOS.shutdown({ deregister: true });
-    runtime = await composeWork([
-      {
-        name: registerContent.name,
-        register(context) {
-          return registerContent.register({
-            ...context,
-            addEffects(effects) { registered.push(...effects); context.addEffects(effects); },
-          });
+    runtime = await composeWork(
+      [
+        {
+          name: registerContent.name,
+          register(context) {
+            return registerContent.register({
+              ...context,
+              addEffects(effects) {
+                registered.push(...effects);
+                context.addEffects(effects);
+              },
+            });
+          },
         },
+      ],
+      {
+        databaseUrl: growth.url,
+        pool: growth.openPool({ max: 4 }),
+        client,
+        executorId: `membership-growth-${crypto.randomUUID()}`,
+        env: workerTestEnv({
+          KERNEL_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
+          CONTENT_TEST_COLLECTION_PARTITIONS: '0',
+        }),
       },
-    ], {
-      databaseUrl: growth.url,
-      pool: growth.openPool({ max: 4 }),
-      client,
-      executorId: `membership-growth-${crypto.randomUUID()}`,
-      env: workerTestEnv({
-        KERNEL_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
-        CONTENT_TEST_COLLECTION_PARTITIONS: '0',
-      }),
-    });
+    );
     await runtime.launch();
     const selected = envelopes.flatMap((envelope) =>
       envelope.events.some((event) => event.type === 'com.rezics.content.reaction.changed.v1') ? [envelope] : [],
@@ -160,15 +170,30 @@ export async function createMembershipGrowthFixture() {
     );
     if (projected.rowCount !== 4) throw new Error('Native selected reaction effects did not complete');
 
-    let noise: Array<{ actor: string; target: string; transaction: string; event: string; key: string; digest: string }> = [];
+    let noise: Array<{
+      actor: string;
+      target: string;
+      transaction: string;
+      event: string;
+      key: string;
+      digest: string;
+    }> = [];
     async function resetNoise() {
       if (noise.length === 0) return;
-      await growth.admin.query('DELETE FROM content.reaction WHERE target_id=ANY($1::uuid[])', [noise.map((r) => r.target)]);
+      await growth.admin.query('DELETE FROM content.reaction WHERE target_id=ANY($1::uuid[])', [
+        noise.map((r) => r.target),
+      ]);
       await growth.admin.query('DELETE FROM core.outbox WHERE id=ANY($1::uuid[])', [noise.map((r) => r.event)]);
-      await growth.admin.query('DELETE FROM core.receipt WHERE transaction_id=ANY($1::uuid[])', [noise.map((r) => r.transaction)]);
-      await growth.admin.query('DELETE FROM editorial.write_basis WHERE transaction_id=ANY($1::uuid[])', [noise.map((r) => r.transaction)]);
+      await growth.admin.query('DELETE FROM core.receipt WHERE transaction_id=ANY($1::uuid[])', [
+        noise.map((r) => r.transaction),
+      ]);
+      await growth.admin.query('DELETE FROM editorial.write_basis WHERE transaction_id=ANY($1::uuid[])', [
+        noise.map((r) => r.transaction),
+      ]);
       const actors = noise.map((r) => r.actor).filter((id) => id !== actor.accountId);
-      await growth.admin.query('DELETE FROM content.reaction_liked_version WHERE actor_account_id=ANY($1::uuid[])', [actors]);
+      await growth.admin.query('DELETE FROM content.reaction_liked_version WHERE actor_account_id=ANY($1::uuid[])', [
+        actors,
+      ]);
       await growth.admin.query('DELETE FROM access.account WHERE account_id=ANY($1::uuid[])', [actors]);
       noise = [];
     }
@@ -179,8 +204,12 @@ export async function createMembershipGrowthFixture() {
         return {
           actor: axis === 'other-actors' ? newId(home) : actor.accountId,
           target,
-          transaction: Bun.randomUUIDv7(), event: Bun.randomUUIDv7(), key: crypto.randomUUID(),
-          digest: createHash('sha256').update(canonicalize([principalCommandIdentity(actor), 'content.reaction.set', body])!).digest('hex'),
+          transaction: Bun.randomUUIDv7(),
+          event: Bun.randomUUIDv7(),
+          key: crypto.randomUUID(),
+          digest: createHash('sha256')
+            .update(canonicalize([principalCommandIdentity(actor), 'content.reaction.set', body])!)
+            .digest('hex'),
         };
       });
       const seed = await growth.admin.connect();
@@ -208,29 +237,46 @@ export async function createMembershipGrowthFixture() {
             SELECT data, $2::bigint + ordinal AS position
             FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS s(data,ordinal)
           )`;
-          await seed.query(`${seeds}
+          await seed.query(
+            `${seeds}
             INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
             SELECT o.partition_no,s.position,o.event_seq,o.event_count,o.epoch,(s.data->>'event')::uuid,o.type,
               s.data->>'target',jsonb_set(o.data,'{targetId}',s.data->'target')
             FROM seeds s JOIN core.receipt c ON c.partition_no=$3 AND c.transaction_id=$4
-            JOIN core.outbox o ON o.partition_no=c.partition_no AND o.position=c.position`, parameters);
-          await seed.query(`${seeds}
+            JOIN core.outbox o ON o.partition_no=c.partition_no AND o.position=c.position`,
+            parameters,
+          );
+          await seed.query(
+            `${seeds}
             INSERT INTO editorial.write_basis(partition_no,transaction_id,epoch,position,principal_kind,principal_id,client_id,requested_by)
             SELECT b.partition_no,(s.data->>'transaction')::uuid,b.epoch,s.position,b.principal_kind,b.principal_id,b.client_id,b.requested_by
-            FROM seeds s JOIN editorial.write_basis b ON b.partition_no=$3 AND b.transaction_id=$4`, parameters);
-          await seed.query(`${seeds}
+            FROM seeds s JOIN editorial.write_basis b ON b.partition_no=$3 AND b.transaction_id=$4`,
+            parameters,
+          );
+          await seed.query(
+            `${seeds}
             INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
             SELECT c.partition_no,c.principal_kind,c.principal_id,c.command_kind,s.data->>'key',decode(s.data->>'digest','hex'),
               c.epoch,s.position,(s.data->>'transaction')::uuid,jsonb_set(c.response,'{targetId}',s.data->'target')
-            FROM seeds s JOIN core.receipt c ON c.partition_no=$3 AND c.transaction_id=$4`, parameters);
+            FROM seeds s JOIN core.receipt c ON c.partition_no=$3 AND c.transaction_id=$4`,
+            parameters,
+          );
         }
         await seed.query('COMMIT');
       } catch (error) {
         await seed.query('ROLLBACK');
         throw error;
-      } finally { seed.release(); }
+      } finally {
+        seed.release();
+      }
       noise.push(...rows);
-      const counts = await growth.admin.query<{ reactions: number; actors: number; receipts: number; events: number; basis: number }>(
+      const counts = await growth.admin.query<{
+        reactions: number;
+        actors: number;
+        receipts: number;
+        events: number;
+        basis: number;
+      }>(
         `SELECT
           (SELECT count(*)::int FROM content.reaction WHERE target_id=ANY($1::uuid[])) AS reactions,
           (SELECT count(DISTINCT actor_account_id)::int FROM content.reaction WHERE target_id=ANY($1::uuid[])) AS actors,
@@ -242,9 +288,18 @@ export async function createMembershipGrowthFixture() {
       return counts.rows[0]!;
     }
     return {
-      db: growth, actorId: actor.accountId, home, liked, loved, laughed, otherOnly, absent,
+      db: growth,
+      actorId: actor.accountId,
+      home,
+      liked,
+      loved,
+      laughed,
+      otherOnly,
+      absent,
       baselineActorId: system.actors.moderator.actor.accountId,
-      grow, resetNoise, close,
+      grow,
+      resetNoise,
+      close,
     };
   } catch (error) {
     await close();

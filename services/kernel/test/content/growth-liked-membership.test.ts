@@ -108,12 +108,19 @@ for (const axis of ['other-actors', 'same-actor-history'] as const satisfies rea
               expect(reaction.sequentialScans).toBe(0);
             }
           }
-          console.info(JSON.stringify({
-            operation: report.name, scale: sample.scale, version: membershipVersion.toString(),
-            requested: item.ids, rows: sample.cost.rows, blocks: sample.cost.blocks,
-            statements: sample.cost.statements, relations: sample.cost.relations,
-            verdicts: report.verdicts,
-          }));
+          console.info(
+            JSON.stringify({
+              operation: report.name,
+              scale: sample.scale,
+              version: membershipVersion.toString(),
+              requested: item.ids,
+              rows: sample.cost.rows,
+              blocks: sample.cost.blocks,
+              statements: sample.cost.statements,
+              relations: sample.cost.relations,
+              verdicts: report.verdicts,
+            }),
+          );
         }
         assertGrowthAccessPaths(report.name, report.samples, [
           'content.reaction_liked_version',
@@ -127,12 +134,19 @@ for (const axis of ['other-actors', 'same-actor-history'] as const satisfies rea
       const guard = await measure(f.db, async () => {
         const client: PoolClient = await f.db.pool.connect();
         try {
-          await expect(readLikedMembership(client, {
-            actorAccountId: f.actorId, subjectIds: Array(257).fill(f.liked),
-          })).rejects.toThrow('At most 256 liked membership ids');
-        } finally { client.release(); }
+          await expect(
+            readLikedMembership(client, {
+              actorAccountId: f.actorId,
+              subjectIds: Array(257).fill(f.liked),
+            }),
+          ).rejects.toThrow('At most 256 liked membership ids');
+        } finally {
+          client.release();
+        }
       });
       expect(guard.cost.statements).toBe(0);
-    } finally { await f.close(); }
+    } finally {
+      await f.close();
+    }
   }, 1_200_000);
 }
