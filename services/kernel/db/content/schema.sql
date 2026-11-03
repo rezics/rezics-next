@@ -2481,19 +2481,19 @@ ALTER TABLE ONLY content.moderation_appeal
 
 
 --
--- Name: moderation_decision moderation_decision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.moderation_decision
-    ADD CONSTRAINT moderation_decision_pkey PRIMARY KEY (route, decision_id);
-
-
---
 -- Name: moderation_decision_board moderation_decision_board_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.moderation_decision_board
     ADD CONSTRAINT moderation_decision_board_pkey PRIMARY KEY (route, board_id, decision_id);
+
+
+--
+-- Name: moderation_decision moderation_decision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_decision
+    ADD CONSTRAINT moderation_decision_pkey PRIMARY KEY (route, decision_id);
 
 
 --
