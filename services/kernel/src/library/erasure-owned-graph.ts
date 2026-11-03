@@ -257,8 +257,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
             [route, accountId],
           )
         ).rows[0];
-        if (!root)
-          return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, hasMore: false });
+        if (!root) return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, hasMore: false });
         const rows = await tx.query(
           `WITH keys AS MATERIALIZED (
             SELECT ordinal FROM library.library_archive_merge_item

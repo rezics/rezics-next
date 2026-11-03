@@ -353,9 +353,7 @@ export function createLabelAssignmentCommands(deps: {
       undefined,
       undefined,
       reviewGuard,
-    )) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal> & { unchanged?: boolean }
-    >;
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
   async function assignLabelAtRevision(
     actor: Actor,

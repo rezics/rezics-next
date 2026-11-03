@@ -16,7 +16,13 @@ import { runOperationalTransaction, type OperationalTransaction } from '../comma
 import { withConnection } from '../database/pool.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCommandAuthorization, AuthenticationError, type Access, type Actor, type AccountActor } from '../request/access.ts';
+import {
+  accessCommandAuthorization,
+  AuthenticationError,
+  type Access,
+  type Actor,
+  type AccountActor,
+} from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -327,8 +333,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         const records = parsed.records.map((record, ordinal) => ({
           ordinal,
           section: record.section,
-          source_subject_id:
-            typeof record.subject_id === 'string' ? record.subject_id : null,
+          source_subject_id: typeof record.subject_id === 'string' ? record.subject_id : null,
           source_label_id:
             record.section === 'labels'
               ? typeof record.label_id === 'string'
@@ -431,12 +436,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     });
   }
 
-  async function mapAssignmentLabel(
-    actor: Actor,
-    id: string,
-    sourceLabelId: string | null,
-    signal?: AbortSignal,
-  ) {
+  async function mapAssignmentLabel(actor: Actor, id: string, sourceLabelId: string | null, signal?: AbortSignal) {
     if (!sourceLabelId) return null;
     return operation(actor, 'library_entry:update', signal, async (tx, route, accountId) => {
       const result = await tx.query<{
@@ -490,7 +490,11 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             if (error instanceof LibraryNotFoundError)
               return {
                 status: 'unresolved',
-                review: { requestedSubjectId: decision.subjectId, targetSubjectId: anchor.subjectId, action: 'preserve' },
+                review: {
+                  requestedSubjectId: decision.subjectId,
+                  targetSubjectId: anchor.subjectId,
+                  action: 'preserve',
+                },
               };
             throw error;
           }
@@ -788,7 +792,17 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         SET status='applying',native_command_kind=$5,native_request_key=$6,native_operands=$7::jsonb,result=NULL
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4 AND status=$8
           AND review_revision=$9 RETURNING ordinal`,
-        [route, accountId, id, ordinal, binding.kind, binding.key, JSON.stringify(binding.operands), item.status, item.review_revision],
+        [
+          route,
+          accountId,
+          id,
+          ordinal,
+          binding.kind,
+          binding.key,
+          JSON.stringify(binding.operands),
+          item.status,
+          item.review_revision,
+        ],
       );
       if (!updated.rowCount) throw conflict();
       return { mode: 'run' as const, effect: binding };
@@ -809,9 +823,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       const input = {
         state: effect.operands.stateId,
         ...(typeof effect.operands.revision === 'number' ? { revision: effect.operands.revision } : {}),
-        ...(typeof effect.operands.incarnationId === 'string'
-          ? { incarnationId: effect.operands.incarnationId }
-          : {}),
+        ...(typeof effect.operands.incarnationId === 'string' ? { incarnationId: effect.operands.incarnationId } : {}),
       };
       const result = await entries().putEntry(actor, String(effect.operands.subjectId), input, effect.key, guard);
       const entry = result.value.entry;
@@ -873,7 +885,12 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     });
   }
 
-  async function refuse(actor: Actor, id: string, ordinal: number, status: 'current_conflict' | 'unsupported' | 'unresolved') {
+  async function refuse(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    status: 'current_conflict' | 'unsupported' | 'unresolved',
+  ) {
     return operation(actor, 'library_entry:update', undefined, async (tx, route, accountId) => {
       await readUpload(tx, route, accountId, id, true);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
@@ -892,7 +909,9 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       ordinals.length < 1 ||
       ordinals.length > LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems ||
       new Set(ordinals).size !== ordinals.length ||
-      ordinals.some((ordinal) => !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records)
+      ordinals.some(
+        (ordinal) => !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records,
+      )
     )
       throw new ProblemError('invalid_request');
     const applied: { ordinal: number; status: string; result: Record<string, unknown> | null }[] = [];

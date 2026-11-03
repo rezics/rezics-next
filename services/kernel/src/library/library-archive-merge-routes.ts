@@ -213,7 +213,10 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id/review',
       {
         params: t.Object({ id }, closed),
-        body: t.Object({ items: t.Array(reviewItem, { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.reviewItems }) }, closed),
+        body: t.Object(
+          { items: t.Array(reviewItem, { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.reviewItems }) },
+          closed,
+        ),
         response: {
           200: t.Object({ uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text }, closed)) }, closed),
           ...failures,
@@ -236,7 +239,13 @@ export function libraryArchiveMergeRoutes(
           closed,
         ),
         response: {
-          200: t.Object({ uploadId: id, applied: t.Array(t.Object({ ordinal, status: text, result: t.Union([object, t.Null()]) }, closed)) }, closed),
+          200: t.Object(
+            {
+              uploadId: id,
+              applied: t.Array(t.Object({ ordinal, status: text, result: t.Union([object, t.Null()]) }, closed)),
+            },
+            closed,
+          ),
           ...failures,
         },
         detail: detail('library_archive_merge.apply', 'library_entry:update', true),
@@ -291,7 +300,10 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges/:id/prune',
       {
         params: t.Object({ id }, closed),
-        response: { 200: t.Object({ uploadId: id, removed: t.Integer({ minimum: 0 }), complete: t.Boolean() }, closed), ...failures },
+        response: {
+          200: t.Object({ uploadId: id, removed: t.Integer({ minimum: 0 }), complete: t.Boolean() }, closed),
+          ...failures,
+        },
         detail: detail('library_archive_merge.prune', 'library_entry:update', true),
       },
       async ({ actor, params, admission, job, set }) => {
