@@ -24,6 +24,7 @@ function counters() {
   let staged = 0;
   let acknowledged = 0;
   let classified = 0;
+  let skipped = 0;
   let sourceComplete = false;
   const progress: ImportProgressObserver = {
     onPhase(phase) {
@@ -32,6 +33,7 @@ function counters() {
     onStaged: (count) => (staged += count),
     onAcknowledgedEffects: (count) => (acknowledged += count),
     onClassified: () => classified++,
+    onSkipped: (count) => (skipped += count),
     onSourceCompleted: () => (sourceComplete = true),
   };
   return {
@@ -45,6 +47,9 @@ function counters() {
     },
     get classified() {
       return classified;
+    },
+    get skipped() {
+      return skipped;
     },
     get sourceComplete() {
       return sourceComplete;
@@ -166,7 +171,10 @@ test('launch dump decoders report committed staging and acknowledgement transiti
       expect(progress.phases).toContain('staging');
       expect(progress.phases).toContain('reconciling');
       expect(progress.classified).toBeGreaterThan(0);
-      expect(progress.acknowledged, `${source}: no acknowledged effects`).toBeGreaterThan(0);
+      if (source === 'wikidata') {
+        expect(progress.acknowledged).toBe(0);
+        expect(progress.skipped).toBeGreaterThan(0);
+      } else expect(progress.acknowledged).toBeGreaterThan(0);
     } finally {
       await subject.close();
     }
