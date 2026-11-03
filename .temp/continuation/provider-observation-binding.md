@@ -28,15 +28,15 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - subject-source-observation.test.tsx
   tests:
-    - "An ordinary Subject reader opens a displayed provider observation from its exact admitted provider/record/digest, compares current and selected retained provenance and returns to the same Subject sources visit."
-    - "Native concealed history can return empty-plus-next without fabricated exhaustion; exact/current concealment, changed source and optional dependency conflict retain distinct failure/retry behavior."
-    - "Provider-local retirement releases old payloads and callbacks; VNDB/Bangumi/native enjoyment and classification remain independent, with no inferred importer or write permission."
+    - 'An ordinary Subject reader opens a displayed provider observation from its exact admitted provider/record/digest, compares current and selected retained provenance and returns to the same Subject sources visit.'
+    - 'Native concealed history can return empty-plus-next without fabricated exhaustion; exact/current concealment, changed source and optional dependency conflict retain distinct failure/retry behavior.'
+    - 'Provider-local retirement releases old payloads and callbacks; VNDB/Bangumi/native enjoyment and classification remain independent, with no inferred importer or write permission.'
   failing: true
   placement: default
 ---
