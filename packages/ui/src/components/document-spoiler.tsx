@@ -6,20 +6,19 @@ const useIsoLayoutEffect = typeof document === 'undefined' ? useEffect : useLayo
 export function DocumentSpoiler({
   children,
   label = 'Reveal spoiler',
-  revealed: revealedProp,
+  initialRevealed = false,
   onReveal,
 }: {
   children: ReactNode;
   label?: string;
-  revealed?: boolean;
+  initialRevealed?: boolean;
   onReveal?: () => void;
 }) {
-  const [internal, setInternal] = useState(false);
-  const revealed = revealedProp ?? internal;
+  const [revealed, setRevealed] = useState(initialRevealed);
   const place = useRef<HTMLSpanElement>(null);
   const reveal = () => {
     onReveal?.();
-    if (revealedProp === undefined) setInternal(true);
+    setRevealed(true);
   };
 
   // Replacing the button would drop focus onto the document and scroll to the top.

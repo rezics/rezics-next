@@ -1,6 +1,6 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import { type DocumentSnapshot } from '@rezics/document';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -39,6 +39,7 @@ export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
 
 type DocumentRenderValue = {
   labels: DocumentBodyLabels;
+  visitId: number;
   revealed: ReadonlySet<number>;
   reveal: (index: number) => void;
   nextSpoilerIndex: () => number;
@@ -46,7 +47,7 @@ type DocumentRenderValue = {
 
 const DocumentRenderContext = createContext<DocumentRenderValue | null>(null);
 
-/** Stable mark component; visit-scoped revealed indices survive a parent re-render. */
+/** Stable mark component; visit-scoped revealed indices restore after a parent re-render remounts. */
 function SpoilerMark({ children }: { children?: ReactNode }) {
   const render = useContext(DocumentRenderContext);
   if (!render) return <DocumentSpoiler>{children}</DocumentSpoiler>;
@@ -54,7 +55,7 @@ function SpoilerMark({ children }: { children?: ReactNode }) {
   return (
     <DocumentSpoiler
       label={render.labels.revealSpoiler}
-      revealed={render.revealed.has(index)}
+      initialRevealed={render.revealed.has(index)}
       onReveal={() => render.reveal(index)}
     >
       {children}
@@ -75,31 +76,30 @@ type Props = {
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
 export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
   const semanticSnapshot = semanticSnapshotJson(document);
-  const [visit, setVisit] = useState(() => ({
-    semanticSnapshot,
-    id: 0,
-    revealed: new Set<number>(),
-  }));
+  const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
+  const concealment = useRef({ id: 0, revealed: new Set<number>() });
   if (visit.semanticSnapshot !== semanticSnapshot) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
-    setVisit({ semanticSnapshot, id: visit.id + 1, revealed: new Set() });
+    const id = visit.id + 1;
+    concealment.current = { id, revealed: new Set() };
+    setVisit({ semanticSnapshot, id });
     return null;
+  }
+  if (concealment.current.id !== visit.id) {
+    concealment.current = { id: visit.id, revealed: new Set() };
   }
 
   const visitId = visit.id;
   const reveal = (index: number) => {
-    setVisit((previous) => {
-      if (previous.id !== visitId || previous.revealed.has(index)) return previous;
-      const revealed = new Set(previous.revealed);
-      revealed.add(index);
-      return { ...previous, revealed };
-    });
+    if (concealment.current.id !== visitId) return;
+    concealment.current.revealed.add(index);
   };
   let spoilerIndex = 0;
   const resolved = { ...documentBodyLabels, ...labels };
   const renderValue: DocumentRenderValue = {
     labels: resolved,
-    revealed: visit.revealed,
+    visitId,
+    revealed: concealment.current.revealed,
     reveal,
     nextSpoilerIndex: () => spoilerIndex++,
   };
