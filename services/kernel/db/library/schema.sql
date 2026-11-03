@@ -2735,33 +2735,6 @@ CREATE TABLE library.entry_deleted (
 
 
 --
--- Name: entry_state_change; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.entry_state_change (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    incarnation_id uuid NOT NULL,
-    prior_revision integer,
-    revision integer NOT NULL,
-    before_state text,
-    before_profile_pin jsonb,
-    after_state text NOT NULL,
-    after_profile_pin jsonb,
-    command_id uuid NOT NULL,
-    command_kind text NOT NULL,
-    changed_at timestamp with time zone NOT NULL,
-    coverage_complete boolean NOT NULL,
-    CONSTRAINT entry_state_change_after_profile_pin_check CHECK (((after_profile_pin IS NULL) OR library.library_profile_pin_valid(after_profile_pin))),
-    CONSTRAINT entry_state_change_before_profile_pin_check CHECK (((before_profile_pin IS NULL) OR library.library_profile_pin_valid(before_profile_pin))),
-    CONSTRAINT entry_state_change_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT entry_state_change_check1 CHECK ((((prior_revision IS NULL) AND (revision = 1) AND (before_state IS NULL) AND (before_profile_pin IS NULL)) OR ((prior_revision IS NOT NULL) AND (prior_revision >= 1) AND (revision = (prior_revision + 1)) AND (before_state IS NOT NULL)))),
-    CONSTRAINT entry_state_change_command_kind_check CHECK ((command_kind = ANY (ARRAY['library.entry.put'::text, 'library.entry.state.restore'::text]))),
-    CONSTRAINT entry_state_change_revision_check CHECK (((revision >= 1) AND (revision <= 2147483644))),
-    CONSTRAINT entry_state_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
 -- Name: entry_personal_fact; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -2821,6 +2794,35 @@ CREATE TABLE library.entry_source_observation (
     CONSTRAINT entry_source_observation_revision_check CHECK (((revision >= 1) AND (revision <= 2147483646))),
     CONSTRAINT entry_source_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT entry_source_observation_updated_check CHECK ((((source_updated_status = 'known'::text) AND (source_updated_value IS NOT NULL) AND ((octet_length(source_updated_value) >= 4) AND (octet_length(source_updated_value) <= 64)) AND (source_updated_precision IS NOT NULL) AND (source_updated_precision = ANY (ARRAY['year'::text, 'month'::text, 'day'::text, 'minute'::text, 'second'::text, 'fraction'::text])) AND (source_updated_zone IS NOT NULL) AND (source_updated_zone = ANY (ARRAY['utc'::text, 'offset'::text, 'unknown'::text]))) OR ((source_updated_status = 'unknown'::text) AND ((source_updated_value IS NULL) OR ((octet_length(source_updated_value) >= 1) AND (octet_length(source_updated_value) <= 64))) AND (source_updated_precision IS NULL) AND (source_updated_zone IS NULL)) OR ((source_updated_status = ANY (ARRAY['absent'::text, 'cleared'::text])) AND (source_updated_value IS NULL) AND (source_updated_precision IS NULL) AND (source_updated_zone IS NULL))))
+);
+
+
+--
+-- Name: entry_state_change; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_state_change (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    incarnation_id uuid NOT NULL,
+    prior_revision integer,
+    revision integer NOT NULL,
+    before_state text,
+    before_profile_pin jsonb,
+    after_state text NOT NULL,
+    after_profile_pin jsonb,
+    command_id uuid NOT NULL,
+    command_kind text NOT NULL,
+    changed_at timestamp with time zone NOT NULL,
+    coverage_complete boolean NOT NULL,
+    CONSTRAINT entry_state_change_after_profile_pin_check CHECK (((after_profile_pin IS NULL) OR library.library_profile_pin_valid(after_profile_pin))),
+    CONSTRAINT entry_state_change_before_profile_pin_check CHECK (((before_profile_pin IS NULL) OR library.library_profile_pin_valid(before_profile_pin))),
+    CONSTRAINT entry_state_change_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_state_change_check1 CHECK ((((prior_revision IS NULL) AND (revision = 1) AND (before_state IS NULL) AND (before_profile_pin IS NULL)) OR ((prior_revision IS NOT NULL) AND (prior_revision >= 1) AND (revision = (prior_revision + 1)) AND (before_state IS NOT NULL)))),
+    CONSTRAINT entry_state_change_command_kind_check CHECK ((command_kind = ANY (ARRAY['library.entry.put'::text, 'library.entry.state.restore'::text]))),
+    CONSTRAINT entry_state_change_revision_check CHECK (((revision >= 1) AND (revision <= 2147483644))),
+    CONSTRAINT entry_state_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
