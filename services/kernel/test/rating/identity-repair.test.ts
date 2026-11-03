@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createRatingIdentityRepairCommands } from '../../src/rating/identity-repair.ts';
 import pageVotes from '../../src/rating/segment-identity-page.sql';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { ratingIdentityFixture, route } from './identity-repair-fixture.ts';

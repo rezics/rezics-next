@@ -60,24 +60,30 @@ function receipts(voterId: string): Population {
     }),
   };
 }
-const unrelated: Population = {
-  ...votes(id(2000000)),
-  name: 'rating unrelated voters',
-  rows: ({ ordinal }) => ({
-    'rating.vote': [
-      {
-        route,
-        voter_id: id(2000000 + ordinal),
-        question_id: STANDARD_QUESTION_ID,
-        target_id: id(1),
-        units: 7,
-        revision: 1,
-        changed_at: at,
-        transaction_id: newId(route),
-      },
-    ],
-  }),
-};
+function unrelated(voterIds: string[]): Population {
+  return {
+    ...votes(id(2000000)),
+    name: 'rating unrelated voters',
+    rows: () => {
+      const voterId = newId(route);
+      voterIds.push(voterId);
+      return {
+        'rating.vote': [
+          {
+            route,
+            voter_id: voterId,
+            question_id: STANDARD_QUESTION_ID,
+            target_id: id(1),
+            units: 7,
+            revision: 1,
+            changed_at: at,
+            transaction_id: newId(route),
+          },
+        ],
+      };
+    },
+  };
+}
 
 // 64 selected votes; <=100 memberships; each vote has a fixed number of full-key winner/write probes
 // and <=3 effects. Command/account, frame and receipt work is fixed. Thus examined rows/statements
@@ -87,16 +93,32 @@ for (const axis of ['voters', 'receipts', 'input'] as const) {
   for (const scenario of scenarios) {
     test(`Rating transaction/page seam: ${scenario} stays bounded as ${axis} grow`, async () => {
       const db = await openGrowthDatabase();
+      const voterIds: string[] = [];
       try {
-        await series(db, axis, scenario);
+        await series(db, axis, scenario, voterIds);
       } finally {
-        await db.close();
+        try {
+          // Remove only this scenario's fixtures so the independent axes start at the same baseline.
+          for (const table of ['vote', 'identity_repair_receipt', 'identity_work_frame', 'voter_state'])
+            await db.admin.query(`DELETE FROM rating.${table} WHERE route = $1 AND voter_id = ANY($2::uuid[])`, [
+              route,
+              voterIds,
+            ]);
+        } finally {
+          await db.close();
+        }
       }
     });
   }
 }
 
-async function series(db: GrowthDatabase, axis: 'voters' | 'receipts' | 'input', scenario: Scenario) {
+async function series(
+  db: GrowthDatabase,
+  axis: 'voters' | 'receipts' | 'input',
+  scenario: Scenario,
+  voterIds: string[],
+) {
+  const background = unrelated(voterIds);
   const fixture = ratingIdentityFixture(() => db);
   const { voter, producer, admit, select, binding, key, effects } = fixture;
   async function snapshot(voterId: string) {
@@ -129,6 +151,7 @@ async function series(db: GrowthDatabase, axis: 'voters' | 'receipts' | 'input',
   }
   async function prepare(scale: number) {
     const actor = await voter();
+    voterIds.push(actor.accountId);
     const injected = producer(destination);
     // Production unavailability and local withdrawal deliberately use the delivered default composition.
     const commands = createRatingIdentityRepairCommands({
@@ -197,7 +220,7 @@ async function series(db: GrowthDatabase, axis: 'voters' | 'receipts' | 'input',
       });
     } else if (scenario === 'replay') {
       for (const request of [s.requestKey, key()])
-        expect((await s.commands.commit(s.actor, binding(s.page!), request)).value).toEqual(s.committed);
+        expect((await s.commands.commit(s.actor, binding(s.page!), request)).value).toEqual(s.committed!);
     } else {
       s.page ??= await select(s.commands, s.actor, s.ref);
       expect(s.page.votes).toHaveLength(scenario === 'empty' ? 0 : RATING_IDENTITY_PAGE_SIZE);
@@ -232,7 +255,7 @@ async function series(db: GrowthDatabase, axis: 'voters' | 'receipts' | 'input',
     warmups: 1,
     grow: async (_, scale, previous) => {
       const to = axis === 'voters' ? scale : 256;
-      await seed({ pool: db.pool, admin: db.admin }, unrelated, {
+      await seed({ pool: db.pool, admin: db.admin }, background, {
         from: axis === 'voters' ? previous : previous === 0 ? 0 : to,
         to,
       });
