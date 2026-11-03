@@ -366,6 +366,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     }>;
     'com.rezics.semantic.erasure.progress.v1': EventClassification;
     'com.rezics.semantic.links.changed.v1': EventClassification;
+    'com.rezics.semantic.subject_page.dependencies_changed.v1': EventClassification;
     'com.rezics.semantic.links.keys-changed.v1': EventClassification;
     'com.rezics.semantic.links.moving.v1': EventClassification;
     'com.rezics.semantic.links.projected.v1': Readonly<{

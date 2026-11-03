@@ -1,8 +1,10 @@
-import type { PublicFilterConsumerCapture, PublicFilterConsumerContext, PublicFilterConsumerOperationsFactory, PublicFilterConsumerStatus, PublicFilterQueriedObservation, PublicSuggestionCaptureInput, PublicSuggestionQuery } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerCapture, PublicFilterConsumerContext, PublicFilterConsumerOperationsFactory, PublicFilterConsumerQuery, PublicFilterConsumerRefill, PublicFilterConsumerStatus, PublicFilterQueriedObservation, PublicSuggestionCaptureInput, PublicSuggestionQuery } from './public-filter-consumer-contract.ts';
 export type { PublicSuggestionCaptureInput, PublicSuggestionQuery } from './public-filter-consumer-contract.ts';
 export interface PublicSuggestionOperations {
     capture(request: PublicSuggestionCaptureInput, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerCapture>;
     query(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<PublicSuggestionQuery>;
+    /** Scoped callers use the shared retained-window iterator; the public Global path keeps its original query. */
+    queryScoped(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, refill?: PublicFilterConsumerRefill): Promise<PublicFilterConsumerQuery>;
     readStatus(request: Readonly<{
         queried: PublicFilterQueriedObservation;
         execution?: string;

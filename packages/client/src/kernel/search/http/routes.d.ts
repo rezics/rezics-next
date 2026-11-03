@@ -635,6 +635,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         q: import("typebox").TString;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+        filter: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -723,6 +724,34 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -763,7 +792,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
         score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
     }>;
-}, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ query, authorize, admission, job }: {
+}, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ query, authorize, admission, job, actor, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -840,6 +869,28 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             errors: unknown;
         };
         403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -940,6 +991,28 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail: unknown;
             errors: unknown;
         };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        422: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
         503: {
             type: unknown;
             title: unknown;
@@ -957,6 +1030,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             q: import("typebox").TString;
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+            filter: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
             200: import("typebox").TObject<{
@@ -1045,6 +1119,34 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
+            409: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            422: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -1113,6 +1215,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         q: string;
         limit?: number;
         languages?: string[];
+        filter?: string;
     };
     params: {};
     headers: Record<string, string | undefined>;
@@ -1179,6 +1282,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         q: import("typebox").TString;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+        filter: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -1254,6 +1358,34 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             }>>>;
         }>;
         403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;

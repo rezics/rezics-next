@@ -86,12 +86,18 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     }): Promise<FacetDiscovery200Response>;
     suggest(q: string, limit?: number, languages?: string[], read?: {
         deadline: number;
+        filter?: unknown;
+        scope?: LeafOptions;
         complete(page: {
             subjects: Result[];
             as_of: string;
         }): Promise<void>;
     }): Promise<{
-        subjects: Result[];
+        subjects: {
+            id: string;
+            type: string;
+            labels: Record<string, string>;
+        }[];
         as_of: string;
     }>;
 };

@@ -24,6 +24,7 @@ import { noticeRoutes } from '../content/notice-routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
+import { malImportRoutes } from '../library/list-import-mal-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
@@ -101,7 +102,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof continueRoutes> & ReturnType<typeof feedRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof bangumiImportRoutes> & ReturnType<typeof malImportRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof erasureStatusRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes> & ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {
