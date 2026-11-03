@@ -75,6 +75,9 @@ async function upload(person: Identity, value: unknown = artifact) {
 async function previewAll(person: Identity, id: string, limit = 100) {
   return json(await send(person, 'GET', `${mergePath}/${id}/preview?limit=${limit}`));
 }
+function selected(ordinals: number[], reviewRevision = 1) {
+  return { items: ordinals.map((ordinal) => ({ ordinal, reviewRevision })) };
+}
 async function makeUpload(person: Identity) {
   const status = await upload(person);
   return { id: status.uploadId as string, status };
@@ -163,7 +166,7 @@ beforeAll(async () => {
       revision: 0,
       startDate: { year: 2004, month: 2 },
       finishDate: { year: 2021, month: 6, day: 7 },
-      reflection: 'A historical reflection is retained as evidence only.',
+      reflection: '  A historical private reflection.\n',
     },
     key(),
   );
@@ -220,7 +223,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(await duplicateNameResponse.text()).not.toContain('archive second');
 
   expect((await send(source, 'GET', `${mergePath}/${id}`)).status).toBe(404);
-  expect((await send(source, 'POST', `${mergePath}/${id}/apply`, { ordinals: [0] })).status).toBe(404);
+  expect((await send(source, 'POST', `${mergePath}/${id}/apply`, selected([0]))).status).toBe(404);
   const rows: Record<string, any>[] = [];
   let after = -1;
   while (true) {
@@ -251,7 +254,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(provenance.evidence.observation.privacy).toEqual({ status: 'known', meaning: 'source_visible' });
   const targetLabels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
   const existingLabel = (await targetLabels.listLabels(main.actor, { limit: 100 })).labels[0]!;
-  await json(
+  const initialReview = await json(
     await send(main, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         { ordinal: entryOne.ordinal, kind: 'entry', subjectId: subjects[0], stateId: 'planned', action: 'update' },
@@ -270,7 +273,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
           kind: 'journal',
           subjectId: subjects[0],
           sessionId: targetSessionId,
-          fields: { startDate: 'set', finishDate: 'preserve' },
+          fields: { startDate: 'set', finishDate: 'preserve', reflection: 'set' },
         },
       ],
     }),
@@ -288,11 +291,21 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       ],
     }),
   );
+  const staleSelection = {
+    items: initialReview.reviewed
+      .filter((row: any) => row.ordinal === entryOne.ordinal || row.ordinal === annotation.ordinal)
+      .map(({ ordinal, reviewRevision }: { ordinal: number; reviewRevision: number }) => ({ ordinal, reviewRevision })),
+  };
+  expect((await send(main, 'POST', `${mergePath}/${id}/apply`, staleSelection)).status).toBe(409);
+  expect((await f.commands.readEntry(main.actor, subjects[0])).state).toBe('in_progress');
   const refreshed = await previewAll(main, id);
   const reviewedAnnotation = refreshed.records.find((row: any) => row.ordinal === annotation.ordinal)!;
   const reviewedJournal = refreshed.records.find((row: any) => row.ordinal === journalItem.ordinal)!;
+  expect(reviewedAnnotation.reviewRevision).toBe(
+    initialReview.reviewed.find((row: any) => row.ordinal === annotation.ordinal).reviewRevision + 1,
+  );
   expect(reviewedAnnotation.review.fields).toEqual({ note: 'set', priority: 'clear' });
-  expect(reviewedJournal.review.fields).toEqual({ startDate: 'set', finishDate: 'preserve' });
+  expect(reviewedJournal.review.fields).toEqual({ startDate: 'set', finishDate: 'preserve', reflection: 'set' });
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
   const currentEntry = await f.commands.readEntry(main.actor, subjects[0]);
@@ -353,7 +366,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     [routeOf(main.actor.accountId), main.actor.accountId, subjects[0]],
   );
   const appliedEntries = await json(
-    await send(main, 'POST', `${mergePath}/${id}/apply`, { ordinals: [entryOne.ordinal, entryTwo.ordinal] }),
+    await send(main, 'POST', `${mergePath}/${id}/apply`, selected([entryOne.ordinal, entryTwo.ordinal])),
   );
   expect(appliedEntries.applied).toMatchObject([{ status: 'acknowledged' }, { status: 'preserved' }]);
   expect((await f.commands.readEntry(main.actor, subjects[0])).state).toBe('planned');
@@ -365,7 +378,9 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(historyAfter.rows.length).toBe(historyBefore.rows.length + 1);
 
   const appliedFacts = await json(
-    await send(main, 'POST', `${mergePath}/${id}/apply`, { ordinals: [annotation.ordinal, journalItem.ordinal] }),
+    await send(main, 'POST', `${mergePath}/${id}/apply`, {
+      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+    }),
   );
   expect(appliedFacts.applied).toMatchObject([
     {
@@ -374,7 +389,10 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     },
     {
       status: 'accepted',
-      result: { outcome: 'accepted', fields: { startDate: 'accepted', finishDate: 'preserved' } },
+      result: {
+        outcome: 'accepted',
+        fields: { startDate: 'accepted', finishDate: 'preserved', reflection: 'accepted' },
+      },
     },
   ]);
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).note).toBe('Recovered owner note');
@@ -383,7 +401,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(recoveredJournal).toMatchObject({
     startDate: { year: 2004, month: 2 },
     finishDate: { year: 2020, month: 3 },
-    reflection: null,
+    reflection: '  A historical private reflection.\n',
   });
   expect(recoveredJournal.finishDate).toEqual(journalBefore.finishDate);
   const journalAudit = await f.pool.query<{ createdAt: string }>(
@@ -409,7 +427,9 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   );
   expect(progressChangesAfter.rows[0]?.count).toBe(progressChangesBefore.rows[0]?.count);
   const replayedFacts = await json(
-    await send(main, 'POST', `${mergePath}/${id}/apply`, { ordinals: [annotation.ordinal, journalItem.ordinal] }),
+    await send(main, 'POST', `${mergePath}/${id}/apply`, {
+      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+    }),
   );
   expect(replayedFacts.applied).toEqual(appliedFacts.applied);
 
@@ -430,7 +450,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     ],
   );
   expect(journal.rowCount).toBe(1);
-  await json(await send(main, 'POST', `${mergePath}/${id}/apply`, { ordinals: [labelTwo.ordinal] }));
+  await json(await send(main, 'POST', `${mergePath}/${id}/apply`, selected([labelTwo.ordinal])));
   const created = (await nativeLabels.listLabels(main.actor, { limit: 100, q: 'archive second' })).labels;
   expect(created).toHaveLength(1);
   expect(created[0]!.revision).toBe(1);
@@ -440,7 +460,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       items: [{ ordinal: assignment.ordinal, kind: 'assignment', subjectId: subjects[1], action: 'assign' }],
     }),
   );
-  await json(await send(main, 'POST', `${mergePath}/${id}/apply`, { ordinals: [assignment.ordinal] }));
+  await json(await send(main, 'POST', `${mergePath}/${id}/apply`, selected([assignment.ordinal])));
   const assignmentRows = await createLabelAssignmentCommands({
     pool: f.pool,
     access: f.access,
@@ -491,6 +511,61 @@ test('unknown archived state remains readable but cannot enter the current profi
   ).toBe('unsupported');
 });
 
+test('refreshed label mappings require the new confirmation and retain accepted operands on retry', async () => {
+  const owner = await f.identity(exportScopes);
+  const { id } = await makeUpload(owner);
+  const row = (await previewAll(owner, id)).records.find((item: any) => item.section === 'labels');
+  const labels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
+  const local = await labels.createLabel(owner.actor, { name: 'explicit local mapping' }, key());
+  const first = await json(
+    await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [{ ordinal: row.ordinal, kind: 'label', target: { mode: 'existing', labelId: local.value.label.id } }],
+    }),
+  );
+  const second = await json(
+    await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [{ ordinal: row.ordinal, kind: 'label', target: { mode: 'create' } }],
+    }),
+  );
+  const confirmation = selected([row.ordinal], second.reviewed[0].reviewRevision);
+  expect(second.reviewed[0].reviewRevision).not.toBe(first.reviewed[0].reviewRevision);
+  expect(
+    (await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal], first.reviewed[0].reviewRevision)))
+      .status,
+  ).toBe(409);
+  expect((await labels.listLabels(owner.actor, { limit: 100 })).labels).toHaveLength(1);
+  expect((await send(source, 'POST', `${mergePath}/${id}/apply`, confirmation)).status).toBe(404);
+  const accepted = await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, confirmation));
+  expect(accepted.applied[0].result.labelId).not.toBe(local.value.label.id);
+  const binding = await f.pool.query(
+    `SELECT native_request_key,native_operands,result FROM library.library_archive_merge_item
+    WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [routeOf(owner.actor.accountId), owner.actor.accountId, id, row.ordinal],
+  );
+  expect(
+    (
+      await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [{ ordinal: row.ordinal, kind: 'label', target: { mode: 'create' } }],
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (await send(owner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal], first.reviewed[0].reviewRevision)))
+      .status,
+  ).toBe(409);
+  await json(await send(owner, 'DELETE', `${mergePath}/${id}`));
+  expect(await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, confirmation))).toEqual(accepted);
+  expect(
+    (
+      await f.pool.query(
+        `SELECT native_request_key,native_operands,result FROM library.library_archive_merge_item
+    WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+        [routeOf(owner.actor.accountId), owner.actor.accountId, id, row.ordinal],
+      )
+    ).rows,
+  ).toEqual(binding.rows);
+});
+
 test('create and already-equal entry choices have distinct reviewed outcomes', async () => {
   const equal = (await f.commands.putEntry(createOwner.actor, subjects[1], { state: 'playing' }, entryKey())).value
     .entry;
@@ -508,7 +583,7 @@ test('create and already-equal entry choices have distinct reviewed outcomes', a
   );
   expect(reviewed.reviewed).toMatchObject([{ status: 'create' }, { status: 'already_equal' }]);
   const applied = await json(
-    await send(createOwner, 'POST', `${mergePath}/${id}/apply`, { ordinals: [first.ordinal, second.ordinal] }),
+    await send(createOwner, 'POST', `${mergePath}/${id}/apply`, selected([first.ordinal, second.ordinal])),
   );
   expect(applied.applied).toMatchObject([{ status: 'acknowledged' }, { status: 'already_equal' }]);
   expect((await f.commands.readEntry(createOwner.actor, subjects[0])).state).toBe('planned');
@@ -547,7 +622,7 @@ test('reviewed entry revision and incarnation changes are refused at effect time
         entryKey(),
       );
     }
-    const result = await json(await send(person, 'POST', `${mergePath}/${id}/apply`, { ordinals: [entry.ordinal] }));
+    const result = await json(await send(person, 'POST', `${mergePath}/${id}/apply`, selected([entry.ordinal])));
     expect(result.applied).toMatchObject([{ status: 'current_conflict', result: { code: 'current_conflict' } }]);
   }
 });
@@ -583,9 +658,12 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   expect(
     (
       await json(
-        await send(missingFactOwner, 'POST', `${mergePath}/${missing.id}/apply`, {
-          ordinals: [missingAnnotation.ordinal, missingJournal.ordinal],
-        }),
+        await send(
+          missingFactOwner,
+          'POST',
+          `${mergePath}/${missing.id}/apply`,
+          selected([missingAnnotation.ordinal, missingJournal.ordinal]),
+        ),
       )
     ).applied,
   ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
@@ -650,9 +728,12 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   expect(
     (
       await json(
-        await send(staleFactOwner, 'POST', `${mergePath}/${stale.id}/apply`, {
-          ordinals: [annotation.ordinal, journal.ordinal],
-        }),
+        await send(
+          staleFactOwner,
+          'POST',
+          `${mergePath}/${stale.id}/apply`,
+          selected([annotation.ordinal, journal.ordinal]),
+        ),
       )
     ).applied,
   ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
@@ -686,7 +767,7 @@ test('annotation application rejects a recreated Entry and expiry cleanup remove
     .value.entry;
   expect(recreated.incarnationId).not.toBe(original.incarnationId);
   expect(
-    (await json(await send(staleIncarnation, 'POST', `${mergePath}/${id}/apply`, { ordinals: [annotation.ordinal] })))
+    (await json(await send(staleIncarnation, 'POST', `${mergePath}/${id}/apply`, selected([annotation.ordinal]))))
       .applied,
   ).toMatchObject([{ status: 'stale' }]);
 
@@ -715,11 +796,9 @@ test('cancellation stops pending effects and terminal erasure removes retained a
       ],
     }),
   );
-  await json(await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, { ordinals: [label.ordinal] }));
+  await json(await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([label.ordinal])));
   await json(await send(cancelledOwner, 'DELETE', `${mergePath}/${id}`));
-  expect((await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, { ordinals: [entry.ordinal] })).status).toBe(
-    409,
-  );
+  expect((await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([entry.ordinal]))).status).toBe(409);
   expect((await f.commands.readEntry(cancelledOwner.actor, subjects[0])).state).toBe(before.state);
   const results = await json(await send(cancelledOwner, 'GET', `${mergePath}/${id}/results`));
   expect(results.results.find((row: any) => row.ordinal === label.ordinal).status).toBe('acknowledged');
@@ -749,7 +828,7 @@ test('cancellation stops pending effects and terminal erasure removes retained a
       `${mergePath}/${deletedId}/review`,
       { items: [{ ordinal: 0, kind: 'entry', subjectId: subjects[0], stateId: 'planned', action: 'create' }] },
     ],
-    ['POST', `${mergePath}/${deletedId}/apply`, { ordinals: [0] }],
+    ['POST', `${mergePath}/${deletedId}/apply`, selected([0])],
     ['DELETE', `${mergePath}/${deletedId}`],
     ['POST', `${mergePath}/${deletedId}/prune`],
     ['POST', mergePath, artifact],
@@ -772,3 +851,162 @@ test('cancellation stops pending effects and terminal erasure removes retained a
     ]),
   ).toMatchObject({ rowCount: 0 });
 });
+
+test('reflection choices retain empty, null and absent evidence and exact bounded plain text', async () => {
+  const sourceRow = artifact.records.find((row) => row.section === 'journals')!;
+  const cases = [
+    { value: '', choice: 'set', expected: '' },
+    { value: null, choice: 'clear', expected: null },
+    { value: null, choice: 'set', unsupported: true },
+    { choice: 'set', unsupported: true },
+    { choice: 'preserve', expected: 'local' },
+    { value: '😀'.repeat(1024), choice: 'set', expected: '😀'.repeat(1024) },
+    { value: '\u0001'.repeat(2000), choice: 'set', expected: '\u0001'.repeat(2000) },
+    { value: 'x'.repeat(2001), choice: 'set', unsupported: true },
+    { value: '😀'.repeat(1025), choice: 'set', unsupported: true },
+    { value: '\ud800', choice: 'set', unsupported: true },
+  ];
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  for (const c of cases) {
+    const owner = await f.identity(exportScopes);
+    const target = (
+      await sessions.startSession(owner.actor, { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' }, key())
+    ).value;
+    await sessions.patchSessionJournal(
+      owner.actor,
+      target.id,
+      { revision: 0, reflection: 'local', finishDate: { year: 2020 } },
+      key(),
+    );
+    const journal = { ...(sourceRow.journal as Record<string, unknown>) };
+    if ('value' in c) journal.reflection = c.value;
+    else delete journal.reflection;
+    const id = (await upload(owner, framed([{ ...sourceRow, journal }]))).uploadId;
+    const row = (await previewAll(owner, id)).records[0];
+    expect(row.evidence.journal).toEqual(journal);
+    const reviewed = await json(
+      await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [
+          {
+            ordinal: row.ordinal,
+            kind: 'journal',
+            subjectId: subjects[0],
+            sessionId: target.id,
+            fields: { reflection: c.choice },
+          },
+        ],
+      }),
+    );
+    if (c.unsupported)
+      expect((await previewAll(owner, id)).records[0].review.reason).toMatch(
+        /unsupported-field|invalid-journal-reflection/,
+      );
+    const result = await json(
+      await send(owner, 'POST', `${mergePath}/${id}/apply`, {
+        items: reviewed.reviewed.map(({ ordinal, reviewRevision }: any) => ({ ordinal, reviewRevision })),
+      }),
+    );
+    expect(result.applied[0].status).toBe(
+      c.unsupported ? 'unsupported' : c.choice === 'preserve' ? 'unchanged' : 'accepted',
+    );
+    const current = await sessions.readSessionJournal(owner.actor, target.id);
+    expect(current).toMatchObject({
+      reflection: c.unsupported ? 'local' : c.expected,
+      finishDate: { year: 2020 },
+      startDate: null,
+    });
+    expect(await sessions.readSession(owner.actor, target.id)).toEqual(target);
+  }
+}, 120_000);
+
+test('exact occurrence confirmations fence competing corrections and replay the original committed patch', async () => {
+  const owner = await f.identity(exportScopes);
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  const targets = [];
+  for (let i = 0; i < 2; i++)
+    targets.push(
+      (await sessions.startSession(owner.actor, { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' }, key()))
+        .value.id,
+    );
+  const { id } = await makeUpload(owner);
+  const rows = (await previewAll(owner, id)).records;
+  const row = rows.find((r: any) => r.section === 'journals');
+  const label = rows.find((r: any) => r.section === 'labels');
+  const review = (sessionId: string) =>
+    send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [
+        {
+          ordinal: row.ordinal,
+          kind: 'journal',
+          subjectId: subjects[0],
+          sessionId,
+          fields: { reflection: 'set', startDate: 'set' },
+        },
+        { ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } },
+      ],
+    }).then((r) => json(r));
+  const old = await review(targets[0]!);
+  const latest = await review(targets[1]!);
+  const confirmation = {
+    items: latest.reviewed.map(({ ordinal, reviewRevision }: any) => ({ ordinal, reviewRevision })),
+  };
+  expect(
+    (await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[1], old.reviewed[0]] })).status,
+  ).toBe(400); // Extra review status is not a confirmation operand.
+  expect(
+    (
+      await send(owner, 'POST', `${mergePath}/${id}/apply`, {
+        items: [confirmation.items[1], { ordinal: row.ordinal, reviewRevision: old.reviewed[0].reviewRevision }],
+      })
+    ).status,
+  ).toBe(409);
+  expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).revision).toBe(0);
+  await sessions.patchSessionJournal(
+    owner.actor,
+    targets[1]!,
+    { revision: 0, reflection: 'competing correction' },
+    key(),
+  );
+  const stale = await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[0]] }));
+  expect(stale.applied[0].status).toBe('stale');
+  const refreshed = await review(targets[1]!);
+  const exact = selected([row.ordinal], refreshed.reviewed[0].reviewRevision);
+  const accepted = await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, exact));
+  const committed = await sessions.readSessionJournal(owner.actor, targets[1]!);
+  expect(committed).toMatchObject({
+    reflection: '  A historical private reflection.\n',
+    startDate: { year: 2004, month: 2 },
+  });
+  await sessions.patchSessionJournal(
+    owner.actor,
+    targets[1]!,
+    { revision: committed.revision, reflection: 'later local correction' },
+    key(),
+  );
+  // Simulate native commit before the archive acknowledgement checkpoint.
+  await f.pool.query(
+    `UPDATE library.library_archive_merge_item SET status='applying',result=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [routeOf(owner.actor.accountId), owner.actor.accountId, id, row.ordinal],
+  );
+  expect(await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, exact))).toEqual(accepted);
+  expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).reflection).toBe('later local correction');
+  expect((await sessions.readSessionJournal(owner.actor, targets[0]!)).revision).toBe(0);
+  expect(
+    (
+      await send(owner, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [
+          {
+            ordinal: row.ordinal,
+            kind: 'journal',
+            subjectId: subjects[0],
+            sessionId: targets[0],
+            fields: { reflection: 'clear' },
+          },
+        ],
+      })
+    ).status,
+  ).toBe(409);
+  await json(await send(owner, 'DELETE', `${mergePath}/${id}`));
+  expect((await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[1]] })).status).toBe(409);
+  expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).reflection).toBe('later local correction');
+}, 120_000);

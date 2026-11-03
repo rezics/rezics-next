@@ -56,7 +56,7 @@ const v2Omissions = {
   commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
   publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
   reimport:
-    'version 1 archive recovery plus reviewed version 2 annotations and journal dates; provenance remains unsupported',
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; provenance remains unsupported',
 } as const;
 
 export type LibraryExportManifestV1 = {

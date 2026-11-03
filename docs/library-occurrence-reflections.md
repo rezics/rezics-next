@@ -50,7 +50,7 @@ partial date into an instant. Reported `startDate` and `finishDate` remain separ
 `completedAt`, command time and audit time.
 
 Reflection is plain text, retained without trimming, limited to 2,000 Unicode characters and 4,096 UTF-8 bytes.
-The empty string is a value; `null` clears it. TypeBox checks the character limit and the native parser enforces
+The empty string is a value; `null` clears it. Malformed Unicode and U+0000 are unsupported native text values. TypeBox checks the character limit and the native parser enforces
 both limits. The PATCH route caps the complete JSON frame at 16,384 bytes, leaving room for worst-case JSON
 escaping and the bounded date/revision fields while limiting parse work to a constant multiple of `B`.
 
