@@ -23,7 +23,9 @@ function exposureSource(client: QueryClient) {
     snapshot: () => revision,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }
@@ -35,7 +37,10 @@ export function RealmMembersPanel({ realmId }: { realmId: string }) {
   const session = useSession();
   const source = realmBanSessionSource(client);
   let exposure = exposures.get(client);
-  if (!exposure) { exposure = exposureSource(client); exposures.set(client, exposure); }
+  if (!exposure) {
+    exposure = exposureSource(client);
+    exposures.set(client, exposure);
+  }
   const revision = useSyncExternalStore(source.subscribe, source.snapshot, serverRevision);
   const exposureRevision = useSyncExternalStore(exposure.subscribe, exposure.snapshot, serverRevision);
   const locale = getLocale();
@@ -45,20 +50,37 @@ export function RealmMembersPanel({ realmId }: { realmId: string }) {
     return {
       current: () => {
         const observed = source.read();
-        if (source.snapshot() !== revision || exposure.snapshot() !== exposureRevision || getLocale() !== locale ||
-          state !== 'signed-in' || !subject || !csrfToken || observed?.state !== state ||
-          observed.subject !== subject || observed.csrfToken !== csrfToken) retired = true;
+        if (
+          source.snapshot() !== revision ||
+          exposure.snapshot() !== exposureRevision ||
+          getLocale() !== locale ||
+          state !== 'signed-in' ||
+          !subject ||
+          !csrfToken ||
+          observed?.state !== state ||
+          observed.subject !== subject ||
+          observed.csrfToken !== csrfToken
+        )
+          retired = true;
         return !retired;
       },
-      retire: () => { retired = true; },
+      retire: () => {
+        retired = true;
+      },
       subscribe: (listener: () => void) => {
         const stopSession = source.subscribe(listener);
         const stopExposure = exposure.subscribe(listener);
-        return () => { stopSession(); stopExposure(); };
+        return () => {
+          stopSession();
+          stopExposure();
+        };
       },
     };
   }, [source, revision, exposure, exposureRevision, locale, state, subject, csrfToken]);
   const previous = useRef(caller);
-  if (previous.current !== caller) { previous.current.retire(); previous.current = caller; }
+  if (previous.current !== caller) {
+    previous.current.retire();
+    previous.current = caller;
+  }
   return <RealmMembersPage realmId={realmId} caller={caller} locale={locale} />;
 }

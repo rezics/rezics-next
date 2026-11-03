@@ -49,7 +49,9 @@ export class RealmMembersVisit {
   snapshot = () => this.value;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   private emit() {
@@ -80,7 +82,9 @@ export class RealmMembersVisit {
   connect = () => {
     this.connected = true;
     this.connection++;
-    this.stop = this.watch?.(() => { if (!this.current()) this.retire(); });
+    this.stop = this.watch?.(() => {
+      if (!this.current()) this.retire();
+    });
     if (this.admitted()) void this.readPage(this.value.address);
     return () => {
       this.connected = false;
@@ -96,23 +100,35 @@ export class RealmMembersVisit {
         address: { realmId: this.realmId, cursor: null },
         selection: null,
       };
-      queueMicrotask(() => { if (!this.connected) this.retire(); });
+      queueMicrotask(() => {
+        if (!this.connected) this.retire();
+      });
     };
   };
 
   private index(page: MemberPage): Map<string, DisclosedRow> | null {
     if (
-      page.realm.id !== this.realmId || !page.realm.label || !page.authority ||
-      !Number.isSafeInteger(this.source.pageBound) || this.source.pageBound < 1 ||
+      page.realm.id !== this.realmId ||
+      !page.realm.label ||
+      !page.authority ||
+      !Number.isSafeInteger(this.source.pageBound) ||
+      this.source.pageBound < 1 ||
       page.rows.length > this.source.pageBound ||
       (page.next !== null && (typeof page.next !== 'string' || !page.next))
-    ) return null;
+    )
+      return null;
     const index = new Map<string, DisclosedRow>();
     for (const row of page.rows) {
       if (row.kind === 'concealed') continue;
       const { identity } = row;
-      if (!identity.accountId || !identity.reference || !identity.label || !row.episode ||
-          index.has(identity.accountId)) return null;
+      if (
+        !identity.accountId ||
+        !identity.reference ||
+        !identity.label ||
+        !row.episode ||
+        index.has(identity.accountId)
+      )
+        return null;
       index.set(identity.accountId, row);
     }
     return index;
@@ -141,7 +157,11 @@ export class RealmMembersVisit {
       if (index) this.rows = index;
       else read = { kind: 'unavailable' };
     }
-    this.value = { read, address: read.kind === 'denied' ? { realmId: this.realmId, cursor: null } : address, selection: null };
+    this.value = {
+      read,
+      address: read.kind === 'denied' ? { realmId: this.realmId, cursor: null } : address,
+      selection: null,
+    };
     this.emit();
   }
 
@@ -152,8 +172,12 @@ export class RealmMembersVisit {
   };
 
   retryPage = async () => {
-    if (this.value.read.kind !== 'failed' && this.value.read.kind !== 'unavailable' &&
-        this.value.read.kind !== 'preparing') return;
+    if (
+      this.value.read.kind !== 'failed' &&
+      this.value.read.kind !== 'unavailable' &&
+      this.value.read.kind !== 'preparing'
+    )
+      return;
     await this.readPage(this.value.address);
   };
 
@@ -186,14 +210,23 @@ export class RealmMembersVisit {
     } catch {
       read = { kind: 'failed' };
     }
-    if (!this.admitted() || connection !== this.connection || operation !== this.selectedOperation ||
-        pageOperation !== this.pageOperation) return;
+    if (
+      !this.admitted() ||
+      connection !== this.connection ||
+      operation !== this.selectedOperation ||
+      pageOperation !== this.pageOperation
+    )
+      return;
     if (read.kind === 'denied') {
       this.rows.clear();
       this.value = { read: { kind: 'denied' }, address: { realmId: this.realmId, cursor: null }, selection: null };
-    } else if (read.kind === 'ready' &&
-      (read.authority !== address.authority || read.realmId !== address.realmId ||
-       read.identity.accountId !== address.accountId || read.episode !== address.episode)) {
+    } else if (
+      read.kind === 'ready' &&
+      (read.authority !== address.authority ||
+        read.realmId !== address.realmId ||
+        read.identity.accountId !== address.accountId ||
+        read.episode !== address.episode)
+    ) {
       // Currentness changes require a replacement page and a fresh deliberate selection.
       this.rows.clear();
       this.value = { ...this.value, read: { kind: 'unavailable' }, selection: null };
@@ -201,8 +234,7 @@ export class RealmMembersVisit {
       this.rows.clear();
       this.value = { read: { kind: 'unavailable' }, address: this.value.address, selection: { address, read } };
     } else {
-      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference))
-        read = { kind: 'unavailable' };
+      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference)) read = { kind: 'unavailable' };
       this.value = { ...this.value, selection: { address, read } };
     }
     this.emit();
