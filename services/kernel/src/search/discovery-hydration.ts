@@ -2,11 +2,12 @@ import type { Pool } from 'pg';
 import { accountDiscoverySource, readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import type {
-  DiscoveryHit,
-  DiscoveryKey,
+  DiscoveryOwnerHit,
+  DiscoveryOwnerKey,
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerKind,
   DiscoveryOwnerMetadataSummary,
+  DiscoveryOwnerRegistry,
   DiscoveryReadContext,
   DiscoveryRegistryOptions,
 } from './discovery.ts';
@@ -61,16 +62,14 @@ function currentMetadata(value: unknown, id: string): value is DiscoveryOwnerMet
 
 /** Hydrate only owner kinds whose native adapter has an explicit ready slot. */
 export async function hydrateOwnerDiscoveryHits(
-  registry: ReturnType<typeof createDiscoveryRegistry>,
-  keys: readonly DiscoveryKey[],
+  registry: ReturnType<typeof createDiscoveryRegistry> & DiscoveryOwnerRegistry,
+  keys: readonly DiscoveryOwnerKey[],
   context: DiscoveryReadContext,
-): Promise<DiscoveryHit[]> {
+): Promise<DiscoveryOwnerHit[]> {
   if (keys.length > 200) throw new RangeError('Discovery hydration exceeds its owner bound');
-  const canonical = keys.map((key) => registry.key(key));
+  const canonical = keys.map((key) => registry.ownerKey(key));
   const idsByKind = new Map<DiscoveryOwnerKind, string[]>();
   for (const key of canonical) {
-    if (key.owner !== 'commerce' && key.owner !== 'content')
-      throw new TypeError('Owner hydration requires a public metadata kind');
     const ids = idsByKind.get(key.kind) ?? [];
     if (!ids.includes(key.id)) ids.push(key.id);
     idsByKind.set(key.kind, ids);
@@ -88,9 +87,9 @@ export async function hydrateOwnerDiscoveryHits(
       current.set(`${kind}:${id}`, { id, title: summary.title, summary: summary.summary });
     }
   }
-  return canonical.flatMap((key): DiscoveryHit[] => {
+  return canonical.flatMap((key): DiscoveryOwnerHit[] => {
     const summary = current.get(`${key.kind}:${key.id}`);
-    if (!summary || (key.owner !== 'commerce' && key.owner !== 'content')) return [];
+    if (!summary) return [];
     switch (key.kind) {
       case 'collection':
         return [{ key, summary: { kind: 'collection', value: summary } }];

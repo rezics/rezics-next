@@ -21,9 +21,11 @@ export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
 export type DiscoveryKey =
   | { owner: 'semantic'; kind: string; route: number; id: string }
-  | { owner: 'accounts'; kind: 'account'; route: number; id: string }
+  | { owner: 'accounts'; kind: 'account'; route: number; id: string };
+export type DiscoveryOwnerKey =
   | { owner: 'commerce'; kind: 'collection'; route: number; id: string }
   | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
+export type DiscoveryUnionKey = DiscoveryKey | DiscoveryOwnerKey;
 export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
 
 /** Already eligible native projection. Only the producer can establish eligibility and exact claims at T. */
@@ -78,11 +80,15 @@ export type AccountDiscoverySummary = {
 };
 export type DiscoverySummary =
   | { kind: 'subject'; value: SubjectSummary }
-  | { kind: 'account'; value: AccountDiscoverySummary }
+  | { kind: 'account'; value: AccountDiscoverySummary };
+export type DiscoveryHit = { key: DiscoveryKey; summary: DiscoverySummary };
+export type DiscoveryOwnerSummary =
   | { kind: 'collection'; value: DiscoveryOwnerMetadataSummary }
   | { kind: 'review'; value: DiscoveryOwnerMetadataSummary }
   | { kind: 'space'; value: DiscoveryOwnerMetadataSummary };
-export type DiscoveryHit = { key: DiscoveryKey; summary: DiscoverySummary };
+export type DiscoveryOwnerHit = { key: DiscoveryOwnerKey; summary: DiscoveryOwnerSummary };
+export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
+export type DiscoveryUnionHit = DiscoveryHit | DiscoveryOwnerHit;
 export type KindCountEvidence =
   | { kind: string; value: number; exact: true }
   | { kind: string; value: number; exact: false } // strictly positive
@@ -187,11 +193,14 @@ export type DiscoveryRegistryOptions = {
 };
 export interface DiscoveryRegistry {
   readonly entries: readonly DiscoveryRegistration[];
-  readonly ownerAdapters: DiscoveryOwnerAdapterSlots;
   get(kind: string): DiscoveryRegistration;
+  key(value: DiscoveryKey): DiscoveryKey;
+}
+export interface DiscoveryOwnerRegistry {
+  readonly ownerAdapters: DiscoveryOwnerAdapterSlots;
   getOwnerAdapter(kind: DiscoveryOwnerKind): DiscoveryOwnerRegistration;
   domains(kind: string): readonly DiscoveryDomain[];
-  key(value: DiscoveryKey): DiscoveryKey;
+  ownerKey(value: DiscoveryOwnerKey): DiscoveryOwnerKey;
 }
 
 export type DiscoverySnapshot =

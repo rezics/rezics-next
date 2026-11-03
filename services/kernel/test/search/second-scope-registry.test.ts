@@ -7,13 +7,20 @@ import {
   discoveryDomain,
   evaluateDiscoveryCondition,
 } from '../../src/search/discovery-registry.ts';
-import type { DiscoveryKey, DiscoveryReadContext, DiscoveryRegistryOptions } from '../../src/search/discovery.ts';
+import type {
+  DiscoveryOwnerKey,
+  DiscoveryReadContext,
+  DiscoveryRegistryOptions,
+} from '../../src/search/discovery.ts';
 
 const id = '018f0000-0000-7000-8000-00a000000001';
 const route = 160;
 const noRead = async (): Promise<never> => {
   throw new Error('This registry test must not read existing producer sources');
 };
+function currentSummaries(ids: readonly string[], title: string) {
+  return new Map(ids.map((currentId) => [currentId, { id: currentId, title, summary: null }] as const));
+}
 const options: DiscoveryRegistryOptions = {
   release: release as Release,
   semantic: {
@@ -35,7 +42,7 @@ const options: DiscoveryRegistryOptions = {
         kind: 'collection',
         metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
         async readCurrent(ids) {
-          return new Map(ids.map((currentId) => [currentId, { id: currentId, title: 'Collection', summary: null }]));
+          return currentSummaries(ids, 'Collection');
         },
       },
     },
@@ -46,7 +53,7 @@ const options: DiscoveryRegistryOptions = {
         kind: 'review',
         metadata: { id: 'review', labels: { en: 'Reviews' }, icon: 'review' },
         async readCurrent(ids) {
-          return new Map(ids.map((currentId) => [currentId, { id: currentId, title: 'Review', summary: null }]));
+          return currentSummaries(ids, 'Review');
         },
       },
     },
@@ -57,20 +64,20 @@ const options: DiscoveryRegistryOptions = {
         kind: 'space',
         metadata: { id: 'space', labels: { en: 'Spaces' }, icon: 'space' },
         async readCurrent(ids) {
-          return new Map(ids.map((currentId) => [currentId, { id: currentId, title: 'Space', summary: null }]));
+          return currentSummaries(ids, 'Space');
         },
       },
     },
   },
 };
 const registry = createDiscoveryRegistry(options);
-const keys: DiscoveryKey[] = [
+const keys: DiscoveryOwnerKey[] = [
   { owner: 'commerce', kind: 'collection', route, id },
   { owner: 'content', kind: 'review', route, id },
   { owner: 'content', kind: 'space', route, id },
 ];
 
-test('ready owner adapters preserve three same-UUID identities, current metadata, and text/kind applicability', async () => {
+test('ready owner adapters preserve canonical identity and current text/kind metadata', async () => {
   const hits = await hydrateOwnerDiscoveryHits(registry, keys, {} as DiscoveryReadContext);
   expect(hits.map(({ key }) => key)).toEqual(keys);
   expect(new Set(hits.map(({ key }) => `${key.owner}:${key.kind}:${key.route}:${key.id}`)).size).toBe(3);
@@ -96,12 +103,16 @@ test('ready owner adapters preserve three same-UUID identities, current metadata
   }
 });
 
-test('unknown or foreign owners and unavailable slots do not activate a kind; Subject and Account stay registered', async () => {
+test('unknown, foreign, and unavailable owners fail closed while legacy registrations remain', async () => {
   expect(registry.entries.map(({ kind }) => kind)).toEqual([...Object.keys(release.types), 'account']);
   expect(registry.get('schema:Person').owner).toBe('semantic');
   expect(registry.get('account').domains).toEqual(['text', 'kind']);
-  expect(() => registry.key({ ...keys[1]!, owner: 'commerce' } as DiscoveryKey)).toThrow('does not own this kind');
-  expect(() => registry.key({ owner: 'content', kind: 'unknown', route, id } as unknown as DiscoveryKey)).toThrow();
+  expect(() => registry.ownerKey({ ...keys[1]!, owner: 'commerce' } as DiscoveryOwnerKey)).toThrow(
+    'does not own this kind',
+  );
+  expect(() =>
+    registry.ownerKey({ owner: 'content', kind: 'unknown', route, id } as unknown as DiscoveryOwnerKey),
+  ).toThrow();
 
   const unavailable = createDiscoveryRegistry({
     ...options,
@@ -112,7 +123,9 @@ test('unknown or foreign owners and unavailable slots do not activate a kind; Su
     },
   });
   expect(unavailable.ownerAdapters.collection.readiness).toBe('unavailable');
-  expect(() => unavailable.key(keys[0]!)).toThrow();
+  expect(() => unavailable.ownerKey(keys[0]!)).toThrow();
   expect(() => unavailable.getOwnerAdapter('collection')).toThrow();
-  await expect(hydrateOwnerDiscoveryHits(unavailable, [keys[0]!], {} as DiscoveryReadContext)).rejects.toThrow();
+  await expect(
+    hydrateOwnerDiscoveryHits(unavailable, [keys[0]!], {} as DiscoveryReadContext),
+  ).rejects.toThrow();
 });

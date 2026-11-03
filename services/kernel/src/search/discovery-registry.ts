@@ -7,6 +7,8 @@ import type {
   DiscoveryOwnerAdapter,
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerKind,
+  DiscoveryOwnerKey,
+  DiscoveryOwnerRegistry,
   DiscoveryOwnerRegistration,
   DiscoveryRegistration,
   DiscoveryRegistry,
@@ -49,7 +51,9 @@ function metadata(id: string, labels: Record<string, string>, icon: string) {
 }
 
 /** Closed dispatch: released catalogue types and the Accounts source, with no arbitrary owner registration. */
-export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): DiscoveryRegistry {
+export function createDiscoveryRegistry(
+  options: DiscoveryRegistryOptions,
+): DiscoveryRegistry & DiscoveryOwnerRegistry {
   const types = Object.entries(options.release.types);
   if (types.length > RELEASE_LIMITS.types) throw new RangeError('Discovery catalogue exceeds the release limit');
   const byKind = new Map<string, DiscoveryRegistration>();
@@ -106,7 +110,7 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
       readCurrent: adapter.readCurrent,
     });
     ownerByKind.set(kind, Object.freeze({ ...normalized, domains: OWNER_DOMAINS }) as DiscoveryOwnerRegistration);
-    return Object.freeze({ readiness: 'ready', adapter: normalized }) as DiscoveryOwnerAdapterSlots[K];
+    return Object.freeze({ readiness: 'ready', adapter: normalized }) as unknown as DiscoveryOwnerAdapterSlots[K];
   }
   const supplied = options.ownerAdapters ?? UNAVAILABLE_OWNER_ADAPTERS;
   const ownerAdapters: DiscoveryOwnerAdapterSlots = Object.freeze({
@@ -147,28 +151,44 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
       return entry.domains;
     },
     key(value: DiscoveryKey): DiscoveryKey {
-      const entry = byKind.get(value.kind) ?? ownerByKind.get(value.kind as DiscoveryOwnerKind);
-      if (!entry) return get(value.kind);
+      const entry = get(value.kind);
       const route = routeOf(value.id);
       if (entry.owner !== value.owner) throw new TypeError('Discovery owner does not own this kind');
       if (route === null || route !== value.route)
         throw new RangeError('Discovery key has an invalid or foreign route');
       // Copy only the canonical identity; do not retain caller-added profile/authority fields.
-      if (entry.owner === 'accounts') return { owner: 'accounts', kind: 'account', route, id: value.id };
-      if (entry.owner === 'semantic') return { owner: 'semantic', kind: entry.kind, route, id: value.id };
-      return { owner: entry.owner, kind: entry.kind, route, id: value.id };
+      return entry.owner === 'accounts'
+        ? { owner: 'accounts', kind: 'account', route, id: value.id }
+        : { owner: 'semantic', kind: entry.kind, route, id: value.id };
+    },
+    ownerKey(value: DiscoveryOwnerKey): DiscoveryOwnerKey {
+      const entry = ownerByKind.get(value.kind);
+      if (!entry) throw new RangeError('Unregistered discovery kind');
+      const route = routeOf(value.id);
+      if (entry.owner !== value.owner) throw new TypeError('Discovery owner does not own this kind');
+      if (route === null || route !== value.route)
+        throw new RangeError('Discovery key has an invalid or foreign route');
+      return entry.kind === 'collection'
+        ? { owner: 'commerce', kind: 'collection', route, id: value.id }
+        : entry.kind === 'review'
+          ? { owner: 'content', kind: 'review', route, id: value.id }
+          : { owner: 'content', kind: 'space', route, id: value.id };
     },
   });
 }
 
+function registeredDomains(registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>, kind: string) {
+  return registry.domains ? registry.domains(kind) : registry.get(kind).domains;
+}
+
 /** Domain admission is independent of membership, resource authorization and native source availability. */
 export function discoveryDomain(
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   kind: string,
   domain: DiscoveryDomain,
 ): 'applicable' | 'not_applicable' {
   if (!SUBJECT_DOMAINS.includes(domain)) throw new TypeError('Unsupported discovery condition domain');
-  return registry.domains(kind).includes(domain) ? 'applicable' : 'not_applicable';
+  return registeredDomains(registry, kind).includes(domain) ? 'applicable' : 'not_applicable';
 }
 
 /**
@@ -177,12 +197,12 @@ export function discoveryDomain(
  * Unknown domains reject even in a branch whose truth would otherwise short circuit.
  */
 export function evaluateDiscoveryCondition(
-  registry: DiscoveryRegistry,
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
   kind: string,
   condition: DiscoveryCondition,
   evidence: (leaf: Extract<DiscoveryCondition, { domain: DiscoveryDomain }>) => DiscoveryTruth,
 ): DiscoveryTruth {
-  registry.domains(kind);
+  registeredDomains(registry, kind);
   function evaluate(node: DiscoveryCondition): DiscoveryTruth {
     if ('not' in node) {
       const value = evaluate(node.not);
