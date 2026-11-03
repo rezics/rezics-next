@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { createBoard } from '../../src/content/board-create.ts';
+import { createThread, createPost } from '../../src/content/commands.ts';
+import { createRealmParticipationCheck } from '../../src/community/participation.ts';
 import { createRealmSubjectCensus } from '../../src/content/realm-subject-census.ts';
 import {
   createRealmSubjectCandidates,
@@ -28,37 +31,65 @@ async function drain(route: number) {
 test.serial(
   'native discussion and review openings export exact originals, exclude replies and retain a restartable cut',
   async () => {
-    const board = (await world.board()).value.board;
+    const access = world.kernel.testAccess;
+    const actor = await access.authenticate(world.owner.bearer, { pool: world.db.pool, deadline: deadline() });
+    const dependencies = {
+      pool: world.db.pool,
+      access,
+      routeKey: world.routeKey,
+      realmParticipation: createRealmParticipationCheck({ pool: world.db.pool, access }),
+    };
+    const context = () => ({ deadline: deadline(), idempotencyKey: crypto.randomUUID() });
+    const board = await world.directBoard();
     const reviewConcept = await world.subject('skos:Concept', world.schemeId);
-    const reviews = await world.checked('POST', `/v1/realms/${world.realm.realmId}/boards`, {
-      conceptId: reviewConcept,
-      title: 'Reviews',
-      visibility: 'published',
-      purpose: 'reviews',
-    });
+    const reviews = await createBoard(
+      dependencies,
+      actor,
+      {
+        realmId: world.realm.realmId,
+        conceptId: reviewConcept,
+        title: 'Reviews',
+        visibility: 'published',
+        purpose: 'reviews',
+      },
+      context(),
+    );
     const first = await world.subject('schema:CreativeWork');
     const second = await world.subject('schema:CreativeWork');
     const replyOnly = await world.subject('schema:CreativeWork');
     async function thread(boardId: string, kind: 'discussion' | 'review', subjectIds: string[]) {
-      return world.checked('POST', '/v1/threads', {
-        boardId,
-        kind,
-        title: 'Native structural provenance',
-        body: fromPlainText('An opening.'),
-        licence: 'MIT',
-        visibility: 'published',
-        subjectIds,
-      });
+      return (
+        await createThread(
+          dependencies,
+          actor,
+          {
+            boardId,
+            kind,
+            title: 'Native structural provenance',
+            body: fromPlainText('An opening.'),
+            licence: 'MIT',
+            visibility: 'published',
+            subjectIds,
+          },
+          context(),
+        )
+      ).value;
     }
-    const discussion = await thread(board.id, 'discussion', [first, second]);
-    const review = await thread(reviews.board.id, 'review', [first]);
-    await world.checked('POST', `/v1/threads/${discussion.thread.id}/posts`, {
-      body: fromPlainText('A reply is not an opening.'),
-      licence: 'MIT',
-      subjectIds: [replyOnly],
-    });
+    const discussion = await thread(board.value.boardId, 'discussion', [first, second]);
+    const review = await thread(reviews.value.boardId, 'review', [first]);
+    await createPost(
+      dependencies,
+      actor,
+      {
+        threadId: discussion.threadId,
+        body: fromPlainText('A reply is not an opening.'),
+        licence: 'MIT',
+        subjectIds: [replyOnly],
+      },
+      context(),
+    );
     const census = createRealmSubjectCensus(world.db.pool);
-    const routes = [...new Set([routeOf(discussion.thread.id)!, routeOf(review.thread.id)!])];
+    const routes = [...new Set([routeOf(discussion.threadId)!, routeOf(review.threadId)!])];
     const cuts = await Promise.all(routes.map((route) => census.capture(route, deadline())));
     for (const route of routes) await drain(route);
     const rows = (
@@ -70,11 +101,11 @@ test.serial(
     ).rows;
     expect(
       rows
-        .filter((r) => r.thread_id === discussion.thread.id)
+        .filter((r) => r.thread_id === discussion.threadId)
         .map((r) => r.original_id)
         .sort(),
     ).toEqual([first, second].sort());
-    expect(rows.filter((r) => r.thread_id === review.thread.id).map((r) => r.original_id)).toEqual([first]);
+    expect(rows.filter((r) => r.thread_id === review.threadId).map((r) => r.original_id)).toEqual([first]);
     expect(rows.some((r) => r.original_id === replyOnly)).toBe(false);
     expect(rows.every((r) => r.opening_id && r.revision_id)).toBe(true);
     expect(new Set(rows.map((r) => r.kind))).toEqual(new Set(['discussion', 'review']));
@@ -83,7 +114,7 @@ test.serial(
       expect(await census.capture(cut.route, deadline())).toEqual(cut);
     }
     const store = createRealmSubjectCandidates(world.db.pool);
-    const actual = await store.thread(world.realm.realmId, discussion.thread.id, null, deadline());
+    const actual = await store.thread(world.realm.realmId, discussion.threadId, null, deadline());
     expect(actual).toHaveLength(2);
     expect(actual.every((c) => c.opening === rows.find((r) => r.thread_id === c.thread)!.opening_id)).toBe(true);
     // A completed structural cut cannot fabricate the separately owned capabilities.
