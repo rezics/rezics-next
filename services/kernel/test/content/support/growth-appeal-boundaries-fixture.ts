@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { encodeReceiptKey } from '../../../src/command/receipt-key.ts';
+import { SESSION_HEADER } from '../../../src/http/request.ts';
 import { registerContent } from '../../../src/content/register.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
@@ -15,17 +16,20 @@ import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { registerNativeContentAccount } from './native-system.ts';
 import { createReactionRelayBase } from '../reaction-relay-convergence-fixture.ts';
+import { observeSql } from './sql-observer.ts';
+import { accountDeletionRuntime, deletePersona } from '../../support/account-deletion.ts';
 
 type Person = Readonly<{ accountId: string; bearer: string }>;
 type ThreadTarget = Awaited<ReturnType<Awaited<ReturnType<typeof createReactionRelayBase>>['createThread']>>;
 type QueueRecord = Readonly<{
   boardId: string;
   threadId: string;
+  postId: string;
   reportId: string;
   decisionId: string;
   appealId: string;
 }>;
-export type AppealHistoryAxis = 'unrelated-pending' | 'retained-history';
+export type AppealHistoryAxis = 'unrelated-pending' | 'retained-history' | 'identity-history' | 'authority-history';
 
 const retentionTimestamp = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -41,6 +45,7 @@ export async function createGrowthAppealBoundariesFixture() {
 
   try {
     db = await openGrowthDatabase(databaseUrl);
+    const observer = observeSql(db.pool);
     const originalAuthenticate = system.access.authenticate;
     system.access.authenticate = (token, boundary) => originalAuthenticate(token, { ...boundary, pool: db!.pool });
 
@@ -79,6 +84,7 @@ export async function createGrowthAppealBoundariesFixture() {
 
     client = await createWorkClient(databaseUrl, db.pool);
     const registered: Effect[] = [];
+    const runnerPhases: Array<{ effect: string; type: string; subject?: string }> = [];
     await DBOS.shutdown({ deregister: true });
     work = await composeWork(
       [
@@ -89,7 +95,15 @@ export async function createGrowthAppealBoundariesFixture() {
               ...context,
               addEffects(effects) {
                 registered.push(...effects);
-                context.addEffects(effects);
+                context.addEffects(
+                  effects.map((effect) => ({
+                    ...effect,
+                    async run(event) {
+                      runnerPhases.push({ effect: effect.name, type: event.type, subject: event.subject });
+                      return effect.run(event);
+                    },
+                  })),
+                );
               },
             });
           },
@@ -108,9 +122,19 @@ export async function createGrowthAppealBoundariesFixture() {
     );
     await work.launch();
 
-    async function call(method: string, path: string, options: { bearer?: string; key?: string; body?: unknown } = {}) {
+    async function call(
+      method: string,
+      path: string,
+      options: {
+        bearer?: string;
+        key?: string;
+        body?: unknown;
+        session?: string;
+      } = {},
+    ) {
       const headers = new Headers();
       if (options.bearer) headers.set('authorization', `Bearer ${options.bearer}`);
+      if (options.session) headers.set(SESSION_HEADER, options.session);
       if (options.key !== undefined) headers.set('idempotency-key', JSON.stringify(options.key));
       if (options.body !== undefined) headers.set('content-type', 'application/json');
       const response = await app.handle(
@@ -139,10 +163,10 @@ export async function createGrowthAppealBoundariesFixture() {
       options: { bearer: string; key?: string; expectedStatus: number },
     ) {
       const key = options.key ?? randomUUID();
-      const result = await base.call(method, path, { bearer: options.bearer, key, body });
+      const result = await call(method, path, { bearer: options.bearer, key, body });
       if (result.response.status !== options.expectedStatus)
         throw new Error(`${method} ${path}: ${result.response.status} ${result.text}`);
-      return { body: result.value as T, key, response: result.response };
+      return { body: result.body as T, key, response: result.response };
     }
 
     async function completeRegisteredCommand(
@@ -216,12 +240,14 @@ export async function createGrowthAppealBoundariesFixture() {
     async function submitAppeal(
       boardId: string,
       target: ThreadTarget,
+      deliver = true,
     ): Promise<{
       record: QueueRecord;
       reportReceipt: Awaited<ReturnType<typeof call>>;
       appeal: Awaited<ReturnType<typeof call>>;
       appealReplay: Awaited<ReturnType<typeof call>>;
       authorDecision: Awaited<ReturnType<typeof call>>;
+      appealKey: string;
     }> {
       await grant(target.threadId, people.reporter.accountId, ['report:create']);
       const report = await command<{ reportId: string }>(
@@ -266,7 +292,7 @@ export async function createGrowthAppealBoundariesFixture() {
         throw new Error(
           `POST /v1/moderation-decisions/${decision.decision_id}:appeal replay: ${appealReplay.response.status}`,
         );
-      await completeRegisteredCommand(people.author.accountId, appeal.key, 'content.appeal');
+      if (deliver) await completeRegisteredCommand(people.author.accountId, appeal.key, 'content.appeal');
 
       const reportReceipt = await call('GET', `/v1/reports/${report.body.reportId}`, {
         bearer: people.reporter.bearer,
@@ -278,6 +304,7 @@ export async function createGrowthAppealBoundariesFixture() {
         record: {
           boardId,
           threadId: target.threadId,
+          postId: target.postId,
           reportId: report.body.reportId,
           decisionId: decision.decision_id,
           appealId: appeal.body.id,
@@ -286,6 +313,7 @@ export async function createGrowthAppealBoundariesFixture() {
         appeal: { response: appeal.response, body: appeal.body, text: '' },
         appealReplay,
         authorDecision,
+        appealKey: appeal.key,
       };
     }
 
@@ -317,6 +345,28 @@ export async function createGrowthAppealBoundariesFixture() {
       const targetRoute = routed(pressureThreadId);
       const boardRoute = routed(pressureBoardId);
       const statement = `growth-appeal-boundaries:${tag}`;
+      if (axis === 'identity-history') {
+        const ids = Array.from({ length: scale - previous }, () => newId(routed(people.author.accountId)));
+        await database.admin.query(
+          `INSERT INTO access.account (route,account_id,kind,state,display_name,biography,transaction_id)
+           SELECT $1,id,'actor','pending',$3,'Private identity sentinel',$4 FROM unnest($2::uuid[]) AS a(id)`,
+          [routed(people.author.accountId), ids, statement, randomUUID()],
+        );
+        return;
+      }
+      if (axis === 'authority-history') {
+        // Expired intervals on the same resource and principal must not change current queue authority.
+        await database.admin.query(
+          `INSERT INTO access.resource_grant
+           (route,resource_id,subject_id,action,valid,transaction_id)
+           SELECT $1,$2,$3,'moderation:read_reports',
+             tstzrange('2000-01-01'::timestamptz + n * interval '1 second',
+                       '2000-01-01'::timestamptz + (n+1) * interval '1 second','[)'),$4
+           FROM generate_series($5::integer,$6::integer) AS n`,
+          [boardRoute, pressureBoardId, people.reviewer.accountId, randomUUID(), previous, scale - 1],
+        );
+        return;
+      }
       const existing = (
         await database.admin.query<{ count: number }>(
           `SELECT count(*)::integer AS count FROM content.moderation_appeal
@@ -367,11 +417,15 @@ export async function createGrowthAppealBoundariesFixture() {
       );
     }
 
-    async function revokeTargetModeration(resourceId: string, subjectId: string): Promise<void> {
+    async function revokeTargetModeration(
+      resourceId: string,
+      subjectId: string,
+      action = 'moderation:takedown',
+    ): Promise<void> {
       await db!.admin.query(
         `DELETE FROM access.resource_grant
-         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'`,
-        [routed(resourceId), resourceId, subjectId],
+         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,
+        [routed(resourceId), resourceId, subjectId, action],
       );
     }
 
@@ -380,6 +434,7 @@ export async function createGrowthAppealBoundariesFixture() {
       base,
       people,
       call,
+      command,
       grant,
       submitAppeal,
       resolveAppeal,
@@ -388,6 +443,17 @@ export async function createGrowthAppealBoundariesFixture() {
       revokeTargetModeration,
       completeRegisteredCommand,
       moderationEffect: registered.find((effect) => effect.name === 'content_moderation_decision')!,
+      observer,
+      runnerPhases,
+      async reviewerSession(deletion = false) {
+        const clientId = `appeal_session_${randomUUID().replaceAll('-', '')}`;
+        const scopes = [...new Set([...system.auth.ordinaryScopes, ...(deletion ? ['account:delete'] : [])])];
+        await system.nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes });
+        return system.auth.issue({ accountId: people.reviewer.accountId, clientId, scopes });
+      },
+      async deleteReviewer() {
+        await deletePersona({ pool: db!.pool, auth: accountDeletionRuntime(system).auth }, people.reviewer);
+      },
       async createBoard(label: string) {
         return (await base.createRealmTarget(label, 'public')).boardId;
       },
@@ -405,6 +471,7 @@ export async function createGrowthAppealBoundariesFixture() {
             await client?.close();
           } finally {
             try {
+              await observer.close();
               await db?.close();
             } finally {
               await system.close();

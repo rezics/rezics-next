@@ -916,6 +916,8 @@ other owners' takedowns.
 Decision: exact review uses `inspect=<appealId>` and returns `selectedAppeal` beside unchanged queue paging; optional
 identity and destination context use explicit `concealed` and `unavailable` states.
 
+Decision: growth evidence varies pending cases, retained decisions, unrelated routed identities and expired queue grants independently, keeping the two-row budget and exact selected key fixed.
+
 The executable API contract is `specs/content-notification-outcomes.test.ts`, with the test-only interface in
 `specs/content-notification-driver.ts`. `CONTENT_NOTIFICATION_DRIVER` selects a real product binding exporting
 `createContentNotificationDriver()`; without it every scenario fails with
@@ -2564,7 +2566,7 @@ Limits: board candidates <= 200, collection <= 100, public pages <= 100 results 
 
 - Touches: The queue read checks `moderation:read_reports`, seeks L + 1 raw candidates, and does not refill after a candidate fails a current source/scope check. Each admitted candidate uses an exact appeal/decision read, a public identity batch by routed home, a current target-location batch by routed Content home, the ordinary current board/thread disclosure reader, a second public identity batch, an exact source re-read and a current `moderation:takedown` check. The queue scope is checked again before serialization. The existing selected appeal index is a full-prefix `(route, scope, created_at, appeal_id)` seek. Target lookups use routed primary keys; no decision or identity history is enumerated.
 - Bound: L is at most 100. The raw page reads at most L + 1 candidates; current appeal/decision reads and target-authority checks are O(L); identity batches, target-location batches and ordinary disclosures are bounded by the distinct admitted identities, target routes and target destinations. All statements, runner phases, examined rows and payload bytes inside Access and the ordinary disclosure readers remain charged to those owners. Page work is independent of pending appeals per scope and retained unrelated histories.
-- Growth check: `test/content/growth-appeal-boundaries.test.ts`, connected native scopes at 256, 1024 and 4096 unrelated pending/retained target and decision rows, with a fixed two-appeal page and one exact terminal key; compare rows, statements, blocks and request/response bytes. Independent identity/authority history axes remain in the continuation.
+- Growth check: `test/content/growth-appeal-boundaries.test.ts`, connected native scopes at 256, 1024 and 4096 unrelated pending/retained target and decision rows, with a fixed two-appeal page and one exact terminal key; compare rows, statements, blocks and request/response bytes. Independent identity and authority axes grow routed identity rows and expired same-principal queue grants while all other histories remain fixed; strict native access-path evidence is checked for every measured repetition.
 
 ### Operation: Exact selected appeal inspection
 
@@ -2572,7 +2574,7 @@ Limits: board candidates <= 200, collection <= 100, public pages <= 100 results 
 
 - Touches: One exact appeal/decision lookup and source anchor check the requested key; a batched public identity read and a routed target-location read prepare optional context; the ordinary board/thread reader checks current target disclosure. The identity is read again, the exact appeal/decision link is verified again, and queue scope plus current target authority are rechecked. A resolved result reads only that one retained appeal and performs no terminal page scan.
 - Bound: Constant work for one selected key, independent of pending queue depth and all terminal history. Identity and target preparation are limited to the selected appellant and target's routed homes; unavailable optional context is explicit, while required queue/source failure withholds the response.
-- Growth check: `test/content/growth-appeal-boundaries.test.ts`, one exact terminal key at 256, 1024 and 4096 independently growing unrelated pending and retained target/decision rows. Independent identity/authority histories and all empty/denied/revoked/retry phases remain in the continuation.
+- Growth check: `test/content/growth-appeal-boundaries.test.ts`, one exact terminal key at 256, 1024 and 4096 independently growing unrelated pending and retained target/decision rows. The same fixed key is retained across independent identity and authority growth. Registered creation, resolution/notification and workflow replay are captured separately; native state-change coverage includes late queue revocation, target revocation, changed client sessions, concurrent resolution, transport retry and account deletion.
 
 ## Realm discovery source
 
