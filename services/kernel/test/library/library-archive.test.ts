@@ -8,14 +8,25 @@ import {
 } from '../../src/library/library-archive.ts';
 import { libraryExportManifest } from '../../src/library/library-export-format.ts';
 
-const first = randomUUID(), second = randomUUID(), label = randomUUID();
+const first = randomUUID(),
+  second = randomUUID(),
+  label = randomUUID();
 const at = '2026-01-01 00:00:00.123456+00';
 const reference = (id: string) => ({ id, href: `https://rezics.com/subjects/${id}` });
 function entry(subject: string, state = 'retired-vocabulary') {
   return {
-    section: 'entries', subject_id: subject, requested_subject_id: null, incarnation_id: null,
-    state, revision: 7, library_profile_pin: null, created_at: at, updated_at: at,
-    activity_at: null, finished_at: null, subject_id_reference: reference(subject),
+    section: 'entries',
+    subject_id: subject,
+    requested_subject_id: null,
+    incarnation_id: null,
+    state,
+    revision: 7,
+    library_profile_pin: null,
+    created_at: at,
+    updated_at: at,
+    activity_at: null,
+    finished_at: null,
+    subject_id_reference: reference(subject),
   };
 }
 function named(id = label, name = 'weekend') {
@@ -23,14 +34,24 @@ function named(id = label, name = 'weekend') {
 }
 function assignment() {
   return {
-    section: 'assignments', subject_id: first, label_id: label, assignment_id: null,
-    revision: 1, created_at: at, updated_at: at, subject_id_reference: reference(first),
+    section: 'assignments',
+    subject_id: first,
+    label_id: label,
+    assignment_id: null,
+    revision: 1,
+    created_at: at,
+    updated_at: at,
+    subject_id_reference: reference(first),
   };
 }
 function archive(records: Record<string, unknown>[] = [entry(first), entry(second, 'planned'), named(), assignment()]) {
   return {
     manifest: {
-      ...libraryExportManifest({ export_id: randomUUID(), created_at: at, expires_at: '2026-01-01 00:15:00.123456+00' }),
+      ...libraryExportManifest({
+        export_id: randomUUID(),
+        created_at: at,
+        expires_at: '2026-01-01 00:15:00.123456+00',
+      }),
       fullExport: false,
       rows: records.length,
       recordBytes: records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0),
@@ -45,7 +66,10 @@ function refuses(value: unknown, code: ArchiveValidationCode) {
 
 test('completed installed manifest preserves old meanings, explicit emptiness and unsupported evidence', () => {
   const file = archive([
-    entry(first), entry(second), named(), assignment(),
+    entry(first),
+    entry(second),
+    named(),
+    assignment(),
     { section: 'sessions', session_id: randomUUID(), amount: '12.50', state: 'completed' },
   ]);
   const decoded = decode(file);
@@ -53,13 +77,20 @@ test('completed installed manifest preserves old meanings, explicit emptiness an
   expect(decoded.manifest.omissions).toEqual(file.manifest.omissions);
   expect(decoded.fullRestoration).toBe(false);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toEqual({
-    section: 'entries', rows: 2, capture: 'present', treatment: 'requires-explicit-mapping',
+    section: 'entries',
+    rows: 2,
+    capture: 'present',
+    treatment: 'requires-explicit-mapping',
   });
   expect(decoded.coverage.find((s) => s.section === 'sessions')).toMatchObject({
-    capture: 'present', treatment: 'retained-unsupported', rows: 1,
+    capture: 'present',
+    treatment: 'retained-unsupported',
+    rows: 1,
   });
   expect(decoded.coverage.find((s) => s.section === 'holdings')).toMatchObject({
-    capture: 'empty', treatment: 'retained-unsupported', rows: 0,
+    capture: 'empty',
+    treatment: 'retained-unsupported',
+    rows: 0,
   });
   expect(decode(archive([])).coverage.every((s) => s.capture === 'empty')).toBe(true);
   // Expiry belongs to the original capture stream, never to completed archive evidence.
@@ -75,7 +106,10 @@ test('unsupported versions, unfinished captures and inconsistent final counts ar
   refuses({ ...file, manifest: { ...file.manifest, rows: undefined } }, 'incomplete_capture');
   refuses({ ...file, manifest: { ...file.manifest, sections: file.manifest.sections.slice(1) } }, 'incomplete_capture');
   refuses({ ...file, manifest: { ...file.manifest, rows: 3 } }, 'inconsistent_manifest');
-  refuses({ ...file, manifest: { ...file.manifest, recordBytes: file.manifest.recordBytes + 1 } }, 'inconsistent_manifest');
+  refuses(
+    { ...file, manifest: { ...file.manifest, recordBytes: file.manifest.recordBytes + 1 } },
+    'inconsistent_manifest',
+  );
   refuses({ ...file, manifest: { ...file.manifest, fullExport: true } }, 'invalid_envelope');
   refuses({ ...file, manifest: { ...file.manifest, state: 'collecting' } }, 'invalid_envelope');
 });
@@ -101,8 +135,9 @@ test('native references and required shapes are validated without admitting stor
 });
 
 test('raw upload, nesting, rows and record bytes are bounded before native admission', () => {
-  expect(() => decodeLibraryArchive(new Uint8Array(LIBRARY_ARCHIVE_LIMITS.uploadBytes + 1)))
-    .toThrow(new ArchiveValidationError('bounds'));
+  expect(() => decodeLibraryArchive(new Uint8Array(LIBRARY_ARCHIVE_LIMITS.uploadBytes + 1))).toThrow(
+    new ArchiveValidationError('bounds'),
+  );
   const nested = '['.repeat(LIBRARY_ARCHIVE_LIMITS.depth + 1) + '0' + ']'.repeat(LIBRARY_ARCHIVE_LIMITS.depth + 1);
   expect(() => decodeLibraryArchive(Buffer.from(nested))).toThrow(new ArchiveValidationError('bounds'));
   refuses(archive([{ ...entry(first), state: 'x'.repeat(LIBRARY_ARCHIVE_LIMITS.pageBytes) }]), 'bounds');

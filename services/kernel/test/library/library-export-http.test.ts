@@ -172,10 +172,14 @@ test('native owner export streams independent persisted facts, preserves dates, 
   const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
   expect(decoded.records).toEqual(records);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
-    rows: 18, capture: 'present', treatment: 'requires-explicit-mapping',
+    rows: 18,
+    capture: 'present',
+    treatment: 'requires-explicit-mapping',
   });
   expect(decoded.coverage.find((s) => s.section === 'sessions')).toMatchObject({
-    rows: 2, capture: 'present', treatment: 'retained-unsupported',
+    rows: 2,
+    capture: 'present',
+    treatment: 'retained-unsupported',
   });
   expect(decoded.fullRestoration).toBe(false);
   expect((await get(`/v1/libraryExports/${id}`)).state).toBe('ready');

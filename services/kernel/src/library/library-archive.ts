@@ -144,36 +144,68 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
   if (m.rows === undefined || m.recordBytes === undefined || m.sections === undefined) fail('incomplete_capture');
   if (
     !exactKeys(m, [
-      'format', 'version', 'exportId', 'capturedAt', 'expiresAt', 'privacy', 'completeness',
-      'sections', 'omissions', 'fullExport', 'rows', 'recordBytes',
+      'format',
+      'version',
+      'exportId',
+      'capturedAt',
+      'expiresAt',
+      'privacy',
+      'completeness',
+      'sections',
+      'omissions',
+      'fullExport',
+      'rows',
+      'recordBytes',
     ]) ||
-    !uuid(m.exportId) || !timestamp(m.capturedAt) || !timestamp(m.expiresAt) ||
+    !uuid(m.exportId) ||
+    !timestamp(m.capturedAt) ||
+    !timestamp(m.expiresAt) ||
     Date.parse(m.expiresAt) - Date.parse(m.capturedAt) !== 15 * 60_000 ||
-    m.privacy !== 'private' || m.completeness !== 'supported-native-facts' || m.fullExport !== false
-  ) fail('invalid_envelope');
+    m.privacy !== 'private' ||
+    m.completeness !== 'supported-native-facts' ||
+    m.fullExport !== false
+  )
+    fail('invalid_envelope');
   // V1 always declares every installed section; omission is not an empty section or success.
   const sections = m.sections;
   if (
-    !Array.isArray(sections) || sections.length !== exportSections.length ||
+    !Array.isArray(sections) ||
+    sections.length !== exportSections.length ||
     exportSections.some((section, index) => sections[index] !== section)
-  ) fail('incomplete_capture');
+  )
+    fail('incomplete_capture');
   const omissions = object(m.omissions, 'invalid_envelope');
   if (
-    !exactKeys(omissions, ['trash', 'providerIdentifiers', 'personalImportEvidence', 'commerce', 'publication', 'reimport']) ||
+    !exactKeys(omissions, [
+      'trash',
+      'providerIdentifiers',
+      'personalImportEvidence',
+      'commerce',
+      'publication',
+      'reimport',
+    ]) ||
     Object.values(omissions).some((text) => typeof text !== 'string' || text.length === 0)
-  ) fail('invalid_envelope');
+  )
+    fail('invalid_envelope');
   if (
-    !Number.isSafeInteger(m.rows) || (m.rows as number) < 0 ||
-    !Number.isSafeInteger(m.recordBytes) || (m.recordBytes as number) < 0
-  ) fail('inconsistent_manifest');
-  if ((m.rows as number) > LIBRARY_EXPORT_LIMITS.records || (m.recordBytes as number) > LIBRARY_EXPORT_LIMITS.recordBytes)
+    !Number.isSafeInteger(m.rows) ||
+    (m.rows as number) < 0 ||
+    !Number.isSafeInteger(m.recordBytes) ||
+    (m.recordBytes as number) < 0
+  )
+    fail('inconsistent_manifest');
+  if (
+    (m.rows as number) > LIBRARY_EXPORT_LIMITS.records ||
+    (m.recordBytes as number) > LIBRARY_EXPORT_LIMITS.recordBytes
+  )
     fail('bounds');
   // Expiry fences the producer's page stream. An already completed file remains readable after expiry.
   return m as LibraryArchiveManifest;
 }
 
 function reference(row: ObjectValue, key: string) {
-  const value = row[key], ref = row[`${key}_reference`];
+  const value = row[key],
+    ref = row[`${key}_reference`];
   if (value === null) {
     if (ref !== undefined) fail('invalid_record');
     return;
@@ -185,15 +217,28 @@ function reference(row: ObjectValue, key: string) {
 }
 function supportedRecord(row: ObjectValue, section: MergeSection) {
   const common = ['section', 'revision', 'created_at', 'updated_at'];
-  const fields = section === 'entries'
-    ? ['subject_id', 'requested_subject_id', 'incarnation_id', 'state', 'library_profile_pin', 'activity_at', 'finished_at', 'subject_id_reference']
-    : section === 'labels'
-      ? ['label_id', 'normalized_name']
-      : ['subject_id', 'label_id', 'assignment_id', 'subject_id_reference'];
+  const fields =
+    section === 'entries'
+      ? [
+          'subject_id',
+          'requested_subject_id',
+          'incarnation_id',
+          'state',
+          'library_profile_pin',
+          'activity_at',
+          'finished_at',
+          'subject_id_reference',
+        ]
+      : section === 'labels'
+        ? ['label_id', 'normalized_name']
+        : ['subject_id', 'label_id', 'assignment_id', 'subject_id_reference'];
   if (
     !exactKeys(row, [...common, ...fields], section === 'entries' ? ['requested_subject_id_reference'] : []) ||
-    !revision(row.revision) || !timestamp(row.created_at) || !timestamp(row.updated_at)
-  ) fail('invalid_record');
+    !revision(row.revision) ||
+    !timestamp(row.created_at) ||
+    !timestamp(row.updated_at)
+  )
+    fail('invalid_record');
   if (section === 'labels') {
     if (!uuid(row.label_id) || typeof row.normalized_name !== 'string' || !row.normalized_name.length)
       fail('invalid_record');
@@ -206,17 +251,32 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
   }
   reference(row, 'requested_subject_id');
   if (
-    (row.incarnation_id !== null && !uuid(row.incarnation_id)) || typeof row.state !== 'string' ||
-    (row.library_profile_pin !== null && (!row.library_profile_pin || typeof row.library_profile_pin !== 'object' || Array.isArray(row.library_profile_pin))) ||
-    (row.activity_at !== null && !timestamp(row.activity_at)) || (row.finished_at !== null && !timestamp(row.finished_at))
-  ) fail('invalid_record');
+    (row.incarnation_id !== null && !uuid(row.incarnation_id)) ||
+    typeof row.state !== 'string' ||
+    (row.library_profile_pin !== null &&
+      (!row.library_profile_pin ||
+        typeof row.library_profile_pin !== 'object' ||
+        Array.isArray(row.library_profile_pin))) ||
+    (row.activity_at !== null && !timestamp(row.activity_at)) ||
+    (row.finished_at !== null && !timestamp(row.finished_at))
+  )
+    fail('invalid_record');
 }
 
 const identityFields: Record<LibraryExportSection, readonly string[]> = {
-  entries: ['subject_id'], labels: ['label_id'], assignments: ['subject_id', 'label_id'],
-  sessions: ['session_id'], holdings: ['copy_id'], collections: ['collection_id'], collectionPins: [],
-  bangumiUploads: ['upload_id'], bangumiEvidence: ['upload_id', 'ordinal'], malImports: ['upload_id'],
-  units: ['session_id', 'unit_id'], history: ['session_id', 'change_no'], occurrences: ['member_id'],
+  entries: ['subject_id'],
+  labels: ['label_id'],
+  assignments: ['subject_id', 'label_id'],
+  sessions: ['session_id'],
+  holdings: ['copy_id'],
+  collections: ['collection_id'],
+  collectionPins: [],
+  bangumiUploads: ['upload_id'],
+  bangumiEvidence: ['upload_id', 'ordinal'],
+  malImports: ['upload_id'],
+  units: ['session_id', 'unit_id'],
+  history: ['session_id', 'change_no'],
+  occurrences: ['member_id'],
   malEvidence: ['upload_id', 'ordinal'],
 };
 function recordKey(row: ObjectValue, section: LibraryExportSection) {
@@ -243,10 +303,14 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS.records) fail('bounds');
   if (envelope.records.length !== manifest.rows) fail('inconsistent_manifest');
   const counts = new Map<LibraryExportSection, number>(exportSections.map((s) => [s, 0]));
-  const seen = new Set<string>(), labelIds = new Set<string>(), names = new Set<string>();
-  let recordBytes = 0, previousSection = 0;
+  const seen = new Set<string>(),
+    labelIds = new Set<string>(),
+    names = new Set<string>();
+  let recordBytes = 0,
+    previousSection = 0;
   for (const value of envelope.records) {
-    const row = object(value, 'invalid_record'), section = row.section as LibraryExportSection;
+    const row = object(value, 'invalid_record'),
+      section = row.section as LibraryExportSection;
     const index = exportSections.indexOf(section);
     if (index < previousSection || index === -1) fail('invalid_record');
     previousSection = index;
@@ -273,9 +337,12 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     records: envelope.records as ArchiveRecord[],
     fullRestoration: false,
     coverage: exportSections.map((section) => ({
-      section, rows: counts.get(section)!, capture: counts.get(section) ? 'present' : 'empty',
+      section,
+      rows: counts.get(section)!,
+      capture: counts.get(section) ? 'present' : 'empty',
       treatment: (archiveMergeSections as readonly string[]).includes(section)
-        ? 'requires-explicit-mapping' : 'retained-unsupported',
+        ? 'requires-explicit-mapping'
+        : 'retained-unsupported',
     })),
   };
 }
