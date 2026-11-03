@@ -427,6 +427,8 @@ evidence, reporter identity or decider identity. Projection upserts converge on 
 `limit + 1` board-index candidates through separate all-kind and exact-kind B-tree seeks and hydrates at most `limit`; it rechecks board `moderation:takedown`, target
 `moderation:takedown`, current target ancestry and the existing exact decision disclosure for every returned entry.
 Denied, erased, stale or out-of-board targets are omitted while the cursor advances past examined candidates.
+Exact reads preserve the existing affected-author branch independently of target erasure; moderators require
+a current available target, and history always checks current target/parent availability.
 No descendant, partition, report, grant or account scan discovers a page.
 
 At a fixed page limit L, a page uses at most `3 + 3L` anchored snapshots: board authority before and after, one
@@ -486,12 +488,12 @@ Responses are private/no-store and the history is not a public feed or search so
 ### Cost: scoped history page
 
 - Touches: `listModerationHistory` prepares board Access once, checks it before/after, reads one board-bound index
-  range, and hydrates each admitted raw key through current target Access, `reportBoardPlacement` and the exact reader.
+  range, and hydrates each admitted raw key through current target Access, `moderation-history-target.sql` and the exact reader.
 - Bound: let L be the requested limit (1–100), B=L+1 (at most 101 raw keys), and H≤L the selected raw candidates.
-  There are at most `3+3H` anchored snapshots, `10+13H` Content statements including `6+6H` controls, and
-  `3+B+9H` physical relation rows: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
-  and at most `4H` decision/appeal/target/parent rows. Board placement needs no extra SQL for board targets and
-  at most two PK reads for posts. Plan intermediates add only bounded scalar inputs and singleton equality joins;
+  There are at most `3+3H` anchored snapshots, `12+12H` Content statements including `6+6H` controls, and
+  `5+B+9H` physical relation rows: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
+  and at most `4H` decision/appeal/target/parent rows. Board existence adds two PK statements/rows across initial/final checks;
+  each selected target uses one placement statement with at most two PK relation rows for posts. Plan intermediates add only bounded scalar inputs and singleton equality joins;
   physical plan/tuple evidence, including withholding, is retained by the native growth harness.
   Access adds `1+2H` preparations and `2+2H` final formulas. Preparation calls the actual `permission.ts` callees:
   one permission-time scalar, at most one assignment/account join, at most two membership-inverse ranges (each
