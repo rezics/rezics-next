@@ -1,4 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import type { Pool } from 'pg';
 import { createAccess } from '../../../src/access/index.ts';
 import { checkout as httpCheckout } from '../../../src/commerce/checkout.ts';
 import { StripeRejectedError, StripeUnavailableError, type StripePort } from '../../../src/commerce/model.ts';
@@ -23,10 +24,11 @@ export async function until<T>(read: () => Promise<T>, accept: (value: T) => boo
   }
 }
 
-export async function workFixture() {
+export async function workFixture(options: { readonly pool?: Pool } = {}) {
   const databaseUrl = process.env.DATABASE_URL!;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(databaseUrl);
+  const ownsPool = options.pool === undefined;
+  const pool = options.pool ?? createPool(databaseUrl);
   const client = await createWorkClient(databaseUrl);
   const transport = startWorkStripe();
   const providerStripe = createStripePort({
@@ -293,7 +295,7 @@ export async function workFixture() {
       await stop();
       transport.stop();
       await client.close();
-      await pool.end();
+      if (ownsPool) await pool.end();
     },
   };
 }

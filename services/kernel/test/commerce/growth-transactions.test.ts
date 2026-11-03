@@ -4,20 +4,32 @@ import { createPayouts } from '../../src/commerce/payouts.ts';
 import type { Order, StripeTransaction } from '../../src/commerce/model.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readSettlementState } from '../../src/commerce/store.ts';
-import { capture, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { classifySeries, type GrowthModelBound } from '../support/growth-model.ts';
 import { nativeAnchorFixture } from './support/checkout-anchor.ts';
+import {
+  observeTransactionGrowth,
+  type TransactionGrowthFrame,
+  type TransactionGrowthObservation,
+} from './support/transaction-growth-observation.ts';
 import { workFixture } from './support/work-fixture.ts';
 
 setDefaultTimeout(360_000);
 
 let fixture: Awaited<ReturnType<typeof workFixture>>;
+let growthDatabase: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const connections = new Set<PoolClient>();
 beforeAll(async () => {
-  fixture = await workFixture();
+  growthDatabase = await openGrowthDatabase(process.env.DATABASE_URL);
+  fixture = await workFixture({ pool: growthDatabase.pool });
   fixture.pool.on('connect', (connection) => connections.add(connection));
 });
 afterAll(async () => {
-  await fixture?.close();
+  try {
+    await fixture?.close();
+  } finally {
+    await growthDatabase?.close();
+  }
 });
 
 const transaction = (id: string): StripeTransaction => ({
@@ -172,6 +184,21 @@ function indexProbeBudget(axis: HistoryAxis, operation: NamedOperation) {
   return 2;
 }
 
+function isHistoryProbe(statement: string): boolean {
+  return (
+    /SELECT\s+1\s+AS\s+present/i.test(statement) &&
+    /FROM commerce\.order_transaction\b/i.test(statement) &&
+    /LIMIT\s+257\b/i.test(statement)
+  );
+}
+
+function classify(values: readonly { readonly scale: number; readonly value: number }[], bound: GrowthModelBound) {
+  return classifySeries(
+    values.map(({ scale, value }) => ({ scale, repetitions: [value], uncertainty: 0 })),
+    bound,
+  );
+}
+
 // One method seeds both the buyer history and the creator's already recorded lines at every scale.
 async function seed(length: number) {
   const { order, session } = await fixture.checkout();
@@ -191,8 +218,55 @@ async function seed(length: number) {
   return { order, snapshot, payouts };
 }
 
-test('settlement and royalty read only named keys with equal statements and rows at histories 1, 64 and 255', async () => {
-  const measurements: { statements: number; rows: number }[][] = [];
+test('settlement and royalty read only named keys with equal statements and returned rows at histories 1, 64 and 255', async () => {
+  const observations: TransactionGrowthObservation[] = [];
+  const measurements: { statements: number; returnedRows: number }[][] = [];
+  async function record<T>(
+    frame: TransactionGrowthFrame,
+    operation: () => Promise<T>,
+  ): Promise<{ readonly value: T; readonly observation: TransactionGrowthObservation<T> }> {
+    const observation = await observeTransactionGrowth(growthDatabase, frame, operation);
+    observations.push(observation);
+    const captured = observation.capture;
+    expect(observation.outcome.kind).toBe('completed');
+    expect(observation.attemptLedgerError).toBeUndefined();
+    expect(captured.plans.length).toBeGreaterThan(0);
+    expect(captured.statementBackends).toHaveLength(captured.statements.length);
+    expect(captured.statementBackends!.every((backend) => Number.isSafeInteger(backend))).toBe(true);
+    expect(captured.planStatements).toHaveLength(captured.plans.length);
+    expect(captured.planBackends).toHaveLength(captured.plans.length);
+    expect(
+      captured.planStatements!.every((owner) => owner !== undefined && owner >= 0 && owner < captured.statements.length),
+    ).toBe(true);
+    expect(captured.planBackends!.every((backend) => Number.isSafeInteger(backend))).toBe(true);
+    expect(captured.statementErrors).toHaveLength(captured.statements.length);
+    expect(observation.occurrences.statements).toHaveLength(captured.statements.length);
+    expect(observation.statementAttributions.length).toBeGreaterThan(0);
+    for (const attempt of observation.attempts ?? []) {
+      expect(attempt.occurrences.length).toBeGreaterThan(0);
+      expect(attempt.occurrences.every((index) => index >= 0 && index < captured.statements.length)).toBe(true);
+    }
+    if (captured.requestBytes !== undefined)
+      expect(observation.cost.requestBytes).toBe(captured.requestBytes.reduce((sum, bytes) => sum + bytes, 0));
+    if (captured.responseBytes !== undefined)
+      expect(observation.cost.responseBytes).toBe(captured.responseBytes.reduce((sum, bytes) => sum + bytes, 0));
+    if (
+      (captured.backgroundStatements?.length ?? 0) > 0 ||
+      (captured.backgroundRequestBytes?.length ?? 0) > 0 ||
+      (captured.backgroundResponseBytes?.length ?? 0) > 0
+    ) {
+      if (captured.backgroundRequestBytes !== undefined)
+        expect(observation.cost.backgroundRequestBytes).toBe(
+          captured.backgroundRequestBytes.reduce((sum, bytes) => sum + bytes, 0),
+        );
+      if (captured.backgroundResponseBytes !== undefined)
+        expect(observation.cost.backgroundResponseBytes).toBe(
+          captured.backgroundResponseBytes.reduce((sum, bytes) => sum + bytes, 0),
+        );
+    }
+    if (observation.outcome.kind === 'failed') throw new Error(`${observation.outcome.name}: ${observation.outcome.message}`);
+    return { value: observation.outcome.value, observation };
+  }
   for (const length of [1, 64, 255]) {
     const { order, snapshot, payouts } = await seed(length);
     const next = transaction(`txn_change${length}`);
@@ -235,32 +309,53 @@ test('settlement and royalty read only named keys with equal statements and rows
     client.release();
     for (const connection of connections) instrument(connection);
     fixture.pool.on('connect', instrument);
-    const measured: { statements: number; rows: number }[] = [];
+    const measured: { statements: number; returnedRows: number }[] = [];
     try {
-      for (const run of [
-        () => fixture.commands.applyCheckoutSnapshot(snapshot, `growth:settle:${length}`),
-        () => payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`),
+      for (const { phase, attemptId, run } of [
+        {
+          phase: 'settlement' as const,
+          attemptId: `growth:settle:${length}`,
+          run: () => fixture.commands.applyCheckoutSnapshot(snapshot, `growth:settle:${length}`),
+        },
+        {
+          phase: 'royalty' as const,
+          attemptId: `growth:royalty:${length}`,
+          run: () => payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`),
+        },
       ]) {
         captured = [];
-        await run();
-        const queries = captured;
+        const { observation } = await record({ attemptId, phase, scale: length, repetition: 0 }, run);
+        const queries = captured ?? [];
         captured = undefined;
-        const probes = queries.filter(
-          (q) =>
-            /SELECT\s+1\s+AS\s+present/i.test(q.sql) &&
-            /FROM commerce\.order_transaction\b/i.test(q.sql) &&
-            /LIMIT\s+257\b/i.test(q.sql),
-        );
+        const probes = queries.filter((query) => isHistoryProbe(query.sql));
         expect(probes.length).toBeLessThanOrEqual(1);
         for (const probe of probes) expect(probe.rows).toBeLessThanOrEqual(257);
-        const reads = queries.filter((q) => /FROM commerce\.order_transaction\b/i.test(q.sql) && !probes.includes(q));
+        const physicalProbes = observation.occurrences.statements.filter(({ statement }) => isHistoryProbe(statement));
+        expect(physicalProbes).toHaveLength(probes.length);
+        for (const probe of physicalProbes) {
+          expect(probe.plans.length).toBeGreaterThan(0);
+          expect(probe.rows).toBeLessThanOrEqual(257);
+        }
+        const reads = queries.filter(
+          (query) => /FROM commerce\.order_transaction\b/i.test(query.sql) && !probes.includes(query),
+        );
         expect(reads).toHaveLength(1);
         expect(reads[0]!.sql).toMatch(/balance_transaction_id\s*=\s*ANY\s*\(/i);
         expect(reads[0]!.rows).toBeLessThanOrEqual(1);
         expect(JSON.stringify(reads[0]!.values)).toContain(next.id);
+        const physicalReads = observation.occurrences.statements.filter(
+          ({ statement }) => /FROM commerce\.order_transaction\b/i.test(statement) && !isHistoryProbe(statement),
+        );
+        expect(physicalReads).toHaveLength(1);
+        expect(physicalReads[0]!.statement).toMatch(/balance_transaction_id\s*=\s*ANY\s*\(/i);
+        expect(physicalReads[0]!.plans.length).toBeGreaterThan(0);
+        expect(physicalReads[0]!.rows).toBeLessThanOrEqual(1);
+        // Keep the original returned-row comparison separate from the physical plan measurements below.
         measured.push({
           statements: queries.length,
-          rows: queries.filter((q) => !probes.includes(q)).reduce((sum, q) => sum + q.rows, 0),
+          returnedRows: queries
+            .filter((query) => !isHistoryProbe(query.sql))
+            .reduce((sum, query) => sum + query.rows, 0),
         });
         expect(queries.some((q) => /FROM commerce.offer\b/.test(q.sql))).toBe(false);
         const recording = queries.find((q) => /INSERT INTO commerce.royalty_line/.test(q.sql));
@@ -285,13 +380,20 @@ test('settlement and royalty read only named keys with equal statements and rows
         routeOf(order.creatorAccountId),
       ])
     ).rows;
-    expect(await fixture.commands.applyCheckoutSnapshot(snapshot, `growth:replay:${length}`)).toMatchObject({
-      changed: false,
-    });
-    await payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`);
-    expect(await payouts.recordTransactions(order.id, [next.id], `growth:redelivery:${length}`)).toMatchObject({
-      changed: false,
-    });
+    const replay = await record(
+      { attemptId: `growth:replay:${length}`, phase: 'settlement', scale: length, repetition: 1 },
+      () => fixture.commands.applyCheckoutSnapshot(snapshot, `growth:replay:${length}`),
+    );
+    expect(replay.value).toMatchObject({ changed: false });
+    await record(
+      { attemptId: `growth:royalty:${length}`, phase: 'royalty', scale: length, repetition: 1 },
+      () => payouts.recordTransactions(order.id, [next.id], `growth:royalty:${length}`),
+    );
+    const redelivery = await record(
+      { attemptId: `growth:redelivery:${length}`, phase: 'royalty', scale: length, repetition: 2 },
+      () => payouts.recordTransactions(order.id, [next.id], `growth:redelivery:${length}`),
+    );
+    expect(redelivery.value).toMatchObject({ changed: false });
     expect(
       (
         await fixture.pool.query('SELECT * FROM commerce.payout_statement WHERE route=$1', [
@@ -310,6 +412,41 @@ test('settlement and royalty read only named keys with equal statements and rows
   }
   expect(measurements[1]).toEqual(measurements[0]);
   expect(measurements[2]).toEqual(measurements[0]);
+
+  expect(
+    observations.map(({ frame }) => [frame.attemptId, frame.phase, frame.scale, frame.repetition]),
+  ).toEqual(
+    [1, 64, 255].flatMap((scale) => [
+      [`growth:settle:${scale}`, 'settlement', scale, 0],
+      [`growth:royalty:${scale}`, 'royalty', scale, 0],
+      [`growth:replay:${scale}`, 'settlement', scale, 1],
+      [`growth:royalty:${scale}`, 'royalty', scale, 1],
+      [`growth:redelivery:${scale}`, 'royalty', scale, 2],
+    ]),
+  );
+
+  for (const phase of ['settlement', 'royalty'] as const) {
+    const series = observations
+      .filter(({ frame }) => frame.phase === phase && frame.repetition === 0)
+      .sort((left, right) => left.frame.scale - right.frame.scale);
+    expect(series.map(({ frame }) => frame.scale)).toEqual([1, 64, 255]);
+    const broadRows = series.map(({ frame, cost, occurrences }) => {
+      const probeRows = occurrences.statements
+        .filter(({ statement }) => isHistoryProbe(statement))
+        .reduce((sum, occurrence) => sum + occurrence.rows, 0);
+      expect(probeRows).toBeLessThanOrEqual(257);
+      expect(cost.rows).toBeGreaterThanOrEqual(probeRows);
+      // Keep the probe in complete cost; isolate its measured prefix only for broad-scan growth classification.
+      return { scale: frame.scale, value: cost.rows - probeRows };
+    });
+    expect(
+      classify(series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.statements })), 'constant').outcome,
+    ).toBe('compatible');
+    expect(classify(broadRows, 'constant').outcome).toBe('compatible');
+    expect(
+      classify(series.map(({ frame, cost }) => ({ scale: frame.scale, value: cost.blocks })), 'logarithmic').outcome,
+    ).toBe('compatible');
+  }
 });
 
 for (const axis of ['transactions', 'orders', 'receipts'] as const) {
