@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { createPost } from '../../../src/content/commands.ts';
 import { readExactPublishedRules } from '../../../src/content/reads.ts';
 import { readCommunityPresentations } from '../../../src/content/community-presentation.ts';
@@ -104,7 +104,7 @@ export async function createRulesFixture() {
       const result = await createPost({ pool: system.database.pool, access: system.access, routeKey: system.routeKey },
         author.actor, {
           threadId: target.threadId, parentId, body: textAtBytes(bytes), licence: 'MIT', subjectIds: [],
-        }, { idempotencyKey: randomUUID(), deadline: Date.now() + 90_000 });
+        }, { idempotencyKey: randomUUID(), deadline: Date.now() + 90_000, requestId: randomUUID() });
       return { realmId: target.realmId, postId: result.value.itemId, revisionId: result.value.revisionId };
     }
     const exact = (refs: readonly Pin[], access = system.access, pool = database.pool) =>
@@ -158,11 +158,13 @@ export function betweenRulesRounds(pool: Pool, transition: () => Promise<void>):
               const value = Reflect.get(connection, key, connection);
               return typeof value === 'function' ? value.bind(connection) : value;
             }
-            return async (...args: Parameters<PoolClient['query']>) => {
+            return async (...args: unknown[]) => {
               const query = args[0];
-              const sql = typeof query === 'string' ? query : query && 'text' in query ? query.text : '';
+              const sql = typeof query === 'string' ? query
+                : typeof query === 'object' && query !== null && 'text' in query && typeof query.text === 'string'
+                  ? query.text : '';
               if (sql.includes('octet_length(r.body)')) bodies = true;
-              const result = await (connection.query as Function).apply(connection, args);
+              const result = await Reflect.apply(connection.query, connection, args);
               if (pending && bodies && sql.trim() === 'COMMIT') {
                 pending = false;
                 await transition();
