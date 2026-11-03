@@ -5,20 +5,89 @@ import defaults from '../defaults.json';
 import { checkSettings, readControlPolicy } from './config.ts';
 import { capacityAvailable } from './launch.ts';
 import { harness } from './test-support.ts';
+import { toolRetryDelay } from './attempt-progress.ts';
+import { lifecycleMetrics } from './lifecycle-metrics.ts';
 
 test('local policy overrides individual leaves and validates configurable notifier bounds', () => {
   const h = harness();
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
-    local.policy = { backlog: { lowWater: 3 }, validation: { hourlyReportMaxTimeoutMs: 200001 } };
+    local.policy = {
+      backlog: { lowWater: 3 },
+      host: { startupTimeoutMs: 90 },
+      process: { exitPollMs: 7 },
+      validation: { hourlyReportMaxTimeoutMs: 200001 },
+      worker: { toolRetryBackoffMs: [0, 7], toolRetryWindowMs: 5000 },
+      workerResources: { minimumMemoryFraction: 0.5 },
+      containers: { maxAgeHours: 0.5 },
+      appServer: { requestTimeoutMs: 25 },
+      watchdog: { noWorkerMs: 100, hostProbeFailures: 1 },
+      width: { pageSize: 1 },
+      flow: { alertEveryMs: 25 },
+      lifecycle: { conflictWindowRows: 1 },
+      provider: { claudeRefreshMs: 25 },
+      manager: { messageWords: 30 },
+      routing: { implementation: { maxSteps: 5 } },
+      hourlyReport: { reportBytes: 500 },
+      storage: { sqliteBusyTimeoutMs: 17 },
+      dependencies: { install: { runMs: 21 } },
+      promotion: { gateTimeoutMs: 23 },
+      verifier: { findingRows: 1 },
+    };
     local.integration = { hourlyReportTimeoutMs: 200001 };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     const settings = checkSettings({ cwd: h.root, env: {} });
     expect(settings.policy).toEqual({
       ...defaults.policy,
       backlog: { ...defaults.policy.backlog, lowWater: 3 },
+      host: { ...defaults.policy.host, startupTimeoutMs: 90 },
+      process: { ...defaults.policy.process, exitPollMs: 7 },
       validation: { ...defaults.policy.validation, hourlyReportMaxTimeoutMs: 200001 },
+      worker: { ...defaults.policy.worker, toolRetryBackoffMs: [0, 7], toolRetryWindowMs: 5000 },
+      workerResources: { ...defaults.policy.workerResources, minimumMemoryFraction: 0.5 },
+      containers: { ...defaults.policy.containers, maxAgeHours: 0.5 },
+      appServer: { ...defaults.policy.appServer, requestTimeoutMs: 25 },
+      watchdog: { ...defaults.policy.watchdog, noWorkerMs: 100, hostProbeFailures: 1 },
+      width: { ...defaults.policy.width, pageSize: 1 },
+      flow: { ...defaults.policy.flow, alertEveryMs: 25 },
+      lifecycle: { ...defaults.policy.lifecycle, conflictWindowRows: 1 },
+      provider: { ...defaults.policy.provider, claudeRefreshMs: 25 },
+      manager: { ...defaults.policy.manager, messageWords: 30 },
+      routing: {
+        ...defaults.policy.routing,
+        implementation: { ...defaults.policy.routing.implementation, maxSteps: 5 },
+      },
+      hourlyReport: { ...defaults.policy.hourlyReport, reportBytes: 500 },
+      storage: { ...defaults.policy.storage, sqliteBusyTimeoutMs: 17 },
+      dependencies: {
+        ...defaults.policy.dependencies,
+        install: { ...defaults.policy.dependencies.install, runMs: 21 },
+      },
+      promotion: { ...defaults.policy.promotion, gateTimeoutMs: 23 },
+      verifier: { ...defaults.policy.verifier, findingRows: 1 },
     });
+    // The fixture environment normally disables delays; inspect the actual local policy without launching a worker.
+    const retrySettings = settings;
+    const task = h.tasks.dispatch(h.briefFile),
+      ref = { taskId: task.id, attempt: 0 };
+    const other = h.tasks.dispatch(h.briefFile);
+    h.store.event({ taskId: task.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
+    h.store.event({ taskId: other.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
+    expect(lifecycleMetrics(h.store.db, new Date(), settings.policy).conflicts.recordedOutcomes).toMatchObject({
+      complete: false,
+      unclassifiedCount: 1,
+    });
+    const now = Date.now();
+    const fixtureEnvironment = process.env.REZICS_GOAL_TEST_ENVIRONMENT;
+    delete process.env.REZICS_GOAL_TEST_ENVIRONMENT;
+    try {
+      expect(
+        [0, 1, 2, 6000].map((elapsed) => toolRetryDelay(h.store, retrySettings, ref, 'same', now + elapsed)),
+      ).toEqual([0, 7, 7, 0]);
+    } finally {
+      if (fixtureEnvironment === undefined) delete process.env.REZICS_GOAL_TEST_ENVIRONMENT;
+      else process.env.REZICS_GOAL_TEST_ENVIRONMENT = fixtureEnvironment;
+    }
     local.integration.hourlyReportTimeoutMs++;
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('at most 200001');
@@ -27,6 +96,39 @@ test('local policy overrides individual leaves and validates configurable notifi
   } finally {
     h.dispose();
   }
+});
+
+test('fractional and retry-list policies reject invalid leaves and copy schedules', () => {
+  for (const invalid of [
+    { storage: { sqliteBusyTimeoutMs: 0 } },
+    { dependencies: { install: { budgetMs: 0.5 } } },
+    { verifier: { findingRows: 0 } },
+    { host: { startupLogBytes: 0 } },
+    { provider: { claudeRefreshMs: 0 } },
+    { manager: { continuationBudgetPercent: 101 } },
+    { pacing: { alertUnusedPercent: 101 } },
+    { records: { sessionRecordBytes: 1.5 } },
+    { routing: { implementation: { maxSteps: 0 } } },
+    { host: { retryFailures: 1.5 } },
+    { host: { maxBackoffMs: 1 } },
+    { process: { exitPollMs: Number.MAX_SAFE_INTEGER + 1 } },
+    { workerResources: { minimumMemoryFraction: 0 } },
+    { workerResources: { minimumMemoryFraction: 1.1 } },
+    { containers: { maxAgeHours: -1 } },
+    { containers: { maxAgeHours: Infinity } },
+    { worker: { toolRetryBackoffMs: [] } },
+    { worker: { toolRetryBackoffMs: [NaN] } },
+    { worker: { toolRetryBackoffMs: [-1] } },
+    { worker: { toolRetryBackoffMs: [0.5] } },
+    { worker: { settlementBackoffMs: [0] } },
+    { worker: { settlementBackoffMs: ['1'] } },
+  ])
+    expect(() => readControlPolicy(invalid)).toThrow('policy.');
+  const input = [0, 5];
+  const policy = readControlPolicy({ worker: { toolRetryBackoffMs: input }, workerResources: { memoryReserveGiB: 0 } });
+  input[0] = 99;
+  expect(policy.worker.toolRetryBackoffMs).toEqual([0, 5]);
+  expect(policy.workerResources.memoryReserveGiB).toBe(0);
 });
 
 test('host admission uses configured defaults and retains the capacity file override and opt-in', () => {

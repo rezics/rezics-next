@@ -1,3 +1,4 @@
+import { processIdentity } from './process.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
@@ -19,6 +20,8 @@ import {
   summarizeTests,
   sync,
   syncChecks,
+  residentRegression,
+  observeResident,
   type Check,
 } from '../scripts/cp-sync.ts';
 import { CONTROL_PLANE_CHECKS } from './merge-train.ts';
@@ -91,6 +94,12 @@ function fixture() {
     lines,
     options: {
       cwd: repo,
+      resident: {
+        async observe() {
+          return { liveWorkers: 1, passedGates: 1, landings: 1 };
+        },
+        async restart() {},
+      },
       worktreeRoot: join(temporary.path, 'worktrees'),
       print: (line: string) => lines.push(line),
       checks: [{ name: 'check', argv: [process.execPath, '-e', 'process.exit(0)'], timeoutMs: 60_000 }] as Check[],
@@ -472,4 +481,82 @@ test('test output and arguments parse', () => {
   });
   expect(parseArguments(['--rollback', '--include', 'x'])).toBeUndefined();
   expect(parseArguments(['--force'])).toBeUndefined();
+});
+
+test('resident regressions roll back the published tree and restart the restored host through systemd', async () => {
+  for (const metric of ['liveWorkers', 'passedGates', 'landings'] as const) {
+    const f = fixture();
+    let observations = 0,
+      restarts = 0;
+    const result = await sync({
+      ...f.options,
+      resident: {
+        async observe() {
+          return { liveWorkers: 2, passedGates: 2, landings: 2, ...(observations++ === 0 ? {} : { [metric]: 1 }) };
+        },
+        async restart() {
+          restarts++;
+        },
+      },
+    });
+    expect(result).toBe(1);
+    expect(restarts).toBe(2);
+    expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync', 'rollback']);
+    expect(git(f.repo, 'show', 'main:tools/goal/src/a.ts')).toBe(git(f.repo, 'show', `${f.main}:tools/goal/src/a.ts`));
+  }
+  expect(
+    residentRegression(
+      { liveWorkers: 0, passedGates: 0, landings: 0 },
+      { liveWorkers: 1, passedGates: 1, landings: 1 },
+    ),
+  ).toBe(false);
+});
+
+test('resident observation counts living current workers and successful gates and landings in its window', async () => {
+  const dir = temporaryDirectory();
+  const state = join(dir.path, '.temp/goal');
+  mkdirSync(state, { recursive: true });
+  const db = new Database(join(state, 'goal.sqlite'));
+  try {
+    db.exec(`CREATE TABLE worker_tasks(id TEXT, current_attempt INTEGER);
+      CREATE TABLE worker_attempts(task_id TEXT, attempt INTEGER, body TEXT);
+      CREATE TABLE worker_events(kind TEXT, at TEXT, body TEXT);`);
+    const identity = processIdentity(process.pid)!;
+    for (const [id, current, process] of [
+      ['live', 1, identity],
+      ['old', 2, identity],
+      ['stale', 1, { ...identity, start: '0' }],
+      ['absent', 1, null],
+    ] as const) {
+      db.query('INSERT INTO worker_tasks VALUES (?,?)').run(id, current);
+      db.query('INSERT INTO worker_attempts VALUES (?,1,?)').run(id, JSON.stringify({ state: 'running', process }));
+    }
+    db.query('INSERT INTO worker_events VALUES (?,?,?)').run(
+      'gate-outcome',
+      '2000-01-01T00:00:00.000Z',
+      JSON.stringify({ passed: true }),
+    );
+    let pauses = 0;
+    const observed = await observeResident(dir.path, async (milliseconds) => {
+      expect(milliseconds).toBe(60_000);
+      if (pauses++ === 0) {
+        for (const outcome of [
+          { passed: true, stage: 'typecheck' },
+          { passed: false, stage: 'merge' },
+          { passed: true, stage: 'merge', mergedCommit: 'landed' },
+        ])
+          db.query('INSERT INTO worker_events VALUES (?,?,?)').run(
+            'gate-outcome',
+            new Date().toISOString(),
+            JSON.stringify(outcome),
+          );
+      }
+      await Bun.sleep(1);
+    });
+    expect(pauses).toBe(10);
+    expect(observed).toEqual({ liveWorkers: 1, passedGates: 2, landings: 1 });
+  } finally {
+    db.close();
+    dir.close();
+  }
 });

@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { defaultPolicy } from './policy.ts';
 import { fixtureOwnerForLog, recordFixtureOwnedProcess, trackFixtureWait } from './fixture-process-ownership.ts';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
 
@@ -24,6 +25,7 @@ function inspectProcessSnapshot(pid: number, procRoot: string): { identity: Proc
     if (['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) return null;
     throw new Error(`process visibility unknown for PID ${pid}`, { cause: error });
   }
+  // Linux proc stat: after the command, state, process group and start time have fixed field offsets.
   const end = stat.lastIndexOf(')');
   const fields = stat
     .slice(end + 2)
@@ -104,11 +106,11 @@ export function liveGroups(): Set<number> {
   return groups;
 }
 /** Wait until every process in an identified detached group has exited. */
-export async function waitForProcessGroup(identity: ProcessIdentity): Promise<void> {
+export async function waitForProcessGroup(identity: ProcessIdentity, policy = defaultPolicy.process): Promise<void> {
   for (;;) {
     const members = checkedProcessGroup(identity);
     if (!members.length) return;
-    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    await new Promise<void>((resolve) => setTimeout(resolve, policy.groupPollMs));
   }
 }
 /** What the launch wrapper records when the worker CLI ends; a missing file means the wrapper itself was killed. */
@@ -126,7 +128,11 @@ export function readWorkerExit(logPath: string): WorkerExit {
   }
 }
 /** Wait until a worker's wrapper has exited, then read the exit it recorded just before. */
-export function waitForWorkerExit(identity: ProcessIdentity | null, logPath: string): Promise<WorkerExit> {
+export function waitForWorkerExit(
+  identity: ProcessIdentity | null,
+  logPath: string,
+  policy = defaultPolicy.process,
+): Promise<WorkerExit> {
   const fixtureOwner = fixtureOwnerForLog(logPath);
   const waiting = (async () => {
     if (identity)
@@ -134,6 +140,7 @@ export function waitForWorkerExit(identity: ProcessIdentity | null, logPath: str
         identity,
         undefined,
         fixtureOwner ? (waiter) => recordFixtureOwnedProcess(logPath, 'waiter', waiter) : undefined,
+        policy,
       );
     return readWorkerExit(logPath);
   })();
@@ -145,6 +152,7 @@ export async function waitForProcess(
   identity: ProcessIdentity,
   signal?: AbortSignal,
   onWaiter?: (identity: ProcessIdentity) => void,
+  policy = defaultPolicy.process,
 ): Promise<void> {
   if (signal?.aborted || !matches(inspectProcessIdentity(identity.pid), identity)) return;
   const source = `import os,sys,select
@@ -182,7 +190,7 @@ except FileNotFoundError: pass
       const poll = () => {
         try {
           if (signal?.aborted || !matches(inspectProcessIdentity(identity.pid), identity)) resolve();
-          else setTimeout(poll, 50);
+          else setTimeout(poll, policy.exitPollMs);
         } catch (error) {
           reject(error);
         }
@@ -204,8 +212,13 @@ except FileNotFoundError: pass
   });
 }
 /** Pin the incarnation before signalling: a PID can be recycled after the /proc check. */
-export async function signalProcessIdentity(identity: ProcessIdentity, name: NodeJS.Signals): Promise<boolean> {
+export async function signalProcessIdentity(
+  identity: ProcessIdentity,
+  name: NodeJS.Signals,
+  policy = defaultPolicy.process,
+): Promise<boolean> {
   if (!matches(inspectProcessIdentity(identity.pid), identity)) return false;
+  // The helper uses exit 3 for a missing or replaced incarnation; it is a protocol result, not a retry cap.
   const source = `import os,sys,signal
 pid,start,boot,group,name=sys.argv[1:]
 try:
@@ -236,7 +249,7 @@ finally:
   );
   let detail = '';
   sender.stderr!.on('data', (chunk) => {
-    detail = (detail + String(chunk)).slice(-4096);
+    detail = (detail + String(chunk)).slice(-policy.signalDiagnosticCharacters);
   });
   return new Promise<boolean>((done, reject) => {
     sender.once('error', reject);
@@ -253,14 +266,18 @@ finally:
   });
 }
 /** Signal only an identified detached group, then verify every surviving member before allowing launch. */
-export async function terminateProcessGroup(identity: ProcessIdentity | null, graceMs: number): Promise<void> {
+export async function terminateProcessGroup(
+  identity: ProcessIdentity | null,
+  graceMs: number,
+  policy = defaultPolicy.process,
+): Promise<void> {
   if (!identity) return;
   const members = checkedProcessGroup(identity);
   if (!members.length) return;
   for (const member of members) {
-    await signalProcessIdentity(member, 'SIGTERM');
+    await signalProcessIdentity(member, 'SIGTERM', policy);
   }
-  const gone = Promise.all(members.map((identity) => waitForProcess(identity)));
+  const gone = Promise.all(members.map((identity) => waitForProcess(identity, undefined, undefined, policy)));
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -276,9 +293,9 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
   for (const member of remaining) {
     if (member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start))
       throw new Error('process group identity changed');
-    await signalProcessIdentity(member, 'SIGKILL');
+    await signalProcessIdentity(member, 'SIGKILL', policy);
   }
-  await Promise.all(remaining.map((identity) => waitForProcess(identity)));
+  await Promise.all(remaining.map((identity) => waitForProcess(identity, undefined, undefined, policy)));
   await gone;
   if (checkedProcessGroup(identity).length) throw new Error('worker process group is still alive');
 }
@@ -287,7 +304,12 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
  * server that a worker or a test starts in a new session leaves the worker's process group, so only its place finds
  * it. This process and its ancestors are spared.
  */
-export async function stopProcessesUnder(directory: string, graceMs: number, procRoot = '/proc'): Promise<number> {
+export async function stopProcessesUnder(
+  directory: string,
+  graceMs: number,
+  procRoot = '/proc',
+  policy = defaultPolicy.process,
+): Promise<number> {
   const root = resolve(directory);
   const spared = new Set<number>();
   for (let pid = process.pid; pid > 1 && !spared.has(pid);) {
@@ -320,7 +342,7 @@ export async function stopProcessesUnder(directory: string, graceMs: number, pro
   const signal = async (members: ProcessIdentity[], name: NodeJS.Signals) => {
     for (const member of members) {
       if (!matches(inspectProcessIdentity(member.pid, procRoot), member)) continue;
-      await signalProcessIdentity(member, name);
+      await signalProcessIdentity(member, name, policy);
     }
   };
   const found = inside();
@@ -329,7 +351,7 @@ export async function stopProcessesUnder(directory: string, graceMs: number, pro
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      Promise.all(found.map((member) => waitForProcess(member))),
+      Promise.all(found.map((member) => waitForProcess(member, undefined, undefined, policy))),
       new Promise<void>((done) => {
         timer = setTimeout(done, graceMs);
       }),
@@ -339,6 +361,6 @@ export async function stopProcessesUnder(directory: string, graceMs: number, pro
   }
   const remaining = found.filter((member) => matches(inspectProcessIdentity(member.pid, procRoot), member));
   await signal(remaining, 'SIGKILL');
-  await Promise.all(remaining.map((member) => waitForProcess(member)));
+  await Promise.all(remaining.map((member) => waitForProcess(member, undefined, undefined, policy)));
   return found.length;
 }

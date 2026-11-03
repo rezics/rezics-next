@@ -11,6 +11,7 @@ import {
   nativeCheckId,
 } from './verification.ts';
 import { remoteCheckEnvironment } from './merge.ts';
+import { defaultPolicy } from './policy.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -232,8 +233,8 @@ export function git(cwd: string, args: string[]): string {
   }
   return result.stdout.trimEnd();
 }
-function installWorktreeDependencies(worktree: string): void {
-  installShared(worktree);
+function installWorktreeDependencies(worktree: string, settings: Settings): void {
+  installShared(worktree, undefined, undefined, settings.policy);
 }
 export type RetryOptions = {
   brief?: string;
@@ -284,7 +285,7 @@ export class WorkerTasks {
   constructor(
     readonly settings: Settings,
     readonly store: WorkerStore,
-    readonly reader: PoolReader = readPool,
+    readonly reader: PoolReader = (pool) => readPool(pool, Date.now(), settings.policy?.provider),
     readonly launcher: typeof launch = launch,
     readonly proofProducer: ProofProducer = productionProofProducer(
       store,
@@ -293,7 +294,7 @@ export class WorkerTasks {
     ),
   ) {
     this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
-      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
+      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory, undefined, settings.policy?.inbox).deliver({
         managerId: settings.integration.supermanager,
         kind: 'instruction',
         summary,
@@ -422,7 +423,11 @@ export class WorkerTasks {
     actor?: AuthenticatedManager | null,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
-    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    const brief = parseBrief(
+      markdown,
+      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+      this.settings.policy?.brief,
+    );
     if (brief.goal === 'control-plane') {
       const outside = brief.paths.filter((path) => !path.startsWith('tools/goal/'));
       if (outside.length)
@@ -482,7 +487,11 @@ export class WorkerTasks {
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
     // The lease covers worktree creation, dependency install and frozen-file formatting, about a minute under load.
     // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', 'dispatch'),
+      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+      this.settings.policy?.leases,
+    );
     try {
       const module = webModule(submittedBrief, this.settings);
       if (module) {
@@ -501,7 +510,7 @@ export class WorkerTasks {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
           if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
         });
-        if (firstUse) installWorktreeDependencies(workspace.worktree);
+        if (firstUse) installWorktreeDependencies(workspace.worktree, this.settings);
         this.prepareSharedFrozen(this.store.task(id));
         return this.store.task(id);
       }
@@ -516,7 +525,9 @@ export class WorkerTasks {
         branch,
         worktree,
         createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
-        ...(brief.kind !== 'verification' ? { installDependencies: () => installWorktreeDependencies(worktree) } : {}),
+        ...(brief.kind !== 'verification'
+          ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
+          : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
         removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
         deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
@@ -550,7 +561,7 @@ export class WorkerTasks {
   }
   /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
   protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
-    const ownership = readRiskOwnership(this.settings.riskAreasFile);
+    const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
     return Object.entries(ownership.areas)
       .filter(([area]) => !brief.riskAreas.includes(area))
       .flatMap(([, patterns]) => patterns);
@@ -685,7 +696,10 @@ export class WorkerTasks {
     options: { expectedAttempt: number; brief: string },
     actor?: AuthenticatedManager | null,
   ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     let briefPath: string | undefined;
     try {
       return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
@@ -800,7 +814,10 @@ export class WorkerTasks {
     status: 'released';
     checks: string[];
   } {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       const task = this.store.task(taskId);
       if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
@@ -823,7 +840,10 @@ export class WorkerTasks {
     options: ProofStartOptions,
     actor?: AuthenticatedManager | null,
   ): ProofStartRegistration {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     let briefPath: string | undefined;
     try {
       const task = this.store.task(taskId);
@@ -905,7 +925,11 @@ export class WorkerTasks {
     const next =
       briefFile === undefined
         ? current
-        : parseBrief(readFileSync(briefFile, 'utf8'), readRiskOwnership(this.settings.riskAreasFile));
+        : parseBrief(
+            readFileSync(briefFile, 'utf8'),
+            readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+            this.settings.policy?.brief,
+          );
     return devProductBrief(current) && devProductBrief(next);
   }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
@@ -915,7 +939,10 @@ export class WorkerTasks {
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
     const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
     } finally {
@@ -930,7 +957,10 @@ export class WorkerTasks {
     briefFile: string,
     actor: AuthenticatedManager,
   ): void {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       const task = this.store.task(taskId);
       if (task.currentAttempt !== expectedAttempt)
@@ -1198,7 +1228,10 @@ export class WorkerTasks {
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
       // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
-      const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+      const lease = acquireDirectoryLease(
+        join(this.settings.stateDirectory, 'leases', taskId),
+        this.settings.policy?.leases,
+      );
       try {
         // Another process may have started it while this one waited for capacity.
         if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
@@ -1280,7 +1313,11 @@ export class WorkerTasks {
   /** Recreate a finished task's removed checkout while holding its task lease. */
   private ensureWorktree(task: Task): void {
     if (existsSync(task.worktree)) return;
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', 'dispatch'),
+      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+      this.settings.policy?.leases,
+    );
     try {
       mkdirSync(dirname(task.worktree), { recursive: true });
       try {
@@ -1289,7 +1326,7 @@ export class WorkerTasks {
         git(this.settings.mainCheckout, ['worktree', 'prune']);
         git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       }
-      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree);
+      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, this.settings);
     } finally {
       lease.release();
     }
@@ -1412,7 +1449,13 @@ export class WorkerTasks {
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
     try {
-      lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+      lease = leased
+        ? undefined
+        : acquireDirectoryLeaseWaiting(
+            join(this.settings.stateDirectory, 'leases', taskId),
+            undefined,
+            this.settings.policy?.leases,
+          );
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
@@ -1528,7 +1571,7 @@ export class WorkerTasks {
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
-      const table = readRouting(this.settings.routingFile);
+      const table = readRouting(this.settings.routingFile, this.settings.policy?.routing);
       const pinned = nextBrief.model !== undefined;
       // A retry keeps its engine while the routing table still offers it for the class; an engine the table dropped
       // (a failing or disallowed pool) is routed afresh, so table changes reach retries at once.
@@ -1549,7 +1592,7 @@ export class WorkerTasks {
         .attempts()
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
-      const routing = readRouting(this.settings.routingFile);
+      const routing = readRouting(this.settings.routingFile, this.settings.policy?.routing);
       let fallbacks =
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
@@ -1597,10 +1640,12 @@ export class WorkerTasks {
           ? undefined
           : (candidate, now) => {
               const reading = readings.find((value) => value.pool === candidate.name);
-              return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
+              return reading
+                ? pace(reading, candidate, now, schedule, this.settings.policy?.pacing)?.urgency
+                : undefined;
             },
       );
-      const oldSession = old ? attemptSession(old) : null;
+      const oldSession = old ? attemptSession(old, this.settings.policy?.records) : null;
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
@@ -1661,9 +1706,9 @@ export class WorkerTasks {
       for (const previous of this.store
         .attempts(taskId)
         .filter((a) => a.attempt < next.attempt && !a.supersededFinalized)) {
-        await terminateProcessGroup(previous.process, this.settings.terminationGraceMs);
+        await terminateProcessGroup(previous.process, this.settings.terminationGraceMs, this.settings.policy?.process);
         for (const process of previous.auxiliaryProcesses)
-          await terminateProcessGroup(process, this.settings.terminationGraceMs);
+          await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
       }
       this.store.assertCurrent(next);
       this.store.finalizeSuperseded(
@@ -1705,7 +1750,7 @@ export class WorkerTasks {
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
           task = this.prepareProofWorktree(task, next);
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree);
+          installWorktreeDependencies(task.worktree, this.settings);
           if (
             existsSync(join(task.worktree, 'package.json')) &&
             !existsSync(join(task.worktree, 'node_modules/.bin/bun'))
@@ -1738,9 +1783,11 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
+              this.settings.policy,
             ),
             this.settings.codex,
             resumeSession,
+            this.settings.policy,
           );
         }
         if (task.workspace) {
@@ -1774,7 +1821,7 @@ export class WorkerTasks {
                 );
               if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']))
                 throw new Error(`Cannot refresh dependencies in ${task.worktree}: unresolved workspace paths`);
-              installWorktreeDependencies(task.worktree);
+              installWorktreeDependencies(task.worktree, this.settings);
             }
             const context = captureLaunchContext(this.store, next, boundary, origin);
             const prompt = workerPrompt(
@@ -1785,9 +1832,19 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
+              this.settings.policy,
             );
             retryPrepared = true;
-            return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
+            return await this.launcher(
+              this.store,
+              task,
+              next,
+              pool,
+              prompt,
+              this.settings.codex,
+              resumeSession,
+              this.settings.policy,
+            );
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
@@ -1848,7 +1905,7 @@ export class WorkerTasks {
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         if (!files.length && !rebasing) {
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree);
+          installWorktreeDependencies(task.worktree, this.settings);
         }
         const context = captureLaunchContext(this.store, next, boundary, origin);
         const prompt = workerPrompt(
@@ -1859,9 +1916,19 @@ export class WorkerTasks {
           this.settings.mainCheckout,
           context,
           this.settings.stateDirectory,
+          this.settings.policy,
         );
         retryPrepared = true;
-        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
+        return await this.launcher(
+          this.store,
+          task,
+          next,
+          pool,
+          prompt,
+          this.settings.codex,
+          resumeSession,
+          this.settings.policy,
+        );
       } catch (error) {
         const failed = this.store.updateAttempt(next, (a) => {
           a.state = 'exited';
@@ -1875,7 +1942,10 @@ export class WorkerTasks {
           makeRecord(
             this.store.task(taskId),
             failed,
-            readMeasurement(failed, { configDirectory: pool.configDirectory }),
+            readMeasurement(failed, {
+              policy: this.settings.policy ?? defaultPolicy,
+              configDirectory: pool.configDirectory,
+            }),
             'stopped',
           ),
         );
@@ -1896,7 +1966,12 @@ export class WorkerTasks {
             kind: 'environment' as const,
             summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000),
           };
-          new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory).deliver(event);
+          new SqliteManagerInbox(
+            this.store.db,
+            this.settings.integration.inboxDirectory,
+            undefined,
+            this.settings.policy?.inbox,
+          ).deliver(event);
         }
         throw error;
       }
@@ -1906,7 +1981,11 @@ export class WorkerTasks {
     }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      undefined,
+      this.settings.policy?.leases,
+    );
     let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
       let task = this.store.task(taskId);
@@ -1921,7 +2000,11 @@ export class WorkerTasks {
       }
       const settleLogPath = this.store.attempt(ref).logPath;
       // A worker's exit may wake its follower while cancellation is still reaping descendants.
-      settlementLease = acquireDirectoryLeaseWaiting(`${settleLogPath}.settle`);
+      settlementLease = acquireDirectoryLeaseWaiting(
+        `${settleLogPath}.settle`,
+        undefined,
+        this.settings.policy?.leases,
+      );
       task = this.store.task(taskId);
       if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
         throw new StaleAttemptError(ref, task.currentAttempt);
@@ -1938,7 +2021,8 @@ export class WorkerTasks {
               .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
               .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
           );
-          for (const process of owned.values()) await terminateProcessGroup(process, this.settings.terminationGraceMs);
+          for (const process of owned.values())
+            await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
           this.store.finishTermination(ref);
         } catch (error) {
           this.store.finishTermination(ref, String(error));
@@ -1973,7 +2057,12 @@ export class WorkerTasks {
       held.push(task.id);
       heldByManager.set(task.brief.manager, held);
     }
-    const inbox = new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory);
+    const inbox = new SqliteManagerInbox(
+      this.store.db,
+      this.settings.integration.inboxDirectory,
+      undefined,
+      this.settings.policy?.inbox,
+    );
     for (const [managerId, heldTasks] of heldByManager) {
       const event = {
         managerId,
@@ -2000,7 +2089,11 @@ export class WorkerTasks {
       throw new Error('recorded base commit is not an ancestor of the stabilize head');
     }
     const markdown = withStabilizeTarget(task.brief.markdown);
-    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    const brief = parseBrief(
+      markdown,
+      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+      this.settings.policy?.brief,
+    );
     const ref = { taskId, attempt: task.currentAttempt };
     const apply = (current: Task) => {
       writeFileSync(current.briefPath, markdown);
