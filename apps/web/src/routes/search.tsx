@@ -6,6 +6,7 @@ import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
 import { searchSessionOwner } from '../search/search-session-owner';
+import { searchRequiresCurrentReader, searchSessionLifetime } from '../search/scoped-search-lifetime';
 import { searchUnavailablePage } from '../search/search-recovery';
 import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
@@ -36,7 +37,7 @@ export const Route = createFileRoute('/search')({
     const params = deps;
     if (params.invalidInput) return { query: params.query, invalidInput: params.invalidInput };
     // Scoped reads start in the session-bound client query so private results never enter the public route cache.
-    if (params.resourceScope) return { query: params.query };
+    if (searchRequiresCurrentReader(params)) return { query: params.query };
     const locale = getLocale();
     return Promise.all([
       context.queryClient.fetchQuery(searchQueryOptions(locale, params)),
@@ -103,8 +104,12 @@ function SearchRoute() {
 }
 
 function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
-  const reader = searchSessionOwner(useSession());
-  if (deps.resourceScope && reader === null)
+  const sessionState = useSession();
+  const reader = searchSessionOwner(sessionState);
+  if (
+    searchRequiresCurrentReader(deps) &&
+    (sessionState.state !== 'signed-in' || reader === null)
+  )
     return (
       <SearchPage
         query={deps.query}
@@ -117,7 +122,8 @@ function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderD
     <LoadedSearchResults
       deps={deps}
       locale={locale}
-      {...(deps.resourceScope && reader ? { reader } : {})}
+      key={searchSessionLifetime(locale, deps, reader ?? undefined)}
+      {...(searchRequiresCurrentReader(deps) && reader ? { reader } : {})}
       session={reader}
     />
   );

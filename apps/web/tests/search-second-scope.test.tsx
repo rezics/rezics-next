@@ -16,6 +16,8 @@ import {
   searchLoaderDeps,
 } from '../src/search/search-params';
 import { searchSortHref } from '../src/search/sort';
+import { RATING_POPULATION_FIELD } from '../src/search/rating-population';
+import { refinementHref } from '../src/search/refinement/model';
 
 const realmId = '5a522c45-d94f-4d36-8b2a-3af80d988cff';
 const collectionId = '438cb7b1-e7a2-4a40-831e-a90b1b143264';
@@ -109,5 +111,64 @@ describe('native Search resource scope', () => {
       ['language', 'ja'],
       ['filter', baseFilter],
     ]);
+  });
+
+  test('rating population remains separate, correctable and present across GET, order, history and header paths', () => {
+    const filter = searchFilterWithScope(JSON.stringify(existingPredicate), { kind: 'realm', id: realmId })!;
+    const state = searchLoaderDeps({
+      q: 'maps',
+      filter,
+      sort: 'rating',
+      ratingPopulation: realmId,
+      cursor: 'opaque-page',
+      language: ['ja', 'en'],
+    });
+    expect(state).toMatchObject({ resourceScope: { kind: 'realm', id: realmId }, ratingPopulation: realmId });
+    expect(searchFormFields({ filter, sort: 'rating', ratingPopulation: realmId })).toEqual([
+      ['sort', 'rating'],
+      [RATING_POPULATION_FIELD, realmId],
+      ['filter', filter],
+    ]);
+
+    const href = discoverySearchHref('en', state);
+    const restored = searchLoaderDeps(Object.fromEntries(new URL(href, 'https://rezics.invalid').searchParams));
+    expect(restored).toMatchObject({ ratingPopulation: realmId, resourceScope: { kind: 'realm', id: realmId } });
+    expect(restored.cursor).toBe('opaque-page');
+    const refinement = new URL(
+      refinementHref(
+        'en',
+        'maps',
+        { facetValues: {}, filter, resourceScope: state.resourceScope, ratingPopulation: realmId },
+        'rating',
+      ),
+      'https://rezics.invalid',
+    );
+    expect(refinement.searchParams.get(RATING_POPULATION_FIELD)).toBe(realmId);
+    expect(refinement.searchParams.get('filter')).toBe(filter);
+    expect(refinement.searchParams.get('sort')).toBe('rating');
+    expect(refinement.searchParams.has('cursor')).toBe(false);
+
+    const changedOrder = new URL(searchSortHref('en', state, 'relevance'), 'https://rezics.invalid');
+    expect(changedOrder.searchParams.get(RATING_POPULATION_FIELD)).toBe(realmId);
+    expect(changedOrder.searchParams.has('cursor')).toBe(false);
+
+    const carried = searchFormFields({ filter, ratingPopulation: realmId, language: ['ja'] });
+    expect(headerSearchFields(carried, undefined, '/en/search')).toContainEqual([RATING_POPULATION_FIELD, realmId]);
+    expect(
+      headerSearchFields(carried, { kind: 'Realm', id: realmId, name: 'Display only' }, undefined),
+    ).toContainEqual([RATING_POPULATION_FIELD, realmId]);
+
+    const malformed = searchLoaderDeps({ q: 'maps', ratingPopulation: 'not-a-realm-id', cursor: 'opaque-page' });
+    expect(malformed.invalidInput).toEqual({ key: RATING_POPULATION_FIELD, value: 'not-a-realm-id' });
+    const corrected = searchLoaderDeps(
+      correctSearchInput({ q: 'maps', ratingPopulation: 'not-a-realm-id', cursor: 'opaque-page' }, RATING_POPULATION_FIELD, realmId),
+    );
+    expect(corrected.ratingPopulation).toBe(realmId);
+    expect(corrected.cursor).toBeUndefined();
+    const removed = searchLoaderDeps(
+      removeSearchInput({ q: 'maps', ratingPopulation: realmId, cursor: 'opaque-page' }, RATING_POPULATION_FIELD),
+    );
+    expect(removed.ratingPopulation).toBeUndefined();
+    expect(removed.cursor).toBeUndefined();
   });
 });

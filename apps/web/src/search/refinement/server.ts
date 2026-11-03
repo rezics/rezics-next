@@ -11,6 +11,8 @@ import { readFacetPage, facetProblem, type FacetState } from './request';
 import { scopedRefinementRequests } from './scoped-refinement';
 import { isSearchResourceScope, parseSearchResourceScope } from '../advanced-scope';
 import { readScopedSearchReader } from '../search-reader';
+import { canonicalRealmRatingPopulationId } from '../rating-population';
+import { searchRequiresCurrentReader } from '../scoped-search-lifetime';
 import type { SearchLoaderDeps } from '../search-params';
 
 const input = v.strictObject({
@@ -33,6 +35,7 @@ const input = v.strictObject({
         ),
       }),
     ),
+    ratingPopulation: v.exactOptional(v.pipe(v.string(), v.maxLength(128))),
     type: v.exactOptional(v.string()),
     facetValues: v.record(v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))),
     ranges: v.exactOptional(
@@ -71,14 +74,20 @@ export const readRefinement = createServerFn({ method: 'POST' })
     const resourceScope = isSearchResourceScope(data.conditions.resourceScope)
       ? data.conditions.resourceScope
       : parsedScope.scope;
+    const ratingPopulation =
+      data.conditions.ratingPopulation === undefined || data.conditions.ratingPopulation === ''
+        ? undefined
+        : canonicalRealmRatingPopulationId(data.conditions.ratingPopulation);
+    if (data.conditions.ratingPopulation && !ratingPopulation) return { status: 'invalid', code: 'invalid_rating_population' };
     if (
       resourceScope &&
       parsedScope.scope &&
       (resourceScope.kind !== parsedScope.scope.kind || resourceScope.id.toLowerCase() !== parsedScope.scope.id)
     )
       return { status: 'invalid', code: 'scope_mismatch' };
-    const reader = resourceScope ? await readScopedSearchReader(requestContext) : undefined;
-    if (resourceScope && (!reader || data.reader !== reader.owner))
+    const readerState = { resourceScope, ratingPopulation };
+    const reader = searchRequiresCurrentReader(readerState) ? await readScopedSearchReader(requestContext) : undefined;
+    if (searchRequiresCurrentReader(readerState) && (!reader || data.reader !== reader.owner))
       return { status: 'restart', httpStatus: 401, code: 'reader_changed' };
     const release = await readRelease();
     compileRefinement(release, data.conditions);
@@ -92,6 +101,7 @@ export const readRefinement = createServerFn({ method: 'POST' })
       ...(data.conditions.languages ? { languages: data.conditions.languages } : {}),
       ...(data.conditions.filter ? { filter: data.conditions.filter } : {}),
       ...(resourceScope ? { resourceScope } : {}),
+      ...(ratingPopulation ? { ratingPopulation } : {}),
       ...(data.conditions.ranges ? { ranges: data.conditions.ranges } : {}),
       ...(data.conditions.condition ? { condition: data.conditions.condition } : {}),
     };
@@ -106,7 +116,7 @@ export const readRefinement = createServerFn({ method: 'POST' })
     try {
       return await readFacetPage(facetRead, (body) =>
         kernelClient(data.locale).subjects.$facets.post(body, {
-          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+          ...(reader ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal },
         }),
       );

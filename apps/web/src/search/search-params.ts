@@ -7,6 +7,7 @@ import {
   searchFilterWithScope,
   type SearchResourceScope,
 } from './advanced-scope';
+import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from './rating-population';
 
 const facetValue = v.optional(v.union([v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))]));
 
@@ -49,6 +50,8 @@ export const searchParams = v.objectWithRest(
         v.transform((sort) => (sort === '' ? undefined : sort)),
       ),
     ),
+    // Keep malformed authored values available to SearchInputRecovery instead of turning them into Global.
+    [RATING_POPULATION_FIELD]: v.optional(v.unknown()),
   },
   facetValue,
 );
@@ -69,6 +72,7 @@ export type SearchLoaderDeps = {
   languages?: string[] | undefined;
   filter?: string | undefined;
   resourceScope?: SearchResourceScope | undefined;
+  ratingPopulation?: string | undefined;
   invalidInput?: InvalidSearchInput | undefined;
 };
 
@@ -153,21 +157,26 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
     filterValue !== undefined && typeof filterValue !== 'string'
       ? { key: 'filter', value: printableSearchValue(filterValue) }
       : resourceScope.invalidInput;
+  const rawPopulation = search[RATING_POPULATION_FIELD];
+  const ratingPopulation =
+    rawPopulation === undefined || rawPopulation === '' ? undefined : canonicalRealmRatingPopulationId(rawPopulation);
+  const invalidPopulation =
+    rawPopulation !== undefined && rawPopulation !== '' && ratingPopulation === undefined
+      ? { key: RATING_POPULATION_FIELD, value: printableSearchValue(rawPopulation) }
+      : undefined;
+  const invalidInput = filterInputs.invalidInput ?? invalidFilter ?? invalidPopulation;
   return {
     query: typeof search.q === 'string' ? search.q : '',
     type: typeof search.type === 'string' ? search.type : undefined,
     facets: facetValuesFromSearch(search),
     ranges: filterInputs.ranges,
     ...(filterInputs.condition ? { condition: filterInputs.condition } : {}),
-    ...(filterInputs.invalidInput
-      ? { invalidInput: filterInputs.invalidInput }
-      : invalidFilter
-        ? { invalidInput: invalidFilter }
-        : {}),
+    ...(invalidInput ? { invalidInput } : {}),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
     sort: search.sort === 'rating' ? 'rating' : undefined,
     ...(typeof search.filter === 'string' ? { filter: search.filter } : {}),
     ...(resourceScope.scope ? { resourceScope: resourceScope.scope } : {}),
+    ...(ratingPopulation ? { ratingPopulation } : {}),
     ...(search.kinds
       ? {
           kinds:
@@ -203,6 +212,8 @@ export function searchFormFields(search: Record<string, unknown>): [string, stri
 
   if (typeof search.type === 'string' && search.type) append('type', search.type);
   if (search.sort === 'rating') append('sort', 'rating');
+  if (typeof search[RATING_POPULATION_FIELD] === 'string' && search[RATING_POPULATION_FIELD] !== '')
+    append(RATING_POPULATION_FIELD, search[RATING_POPULATION_FIELD]);
   const scope = isSearchResourceScope(search.resourceScope)
     ? search.resourceScope
     : typeof search.filter === 'string'
@@ -244,6 +255,7 @@ export function discoverySearchHref(locale: string, state: SearchLoaderDeps): st
       q: state.query,
       type: state.type,
       sort: state.sort,
+      [RATING_POPULATION_FIELD]: state.ratingPopulation,
       filter: state.filter,
       resourceScope: state.resourceScope,
       condition: state.condition ? JSON.stringify(state.condition) : undefined,

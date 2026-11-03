@@ -55,6 +55,9 @@ import { ConditionEditor } from './condition-editor';
 import { SearchRealmDiscovery } from './realm-discovery';
 import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
 import { readScopedSearchReader } from './search-reader';
+import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from './rating-population';
+import type { RealmRatingPopulationOption, RealmRatingReadiness } from './rating-population';
+import { searchRequiresCurrentReader } from './scoped-search-lifetime';
 import { sessionCsrfToken } from '../session/query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
@@ -77,6 +80,7 @@ type SearchParams = {
   languages?: string[] | undefined;
   filter?: string | undefined;
   resourceScope?: SearchResourceScope | undefined;
+  ratingPopulation?: string | undefined;
   representation?: 'subjects-v1';
   kindCursor?: string;
   reader?: string | undefined;
@@ -116,6 +120,9 @@ export type SearchPageData = {
   facetIndexNotReady: boolean;
   staleCursorRestarted: boolean;
   sort: 'relevance' | 'rating';
+  ratingPopulation?: string;
+  ratingPopulations?: readonly RealmRatingPopulationOption[];
+  ratingReadiness?: RealmRatingReadiness;
 };
 /** At most this many facet properties are asked for on a single-type search. */
 const FACT_PROPERTIES = 2;
@@ -176,12 +183,19 @@ function validateSearchInput(input: unknown): SearchParams {
     kinds: input.kinds,
     language: input.languages,
     filter: input.filter,
+    [RATING_POPULATION_FIELD]: input.ratingPopulation,
   });
   if (input.resourceScope !== undefined && !isSearchResourceScope(input.resourceScope))
     throw new Error('Invalid search resource scope');
   if (input.reader !== undefined && (typeof input.reader !== 'string' || input.reader.length > 256))
     throw new Error('Invalid search reader');
   if (parsed.filter !== undefined && typeof parsed.filter !== 'string') throw new Error('Invalid search filter');
+  const ratingPopulation =
+    input.ratingPopulation === undefined || input.ratingPopulation === ''
+      ? undefined
+      : canonicalRealmRatingPopulationId(input.ratingPopulation);
+  if (input.ratingPopulation !== undefined && input.ratingPopulation !== '' && !ratingPopulation)
+    throw new Error('Invalid Search rating population');
   const filterScope = typeof parsed.filter === 'string' ? parseSearchResourceScope(parsed.filter) : {};
   if (filterScope.invalidInput) throw new Error('Invalid search resource scope');
   if (
@@ -214,6 +228,7 @@ function validateSearchInput(input: unknown): SearchParams {
     type: parsed.type,
     cursor: parsed.cursor,
     sort: parsed.sort,
+    ...(ratingPopulation ? { ratingPopulation } : {}),
     kinds: parsed.kinds,
     languages: parsed.language,
     ...(filter !== undefined ? { filter } : {}),
@@ -250,6 +265,7 @@ function requestParams(data: SearchParams): SearchLoaderDeps {
     languages: data.languages,
     filter: data.filter,
     resourceScope: data.resourceScope,
+    ratingPopulation: data.ratingPopulation,
   };
 }
 
@@ -258,8 +274,8 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     if (!data.kindCursor) throw new Error('Missing kind cursor');
     const requestContext = getRequest();
-    const reader = data.resourceScope ? await readScopedSearchReader(requestContext) : undefined;
-    if (data.resourceScope && (!reader || data.reader !== reader.owner))
+    const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
+    if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
       return { status: 'unavailable' as const, recovery: { status: 'session' as const } };
     let recovery: SearchRecoveryState | undefined;
     const state = await readDiscoveryKinds(
@@ -267,7 +283,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
       data.kindCursor,
       async (body) => {
         const response = await kernelClient(data.locale).subjects.$search.post(body, {
-          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+          ...(reader ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal: getRequest().signal },
         });
         if (response.error || response.status !== 200) recovery = searchRecoveryFromResponse(response);
@@ -284,8 +300,8 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const requestContext = getRequest();
     const signal = requestContext.signal;
     const queryState = requestParams(data);
-    const reader = data.resourceScope ? await readScopedSearchReader(requestContext) : undefined;
-    if (data.resourceScope && (!reader || data.reader !== reader.owner))
+    const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
+    if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
       return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
     let release: Release | undefined;
     try {
@@ -313,18 +329,24 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       refinementRequests = undefined;
     }
     const body = refinementRequests?.search;
-    const hasSearch = hasResultSearchIntent(queryState) || queryState.resourceScope !== undefined;
+    const hasSearch =
+      hasResultSearchIntent(queryState) ||
+      queryState.resourceScope !== undefined ||
+      (queryState.sort === 'rating' && queryState.ratingPopulation !== undefined);
     const sendSearch = async (
       request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
     ) => {
       const response = await kernelClient(data.locale).subjects.$search.post(request, {
-        ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
         fetch: { signal },
       });
       return response;
     };
+    const realmRatingUnavailable = data.sort === 'rating' && data.ratingPopulation !== undefined;
     const searchPromise = hasSearch
       ? (async () => {
+          // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
+          if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
           if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
           const request = { ...body, ...(properties.length ? { properties } : {}) };
           if (data.representation !== 'subjects-v1') {
@@ -340,7 +362,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       body && facetRead
         ? readFacetPage(facetRead, (request) =>
             kernelClient(data.locale).subjects.$facets.post(request, {
-              ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+              ...(reader ? { headers: { authorization: reader.authorization } } : {}),
               fetch: { signal },
             }),
           ).catch((error): FacetState => {
@@ -394,6 +416,9 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
                 text: data.query,
                 ...(body?.filter ? { filter: body.filter } : {}),
                 ...(data.resourceScope ? { scope: data.resourceScope } : {}),
+                ratingPopulation: data.ratingPopulation,
+                sort: data.sort ?? 'relevance',
+                mode: searchRequiresCurrentReader(data) ? 'personal' : 'public-anonymous',
               }),
               properties: roster,
               ...(facetResult ? { initial: facetResult } : {}),
@@ -411,6 +436,8 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       facetIndexNotReady: facetResult?.status === 'preparing',
       staleCursorRestarted: false,
       sort: data.sort ?? 'relevance',
+      ...(data.ratingPopulation ? { ratingPopulation: data.ratingPopulation } : {}),
+      ...(realmRatingUnavailable ? { ratingReadiness: { status: 'unavailable' as const } } : {}),
     });
   });
 
@@ -565,6 +592,7 @@ export function SearchPage({
     facets: selectedFacets,
     cursor,
     sort: data?.sort === 'rating' ? 'rating' : undefined,
+    ratingPopulation: data?.ratingPopulation,
   };
   const stateKey = JSON.stringify(committedState);
   const latestStateKey = useRef(stateKey);
@@ -879,6 +907,9 @@ export function SearchPage({
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
+      {committedState.ratingPopulation && (
+        <input type="hidden" name={RATING_POPULATION_FIELD} value={committedState.ratingPopulation} />
+      )}
       <AdvancedScope
         key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
         filter={data?.queryState?.filter}
@@ -912,10 +943,12 @@ export function SearchPage({
                 facetValues: selectedFacets,
                 locale,
                 kindCursor,
-                ...(data.queryState?.resourceScope && session ? { reader: session } : {}),
+                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
               },
               signal,
-              ...(data.queryState?.resourceScope ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } } : {}),
+              ...(searchRequiresCurrentReader(data.queryState!)
+                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                : {}),
             });
             if (
               !signal.aborted &&
@@ -976,6 +1009,7 @@ export function SearchPage({
             ...(draft.languages ? { languages: draft.languages } : {}),
             ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
             ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+            ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
             ...(data.ranges ? { ranges: data.ranges } : {}),
             ...(draft.condition ? { condition: draft.condition } : {}),
           }}
@@ -986,7 +1020,7 @@ export function SearchPage({
               data: {
                 query,
                 locale,
-                ...(data.queryState?.resourceScope && session ? { reader: session } : {}),
+                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
                 conditions: {
                   ...(type ? { type } : {}),
                   facetValues: selectedFacets,
@@ -994,12 +1028,16 @@ export function SearchPage({
                   ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
                   ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
                   ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+                  ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
                   ...(data.ranges ? { ranges: data.ranges } : {}),
                   ...(data.condition ? { condition: data.condition } : {}),
                 },
                 facets,
               },
               signal,
+              ...(searchRequiresCurrentReader(data.queryState!)
+                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                : {}),
             });
             const state = facetSearchInvalidation(response);
             if (!signal.aborted && sourceData && currentData.current === sourceData && state)
@@ -1169,6 +1207,9 @@ function renderResults(
             type={type}
             facets={selectedFacets}
             state={data?.queryState}
+            ratingPopulations={data?.ratingPopulations}
+            ratingPopulation={data?.queryState?.ratingPopulation}
+            ratingReadiness={data?.ratingReadiness}
             disabled={invalid}
           />
         </div>
@@ -1251,6 +1292,7 @@ function renderResults(
             type,
             cursor: next,
             sort: data?.sort === 'rating' ? 'rating' : undefined,
+            ratingPopulation: data?.queryState?.ratingPopulation,
             kinds: data?.queryState?.kinds,
             language: data?.queryState?.languages,
             filter: data?.queryState?.filter,

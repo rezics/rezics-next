@@ -7,6 +7,7 @@ import * as start from '../.storybook/react-start';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { SearchPageData } from '../src/search/search';
 import type { SearchLoaderDeps } from '../src/search/search-params';
+import { searchSessionLifetime } from '../src/search/scoped-search-lifetime';
 import { searchUnavailablePage } from '../src/search/search-recovery';
 import type { BrowserSession } from '../src/session/browser-state';
 
@@ -16,9 +17,9 @@ mock.module('@tanstack/react-start/server', () => start);
 
 const reads: { resolve: (value: SearchPageData) => void }[] = [];
 mock.module('../src/search/search-queries', () => ({
-  searchQueryOptions: (locale: string, params: SearchLoaderDeps) =>
+  searchQueryOptions: (locale: string, params: SearchLoaderDeps, reader?: string) =>
     queryOptions({
-      queryKey: ['search', 'discovery-v1', 'anonymous', 'public-global', locale, params],
+      queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
       queryFn: () =>
         new Promise<SearchPageData>((resolve) => {
           reads.push({ resolve });
@@ -92,7 +93,7 @@ async function settle(page: SearchPageData) {
   });
 }
 
-async function show(session: BrowserSession) {
+async function show(session: BrowserSession, path = '/search?q=Mira') {
   reads.length = 0;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
@@ -106,7 +107,7 @@ async function show(session: BrowserSession) {
   const router = createRouter({
     routeTree: parent.addChildren([Route]),
     context: { queryClient: client },
-    history: createMemoryHistory({ initialEntries: ['/search?q=Mira'] }),
+    history: createMemoryHistory({ initialEntries: [path] }),
     defaultPendingMs: 0,
     defaultPendingMinMs: 0,
   });
@@ -114,7 +115,7 @@ async function show(session: BrowserSession) {
   await act(async () => {
     await Promise.resolve();
   });
-  await settle(unavailable);
+  if (reads.length) await settle(unavailable);
   await loading;
   root ??= createRoot(host);
   await act(async () =>
@@ -124,6 +125,9 @@ async function show(session: BrowserSession) {
       </QueryClientProvider>,
     ),
   );
+  await act(async () => {
+    await Promise.resolve();
+  });
   return client;
 }
 
@@ -178,4 +182,32 @@ test('stable session observation still recovers current Retry focus', async () =
   await retryCurrent();
   await settle(ready);
   expect(focusedResults()).toBe(true);
+});
+
+test('sign-out retires a retained scoped request and quarantines its late response', async () => {
+  setLocale('en', { reload: false });
+  const filter = JSON.stringify({ realm: { id: '5a522c45-d94f-4d36-8b2a-3af80d988cff' } });
+  const client = await show(viewer(), `/search?q=Mira&filter=${encodeURIComponent(filter)}`);
+  expect(reads).toHaveLength(1);
+
+  await act(async () => {
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+  });
+  expect(host.querySelector('[data-search-recovery="session"]')).not.toBeNull();
+
+  const late: SearchPageData = {
+    ...ready,
+    discovery: {
+      status: 'ready',
+      page: {
+        hits: discoveryExample.hits,
+        kinds: { values: [], next: null },
+        next: null,
+        as_of: discoveryExample.as_of,
+      },
+    },
+  };
+  await settle(late);
+  expect(host.textContent).not.toContain('Mira Reading Room');
+  expect(host.querySelector('[data-search-recovery="session"]')).not.toBeNull();
 });

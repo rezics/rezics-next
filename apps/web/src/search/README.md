@@ -109,14 +109,25 @@ single resource leaf for scope; display labels never enter native authority. The
 `POST /v1/subjects:search` with `representation: "discovery-v1"`. Result, kind and facet reads keep the same filter;
 refinement carries that filter through its existing request bridge. Removing scope removes its one leaf, retains
 sibling predicates, clears the cursor and begins a fresh traversal. GET scope is authored intent, not access proof.
-Until the native session/cache reader and resource population/response handoffs are present, scoped Search stays
-explicitly unavailable; it never retries the request as Global. The unscoped public Search route keeps its anonymous
-server rendering.
+The route keeps public Search anonymous and server-prefetched. Resource membership and a selected `ratingPopulation`
+use a browser-owned personal query instead: the route does not prefetch or dehydrate those responses. The browser's
+reader string is only a cache identity hint. Each protected Search, kind and facet server function calls
+`readScopedSearchReader`, which prepares the current cookie session, compares the current subject with that hint,
+uses its current viewer credential for the Kernel BFF call, and sets `Cache-Control: private, no-store`. Missing,
+changed or uncertain authority yields an explicit session/unavailable state; it never retries as anonymous Global.
 
-The native handoffs extend the existing ConditionEditor with request-only resource admission, Refinement with scoped
-continuation, SearchSort with Realm population, DiscoveryResults with the closed mixed-kind response, and the
-Search-local reader with session-bound credentials and cache ownership. Search owns the URL and page wiring; each
-missing population or reader keeps the scoped result unavailable until its native owner supplies that seam.
+The Search page is the wiring owner for request-only resource admission in ConditionEditor, population-aware GET order
+in SearchSort, scoped refinement continuations in Refinement, and the expanded response union in DiscoveryResults.
+GET submission, the shell/header form, refinements, retry/restart links, result-kind navigation and browser history
+carry Realm or Collection membership and `ratingPopulation` separately. Changing either basis or order drops the hit
+cursor. Removing a membership leaf retains sibling predicates; removing `ratingPopulation` selects Global. Blank or
+absent `ratingPopulation` means Global, while malformed nonempty input remains correctable.
+
+The protected Content complete-order adapter for Realm rating figures is not installed in this Web contract yet.
+When a Realm population is selected with Rating order, Search keeps it selected and reports unavailable; it does not
+send a Global rating request or rerank a loaded preview. The existing native retry/refusal/restart surface remains
+available for installed membership reads. The recorded Search stories demonstrate page wiring and response states;
+they are not native execution evidence.
 
 Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
 never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.

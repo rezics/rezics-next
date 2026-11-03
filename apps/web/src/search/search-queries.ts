@@ -3,10 +3,10 @@ import { personalRead, publicRead } from '../kernel/query';
 import { readSearch, type SearchPageData } from './search.tsx';
 import type { SearchLoaderDeps } from './search-params';
 import { searchUnavailablePage } from './search-recovery';
+import { searchRequiresCurrentReader, searchSessionLifetime } from './scoped-search-lifetime';
 
 export function searchQueryOptions(locale: string, params: SearchLoaderDeps, reader?: string) {
-  const scoped = params.resourceScope !== undefined;
-  const source = params.resourceScope ? `${params.resourceScope.kind}:${params.resourceScope.id}` : 'public-global';
+  const scoped = searchRequiresCurrentReader(params);
   return queryOptions({
     ...(scoped ? personalRead : publicRead),
     staleTime: 0,
@@ -15,7 +15,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
-    queryKey: ['search', 'discovery-v1', scoped ? (reader ?? 'unverified') : 'anonymous', source, locale, params],
+    queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
     queryFn: async ({ signal, client, queryKey }) => {
       try {
         return await readSearch({
@@ -27,6 +27,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
             languages: params.languages,
             filter: params.filter,
             ...(params.resourceScope ? { resourceScope: params.resourceScope } : {}),
+            ...(params.ratingPopulation ? { ratingPopulation: params.ratingPopulation } : {}),
             ...(scoped && reader ? { reader } : {}),
             ...(params.ranges ? { ranges: params.ranges } : {}),
             ...(params.condition ? { condition: params.condition } : {}),

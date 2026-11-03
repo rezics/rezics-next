@@ -23,6 +23,7 @@ export type RefinementConditions = {
   languages?: string[];
   filter?: string;
   resourceScope?: SearchResourceScope;
+  ratingPopulation?: string;
   type?: string;
   facetValues: Record<string, string[]>;
   ranges?: Record<string, FilterRange>;
@@ -95,6 +96,7 @@ export function refinementHref(
   for (const language of conditions.languages ?? []) params.append('language', language);
   const filter = searchFilterWithScope(conditions.filter, conditions.resourceScope);
   if (filter) params.set('filter', filter);
+  if (conditions.ratingPopulation) params.set('ratingPopulation', conditions.ratingPopulation);
   if (conditions.condition) params.set('condition', JSON.stringify(conditions.condition));
   for (const [property, values] of Object.entries(conditions.facetValues))
     for (const value of values) params.append(`f.${property}`, value);

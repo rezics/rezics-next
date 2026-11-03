@@ -4,7 +4,7 @@ import type { SessionEnv } from '../session/client';
 export type ScopedSearchReader = Readonly<{
   owner: string;
   principal: string;
-  authorization: string | null;
+  authorization: string;
 }>;
 
 /** Prepare the current cookie-backed reader once; callers use its credential and subject together. */
@@ -15,7 +15,7 @@ export async function readScopedSearchReader(request: Request): Promise<ScopedSe
   await session.prepareSession(request, env as Partial<SessionEnv>);
   const principal = session.sessionSubject(request);
   const authorization = session.viewerCredential(request);
-  if (authorization && !principal) return undefined;
-  const owner = searchSessionOwner(principal ? { state: 'signed-in', subject: principal } : { state: 'signed-out' });
-  return owner ? { owner, principal: principal ?? 'anonymous', authorization } : undefined;
+  if (!principal || !authorization) return undefined;
+  const owner = searchSessionOwner({ state: 'signed-in', subject: principal });
+  return owner ? { owner, principal, authorization } : undefined;
 }

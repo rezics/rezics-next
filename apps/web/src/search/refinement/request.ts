@@ -109,6 +109,9 @@ export function refinementKey(context: {
   text: string;
   filter?: FilterDocument;
   scope?: SearchResourceScope;
+  ratingPopulation?: string;
+  sort?: 'rating' | 'relevance';
+  mode?: 'personal' | 'public-anonymous';
 }) {
   return JSON.stringify({ ...context, scope: context.scope ?? null });
 }
