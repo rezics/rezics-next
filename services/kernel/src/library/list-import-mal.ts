@@ -501,7 +501,7 @@ export function createMalImport(deps: Dependencies) {
     )
       throw stale();
     const fact = await journal.inspectSession(actor, input.occurrenceId);
-    if (fact.session.subjectId !== imported.target) throw missing();
+    if (fact.session.subjectId !== imported.target || fact.session.state === 'retired') throw stale();
     const current = await journal.readSessionJournal(actor, input.occurrenceId);
     const profileCurrent = profilePinMatches(fact.pin, observation.source);
     const proposed: MalDateReview = {
@@ -542,6 +542,7 @@ export function createMalImport(deps: Dependencies) {
     const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
     if (
       fact.session.subjectId !== reviewed.target ||
+      fact.session.state === 'retired' ||
       fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
       hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
       !profilePinMatches(fact.pin, observation.source)
