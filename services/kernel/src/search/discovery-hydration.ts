@@ -224,7 +224,7 @@ export async function hydrateOwnerDiscoveryHits(
       case 'collection': {
         const collection = value as Extract<DiscoveryOwnerMetadataSummary, { card: unknown }>;
         return {
-          key,
+          key: key as Extract<typeof key, { kind: 'collection' }>,
           summary: {
             kind: 'collection',
             value: {
@@ -241,7 +241,7 @@ export async function hydrateOwnerDiscoveryHits(
         const author = accountSummaries.get(review.authorId);
         const subject = subjectSummaries.get(review.subjectId);
         return {
-          key,
+          key: key as Extract<typeof key, { kind: 'review' }>,
           summary: {
             kind: 'review',
             value: {
@@ -259,7 +259,7 @@ export async function hydrateOwnerDiscoveryHits(
         const space = value as Extract<DiscoveryOwnerMetadataSummary, { address: string | null }>;
         if (!space.address) return undefined;
         return {
-          key,
+          key: key as Extract<typeof key, { kind: 'space' }>,
           summary: {
             kind: 'space',
             value: {

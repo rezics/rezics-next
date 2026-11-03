@@ -339,12 +339,13 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
   return {
     ...page,
-    hits: page.hits.map((hit) => {
+    hits: page.hits.map((hit): DiscoveryHttpPage['hits'][number] => {
       if (hit.summary.kind === 'account') {
         if (hit.key.owner !== 'accounts') throw new SearchUnavailableError('Discovery summary owner disagrees');
-        const summary = hit.summary.value;
+        const account = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'account' } }>;
+        const summary = account.summary.value;
         return {
-          key: hit.key,
+          key: { ...account.key },
           summary: {
             kind: 'account' as const,
             value: {
@@ -358,53 +359,62 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       }
       if (hit.summary.kind === 'subject') {
         if (hit.key.owner !== 'semantic') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        const subject = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
         return {
-          key: { ...hit.key },
-          summary: { kind: 'subject' as const, value: { ...hit.summary.value } },
-          ...(hit.labels === undefined ? {} : { labels: { ...hit.labels } }),
-          ...(hit.aliases === undefined
+          key: { ...subject.key },
+          summary: { kind: 'subject' as const, value: { ...subject.summary.value } },
+          ...(subject.labels === undefined ? {} : { labels: { ...subject.labels } }),
+          ...(subject.aliases === undefined
             ? {}
             : {
                 aliases: Object.fromEntries(
-                  Object.entries(hit.aliases).map(([language, values]) => [language, [...values]]),
+                  Object.entries(subject.aliases).map(([language, values]) => [language, [...values]]),
                 ),
               }),
-          ...(hit.descriptions === undefined ? {} : { descriptions: { ...hit.descriptions } }),
-          ...(hit.facts === undefined
+          ...(subject.descriptions === undefined ? {} : { descriptions: { ...subject.descriptions } }),
+          ...(subject.facts === undefined
             ? {}
             : {
                 facts: Object.fromEntries(
-                  Object.entries(hit.facts).map(([property, values]) => [
+                  Object.entries(subject.facts).map(([property, values]) => [
                     property,
                     values.map((fact) => structuredClone(fact)),
                   ]),
                 ),
               }),
-          ...(hit.figure === undefined ? {} : { figure: { ...hit.figure, scale: { ...hit.figure.scale } } }),
-          ...(hit.listPresentation === undefined
+          ...(subject.figure === undefined
             ? {}
-            : { listPresentation: { ...hit.listPresentation, keyFacts: [...hit.listPresentation.keyFacts] } }),
-          ...(hit.contexts === undefined
+            : { figure: { ...subject.figure, scale: { ...subject.figure.scale } } }),
+          ...(subject.listPresentation === undefined
+            ? {}
+            : {
+                listPresentation: {
+                  ...subject.listPresentation,
+                  keyFacts: [...subject.listPresentation.keyFacts],
+                },
+              }),
+          ...(subject.contexts === undefined
             ? {}
             : {
                 contexts: {
                   credits: {
-                    items: hit.contexts.credits.items.map((item) => structuredClone(item)),
-                    next: hit.contexts.credits.next,
+                    items: subject.contexts.credits.items.map((item) => structuredClone(item)),
+                    next: subject.contexts.credits.next,
                   },
                   appearances: {
-                    items: hit.contexts.appearances.items.map((item) => structuredClone(item)),
-                    next: hit.contexts.appearances.next,
+                    items: subject.contexts.appearances.items.map((item) => structuredClone(item)),
+                    next: subject.contexts.appearances.next,
                   },
                 },
               }),
         };
       }
-      const value = hit.summary.value;
       if (hit.summary.kind === 'collection') {
         if (hit.key.owner !== 'library') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        const collection = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'collection' } }>;
+        const value = collection.summary.value;
         return {
-          key: { ...hit.key },
+          key: { ...collection.key },
           summary: {
             kind: 'collection' as const,
             value: {
@@ -431,8 +441,10 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       }
       if (hit.summary.kind === 'review') {
         if (hit.key.owner !== 'content') throw new SearchUnavailableError('Discovery summary owner disagrees');
+        const review = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'review' } }>;
+        const value = review.summary.value;
         return {
-          key: { ...hit.key },
+          key: { ...review.key },
           summary: {
             kind: 'review' as const,
             value: {
@@ -444,8 +456,10 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         };
       }
       if (hit.key.owner !== 'community') throw new SearchUnavailableError('Discovery summary owner disagrees');
+      const space = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'space' } }>;
+      const value = space.summary.value;
       return {
-        key: { ...hit.key },
+        key: { ...space.key },
         summary: {
           kind: 'space' as const,
           value: { ...value, ...(value.realm && value.realm !== null ? { realm: { ...value.realm } } : {}) },

@@ -346,8 +346,9 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
     switch (hit.summary.kind) {
       case 'subject':
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
-        if (hit.facts && Object.keys(hit.facts).length > 4) return;
-        const contexts = (hit as Extract<DiscoveryHit, { summary: { kind: 'subject' } }>).contexts;
+        const subject = hit as Extract<DiscoveryHit, { summary: { kind: 'subject' } }>;
+        if (subject.facts && Object.keys(subject.facts).length > 4) return;
+        const contexts = subject.contexts;
         if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
           return;
         break;
