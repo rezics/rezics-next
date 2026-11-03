@@ -90,12 +90,16 @@ const decisionWithProvenance = (change: Partial<ModerationDecision> = {}) =>
 
 test('the composed decision reader uses one native response and does not hydrate a target', async () => {
   const calls: string[] = [];
-  const page = await loadDecisionPage('decision-1', {
-    decision: async (id) => {
-      calls.push(`decision:${id}`);
-      return decisionWithProvenance();
+  const page = await loadDecisionPage(
+    'decision-1',
+    {
+      decision: async (id) => {
+        calls.push(`decision:${id}`);
+        return decisionWithProvenance();
+      },
     },
-  }, 'author-1');
+    'author-1',
+  );
 
   expect(page).toMatchObject({ decision, viewerId: 'author-1', nativeSourceFingerprint: expect.any(String) });
   expect(calls).toEqual(['decision:decision-1']);
@@ -124,24 +128,30 @@ test('native provenance is complete before the decision source can be bound', as
 });
 
 test('decision reads retain supplied text while staying independent of unrelated fixture history', async () => {
-  const history = new Proxy(Array.from({ length: 1000 }, (_, index) => index), {
-    get(target, property, receiver) {
-      if (property === Symbol.iterator) throw new Error('Unrelated history must not be enumerated');
-      return Reflect.get(target, property, receiver);
-    },
-  });
-  for (const size of [1, 8000]) {
-    const response = Object.assign(
-      decisionWithProvenance({ statement: 'r'.repeat(size) }),
-      { unrelatedHistory: history },
-    );
-    let calls = 0;
-    const page = await loadDecisionPage('decision-1', {
-      decision: async () => {
-        calls++;
-        return response;
+  const history = new Proxy(
+    Array.from({ length: 1000 }, (_, index) => index),
+    {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) throw new Error('Unrelated history must not be enumerated');
+        return Reflect.get(target, property, receiver);
       },
-    }, 'author-1');
+    },
+  );
+  for (const size of [1, 8000]) {
+    const response = Object.assign(decisionWithProvenance({ statement: 'r'.repeat(size) }), {
+      unrelatedHistory: history,
+    });
+    let calls = 0;
+    const page = await loadDecisionPage(
+      'decision-1',
+      {
+        decision: async () => {
+          calls++;
+          return response;
+        },
+      },
+      'author-1',
+    );
     expect(page?.decision.statement).toHaveLength(size);
     expect(calls).toBe(1);
   }
@@ -180,7 +190,9 @@ test('a 422 length error preserves the draft while late and duplicate appeals us
   });
   expect(tooLong).toMatchObject({ state: 'invalid', text: draft });
 
-  next = decisionWithProvenance({ appeal: { id: 'appeal-1', outcome: null, statement: 'Earlier appeal', resolvedAt: null } });
+  next = decisionWithProvenance({
+    appeal: { id: 'appeal-1', outcome: null, statement: 'Earlier appeal', resolvedAt: null },
+  });
   for (const status of [409, 422]) {
     const refreshed = await submitDecisionAppeal('decision-1', 'My reason', {
       appeal: async () => ({ status }),
@@ -219,28 +231,29 @@ test('decision presentation shows the receipt while generated appeal advice and 
   expect(late).toContain(m.decision_appeal_advice_unavailable());
   expect(late).not.toContain('appeal-statement');
   const otherReader = renderToStaticMarkup(
-    createElement(
-      DecisionPageView,
-      {
-        page: {
-          ...page,
-          viewerId: 'another-author',
-        },
-        now: Date.parse(decidedAt),
+    createElement(DecisionPageView, {
+      page: {
+        ...page,
+        viewerId: 'another-author',
       },
-    ),
+      now: Date.parse(decidedAt),
+    }),
   );
   expect(otherReader).not.toContain('appeal-statement');
 });
 
 test('a private decision remains readable without generated context, including after its appeal deadline', async () => {
   const calls: string[] = [];
-  const page = await loadDecisionPage(decision.id, {
-    decision: async (id) => {
-      calls.push(`decision:${id}`);
-      return decisionWithProvenance();
+  const page = await loadDecisionPage(
+    decision.id,
+    {
+      decision: async (id) => {
+        calls.push(`decision:${id}`);
+        return decisionWithProvenance();
+      },
     },
-  }, 'author-1');
+    'author-1',
+  );
   expect(calls).toEqual(['decision:decision-1']);
   if (!page) throw new Error('The authorized decision must remain readable');
   for (const now of [Date.parse(decidedAt), Date.parse(decision.appealDeadline) + 1]) {
@@ -305,7 +318,9 @@ test('decision adapter uses only the composed exact endpoint and preserves nativ
       'moderation-decisions': ({ id }) => ({
         get: async () => {
           calls.push(`decision:${id}`);
-          return denied ? { data: null, error: { status: 404 }, status: 404 } : { data: decision, error: null, status: 200 };
+          return denied
+            ? { data: null, error: { status: 404 }, status: 404 }
+            : { data: decision, error: null, status: 200 };
         },
       }),
     },

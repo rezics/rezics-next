@@ -288,9 +288,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.textContent).toContain(m.decision_appeal_advice_unavailable());
       expect(host.querySelector('details')?.closest('form')).toBeNull();
       expect(host.querySelector('h2')?.textContent).toContain(m.decision_current_outcome());
-      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([
-        decisionId,
-      ]);
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([decisionId]);
       expect(host.querySelector('details dd')?.className).toContain('break-all');
     } finally {
       await currentDecision.window.happyDOM.close();

@@ -1100,7 +1100,9 @@ for (const kind of ['appeals', 'reporter'] as const) {
 
 test('Decision visit reads one composed endpoint and keeps ungenerated context and advice closed', async () => {
   const page = await load('decision');
-  const decisionReads = nativeReads.filter((request) => new URL(request.url).pathname.startsWith('/v1/moderation-decisions/'));
+  const decisionReads = nativeReads.filter((request) =>
+    new URL(request.url).pathname.startsWith('/v1/moderation-decisions/'),
+  );
   expect(decisionReads).toHaveLength(1);
   expect(new URL(decisionReads[0]!.url).pathname).toBe(`/v1/moderation-decisions/${decision.id}`);
   await paint('decision', page);

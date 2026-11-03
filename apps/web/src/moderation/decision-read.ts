@@ -29,9 +29,7 @@ type DecisionReads = {
   decision: (id: string) => Promise<ModerationDecision | null>;
 };
 
-export type DecisionSourceBinding =
-  | { state: 'available'; fingerprint: string }
-  | { state: 'unavailable' };
+export type DecisionSourceBinding = { state: 'available'; fingerprint: string } | { state: 'unavailable' };
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

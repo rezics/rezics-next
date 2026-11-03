@@ -68,8 +68,7 @@ export type DecisionPageProps = {
   canCommand?: () => boolean;
   accepts?: (page: DecisionPage) => Promise<boolean>;
 };
-const sendAppeal: DecisionAppealAction = ({ credentials, ...data }) =>
-  appealDecision({ data, headers: credentials });
+const sendAppeal: DecisionAppealAction = ({ credentials, ...data }) => appealDecision({ data, headers: credentials });
 const refreshDecision = (id: string) => readDecisionPage({ data: { id } });
 type Feedback = 'denied' | 'conflict' | 'uncertain' | 'invalid' | 'refused';
 
@@ -177,7 +176,11 @@ function DecisionBoundPage(props: DecisionPageProps) {
   );
   const originalClient = useRef(client).current;
   const [retiredReadState, setRetiredReadState] = useState<DecisionReadState | null>(null);
-  const ownerSnapshot = useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
+  const ownerSnapshot = useSyncExternalStore(
+    owner?.subscribe ?? emptySubscribe,
+    owner?.snapshot ?? zeroSnapshot,
+    zeroSnapshot,
+  );
   useEffect(() => {
     if (owner && (!owner.healthy() || !owner.available())) setPage(null);
   }, [owner, ownerSnapshot]);
@@ -457,13 +460,14 @@ function DecisionVisit({
             : m.decision_appeal_refused();
   const readbackDecision = readback?.state === 'available' ? readback.decision : null;
   const readbackAppeal = readbackDecision?.appeal ?? null;
-  const readbackStatus = readbackAppeal?.outcome === 'reversed'
-    ? m.decision_appeal_reversed()
-    : readbackAppeal?.outcome === 'upheld'
-      ? m.decision_appeal_upheld()
-      : readbackAppeal
-        ? m.decision_status_pending()
-        : m.decision_status_taken_down();
+  const readbackStatus =
+    readbackAppeal?.outcome === 'reversed'
+      ? m.decision_appeal_reversed()
+      : readbackAppeal?.outcome === 'upheld'
+        ? m.decision_appeal_upheld()
+        : readbackAppeal
+          ? m.decision_status_pending()
+          : m.decision_status_taken_down();
   useEffect(() => {
     const pending = outcomeFocus.current;
     if (!pending) return;
@@ -501,10 +505,7 @@ function DecisionVisit({
     const token = ++lifetime.current.serial;
     const command = retry
       ? composition.retry()!
-      : composition.freeze(
-          decision.id,
-          Object.fromEntries(new Headers(csrfHeaders()).entries()),
-        );
+      : composition.freeze(decision.id, Object.fromEntries(new Headers(csrfHeaders()).entries()));
     outcomeFocus.current =
       keyboardControl && document.activeElement === keyboardControl && !decision.appeal
         ? { serial: token, decision, nativeSourceFingerprint: page.nativeSourceFingerprint, control: keyboardControl }
@@ -789,7 +790,9 @@ function DecisionVisit({
             </form>
           ) : (
             <p className="mt-5 text-sm leading-6 text-muted-foreground">
-              {acknowledged ? m.decision_appeal_acknowledged() : adviceMessage ?? m.decision_appeal_advice_unavailable()}
+              {acknowledged
+                ? m.decision_appeal_acknowledged()
+                : (adviceMessage ?? m.decision_appeal_advice_unavailable())}
             </p>
           )}
           {acknowledged && appeal ? (
