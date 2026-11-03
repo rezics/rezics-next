@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ReactNode,
-} from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import type { DocumentNode } from '@rezics/document';
 import {
   CodeBlock,
@@ -36,11 +28,7 @@ import {
 } from './wide-document-copy';
 import { WideDocumentCode, WideDocumentCopyFeedback } from './wide-document-code';
 import { WideDocumentTable } from './wide-document-table';
-import {
-  MAX_WIDE_CODE_BYTES,
-  registerWideDocumentBlocks,
-  type WideDocumentDescriptor,
-} from './wide-document-reading';
+import { MAX_WIDE_CODE_BYTES, registerWideDocumentBlocks, type WideDocumentDescriptor } from './wide-document-reading';
 
 type TextDirection = 'ltr' | 'rtl' | 'auto';
 
@@ -143,44 +131,46 @@ export function WideDocumentReading({
     if (!current || current.kind !== active.kind) close();
   }, [active, close, descriptorsByNode]);
 
-  const copy = useCallback(async (descriptor: WideDocumentDescriptor) => {
-    if (!isCurrent()) return;
-    if (descriptor.kind !== 'code' || (descriptor.codeBytes ?? MAX_WIDE_CODE_BYTES + 1) > MAX_WIDE_CODE_BYTES)
-      return;
+  const copy = useCallback(
+    async (descriptor: WideDocumentDescriptor) => {
+      if (!isCurrent()) return;
+      if (descriptor.kind !== 'code' || (descriptor.codeBytes ?? MAX_WIDE_CODE_BYTES + 1) > MAX_WIDE_CODE_BYTES) return;
 
-    let text: string;
-    try {
-      text = selectedCodeForCopy(descriptor);
-    } catch {
-      return;
-    }
+      let text: string;
+      try {
+        text = selectedCodeForCopy(descriptor);
+      } catch {
+        return;
+      }
 
-    const operation = ++lifetime.current.operation;
-    const visit = lifetime.current.visit;
-    const pending = { text, operation };
-    text = '';
-    pendingCopy.current = pending;
-    updateCopyState({ blockOrder: descriptor.order, status: 'pending' });
-    const result = await writeCodeToClipboard(pending.text, currentClipboard());
-    if (
-      !isCurrent() ||
-      lifetime.current.visit !== visit ||
-      lifetime.current.operation !== operation ||
-      pendingCopy.current !== pending
-    ) {
+      const operation = ++lifetime.current.operation;
+      const visit = lifetime.current.visit;
+      const pending = { text, operation };
+      text = '';
+      pendingCopy.current = pending;
+      updateCopyState({ blockOrder: descriptor.order, status: 'pending' });
+      const result = await writeCodeToClipboard(pending.text, currentClipboard());
+      if (
+        !isCurrent() ||
+        lifetime.current.visit !== visit ||
+        lifetime.current.operation !== operation ||
+        pendingCopy.current !== pending
+      ) {
+        pending.text = '';
+        return;
+      }
+
+      pendingCopy.current = null;
+      if (result === 'copied') {
+        pending.text = '';
+        updateCopyState({ blockOrder: descriptor.order, status: 'copied' });
+        return;
+      }
+      updateCopyState({ blockOrder: descriptor.order, status: result, text: pending.text });
       pending.text = '';
-      return;
-    }
-
-    pendingCopy.current = null;
-    if (result === 'copied') {
-      pending.text = '';
-      updateCopyState({ blockOrder: descriptor.order, status: 'copied' });
-      return;
-    }
-    updateCopyState({ blockOrder: descriptor.order, status: result, text: pending.text });
-    pending.text = '';
-  }, [isCurrent, updateCopyState]);
+    },
+    [isCurrent, updateCopyState],
+  );
 
   useLayoutEffect(() => {
     if (wasOpen.current && !active) {
@@ -293,7 +283,8 @@ function WideDocumentInspector({
   onClose: () => void;
 }) {
   const options = { locale: locale as never };
-  const title = active?.kind === 'table' ? m.wide_document_table_title({}, options) : m.wide_document_code_title({}, options);
+  const title =
+    active?.kind === 'table' ? m.wide_document_table_title({}, options) : m.wide_document_code_title({}, options);
   return (
     <Dialog open={active !== null} onOpenChange={(open) => !open && onClose()}>
       {active ? (

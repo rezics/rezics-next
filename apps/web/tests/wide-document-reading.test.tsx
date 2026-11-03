@@ -91,9 +91,13 @@ function button(container: ParentNode, label: string): HTMLButtonElement | null 
 
 test('wide reading registers bounded disclosed blocks and keeps codec admission limits', () => {
   for (const count of [1, 16, 64, 65]) {
-    const registered = registerWideDocumentBlocks(snapshot(Array.from({ length: count }, (_, index) => codeNode(`line ${index}`))));
+    const registered = registerWideDocumentBlocks(
+      snapshot(Array.from({ length: count }, (_, index) => codeNode(`line ${index}`))),
+    );
     expect(registered).toHaveLength(Math.min(count, MAX_WIDE_DOCUMENT_BLOCKS));
-    expect(registered.map((item) => item.order)).toEqual([...registered.map((item) => item.order)].sort((a, b) => a - b));
+    expect(registered.map((item) => item.order)).toEqual(
+      [...registered.map((item) => item.order)].sort((a, b) => a - b),
+    );
   }
 
   const selected = registerWideDocumentBlocks(snapshot([codeNode('first block'), codeNode(exactCode)]))[1]!;
@@ -153,9 +157,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     IS_REACT_ACT_ENVIRONMENT: true,
     fetch: network as unknown as typeof fetch,
   };
-  const previous = new Map(
-    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
-  );
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals)) {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
@@ -176,9 +178,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
 
   try {
     await act(async () =>
-      root.render(
-        <ThreadPostReadingBody post={post} mentions={{}} locale="en" readerIdentity="viewer-a" />,
-      ),
+      root.render(<ThreadPostReadingBody post={post} mentions={{}} locale="en" readerIdentity="viewer-a" />),
     );
 
     const codeRegion = host.querySelector<HTMLElement>('pre.wide-document-code-content');
@@ -253,9 +253,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
       'replacement revision',
     );
     await act(async () =>
-      root.render(
-        <ThreadPostReadingBody post={replacement} mentions={{}} locale="en" readerIdentity="viewer-b" />,
-      ),
+      root.render(<ThreadPostReadingBody post={replacement} mentions={{}} locale="en" readerIdentity="viewer-b" />),
     );
     expect(window.document.body.querySelector('[role="dialog"]')).toBeNull();
     expect(host.textContent).not.toContain(m.wide_document_code_copied());
@@ -270,9 +268,7 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     await act(async () => root.render(<ThreadPostReadingBody post={oversized} mentions={{}} locale="en" />));
     expect(button(host, m.wide_document_code_copy())?.disabled).toBe(true);
     expect(host.textContent).toContain(m.wide_document_code_too_large());
-    expect(host.querySelector('pre.wide-document-code-content')?.textContent).toHaveLength(
-      MAX_WIDE_CODE_BYTES + 1,
-    );
+    expect(host.querySelector('pre.wide-document-code-content')?.textContent).toHaveLength(MAX_WIDE_CODE_BYTES + 1);
 
     const unavailable = { ...oversized, availability: 'unavailable' } as unknown as ThreadPost;
     await act(async () => root.render(<ThreadPostReadingBody post={unavailable} mentions={{}} locale="en" />));

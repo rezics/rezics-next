@@ -34,14 +34,8 @@
   max-width: 100%;
 }
 
-.post-reading-document > :is(
-  figure,
-  [data-slot='document-image'],
-  .document-table-scroll,
-  pre,
-  .wide-document-code,
-  .wide-document-table
-) {
+.post-reading-document
+  > :is(figure, [data-slot='document-image'], .document-table-scroll, pre, .wide-document-code, .wide-document-table) {
   grid-column: 1 / -1;
 }
 

@@ -111,13 +111,7 @@ export function WideDocumentCode({
   );
 }
 
-export function WideDocumentCopyFeedback({
-  state,
-  locale,
-}: {
-  state: WideDocumentCopyState;
-  locale: string;
-}) {
+export function WideDocumentCopyFeedback({ state, locale }: { state: WideDocumentCopyState; locale: string }) {
   const options = { locale: locale as never };
   if (state.status === 'pending') {
     return <p role="status">{m.wide_document_code_copying({}, options)}</p>;

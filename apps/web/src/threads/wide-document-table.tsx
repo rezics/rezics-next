@@ -30,10 +30,7 @@ export function WideDocumentTable({
           variant="outline"
           className="min-h-11 min-w-11 max-w-full whitespace-normal px-3 text-start [overflow-wrap:anywhere]"
           onClick={(event) =>
-            onInspect(
-              { kind: 'table', descriptor, children, caption, language, direction },
-              event.currentTarget,
-            )
+            onInspect({ kind: 'table', descriptor, children, caption, language, direction }, event.currentTarget)
           }
         >
           {m.wide_document_table_inspect({}, options)}

@@ -21,15 +21,7 @@ type Metrics = Readonly<{
 
 const noDisclosures: ReadonlySet<number> = new Set();
 
-const tableNodeTypes = new Set([
-  'table',
-  'tableRow',
-  'tableCell',
-  'tableHeader',
-  'paragraph',
-  'text',
-  'hardBreak',
-]);
+const tableNodeTypes = new Set(['table', 'tableRow', 'tableCell', 'tableHeader', 'paragraph', 'text', 'hardBreak']);
 
 const tableMarkTypes = new Set([
   'bold',
@@ -99,7 +91,8 @@ export function registerWideDocumentBlocks(
       !tableNodeTypes.has(node.type) || (node.marks?.some((mark) => !tableMarkTypes.has(mark.type)) ?? false);
     let hasHiddenContent = entry.hidden;
     let hasUnsupportedVisibility = entry.unsupportedVisibility;
-    let textBytes = !entry.hidden && node.type === 'text' ? boundedUtf8Length(node.text ?? '', MAX_WIDE_CODE_BYTES + 1) : 0;
+    let textBytes =
+      !entry.hidden && node.type === 'text' ? boundedUtf8Length(node.text ?? '', MAX_WIDE_CODE_BYTES + 1) : 0;
 
     for (const child of node.content ?? []) {
       const childMetrics = metrics.get(child);

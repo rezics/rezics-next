@@ -109,47 +109,44 @@ function ReadingVisit({
   );
   const isReadingCurrent = useCallback(() => position.isCurrent(), [position]);
   // Opening, dismissing and returning only render the controls; they never traverse the snapshot again.
-  const body = useMemo(
-    () => {
-      const bodyProps = {
-        ...props,
-        locale,
-        headingAttributes: attributes,
-        linkAttributes,
-        onDisclosureChange: disclosure,
-        className: `post-reading-document ${className ?? ''}`,
-      };
-      return wideVisitKey ? (
-        <WideDocumentReading
-          {...bodyProps}
-          visitKey={`${wideVisitKey}:${namespace}`}
-          disclosedSpoilers={disclosed}
-          focusBoundaryRef={focusBoundaryRef}
-          isReadingCurrent={isReadingCurrent}
-        />
-      ) : (
-        <DocumentBody {...bodyProps} />
-      );
-    },
-    [
-      props.document,
-      props.mentions,
-      props.labels,
-      props.renderImage,
-      props.renderCodeBlock,
-      props.renderTable,
-      props.visitKey,
+  const body = useMemo(() => {
+    const bodyProps = {
+      ...props,
       locale,
-      attributes,
+      headingAttributes: attributes,
       linkAttributes,
-      disclosure,
-      className,
-      wideVisitKey,
-      namespace,
-      disclosed,
-      isReadingCurrent,
-    ],
-  );
+      onDisclosureChange: disclosure,
+      className: `post-reading-document ${className ?? ''}`,
+    };
+    return wideVisitKey ? (
+      <WideDocumentReading
+        {...bodyProps}
+        visitKey={`${wideVisitKey}:${namespace}`}
+        disclosedSpoilers={disclosed}
+        focusBoundaryRef={focusBoundaryRef}
+        isReadingCurrent={isReadingCurrent}
+      />
+    ) : (
+      <DocumentBody {...bodyProps} />
+    );
+  }, [
+    props.document,
+    props.mentions,
+    props.labels,
+    props.renderImage,
+    props.renderCodeBlock,
+    props.renderTable,
+    props.visitKey,
+    locale,
+    attributes,
+    linkAttributes,
+    disclosure,
+    className,
+    wideVisitKey,
+    namespace,
+    disclosed,
+    isReadingCurrent,
+  ]);
   return (
     <div
       ref={setRoot}
