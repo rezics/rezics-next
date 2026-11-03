@@ -22,6 +22,8 @@ const scopes = [
   'source_statistic:write',
   'subject:read',
   'subject:create',
+  'context:create',
+  'context:read',
   'subject:merge',
 ];
 
@@ -139,7 +141,9 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       bearer: fullBearer,
       readerBearer,
       nativeFigures,
-      async createSubject() {
+      get access() { return access; },
+      identityCommand,
+      async createSubject(item: unknown = { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } }) {
         const key = crypto.randomUUID();
         const command = await identityCommand('subject:create');
         const result = await createSubject(database!.pool, {
@@ -147,7 +151,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
           target: subjectTarget(routeKey, accountId, key),
           idempotencyKey: key,
           digest: createHash('sha256').update(key).digest(),
-          item: { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } },
+          item,
           release,
         });
         return result.subject.id;
