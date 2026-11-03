@@ -396,6 +396,15 @@ export function ContextCreateView({
   const createdContext =
     created?.created ?? (created?.current.kind === 'ready' ? created.current.value.context : null);
   const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
+  const capturedLabels =
+    createdContext?.settings &&
+    (snapshot?.digest === createdContext.settings.release
+      ? 'ready'
+      : captured
+        ? captured.kind === 'ready'
+          ? 'ready'
+          : captured.kind
+        : null);
   const review = snapshot
     ? policyPreview(snapshot, selected)
     : { settings: selected, release: '', defaults: {} };
@@ -484,18 +493,7 @@ export function ContextCreateView({
                     ? captured.snapshot
                     : null
               }
-              {...(createdContext.settings
-                ? {
-                    labels:
-                      snapshot?.digest === createdContext.settings.release
-                        ? 'ready'
-                        : captured
-                          ? captured.kind === 'ready'
-                            ? 'ready'
-                            : captured.kind
-                          : undefined,
-                  }
-                : {})}
+              {...(capturedLabels ? { labels: capturedLabels } : {})}
               {...(preview.current ? { preview: preview.current } : {})}
               mismatch={!!preview.current && !capturedMatches(preview.current, createdContext)}
             />
@@ -517,7 +515,7 @@ export function ContextCreateView({
             locale={locale}
             rows={rows}
             disabled={locked}
-            invalidId={intent.result?.kind === 'invalid' ? `${rows[0]?.id}-text` : undefined}
+            {...(intent.result?.kind === 'invalid' && rows[0] ? { invalidId: `${rows[0].id}-text` } : {})}
             onChange={(next) => {
               if (current()) {
                 setRows(next);
