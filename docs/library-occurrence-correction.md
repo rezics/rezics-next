@@ -11,11 +11,11 @@ until account erasure, and never changes an independently published snapshot.
 
 The default authenticated progress routes mount these existing session-writer methods:
 
-- `POST /v1/progressSessions/:sessionId/$reopen` / `reopenSession(actor, sessionId, {revision}, requestKey)`
+- `POST /v1/progressSessions/:sessionId:reopen` / `reopenSession(actor, sessionId, {revision}, requestKey)`
   changes `completed` or `abandoned` to `active`, and clears `completedAt`. Values, units, totals, original
   meaning and identity remain. Use the normal `$record` command afterward to correct values. Completion requires
   another explicit `$complete`; reopening never supplies replacement dates or duration.
-- `POST /v1/progressSessions/:sessionId/$retire` / `retireSession(actor, sessionId, {revision}, requestKey)`
+- `POST /v1/progressSessions/:sessionId:retire` / `retireSession(actor, sessionId, {revision}, requestKey)`
   changes an active or terminal occurrence to `retired`. The successful response includes its incremented revision
   and explicit retired state. Ordinary addressed reads, units/history pages, native lists and private source exports
   subsequently conceal it. There is no Undo or implicit replacement occurrence.

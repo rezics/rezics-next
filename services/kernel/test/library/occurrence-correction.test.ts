@@ -51,27 +51,27 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   await send('POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, 201);
   const first = await start(subjectId);
   const duplicateStart = await start(subjectId);
-  const duplicate = (await send('POST', `/v1/progressSessions/${duplicateStart.id}/$complete`, { revision: 1 }))
+  const duplicate = (await send('POST', `/v1/progressSessions/${duplicateStart.id}:complete`, { revision: 1 }))
     .progressSession;
   const repeatStart = await start(subjectId);
-  const repeat = (await send('POST', `/v1/progressSessions/${repeatStart.id}/$complete`, { revision: 1 }))
+  const repeat = (await send('POST', `/v1/progressSessions/${repeatStart.id}:complete`, { revision: 1 }))
     .progressSession;
   const path = `/v1/progressSessions/${first.id}`;
-  const record = (await send('POST', `${path}/$record`, { revision: 1, amount: '10' })).progressSession;
+  const record = (await send('POST', `${path}:record`, { revision: 1, amount: '10' })).progressSession;
   expect(record.state).toBe('active'); // A full amount is not completion.
-  const completed = (await send('POST', `${path}/$complete`, { revision: 2 })).progressSession;
+  const completed = (await send('POST', `${path}:complete`, { revision: 2 })).progressSession;
   const publicLog = (await send('POST', '/v1/publishedLogs', { sessionId: first.id, note: 'Captured' }, 201))
     .publishedLog;
   const before = await native.inspect(owner.actor.accountId);
-  await send('POST', `${path}/$reopen`, { revision: 2 }, 409);
+  await send('POST', `${path}:reopen`, { revision: 2 }, 409);
   const foreign = await native.identity(scopes, undefined, routeOf(owner.actor.accountId)!);
-  await send('POST', `${path}/$reopen`, { revision: 3 }, 404, entryKey(), foreign.bearer);
+  await send('POST', `${path}:reopen`, { revision: 3 }, 404, entryKey(), foreign.bearer);
   const key = entryKey();
-  const reopened = await send('POST', `${path}/$reopen`, { revision: 3 }, 200, key);
+  const reopened = await send('POST', `${path}:reopen`, { revision: 3 }, 200, key);
   expect(reopened.progressSession).toEqual({ ...completed, state: 'active', completedAt: null, revision: 4 });
-  expect(await send('POST', `${path}/$reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
-  await send('POST', `${path}/$reopen`, { revision: 4 }, 400);
-  await send('POST', `${path}/$record`, { revision: 4, amount: '7' });
+  expect(await send('POST', `${path}:reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
+  await send('POST', `${path}:reopen`, { revision: 4 }, 400);
+  await send('POST', `${path}:record`, { revision: 4, amount: '7' });
   const changes = (await send('GET', `${path}/changes`)).changes;
   expect(changes.map((row: { intent: unknown }) => row.intent)).toEqual([
     { amount: '10' },
@@ -79,14 +79,14 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
     { amount: '7' },
   ]);
   const retireKey = entryKey();
-  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 200, retireKey);
+  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 2 }, 200, retireKey);
   expect(retired.progressSession).toEqual({ ...duplicate, state: 'retired', completedAt: null, revision: 3 });
-  expect(await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 200, retireKey)).toEqual(
+  expect(await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 2 }, 200, retireKey)).toEqual(
     retired,
   );
   for (const suffix of ['', '/changes', '/completedUnits'])
     await send('GET', `/v1/progressSessions/${duplicate.id}${suffix}`, undefined, 404);
-  await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 3 }, 404);
+  await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 3 }, 404);
   await send('POST', '/v1/publishedLogs', { sessionId: duplicate.id }, 404);
   const ids: string[] = [];
   let next: string | null = null;
@@ -100,7 +100,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   } while (next);
   expect(ids.sort()).toEqual([first.id, repeat.id].sort());
   expect((await send('GET', `/v1/progressSessions/${repeat.id}`)).progressSession).toEqual(repeat);
-  await send('POST', `${path}/$retire`, { revision: 5 });
+  await send('POST', `${path}:retire`, { revision: 5 });
   expect((await send('GET', `/v1/publishedLogs/${publicLog.id}`)).publishedLog).toEqual(publicLog);
   const after = await native.inspect(owner.actor.accountId);
   expect(after.entries).toEqual(before.entries);
@@ -115,7 +115,7 @@ test('retiring the last occurrence removes its native support; concealment and a
   const first = await start(subjectId);
   const path = `/v1/progressSessions/${first.id}`;
   const key = entryKey();
-  const retired = await send('POST', `${path}/$retire`, { revision: 1 }, 200, key);
+  const retired = await send('POST', `${path}:retire`, { revision: 1 }, 200, key);
   const support = await native.pool.query(
     `SELECT 1 FROM library.owner_member_support WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
     [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
@@ -123,13 +123,13 @@ test('retiring the last occurrence removes its native support; concealment and a
   expect(support.rows).toEqual([]);
   const hidden = await native.createSubject('game');
   const occurrence = await start(hidden);
-  await send('POST', `/v1/progressSessions/${occurrence.id}/$complete`, { revision: 1 });
+  await send('POST', `/v1/progressSessions/${occurrence.id}:complete`, { revision: 1 });
   expect(
-    (await native.send('steward', 'POST', `/v1/subjects/${hidden}/$hide`, { reason: 'Mistaken source' })).status,
+    (await native.send('steward', 'POST', `/v1/subjects/${hidden}:hide`, { reason: 'Mistaken source' })).status,
   ).toBe(200);
-  await send('POST', `/v1/progressSessions/${occurrence.id}/$reopen`, { revision: 2 }, 404);
-  await send('POST', `/v1/progressSessions/${occurrence.id}/$retire`, { revision: 2 }, 404);
-  expect(await send('POST', `${path}/$retire`, { revision: 1 }, 200, key)).toEqual(retired);
+  await send('POST', `/v1/progressSessions/${occurrence.id}:reopen`, { revision: 2 }, 404);
+  await send('POST', `/v1/progressSessions/${occurrence.id}:retire`, { revision: 2 }, 404);
+  expect(await send('POST', `${path}:retire`, { revision: 1 }, 200, key)).toEqual(retired);
   const isolated = await native.identity(scopes);
   const session = (
     await send(
@@ -142,12 +142,12 @@ test('retiring the last occurrence removes its native support; concealment and a
     )
   ).progressSession;
   const isolatedKey = entryKey();
-  await send('POST', `/v1/progressSessions/${session.id}/$retire`, { revision: 1 }, 200, isolatedKey, isolated.bearer);
+  await send('POST', `/v1/progressSessions/${session.id}:retire`, { revision: 1 }, 200, isolatedKey, isolated.bearer);
   await native.revokeIdentity(isolated.actor.accountId);
   const response = await native.send(
     isolated.bearer,
     'POST',
-    `/v1/progressSessions/${session.id}/$retire`,
+    `/v1/progressSessions/${session.id}:retire`,
     { revision: 1 },
     isolatedKey,
   );

@@ -542,7 +542,7 @@ intended reason. It does not prove the product implementation.
 
 ## Occurrence lifecycle consumers
 
-[Occurrence correction](library-occurrence-correction.md) owns the mounted `$reopen` and `$retire` operations and
+[Occurrence correction](library-occurrence-correction.md) owns the mounted `:reopen` and `:retire` operations and
 exact recovery/clear semantics for the existing progress/diary editor. The original profile pin and independent
 measures survive reopening; retirement hides the whole session from ordinary reads and native private source pages.
 Export, diary and analytics consumers must use live native session facts and invalidate on the existing session-updated
