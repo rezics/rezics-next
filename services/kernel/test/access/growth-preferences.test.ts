@@ -13,6 +13,9 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 const notifications = Object.fromEntries(
   NOTIFICATION_KINDS.filter(({ optional }) => optional).map((entry) => [entry.kind, !entry.default]),
 ) as Notifications;
+const defaultNotifications = Object.fromEntries(
+  NOTIFICATION_KINDS.filter(({ optional }) => optional).map(({ kind, default: enabled }) => [kind, enabled]),
+) as Notifications;
 const route = 0x4567;
 const accountId = newId(route);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -20,7 +23,7 @@ const maximalShelf = (): Shelf =>
   ({
     layouts: Object.fromEntries(
       Array.from({ length: 32 }, (_, index) => [
-        `https://rezics.com/vocab/${String(index).padStart(3, '0')}${'a'.repeat(220)}`,
+        `https://rezics.com/vocab/${String(index).padStart(3, '0')}${'a'.repeat(228)}`,
         'grid',
       ]),
     ),
@@ -51,6 +54,13 @@ beforeAll(async () => {
 afterAll(async () => db?.close());
 
 test('preferences read stays constant as accounts with stored preferences grow', async () => {
+  expect(await readAccountPreferences(db.pool, newId(route))).toEqual({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    shelf: {},
+    notifications: defaultNotifications,
+    version: 0,
+  });
   const report = await checkGrowth(db, {
     name: 'account preferences read',
     scales: [256, 1024, 4096],
