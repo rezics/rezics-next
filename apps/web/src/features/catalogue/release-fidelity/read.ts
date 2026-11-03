@@ -193,8 +193,7 @@ export async function readReleaseFidelity(
       return { ok: false, reason: 'stale' };
     const digest = subject.data.subject.release;
     const bundle = await client.definitions.releases({ digest }).get({ headers });
-    if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== digest)
-      return candidateFailure(bundle.status);
+    if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== digest) return candidateFailure(bundle.status);
     const release = bundle.data.release as Release;
     if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };
     work = recordComponent(work, {

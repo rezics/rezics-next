@@ -78,11 +78,9 @@ export function withConcreteReleaseDescriptors(source: Release, files = true): R
     qualifiers: [],
     value: { type: 'object' },
   };
-  release.properties['schema:encodesCreativeWork'] = itemProperty(
-    'schema:encodesCreativeWork',
-    'encodes',
-    ['schema:Episode'],
-  );
+  release.properties['schema:encodesCreativeWork'] = itemProperty('schema:encodesCreativeWork', 'encodes', [
+    'schema:Episode',
+  ]);
   release.properties['rezics:releaseGroup'] = itemProperty('rezics:releaseGroup', 'release group', [
     'rezics:ReleaseGroup',
   ]);
@@ -157,11 +155,7 @@ function statement(
   };
 }
 
-export function releaseFidelityFixture(
-  scenario: ReleaseFidelityScenario = 'ready',
-  locale = 'en',
-  population = 2,
-) {
+export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'ready', locale = 'en', population = 2) {
   const digest = definitions.digest;
   const release = withConcreteReleaseDescriptors(definitions.release as Release, scenario !== 'not-release');
   let active = scenario;
@@ -217,7 +211,13 @@ export function releaseFidelityFixture(
     ];
     if (scenario === 'tba')
       publicRead.subject.statements['schema:datePublished'] = [
-        statement('00000000-0000-4000-8000-00000000a114', 'schema:datePublished', 'time', { type: 'somevalue' }, digest),
+        statement(
+          '00000000-0000-4000-8000-00000000a114',
+          'schema:datePublished',
+          'time',
+          { type: 'somevalue' },
+          digest,
+        ),
       ];
     else if (scenario === 'partial-date')
       publicRead.subject.statements['schema:datePublished'] = [
@@ -246,8 +246,7 @@ export function releaseFidelityFixture(
         [releaseWork]: { type: 'schema:Book', labels: { en: 'The Traveller', ja: '旅人' } },
       };
   }
-  const relatedId = (index: number) =>
-    `00000000-0000-4000-8000-${(0xa103 + index).toString(16).padStart(12, '0')}`;
+  const relatedId = (index: number) => `00000000-0000-4000-8000-${(0xa103 + index).toString(16).padStart(12, '0')}`;
   function relationPage(property: string, cursor?: string | null) {
     const start = cursor ? Number(cursor) : 0;
     const count = Math.min(RELEASE_ASSOCIATION_LIMIT, Math.max(0, population - start));
@@ -255,7 +254,9 @@ export function releaseFidelityFixture(
       const index = start + offset;
       const id = relatedId(index);
       const concealed = index % 11 === 10;
-      const label = concealed ? undefined : { value: index === 0 ? 'English hardcover' : `Edition ${index}`, language: 'en' };
+      const label = concealed
+        ? undefined
+        : { value: index === 0 ? 'English hardcover' : `Edition ${index}`, language: 'en' };
       return {
         statement: statement(
           `00000000-0000-4000-8000-${(0xa200 + index).toString(16).padStart(12, '0')}`,
@@ -315,8 +316,7 @@ export function releaseFidelityFixture(
         return json({ digest, release });
       }
       if (request.method === 'GET' && url.pathname === `/v1/subjects/${releaseSubject}`) {
-        if (active === 'stale')
-          return json({ ...publicRead, subject: { ...publicRead.subject, id: releaseAlt } });
+        if (active === 'stale') return json({ ...publicRead, subject: { ...publicRead.subject, id: releaseAlt } });
         return json(publicRead);
       }
       if (url.pathname === `/v1/subjects/${releaseSubject}/relations` && request.method === 'GET') {

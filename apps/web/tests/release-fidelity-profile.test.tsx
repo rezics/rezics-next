@@ -24,18 +24,17 @@ import { m } from '../src/paraglide/messages.js';
 const digest = 'sha256:current';
 const timeStatement = (
   value: Parameters<typeof dateReading>[0] extends (infer Item)[] | undefined ? Item['value'] : never,
-) =>
-  [
-    {
-      id: '00000000-0000-4000-8000-00000000a114',
-      rank: 'normal' as const,
-      property: { id: 'schema:datePublished', data_type: 'time' as const },
-      value,
-      qualifiers: [],
-      references: [],
-      rezics: { release: digest, revision: 1 },
-    },
-  ];
+) => [
+  {
+    id: '00000000-0000-4000-8000-00000000a114',
+    rank: 'normal' as const,
+    property: { id: 'schema:datePublished', data_type: 'time' as const },
+    value,
+    qualifiers: [],
+    references: [],
+    rezics: { release: digest, revision: 1 },
+  },
+];
 
 test('TBA, partial, exact and absent dates stay distinct, and year zero is not TBA', () => {
   expect(dateReading(undefined, 'schema:datePublished', digest, 'en')).toMatchObject({ kind: 'absent' });

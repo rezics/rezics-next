@@ -140,7 +140,10 @@ export function releaseGroups(release: Definitions, type: string): Record<Releas
     else if (property.relation?.group === 'classification') groups.classification.push(id);
     else if (property.relation?.group === 'credit') groups.credits.push(id);
     else if (property.relation) groups.relations.push(id);
-    else if (identifierDatatypes.has(property.datatype) || (property.datatype === 'string' && 'pattern' in property.value))
+    else if (
+      identifierDatatypes.has(property.datatype) ||
+      (property.datatype === 'string' && 'pattern' in property.value)
+    )
       groups.identifiers.push(id);
     else groups.facts.push(id);
   }
@@ -190,10 +193,8 @@ export function dateReading(
   if (!selected.length) return { kind: 'absent', property, historical: false };
   const statement = selected[0]!;
   const historical = historicalStatement(statement, currentDigest);
-  if (statement.value.type === 'somevalue')
-    return { kind: 'tba', property, statementId: statement.id, historical };
-  if (statement.value.type === 'novalue')
-    return { kind: 'none', property, statementId: statement.id, historical };
+  if (statement.value.type === 'somevalue') return { kind: 'tba', property, statementId: statement.id, historical };
+  if (statement.value.type === 'novalue') return { kind: 'none', property, statementId: statement.id, historical };
   const precision = timePrecision(statement.value.content) ?? 'day';
   const iso = timeIso(statement.value.content, precision);
   if (!iso) return { kind: 'tba', property, statementId: statement.id, historical };
@@ -224,10 +225,7 @@ export function relatedTarget(statement: Statement): string | undefined {
     : undefined;
 }
 
-export function relatedReadable(
-  related: SubjectRead['related'],
-  id: string,
-): 'readable' | 'concealed' | 'unreadable' {
+export function relatedReadable(related: SubjectRead['related'], id: string): 'readable' | 'concealed' | 'unreadable' {
   if (!Object.hasOwn(related, id)) return 'unreadable';
   const labels = related[id]?.labels ?? {};
   return Object.keys(labels).length ? 'readable' : 'concealed';
@@ -242,8 +240,12 @@ export function releaseStreams(release: Definitions, type: string, locale: strin
     if (!relation || property.datatype !== 'wikibase-item') continue;
     if (id === WORK_PROPERTY || id === CONTAINED_WORK_PROPERTY) continue;
     const targets = property.targets ?? [];
-    const releaseTarget = targets.some((target) => releaseTypes.some((base) => isA(release, target, base) || target === base));
-    const fileTarget = targets.some((target) => isCatalogueFileType(release, target) || isReleaseGroupType(release, target));
+    const releaseTarget = targets.some((target) =>
+      releaseTypes.some((base) => isA(release, target, base) || target === base),
+    );
+    const fileTarget = targets.some(
+      (target) => isCatalogueFileType(release, target) || isReleaseGroupType(release, target),
+    );
     if (!releaseTarget && !fileTarget) continue;
     const kind: ReleaseStream['kind'] = fileTarget && !releaseTarget ? 'file' : 'release';
     if (admittedProperty(release, type, id)) {
@@ -255,11 +257,7 @@ export function releaseStreams(release: Definitions, type: string, locale: strin
         label: pickText(property.labels, locale),
       });
     }
-    if (
-      relation.inverse &&
-      relation.inverse !== 'none' &&
-      targets.some((target) => isA(release, type, target))
-    ) {
+    if (relation.inverse && relation.inverse !== 'none' && targets.some((target) => isA(release, type, target))) {
       streams.push({
         key: `inverse:${id}`,
         property: id,
@@ -284,16 +282,19 @@ export function isReleaseGroupType(release: Definitions, type: string): boolean 
 }
 
 export function fileProfileReleased(release: Definitions): boolean {
-  return Object.keys(release.types).some((type) => isCatalogueFileType(release, type) || isReleaseGroupType(release, type));
+  return Object.keys(release.types).some(
+    (type) => isCatalogueFileType(release, type) || isReleaseGroupType(release, type),
+  );
 }
 
 export function unknownProvenance(statement: Statement): string[] {
-  return statement.qualifiers
-    .concat(statement.references.flatMap((reference) => reference.parts))
-    .flatMap((part) => {
-      if (part.value.type !== 'value' || typeof part.value.content !== 'string') return [];
-      if (!['schema:sameAs', 'schema:identifier', 'wdt:P973'].includes(part.property.id) && part.property.data_type !== 'external-id')
-        return [];
-      return [part.value.content];
-    });
+  return statement.qualifiers.concat(statement.references.flatMap((reference) => reference.parts)).flatMap((part) => {
+    if (part.value.type !== 'value' || typeof part.value.content !== 'string') return [];
+    if (
+      !['schema:sameAs', 'schema:identifier', 'wdt:P973'].includes(part.property.id) &&
+      part.property.data_type !== 'external-id'
+    )
+      return [];
+    return [part.value.content];
+  });
 }

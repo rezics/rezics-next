@@ -222,7 +222,9 @@ function CatalogueFileProfileLive({
             <EditorFailure reason="unavailable" locale={locale} />
           ) : error ? (
             <p ref={readFailure} tabIndex={-1} role="status">
-              {error.reason === 'invalid' ? m.catalogue_file_not_file({}, o) : m.catalogue_file_episode_concealed({}, o)}
+              {error.reason === 'invalid'
+                ? m.catalogue_file_not_file({}, o)
+                : m.catalogue_file_episode_concealed({}, o)}
             </p>
           ) : (
             <p role="status">{m.candidate_loading({}, o)}</p>
@@ -247,7 +249,9 @@ function CatalogueFileProfileLive({
             />
             <p className="text-muted-foreground">{m.catalogue_file_intro({}, o)}</p>
             <p data-slot="catalogue-file-disclaimer">{m.catalogue_file_disclaimer({}, o)}</p>
-            {read.profile === 'unreleased' && <p data-slot="catalogue-file-unreleased">{m.catalogue_file_unreleased({}, o)}</p>}
+            {read.profile === 'unreleased' && (
+              <p data-slot="catalogue-file-unreleased">{m.catalogue_file_unreleased({}, o)}</p>
+            )}
             {read.profile !== 'unreleased' && (
               <>
                 <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -256,7 +260,11 @@ function CatalogueFileProfileLive({
                       {title.text || m.subject_value_unlabelled({}, o)}
                     </a>
                   </span>
-                  <span lang={pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined}>
+                  <span
+                    lang={
+                      pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined
+                    }
+                  >
                     {pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).text}
                   </span>
                 </p>
@@ -283,7 +291,9 @@ function CatalogueFileProfileLive({
                                 {identifier ? (
                                   <>
                                     <p data-raw={identifier.raw}>{identifier.display}</p>
-                                    <p className="text-sm text-muted-foreground">{m.catalogue_file_hash_statement({}, o)}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {m.catalogue_file_hash_statement({}, o)}
+                                    </p>
                                   </>
                                 ) : quantity ? (
                                   <p>
@@ -306,7 +316,9 @@ function CatalogueFileProfileLive({
                     </section>
                   ) : null,
                 )}
-                {unknownCodec && <p data-slot="catalogue-file-unknown-codec">{m.catalogue_file_unknown_codec({}, o)}</p>}
+                {unknownCodec && (
+                  <p data-slot="catalogue-file-unknown-codec">{m.catalogue_file_unknown_codec({}, o)}</p>
+                )}
                 <section className="space-y-3" data-slot="catalogue-file-group">
                   <ContentItemHeading level={2} className="text-lg font-semibold">
                     {m.catalogue_file_group({}, o)}

@@ -41,11 +41,7 @@ function statement(
   };
 }
 
-export function catalogueFileProfileFixture(
-  scenario: CatalogueFileScenario = 'ready',
-  locale = 'en',
-  population = 2,
-) {
+export function catalogueFileProfileFixture(scenario: CatalogueFileScenario = 'ready', locale = 'en', population = 2) {
   const digest = definitions.digest;
   const release = withConcreteReleaseDescriptors(definitions.release as Release, scenario !== 'unreleased');
   let active = scenario;
@@ -146,7 +142,11 @@ export function catalogueFileProfileFixture(
     summary: null,
   };
   const fileId = (index: number) =>
-    index === 0 ? catalogueFile : index === 1 ? catalogueFileTwo : `00000000-0000-4000-8000-${(0xa201 + index).toString(16).padStart(12, '0')}`;
+    index === 0
+      ? catalogueFile
+      : index === 1
+        ? catalogueFileTwo
+        : `00000000-0000-4000-8000-${(0xa201 + index).toString(16).padStart(12, '0')}`;
   function relationPage(property: string, cursor?: string | null) {
     const start = cursor ? Number(cursor) : 0;
     const count = Math.min(RELEASE_ASSOCIATION_LIMIT, Math.max(0, population - start));
@@ -260,7 +260,12 @@ export function catalogueFileProfileFixture(
           subject: {
             ...structuredClone(publicRead.subject),
             id,
-            type: id === catalogueEpisode ? 'schema:Episode' : id === catalogueGroup ? 'rezics:ReleaseGroup' : 'schema:MediaObject',
+            type:
+              id === catalogueEpisode
+                ? 'schema:Episode'
+                : id === catalogueGroup
+                  ? 'rezics:ReleaseGroup'
+                  : 'schema:MediaObject',
             labels: {
               en:
                 id === catalogueEpisode

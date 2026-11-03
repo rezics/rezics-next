@@ -1,8 +1,4 @@
-import {
-  CatalogueCurrentReading,
-  catalogueEditor,
-  useEditorLifetime,
-} from '../editor-lifetime';
+import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from '../editor-lifetime';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -17,7 +13,12 @@ import { CandidateValue } from '../../pages/data';
 import { ViewHeading } from '../../pages/view-heading';
 import { subjectHref } from '../../../subject/subject-href';
 import type { CandidateTransport } from '../../../subject/candidate-review';
-import { relationDraft, validRelationSlot, type RelationTransport, type RelationSlot } from '../../../subject/relation-candidates';
+import {
+  relationDraft,
+  validRelationSlot,
+  type RelationTransport,
+  type RelationSlot,
+} from '../../../subject/relation-candidates';
 import { m } from '../../../paraglide/messages.js';
 import { EditorFailure, PartValue } from '../statement-editor-view';
 import { RelationEditor } from '../relation-editor';
@@ -46,7 +47,7 @@ const summaryClass =
   'cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
 
 function rowTarget(row: ReleaseRow): string | undefined {
-  return row.statement ? relatedTarget(row.statement) ?? row.holder : row.holder;
+  return row.statement ? (relatedTarget(row.statement) ?? row.holder) : row.holder;
 }
 
 function relationSlot(row: ReleaseRow, stream: ReleaseStream): RelationSlot | undefined {
@@ -213,7 +214,11 @@ function ReleaseFidelityLive({
           ) : (
             <p role="status">{m.candidate_loading({}, o)}</p>
           )}
-          <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={(event) => void load({}, event)}>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
+            onClick={(event) => void load({}, event)}
+          >
             {m.release_fidelity_reload({}, o)}
           </button>
         </div>
@@ -234,7 +239,9 @@ function ReleaseFidelityLive({
                   {title.text || m.subject_value_unlabelled({}, o)}
                 </a>
               </span>
-              <span lang={pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined}>
+              <span
+                lang={pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).lang ?? undefined}
+              >
                 {pickText(read.release.types[read.public.subject.type]?.labels ?? {}, locale).text}
               </span>
             </p>
@@ -250,7 +257,9 @@ function ReleaseFidelityLive({
                   {read.work.label?.text || m.subject_value_unlabelled({}, o)}
                 </a>
               )}
-              {read.work.historical && <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>}
+              {read.work.historical && (
+                <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+              )}
               {workHref && <PublicationEditorEntry work={read.work.id!} locale={locale} />}
             </section>
             <section className="space-y-2" data-slot="release-date">
@@ -268,7 +277,9 @@ function ReleaseFidelityLive({
                         ? m.release_fidelity_date_partial({ value: read.date.text ?? '' }, o)
                         : (read.date.text ?? m.release_fidelity_date_absent({}, o))}
               </p>
-              {read.date.historical && <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>}
+              {read.date.historical && (
+                <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+              )}
               {!read.statusProperty && <p>{m.release_fidelity_status_unavailable({}, o)}</p>}
               {!read.regionProperty && <p>{m.release_fidelity_region_unavailable({}, o)}</p>}
             </section>
@@ -384,15 +395,15 @@ function ReleaseFidelityLive({
                               ? m.release_fidelity_work_unreadable({}, o)
                               : summaryLabel}
                         </p>
-                        {row.statement && (
-                          <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                        )}
+                        {row.statement && <CandidateValue snak={row.statement} related={row.related} locale={locale} />}
                         {row.provenance.map((code) => (
                           <p key={code} className="text-sm text-muted-foreground">
                             {m.release_fidelity_related_unknown({ code }, o)}
                           </p>
                         ))}
-                        {row.historical && <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>}
+                        {row.historical && (
+                          <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                        )}
                         {target && (
                           <Button
                             type="button"
@@ -403,25 +414,23 @@ function ReleaseFidelityLive({
                             {m.release_fidelity_select_detail({}, o)}
                           </Button>
                         )}
-                        {read.stream &&
-                          relationSlot(row, read.stream) &&
-                          row.statement && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={actionClass}
-                              onClick={() =>
-                                setDraft({
-                                  holder: row.holder,
-                                  slot: relationSlot(row, read.stream!)!,
-                                  statement: relationDraft(row.statement!),
-                                  ...(read.session ? { session: read.session } : {}),
-                                })
-                              }
-                            >
-                              {m.correction_title({}, o)}
-                            </Button>
-                          )}
+                        {read.stream && relationSlot(row, read.stream) && row.statement && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={actionClass}
+                            onClick={() =>
+                              setDraft({
+                                holder: row.holder,
+                                slot: relationSlot(row, read.stream!)!,
+                                statement: relationDraft(row.statement!),
+                                ...(read.session ? { session: read.session } : {}),
+                              })
+                            }
+                          >
+                            {m.correction_title({}, o)}
+                          </Button>
+                        )}
                       </ContentItemFrame>
                     </li>
                   );
@@ -437,9 +446,7 @@ function ReleaseFidelityLive({
                   {m.release_fidelity_next({}, o)}
                 </Button>
               )}
-              {detailId.current && !read.detail && (
-                <p>{m.release_fidelity_detail_unavailable({}, o)}</p>
-              )}
+              {detailId.current && !read.detail && <p>{m.release_fidelity_detail_unavailable({}, o)}</p>}
               {read.detail && (
                 <ContentItemFrame as="div" className="space-y-2 p-4" data-slot="release-detail">
                   <p lang={pickText(read.detail.subject.labels, locale).lang ?? undefined}>
@@ -505,7 +512,10 @@ function ReleaseFidelityLive({
                   {m.release_fidelity_return({}, o)}
                 </a>
               )}
-              <a href={`${href}/changes`} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}>
+              <a
+                href={`${href}/changes`}
+                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}
+              >
                 {catalogueEntries.changes({ id, title: title.text, locale }).label}
               </a>
               <SubjectChangesLink id={id} title={title.text} locale={locale} />

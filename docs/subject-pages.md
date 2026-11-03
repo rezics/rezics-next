@@ -277,12 +277,12 @@ and at most one explicitly selected detail. Calls per visit are at most C. Web p
 are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
 Correction uses a fixed addressed native command/readback sequence.
 
-| Component   | L_i (rows)                                      | B_i (bytes)                         | Source |
-| ----------- | ----------------------------------------------- | ----------------------------------- | ------ |
-| descriptor  | 1,024 types                                     | 4 MiB                               | `RELEASE_LIMITS.types` / `RELEASE_LIMITS.bytes` in [definitions portable](../packages/definitions/src/portable.ts) |
-| subject     | 64 properties per type                          | unavailable                         | `RELEASE_LIMITS.propertiesPerType`; subject-read bytes have no delivered cap |
-| association | 20 (native default; producer admits at most 100) | unavailable                         | Kernel relations/links `limit` default 20, max 100 |
-| detail      | 1 selected subject                              | unavailable                         | one `GET /v1/subjects/{id}` |
+| Component   | L_i (rows)                                       | B_i (bytes) | Source                                                                                                             |
+| ----------- | ------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| descriptor  | 1,024 types                                      | 4 MiB       | `RELEASE_LIMITS.types` / `RELEASE_LIMITS.bytes` in [definitions portable](../packages/definitions/src/portable.ts) |
+| subject     | 64 properties per type                           | unavailable | `RELEASE_LIMITS.propertiesPerType`; subject-read bytes have no delivered cap                                       |
+| association | 20 (native default; producer admits at most 100) | unavailable | Kernel relations/links `limit` default 20, max 100                                                                 |
+| detail      | 1 selected subject                               | unavailable | one `GET /v1/subjects/{id}`                                                                                        |
 
 An absent byte cap is an unavailable receiving seam. The loader never preloads one detail per listed file, never
 fans out per association row, and never substitutes elapsed time for this bound. Tests

@@ -17,7 +17,11 @@ export function CatalogueFileProfileEntry({
   locale: string;
   release?: Pick<Release, 'types' | 'properties'> | undefined;
 }) {
-  if (release ? !isFileOrGroupType(release, type) : !['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'].includes(type))
+  if (
+    release
+      ? !isFileOrGroupType(release, type)
+      : !['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'].includes(type)
+  )
     return null;
   return (
     <a

@@ -103,7 +103,12 @@ function listedOnPage(rows: FileRow[], detail: string, current: string): boolean
   });
 }
 
-function pageRows(id: string, digest: string, page: ForwardPage | InversePage, direction: 'forward' | 'inverse'): FileRow[] {
+function pageRows(
+  id: string,
+  digest: string,
+  page: ForwardPage | InversePage,
+  direction: 'forward' | 'inverse',
+): FileRow[] {
   if (direction === 'forward' && 'relations' in page) {
     return page.relations.map((row) => {
       const related = relatedMap(row.related);
@@ -141,7 +146,8 @@ export async function readCatalogueFileProfile(
   authorization: string,
   query: FileReadQuery,
 ): Promise<CatalogueFileRead> {
-  if (!fileUuid.test(query.id) || (query.detail && !fileUuid.test(query.detail))) return { ok: false, reason: 'invalid' };
+  if (!fileUuid.test(query.id) || (query.detail && !fileUuid.test(query.detail)))
+    return { ok: false, reason: 'invalid' };
   if (query.cursor && !query.stream) return { ok: false, reason: 'invalid' };
   const headers = { authorization, ...(query.session ? { 'rezics-session-token': query.session } : {}) };
   let visit = emptyVisit();
