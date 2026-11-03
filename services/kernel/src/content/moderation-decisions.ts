@@ -22,12 +22,12 @@ const appealWindowMs = 183 * 24 * 60 * 60 * 1000;
 export const ModerationDecisionSchema = t.Object(
   {
     id: t.String(),
-    targetKind: t.Union([t.Literal('thread'), t.Literal('post')]),
+    targetKind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]),
     targetId: t.String(),
     action: t.Literal('takedown'),
     statement: t.String(),
     decidedAt: t.String({ format: 'date-time' }),
-    appealDeadline: t.String({ format: 'date-time' }),
+    appealDeadline: t.Union([t.String({ format: 'date-time' }), t.Null()]),
     appeal: t.Union([
       t.Object(
         {
@@ -97,7 +97,7 @@ export async function readModerationDecision(
   if (!observed.value || context.actor.kind !== 'account') return null;
   const { decision, target } = observed.value;
   let anchor = observed.anchor;
-  if (target.author_account_id !== context.actor.accountId) {
+  if (decision.target_kind === 'board' || target.author_account_id !== context.actor.accountId) {
     // Preparation may acquire a connection; release the source checkout first.
     const check = await accessCheck(
       deps.access,
@@ -114,12 +114,12 @@ export async function readModerationDecision(
   return {
     value: {
       id: decision.decision_id,
-      targetKind: decision.target_kind as 'thread' | 'post',
+      targetKind: decision.target_kind as 'board' | 'thread' | 'post',
       targetId: decision.target_id,
       action: 'takedown' as const,
       statement: decision.statement,
       decidedAt: decidedAt.toISOString(),
-      appealDeadline: new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
+      appealDeadline: decision.target_kind === 'board' ? null : new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
       appeal:
         decision.appeal_id === null
           ? null
@@ -181,7 +181,6 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
         targetId: string;
         securityRevision: string;
       };
-      if (data.targetKind === 'board') return;
       const route = routeOf(data.targetId);
       const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
       if (route === null || !source || Number(source[1]) !== partitionOf(route) || !/^\d{19}$/.test(event.sequence))
