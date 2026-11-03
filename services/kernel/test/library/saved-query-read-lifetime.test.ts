@@ -24,6 +24,8 @@ const originalEpisode = episodes.readCollectionPublicationEpisode;
 
 beforeAll(async () => {
   f = await createCollectionRulesFixture();
+  // Publication and native Members preparation may overlap independent read checkouts.
+  f.database.pool.options.max = 4;
   const context = { pool: f.database.pool, deadline: Date.now() + 30_000 };
   actor = await f.runtime.identity.access.authenticate(f.owner, context);
   reduced = await f.runtime.identity.access.authenticate(f.reduced, context);
