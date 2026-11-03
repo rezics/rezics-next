@@ -16,6 +16,8 @@ export type AlbumTrackExample = 'admitted' | 'unconfigured' | 'empty' | 'withhel
 /** Source examples supply a configured Release explicitly. They do not publish a native music vocabulary. */
 export function albumTrackExample(scenario: AlbumTrackExample = 'admitted', locale = 'en') {
   const release = structuredClone(bundledRelease);
+  // This configured source example exposes only the part stream it supplies.
+  delete release.properties['wdt:P1433'];
   release.types['schema:MusicRecording'] = {
     iri: 'https://schema.org/MusicRecording',
     labels: { en: 'recording' },

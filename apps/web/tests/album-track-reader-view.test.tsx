@@ -142,11 +142,12 @@ test('replacement observations retire delayed continuations and removed keyboard
       finish(await fixture.read());
     });
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
-    await mounted.render({ ...props, source: {} });
+    const fresh = { ...props, source: {} };
+    await mounted.render(fresh);
     expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]').length).toBe(3);
-    await mounted.render({ ...props, locale: 'ja' });
+    await mounted.render({ ...fresh, locale: 'ja' });
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
-    await mounted.render(props);
+    await mounted.render(fresh);
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
   } finally {
     await mounted.close();
