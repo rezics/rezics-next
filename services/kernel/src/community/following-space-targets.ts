@@ -8,7 +8,11 @@ import {
   type ViewerActionResources,
 } from '../access/viewer-actions.ts';
 import { withConnection } from '../database/pool.ts';
-import type { FollowingSpaceActions, FollowingSpaceDestination, FollowingSpaceProjection } from '../library/following-space-contract.ts';
+import type {
+  FollowingSpaceActions,
+  FollowingSpaceDestination,
+  FollowingSpaceProjection,
+} from '../library/following-space-contract.ts';
 import { routeOf } from '../route/route.ts';
 import { spaceViewerActionResource } from './space.ts';
 import { realmViewerActionResource } from './realm.ts';
@@ -128,10 +132,7 @@ function realmResource(
           return Object.fromEntries(
             expected.map(({ realmId, snapshot }) => {
               const source = current.get(snapshot.space_id);
-              return [
-                realmId,
-                native[realmId] === true && sameSpace(source, snapshot) && sameRealm(source, snapshot),
-              ];
+              return [realmId, native[realmId] === true && sameSpace(source, snapshot) && sameRealm(source, snapshot)];
             }),
           );
         },

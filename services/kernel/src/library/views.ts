@@ -257,10 +257,10 @@ export async function fullView<T>(
         ? {
             target:
               row.targetType === 'subject'
-                ? reader.subjects.get(row.targetId) ?? null
+                ? (reader.subjects.get(row.targetId) ?? null)
                 : options.followingSpaces && row.targetType === 'space'
-                  ? spaceProjection?.target ?? null
-                  : reader.targets.get(row.targetId) ?? null,
+                  ? (spaceProjection?.target ?? null)
+                  : (reader.targets.get(row.targetId) ?? null),
           }
         : {}),
       ...(options.followingSpaces && typeof row.targetId === 'string' && row.targetType === 'space'

@@ -1509,19 +1509,25 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             let more = rows.length > size;
             if (!more && size === 100 && last)
               more = (await follows().listFollows(actor, { cursor: last, limit: 1 })).length > 0;
-            return fullView(config(), actor, query.view, {
-              follows: shown.map(followView),
-              next:
-                more && last && partition
-                  ? encodeCursor(dependencies.tokens, binding, {
-                      epoch: partition.epoch,
-                      after: [last.updatedAt, last.targetId],
-                    })
-                  : null,
-            }, {
-              deadline: job.deadline,
-              ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
-            });
+            return fullView(
+              config(),
+              actor,
+              query.view,
+              {
+                follows: shown.map(followView),
+                next:
+                  more && last && partition
+                    ? encodeCursor(dependencies.tokens, binding, {
+                        epoch: partition.epoch,
+                        after: [last.updatedAt, last.targetId],
+                      })
+                    : null,
+              },
+              {
+                deadline: job.deadline,
+                ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
+              },
+            );
           }),
         );
       },
