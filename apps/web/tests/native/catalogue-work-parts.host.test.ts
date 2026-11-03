@@ -57,7 +57,7 @@ type PublicSubject = {
         value: { type: string; content?: unknown };
         qualifiers: { property: { id: string }; value: { type: string; content?: unknown } }[];
         references: { parts: { property: { id: string }; value: { type: string; content?: unknown } }[] }[];
-      }[];
+      }[]>;
   };
 };
 
