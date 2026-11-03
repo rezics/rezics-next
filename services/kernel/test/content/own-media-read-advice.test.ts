@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createKernelClient, type OwnMediaInventoryPage } from '@rezics/client';
 import { mediaRealmDownloadFixture } from './media-realm-download-fixture.ts';
+import objects from '../../src/content/own-media-objects.sql';
+import { observeSql } from './support/sql-observer.ts';
 
 setDefaultTimeout(360_000);
 let fixture: Awaited<ReturnType<typeof mediaRealmDownloadFixture>>;
@@ -39,4 +41,25 @@ test('retained uploader ownership does not advertise download after Realm read r
     await fixture.grant(fixture.alice.accountId, fixture.protectedRealm.realmId, ['realm:read']);
   }
   expect((await inventory()).actions.read?.variants).toContain('original');
+});
+
+test('Realm revocation between advice rounds fails without consuming the inventory frontier', async () => {
+  const observer = observeSql(fixture.db.pool);
+  const finalObjects = observer.hold({ statement: objects.sql, occurrence: 2 }, 'after');
+  const pending = fixture.call('GET', '/v1/media', { bearer: fixture.alice.bearer });
+  try {
+    await finalObjects.entered;
+    await fixture.revoke(fixture.protectedRealm.realmId, fixture.alice.accountId, ['realm:read']);
+    finalObjects.release();
+    const failed = await pending;
+    expect(failed.response.status).toBe(503);
+    expect(failed.value.code).toBe('dependency_unavailable');
+    // Retry the identical first-page input after the concurrent change settles.
+    expect((await inventory()).actions.read).toBeNull();
+  } finally {
+    finalObjects.release();
+    await pending;
+    await observer.close();
+    await fixture.grant(fixture.alice.accountId, fixture.protectedRealm.realmId, ['realm:read']);
+  }
 });
