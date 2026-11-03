@@ -5353,8 +5353,8 @@ type PreparedRun = {
 type CheckGitTransfer = { stage?: { directory: string; manifest: string } };
 
 /** One publication survives host retries and is deleted only after the logical check finishes. */
-async function withCheckGitTransfer<T>(
-  workspace: string,
+export async function withCheckGitTransfer<T>(
+  options: Pick<RemoteCheck, 'workspace' | 'expectedSourceManifest'>,
   operation: (transfer: CheckGitTransfer) => Promise<T>,
 ): Promise<T> {
   const transfer: CheckGitTransfer = {};
@@ -5362,12 +5362,14 @@ async function withCheckGitTransfer<T>(
     return await operation(transfer);
   } finally {
     if (transfer.stage) {
-      try {
-        const { releaseCheckGit } = await import('./check-git.ts');
-        releaseCheckGit(workspace, transfer.stage.manifest);
-      } finally {
-        rmSync(transfer.stage.directory, { recursive: true, force: true });
-      }
+      const stage = transfer.stage;
+      // Result/settlement delivery does not wait on GitHub cleanup. Frozen callers retain controller custody.
+      void import('./check-git.ts').then(async ({ releaseCheckGit, sweepCheckGit }) => {
+        if (!options.expectedSourceManifest) await releaseCheckGit(options.workspace, stage.manifest);
+        await sweepCheckGit(options.workspace);
+      }).catch(() => {}).finally(() => {
+        try { rmSync(stage.directory, { recursive: true, force: true }); } catch { /* Best effort staging cleanup. */ }
+      });
     }
   }
 }
@@ -5442,7 +5444,11 @@ async function uploadRun(
       if (!transfer.stage) {
         const directory = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
         try {
-          const manifest = await stageCheckGit(options.workspace, directory, { ref: `refs/checks/${randomUUID()}` });
+          const manifest = await stageCheckGit(options.workspace, directory, {
+            ref: `refs/checks/${randomUUID()}`,
+            retain: options.expectedSourceManifest !== undefined,
+            deadlineMs: Date.now() + configuredTimeout(options.preparationTimeoutMs, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+          });
           transfer.stage = { directory, manifest };
         } catch (error) {
           rmSync(directory, { recursive: true, force: true });
@@ -6237,7 +6243,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options.workspace, (transfer) =>
+    withCheckGitTransfer(options, (transfer) =>
       runWithTransportRetries(options, options.hosts, files, ownedSignal, false, undefined, transfer),
     ),
   );
@@ -6383,7 +6389,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   getPinnedBun();
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options.workspace, (transfer) =>
+    withCheckGitTransfer(options, (transfer) =>
       runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered, transfer),
     ),
   );
@@ -6394,7 +6400,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   return withExecutionCancellation(options, signal, (ownedSignal) =>
-    withCheckGitTransfer(options.workspace, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
+    withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
   );
 }
 

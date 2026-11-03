@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  opendirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -104,37 +105,117 @@ fi
   return `# REMOTE_CHECK_GITHUB_FETCH\nmkdir -p ${shell(dirname(resolve(store)))}\nflock -x ${shell(`${resolve(store)}.lock`)} sh -c ${shell(body)}`;
 }
 
-/** Removing a check-only ref is best effort, including after a transport failure. */
-export function releaseCheckGit(workspace: string, manifestPath: string): void {
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Partial<CheckGitPublication>;
-  if (!manifest.remote || !/^refs\/checks\/[a-zA-Z0-9-]+$/.test(manifest.remote.ref)) return;
+const CHECK_REF = /^refs\/checks\/[a-zA-Z0-9-]+$/;
+const REF_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+type OwnedPublication = CheckGitPublication & {
+  ownership: { origin: string | null; createdAt: number; state: 'active' | 'retained' | 'releasable' };
+};
+type PublicationOptions = {
+  ref: string;
+  retain?: boolean;
+  deadlineMs?: number;
+  /** Controlled-clock seams; production uses one absolute preparation deadline. */
+  now?: () => number;
+  backoff?: (ms: number) => Promise<void>;
+};
+
+function publicationRecord(workspace: string, ref: string): string {
+  return join(resolve(workspace), '.temp/check-git-publications', `${ref.slice('refs/checks/'.length)}.json`);
+}
+function originIdentity(workspace: string): string | null {
+  try { return createHash('sha256').update(git(workspace, ['remote', 'get-url', '--push', 'origin'])).digest('hex'); }
+  catch { return null; }
+}
+function savePublication(path: string, record: OwnedPublication): void {
+  const temporary = `${path}.${process.pid}.pending`;
+  writeFileSync(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+  renameSync(temporary, path);
+}
+
+function transportDiagnostic(value: unknown): string {
+  let message = String(value).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+  message = message.replace(/https?:\/\/[^\s'"<>]+/gi, (url) => {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    } catch { return '[redacted URL]'; }
+  });
+  message = message.replace(/((?:authorization|password|passwd|token|secret|credential)[\w-]*\s*[:=]\s*|bearer\s+|basic\s+)[^\s,;]+/gi, '$1[redacted]');
+  for (const [key, secret] of Object.entries(process.env)) {
+    if (secret && secret.length >= 4 && /TOKEN|PASSWORD|SECRET|CREDENTIAL/i.test(key))
+      message = message.replaceAll(secret, '[redacted]');
+  }
+  return message.slice(-8192);
+}
+
+/** Only an exact recorded candidate can be deleted; retained runs require controller settlement. */
+export async function releaseCheckGit(
+  workspace: string,
+  manifestPath: string,
+  options: { settled?: boolean; deadlineMs?: number } = {},
+): Promise<void> {
   try {
-    pushCheckGit(workspace, [`:${manifest.remote.ref}`]);
-  } catch {
-    console.error(`check-git: could not delete ${manifest.remote.ref}`);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
+    if (!manifest.remote || !CHECK_REF.test(manifest.remote.ref)) return;
+    const path = publicationRecord(workspace, manifest.remote.ref);
+    const record = JSON.parse(readFileSync(path, 'utf8')) as OwnedPublication;
+    if (record.remote.ref !== manifest.remote.ref || record.remote.commit !== manifest.remote.commit ||
+        !validObjectId(record.remote.commit, record.objectFormat) ||
+        record.ownership.origin === null || record.ownership.origin !== originIdentity(workspace)) return;
+    if (record.ownership.state === 'retained' && !options.settled) return;
+    record.ownership.state = 'releasable';
+    savePublication(path, record);
+    await pushCheckGit(workspace, [`--force-with-lease=${record.remote.ref}:${record.remote.commit}`, `:${record.remote.ref}`], {},
+      options.deadlineMs ?? Date.now() + 2000);
+    rmSync(path, { force: true });
+  } catch (error) {
+    console.error(`check-git: ref cleanup deferred: ${transportDiagnostic(error)}`);
   }
 }
 
-function pushCheckGit(workspace: string, refspecs: string[], overrides: Record<string, string> = {}): void {
+/** Scan at most 32 owned records, for at most ten seconds. Unknown, active and retained refs stay pinned. */
+export async function sweepCheckGit(workspace: string, now = Date.now()): Promise<void> {
+  const deadlineMs = Date.now() + 10_000;
+  try {
+    const directory = opendirSync(join(resolve(workspace), '.temp/check-git-publications'));
+    try {
+      for (let visited = 0; visited < 32 && Date.now() < deadlineMs; visited++) {
+        const entry = directory.readSync();
+        if (!entry) break;
+        if (!entry.isFile() || !/^[a-zA-Z0-9-]+\.json$/.test(entry.name)) continue;
+        const path = join(directory.path, entry.name);
+        try {
+          const record = JSON.parse(readFileSync(path, 'utf8')) as OwnedPublication;
+          if (!CHECK_REF.test(record.remote.ref) || basename(path) !== `${record.remote.ref.slice('refs/checks/'.length)}.json` ||
+              record.ownership.state !== 'releasable' || !Number.isFinite(record.ownership.createdAt) ||
+              now - record.ownership.createdAt < REF_GRACE_MS) continue;
+          await releaseCheckGit(workspace, path, { deadlineMs: Math.min(deadlineMs, Date.now() + 2000) });
+        } catch { /* Unknown ownership never grants deletion authority. */ }
+      }
+    } finally { directory.closeSync(); }
+  } catch { /* No journal, or unreadable ownership: leave remote refs alone. */ }
+}
+
+async function pushCheckGit(
+  workspace: string, refspecs: string[], overrides: Record<string, string> = {},
+  deadlineMs = Date.now() + GIT_OPERATION_TIMEOUT_MS, now = Date.now,
+): Promise<void> {
+  const remaining = deadlineMs - now();
+  if (remaining <= 0) throw new Error('check-git: publication preparation deadline exceeded');
   const env = environment(overrides);
   // Authentication remains local; it is never part of the published manifest or host repository.
   for (const key of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']) {
     if (process.env[key] === undefined) delete env[key];
     else env[key] = process.env[key]!;
   }
-  const pushed = Bun.spawnSync(['git', 'push', '--no-follow-tags', '--progress', 'origin', ...refspecs], {
-    cwd: workspace,
-    env,
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-    timeout: GIT_OPERATION_TIMEOUT_MS,
+  const pushed = Bun.spawn(['git', 'push', '--no-follow-tags', '--progress', 'origin', ...refspecs], {
+    cwd: workspace, env, stdin: 'ignore', stdout: 'ignore', stderr: 'pipe',
+    timeout: Math.min(GIT_OPERATION_TIMEOUT_MS, remaining),
   });
-  if (pushed.exitCode !== 0) throw new Error('check-git: check ref push failed');
-  const bytes = pushed.stderr
-    .toString()
-    .match(/Writing objects: 100%[^\r\n]*/g)
-    ?.at(-1);
+  const [code, stderr] = await Promise.all([pushed.exited, new Response(pushed.stderr).text()]);
+  const detail = transportDiagnostic(stderr);
+  if (code !== 0) throw new Error(`check-git: check ref push failed (exit ${code}${pushed.signalCode ? `, ${pushed.signalCode}` : ''}): ${detail}`);
+  const bytes = detail.match(/Writing objects: 100%[^\r\n]*/g)?.at(-1);
   if (bytes) console.error(`check-git: ${bytes}`);
 }
 
@@ -356,8 +437,10 @@ async function publishReusableSnapshot(
 export async function stageCheckGit(
   workspace: string,
   artifactDirectory: string,
-  publication?: { ref: string },
+  publication?: PublicationOptions,
 ): Promise<string> {
+  const now = publication?.now ?? Date.now;
+  const deadlineMs = publication?.deadlineMs ?? now() + 900_000;
   const source = resolve(workspace);
   const artifacts = resolve(artifactDirectory);
   if (!isDirectory(source)) throw new Error('check-git: source checkout is unavailable');
@@ -463,13 +546,32 @@ export async function stageCheckGit(
           GIT_COMMITTER_EMAIL: 'check@rezics.invalid',
         },
       );
+      const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
+      const recordPath = publicationRecord(source, publication.ref);
+      mkdirSync(dirname(recordPath), { recursive: true, mode: 0o700 });
+      const record: OwnedPublication = { ...manifest, ownership: {
+        origin: originIdentity(source), createdAt: now(), state: publication.retain ? 'retained' : 'active',
+      } };
+      // Persist intent before transport: a lost push response or failed manifest still has exact cleanup identity.
+      writeFileSync(recordPath, `${JSON.stringify(record)}\n`, { mode: 0o600, flag: 'wx' });
       try {
-        pushCheckGit(source, [`${commit}:${publication.ref}`], isolatedObjects);
-        const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await pushCheckGit(source, [`${commit}:${publication.ref}`], isolatedObjects, deadlineMs, now);
+            break;
+          } catch (error) {
+            console.error(`check-git: publication attempt ${attempt + 1} ${commit}:${publication.ref}: ${transportDiagnostic(error)}`);
+            if (attempt === 1) throw error;
+            if (deadlineMs - now() <= 250) throw new Error('check-git: publication preparation deadline exceeded before retry');
+            await (publication.backoff ?? Bun.sleep)(250);
+          }
+        }
         writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, { mode: 0o600, flag: 'wx' });
         return manifestPath;
-      } catch {
-        console.error('check-git: GitHub publication unavailable; using full snapshot upload');
+      } catch (error) {
+        console.error(`check-git: GitHub publication unavailable; using full snapshot upload: ${transportDiagnostic(error)}`);
+        // Failed or interrupted publication may already exist remotely; cleanup must not gate fallback delivery.
+        void releaseCheckGit(source, recordPath);
       }
     }
     const cacheRoot = reusableCacheRoot(source);

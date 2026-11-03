@@ -57,6 +57,7 @@ import {
   slotScript,
   workspaceFiles,
   gitWorkspaceOverlay,
+  withCheckGitTransfer,
   parseCommandPhases,
 } from './remote-check.ts';
 
@@ -2910,11 +2911,11 @@ test('a fetched staged tree needs only working edits and untracked inputs, with 
   expect(overlay.files).not.toContain('src/staged.ts');
 });
 
-test.each([0, 1])(
-  'GitHub fetch exit %i uses an overlay or full upload and deletes the shared check ref',
-  async (gitFetchExit) => {
+test.each([[0, 0], [1, 0], [1, 19]])(
+  'GitHub fetch exit %i preserves command exit %i and deletes the shared check ref',
+  async (gitFetchExit, commandExit) => {
     const fixture = scenario({
-      a: { available: 8e9, gitFetchExit, preCommandFailures: gitFetchExit === 0 ? 1 : 0 },
+      a: { available: 8e9, gitFetchExit, exit: commandExit, preCommandFailures: gitFetchExit === 0 ? 1 : 0 },
       ...(gitFetchExit === 0 ? { b: { available: 8e9, gitFetchExit } } : {}),
     });
     const directory = workspace();
@@ -2924,7 +2925,7 @@ test.each([0, 1])(
     expect(git('remote', 'add', 'origin', origin).status).toBe(0);
     expect(git('push', '-q', 'origin', 'HEAD:refs/heads/dev').status).toBe(0);
     const result = await remote(fixture.env, directory);
-    expect(result.code, result.stderr).toBe(0);
+    expect(result.code, result.stderr).toBe(commandExit);
     const fetched = fixture.events().filter((event) => event.kind === 'github-fetch');
     expect(fetched).toHaveLength(gitFetchExit === 0 ? 2 : 1);
     expect(fetched.every((event) => event.slotHeld === false)).toBe(true);
@@ -6785,9 +6786,9 @@ sys.exit(child.wait())
   };
 }
 
-test('remote dependency preparation has an absolute three-minute default and reaps an active named installer without starting the command', () => {
-  expect(DEFAULT_PREPARATION_TIMEOUT_MS).toBe(180_000);
-  expect(generatedHostRun()).toContain('supervise 180000 check-a cache-test');
+test('remote dependency preparation has an absolute fifteen-minute default and reaps an active named installer without starting the command', () => {
+  expect(DEFAULT_PREPARATION_TIMEOUT_MS).toBe(900_000);
+  expect(generatedHostRun()).toContain('supervise 900000 check-a cache-test');
   const fixture = preparationFixture();
   const run = fixture.create({ mode: 'spinner', bound: 1_200 });
   const result = run.execute();
@@ -7959,4 +7960,21 @@ test('nested official placement admits the named profile and physically receives
   } finally {
     rmSync(producer, { recursive: true, force: true });
   }
+});
+
+
+test('publication cleanup cannot replace a result or a primary failure when its manifest is lost', async () => {
+  const directory = workspace();
+  const stage = () => {
+    const path = mkdtempSync(join(directory, '.temp/publication-'));
+    return { directory: path, manifest: join(path, 'missing.json') };
+  };
+  expect(await withCheckGitTransfer({ workspace: directory }, async (transfer) => {
+    transfer.stage = stage();
+    return 19;
+  })).toBe(19);
+  await expect(withCheckGitTransfer({ workspace: directory }, async (transfer) => {
+    transfer.stage = stage();
+    throw new Error('primary transport failure');
+  })).rejects.toThrow('primary transport failure');
 });

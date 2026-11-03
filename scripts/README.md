@@ -427,6 +427,15 @@ Admission retries races against other callers. The default probe interval is fiv
    reusable immutable pack is accepted only when its object format, `HEAD`, `dev` base, shallow boundary, index tree
    and manifest/pack integrity match. Snapshot staging reports artifact bytes and the rsync upload reports its
    duration and bytes sent; the per-run local staging directory is removed after transfer, including on failure.
+   GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
+   (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;
+   final failure retains full snapshot upload. Local authentication never enters a manifest or host checkout.
+   An owner-only journal under `.temp/check-git-publications` records intent before pushing, including a lost response
+   or failed manifest write. Ordinary terminal runs release only their exact candidate with a compare-and-delete lease;
+   cleanup runs after result delivery and cannot change the result. Frozen runs retain their refs until the controller
+   calls `releaseCheckGit(workspace, manifestOrJournalPath, { settled: true })` after settlement.
+   Decision: stale sweep visits at most 32 journal entries in ten seconds, deleting only explicitly releasable records
+   aged at least seven days with matching origin and candidate; active, retained, unknown and foreign refs stay intact.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
    After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;

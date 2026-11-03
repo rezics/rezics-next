@@ -1,11 +1,12 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   stageCheckGit,
   restoreCheckGit,
   releaseCheckGit,
+  sweepCheckGit,
   fetchCheckGitScript,
   type CheckGitPublication,
 } from './check-git.ts';
@@ -192,7 +193,7 @@ test('a check-only publication sends only new objects and both hosts restore the
     expect(readFileSync(join(checkout, '.git/objects/info/alternates'), 'utf8').trim()).toBe(join(store, 'objects'));
   }
   expect(git(source, 'status', '--porcelain')).toBe(status);
-  releaseCheckGit(source, manifestPath);
+  await releaseCheckGit(source, manifestPath);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
 }, 30000);
 
@@ -229,7 +230,7 @@ test.each(['push', 'fetch'])(
     expect(git(checkout, 'write-tree')).toBe(indexTree);
     expect(git(checkout, 'rev-parse', 'dev')).toBe(base);
     expect(git(checkout, 'status', '--porcelain')).toBe(git(source, 'status', '--porcelain'));
-    if (failure === 'fetch') releaseCheckGit(source, published);
+    if (failure === 'fetch') await releaseCheckGit(source, published);
   },
   30000,
 );
@@ -245,4 +246,93 @@ test('private key material in the staged tree is refused before a ref can be pus
     'private key',
   );
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+});
+
+
+function publicationFixture(hook: string) {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  const log = join(root, 'pushes');
+  const receive = join(origin, 'hooks/pre-receive');
+  writeFileSync(receive, `#!/bin/sh\ncat >> '${log}'\n${hook}\n`);
+  chmodSync(receive, 0o755);
+  return { root, source, origin, log };
+}
+
+test('one failed push retries the identical candidate and retains redacted transport diagnostics', async () => {
+  const { root, source, origin, log } = publicationFixture(
+    `if [ "$(wc -l < '../pushes')" -eq 1 ]; then echo 'fatal: gateway https://user:credential@github.test/repo?token=private authorization: Bearer hidden' >&2; exit 1; fi`,
+  );
+  const errors: string[] = [];
+  const output = spyOn(console, 'error').mockImplementation((message) => { errors.push(String(message)); });
+  try {
+    const path = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/retry', backoff: async () => {} });
+    const publication = JSON.parse(readFileSync(path, 'utf8')) as CheckGitPublication;
+    const pushes = readFileSync(log, 'utf8').trim().split('\n');
+    expect(pushes).toHaveLength(2);
+    expect(pushes[0]).toBe(pushes[1]);
+    expect(pushes[0]).toContain(publication.remote.commit);
+    expect(git(root, '--git-dir', origin, 'rev-parse', publication.remote.ref)).toBe(publication.remote.commit);
+    expect(errors.join('\n')).toContain('exit 1');
+    expect(errors.join('\n')).toContain('gateway');
+    expect(errors.join('\n')).not.toMatch(/credential@|token=private|Bearer hidden/);
+    await releaseCheckGit(source, path);
+  } finally { output.mockRestore(); }
+});
+
+test.each([false, true])('final push failure keeps stderr and snapshot fallback; expired retry=%s', async (expire) => {
+  const { root, source, log } = publicationFixture(`echo 'fatal: gateway unavailable' >&2; exit 1`);
+  const errors: string[] = [];
+  const output = spyOn(console, 'error').mockImplementation((message) => { errors.push(String(message)); });
+  let clock = 0;
+  try {
+    const manifest = await stageCheckGit(source, join(root, 'publication'), {
+      ref: 'refs/checks/final-failure', deadlineMs: 1000, now: () => clock,
+      backoff: async () => { if (expire) clock = 1000; },
+    });
+    expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(expire ? 1 : 2);
+    expect(errors.join('\n')).toContain('gateway unavailable');
+    expect(errors.join('\n')).toContain(expire ? 'deadline exceeded' : 'exit 1');
+    expect(errors.join('\n')).toContain('using full snapshot upload');
+  } finally { output.mockRestore(); }
+});
+
+test('failed manifest delivery releases a published ref using the earlier intent', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  const artifacts = join(root, 'publication');
+  // The receiving hook simulates a local manifest write failure after the server accepted the candidate.
+  writeFileSync(join(origin, 'hooks/post-receive'), `#!/bin/sh\nmkdir '${artifacts}/manifest.json'\n`);
+  chmodSync(join(origin, 'hooks/post-receive'), 0o755);
+  await expect(stageCheckGit(source, artifacts, { ref: 'refs/checks/interrupted' })).rejects.toThrow();
+  const journal = join(source, '.temp/check-git-publications/interrupted.json');
+  if (existsSync(journal)) await releaseCheckGit(source, journal);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+});
+
+test('stale sweep deletes only settled owned identities and preserves active, frozen and foreign refs', async () => {
+  const root = sandbox();
+  const { source, head } = repository(root);
+  const origin = publicOrigin(root, source);
+  for (const name of ['stale', 'active', 'retained', 'replaced', 'foreign', 'recent', 'unknown']) {
+    const path = await stageCheckGit(source, join(root, name), { ref: `refs/checks/${name}`, retain: name === 'retained' });
+    const journal = join(source, `.temp/check-git-publications/${name}.json`);
+    const record = JSON.parse(readFileSync(journal, 'utf8'));
+    record.ownership.createdAt = name === 'recent' ? 10 * 86400000 : 0;
+    if (!['active', 'retained', 'unknown'].includes(name)) record.ownership.state = 'releasable';
+    if (name === 'foreign') record.remote.ref = 'refs/heads/dev';
+    if (name === 'unknown') delete record.ownership;
+    writeFileSync(journal, JSON.stringify(record));
+    if (name === 'replaced') git(source, 'push', '-q', '--force', 'origin', `${head}:refs/checks/replaced`);
+    if (name === 'retained') await releaseCheckGit(source, path);
+  }
+  git(source, 'push', '-q', 'origin', `${head}:refs/heads/main`, `${head}:refs/tags/keep`, `${head}:refs/other/foreign`);
+  await sweepCheckGit(source, 10 * 86400000);
+  const refs = git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)');
+  expect(refs).not.toContain('refs/checks/stale');
+  for (const ref of ['active', 'retained', 'replaced', 'foreign', 'recent', 'unknown']) expect(refs).toContain(`refs/checks/${ref}`);
+  for (const ref of ['refs/heads/dev', 'refs/heads/main', 'refs/tags/keep', 'refs/other/foreign']) expect(refs).toContain(ref);
+  await releaseCheckGit(source, join(root, 'retained/manifest.json'), { settled: true });
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/retained')).toBe('');
 });
