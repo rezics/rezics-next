@@ -671,7 +671,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         headers,
         response: { 200: shelfScorePreparationSchema, ...shelfFailures },
-        detail: detail('library_shelf.score.prepare', 'library_entry:list', true),
+        detail: detail('library_shelf_score.prepare', 'library_entry:list', true),
       },
       async ({ actor, headers: requestHeaders, admission, job, set }) => {
         shelfOwner(actor);
