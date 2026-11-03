@@ -8103,6 +8103,12 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         approvedAt: string | null;
                                         currentEpisode: boolean;
                                     } | null;
+                                    requestAdvice: {
+                                        method: "POST";
+                                        destination: string;
+                                        requiredAction: "realm:participate";
+                                        requiredHeader: "Idempotency-Key";
+                                    };
                                 };
                                 400: Response | {
                                     type: unknown;
@@ -8206,6 +8212,12 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         requestedAt: string;
                                         approvedAt: string | null;
                                         currentEpisode: boolean;
+                                    };
+                                    requestAdvice: {
+                                        method: "POST";
+                                        destination: string;
+                                        requiredAction: "realm:participate";
+                                        requiredHeader: "Idempotency-Key";
                                     };
                                 };
                                 400: Response | {
