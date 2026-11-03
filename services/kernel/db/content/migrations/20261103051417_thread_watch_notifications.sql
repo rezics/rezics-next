@@ -15,11 +15,13 @@ CREATE TABLE content.thread_watch (
   thread_id uuid NOT NULL,
   watcher_account_id uuid NOT NULL,
   created_at timestamptz NOT NULL,
-  PRIMARY KEY (route, watch_id),
-  UNIQUE (route, thread_id, watcher_account_id),
-  CHECK (route = get_byte(uuid_send(watcher_account_id), 10) * 256 + get_byte(uuid_send(watcher_account_id), 11)),
-  CHECK (route = get_byte(uuid_send(watch_id), 10) * 256 + get_byte(uuid_send(watch_id), 11)),
-  CHECK (isfinite(created_at))
+  CONSTRAINT thread_watch_watcher_route_check
+    CHECK (route = get_byte(uuid_send(watcher_account_id), 10) * 256 + get_byte(uuid_send(watcher_account_id), 11)),
+  CONSTRAINT thread_watch_id_route_check
+    CHECK (route = get_byte(uuid_send(watch_id), 10) * 256 + get_byte(uuid_send(watch_id), 11)),
+  CONSTRAINT thread_watch_created_at_check CHECK (isfinite(created_at)),
+  CONSTRAINT thread_watch_identity_key UNIQUE (route, thread_id, watcher_account_id),
+  PRIMARY KEY (route, watch_id)
 );
 CREATE INDEX thread_watch_fanout_idx
   ON content.thread_watch (thread_id, created_at, watch_id) INCLUDE (route, watcher_account_id);
@@ -34,12 +36,15 @@ CREATE TABLE content.thread_watch_notice_work (
   cursor_created_at timestamptz,
   cursor_watch_id uuid,
   done boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (route, post_id),
-  CHECK (route = get_byte(uuid_send(post_id), 10) * 256 + get_byte(uuid_send(post_id), 11)),
-  CHECK (route = get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11)),
-  CHECK ((cursor_created_at IS NULL) = (cursor_watch_id IS NULL)),
-  CHECK (cursor_watch_id IS NULL OR route = get_byte(uuid_send(cursor_watch_id), 10) * 256 + get_byte(uuid_send(cursor_watch_id), 11)),
-  CHECK (isfinite(published_at))
+  CONSTRAINT thread_watch_notice_work_post_route_check
+    CHECK (route = get_byte(uuid_send(post_id), 10) * 256 + get_byte(uuid_send(post_id), 11)),
+  CONSTRAINT thread_watch_notice_work_thread_route_check
+    CHECK (route = get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11)),
+  CONSTRAINT thread_watch_notice_work_cursor_check CHECK ((cursor_created_at IS NULL) = (cursor_watch_id IS NULL)),
+  CONSTRAINT thread_watch_notice_work_cursor_route_check
+    CHECK (cursor_watch_id IS NULL OR route = get_byte(uuid_send(cursor_watch_id), 10) * 256 + get_byte(uuid_send(cursor_watch_id), 11)),
+  CONSTRAINT thread_watch_notice_work_published_at_check CHECK (isfinite(published_at)),
+  PRIMARY KEY (route, post_id)
 );
 CREATE INDEX thread_watch_notice_work_expire_idx
   ON content.thread_watch_notice_work (route, published_at, post_id);

@@ -3805,11 +3805,11 @@ CREATE TABLE library.reported_year_bucket (
     month_precision bigint NOT NULL,
     day_precision bigint NOT NULL,
     CONSTRAINT reported_year_bucket_bucket_check CHECK (((bucket >= 0) AND (bucket <= 13))),
+    CONSTRAINT reported_year_bucket_check CHECK (((subjects >= 1) AND (subjects <= completed))),
+    CONSTRAINT reported_year_bucket_check1 CHECK (((unknown_profile >= 0) AND (unknown_profile <= completed))),
+    CONSTRAINT reported_year_bucket_check2 CHECK (((month_precision >= 0) AND (month_precision <= completed))),
+    CONSTRAINT reported_year_bucket_check3 CHECK (((day_precision >= 0) AND (day_precision <= completed))),
     CONSTRAINT reported_year_bucket_completed_check CHECK ((completed > 0)),
-    CONSTRAINT reported_year_bucket_day_precision_check CHECK (((day_precision >= 0) AND (day_precision <= completed))),
-    CONSTRAINT reported_year_bucket_month_precision_check CHECK (((month_precision >= 0) AND (month_precision <= completed))),
-    CONSTRAINT reported_year_bucket_subjects_check CHECK (((subjects >= 1) AND (subjects <= completed))),
-    CONSTRAINT reported_year_bucket_unknown_profile_check CHECK (((unknown_profile >= 0) AND (unknown_profile <= completed))),
     CONSTRAINT reported_year_bucket_year_check CHECK (((year >= 1) AND (year <= 9999)))
 );
 

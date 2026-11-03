@@ -1335,47 +1335,6 @@ CREATE TABLE content.notice_seen (
 
 
 --
--- Name: thread_watch; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.thread_watch (
-    route integer NOT NULL,
-    watch_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    watcher_account_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT thread_watch_pkey PRIMARY KEY (route, watch_id),
-    CONSTRAINT thread_watch_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT thread_watch_watcher_route_check CHECK ((route = ((get_byte(uuid_send(watcher_account_id), 10) * 256) + get_byte(uuid_send(watcher_account_id), 11)))),
-    CONSTRAINT thread_watch_id_route_check CHECK ((route = ((get_byte(uuid_send(watch_id), 10) * 256) + get_byte(uuid_send(watch_id), 11)))),
-    CONSTRAINT thread_watch_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT thread_watch_identity_key UNIQUE (route, thread_id, watcher_account_id)
-);
-
-
---
--- Name: thread_watch_notice_work; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.thread_watch_notice_work (
-    route integer NOT NULL,
-    post_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    published_at timestamp with time zone NOT NULL,
-    cursor_created_at timestamp with time zone,
-    cursor_watch_id uuid,
-    done boolean DEFAULT false NOT NULL,
-    CONSTRAINT thread_watch_notice_work_pkey PRIMARY KEY (route, post_id),
-    CONSTRAINT thread_watch_notice_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT thread_watch_notice_work_post_route_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
-    CONSTRAINT thread_watch_notice_work_thread_route_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
-    CONSTRAINT thread_watch_notice_work_cursor_check CHECK (((cursor_created_at IS NULL) = (cursor_watch_id IS NULL))),
-    CONSTRAINT thread_watch_notice_work_cursor_route_check CHECK (((cursor_watch_id IS NULL) OR (route = ((get_byte(uuid_send(cursor_watch_id), 10) * 256) + get_byte(uuid_send(cursor_watch_id), 11))))),
-    CONSTRAINT thread_watch_notice_work_published_at_check CHECK (isfinite(published_at))
-);
-
-
---
 -- Name: operation; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2137,6 +2096,44 @@ CREATE TABLE content.thread (
 
 
 --
+-- Name: thread_watch; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.thread_watch (
+    route integer NOT NULL,
+    watch_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    watcher_account_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT thread_watch_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT thread_watch_id_route_check CHECK ((route = ((get_byte(uuid_send(watch_id), 10) * 256) + get_byte(uuid_send(watch_id), 11)))),
+    CONSTRAINT thread_watch_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT thread_watch_watcher_route_check CHECK ((route = ((get_byte(uuid_send(watcher_account_id), 10) * 256) + get_byte(uuid_send(watcher_account_id), 11))))
+);
+
+
+--
+-- Name: thread_watch_notice_work; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.thread_watch_notice_work (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    cursor_created_at timestamp with time zone,
+    cursor_watch_id uuid,
+    done boolean DEFAULT false NOT NULL,
+    CONSTRAINT thread_watch_notice_work_cursor_check CHECK (((cursor_created_at IS NULL) = (cursor_watch_id IS NULL))),
+    CONSTRAINT thread_watch_notice_work_cursor_route_check CHECK (((cursor_watch_id IS NULL) OR (route = ((get_byte(uuid_send(cursor_watch_id), 10) * 256) + get_byte(uuid_send(cursor_watch_id), 11))))),
+    CONSTRAINT thread_watch_notice_work_post_route_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT thread_watch_notice_work_published_at_check CHECK (isfinite(published_at)),
+    CONSTRAINT thread_watch_notice_work_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT thread_watch_notice_work_thread_route_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11))))
+);
+
+
+--
 -- Name: account_erasure_progress account_erasure_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2713,6 +2710,30 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: thread_watch thread_watch_identity_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.thread_watch
+    ADD CONSTRAINT thread_watch_identity_key UNIQUE (route, thread_id, watcher_account_id);
+
+
+--
+-- Name: thread_watch_notice_work thread_watch_notice_work_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.thread_watch_notice_work
+    ADD CONSTRAINT thread_watch_notice_work_pkey PRIMARY KEY (route, post_id);
+
+
+--
+-- Name: thread_watch thread_watch_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.thread_watch
+    ADD CONSTRAINT thread_watch_pkey PRIMARY KEY (route, watch_id);
+
+
+--
 -- Name: author_item_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2915,24 +2936,6 @@ CREATE INDEX notice_route_created_idx ON content.notice USING btree (route, crea
 
 CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx ON content.notice USING btree (route, kind, source_id, recipient_id);
 
---
--- Name: thread_watch_fanout_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX thread_watch_fanout_idx ON content.thread_watch USING btree (thread_id, created_at, watch_id) INCLUDE (route, watcher_account_id);
-
---
--- Name: thread_watch_account_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX thread_watch_account_idx ON content.thread_watch USING btree (route, watcher_account_id, created_at, thread_id) INCLUDE (watch_id);
-
---
--- Name: thread_watch_notice_work_expire_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX thread_watch_notice_work_expire_idx ON content.thread_watch_notice_work USING btree (route, published_at, post_id);
-
 
 --
 -- Name: post_deleted_page_idx; Type: INDEX; Schema: content; Owner: -
@@ -3058,6 +3061,27 @@ CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (ro
 --
 
 CREATE INDEX thread_review_discovery_page_idx ON content.thread USING btree (route, thread_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility = 'published'::text));
+
+
+--
+-- Name: thread_watch_account_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_account_idx ON content.thread_watch USING btree (route, watcher_account_id, created_at, thread_id) INCLUDE (watch_id);
+
+
+--
+-- Name: thread_watch_fanout_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_fanout_idx ON content.thread_watch USING btree (thread_id, created_at, watch_id) INCLUDE (route, watcher_account_id);
+
+
+--
+-- Name: thread_watch_notice_work_expire_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_watch_notice_work_expire_idx ON content.thread_watch_notice_work USING btree (route, published_at, post_id);
 
 
 --
