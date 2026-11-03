@@ -879,7 +879,9 @@ async function startStack(): Promise<
           ifMatch: request.headers.get('if-match'),
           session: request.headers.get('rezics-session-token'),
           fixtureRequest: request.headers.get('x-native-fixture-request') === '1',
-          ...(request.method === 'POST' && ['/v1/copies', '/v1/subjects'].includes(url.pathname)
+          ...(request.method === 'POST' &&
+          (['/v1/copies', '/v1/subjects'].includes(url.pathname) ||
+            /^\/v1\/subjects\/[^/]+\/candidates$/u.test(url.pathname))
             ? { body: await request.clone().text() }
             : request.method === 'PATCH'
               ? { body: await request.clone().text() }

@@ -30,8 +30,10 @@ export type CatalogueFactsFixture = {
   alice: AuthJourney;
   aliceAccountId: string;
   digest: string;
+  type: string;
   label: string;
   path: string;
+  identifiersPath: string;
   published: typeof published;
   language: string;
   url: string;
@@ -54,8 +56,8 @@ function cited(property: string, content: unknown, citation: string) {
   };
 }
 
-/** Provision a Book through admitted APIs; Alice’s signed-in session owns the later user action. */
-export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixture> {
+/** Provision an emitted Type through admitted APIs; Alice owns the later user action. */
+export async function startCatalogueFactsFixture(type = 'schema:Book'): Promise<CatalogueFactsFixture> {
   const stack = await startNativeWebStack();
   let auth: NativeAuthStack | undefined;
   try {
@@ -66,10 +68,10 @@ export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixtur
     );
     if (active.digest !== bundledDigest)
       throw new Error(`Native stack is not using bundled definitions ${bundledDigest}`);
-    const book = bundledRelease.types['schema:Book'];
-    if (!book) throw new Error('Bundled release has no schema:Book');
+    const subjectType = bundledRelease.types[type];
+    if (!subjectType) throw new Error(`Bundled release has no ${type}`);
     for (const property of ['schema:datePublished', 'schema:inLanguage', 'schema:url'] as const)
-      if (!book.properties.includes(property)) throw new Error(`schema:Book does not emit ${property}`);
+      if (!subjectType.properties.includes(property)) throw new Error(`${type} does not emit ${property}`);
 
     auth = await startAuthStack(stack);
     const aliceIdentity = await stack.authPersona('alice');
@@ -103,7 +105,7 @@ export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixtur
           method: 'POST',
           headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
           body: JSON.stringify({
-            type: 'schema:Book',
+            type,
             labels: { en: label },
             statements: {
               'schema:datePublished': [cited('schema:datePublished', published, citations.date)],
@@ -126,8 +128,8 @@ export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixtur
         200,
         `GET /v1/subjects/${created.subject.id}`,
       );
-      if (body.subject.id !== created.subject.id || body.subject.type !== 'schema:Book')
-        throw new Error('Public subject identity drifted from the provisioned Book');
+      if (body.subject.id !== created.subject.id || body.subject.type !== type)
+        throw new Error('Public subject identity drifted from the provisioned Type');
       return body.subject;
     };
     const subject = await current();
@@ -139,8 +141,10 @@ export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixtur
       alice,
       aliceAccountId: aliceIdentity.accountId,
       digest: bundledDigest,
+      type,
       label,
       path: `${subjectHref({ id: created.subject.id, label }, 'en').href}/edit`,
+      identifiersPath: `${subjectHref({ id: created.subject.id, label }, 'en').href}/identifiers`,
       published,
       language: 'en',
       url: 'https://example.org/catalogue-facts/book',
