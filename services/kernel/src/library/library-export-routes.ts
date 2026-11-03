@@ -370,7 +370,14 @@ export function libraryExportRoutes(
               exportId: text,
               state,
               records: t.Array(
-                t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecordV2, journalRecordV3, ...providerRecords]),
+                t.Union([
+                  legacyRecord,
+                  annotationRecord,
+                  provenanceRecord,
+                  journalRecordV2,
+                  journalRecordV3,
+                  ...providerRecords,
+                ]),
                 {
                   maxItems: 16,
                 },

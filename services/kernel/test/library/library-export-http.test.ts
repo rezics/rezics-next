@@ -865,7 +865,8 @@ test('stored V3 keeps its assessment sections and provider oversize refuses the 
   const status = await get(`/v1/libraryExports/${old.exportId}`);
   expect(status).toMatchObject({ version: 3, sections: expect.arrayContaining(['journals']) });
   expect(status.sections).toHaveLength(17);
-  let cursor = status.first, last: any;
+  let cursor = status.first,
+    last: any;
   while (cursor) {
     last = await get(`/v1/libraryExports/${old.exportId}/pages?cursor=${encodeURIComponent(cursor)}`);
     cursor = last.next;
@@ -882,7 +883,8 @@ test('stored V3 keeps its assessment sections and provider oversize refuses the 
       await sql`UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{source}',${evidence}::jsonb)
         WHERE route=${route} AND account_id=${owner} AND ordinal=0`;
     const start = await capture();
-    let next = start.first, page: any;
+    let next = start.first,
+      page: any;
     do {
       page = await get(`/v1/libraryExports/${start.exportId}/pages?cursor=${encodeURIComponent(next)}`);
       next = page.next;
@@ -890,8 +892,10 @@ test('stored V3 keeps its assessment sections and provider oversize refuses the 
     expect(page).toMatchObject({ state: 'limit', records: [], manifest: null });
     expect(await capture()).toMatchObject({ state: 'collecting' });
     await sql`UPDATE library.library_export SET state='cancelled' WHERE route=${route} AND account_id=${owner}`;
-    if (provider === 'vndb') await sql`UPDATE library.vndb_import SET rows='[]' WHERE route=${route} AND account_id=${owner}`;
-    else await sql`UPDATE library.list_import_anilist SET payload='{"source":{}}' WHERE route=${route} AND account_id=${owner} AND ordinal=0`;
+    if (provider === 'vndb')
+      await sql`UPDATE library.vndb_import SET rows='[]' WHERE route=${route} AND account_id=${owner}`;
+    else
+      await sql`UPDATE library.list_import_anilist SET payload='{"source":{}}' WHERE route=${route} AND account_id=${owner} AND ordinal=0`;
   }
 });
 
@@ -965,9 +969,20 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
     0,
   );
   await purge(db.pool, { accountId: owner, kind: 'vndb_import', parent: null, after: null, ordinal: 0, segment: 0 });
-  await purge(db.pool, { accountId: owner, kind: 'list_import_anilist', parent: null, after: null, ordinal: 0, segment: 0 });
-  expect((await sql`SELECT 1 FROM library.vndb_import_row WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(0);
-  expect((await sql`SELECT 1 FROM library.list_import_anilist WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(0);
+  await purge(db.pool, {
+    accountId: owner,
+    kind: 'list_import_anilist',
+    parent: null,
+    after: null,
+    ordinal: 0,
+    segment: 0,
+  });
+  expect((await sql`SELECT 1 FROM library.vndb_import_row WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
+    0,
+  );
+  expect(
+    (await sql`SELECT 1 FROM library.list_import_anilist WHERE route=${route} AND account_id=${owner}`).rowCount,
+  ).toBe(0);
   await purge(db.pool, {
     accountId: owner,
     kind: 'collection_archive_recovery',

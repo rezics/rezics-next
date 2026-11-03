@@ -270,9 +270,12 @@ export async function readExportSourcePage(
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
-    const sourceSql = version >= 3 && section === 'journals' ? journalQueryV3
-      : version === 4 && section === 'malImports' ? queries.malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
-      : queries[section];
+    const sourceSql =
+      version >= 3 && section === 'journals'
+        ? journalQueryV3
+        : version === 4 && section === 'malImports'
+          ? queries.malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
+          : queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
@@ -336,20 +339,20 @@ export async function readExportSourcePage(
         : mal && version === 4
           ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.list_import_mal_row
            WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
-        : mal
-          ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
+          : mal
+            ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
            FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
              least(jsonb_array_length(document->'rows')-1,$3::integer+${fetchRows})) i
            WHERE route=$1 AND id=$2 AND account_id=$4 ORDER BY i LIMIT ${fetchRows}`
-          : section === 'units'
-            ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
+            : section === 'units'
+              ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
            WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
              AND p.session_id=$2 AND p.state <> 'retired') AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT ${fetchRows}`
-            : section === 'history'
-              ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
+              : section === 'history'
+                ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
              WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
                AND p.session_id=$2 AND p.state <> 'retired') AND change_no>$3::integer ORDER BY change_no LIMIT ${fetchRows}`
-              : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
+                : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
              FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL
              AND member_id>$3::uuid ORDER BY member_id LIMIT ${fetchRows}`;
     rows = await bounded(

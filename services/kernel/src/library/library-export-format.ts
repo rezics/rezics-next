@@ -41,7 +41,13 @@ export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
 export type LibraryExportSection = LibraryExportSectionV2;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
-  return version === 1 ? exportSections : version === 2 ? exportSectionsV2 : version === 3 ? exportSectionsV3 : exportSectionsV4;
+  return version === 1
+    ? exportSections
+    : version === 2
+      ? exportSectionsV2
+      : version === 3
+        ? exportSectionsV3
+        : exportSectionsV4;
 }
 
 type Capture = { export_id: string; created_at: string; expires_at: string };
@@ -134,7 +140,11 @@ export type LibraryExportManifestV4 = {
   omissions: typeof v4Omissions;
 };
 
-export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3 | LibraryExportManifestV4;
+export type LibraryExportManifest =
+  | LibraryExportManifestV1
+  | LibraryExportManifestV2
+  | LibraryExportManifestV3
+  | LibraryExportManifestV4;
 export type LibraryExportFinalManifestV1 = LibraryExportManifestV1 & {
   fullExport: false;
   rows: number;
@@ -198,13 +208,14 @@ export function libraryExportManifest(
       sections: [...exportSectionsV2],
       omissions: v2Omissions,
     };
-  if (capture.format_version === 3) return {
-    ...common,
-    version: 3,
-    coverage: 'private-library-owner-facts-v3',
-    sections: [...exportSectionsV3],
-    omissions: v3Omissions,
-  };
+  if (capture.format_version === 3)
+    return {
+      ...common,
+      version: 3,
+      coverage: 'private-library-owner-facts-v3',
+      sections: [...exportSectionsV3],
+      omissions: v3Omissions,
+    };
   return {
     ...common,
     version: 4,
