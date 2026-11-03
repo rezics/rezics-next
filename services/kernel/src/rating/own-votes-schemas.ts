@@ -11,7 +11,7 @@ export const OwnVoteActionsSchema = t.Union([
   t.Object(
     {
       state: t.Literal('unavailable'),
-      reason: t.Union([t.Literal('merged_source'), t.Literal('identity_pending')]),
+      reason: t.Union([t.Literal('merged_source'), t.Literal('identity_pending'), t.Literal('read_only')]),
     },
     closed,
   ),

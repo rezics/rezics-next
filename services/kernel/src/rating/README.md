@@ -1061,13 +1061,18 @@ sort by change time or invent chronology. Changing a value keeps its key; cleari
 the consumed key is observed on a fresh traversal. Inserts after that key may appear later. This live cursor
 promises neither a historical snapshot nor continued readability of previously consumed rows.
 
-Continuation is sealed to account, authentication epoch, current-native selection and ordering version. Current
+Continuation is sealed to account, client, delegator, normalized complete scopes, authentication epoch, current-native
+selection and ordering version, using the observed native account-home epoch. The injected clock and shared signed
+cursor service retain their fifteen-minute expiry. Current
 account kind/state/fence/epoch is checked before cursor decoding and before vote payloads. The twenty selected
 source keys alone enter native identity, Subject summary and question observations. Question reads group exact
 IDs by home, join only their label/lifecycle heads, release the home, and check each represented Realm through
 native Access. Global questions retain the existing vote command's disclosure rule. No mounted point GET is used
-for hydration. Final question, original/terminal disclosure, identity and account observations remove stale rows
-and actions. A final exact-key account read also suppresses concurrently cleared votes and returns current values.
+for hydration. Final question, original/terminal disclosure, identity and account observations qualify rows and actions. Labels
+come from `readSubjectSummaryObservation`; its final `current()` witness rechecks actual source-home epochs and
+positions and freshly prepared native disclosure. Changed summary sources fail with retryable unavailability,
+never old labels. A final exact-key account read suppresses concurrently cleared votes; a changed selected slot or
+question observation fails for retry at the same frontier, rather than combining observations from different operations.
 
 Each entry includes the original `targetId`/`questionId`, current permitted `subject` summary and `subjectHref`
 (the native Subject GET), current `question` label/scale/lifecycle, and `own: {units, revision, at}`. Units equal
@@ -1085,6 +1090,16 @@ GET returns 404 and a fresh inventory omits the clear. Neither replay nor delaye
 Own units imply no public mean, private rank, provider figure or Realm contribution. Aggregate freshness remains
 the existing aggregate read's explicit `freshness` contract; the page does not claim aggregate completion.
 
+`prepareVoteTarget` in `votes.ts` is shared by the writer's initial preparation, every native attempt before
+receipt replay, and two request-local observations for each selected unmerged slot. It observes the actual question
+and original-to-terminal resolution through native Access. The account snapshot repeats the writer's current account
+requirements, native identity-effect admission and existing Library command gate. Retired definitions offer only
+clear/readback when those conditions hold. Advice grants no authority: PUT/DELETE repeat their own authorization,
+preparation and locked native admission on every attempt. No new writer, authority copy or lifecycle is installed.
+
+Decision: a fenced native account home or closed existing Library command gate returns closed `unavailable/read_only`
+action advice without mutation links; changed retained summary, question or slot observations require same-input retry.
+
 Examples for Web's existing account reader and Subject assessment owners:
 
 ```ts
@@ -1096,7 +1111,11 @@ Examples for Web's existing account reader and Subject assessment owners:
 { viewer: { accountId }, votes: [], next: null }
 { viewer: { accountId }, votes: [], next: opaqueCursor }
 // Failed load is HTTP 503 with a retryable problem, never the empty DTO.
-// Signed out is HTTP 401; an authenticated caller without rating:vote is HTTP 403.
+// Revoked/suspended or missing rating:vote is HTTP 403; signed out is HTTP 401.
+// A fenced home/closed native command gate preserves the readable row without action links.
+{ state: 'unavailable', reason: 'read_only' }
+// A retryable 503 keeps the original cursor. Reload that exact cursor after recovery.
+// Uncertain PUT/DELETE retains the original method/path/body/key and uses exact-source GET readback.
 ```
 
 Web retains all UI ownership. The account inventory consumer and phone/desktop change/clear/failure-recovery
@@ -1114,33 +1133,40 @@ inspection after integration are remaining experience work; this API alone does 
 
 #### Current own-vote page Cost
 
-- Touches: three account-home snapshots (pre-cursor, raw selection, final supplied-key read), four account reads
-  including the raw helper's admission, and at most 20 final exact vote probes. Two question passes each group
-  Q <=20 exact definitions by home and seek their label/lifecycle heads; each pass performs native `readRealm`
-  for R <=Q distinct represented Realms. Two explicit source mapping batches plus the two `readableSubjects`
-  batches make four identity mapping calls. Each mapping call collects twice: per source home one owner batch
-  and one source batch; per represented control home one owner, pending-group and current-closure batch. Both
-  readable passes additionally perform original AND terminal `accessCheck` preparation, original reference
-  disclosure and terminal reference disclosure for up to S <=20 sources; an ordinary source still incurs both
-  reference reads. Each reference snapshot reads its partition and exact Subject and runs native Access.
-  One `readSubjectSummaries` batch hydrates at most S distinct terminals. Two independently anchored Global
-  release reads bracket that summary. Finally, each distinct visible unmerged source runs the native
-  `admitIdentityRatingEffect` observation grouped by Subject home, without an account checkout: one exact
-  Subject/direct-redirect probe, then one `readEpoch` for its home (partition owner, cutover authority and
-  partition identity control). Pending admission removes mutation links. All snapshots, pool acquisition,
-  deadlines and runner controls participate.
-- Bound: Rating-owned storage work is at most 21 selected votes plus 20 exact reobservations, four account points,
-  and 2Q definition/label/lifecycle points each. The complete cost additionally includes four real identity
-  batches, 4S prepared native checks/reference observations, 2R Realm reads, at most S native identity-admission
-  probes with their owner/cutover/control observations, and one shared summary projection.
-  Summary work includes current labels, original-language and image slots, up to twelve representative-edition
-  keys per supplied terminal, one chosen edition per terminal, up to three planning attempts, native disclosure
-  for all addressed subjects, selected Content media/custody and independently anchored source fences. Release
-  cache misses include the whole released definition bundle. Bytes include all selected labels, expanded-slot
-  candidates, images/credits, serialized Access evidence and cold release bytes, not just vote scalars. These
-  owner terms must be summed from their actual admitted branches; neither a numeric whole-operation ceiling nor
-  constant physical work for every expanded slot/history is asserted here. Empty raw pages stop before all
-  identity, question and summary work. Denied account/scope/epoch stops before private payload selection.
+- Touches: three account-home repeatable-read snapshots (pre-cursor, raw selection, final supplied-key read),
+  each with partition binding, a second native partition-state read and current account admission; the raw helper
+  repeats account admission. Final selection probes at most20 exact vote keys and the native Library command gate.
+  Two question passes group Q <=20 definitions by home, reading exact definition/label/lifecycle heads and preparing
+  and evaluating native `readRealm` for R <=Q represented Realms per pass. Four batch identity observations remain:
+  initial mappings, initial readable originals, final readable originals and final mappings. Each batch collects
+  twice, with source-home owner/source batches and control-home owner/pending-group/current-closure batches.
+  Each readable-original pass prepares original AND terminal Access and reads both references, even for ordinary
+  sources. For P <=20 selected visible unmerged slots, two `prepareVoteTarget` passes additionally read a native
+  question, its Realm when applicable, one identity mapping and original AND terminal prepared Access/reference
+  observations. The final account snapshot performs at most S <=20 exact native `admitIdentityRatingEffect` probes,
+  each with direct redirect and identity-home owner/cutover/control reads, matching the writer's native location.
+  Two independently anchored Global release reads bracket the shared summary. `readSubjectSummaryObservation`
+  projects at most S terminals; its final witness prepares native Access for disclosed initial/representative
+  batches, reads all participating partition bindings and epoch/positions and evaluates each check afresh. All
+  preparation releases its checkout before another home is acquired; every snapshot has BEGIN/isolation/COMMIT or
+  rollback, pool acquisition and deadline work. The reader has no command runner; actual PUT/DELETE retain their
+  existing preparation, authorization-before-receipt, locked vote/count/admission, event/receipt/commit and replay
+  phases from the vote Cost sections, including the shared Library gate and registered effect runner phases.
+- Bound: at most21 raw votes,20 exact final vote points, four account points, six account-home partition points,
+  one Library gate point,2Q question/label/lifecycle points plus2P native command question/label/lifecycle points,
+  2R grouped Realm observations plus up to2P command-preparation Realm observations. Identity work comprises four
+  batches plus2P individual mapping observations,4S readable-source reference checks plus4P preparation reference
+  checks, and S effect-admission probes. These are supplied-key bounds, not a numeric ceiling on nested authority.
+  The summary owner includes current labels, original-language/image slots, up to twelve representative-edition
+  keys and one chosen edition per terminal, up to three planning attempts, native disclosure for all addressed
+  Subjects, selected Content media/custody and independently anchored source fences. Its final witness retains
+  actual source-home epoch/position components and selected/disclosed batches and repeats native authority work.
+  Cold release reads include the complete released bundle. Charge physical rows and raw/materialized/retained/
+  serialized bytes for every nested pool, Access proof, statement/expanded-slot candidate, label, cover/credit,
+  retained observation and final DTO, not only twenty vote scalars. Existing Performance corrections still apply;
+  neither output limits nor fixed keys prove a whole-operation physical or byte ceiling. Empty raw pages stop
+  before foreign work; denied scopes/security episodes stop before private payload selection. Operational failure
+  returns no page/frontier; callers retain the exact input for retry.
 - Growth check: `test/rating/own-votes-page.test.ts` uses production Kernel, native Access, signed-account fixtures
   and registered Rating effects for native mutation/replay/readback, sparse pages, two devices and dependency
   recovery. All-pool controls/rows/bytes and strict by-ID physical-prefix plans at independent 256/1024/4096

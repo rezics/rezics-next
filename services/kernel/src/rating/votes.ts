@@ -152,10 +152,28 @@ function queryClient(client: Queryable): Queryable {
   return { query: client.query.bind(client) };
 }
 
-async function findQuestion(config: Dependencies, actor: Actor, questionId: string): Promise<RatingQuestion> {
-  const row = await readVisibleRatingQuestion(config, actor, questionId, deadlineFor(5_000), false);
+async function findQuestion(config: Dependencies, actor: Actor, questionId: string, deadline = deadlineFor(5_000)): Promise<RatingQuestion> {
+  const row = await readVisibleRatingQuestion(config, actor, questionId, deadline, false);
   if (!row) throw new RatingQuestionNotFoundError();
   return asQuestion(row);
+}
+
+/** Shared native command preparation for a selected exact slot. Advice retains no authorization. */
+export async function prepareVoteTarget(
+  config: Dependencies,
+  actor: Actor,
+  input: { questionId: string; targetId: string; units?: number | null },
+  deadline: number,
+) {
+  voteAccount(actor);
+  const question = await findQuestion(config, actor, input.questionId, deadline);
+  if (input.units !== undefined) {
+    if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
+    validateUnits(question, input.units);
+  }
+  const target = await resolveSubject(config, actor, input.targetId, undefined, { pool: config.pool, deadline });
+  if (!target) throw new LibraryNotFoundError();
+  return { question, target };
 }
 
 function validateUnits(question: RatingQuestion, units: number | null): void {
@@ -190,7 +208,7 @@ class VoteUnchanged extends Error {
 
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export function createVoteCommands(config: Dependencies) {
-  const { pool, access, clock } = config;
+  const { pool, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
   async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
@@ -204,15 +222,9 @@ export function createVoteCommands(config: Dependencies) {
       throw new VoteInvalidError('vote');
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
-    const question = await findQuestion(config, actor, input.questionId);
+    const { question, target: resolved } = await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
     if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
     validateUnits(question, input.units);
-    const resolved = await resolveSubject(
-      { pool, access, ...(clock === undefined ? {} : { clock }) },
-      owner,
-      input.targetId,
-    );
-    if (!resolved) throw new LibraryNotFoundError();
 
     try {
       const outcome = await runner.ownAccountPrepared(
@@ -225,15 +237,11 @@ export function createVoteCommands(config: Dependencies) {
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
           prepare: async (attempt) => {
-            const current = await readVisibleRatingQuestion(
-              config,
-              actor,
-              question.id,
-              commandAttemptDeadline(attempt),
-              false,
-            );
-            if (!current) throw new RatingQuestionNotFoundError();
-            if (input.units !== null && current.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
+            const current = await prepareVoteTarget(config, actor, input, commandAttemptDeadline(attempt));
+            if (current.target.subjectId !== resolved.subjectId)
+              throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
+            if (input.units !== null && current.question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
+            validateUnits(current.question, input.units);
           },
         },
         async (tx, command) => {

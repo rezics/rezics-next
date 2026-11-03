@@ -4,6 +4,9 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
+import { readPartition, type Partition } from '../partition/partition.ts';
+import { LibraryNotFoundError } from '../library/command-support.ts';
+import commandGate from '../library/shelf-maintenance-gate-read.sql';
 import { ProblemError } from '../http/problem.ts';
 import { readableSubjects, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -13,11 +16,11 @@ import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
 import { admitIdentityRatingEffect } from '../semantic/identity-rating-admission.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
+import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ratingQuestionView, requireRealmQuestionRead, type RatingQuestionView } from './question-directory.ts';
-import { VOTE_SCOPE, VoteInvalidError } from './votes.ts';
+import { prepareVoteTarget, RatingQuestionNotFoundError, VOTE_SCOPE, VoteInvalidError } from './votes.ts';
 import selectPage from './own-votes-page.sql';
 import selectCurrent from './own-votes-current.sql';
 import selectQuestions from './own-votes-questions.sql';
@@ -30,7 +33,7 @@ type CommandLinks = { clear: string; readback: string };
 export type OwnVoteActions =
   | (CommandLinks & { state: 'editable'; put: string })
   | (CommandLinks & { state: 'retired'; reason: 'question_retired' })
-  | { state: 'unavailable'; reason: 'merged_source' | 'identity_pending' };
+  | { state: 'unavailable'; reason: 'merged_source' | 'identity_pending' | 'read_only' };
 export type OwnVoteEntry = {
   /** Exact stored source key, even when its permitted navigation points at a terminal. */
   targetId: string;
@@ -101,28 +104,18 @@ async function visibleSources(deps: Dependencies, actor: Actor, sources: readonl
   }
 }
 
-/** Observe the same native identity admission as a changed vote, without writing or holding an account checkout. */
-async function admittedSources(deps: Dependencies, sources: readonly string[], deadline: number) {
-  const homes = new Map<number, string[]>();
-  for (const id of sources) {
-    const home = partitionOf(routeOf(id)!);
-    homes.set(home, [...(homes.get(home) ?? []), id]);
+async function commandPreparation(deps: Dependencies, actor: Actor, slot: Key, deadline: number) {
+  try {
+    return await prepareVoteTarget(deps, actor, slot, deadline);
+  } catch (error) {
+    if (
+      error instanceof LibraryNotFoundError ||
+      error instanceof RatingQuestionNotFoundError ||
+      (error instanceof ProblemError && error.code === 'not_found')
+    ) return null;
+    if (error instanceof SubjectIdentityUnavailableError) throw new AccessUnavailableError('contention');
+    throw error;
   }
-  const admitted = new Set<string>();
-  for (const [home, ids] of homes) {
-    await withReadTransaction(
-      deps.pool,
-      async (client) => {
-        await partitionReadClient(client, home);
-        for (const id of ids) {
-          const result = await admitIdentityRatingEffect(client, { requestedTargetId: id, resolvedTargetId: id });
-          if (result.status === 'admitted') admitted.add(id);
-        }
-      },
-      deadline,
-    );
-  }
-  return admitted;
 }
 
 /** Supplied exact keys only; each question home is released before native Realm Access preparation. */
@@ -165,13 +158,17 @@ export function createOwnVotesReader(deps: Dependencies) {
     async page(actor: Actor, input: { cursor?: string }, deadline: number): Promise<OwnVotesPage> {
       const owner = ownerOf(actor);
       const home = partitionOf(routeOf(owner.accountId)!);
-      const accountRead = <T>(read: (client: PoolClient) => Promise<T>) =>
+      let epoch: number | undefined;
+      const accountRead = <T>(read: (client: PoolClient, state: Partition) => Promise<T>) =>
         withReadTransaction(
           deps.pool,
           async (client) => {
             await partitionReadClient(client, home);
+            const state = await readPartition(client, home);
+            if (!state || (epoch !== undefined && state.epoch !== epoch)) throw new AccessUnavailableError('contention');
+            epoch = state.epoch;
             await currentAccount(client, owner);
-            return read(client);
+            return read(client, state);
           },
           deadline,
         );
@@ -181,6 +178,9 @@ export function createOwnVotesReader(deps: Dependencies) {
         operation: 'rating.own-votes-page',
         parameters: {
           account: owner.accountId,
+          client: owner.clientId,
+          delegator: owner.requestedBy,
+          scopes: JSON.stringify([...new Set(owner.scopes)].sort()),
           authnEpoch: owner.authnEpoch,
           selection: 'current-native',
           order: 'question-target.v1',
@@ -192,7 +192,7 @@ export function createOwnVotesReader(deps: Dependencies) {
         const cursor = decodeCursor(deps.tokens, binding, input.cursor, now());
         if (
           !cursor.ok ||
-          cursor.epoch !== 1 ||
+          cursor.epoch !== epoch ||
           cursor.after.length !== 2 ||
           cursor.after.some((value) => typeof value !== 'string' || routeOf(value) === null)
         )
@@ -209,6 +209,12 @@ export function createOwnVotesReader(deps: Dependencies) {
       for (const mapping of mappings) mappingKey(mapping);
       const visible = await visibleSources(deps, owner, sources);
       const initialQuestions = await questions(deps, owner, questionIds, deadline);
+      const prepared = new Map<string, Awaited<ReturnType<typeof commandPreparation>>>();
+      for (const slot of page.votes) {
+        const mapping = initial.get(slot.targetId)!;
+        if (visible.has(slot.targetId) && mapping.state === 'mapped' && mapping.terminal === slot.targetId && initialQuestions.has(slot.questionId))
+          prepared.set(key(slot), await commandPreparation(deps, owner, slot, deadline));
+      }
       const terminals = [
         ...new Set(
           mappings.flatMap((mapping) =>
@@ -227,28 +233,44 @@ export function createOwnVotesReader(deps: Dependencies) {
           deadline,
         );
       await requireRelease();
-      const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, terminals);
+      const summaryObservation = await readSubjectSummaryObservation({ ...deps, actor: owner, deadline }, terminals);
       const finalQuestions = await questions(deps, owner, questionIds, deadline);
       const finalVisible = await visibleSources(deps, owner, sources);
       const finalMappings = await identityEpochStore.readMappings(deps.pool, sources);
       const final = new Map(sources.map((id, i) => [id, finalMappings[i]!]));
       for (const mapping of finalMappings) mappingKey(mapping);
-      const admitted = await admittedSources(
-        deps,
-        sources.filter((id) => {
-          const mapping = final.get(id)!;
-          return mapping.state === 'mapped' && mapping.terminal === id && finalVisible.has(id);
-        }),
-        deadline,
-      );
+      const commandReady = new Set<string>();
+      for (const slot of page.votes) {
+        const before = prepared.get(key(slot));
+        if (!before) continue;
+        const latest = await commandPreparation(deps, owner, slot, deadline);
+        if (!latest || JSON.stringify(before) !== JSON.stringify(latest)) throw new AccessUnavailableError('contention');
+        const question = finalQuestions.get(slot.questionId);
+        if (question && question.revision === latest.question.revision &&
+            question.lifecycleState === latest.question.lifecycleState &&
+            Number(question.lifecycleRevision) === latest.question.lifecycleRevision &&
+            latest.target.subjectId === slot.targetId) commandReady.add(key(slot));
+      }
       await requireRelease();
-      const current = await accountRead((client) =>
-        selectCurrent.run(client, {
+      if (!(await summaryObservation.current())) throw new AccessUnavailableError('contention');
+      const { current, admitted, writable } = await accountRead(async (client, state) => {
+        const admitted = new Set<string>();
+        for (const id of sources) {
+          const mapping = final.get(id)!;
+          if (mapping.state !== 'mapped' || mapping.terminal !== id || !finalVisible.has(id)) continue;
+          const admission = await admitIdentityRatingEffect(client, { requestedTargetId: id, resolvedTargetId: id });
+          if (admission.status === 'admitted') admitted.add(id);
+        }
+        const current = await selectCurrent.run(client, {
           route: routeOf(owner.accountId)!,
           voter_id: owner.accountId,
           keys: page.votes.map((row) => ({ question_id: row.questionId, target_id: row.targetId })),
-        }),
-      );
+        });
+        // This is the native gate shared by the existing command runner, not a copied maintenance rule.
+        // An absent gate is initialized by enterShelfWrite; an installed closed gate cannot execute.
+        const gate = await commandGate.run(client, { route: routeOf(owner.accountId)!, account_id: owner.accountId });
+        return { current, admitted, writable: state.writeState === 'active' && (!gate || gate.mode === 'open') };
+      });
       const byKey = new Map(current.map((row) => [key(row), row]));
       const votes: OwnVoteEntry[] = [];
       for (const selected of page.votes) {
@@ -264,16 +286,20 @@ export function createOwnVotesReader(deps: Dependencies) {
           !finalVisible.has(row.targetId)
         )
           continue;
-        const subject = summaries.get(latest.terminal);
+        const subject = summaryObservation.summaries.get(latest.terminal);
         const question = finalQuestions.get(row.questionId);
         const previousQuestion = initialQuestions.get(row.questionId);
-        if (!subject || !question || !previousQuestion || question.revision !== previousQuestion.revision) continue;
+        if (!subject || !question || !previousQuestion) continue;
+        if (JSON.stringify(question) !== JSON.stringify(previousQuestion) ||
+            row.revision !== selected.revision || row.units !== selected.units ||
+            row.countedTarget !== selected.countedTarget) throw new AccessUnavailableError('contention');
         if (row.units === null) continue;
         if (row.changedAt === null) throw new Error('Rating vote has no change time');
         const path = `/v1/subjects/${row.targetId}/ratings/${row.questionId}/vote`;
         let actions: OwnVoteActions;
         if (row.targetId !== latest.terminal) actions = { state: 'unavailable', reason: 'merged_source' };
-        else if (row.countedTarget !== row.targetId || !admitted.has(row.targetId))
+        else if (!writable) actions = { state: 'unavailable', reason: 'read_only' };
+        else if (row.countedTarget !== row.targetId || !admitted.has(row.targetId) || !commandReady.has(key(row)))
           actions = { state: 'unavailable', reason: 'identity_pending' };
         else if (question.lifecycleState === 'retired')
           actions = { state: 'retired', reason: 'question_retired', clear: path, readback: path };
@@ -297,7 +323,7 @@ export function createOwnVotesReader(deps: Dependencies) {
                 deps.tokens,
                 binding,
                 {
-                  epoch: 1,
+                  epoch: epoch!,
                   after: [page.after.questionId, page.after.targetId],
                 },
                 now(),
