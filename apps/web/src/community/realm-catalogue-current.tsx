@@ -11,7 +11,17 @@ import { RealmCatalogueNavigation } from './realm-catalogue-navigation';
  * changing a read, route, locale or reader releases its draft and fences detached event handlers.
  * No catalogue or participation read is started here.
  */
-export function RealmCatalogueCurrent({ page, available }: { page: SpacePageData; available: boolean }) {
+export function RealmCatalogueCurrent({
+  page,
+  available,
+  sourceRevision = 0,
+  isCurrentSource = () => true,
+}: {
+  page: SpacePageData;
+  available: boolean;
+  sourceRevision?: number;
+  isCurrentSource?: () => boolean;
+}) {
   const lifetime = useSpacePageLifetime();
   const session = useSession();
   const location = useLocation();
@@ -31,6 +41,7 @@ export function RealmCatalogueCurrent({ page, available }: { page: SpacePageData
     [
       page,
       realm,
+      sourceRevision,
       admitted,
       locale,
       location.pathname,
@@ -52,7 +63,12 @@ export function RealmCatalogueCurrent({ page, available }: { page: SpacePageData
     };
   }, [source]);
   const isCurrent = () =>
-    source.active && source.connected && current.current === source && admitted && (!lifetime || lifetime.current());
+    source.active &&
+    source.connected &&
+    current.current === source &&
+    isCurrentSource() &&
+    admitted &&
+    (!lifetime || lifetime.current());
   const community = realm?.presentation?.state === 'available' ? realm.presentation.value : null;
   return (
     <RealmCatalogueNavigation

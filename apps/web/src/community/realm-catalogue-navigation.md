@@ -66,6 +66,11 @@ before acting. Removed or orphaned destinations release the old draft even if hi
 remain readable. A subsequent current read starts with a new draft. Header, publication, claim,
 follow, membership and management lifetimes keep their existing ownership.
 
+Local claim-read and container-restriction notifications advance a navigation revision before
+scheduling their existing React state updates. Previous handlers compare that revision immediately,
+so a late event is refused even before the replacement render commits. A successor render creates
+a fresh entry source from the newly admitted state rather than reviving the previous draft.
+
 There is one accepted query draft of at most 512 UTF-8 bytes and fixed navigation choices. Validation
 uses the installed Search schema; a length guard rejects unbounded programmatic input before
 encoding. An overflowing edit is refused in full, the previous bounded draft is retained, and submit

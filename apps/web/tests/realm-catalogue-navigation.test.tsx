@@ -65,11 +65,13 @@ mock.module('../src/community/container-lifecycle-controls', () => ({
   },
 }));
 const { createRoot } = await import('react-dom/client');
+const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { SpacePage } = await import('../src/community/space-page');
+const { RealmCatalogueCurrent } = await import('../src/community/realm-catalogue-current');
 const { SpacePageLifetimeHost, captureSpacePageAdmission, bindSpacePageResult } =
   await import('../src/community/space-page-lifetime');
 const { m } = await import('../src/paraglide/messages.js');
@@ -356,6 +358,7 @@ test('null or malformed Realm never uses a Space id; removed, orphaned and denie
       if (state === 'space' || state === 'realm') restrictions.get(state)!('removed');
       if (state === 'orphaned') restrictions.get('realm')!('orphaned');
       if (state === 'denied') claimRead!({ kind: 'denied' });
+      if (state !== 'null' && state !== 'malformed') expect(cancelled(oldLink)).toBe(true);
       if (state === 'null') await replace({ ...page(), realm: null });
       if (state === 'malformed') await replace(page(1, 'space-address'));
       await tick();
@@ -393,6 +396,8 @@ test('observed account, same-account credential, readiness and equal session rep
       oldForm = form();
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, observation);
+      expect(cancelled(oldLink)).toBe(true);
+      expect(cancelled(oldForm, 'submit')).toBe(true);
       await tick();
     });
     expect(host.querySelector('[data-slot="realm-catalogue-navigation"]')).toBeNull();
@@ -420,4 +425,28 @@ test('long localized community names stay in wrapping context with labelled cont
   expect(region().querySelector('button[aria-expanded]')!.getAttribute('aria-controls')).toBe(
     region().querySelector('[inert]')?.id ?? region().querySelector('form')!.parentElement!.id,
   );
+});
+
+test('a cached signed-in reader cannot put a protected community destination into server presentation', async () => {
+  await mount();
+  const protectedPage = page();
+  protectedPage.realm!.credentialMode = 'session';
+  protectedPage.realm!.visibility = 'protected';
+  protectedPage.realm!.title = 'Previous reader protected community';
+  client.setQueryData(sessionQuery.queryKey, actor);
+  const serverRoute = createRootRoute({ component: () => <RealmCatalogueCurrent page={protectedPage} available /> });
+  const serverRouter = createRouter({
+    routeTree: serverRoute,
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+  await serverRouter.load();
+  const html = renderToString(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={serverRouter} />
+    </QueryClientProvider>,
+  );
+  expect(html).toContain(m.realm_catalogue_unavailable());
+  expect(html).not.toContain(protectedPage.realm!.title);
+  expect(html).not.toContain(protectedPage.realm!.id);
+  expect(html).not.toContain('/search?');
 });

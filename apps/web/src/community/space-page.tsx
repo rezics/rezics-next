@@ -1,5 +1,5 @@
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import { useCallback, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -353,6 +353,8 @@ function SpaceHome({
   signedOut,
 }: Parameters<typeof SpacePage>[0] & { viewer: string | null; signedOut: boolean }) {
   const location = useLocation();
+  const catalogueRevision = useRef(0);
+  const catalogueVersion = catalogueRevision.current;
   const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
   const [realmRestriction, restrictRealm] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
   const [claim, setClaim] = useState<{
@@ -365,6 +367,7 @@ function SpaceHome({
   const claimRead = claim?.realmId === realmId && claim?.pageSource === pageSource ? claim?.read : null;
   const onClaimRead = useCallback(
     (read: RealmClaimRead) => {
+      catalogueRevision.current++;
       if (realmId) setClaim({ realmId, read, pageSource });
       if (read.kind === 'ready' && read.snapshot.ownershipState === 'owned') {
         restrictRealm((previous) => (previous?.state === 'orphaned' && previous.id === realmId ? null : previous));
@@ -374,6 +377,7 @@ function SpaceHome({
   );
   const onRealmRestriction = useCallback(
     (state: 'removed' | 'orphaned') => {
+      catalogueRevision.current++;
       if (!realmId) return;
       restrictRealm((previous) =>
         previous?.id === realmId && previous.state === state ? previous : { id: realmId, state },
@@ -492,6 +496,8 @@ function SpaceHome({
       <RealmCatalogueCurrent
         page={page}
         available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
+        sourceRevision={catalogueVersion}
+        isCurrentSource={() => catalogueRevision.current === catalogueVersion}
       />
       {page.realm && !realmRemoved && readable ? (
         <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} />
@@ -540,11 +546,12 @@ function SpaceHome({
             target={{ kind: 'space', id: page.space.id }}
             title={page.space.title}
             {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
-            onRestriction={(state) =>
+            onRestriction={(state) => {
+              catalogueRevision.current++;
               restrictSpace((previous) =>
                 previous?.id === page.space.id && previous.state === state ? previous : { id: page.space.id, state },
-              )
-            }
+              );
+            }}
           />
           {page.realm ? (
             <ContainerLifecyclePanel
