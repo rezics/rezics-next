@@ -176,10 +176,17 @@ test('From an admitted non-credit work relationship, a contributor creates a mis
     expect(host.textContent).toContain(workField.label);
     const label = `Related work ${crypto.randomUUID().slice(0, 8)}`;
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), label));
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_type_search() }), 'Movie'));
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type_search_mode() }), 'id'),
+    );
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_type_search() }), 'schema:Movie'),
+    );
     await click(m.catalogue_create_type_search_action());
-    await waitFor(() => canvas().getByRole('button', { name: `${m.catalogue_create_type_select()} Movie` }));
-    await click(`${m.catalogue_create_type_select()} Movie`);
+    await waitFor(() => canvas().getByRole('button', { name: new RegExp(m.catalogue_create_type_select()) }));
+    await act(async () =>
+      user.click(canvas().getByRole('button', { name: new RegExp(m.catalogue_create_type_select()) })),
+    );
     await click(m.catalogue_create_submit());
     await waitFor(() => canvas().getByRole('button', { name: m.catalogue_create_retry() }));
     expect(create.calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects')).toHaveLength(1);
