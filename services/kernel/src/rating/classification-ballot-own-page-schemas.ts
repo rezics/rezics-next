@@ -35,6 +35,7 @@ const AssociationSchema = t.Object(
     property: t.String({ minLength: 1, maxLength: 256 }),
     targetId: id,
     contextId: t.Literal(GLOBAL_CONTEXT),
+    origin: t.Literal('global'),
     release: t.String({ minLength: 1, maxLength: 128 }),
     revision: t.Integer({ minimum: 1 }),
     bindingHash: digest,
