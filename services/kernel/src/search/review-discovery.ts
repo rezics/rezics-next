@@ -33,6 +33,7 @@ export type ReviewDiscoveryCensus = NativeReviewDiscoveryCount;
 export type ReviewDiscoveryRecord = {
   id: string;
   route: number;
+  sourceVersion: string;
   openingRevisionId: string;
   title: string | null;
   text: string;
@@ -46,7 +47,7 @@ export type ReviewDiscoveryDocument = {
   route: number;
   partition: number;
   source_position: string;
-  /** Exact Content partition position used for source freshness. */
+  /** Opaque per-review lifecycle version supplied by Content. */
   version: string;
   opening_revision_id: string;
   title: string | null;
@@ -115,18 +116,23 @@ function validExcerpt(value: unknown): value is string | undefined {
   );
 }
 
+function validSourceVersion(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 128 && value.isWellFormed();
+}
+
 function nativeRecord(value: unknown, partition: number): ReviewDiscoveryRecord {
   if (!object(value)) throw new TypeError('Invalid native review discovery row');
-  const allowedKeys = ['id', 'subjectId', 'title', 'revisionId', 'excerpt'];
+  const allowedKeys = ['id', 'subjectId', 'title', 'revisionId', 'sourceVersion', 'excerpt'];
   if (
     Object.keys(value).some((field) => !allowedKeys.includes(field)) ||
-    !['id', 'subjectId', 'title', 'revisionId'].every((field) => Object.hasOwn(value, field)) ||
+    !['id', 'subjectId', 'title', 'revisionId', 'sourceVersion'].every((field) => Object.hasOwn(value, field)) ||
     typeof value.id !== 'string' ||
     typeof value.subjectId !== 'string' ||
     routeOf(value.subjectId) === null ||
     typeof value.revisionId !== 'string' ||
     value.revisionId.length === 0 ||
     value.revisionId.length > MAX_REVISION_ID_LENGTH ||
+    !validSourceVersion(value.sourceVersion) ||
     !validTitle(value.title) ||
     !validExcerpt(value.excerpt)
   )
@@ -137,6 +143,7 @@ function nativeRecord(value: unknown, partition: number): ReviewDiscoveryRecord 
   return {
     id: value.id,
     route,
+    sourceVersion: value.sourceVersion,
     openingRevisionId: value.revisionId,
     title: value.title,
     text: value.excerpt ?? '',
@@ -147,7 +154,7 @@ function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord
   if (
     !object(value) ||
     Object.keys(value).some(
-      (field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId'].includes(field),
+      (field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId', 'sourceVersion'].includes(field),
     ) ||
     !['id', 'subjectId', 'authorId', 'title', 'revisionId'].every((field) => Object.hasOwn(value, field)) ||
     typeof value.authorId !== 'string' ||
@@ -159,6 +166,7 @@ function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord
     subjectId: value.subjectId,
     title: value.title,
     revisionId: value.revisionId,
+    sourceVersion: value.sourceVersion,
     ...(Object.hasOwn(value, 'excerpt') ? { excerpt: value.excerpt } : {}),
   };
   return nativeRecord(row, partition);
@@ -202,8 +210,7 @@ function document(value: unknown): ReviewDiscoveryDocument {
     value.identity !== `content:review:${value.id}` ||
     typeof value.source_position !== 'string' ||
     !/^[1-9][0-9]{0,18}$/u.test(value.source_position) ||
-    typeof value.version !== 'string' ||
-    value.version !== value.source_position ||
+    !validSourceVersion(value.version) ||
     typeof value.opening_revision_id !== 'string' ||
     value.opening_revision_id.length === 0 ||
     value.opening_revision_id.length > MAX_REVISION_ID_LENGTH ||
@@ -253,6 +260,7 @@ export function reviewDiscoveryDocument(
     typeof row.openingRevisionId !== 'string' ||
     row.openingRevisionId.length === 0 ||
     row.openingRevisionId.length > MAX_REVISION_ID_LENGTH ||
+    !validSourceVersion(row.sourceVersion) ||
     !validTitle(row.title) ||
     typeof row.text !== 'string' ||
     !validExcerpt(row.text)
@@ -266,7 +274,7 @@ export function reviewDiscoveryDocument(
     route,
     partition,
     source_position: sourcePosition.toString(),
-    version: sourcePosition.toString(),
+    version: row.sourceVersion,
     opening_revision_id: row.openingRevisionId,
     title: row.title,
     text: row.text,
@@ -293,10 +301,6 @@ function hydration(value: unknown, partition: number, ids: readonly string[]): R
     return row;
   });
   return { partition, position: value.position, reviews };
-}
-
-function sourcePosition(value: ReviewDiscoveryDocument): bigint {
-  return BigInt(value.source_position);
 }
 
 /**
@@ -333,6 +337,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       partition: number,
       after: ReviewDiscoveryFrontier | null,
       limit: number,
+      cut?: bigint,
     ): Promise<
       ReviewDiscoveryResult<{
         position: bigint;
@@ -344,9 +349,21 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_SIZE)
         throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_SIZE}`);
       const previous = after === null ? null : key(after, partition);
+      if (cut !== undefined) position(cut);
       const ownerSource = native();
       if (!ownerSource) return { status: 'unavailable' };
-      const raw = await ownerSource.page(partition, previous, limit);
+      const raw = await ownerSource.page(partition, previous, limit, cut);
+      if (!object(raw)) throw new TypeError('Invalid native review discovery page');
+      if ('incomplete' in raw) {
+        if (
+          !exactKeys(raw, ['partition', 'position', 'incomplete']) ||
+          raw.partition !== partition ||
+          (raw.incomplete !== 'cut-required' && raw.incomplete !== 'cut-changed')
+        )
+          throw new TypeError('Invalid incomplete Content review discovery page');
+        position(raw.position);
+        return { status: 'preparing' };
+      }
       if (
         !object(raw) ||
         !exactKeys(raw, ['partition', 'position', 'reviews', 'next']) ||
@@ -356,6 +373,8 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       )
         throw new TypeError('Invalid native review discovery page');
       position(raw.position);
+      if ((previous !== null && cut === undefined) || (cut !== undefined && raw.position !== cut))
+        throw new TypeError('Content review continuation must retain its population cut');
       const rows = raw.reviews.map((value) => nativeRecord(value, partition));
       let prior = previous;
       const seen = new Set<string>();
@@ -411,7 +430,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
           for (const indexed of chunk) {
             const observed = byId.get(indexed.id);
             if (!observed || observed.openingRevisionId !== indexed.opening_revision_id) continue;
-            if (current.position !== sourcePosition(indexed)) return { status: 'preparing' };
+            if (observed.sourceVersion !== indexed.version) continue;
             result.set(indexed.identity, {
               kind: 'review',
               id: observed.id,

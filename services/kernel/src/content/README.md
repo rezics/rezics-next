@@ -489,9 +489,11 @@ boards live in other partitions.
 
 `createReviewDiscoverySource` exports the Search producer contract: `ReviewDiscoverySource`, `IndexedReview`,
 `ReviewDiscoverySummary`, `ReviewDiscoverySnapshot`, `ReviewDiscoveryHydration`, `ReviewDiscoveryPageKey`,
-`ReviewDiscoveryPage` and `ReviewDiscoveryCount`. Search keeps the existing thread ID as the document identity.
+`ReviewDiscoveryPage`, `ReviewDiscoveryIncompletePage` and `ReviewDiscoveryCount`. Search keeps the existing thread
+ID as the document identity.
 The index candidate contains only the subject ID, current title, a 160-code-point excerpt and the opening revision
-ID; author IDs and presentation stay out of the indexed document. Final hydration returns the current author ID,
+ID and an opaque `sourceVersion`; author IDs and presentation stay out of the indexed document. Final hydration
+returns the current author ID,
 title and excerpt through Content's `readSubjectThread`; Search resolves current author presentation through
 Accounts. Semantic's `readSubjectReference` separately requires the pinned subject to remain visible and readable
 without following redirects.
@@ -503,9 +505,23 @@ anonymous `subject:read`. Protected or stale candidates are omitted, so a hit th
 native deletion when Search refreshes that thread ID. The native lifecycle producer below supplies incremental
 identity invalidations; eligibility always comes from these current reads.
 
+`sourceVersion` binds the exact opening revision ID, thread security revision and opening-post security revision,
+read together from native rows and matched against current hydration. `read`, `page` and `hydrate` export the same
+binding. Opening revision changes and deletion/restoration change it even when restoration keeps `revisionId`;
+unrelated partition writes do not. Search compares it for equality and copies it to the document version. The
+separate partition `position` remains an observation/cut, never a per-review lifecycle version.
+
+Decision: page continuations require the initial page's `position` as `cut`; missing or changed cuts return typed
+incomplete readiness and require a fresh traversal.
+
 `read` and `hydrate` accept at most 100 IDs from one partition. `page` accepts limits 1–25, examines at most four
 candidates per requested result (100 maximum), and advances its full `(route, thread ID)` key past every examined
-candidate, including sparse or empty pages. The partial thread index supports that keyset. Each examined candidate
+candidate, including sparse or empty pages. The partial thread index supports that keyset. Each page
+uses the same native partition cut throughout a traversal: pass `page(partition, next, limit, cut)` on continuation.
+If the cut is absent or the partition has advanced, `ReviewDiscoveryIncompletePage` returns `cut-required` or
+`cut-changed`, with no rows or exhaustion claim. This detects late publication even before the retained frontier;
+restart from the beginning at a new cut. A cut is not a historical permission snapshot: final anonymous eligibility
+remains current, and an empty eligible page never proves an exact census. Each examined candidate
 gets one current Content read and one current Semantic subject read; no reply/history walk or review text table is
 added. Count reports unavailable until a bounded native census can prove every anonymous gate without exposing a
 protected population. Realm discussion-popularity counts continue to exclude reviews.

@@ -3,6 +3,7 @@ import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
 import { restorePost } from '../../src/content/restore-post.ts';
+import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
 import {
   createNativeReviewDiscoveryAdapter,
   createReviewDiscoveryAdapter,
@@ -117,14 +118,19 @@ describe('public review discovery adapter', () => {
     }
     if (!late) throw new Error('Could not publish a review after the retained native frontier');
 
-    let cursor = sparse.value.next;
+    expect(await adapter.page(partition, sparse.value.next, 1, sparse.value.position)).toEqual({ status: 'preparing' });
+    expect(await adapter.page(partition, sparse.value.next, 1)).toEqual({ status: 'preparing' });
+    let cut: bigint | undefined;
+    let cursor: ReviewDiscoveryFrontier | null = null;
     let fifthDocument: ReviewDiscoveryDocument | undefined;
     let lateDocument: ReviewDiscoveryDocument | undefined;
     let latePosition = 0n;
-    for (let pageNumber = 0; pageNumber <= lateReviews.length; pageNumber += 1) {
-      const page = await adapter.page(partition, cursor, 1);
+    for (let pageNumber = 0; pageNumber <= initial.length + lateReviews.length; pageNumber += 1) {
+      const page = await adapter.page(partition, cursor, 1, cut);
       expect(page.status).toBe('ready');
       if (page.status !== 'ready') return;
+      cut ??= page.value.position;
+      expect(page.value.position).toBe(cut);
       const row = page.value.documents[0];
       if (row?.id === initial[4]!.id) fifthDocument = row;
       if (row?.id === late.id) {
@@ -148,6 +154,13 @@ describe('public review discovery adapter', () => {
     if (!fifthDocument || !lateDocument) throw new Error('Content continuation lost an eligible review');
     expect(fifthDocument).not.toHaveProperty('authorId');
     expect(fifthDocument).not.toHaveProperty('voteCitation');
+    const nativeSource = createReviewDiscoverySource(dependencies, () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }));
+    const nativeReview = (await nativeSource.read(partition, [fifthDocument.id])).reviews[0]!;
+    expect(fifthDocument.version).toBe(nativeReview.sourceVersion);
+    expect(fifthDocument.version).not.toBe(fifthDocument.source_position);
     expect(latePosition).toBeGreaterThan(sparse.value.position);
     const lateCard = await adapter.currentSummaries([lateDocument], context);
     expect(lateCard).toMatchObject({ status: 'ready' });
@@ -163,6 +176,8 @@ describe('public review discovery adapter', () => {
       expect(lateCard.value.get(`content:review:${late.id}`)).not.toHaveProperty('authorId');
     }
 
+    // An unrelated review changes the partition observation, not this review's version.
+    await publish(await subject(80), 80);
     const firstCard = await adapter.currentSummaries([fifthDocument], context);
     expect(firstCard.status).toBe('ready');
     if (firstCard.status !== 'ready') return;
@@ -173,6 +188,15 @@ describe('public review discovery adapter', () => {
       title: initial[4]!.title,
       summary: initial[4]!.text,
     });
+    await fixture.reader.query(
+      "UPDATE content.board SET visibility='protected',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id],
+    );
+    expect(await adapter.currentSummaries([fifthDocument], context)).toEqual({ status: 'ready', value: new Map() });
+    await fixture.reader.query(
+      "UPDATE content.board SET visibility='published',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id],
+    );
 
     await revisePost(
       { pool: fixture.pool, access: fixture.access, routeKey },
@@ -185,11 +209,13 @@ describe('public review discovery adapter', () => {
 
     async function currentDocument(id: string): Promise<ReviewDiscoveryDocument | undefined> {
       let after: ReviewDiscoveryFrontier | null = null;
+      let cut: bigint | undefined;
       const maxPages = Math.ceil((initial.length + lateReviews.length) / REVIEW_DISCOVERY_PAGE_SIZE) + 1;
       for (let pageNumber = 0; pageNumber < maxPages; pageNumber += 1) {
-        const page = await adapter.page(partition, after, REVIEW_DISCOVERY_PAGE_SIZE);
+        const page = await adapter.page(partition, after, REVIEW_DISCOVERY_PAGE_SIZE, cut);
         expect(page.status).toBe('ready');
         if (page.status !== 'ready') return undefined;
+        cut ??= page.value.position;
         const found = page.value.documents.find((row) => row.id === id);
         if (found) return found;
         if (page.value.next === null) return undefined;
@@ -201,6 +227,7 @@ describe('public review discovery adapter', () => {
     const revisedDocument = (await currentDocument(initial[4]!.id))!;
     expect(revisedDocument.id).toBe(initial[4]!.id);
     expect(revisedDocument.opening_revision_id).not.toBe(fifthDocument.opening_revision_id);
+    expect(revisedDocument.version).not.toBe(fifthDocument.version);
     expect((await adapter.currentSummaries([revisedDocument], context)).status).toBe('ready');
 
     await fixture.grant(author.accountId, 'post:erase', {
@@ -215,11 +242,12 @@ describe('public review discovery adapter', () => {
     );
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
     await restorePost({ pool: fixture.pool, access: fixture.access, routeKey }, author, initial[4]!.postId, request());
-    expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'preparing' });
+    expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
 
     const restoredDocument = (await currentDocument(initial[4]!.id))!;
     expect(restoredDocument.id).toBe(initial[4]!.id);
     expect(restoredDocument.opening_revision_id).toBe(revisedDocument.opening_revision_id);
+    expect(restoredDocument.version).not.toBe(revisedDocument.version);
     expect(BigInt(restoredDocument.source_position)).toBeGreaterThan(BigInt(revisedDocument.source_position));
     const restoredCard = await adapter.currentSummaries([restoredDocument], context);
     expect(restoredCard.status).toBe('ready');

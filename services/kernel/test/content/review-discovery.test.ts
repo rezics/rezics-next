@@ -148,10 +148,12 @@ test('public review discovery refreshes the same thread and omits protected or r
     subjectId,
     title: 'A public review title',
     excerpt: 'Current review excerpt.',
+    sourceVersion: expect.any(String),
   });
   expect((await source.hydrate(partition, [published.value.threadId])).reviews[0]).toMatchObject({
     authorId: author.accountId,
     excerpt: 'Current review excerpt.',
+    sourceVersion: first.reviews[0]!.sourceVersion,
   });
   expect(await source.count(partition)).toMatchObject({ partition, position: first.position, unavailable: true });
 
@@ -182,10 +184,13 @@ test('public review discovery refreshes the same thread and omits protected or r
   const closedPage = await readReviewDiscoveryChanges(fixture.pool, partition, changePage.after);
   expect((await refreshReviewDiscoveryChanges(source, closedPage)).removed).toEqual([published.value.threadId]);
   const sparse = await source.page(hiddenPartition, null, 1);
+  if ('incomplete' in sparse) throw new Error('Initial review page must capture a cut');
   expect(sparse.reviews).toEqual([]);
   expect(sparse.next).not.toBeNull();
-  const terminal = await source.page(hiddenPartition, sparse.next, 1);
+  expect(await source.page(hiddenPartition, sparse.next, 1)).toMatchObject({ incomplete: 'cut-required' });
+  const terminal = await source.page(hiddenPartition, sparse.next, 1, sparse.position);
   expect(terminal).toMatchObject({ reviews: [], next: null });
+  expect(terminal.position).toBe(sparse.position);
   const opened = await subjectGate(subjectId, 'visible');
   await invalidate(opened, 'com.rezics.subject.revised.v1');
   const publicPage = await readReviewDiscoveryChanges(fixture.pool, partition, closedPage.after);
@@ -208,6 +213,8 @@ test('public review discovery refreshes the same thread and omits protected or r
     } as never,
     request(),
   );
+  const revisedReview = (await source.read(partition, [published.value.threadId])).reviews[0]!;
+  expect(revisedReview.sourceVersion).not.toBe(first.reviews[0]!.sourceVersion);
   expect((await source.read(partition, [published.value.threadId])).reviews[0]?.excerpt).toBe(
     'Revised review excerpt.',
   );
@@ -240,6 +247,9 @@ test('public review discovery refreshes the same thread and omits protected or r
   await invalidate(restored, 'com.rezics.content.post.restored.v1');
   const restoredPage = await readReviewDiscoveryChanges(fixture.pool, partition, withdrawn.after);
   expect((await refreshReviewDiscoveryChanges(source, restoredPage)).reviews[0]?.id).toBe(published.value.threadId);
+  const restoredReview = (await source.hydrate(partition, [published.value.threadId])).reviews[0]!;
+  expect(restoredReview.revisionId).toBe(revisedReview.revisionId);
+  expect(restoredReview.sourceVersion).not.toBe(revisedReview.sourceVersion);
   // The old withdrawal arrives after restoration; current hydration still wins.
   await effect.run(deletion.event);
   expect((await refreshReviewDiscoveryChanges(source, withdrawn)).removed).toEqual([]);
