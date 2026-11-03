@@ -2,12 +2,13 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
+import { admitGroup } from '../access/gates/admission.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, AuthenticationError, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
@@ -106,7 +107,7 @@ export function createDiaryReads(deps: Dependencies) {
     };
   }
 
-  /** Preparation releases foreign homes before the native account lock and snapshot. */
+  /** The authenticated owner and client scope select this private partition, as for Continue. */
   async function snapshot<T>(
     owner: AccountActor,
     deadline: number,
@@ -115,17 +116,6 @@ export function createDiaryReads(deps: Dependencies) {
     const at = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
     try {
       const route = routeOf(owner.accountId)!;
-      const check = await accessCheck(
-        access,
-        owner,
-        'progress_session:list',
-        { route, id: owner.accountId },
-        {
-          pool,
-          deadline,
-          time: at,
-        },
-      );
       return await withConnection(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         await client.query('BEGIN');
@@ -143,8 +133,7 @@ export function createDiaryReads(deps: Dependencies) {
             account.fenced ||
             !Number.isSafeInteger(owner.authnEpoch) ||
             owner.authnEpoch < 1 ||
-            account.minimumAuthnEpoch > BigInt(owner.authnEpoch) ||
-            !(await check(client, at))
+            account.minimumAuthnEpoch > BigInt(owner.authnEpoch)
           )
             throw new ProblemError('forbidden');
           const partition = await readPartition(client, partitionOf(route));
@@ -182,6 +171,14 @@ export function createDiaryReads(deps: Dependencies) {
       const route = routeOf(owner.accountId)!;
       return withRequestDeadline(deadline, () =>
         within(deadline, async () => {
+          await admitGroup({
+            ...deps,
+            access: () => access,
+            actor: owner,
+            group: 'reading_progress',
+            clientAction: 'progress_session:list',
+            deadline,
+          });
           let after: DiaryKey | null = null;
           let navigation: DiaryNavigation | null = null;
           const before = await snapshot(owner, deadline, async (client, epoch, now) => {
@@ -246,6 +243,14 @@ export function createDiaryReads(deps: Dependencies) {
       const owner = ownerOf(actor);
       return withRequestDeadline(deadline, () =>
         within(deadline, async () => {
+          await admitGroup({
+            ...deps,
+            access: () => access,
+            actor: owner,
+            group: 'reading_progress',
+            clientAction: 'progress_session:list',
+            deadline,
+          });
           await snapshot(owner, deadline, async (client, _epoch, now) => {
             let decoded: ReturnType<typeof decode>;
             try {
