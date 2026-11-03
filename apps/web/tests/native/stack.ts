@@ -101,6 +101,8 @@ export type NativeWebStack = {
   syncKernelRequests(): Promise<void>;
   /** Inject a single native HTTP failure at the owned Worker-to-kernel boundary. */
   injectKernelFailureOnce(failure: NativeKernelFailureInjection): Promise<void>;
+  /** Fail the first ordinary read of the next successfully created subject. */
+  injectCreatedSubjectReadFailureOnce(failure: { status: number; body: string }): Promise<void>;
   webOutput(): string;
   flushKernelRequests(): Promise<void>;
   workerLogs(): Promise<string>;
@@ -403,6 +405,8 @@ async function startStack(): Promise<
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   const activeKernelRequests = new Set<Promise<Response>>();
   const injectedKernelFailures: NativeKernelFailureInjection[] = [];
+  const createdSubjectReadFailures = new Map<string, { status: number; body: string }>();
+  let pendingCreatedSubjectReadFailure: { status: number; body: string } | undefined;
   let durableWorker: { pid?: number; logs(): string; stop(): Promise<void> } | undefined;
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
@@ -876,6 +880,16 @@ async function startStack(): Promise<
             : {}),
         };
         requests.push(observed);
+        const createdReadFailure = request.method === 'GET' ? createdSubjectReadFailures.get(url.pathname) : undefined;
+        if (createdReadFailure) {
+          createdSubjectReadFailures.delete(url.pathname);
+          observed.responseStatus = createdReadFailure.status;
+          observed.failure = createdReadFailure;
+          return new Response(createdReadFailure.body, {
+            status: createdReadFailure.status,
+            headers: { 'content-type': 'application/problem+json' },
+          });
+        }
         const failureIndex = injectedKernelFailures.findIndex(
           (failure) =>
             failure.method === request.method &&
@@ -895,6 +909,19 @@ async function startStack(): Promise<
         const handling = (async () => {
           const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           observed.responseStatus = response.status;
+          if (
+            request.method === 'POST' &&
+            url.pathname === '/v1/subjects' &&
+            !observed.fixtureRequest &&
+            response.status === 201 &&
+            pendingCreatedSubjectReadFailure
+          ) {
+            const failure = pendingCreatedSubjectReadFailure;
+            pendingCreatedSubjectReadFailure = undefined;
+            const created = (await response.clone().json()) as { subject?: { id?: unknown } };
+            if (typeof created.subject?.id === 'string')
+              createdSubjectReadFailures.set(`/v1/subjects/${created.subject.id}`, failure);
+          }
           if (!response.ok)
             observed.failure = {
               status: response.status,
@@ -1148,6 +1175,12 @@ async function startStack(): Promise<
           throw new Error('Native failure injection requires a kernel path and non-success status');
         injectedKernelFailures.push({ ...failure });
       },
+      async injectCreatedSubjectReadFailureOnce(failure) {
+        if (!Number.isInteger(failure.status) || failure.status < 400 || failure.status > 599 || !failure.body)
+          throw new Error('Created-subject read failure requires a non-success status and body');
+        if (pendingCreatedSubjectReadFailure) throw new Error('A created-subject read failure is already armed');
+        pendingCreatedSubjectReadFailure = { ...failure };
+      },
       webOutput() {
         return webProcess?.output() ?? '';
       },
@@ -1215,6 +1248,7 @@ type HostCall = {
     | 'advanceAuthClock'
     | 'restartWeb'
     | 'injectKernelFailureOnce'
+    | 'injectCreatedSubjectReadFailureOnce'
     | 'observe'
     | 'workerLogs'
     | 'stop';
@@ -1596,6 +1630,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       async injectKernelFailureOnce(failure) {
         await call('injectKernelFailureOnce', JSON.stringify(failure));
       },
+      async injectCreatedSubjectReadFailureOnce(failure) {
+        await call('injectCreatedSubjectReadFailureOnce', JSON.stringify(failure));
+      },
       webOutput: () => observation.webOutput,
       async flushKernelRequests() {
         await call('observe');
@@ -1734,6 +1771,8 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         else if (method === 'advanceAuthClock') await stack.advanceAuthClock(Number(argument));
         else if (method === 'injectKernelFailureOnce')
           stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
+        else if (method === 'injectCreatedSubjectReadFailureOnce')
+          stack.injectCreatedSubjectReadFailureOnce(JSON.parse(argument!) as { status: number; body: string });
         else if (method === 'observe') await stack.syncKernelRequests();
         else if (method === 'restartWeb') await stack.restartWeb(options!);
         else if (method === 'workerLogs') value = await stack.workerLogs();
