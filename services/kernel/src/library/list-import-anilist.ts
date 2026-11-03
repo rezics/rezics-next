@@ -473,7 +473,9 @@ export function createAniListImport(deps: Dependencies) {
       if (current.started) throw new LibraryConflictError();
       if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
         throw new LibraryConflictError();
-      return { ...current, review: value, outcome: undefined };
+      const next = { ...current, review: value };
+      delete next.outcome;
+      return next;
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -836,9 +838,14 @@ export function createAniListImport(deps: Dependencies) {
       if (status !== 'failed')
         await save(actor, id, confirmation.ordinal, 'finish', reviewed.commandKey, outcome, (row) => {
           if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-          return status === 'stale' && !row.started
-            ? { ...row, review: undefined, started: undefined, outcome: undefined }
-            : { ...row, outcome };
+          if (status === 'stale' && !row.started) {
+            const next = { ...row };
+            delete next.review;
+            delete next.started;
+            delete next.outcome;
+            return next;
+          }
+          return { ...row, outcome };
         });
       outcomes.push(outcome);
     }

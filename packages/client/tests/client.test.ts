@@ -56,15 +56,13 @@ test('all six label consolidation routes retain typed requests and results', () 
     const options = { headers: { 'idempotency-key': '"consolidate"' } };
     const review = await label.$reviewConsolidation.post({ targetLabelId: ID, items: [selected], limit: 4 });
     if (review.error) throw review.error;
-    const confirmation = await label.$confirmConsolidation.post(
-      {
-        selection: review.data.selection,
-        sourceLabel: review.data.sourceLabel,
-        targetLabel: review.data.targetLabel,
-        items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' }],
-      },
-      options,
-    );
+    const confirmationInput = {
+      selection: review.data.selection,
+      sourceLabel: review.data.sourceLabel,
+      targetLabel: review.data.targetLabel,
+      items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' }],
+    };
+    const confirmation = await label.$confirmConsolidation.post(confirmationInput, options);
     if (confirmation.error) throw confirmation.error;
     const body = { confirmationId: confirmation.data.confirmationId };
     const results = [
@@ -80,10 +78,16 @@ test('all six label consolidation routes retain typed requests and results', () 
       const revision: number | undefined = result.data.items[0]?.selected?.revision;
       void [status, item, revision];
     }
+    // @ts-expect-error confirmation requires an idempotency key
+    await label.$confirmConsolidation.post(confirmationInput);
     // @ts-expect-error retry requires the selected item index
     await label.$retryConsolidation.post(body, options);
     // @ts-expect-error apply requires an idempotency key
     await label.$applyConsolidation.post(body);
+    // @ts-expect-error retry requires an idempotency key
+    await label.$retryConsolidation.post({ ...body, item: 0 });
+    // @ts-expect-error cancel requires an idempotency key
+    await label.$cancelConsolidation.post(body);
   };
   expect(typeof typed).toBe('function');
 });

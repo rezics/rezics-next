@@ -973,7 +973,7 @@ function externalRelationValue(statement: Statement): string | null {
   const value = statement.qualifiers.find(
     (qualifier) =>
       qualifier.property.id === 'schema:sameAs' &&
-      qualifier.value.type === 'value' &&
+      qualifier.value?.type === 'value' &&
       typeof qualifier.value.content === 'string' &&
       /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(qualifier.value.content),
   )?.value;
@@ -1271,7 +1271,7 @@ export async function listSubjectLinks(
       current.value.type !== 'value' ||
       current.value.content !== options.subject ||
       (options.filter &&
-        !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+        !current.qualifiers.some((snak) => snak.value?.type === 'value' && snak.value.content === options.filter))
     )
       return [];
     const summary = summaries.get(link.subject) ?? null;
@@ -1283,7 +1283,7 @@ export async function listSubjectLinks(
     if (
       !assertion ||
       (options.filter &&
-        !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+        !assertion.qualifiers.some((snak) => snak.value?.type === 'value' && snak.value.content === options.filter))
     )
       return [];
     const related = Object.fromEntries(
@@ -1548,7 +1548,7 @@ export async function listSubjectRelations(
     if (!statement || statement.property.id !== options.property) return [];
     if (
       options.filter &&
-      !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter)
+      !statement.qualifiers.some((snak) => snak.value?.type === 'value' && snak.value.content === options.filter)
     )
       return [];
     return [
@@ -1584,7 +1584,7 @@ export async function listSubjectRelations(
     if (
       !statement ||
       (options.filter &&
-        !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+      !statement.qualifiers.some((snak) => snak.value?.type === 'value' && snak.value.content === options.filter))
     )
       continue;
     const related = Object.fromEntries(
