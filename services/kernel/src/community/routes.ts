@@ -85,6 +85,7 @@ import {
   realmHomePublicationResponse,
 } from './realm-home-publications.ts';
 import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
+import { PublicationPreparationResponseSchema, readPublicationPreparation } from './publication-preparation.ts';
 import {
   listPublications,
   publish,
@@ -1675,6 +1676,32 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         } catch (error) {
           communityProblem(error);
         }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/publications/:subjectId/preparation',
+      {
+        params: publicationParams,
+        response: {
+          200: withHeaders(strict(PublicationPreparationResponseSchema), sessionHeader),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'publication.prepare',
+          'x-exposure': 'public',
+          'x-action': 'realm:publish',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId, subjectId }, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const result = await admission.run('normal', job, () =>
+          readPublicationPreparation(realmDependencies(), realmId, subjectId, { actor, deadline: job.deadline }),
+        );
+        if (!result) throw new ProblemError('not_found');
+        for (const component of result.components) session.record(component);
+        return { preparation: result.preparation };
       },
     )
     .get(

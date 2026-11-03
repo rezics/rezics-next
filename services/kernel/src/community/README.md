@@ -128,6 +128,79 @@ retry retain their existing per-event bounds. Physical/native/main convergence c
 `test/community/space-discovery.test.ts` covers actual native edit/gate/removal/restoration delivery, reordering,
 duplicate delivery and one actual source-fence scope obligation.
 
+## Exact publication preparation
+
+`GET /v1/realms/:realmId/publications/:subjectId/preparation` is private operational inspection for an existing
+publisher. It returns `{preparation}` with the selected Realm/host titles and identities, the disclosed original
+and current terminal Subject references, the exact native current decision or `null`, supported command destinations
+and their expected head/quoted `If-Match`, and the current account/client/authentication epoch. Its operation is
+`publication.prepare`, its action is actual `realm:publish`, and its resource type is `community.realm`.
+Anonymous, denied and unknown selections use the same `not_found` response. Management, Context editorial power,
+membership and public-read success confer no publication authority. Both ordinary Realm and host disclosure remain
+required. Orphaned, removed, erased or unreadable sources cannot supply preparation.
+
+The resource never consults receipts, creates keys, writes state or repairs projections. `current:null` means the
+selected native slot has no decision; an unavailable partition or required Subject reference is an error instead.
+An existing head returns only `publicationId`, actual `adopt|withdraw|reject` and `decidedAt`, without its author,
+private grants or predecessor chain. Any existing head supplies publish/replacement, withdrawal and rejection
+destinations; no head supplies only creation. These are advice for the ordinary mounted commands, which still
+reauthorize and enforce their existing preconditions and exact replay rules. A changed head is never a receipt.
+`recovery:{requestIdentity:"unknown",replay:"original-command"}` remains explicit even when the observed verdict
+matches a lost request. Preserve that request's original method, body, key and expected head for an explicit replay.
+
+Decision: retain the selected original Subject for the native slot and every command, disclose its independently
+readable current terminal reference separately, and keep optional display presentation explicitly unavailable until
+the bounded Semantic display-label/Content-cover observation port is installed.
+
+The installed reference slice exposes `subject:{originalId,currentId,presentation:{state:"unavailable"}}`.
+This is an explicit owner seam: it does not call the existing summary aggregation of all label languages or infer
+concealment from a failed dependency. Recognizable localized labels, native Content cover descriptors and distinct
+populated/concealed optional presentation remain a continuation of this same resource. It is not a Subject picker,
+history, public shelf or a complete rendered publisher interface. No alternative interface is introduced.
+
+Preparation releases the Realm snapshot before Semantic's reference owner runs. The latter independently checks at
+most the original and one terminal reference, then repeats those exact references with newly prepared Access
+evidence. A second redirect is unsettled. Final Realm observation freshly checks publication authority, disclosure,
+the host and exact source identities/heads/lifecycle/ownership, the selected publication decision and native home
+epoch/position. Any changed binding withholds the result without retry. Each reference has its own native home
+component; these are independent observations, never a global atomic snapshot. Successful reads record those actual
+components through the existing session-token mechanism, without inventing a command result. Operational responses
+use `Cache-Control: private, no-store` and no ETag. Public adopted-publication GET, its representation and ETag stay
+unchanged; terminal decisions remain absent there.
+
+### Operation: publication.prepare
+
+- **Touches:** Two read-only RR Realm snapshots, each with BEGIN, SET LOCAL statement_timeout, one native partition
+  probe, authoritative read time, current Access verification, one exact preparation query and COMMIT (or ROLLBACK).
+  Initial Access preparation runs outside checkout for `realm:publish` and `realm:read`; final preparation repeats
+  both and prepares `space:read`. The preparation query touches one Realm, its exact revision, one host, its exact
+  revision and zero or one selected publication head, all in the Realm home. Each original/terminal reference round
+  prepares `subject:read` outside checkout and uses Semantic's RR owner: two partition probes (the owner's and the
+  adapter's), one Subject/current-redirect reference and current Access verification. At most two keys run twice;
+  each owner snapshot has its own BEGIN/SET/COMMIT or ROLLBACK. All source work uses the supplied Kernel pool;
+  nested Access preparation/verification also uses Auth and native authority dependencies under their producer
+  controls. No summary, media, HTTP, list, history catalogue or command runner is invoked by this reference slice.
+  Unknown/denied stops at the failed gate; exceptions release the current checkout. There is no operation retry;
+  nested owner/Access deadlines, cold-release work and retry controls remain charged to those producers.
+- **Bound:** The preparation SQL materializes identities before exact revision joins and probes the complete
+  `(route,realm_id,subject_id)` head key, including absence and terminal decisions. Reference reads probe
+  `(route,subject_id)` and seek the latest redirect by `(route,subject_id,sequence)`; they never reconstruct publication
+  or Subject history. There are two selected reference keys and at most three represented source homes. Title writes
+  admit 1024 Unicode characters each (at most4096 UTF-8 bytes per title before JSON escaping); closed UUIDs, bigint
+  versions and timestamps are fixed-width. Row comparisons serialize two fixed native rows, then the response is
+  serialized again; title escaping can expand each control character to six bytes. Account/client observations and
+  nested Access evidence retain their existing owner limits. These selected-key counts do not establish a total
+  physical row, byte, JSON-copy or all-pool ceiling. Full-prefix strict plans and nested producer/runner accounting
+  must establish that ceiling before this journey is certified; no ceiling is fitted to a small response.
+- **Growth check:** `test/community/publication-preparation.test.ts` exercises mounted native absent/adopted/terminal
+  inspection, current command advice, competing publisher/stale head, original exact replay after a discarded
+  response, non-publisher management/membership, hidden/unknown Subjects, failed reference dependencies, source edits
+  and changed publication during serialization. Connected three-scale256/1024/4096 growth independently increasing
+  unrelated slots, selected-slot decisions and Subject/authority/identity histories, with fixed selected keys,
+  payloads and authority depth, remains in the continuation together with strict physical plans and capture of every
+  participating pool/registered phase, including denial, revocation, retry and cold release. Fixture failure provides
+  no native evidence. The bounded display/media owner seam and its nested costs require Performance review.
+
 ## Realm home publication shelf
 
 Decision: `GET /v1/realms/:realmId/publicationShelf` exposes the fixed twelve-item native summary continuation;
