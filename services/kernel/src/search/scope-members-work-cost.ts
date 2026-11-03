@@ -197,14 +197,7 @@ export const MEMBERS_SEARCH_QUERY_COST = Object.freeze({
     membersSnapshotScopeDimensions([boundRoute, boundUuid, boundDigest, boundUuid]),
     MEMBERS_SNAPSHOT_OWNER_FENCE_DIMENSIONS,
   ),
-  terminal: membersTerminalDimensions([
-    boundPartition,
-    boundDigest,
-    boundScope,
-    boundUuid,
-    boundRevision,
-    boundUuid,
-  ]),
+  terminal: membersTerminalDimensions([boundPartition, boundDigest, boundScope, boundUuid, boundRevision, boundUuid]),
   group: membersGroupDimensions(
     [boundRoute, boundUuid, boundUuid, boundUuid, boundUuid, boundUuid, boundGroupLimit],
     boundGroupLimit,

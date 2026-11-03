@@ -211,13 +211,7 @@ export async function membersTerminal(execution: MembersExecution, original: str
     terminal: string;
     ticket: { original?: string; capture_id?: string; registration?: string };
     registration: string;
-  }>(
-    input,
-    work,
-    MEMBERS_SEARCH_QUERY_SQL.terminal,
-    terminalValues,
-    membersTerminalDimensions(terminalValues),
-  );
+  }>(input, work, MEMBERS_SEARCH_QUERY_SQL.terminal, terminalValues, membersTerminalDimensions(terminalValues));
   if (
     !row ||
     routeOf(row.terminal) === null ||
@@ -377,11 +371,7 @@ export async function firstMembersOrdinal(
   if (!raw.complete || !raw.keys.length || raw.keys.length > 100) return null;
   let first: NativeOrdinalKey | null = null;
   for (const key of raw.keys) {
-    const ordinalValues = [
-      execution.input.work.locator.route,
-      execution.input.work.locator.collectionId,
-      key.fact,
-    ];
+    const ordinalValues = [execution.input.work.locator.route, execution.input.work.locator.collectionId, key.fact];
     const [row] = await query<{ memberId: string; ordinalKey: string; subject: string }>(
       execution.input,
       work,
