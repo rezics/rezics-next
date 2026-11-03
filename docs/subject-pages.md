@@ -508,6 +508,11 @@ review controls. In-place review carries the returned native session token; reop
 current read. Acceptance/rejection, cardinality-aware whole-slot adoption and ordinary public reading remain
 separate explicit steps. The workspace never claims publication or an atomic save. Current private candidate
 visibility and current native command authority remain with the existing review/session APIs.
+Signing out or replacing the signed-in account retires that editor visit: an old callback, read or submit cannot
+reveal its protected candidate or start a new mutation for the replacement account. Pending drafts and retry UI
+are gone; the new reader needs an explicit newly admitted visit. An already accepted native write remains, and only
+a current-authority readback may disclose it. Private responses stay no-store, and session continuation tokens stay
+off URLs, logs and cross-reader caches.
 
 ## Propose a cited correction
 
