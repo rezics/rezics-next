@@ -12,6 +12,7 @@ import {
   noEffect,
   principalCommandIdentity,
   releaseOperationalTime,
+  type CommandTransaction,
 } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
@@ -833,8 +834,8 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         if (source.subjectId !== decision.subjectId)
           return { status: 'current_conflict', review: { ...base, reason: 'target-not-canonical' } };
 
-        let session: Awaited<ReturnType<ReturnType<typeof sessions>['readSession']>>;
-        let current: Awaited<ReturnType<ReturnType<typeof sessions>['readSessionJournal']>>;
+        let session: Awaited<ReturnType<ReturnType<typeof sessionCommands>['readSession']>>;
+        let current: Awaited<ReturnType<ReturnType<typeof sessionCommands>['readSessionJournal']>>;
         try {
           session = await sessionCommands().readSession(actor, decision.sessionId);
           current = await sessionCommands().readSessionJournal(actor, decision.sessionId);
@@ -1318,21 +1319,22 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       const parsedPatch = parseProgressSessionJournalPatch(patch);
       if (!parsedPatch.ok) throw new ProgressInvalidError(parsedPatch.field);
       const ownerRoute = routeOf(owner.accountId)!;
+      const subjectId = effect.operands.subjectId;
       const admission = {
         identity: {
           profile,
-          subjectId: effect.operands.subjectId,
+          subjectId,
           sessionRevision: effect.operands.sessionRevision,
           state: effect.operands.state,
         },
-        assert: async (tx: OperationalTransaction) => {
+        assert: async (tx: CommandTransaction) => {
           const session = await tx.query<{ subjectId: string; revision: number; state: string }>(
             `SELECT subject_id::text AS "subjectId",revision,state FROM library.progress_session
              WHERE route=$1 AND account_id=$2 AND session_id=$3`,
             [ownerRoute, owner.accountId, effect.operands.sessionId],
           );
           if (
-            session.rows[0]?.subjectId !== effect.operands.subjectId ||
+            session.rows[0]?.subjectId !== subjectId ||
             session.rows[0]?.revision !== effect.operands.sessionRevision ||
             session.rows[0]?.state !== effect.operands.state
           )
@@ -1340,13 +1342,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           await identityTime(async (at) => {
             const observation = await readLibraryProfileSourceObservation(
               { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-              effect.operands.subjectId,
+              subjectId,
             );
             const source = observation?.source;
             if (
               !observation ||
               source?.kind !== 'supported' ||
-              source.subjectId !== effect.operands.subjectId ||
+              source.subjectId !== subjectId ||
               observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
               observation.anchor.acceptingType !== profile.acceptingType ||
               observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
@@ -1433,18 +1435,17 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       await readUpload(tx, route, accountId, id, true);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
       if (item.status !== 'applying') throw conflict();
-      const result = isPersonalRecovery(item.section)
-        ? {
-            outcome: outcome ?? personalOutcome(item.section, status, null),
-            ...(reason ? { reason } : {}),
-          }
-        : { code: status };
+      const personalResult = {
+        outcome: outcome ?? personalOutcome(item.section, status, null),
+        ...(reason ? { reason } : {}),
+      };
+      const result = isPersonalRecovery(item.section) ? personalResult : { code: status };
       await tx.query(
         `UPDATE library.library_archive_merge_item SET status=$5,result=$6::jsonb
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
         [route, accountId, id, ordinal, status, JSON.stringify(result)],
       );
-      return { status: isPersonalRecovery(item.section) ? result.outcome : status, result };
+      return { status: isPersonalRecovery(item.section) ? personalResult.outcome : status, result };
     });
   }
 

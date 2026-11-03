@@ -229,10 +229,10 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
           (value.recordBytes as number) < 0
         );
       }) ||
-      installedSections.reduce((sum, section) => sum + (totals[section] as ObjectValue).rows as number, 0) !==
+      installedSections.reduce((sum, section) => sum + Number((totals[section] as ObjectValue).rows), 0) !==
         m.rows ||
       installedSections.reduce(
-        (sum, section) => sum + (totals[section] as ObjectValue).recordBytes as number,
+        (sum, section) => sum + Number((totals[section] as ObjectValue).recordBytes),
         0,
       ) !== m.recordBytes
     )
