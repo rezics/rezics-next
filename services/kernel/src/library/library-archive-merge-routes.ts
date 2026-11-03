@@ -153,8 +153,8 @@ export function libraryArchiveMergeRoutes(
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: text }),
         // Ingress supplies bytes, not the parsed envelope. The decoder validates those
-        // bytes after owner admission; this declares the client's JSON wire body only.
-        body: t.Unsafe<{ manifest: Record<string, unknown>; records: Record<string, unknown>[] }>(t.Any()),
+        // bytes after owner admission. Clients can send the original JSON text or an envelope.
+        body: t.Unsafe<string | { manifest: Record<string, unknown>; records: Record<string, unknown>[] }>(t.Any()),
         response: { 200: statusSchema, ...failures },
         detail: {
           ...detail('library_archive_merge.upload', 'library_entry:update', true),
