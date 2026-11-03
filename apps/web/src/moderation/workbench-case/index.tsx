@@ -73,7 +73,9 @@ function createVisit(
     register(controller: ReportsBulkAction) {
       if (retired) controller.retire();
       else controllers.add(controller);
-      return () => controllers.delete(controller);
+      return () => {
+        controllers.delete(controller);
+      };
     },
     subscribe(listener: () => void) {
       connected = true;
@@ -156,7 +158,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
         if (currentPage.owner && !currentPage.owner.canCommand()) return { ok: false, state: 'forbidden' };
         return (props.onAction ?? nativeReportAction)(command);
       }}
-      onRefresh={props.onRefresh}
+      {...(props.onRefresh ? { onRefresh: props.onRefresh } : {})}
     />
   );
 }
