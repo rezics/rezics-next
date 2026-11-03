@@ -130,7 +130,7 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
       partitionKey(partition);
       if (ids.length > 100) throw new RangeError('Collection discovery reads at most 100 keys');
       for (const key of ids) keyIn(partition, key);
-      const keys = [...new Map(ids.map((key) => [key.id, key])).values()].sort(compare);
+      const keys = [...new Map(ids.map(({ route, id }) => [id, { route, id }])).values()].sort(compare);
       return snapshot(partition, async (client) => ({
         keys,
         rows: (

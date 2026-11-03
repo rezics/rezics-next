@@ -54,7 +54,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
   const output = await published.json();
   const partition = partitionOf(routeOf(curated.id)!);
   const ids = [curated, hidden, unlisted, deleted, incomplete, privateDynamic, unlistedDynamic, dynamic].map(({ id }) => key(id));
-  const first = available(await source.read(partition, ids));
+  const first = available(await source.read(partition, ids.map((key) => ({ ...key, ruleFilter: 'do-not-echo' }))));
   const byId = new Map(first.items.map((item) => [item.key.id, item]));
   expect(byId.get(curated.id)).toMatchObject({ status: 'indexable', value: { membershipKind: 'curated', output: null } });
   for (const id of [hidden.id, unlisted.id, deleted.id, privateDynamic.id, unlistedDynamic.id]) expect(byId.get(id)).toEqual({ key: key(id), status: 'withdrawn' });
@@ -67,6 +67,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
       output: { route: routeOf(dynamic.id)!, collectionId: dynamic.id, generation: output.publication.generation },
     },
   });
+  expect(JSON.stringify(first)).not.toContain('do-not-echo');
   expect(JSON.stringify(first)).not.toContain(privateMatch);
   expect(JSON.stringify(first)).not.toContain(selected);
   expect((await f.send('POST', `/v1/collections/${dynamic.id}:publishSelected`, input, f.owner, requestKey)).status).toBe(200);
