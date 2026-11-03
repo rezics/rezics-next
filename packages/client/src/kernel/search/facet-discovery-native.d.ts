@@ -2,10 +2,11 @@ import type { FilterDocument } from '@rezics/filter';
 import type { PublicFilterCost, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerCapture, PublicFilterConsumerContext, PublicFilterConsumerOperations, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type { FacetDiscoveryValue } from './facet-discovery-contract.ts';
+import type { ScopedFacetAdmission } from './scoped-facet-source.ts';
 import type { TextNode } from './text.ts';
-/** Additive facet boundary from the continuation-runtime plan. Subject capture/query remain unchanged.
- * Native implementations own finite input, projection, support routing, physical custody and START/FINAL.
- * These declarations are not a delivered native producer or a permission/completeness certificate.
+/** Native facet plan after ordinary facet admission. A scoped request is supplied internally by its owner;
+ * its source identity, meaning, population observation and current authorization are retained and rechecked.
+ * The facet wire remains unchanged.
  */
 export type FacetNativePlan = Readonly<{
     filterDocument: FilterDocument | undefined;
@@ -13,6 +14,8 @@ export type FacetNativePlan = Readonly<{
     property: string;
     valueKind: 'item' | 'code' | 'type';
     meaning: PublicFilterProjectionMeaning;
+    /** Internal admission from the Realm/Collection owner; never parsed as a facet DTO field. */
+    scope?: ScopedFacetAdmission;
 }>;
 export type FacetNativeRead = Readonly<{
     plan: FacetNativePlan;
@@ -47,8 +50,8 @@ export interface FacetNativeOperations {
     }>, context: PublicFilterConsumerContext): Promise<FacetNativePageResult>;
     repairStep: PublicFilterConsumerOperations['repairStep'];
 }
-/** Trusted composition, not HTTP input. The native owner supplies the registered Source definition and
- * pinned complete meaning; the service cannot synthesize either from preview documents or a type anchor.
+/** Trusted composition, not HTTP input. The native owner supplies the registered Source definition,
+ * pinned complete meaning and, for scoped reads, the admitted native population.
  */
 export type FacetDiscoveryProvider = Readonly<{
     source: string;
