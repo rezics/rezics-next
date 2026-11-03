@@ -57,10 +57,7 @@ import { readSearchScopeRelease } from './scope-release.ts';
 import { createRealmScopeSource, type PreparedRealmScope, type RealmSubjectCapabilities } from './realm-scope.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import { subjectPartition, type IndexedSubject, type RelationFacetMatch, type SubjectSource } from './source.ts';
-import {
-  readCollectionKindPreparationWorkDefinition,
-  readScopeWorkDefinition,
-} from './scope-work-context.ts';
+import { readCollectionKindPreparationWorkDefinition, readScopeWorkDefinition } from './scope-work-context.ts';
 import type { ScopeLeafResume } from './scope-execution.ts';
 import type { CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
 import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
@@ -890,10 +887,7 @@ export function createSearchScopeSource({
       if (!selected) unavailable();
       releaseWork();
       const nativeRelease = await readRelease(evidence?.work?.tx ?? pool, selected.digest);
-      if (
-        !nativeRelease ||
-        (injectedBody !== undefined && !isDeepStrictEqual(injectedBody, nativeRelease))
-      )
+      if (!nativeRelease || (injectedBody !== undefined && !isDeepStrictEqual(injectedBody, nativeRelease)))
         unavailable();
       // Re-admit with the exact immutable body. A changed current-release callback cannot
       // be paired with a newer digest, even if both accept the same AST.
