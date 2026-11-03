@@ -397,7 +397,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             ),
           ),
         );
-        return result as { revision: string; delivery: 'unchanged' | 'enqueued' };
+        return result as { associationId: string; revision: string; delivery: 'unchanged' | 'enqueued' };
       },
     )
     .delete(

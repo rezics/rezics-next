@@ -218,7 +218,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
         },
       },
       async (tx, _command, prepared): Promise<{
-        value: { revision: string; delivery: 'unchanged' | 'enqueued' };
+        value: { associationId: string; revision: string; delivery: 'unchanged' | 'enqueued' };
         events: readonly CommandEvent[];
       }> => {
         const route = requireRoute(owner.accountId);
@@ -239,7 +239,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
           prior.eligible &&
           prior.eligibilityGeneration === state.generation;
         if (unchanged && !activation.event)
-          return noEffect({ revision: prior.revision, delivery: 'unchanged' as const });
+          return noEffect({ associationId: input.associationId, revision: prior.revision, delivery: 'unchanged' as const });
 
         const revision = nextRevision(prior?.revision);
         const bindingHash = Buffer.from(prepared.bindingHash, 'hex');
@@ -268,7 +268,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
             eligible: true,
           }),
         );
-        return { value: { revision, delivery: 'enqueued' as const }, events };
+        return { value: { associationId: input.associationId, revision, delivery: 'enqueued' as const }, events };
       },
     );
     return outcome.value;
