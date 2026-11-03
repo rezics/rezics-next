@@ -1,11 +1,7 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { cleanManagedProviderEnvironment } from './agents.ts';
 import { processIdentity as readProcessIdentity, type ProcessIdentity } from './process.ts';
-
-// JSON-RPC's protocol-defined error code for unsupported methods.
-const METHOD_NOT_FOUND = -32601;
 
 export type Notification = { method: string; params: any };
 export interface AppServer {
@@ -25,7 +21,7 @@ export class RpcError extends Error {
   }
 }
 
-async function stopChild(child: ChildProcessWithoutNullStreams, graceMs: number): Promise<void> {
+async function stopChild(child: ChildProcessWithoutNullStreams, graceMs = 500): Promise<void> {
   if (!child.pid) return;
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
@@ -57,8 +53,7 @@ export class StdioAppServer implements AppServer {
   constructor(
     argv: readonly string[],
     env: NodeJS.ProcessEnv,
-    private readonly timeoutMs = defaultPolicy.appServer.requestTimeoutMs,
-    private readonly terminationGraceMs = defaultPolicy.appServer.terminationGraceMs,
+    private readonly timeoutMs = 30_000,
   ) {
     this.child = spawn(argv[0]!, argv.slice(1), { env, stdio: 'pipe' });
     this.child.stderr.on('data', () => {});
@@ -79,10 +74,7 @@ export class StdioAppServer implements AppServer {
   private receive(message: any): void {
     if (message.method && message.id !== undefined) {
       // This client never grants tool approvals on behalf of the maintainer.
-      this.write({
-        id: message.id,
-        error: { code: METHOD_NOT_FOUND, message: `Unsupported server request: ${message.method}` },
-      });
+      this.write({ id: message.id, error: { code: -32601, message: `Unsupported server request: ${message.method}` } });
     } else if (message.method) {
       for (const listener of this.listeners) listener(message);
     } else {
@@ -130,10 +122,11 @@ export class StdioAppServer implements AppServer {
   }
   close(): void | Promise<void> {
     this.fail(new Error('App-server client closed'));
-    return stopChild(this.child, this.terminationGraceMs);
+    return stopChild(this.child);
   }
 }
 
+const APP_SERVER_DIAGNOSTICS_LIMIT = 256 * 1024;
 const APP_SERVER_READY = /readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/;
 
 /** Installed `codex-cli 0.164.0` colors `readyz:` with CSI; strip it before matching. */
@@ -141,9 +134,9 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 }
 
-function retainAppServerDiagnostics(current: string, chunk: string, limit: number): string {
+function retainAppServerDiagnostics(current: string, chunk: string): string {
   const next = current + chunk;
-  return next.length <= limit ? next : next.slice(-limit);
+  return next.length <= APP_SERVER_DIAGNOSTICS_LIMIT ? next : next.slice(-APP_SERVER_DIAGNOSTICS_LIMIT);
 }
 
 export type CodexPool = { id: string; codexHome: string; executable?: string };
@@ -161,8 +154,7 @@ export class WebSocketAppServer implements AppServer {
     readonly endpoint: string,
     private readonly socket: WebSocket,
     private readonly child: ChildProcessWithoutNullStreams,
-    private readonly timeoutMs = defaultPolicy.appServer.requestTimeoutMs,
-    private readonly terminationGraceMs = defaultPolicy.appServer.terminationGraceMs,
+    private readonly timeoutMs = 30_000,
   ) {
     socket.addEventListener('message', (event) => {
       try {
@@ -181,10 +173,7 @@ export class WebSocketAppServer implements AppServer {
   }
   private receive(message: any): void {
     if (message.method && message.id !== undefined) {
-      this.write({
-        id: message.id,
-        error: { code: METHOD_NOT_FOUND, message: `Unsupported server request: ${message.method}` },
-      });
+      this.write({ id: message.id, error: { code: -32601, message: `Unsupported server request: ${message.method}` } });
     } else if (message.method) {
       for (const listener of this.listeners) listener(message);
     } else {
@@ -243,7 +232,7 @@ export class WebSocketAppServer implements AppServer {
     try {
       this.socket.close();
     } catch {}
-    return stopChild(this.child, this.terminationGraceMs);
+    return stopChild(this.child);
   }
 }
 
@@ -251,17 +240,16 @@ export function connectPool(
   pool: CodexPool,
   onStart?: (identity: ProcessIdentity) => void,
   parentEnvironment?: NodeJS.ProcessEnv,
-  policy?: ControlPolicy['appServer'],
 ): Promise<WebSocketAppServer>;
 
 /** Starts one loopback app-server owned by this process and connects its JSON-RPC WebSocket. */
 export async function connectPool(
   pool: CodexPool,
   onStart?: (identity: ProcessIdentity) => void,
-  parentEnvironment: NodeJS.ProcessEnv = process.env,
-  policy = defaultPolicy.appServer,
 ): Promise<WebSocketAppServer> {
   const executable = pool.executable ?? 'codex';
+  // The overload exposes an isolated environment while keeping the transport entry signature stable.
+  const parentEnvironment: NodeJS.ProcessEnv = arguments[2] === undefined ? process.env : arguments[2];
   const env: NodeJS.ProcessEnv = {
     ...cleanManagedProviderEnvironment(parentEnvironment),
     CODEX_HOME: pool.codexHome,
@@ -275,13 +263,13 @@ export async function connectPool(
     const identity = child.pid ? readProcessIdentity(child.pid) : null;
     if (!child.pid) throw new Error('Cannot start app-server process');
     if (!identity) {
-      await stopChild(child, policy.terminationGraceMs);
+      await stopChild(child);
       throw new Error('Cannot identify app-server process');
     }
     try {
       onStart(identity);
     } catch (error) {
-      await stopChild(child, policy.terminationGraceMs);
+      await stopChild(child);
       throw error;
     }
   }
@@ -296,13 +284,10 @@ export async function connectPool(
       if (error) reject(error);
       else resolveReady(value!);
     };
-    const timer = setTimeout(
-      () => finish(new Error(`Timed out waiting for app-server readiness: ${stderr}`)),
-      policy.readinessTimeoutMs,
-    );
+    const timer = setTimeout(() => finish(new Error(`Timed out waiting for app-server readiness: ${stderr}`)), 30_000);
     child.stderr.on('data', (chunk) => {
       if (settled) return;
-      stderr = retainAppServerDiagnostics(stderr, String(chunk), policy.diagnosticCharacters);
+      stderr = retainAppServerDiagnostics(stderr, String(chunk));
       const match = stripAnsi(stderr).match(APP_SERVER_READY);
       if (match) finish(undefined, match[1]);
     });
@@ -319,7 +304,7 @@ export async function connectPool(
       const timer = setTimeout(() => {
         socket.close();
         reject(new Error(`Timed out connecting to app-server at ${endpoint}`));
-      }, policy.connectTimeoutMs);
+      }, 30_000);
       socket.addEventListener(
         'open',
         () => {
@@ -337,7 +322,7 @@ export async function connectPool(
         { once: true },
       );
     });
-    const client = new WebSocketAppServer(endpoint, socket, child, policy.requestTimeoutMs, policy.terminationGraceMs);
+    const client = new WebSocketAppServer(endpoint, socket, child);
     try {
       await client.initialize();
       return client;
@@ -346,7 +331,7 @@ export async function connectPool(
       throw error;
     }
   } catch (error) {
-    await stopChild(child, policy.terminationGraceMs);
+    await stopChild(child);
     throw error;
   }
 }
