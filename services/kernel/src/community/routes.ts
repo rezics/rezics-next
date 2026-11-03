@@ -13,6 +13,7 @@ import {
   realmHomeBoardResponse,
 } from '../content/realm-board-home.ts';
 import { ContentNotFoundError } from '../content/reads.ts';
+import { banReviewPageSchema, banReviewPageQuerySchema } from './ban-review-page-schemas.ts';
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
 import { readOwnRealmClaimPage } from './realm-claim-status.ts';
@@ -404,7 +405,7 @@ const banResponse = t.Object(
   { ban: t.Object({ ...banRecord.properties, realmId: id, workflowId: t.Union([t.String(), t.Null()]) }, closed) },
   closed,
 );
-const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
+const banPage = banReviewPageSchema;
 const memberIdentity = t.Union([
   t.Object(
     {
@@ -628,10 +629,7 @@ const memberPageUnavailable = t.Object(
 const sitemapQuery = strict(SitemapQuerySchema);
 const sitemapRealmPage = strict(SitemapRealmPageSchema);
 const sitemapSpacePage = strict(SitemapSpacePageSchema);
-const banQuery = t.Object(
-  { limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), cursor: t.Optional(t.String()) },
-  closed,
-);
+const banQuery = banReviewPageQuerySchema;
 
 const readFailures = {
   400: problemSchema('invalid_request'),
