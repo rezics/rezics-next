@@ -20,11 +20,11 @@ validation. The second-scope kinds use only the common identity fields plus `rev
 
 ## Second-scope identities and public fields
 
-| Kind | Owner | Identity | Indexed public metadata |
-| --- | --- | --- | --- |
-| `collection` | `commerce` | The Collection UUID and route | The public Collection title in `names`; no description, curator, member count, saved predicate or member fact. |
-| `review` | `content` | The review thread UUID and route; `kind: "review"` preserves its thread discriminator | Only text the Content adapter has already approved for public review discovery. A current author vote or vote citation is never copied into the index. |
-| `space` | `content` | One Space UUID and route, regardless of its hosted Realm or boards | The current public Space title and summary, represented in `names` and `descriptions`. |
+| Kind         | Owner      | Identity                                                                              | Indexed public metadata                                                                                                                                |
+| ------------ | ---------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `collection` | `commerce` | The Collection UUID and route                                                         | The public Collection title in `names`; no description, curator, member count, saved predicate or member fact.                                         |
+| `review`     | `content`  | The review thread UUID and route; `kind: "review"` preserves its thread discriminator | Only text the Content adapter has already approved for public review discovery. A current author vote or vote citation is never copied into the index. |
+| `space`      | `content`  | One Space UUID and route, regardless of its hosted Realm or boards                    | The current public Space title and summary, represented in `names` and `descriptions`.                                                                 |
 
 The owner and kind are a closed pair. A source key always contains owner, kind, route and canonical UUID; that full
 key survives tagged identity creation, document validation and hit decoding. Each leaf adapter decides current

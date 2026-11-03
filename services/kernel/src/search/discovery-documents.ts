@@ -140,7 +140,11 @@ function canonicalSecondScopeKey(registry: DiscoveryRegistry, value: unknown): S
 }
 
 function canonicalDocumentKey(registry: DiscoveryRegistry, value: DiscoveryDocumentKey): DiscoveryDocumentKey {
-  if (typeof value === 'object' && value !== null && secondScopeOwner((value as { kind?: string }).kind ?? '') !== undefined)
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    secondScopeOwner((value as { kind?: string }).kind ?? '') !== undefined
+  )
     return canonicalSecondScopeKey(registry, value);
   return registry.key(value as DiscoveryKey);
 }
@@ -163,8 +167,7 @@ export function parseDiscoveryDocumentId(registry: DiscoveryRegistry, id: string
 export function parseDiscoveryDocumentKey(registry: DiscoveryRegistry, id: string): DiscoveryDocumentKey {
   if (typeof id !== 'string' || !id.startsWith(ID_PREFIX)) throw new TypeError('Expected a tagged discovery identity');
   const separator = id.indexOf(':', ID_PREFIX.length);
-  if (separator <= ID_PREFIX.length || separator === id.length - 1)
-    throw new TypeError('Malformed discovery identity');
+  if (separator <= ID_PREFIX.length || separator === id.length - 1) throw new TypeError('Malformed discovery identity');
   const encodedKind = id.slice(ID_PREFIX.length, separator);
   let kind: string;
   try {
@@ -176,11 +179,17 @@ export function parseDiscoveryDocumentKey(registry: DiscoveryRegistry, id: strin
   const route = routeOf(nativeId);
   if (route === null) throw new RangeError('Invalid native discovery ID');
   const secondOwner = secondScopeOwner(kind);
-  const key: DiscoveryDocumentKey = secondOwner === undefined
-    ? registry.get(kind).owner === 'accounts'
-      ? { owner: 'accounts', kind: 'account', route, id: nativeId }
-      : { owner: 'semantic', kind, route, id: nativeId }
-    : { owner: secondOwner, kind: kind as 'collection' | 'review' | 'space', route, id: nativeId } as SecondScopeDiscoveryKey;
+  const key: DiscoveryDocumentKey =
+    secondOwner === undefined
+      ? registry.get(kind).owner === 'accounts'
+        ? { owner: 'accounts', kind: 'account', route, id: nativeId }
+        : { owner: 'semantic', kind, route, id: nativeId }
+      : ({
+          owner: secondOwner,
+          kind: kind as 'collection' | 'review' | 'space',
+          route,
+          id: nativeId,
+        } as SecondScopeDiscoveryKey);
   if (discoveryDocumentId(registry, key) !== id) throw new TypeError('Noncanonical discovery identity');
   return key;
 }
@@ -421,7 +430,8 @@ function validateSecondScopeDiscoveryDocument(
 export function validateDiscoveryDocumentFormat(registry: DiscoveryRegistry, value: unknown): DiscoveryDocumentValue {
   if (
     record(value) &&
-    ((value.owner === 'commerce' || value.owner === 'content') ||
+    (value.owner === 'commerce' ||
+      value.owner === 'content' ||
       (typeof value.kind === 'string' && secondScopeOwner(value.kind) !== undefined))
   )
     return validateSecondScopeDiscoveryDocument(registry, value);
