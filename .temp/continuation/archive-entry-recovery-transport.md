@@ -35,16 +35,16 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/archive-entry-recovery.test.tsx
     - tests/archive-entry-recovery-native.test.ts
   placement: default
   tests:
-    - "The mounted journey uploads an actual admitted final artifact, reviews one conflict and one preserved local edit, explicitly maps labels/state and presents only native selected outcomes."
-    - "Wrong/incomplete format, unavailable old vocabulary, changed revision/incarnation, replaced review selection, partial success, original retry, cancellation and account/source retirement preserve privacy and exact intent."
+    - 'The mounted journey uploads an actual admitted final artifact, reviews one conflict and one preserved local edit, explicitly maps labels/state and presents only native selected outcomes.'
+    - 'Wrong/incomplete format, unavailable old vocabulary, changed revision/incarnation, replaced review selection, partial success, original retry, cancellation and account/source retirement preserve privacy and exact intent.'
     - Three-scale supplied-page checks add no per-row hydration or full-archive traversal; unsupported sections never become restored.
   failing: true
 ---
