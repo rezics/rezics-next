@@ -3368,6 +3368,8 @@ Decision: statement recovery uses the
 [shared creator read and command admission contract](#creator-read-and-command-admission); healthy reads require
 no CSRF, and payment mutations retain their original credential, operands and request identity.
 
+Decision: the later-empty list story starts from a nonempty first page with its opaque next, and that empty later page still supplies a next cursor so zero visible rows do not complete the list or hide continuation.
+
 ### Creator statement addresses
 
 Decision: restart malformed list/evidence positions before reading; discard a malformed return hint while preserving the statement ID and exact valid evidence position.

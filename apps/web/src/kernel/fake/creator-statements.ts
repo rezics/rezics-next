@@ -103,6 +103,7 @@ export type CreatorStatementStory =
   | 'creator'
   | 'unknown-unit'
   | 'empty'
+  | 'later-empty'
   | 'denied'
   | 'unavailable'
   | 'error'
@@ -124,7 +125,13 @@ export const routes: FakeRoute[] = [
       if (selected === 'stale') return { status: 409, code: 'stale_cursor' };
       const url = new URL(request.url);
       const statementId = match?.[1];
-      if (!statementId)
+      if (!statementId) {
+        if (selected === 'later-empty')
+          return {
+            status: 200,
+            payoutStatements: url.searchParams.has('cursor') ? [] : [creatorStatementFixture, euro],
+            next: url.searchParams.has('cursor') ? 'story-statements-later' : 'story-statements-next',
+          };
         return {
           status: 200,
           payoutStatements:
@@ -140,6 +147,7 @@ export const routes: FakeRoute[] = [
               ? null
               : 'story-statements-next',
         };
+      }
       const statements =
         selected === 'unknown-unit'
           ? [historicalCreatorStatementFixture]

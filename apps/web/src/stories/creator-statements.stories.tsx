@@ -7,7 +7,15 @@ import { PageStory, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Commerce/Creator Statements',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Constructed presentation responses for the actual creator statements route. They do not establish native authorization, payout, settlement or visual acceptance. Signed-in visitor, locale and theme remain the shared globals.',
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -44,6 +52,31 @@ export const InspectAndBack: Story = {
     await userEvent.click(view.getByRole('link', { name: m.statements_back() }));
     await expect(await view.findByRole('heading', { name: m.statements_heading() })).toBeVisible();
     await expect(view.getByText(m.statements_paid())).toBeVisible();
+  },
+};
+export const LaterEmpty: Story = {
+  render: () => render('later-empty'),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await expect(await view.findByRole('heading', { name: m.statements_heading() })).toBeVisible();
+    await expect(
+      await view.findByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-3.15)),
+    ).toBeVisible();
+    await expect(view.queryByText(m.statements_page_empty(), { exact: true })).toBeNull();
+    await expect(view.queryByRole('link', { name: m.statements_restart() })).toBeNull();
+    await userEvent.click(view.getByRole('link', { name: m.statements_next() }));
+    await expect(await view.findByText(m.statements_page_empty(), { exact: true })).toBeVisible();
+    await expect(view.queryByText(m.statements_empty(), { exact: true })).toBeNull();
+    const restart = view.getByRole('link', { name: m.statements_restart() });
+    await expect(restart).toHaveAttribute('href', `/${getLocale()}/creator/statements`);
+    await expect(view.getByRole('link', { name: m.statements_next() })).toBeVisible();
+    await userEvent.click(restart);
+    await expect(
+      await view.findByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-3.15)),
+    ).toBeVisible();
+    await expect(view.queryByText(m.statements_page_empty(), { exact: true })).toBeNull();
+    await expect(view.getByRole('link', { name: m.statements_next() })).toBeVisible();
   },
 };
 export const UnknownHistoricalMoney: Story = {
