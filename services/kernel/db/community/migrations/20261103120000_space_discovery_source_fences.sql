@@ -1,3 +1,4 @@
+-- migrate:up
 -- Source tuple identity is read from the owning producer and installed as an
 -- inverse at tuple home through resumable, separately committed work.
 CREATE SEQUENCE community.space_discovery_tuple_witness_key;
