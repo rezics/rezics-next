@@ -176,7 +176,11 @@ export function compileDiscoveryCapture(
   )
     throw new RangeError('Invalid mixed capture');
   const filterDocument = input.filterDocument
-    ? admitDiscoveryFilter(input.filterDocument, release, new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)))
+    ? admitDiscoveryFilter(
+        input.filterDocument,
+        release,
+        new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)),
+      )
     : undefined;
   const compiled = filterDocument ? compileDiscoveryFilter(filterDocument, registry, release) : undefined;
   const text = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;

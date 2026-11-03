@@ -141,36 +141,35 @@ export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
 /** The closed public metadata envelope returned by owner-native current reads. */
-export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> =
-  K extends 'collection'
+export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> = K extends 'collection'
+  ? Readonly<{
+      id: string;
+      title: string;
+      summary: string | null;
+      revision: string;
+      sourcePosition: string;
+      card: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoverySummary;
+    }>
+  : K extends 'review'
     ? Readonly<{
+        id: string;
+        title: string | null;
+        summary: string | null;
+        sourceVersion: string;
+        sourcePosition: string;
+        authorId: string;
+        subjectId: string;
+      }>
+    : Readonly<{
         id: string;
         title: string;
         summary: string | null;
         revision: string;
         sourcePosition: string;
-        card: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoverySummary;
-      }>
-    : K extends 'review'
-      ? Readonly<{
-          id: string;
-          title: string | null;
-          summary: string | null;
-          sourceVersion: string;
-          sourcePosition: string;
-          authorId: string;
-          subjectId: string;
-        }>
-      : Readonly<{
-          id: string;
-          title: string;
-          summary: string | null;
-          revision: string;
-          sourcePosition: string;
-          address: string | null;
-          realmId: string | null;
-          realmTitle: string | null;
-        }>;
+        address: string | null;
+        realmId: string | null;
+        realmTitle: string | null;
+      }>;
 export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'> = Readonly<{
   owner: O;
   kind: K;

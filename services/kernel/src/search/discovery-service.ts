@@ -259,10 +259,8 @@ function executeDiscoverySearch(
         canonicalize(
           kindDirectory.map(({ kind, metadata }) => ({
             kind,
-            domains:
-              registry.domains?.(kind) ??
-              registry.entries.find((entry) => entry.kind === kind)?.domains ??
-              ['text', 'kind'],
+            domains: registry.domains?.(kind) ??
+              registry.entries.find((entry) => entry.kind === kind)?.domains ?? ['text', 'kind'],
             metadata,
           })),
         )!,

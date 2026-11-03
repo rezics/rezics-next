@@ -397,7 +397,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   }
 
   const owners = candidates.filter(
-    ({ key }) => key.owner === 'commerce' || (key.owner === 'content' && (key.kind === 'review' || key.kind === 'space')),
+    ({ key }) =>
+      key.owner === 'commerce' || (key.owner === 'content' && (key.kind === 'review' || key.kind === 'space')),
   );
   const ownerCandidates: DiscoveryOwnerCandidate[] = [];
   const ownerOriginals: Candidate[] = [];

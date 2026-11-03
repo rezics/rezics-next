@@ -58,11 +58,7 @@ export type DiscoveryOwnerCandidate = Readonly<{
 
 const MAX_NATIVE_REVISION = 9_223_372_036_854_775_807n;
 function decimal(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^(0|[1-9][0-9]{0,18})$/.test(value) &&
-    BigInt(value) <= MAX_NATIVE_REVISION
-  );
+  return typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= MAX_NATIVE_REVISION;
 }
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -79,7 +75,8 @@ function validOwnerSummary(
   value: unknown,
   id: string,
 ): value is DiscoveryOwnerMetadataSummary {
-  if (!object(value) || value.id !== id || !validText(value.sourcePosition) || !decimal(value.sourcePosition)) return false;
+  if (!object(value) || value.id !== id || !validText(value.sourcePosition) || !decimal(value.sourcePosition))
+    return false;
   if (kind === 'collection') {
     return (
       Object.keys(value).length === 6 &&
@@ -199,11 +196,13 @@ export async function hydrateOwnerDiscoveryHits(
     return { candidate, value };
   });
 
-  const reviewRows = accepted.flatMap((entry) =>
-    entry?.candidate.key.kind === 'review' ? [entry] : [],
+  const reviewRows = accepted.flatMap((entry) => (entry?.candidate.key.kind === 'review' ? [entry] : []));
+  const authorIds = reviewRows.map(
+    (entry) => (entry.value as Extract<DiscoveryOwnerMetadataSummary, { authorId: string }>).authorId,
   );
-  const authorIds = reviewRows.map((entry) => (entry.value as Extract<DiscoveryOwnerMetadataSummary, { authorId: string }>).authorId);
-  const subjectIds = reviewRows.map((entry) => (entry.value as Extract<DiscoveryOwnerMetadataSummary, { subjectId: string }>).subjectId);
+  const subjectIds = reviewRows.map(
+    (entry) => (entry.value as Extract<DiscoveryOwnerMetadataSummary, { subjectId: string }>).subjectId,
+  );
   const accountEntry = registry.get('account');
   if (accountEntry.owner !== 'accounts') throw new TypeError('Discovery Account hydrator is unavailable');
   const accountSummaries = await readBatches(authorIds, (ids) => accountEntry.hydrate(ids, context));

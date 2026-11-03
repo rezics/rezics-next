@@ -44,11 +44,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Each native kind shows its authorized cover or portrait, localized title, facts, destination, and applicable owner context; private Library entry/own-score state uses one bounded current page and commands reauthorize."
-    - "Semantic descriptions, four-property/three-value presentation facts, native rating figures, and final identity/source observations stay current through disclosure."
-    - "Installed browser intent, filters, kind selection, sharing, Back/reload, keyboard, continuation, and repair work in eight locales; landed running-app, Storybook, and screenshot review is recorded."
-    - "Review recovery covers missed wakeups, lost responses, restart, takeover, replacement catch-up, and final hydration without weakening the shared operationId fixture."
-    - "Owner/pool/body/citation/Semantic/overlay/final costs and physical index evidence are derived; installed all-pool 1x/4x/16x runs compare statements, examined/returned rows, seeks, actions, bytes, memory, sparse rejection, mutation, and final invalidation under controller policy."
+    - 'Each native kind shows its authorized cover or portrait, localized title, facts, destination, and applicable owner context; private Library entry/own-score state uses one bounded current page and commands reauthorize.'
+    - 'Semantic descriptions, four-property/three-value presentation facts, native rating figures, and final identity/source observations stay current through disclosure.'
+    - 'Installed browser intent, filters, kind selection, sharing, Back/reload, keyboard, continuation, and repair work in eight locales; landed running-app, Storybook, and screenshot review is recorded.'
+    - 'Review recovery covers missed wakeups, lost responses, restart, takeover, replacement catch-up, and final hydration without weakening the shared operationId fixture.'
+    - 'Owner/pool/body/citation/Semantic/overlay/final costs and physical index evidence are derived; installed all-pool 1x/4x/16x runs compare statements, examined/returned rows, seeks, actions, bytes, memory, sparse rejection, mutation, and final invalidation under controller policy.'
 estimate:
   lines: 2100
   files: 19

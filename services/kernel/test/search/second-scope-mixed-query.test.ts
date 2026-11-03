@@ -6,7 +6,12 @@ import { admitDiscoveryHit } from '../../src/search/discovery-http.ts';
 import { discoveryKindDirectory } from '../../src/search/discovery-registry.ts';
 import { compareDiscoveryTuple, type DiscoveryCandidate } from '../../src/search/discovery-query.ts';
 import { routeOf } from '../../src/route/route.ts';
-import type { DiscoveryKey, DiscoveryOwnerRegistry, DiscoveryReadContext, DiscoveryRegistry } from '../../src/search/discovery.ts';
+import type {
+  DiscoveryKey,
+  DiscoveryOwnerRegistry,
+  DiscoveryReadContext,
+  DiscoveryRegistry,
+} from '../../src/search/discovery.ts';
 
 const id = '018f0000-0000-7000-8000-00a000000001';
 const entries = [

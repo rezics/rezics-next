@@ -94,7 +94,10 @@ export const DiscoveryPageSchema = t.Object(
           closed,
         ),
         t.Object(
-          { key: collectionKey, summary: t.Object({ kind: t.Literal('collection'), value: collectionSummary }, closed) },
+          {
+            key: collectionKey,
+            summary: t.Object({ kind: t.Literal('collection'), value: collectionSummary }, closed),
+          },
           closed,
         ),
         t.Object(
