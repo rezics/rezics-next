@@ -72,3 +72,10 @@ New-kind integration must keep the existing Search/Home invocation and its `sear
 a short raw page exhausts even when no row is eligible. Collection census and unverifiable dynamic Publication
 witnesses remain unavailable. Missing current owner evidence or withheld complete hydration stays typed
 unavailable; it never becomes a false empty page or count.
+
+Current Subject and Account summaries are assembled in deduplicated batches of at most 100 identities. A current
+source row whose complete summary is withheld, malformed, foreign or inconsistent refuses the whole page; an absent
+source row still excludes that candidate. Summary objects are copied before later owner reads. The installed reader
+admits the closed transport shape, full identity ties and metadata even for an empty final page before signing its
+cursors, and the endpoint applies the same admission at serialization. Hit pages and metadata-only pages retain
+separate shapes.

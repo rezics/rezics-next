@@ -7,6 +7,7 @@ import { createDiscoverySearch, createRetainedDiscoverySearch } from '../../src/
 import type { DiscoveryKey, DiscoveryReadContext } from '../../src/search/discovery.ts';
 import type { PublicDiscoveryConsumerOperations } from '../../src/search/public-filter-consumer-contract.ts';
 import { installPublicFilterCoveragePage } from '../../src/search/public-filter-coverage-page.ts';
+import { admitDiscoveryPage, discoveryHttpPage } from '../../src/search/discovery-http.ts';
 
 // Lifecycle regressions, authored without running the deferred native campaign. The
 // installed opener is an explicit unit double; it is not Source population evidence.
@@ -28,7 +29,7 @@ const cost = {
   frontierWrites: 0,
 };
 
-function fixture() {
+function fixture(withCandidate = false) {
   const calls: string[] = [];
   const consumer = {
     physicalTarget: 'discovery-unit',
@@ -73,8 +74,12 @@ function fixture() {
           queried,
           execution: 'execution',
           start: { observation: 'start' },
-          result: { hits: [] },
-          window: { positions: [], examined: 0, exhausted: true },
+          result: {
+            hits: withCandidate
+              ? [{ key, index: 'unit', sourcePosition: '7', revision: '3', matched: [], sort: [] }]
+              : [],
+          },
+          window: { positions: withCandidate ? [0] : [], examined: withCandidate ? 1 : 0, exhausted: true },
           cost,
         };
       },
@@ -290,4 +295,40 @@ test('expired retained execution cannot dispatch an owner batch or publish', asy
   expect(f.calls).not.toContain('owner-start');
   expect(f.calls).not.toContain('final');
   expect(f.calls.slice(-2)).toEqual(['dispose', 'close-observation']);
+});
+
+test('malformed metadata on an empty final page refuses publication before cursor signing', async () => {
+  const f = fixture();
+  const keys = new Proxy(f.config.keys, {
+    get(target, property, receiver) {
+      f.calls.push('sign');
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  await expect(
+    createDiscoverySearch({ ...f.config, keys, asOf: async () => 'invalid-date' })('anonymous', f.request, f.context),
+  ).rejects.toMatchObject({ code: 'index_not_ready' });
+  expect(f.calls).not.toContain('sign');
+  expect(f.calls).not.toContain('final');
+  expect(f.calls.slice(-2)).toEqual(['dispose', 'close-observation']);
+});
+
+test('a current native result crosses the same closed transport admission before and after final', async () => {
+  const f = fixture(true);
+  const page = await createDiscoverySearch(f.config)('anonymous', f.request, f.context);
+  expect(page.hits).toHaveLength(1);
+  expect(discoveryHttpPage(page).hits[0]!.summary.value.id).toBe(id);
+  for (const invalid of [
+    { ...page, hits: Array(101).fill(page.hits[0]) },
+    { ...page, hits: [page.hits[0], page.hits[0]] },
+    { ...page, hits: [{ ...page.hits[0], key: { ...key, route: 161 } }] },
+    {
+      ...page,
+      kinds: { ...page.kinds, values: [{ ...page.kinds.values[0], count: { kind: 'other', value: 1, exact: false } }] },
+    },
+    { ...page, next: '' },
+    { ...page, unexpected: 'private' },
+  ])
+    expect(() => admitDiscoveryPage(invalid)).toThrow('incomplete or malformed');
+  expect(f.calls.indexOf('final')).toBeGreaterThan(f.calls.indexOf('hydrate'));
 });

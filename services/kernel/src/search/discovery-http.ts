@@ -1,11 +1,18 @@
 import type { Static } from 'typebox';
-import type { DiscoveryPage } from './discovery.ts';
+import type { DiscoveryHit, DiscoveryPage } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { t } from 'elysia';
+import { Compile } from 'typebox/compile';
+import { routeOf } from '../route/route.ts';
+import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableText = t.Union([t.String(), t.Null()]);
+const continuation = t.Union([
+  t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength }),
+  t.Null(),
+]);
 const accountSummary = t.Object(
   {
     id,
@@ -62,11 +69,11 @@ export const DiscoveryPageSchema = t.Object(
           ),
           { maxItems: 8 },
         ),
-        next: nullableText,
+        next: continuation,
       },
       closed,
     ),
-    next: nullableText,
+    next: continuation,
     as_of: t.String({ format: 'date-time' }),
   },
   closed,
@@ -74,8 +81,42 @@ export const DiscoveryPageSchema = t.Object(
 
 export type DiscoveryHttpPage = Static<typeof DiscoveryPageSchema>;
 
+const hitCheck = Compile(DiscoveryPageSchema.properties.hits.items);
+const pageCheck = Compile(DiscoveryPageSchema);
+const unavailable = (): never => {
+  throw new SearchUnavailableError('Discovery response is incomplete or malformed');
+};
+
+/** Validate the native owner reply without coercion or removal of unrecognized fields. */
+export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryHit {
+  if (!hitCheck.Check(value)) unavailable();
+  const { key, summary } = value;
+  if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
+  if (summary.kind === 'subject' && (key.owner !== 'semantic' || key.kind !== summary.value.type)) unavailable();
+  if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
+}
+
+/** Run before cursor signing as well as at the wire boundary. Empty pages still carry metadata. */
+export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPage {
+  if (!pageCheck.Check(value)) unavailable();
+  const identities = new Set<string>();
+  for (const hit of value.hits) {
+    admitDiscoveryHit(hit);
+    const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
+    if (identities.has(identity)) unavailable();
+    identities.add(identity);
+  }
+  const kinds = new Set<string>();
+  for (const kind of value.kinds.values) {
+    if (kinds.has(kind.id) || (kind.count && kind.count.kind !== kind.id)) unavailable();
+    if (kind.count && 'value' in kind.count && !Number.isSafeInteger(kind.count.value)) unavailable();
+    kinds.add(kind.id);
+  }
+}
+
 /** Close the owner/summary union and materialize readonly native avatar arrays for the wire schema. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
+  admitDiscoveryPage(page);
   return {
     ...page,
     hits: page.hits.map((hit) => {

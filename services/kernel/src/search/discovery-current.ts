@@ -17,6 +17,7 @@ import { currentDiscoveryFilter } from './discovery-filter.ts';
 import { checkHits } from './disclosure/check.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
+import { admitDiscoveryHit } from './discovery-http.ts';
 import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts';
 
 function unavailable(): never {
@@ -37,6 +38,28 @@ function partitioned<T extends { id: string }>(values: readonly T[]): Map<number
     group.push(value);
   }
   return groups;
+}
+
+/** A missing summary after positive current evidence is unavailable, not an excluded candidate. */
+async function completeSummaries<T>(
+  ids: readonly string[],
+  hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, T>>,
+): Promise<Map<string, T>> {
+  const unique = [...new Set(ids)];
+  const current = new Map<string, T>();
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const chunk = unique.slice(offset, offset + 100);
+    const requested = new Set(chunk);
+    const observed = await hydrate(chunk);
+    if (!observed || typeof observed[Symbol.iterator] !== 'function') unavailable();
+    for (const [id, summary] of observed) {
+      if (!requested.delete(id) || summary == null) unavailable();
+      // Do not retain mutable owner objects across subsequent reads or final publication.
+      current.set(id, structuredClone(summary));
+    }
+    if (requested.size) unavailable();
+  }
+  return current;
 }
 
 /** One bounded positional owner batch for original primary keys, including duplicate positions.
@@ -273,11 +296,15 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     const semanticEntry = registry.entries.find((entry) => entry.owner === 'semantic');
     if (selectedSemantic.length && semanticEntry) {
       // All catalogue registrations share one native hydrator, independent of selected kind count.
-      const summaries = await semanticEntry.hydrate([...new Set(selectedSemantic.map(({ key }) => key.id))], context);
+      const summaries = await completeSummaries(
+        selectedSemantic.map(({ key }) => key.id),
+        (ids) => semanticEntry.hydrate(ids, context),
+      );
       for (const candidate of selectedSemantic) {
         const summary = summaries.get(candidate.key.id);
-        if (summary && summary.id === candidate.key.id && summary.type === candidate.key.kind)
-          passed.set(candidate, { key: candidate.key, summary: { kind: 'subject', value: summary } });
+        const hit = { key: candidate.key, summary: { kind: 'subject', value: summary } };
+        admitDiscoveryHit(hit);
+        passed.set(candidate, hit);
       }
     }
   }
@@ -327,24 +354,23 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
   }
   const selected = [...selectedAccounts.keys()];
-  for (let offset = 0; offset < selected.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-    const chunk = selected.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-    const summaries = await entry.hydrate(
-      chunk.map(({ key }) => key.id),
-      context,
-    );
-    for (const candidate of chunk) {
-      const summary = summaries.get(candidate.key.id);
-      const row = selectedAccounts.get(candidate)!;
-      if (
-        summary &&
-        summary.id === row.id &&
-        summary.handle === row.handle &&
-        summary.displayName === row.displayName &&
-        summary.accountKind === row.accountKind
-      )
-        passed.set(candidate, { key: candidate.key, summary: { kind: 'account', value: summary } });
-    }
+  const summaries = await completeSummaries(
+    selected.map(({ key }) => key.id),
+    (ids) => entry.hydrate(ids, context),
+  );
+  for (const candidate of selected) {
+    const summary = summaries.get(candidate.key.id);
+    const row = selectedAccounts.get(candidate)!;
+    const hit = { key: candidate.key, summary: { kind: 'account', value: summary } };
+    admitDiscoveryHit(hit);
+    if (
+      !summary ||
+      summary.handle !== row.handle ||
+      summary.displayName !== row.displayName ||
+      summary.accountKind !== row.accountKind
+    )
+      unavailable();
+    passed.set(candidate, hit);
   }
   return passed;
 }

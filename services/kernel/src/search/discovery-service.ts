@@ -7,6 +7,7 @@ import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
+import { admitDiscoveryPage } from './discovery-http.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { admitDiscoveryRequest, ownDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
 import type {
@@ -449,7 +450,15 @@ function executeDiscoverySearch(
               ? { count: { kind: entry.kind, unavailable: true as const } }
               : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
           }));
-          const next = exhausted
+          const projected: DiscoveryPage = {
+            hits,
+            kinds: { values, next: null },
+            next: null,
+            as_of: await config.asOf(queried),
+          };
+          // Owner replies and metadata must pass the actual transport contract before any token is signed.
+          admitDiscoveryPage(projected);
+          projected.next = exhausted
             ? null
             : await encodeDiscoveryCursor(
                 config.keys,
@@ -464,7 +473,7 @@ function executeDiscoverySearch(
                 },
                 now,
               );
-          const kindsNext =
+          projected.kinds.next =
             remaining.length <= selected.length
               ? null
               : await encodeSearchCursor(
@@ -476,7 +485,7 @@ function executeDiscoverySearch(
                   },
                   now,
                 );
-          const projected = { hits, kinds: { values, next: kindsNext }, next, as_of: await config.asOf(queried) };
+          admitDiscoveryPage(projected);
           await retain(projected, (keys) =>
             currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, context),
           );

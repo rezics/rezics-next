@@ -43,6 +43,16 @@ const hit = (id: string, revision = '7', sourcePosition = '12'): DiscoveryEngine
   matched: [],
   sort: [id, 'account', `account:${id}`],
 });
+const summaryOf = (id: string): AccountDiscoverySummary => ({
+  id,
+  accountKind: 'actor',
+  handle: 'mira',
+  displayName: 'Mira',
+  automated: false,
+  operatorId: null,
+  avatar: null,
+  verifiedAgent: null,
+});
 
 function disclose(
   candidates: readonly DiscoveryEngineHit[],
@@ -120,16 +130,7 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
   expect(validateAccountSnapshot(observed, partition, [nativeId, omitted], 0n).accounts.map(({ id }) => id)).toEqual([
     nativeId,
   ]);
-  const summary: AccountDiscoverySummary = {
-    id: nativeId,
-    accountKind: 'actor',
-    handle: 'mira',
-    displayName: 'Mira',
-    automated: false,
-    operatorId: null,
-    avatar: null,
-    verifiedAgent: null,
-  };
+  const summary = summaryOf(nativeId);
   const passed = await disclose(
     [live, missing],
     () => observed,
@@ -141,4 +142,48 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
   expect([...passed.keys()]).toEqual([live]);
   expect(passed.get(live)).toEqual({ key: live.key, summary: { kind: 'account', value: summary } });
   await expect(disclose([hit(nativeId, '7', '13')], () => observed)).rejects.toBeInstanceOf(SearchUnavailableError);
+});
+
+test('positive current evidence with missing, foreign, changed or malformed hydration refuses the whole page', async () => {
+  const observed: AccountSnapshot = { partition, position: 12n, accounts: [row(nativeId)] };
+  const summary = summaryOf(nativeId);
+  for (const summaries of [
+    new Map<string, AccountDiscoverySummary>(),
+    new Map([
+      [nativeId, summary],
+      ['unrequested', summary],
+    ]),
+    new Map([[nativeId, { ...summary, displayName: 'Changed during hydration' }]]),
+    new Map([[nativeId, { ...summary, privateState: 'not public' }]]),
+    new Map([[nativeId, { ...summary, avatar: { media: nativeId } }]]),
+  ]) {
+    await expect(
+      disclose(
+        [hit(nativeId)],
+        () => observed,
+        async () => summaries as ReadonlyMap<string, AccountDiscoverySummary>,
+      ),
+    ).rejects.toBeInstanceOf(SearchUnavailableError);
+  }
+});
+
+test('current hydration deduplicates identities, admits every bounded chunk and retains its own summary snapshot', async () => {
+  const ids = Array.from({ length: 101 }, (_, index) =>
+    derivedId('00000000-0000-8000-8000-000000000001', `summary-${index}`, route),
+  );
+  const batches: string[][] = [];
+  const summaries = new Map(ids.map((id) => [id, summaryOf(id)]));
+  const passed = await disclose(
+    [...ids, ids[0]!].map((id) => hit(id)),
+    (requested) => ({ partition, position: 12n, accounts: requested.map((id) => row(id)) }),
+    async (requested) => {
+      batches.push([...requested]);
+      return new Map(requested.map((id) => [id, summaries.get(id)!]));
+    },
+  );
+  expect(batches.map((batch) => batch.length)).toEqual([100, 1]);
+  expect(batches.flat()).toEqual(ids);
+  summaries.get(ids[0]!)!.displayName = 'Changed after hydration';
+  expect([...passed.values()][0]!.summary.value).toMatchObject({ displayName: 'Mira' });
+  expect(passed.size).toBe(102);
 });
