@@ -18,10 +18,15 @@ afterAll(async () => {
 async function decision(title: string) {
   const target = await fixture.createThread(fixture.mainBoardId, title);
   await fixture.grant(target.postId, ['moderation:takedown']);
-  await fixture.command('POST', `/v1/posts/${target.postId}:takeDown`, { reason: 'Private retained reason' }, {
-    bearer: fixture.moderator.bearer,
-    expectedStatus: 200,
-  });
+  await fixture.command(
+    'POST',
+    `/v1/posts/${target.postId}:takeDown`,
+    { reason: 'Private retained reason' },
+    {
+      bearer: fixture.moderator.bearer,
+      expectedStatus: 200,
+    },
+  );
   const { rows } = await fixture.system.database.pool.query<{ decision_id: string }>(
     'SELECT decision_id FROM content.moderation_decision WHERE route=$1 AND target_id=$2',
     [target.postRoute, target.postId],
@@ -57,14 +62,27 @@ for (const differentClient of [false, true]) {
     const { system, author } = fixture;
     const clientId = differentClient ? `decision_${crypto.randomUUID()}` : system.auth.ordinaryClient.id;
     if (differentClient)
-      await system.nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: system.auth.ordinaryScopes });
-    const replacement = await system.auth.issue({ accountId: author.accountId, clientId, scopes: system.auth.ordinaryScopes });
+      await system.nativeAuth.internal.registerClient({
+        clientId,
+        firstParty: true,
+        scopes: system.auth.ordinaryScopes,
+      });
+    const replacement = await system.auth.issue({
+      accountId: author.accountId,
+      clientId,
+      scopes: system.auth.ordinaryScopes,
+    });
     expect(replacement.bearer).not.toBe(author.bearer);
     // Also cover replacement after the final source query, before disclosure.
     for (const occurrence of [1, 2])
-      await withheld(path, author.bearer, async (request) => {
-        request.headers.set('authorization', `Bearer ${replacement.bearer}`);
-      }, occurrence);
+      await withheld(
+        path,
+        author.bearer,
+        async (request) => {
+          request.headers.set('authorization', `Bearer ${replacement.bearer}`);
+        },
+        occurrence,
+      );
     const reopened = await fixture.call('GET', path, { bearer: replacement.bearer });
     expect(reopened.response.status).toBe(200);
     expect(reopened.value?.viewer).toMatchObject({ affectedAuthor: true, appeal: { state: 'permitted' } });
@@ -79,26 +97,48 @@ for (const change of ['revoke', 'suspend'] as const) {
     const principal = await accountDeletionRuntime(system).person();
     await fixture.grant(principal.accountId, ['account:manage'], principal.accountId);
     const credential = await system.auth.issue({
-      accountId: principal.accountId, clientId: system.auth.ordinaryClient.id, scopes: system.auth.ordinaryScopes,
+      accountId: principal.accountId,
+      clientId: system.auth.ordinaryClient.id,
+      scopes: system.auth.ordinaryScopes,
     });
     // Assignment has no mounted creation route yet. Use its native command with
     // the installed self-management action and real principal authentication.
-    const commands = createDelegationCommands({ pool: system.database.pool, access: system.access, action: 'account:manage' });
+    const commands = createDelegationCommands({
+      pool: system.database.pool,
+      access: system.access,
+      action: 'account:manage',
+    });
     const context = () => ({ pool: system.database.pool, deadline: Date.now() + 30_000, actor: credential.actor });
-    const input = { principalId: principal.accountId, assignedActorId: author.accountId,
-      requestId: newId(routeOf(principal.accountId)!), valid: '(,)', key: crypto.randomUUID() };
+    const input = {
+      principalId: principal.accountId,
+      assignedActorId: author.accountId,
+      requestId: newId(routeOf(principal.accountId)!),
+      valid: '(,)',
+      key: crypto.randomUUID(),
+    };
     const assignment = await commands.create(context(), input);
-    const delegated = await system.auth.issue({ accountId: author.accountId, clientId: system.auth.ordinaryClient.id,
-      scopes: system.auth.ordinaryScopes, requestedBy: assignment.value.requestedBy });
+    const delegated = await system.auth.issue({
+      accountId: author.accountId,
+      clientId: system.auth.ordinaryClient.id,
+      scopes: system.auth.ordinaryScopes,
+      requestedBy: assignment.value.requestedBy,
+    });
     const { path } = await decision(`Delegated principal ${change}`);
     // Advice must not be the only session gate: this branch already has an appeal.
     await fixture.command('POST', `${path}:appeal`, { statement: 'Pending delegated lifetime' });
     expect((await fixture.call('GET', path, { bearer: delegated.bearer })).response.status).toBe(200);
     await withheld(path, delegated.bearer, async () => {
       if (change === 'revoke') await commands.revoke(context(), { ...input, key: crypto.randomUUID() });
-      else await fixture.command('POST', `/v1/accounts/${principal.accountId}:suspend`, { reason: 'Principal retired' }, {
-        bearer: fixture.governance.bearer, expectedStatus: 200,
-      });
+      else
+        await fixture.command(
+          'POST',
+          `/v1/accounts/${principal.accountId}:suspend`,
+          { reason: 'Principal retired' },
+          {
+            bearer: fixture.governance.bearer,
+            expectedStatus: 200,
+          },
+        );
     });
     const denied = await fixture.call('GET', path, { bearer: delegated.bearer });
     expect(denied.response.status).toBe(401);
@@ -115,20 +155,31 @@ test('sparse retained provenance and an erased decider preserve only the unexpir
   const read = () => fixture.call('GET', path, { bearer: fixture.author.bearer });
   await fixture.system.database.pool.query(
     `UPDATE content.moderation_decision SET recorded_transaction_id=NULL, board_id=NULL, decider_account_id=NULL
-     WHERE route=$1 AND decision_id=$2`, [target.postRoute, id],
+     WHERE route=$1 AND decision_id=$2`,
+    [target.postRoute, id],
   );
   const retained = await read();
   expect(retained.response.status).toBe(200);
-  expect(retained.value).toMatchObject({ id, statement: 'Private retained reason', appeal: null,
-    viewer: { affectedAuthor: true, appeal: { state: 'permitted' } }, targetContext: { state: 'concealed' } });
+  expect(retained.value).toMatchObject({
+    id,
+    statement: 'Private retained reason',
+    appeal: null,
+    viewer: { affectedAuthor: true, appeal: { state: 'permitted' } },
+    targetContext: { state: 'concealed' },
+  });
   await fixture.system.database.pool.query(
     `UPDATE content.moderation_decision SET decided_at=CURRENT_TIMESTAMP - interval '184 days'
-     WHERE route=$1 AND decision_id=$2`, [target.postRoute, id],
+     WHERE route=$1 AND decision_id=$2`,
+    [target.postRoute, id],
   );
   const expired = await read();
   expect(expired.response.status).toBe(200);
-  expect(expired.value).toMatchObject({ id, statement: '', appeal: null,
-    viewer: { affectedAuthor: true, appeal: { state: 'unavailable', reason: 'deadline_passed' } } });
+  expect(expired.value).toMatchObject({
+    id,
+    statement: '',
+    appeal: null,
+    viewer: { affectedAuthor: true, appeal: { state: 'unavailable', reason: 'deadline_passed' } },
+  });
   expect(expired.response.headers.get(SESSION_HEADER)).not.toBeNull();
   expect(expired.text).not.toContain('Private retained reason');
   for (const result of [retained, expired]) {
