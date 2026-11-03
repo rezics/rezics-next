@@ -407,11 +407,7 @@ type NativeEventRow = {
   recorded_at: Date;
 };
 
-async function nativeEvent(
-  growthDb: GrowthDatabase,
-  type: string,
-  subject: string,
-): Promise<CloudEvent> {
+async function nativeEvent(growthDb: GrowthDatabase, type: string, subject: string): Promise<CloudEvent> {
   const { rows } = await growthDb.admin.query<NativeEventRow>(
     `SELECT partition_no,position::text,epoch,id::text,type,subject::text,data,recorded_at
      FROM core.outbox WHERE type=$1 AND subject=$2 ORDER BY position DESC LIMIT 1`,
@@ -434,15 +430,13 @@ async function nativeEvent(
 
 type NotificationGrowthFixture = Awaited<ReturnType<ContentNotificationGrowthDriver['provision']>>;
 
-async function createRunnerThread(
-  driver: ContentNotificationGrowthDriver,
-  fixture: NotificationGrowthFixture,
-) {
+async function createRunnerThread(driver: ContentNotificationGrowthDriver, fixture: NotificationGrowthFixture) {
   const result = await driver.createThread(
     { boardId: fixture.publicBoardId, body: fromPlainText('Moderation runner cost'), visibility: 'published' },
     { actor: fixture.author, key: JSON.stringify(crypto.randomUUID()) },
   );
-  if (!result.response.ok || !result.value) throw new Error(`Native runner thread creation failed (${result.response.status})`);
+  if (!result.response.ok || !result.value)
+    throw new Error(`Native runner thread creation failed (${result.response.status})`);
   return result.value;
 }
 
