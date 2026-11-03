@@ -345,7 +345,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
       async readCurrent(
         ids: readonly string[],
         context: DiscoveryReadContext,
-      ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
+      ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary<'space'>>> {
         if (!Array.isArray(ids) || ids.length > 200) throw new RangeError('Space current read exceeds 200 identities');
         const before = await space.source.dependencies();
         if (before.state !== 'ready')

@@ -457,7 +457,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
     async readCurrent(
       ids: readonly string[],
       context: DiscoveryReadContext,
-    ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
+    ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary<'review'>>> {
       if (!Array.isArray(ids) || ids.length > REVIEW_DISCOVERY_OWNER_CURRENT_LIMIT)
         throw new RangeError(`Review current reads accept at most ${REVIEW_DISCOVERY_OWNER_CURRENT_LIMIT} identities`);
       validReadContext(context);
