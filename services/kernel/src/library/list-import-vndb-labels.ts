@@ -137,20 +137,23 @@ export function createVndbLabelAdoption(config: Config) {
           targets.add(identity);
         }
         const status = m.admission === 'ready' ? eligible ? 'ready' : 'stale' : m.admission;
+        let baseline: VndbLabelOperand['assignment'] = null;
         let result: VndbLabelResult | null = status === 'ready' ? null : {
           reason: m.reason ?? 'source-review-unavailable', retryable: false, label: m.label, assignment: null,
         };
         if (status === 'ready' && m.label) {
-          const existing = await pool.query<LabelIdentity>(
-            `SELECT assignment_id AS id,revision FROM library.label_assignment
-             WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4 AND deleted_at IS NULL AND slot_no IS NOT NULL`,
+          const existing = await pool.query<NonNullable<VndbLabelOperand['assignment']>>(
+            `SELECT assignment_id AS id,revision,deleted_at IS NULL AND slot_no IS NOT NULL AS effective FROM library.label_assignment
+             WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4 AND assignment_id IS NOT NULL`,
             [requireRoute(account.accountId), account.accountId, subjectId, m.label.id]);
-          if (existing.rows[0]) result = { reason: 'already-present', retryable: false, label: m.label, assignment: existing.rows[0] };
+          baseline = existing.rows[0] ?? null;
+          if (baseline?.effective) result = { reason: 'already-present', retryable: false, label: m.label,
+            assignment: { id: baseline.id, revision: baseline.revision } };
         }
         if (status === 'ready' && !result && full)
           result = { reason: 'assignment-capacity', retryable: false, label: m.label, assignment: null };
         operands.push({ operand: { ordinal: selected.ordinal, reviewId: selected.reviewId, sourceDigest: digest(retained.row),
-          subjectId, source: retained.target?.source ?? null, mapping: index }, status, result });
+          subjectId, source: retained.target?.source ?? null, mapping: index, assignment: baseline }, status, result });
       }
     }
     if (used.size !== mappings.length || !operands.length || operands.length > limits.items) throw invalid();
@@ -303,8 +306,8 @@ export function createVndbLabelAdoption(config: Config) {
           }));
         }
         result.label = label;
-        const assigned = await assignments.assignLabel(actor, label.id, { subjectId: item.operand.subjectId! },
-          `${previewId}:assign:${n}`, admission(actor, id, plan, [item.operand], label));
+        const assigned = await assignments.assignReviewedLabel(actor, label.id, { subjectId: item.operand.subjectId! },
+          label.revision, item.operand.assignment, `${previewId}:assign:${n}`, admission(actor, id, plan, [item.operand], label));
         record(assigned);
         status = assigned.value.unchanged ? 'already_present' : 'applied';
         result.assignment = assigned.value.assignment;

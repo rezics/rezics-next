@@ -341,6 +341,19 @@ export function createLabelAssignmentCommands(deps: {
       expectedLabelRevision,
     )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
   }
+  /** Explicit import review retains the addressed membership baseline as native command operands. */
+  async function assignReviewedLabel(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    expectedLabelRevision: number,
+    expectedTarget: { id: string; revision: number; effective: boolean } | null,
+    key: string,
+    admission: LabelCommandAdmission,
+  ) {
+    return (await mutate(actor, labelId, value, key, 'assign', admission, expectedLabelRevision,
+      undefined, expectedTarget)) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
+  }
   async function assignLabelForConsolidation(
     actor: Actor,
     targetLabelId: string,
@@ -512,6 +525,7 @@ export function createLabelAssignmentCommands(deps: {
   return {
     assignLabel,
     assignLabelAtRevision,
+    assignReviewedLabel,
     assignLabelForConsolidation,
     unassignLabel,
     unassignLabelAtRevision,
