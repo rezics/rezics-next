@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { createImageJob } from '../../../src/content/image-job.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
-import { updateRealm, type RealmUpdate } from '../../../src/community/realm.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { type MediaRealmPerson, mediaRealmDownloadFixture } from '../media-realm-download-fixture.ts';
@@ -135,21 +134,6 @@ export async function growthRealmPresentationClaimFixture() {
       headers: { 'if-match': JSON.stringify(expectedHead) },
       body: { presentation },
     });
-  }
-
-  async function update(
-    realmId: string,
-    input: Omit<RealmUpdate, 'realmId' | 'expectedHead'>,
-    key = randomUUID(),
-  ): Promise<string> {
-    const current = await read(realmId);
-    const result = await updateRealm(
-      { pool: base.db.pool, access, routeKey },
-      actor,
-      { realmId, expectedHead: current.headRevisionId, ...input },
-      { idempotencyKey: key, deadline: Date.now() + 30_000 },
-    );
-    return result.value.revisionId;
   }
 
   async function revisionCount(realmId: string): Promise<number> {
@@ -513,15 +497,12 @@ export async function growthRealmPresentationClaimFixture() {
     base,
     actor,
     admittedScopes,
-    access,
-    routeKey,
     bytes,
     sha256,
     createRealm,
     upload,
     read,
     patch,
-    update,
     revisionCount,
     receiptCount,
     mediaRows,

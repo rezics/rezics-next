@@ -18,10 +18,22 @@ The refusal series measures native requests against the same unrelated-populatio
 
 ## Execution record
 
+The inspected source revision is `c968558f1f20e21ca88ac8e7b26754a3fd642d7a`; the focused acceptance and fixture were added in commit `bd2374b4ae` and refined in the following worktree commit. The fixture is `growthRealmPresentationClaimFixture`, built on the shared `mediaRealmDownloadFixture` without modifying it. It uploads and publishes selected assets through native routes and the registered image job; unrelated populations and empty-presentation history are setup-only seeds.
+
 The focused command is:
 
 ```sh
 bun run --cwd services/kernel check test/content/growth-realm-presentation-claim.test.ts
 ```
 
-The three-scale observation table is populated after the focused command runs. It reports each case and scale with statements, rows, buffers, shared hits, shared reads, runner work, and claim-update count. This binding itself does not claim a promotion or add a proof-registration gate.
+The focused command stopped in the kernel schema-dump preflight, before loading the test file or reaching a test assertion. Its exact error was `error: Schema dump differs from db/library/schema.sql.` The preflight named `native_public_output_binding` as the expected first object and `members_preparation` as the actual first object. Neither schema file is changed by this work. No three-scale physical sample was produced:
+
+| Case | 256 | 1024 | 4096 |
+| --- | --- | --- | --- |
+| 0 changed slots vs unrelated Realm/media | not reached | not reached | not reached |
+| 1 changed slot vs unrelated Realm/media | not reached | not reached | not reached |
+| 2 changed slots vs unrelated Realm/media | not reached | not reached | not reached |
+| 2 changed slots vs retained history | not reached | not reached | not reached |
+| media and stale-CAS refusals | not reached | not reached | not reached |
+
+The attempted kernel typecheck first failed in shared check preparation with `reason: absolute preparation deadline exceeded` during `source-artifact-publication`. Its retry reached TypeScript and reported existing diagnostics in unrelated, unmodified kernel files; it reported none in the new acceptance or fixture. The schema preflight and typecheck diagnostics remain integration execution limits, not passing acceptance evidence. This binding does not claim a promotion or add a proof-registration gate.

@@ -301,6 +301,7 @@ async function historySeries(
 
 test('native Realm presentation claims stay bounded across unrelated and retained-history growth', async () => {
   expect(fixture.actor.accountId).toBe(fixture.base.governor.accountId);
+  expect([...fixture.actor.scopes].sort()).toEqual(fixture.admittedScopes);
   expect(fixture.actor.scopes).toContain('realm:manage');
   expect(fixture.actor.clientId).toBeTruthy();
 
@@ -468,7 +469,7 @@ test('native Realm presentation claims stay bounded across unrelated and retaine
   const claimExecutions = observer.records.filter(({ statement }) => /\bUPDATE\s+content\.media\b/i.test(statement));
   expect(claimExecutions).toHaveLength(2);
   const observedIds = claimExecutions.map(({ parameters }) => twoIds.find((id) => parameters.includes(id)));
-  expect(observedIds).toEqual([...twoIds].sort((left, right) => left.localeCompare(right)));
+  expect(observedIds).toEqual([...twoIds].sort());
 
   await assertSuccessfulBinding({
     realmId: twoTarget.realmId,
