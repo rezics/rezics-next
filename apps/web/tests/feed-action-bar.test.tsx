@@ -168,9 +168,7 @@ test('reaction names expose exact localized operands and the signed score', asyn
   );
   const exact = new Intl.NumberFormat('de').format(count);
   expect(
-    host.querySelector(
-      `[data-slot="reaction-chip"][aria-label="${m.reaction_like({}, { locale: 'de' })} ${exact}"]`,
-    ),
+    host.querySelector(`[data-slot="reaction-chip"][aria-label="${m.reaction_like({}, { locale: 'de' })} ${exact}"]`),
   ).not.toBeNull();
   expect(
     host.querySelector(

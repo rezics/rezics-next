@@ -378,7 +378,11 @@ export const Reactions = (props: ReactionsProps) => {
       pressed ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
     );
     return signedOut ? (
-      <a href={signInHref} aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`} className={className}>
+      <a
+        href={signInHref}
+        aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
+        className={className}
+      >
         <Icon aria-hidden className="size-5" />
       </a>
     ) : (

@@ -40,9 +40,7 @@ function PreparedCard({
     let value: 'upvote' | 'downvote' | null = voted ? 'upvote' : null;
     return {
       target: { kind: 'post', id: 'prepared-post' },
-      counts: countInspection
-        ? { upvote: 1234567890123, downvote: 1234567890130 }
-        : { upvote: 8, downvote: 2 },
+      counts: countInspection ? { upvote: 1234567890123, downvote: 1234567890130 } : { upvote: 8, downvote: 2 },
       value,
       preparedTransport: {
         change: async ({ data }) => {
@@ -189,9 +187,10 @@ export const Refused: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_downvote()}\\s`) }));
     await expect(await canvas.findByRole('status')).toHaveTextContent(m.reaction_forbidden());
-    await expect(
-      canvas.getByRole('button', { name: new RegExp(`^${m.reaction_downvote()}\\s`) }),
-    ).toHaveAttribute('aria-pressed', 'false');
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${m.reaction_downvote()}\\s`) })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   },
 };
 export const Phone: Story = { ...SignedIn, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
