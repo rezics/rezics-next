@@ -232,6 +232,18 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'rolling_digest',
   ],
   run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest'],
+  run_retention_work: [
+    'plan_id',
+    'source',
+    'selected_json',
+    'bound_json',
+    'status',
+    'generation_id',
+    'phase',
+    'cursor',
+    'result_json',
+    'created_at',
+  ],
 };
 
 const REQUIRED_EXISTING_INDEXES = [
