@@ -44,10 +44,10 @@ describe('public review discovery adapter', () => {
       return id;
     }
 
-    async function publish(target: string, ordinal: number) {
+    async function publish(target: string, ordinal: number, reviewAuthor = author) {
       const result = await createThread(
         { pool: fixture.pool, access: fixture.access, routeKey },
-        author,
+        reviewAuthor,
         {
           kind: 'review',
           title: `Native review ${ordinal}`,
@@ -92,8 +92,19 @@ describe('public review discovery adapter', () => {
     expect(sparse.value.next).toEqual({ route, id: initial[3]!.id });
     expect((await adapter.readCurrent([initial[0]!.id], context)).size).toBe(0);
 
-    const late = await publish(await subject(9), 9);
-    expect(late.id.localeCompare(initial[4]!.id)).toBeGreaterThan(0);
+    let lateAuthor: typeof author | undefined;
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const candidate = (await fixture.context()).actor;
+      const candidateRoute = routeOf(candidate.accountId)!;
+      if (partitionOf(candidateRoute) === partition && candidateRoute > route) {
+        lateAuthor = candidate;
+        break;
+      }
+    }
+    if (!lateAuthor) throw new Error('Could not create a later native review route in the same partition');
+    await fixture.grant(lateAuthor.accountId, 'thread:create', { route: board.route, id: board.board_id });
+    const late = await publish(await subject(9), 9, lateAuthor);
+    const lateRoute = routeOf(late.id)!;
     const fifth = await adapter.page(partition, sparse.value.next, 1);
     expect(fifth.status).toBe('ready');
     if (fifth.status !== 'ready') return;
@@ -124,7 +135,7 @@ describe('public review discovery adapter', () => {
       expect(lateCard.value.get(`content:review:${late.id}`)).toEqual({
         kind: 'review',
         id: late.id,
-        route,
+        route: lateRoute,
         openingRevisionId: latePage.value.documents[0]!.opening_revision_id,
         title: 'Native review 9',
         text: 'Public review opening 9.',
