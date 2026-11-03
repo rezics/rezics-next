@@ -377,7 +377,7 @@ Notification costs are bounded independently of inbox or thread size:
 - Reply delivery considers at most two candidates and writes at most two notices per post (the single-parent
   rule above currently selects at most one). Mention delivery considers and writes at most ten. Each candidate
   has bounded current Access checks followed by one `notificationAllowed` check at finalization; recipient overlap is deduplicated.
-- Thread-watch delivery seeks at most 100 watchers by `(created_at, watch_id)`, releases that page before current
+- Thread-watch delivery seeks at most 100 watchers by `(created_at, route, watch_id)`, releases that page before current
   post disclosure and recipient writes, and persists its cursor after each completed page. Replay resumes the page;
   each recipient's finalization preserves a sent or refused outcome. Account erasure removes watch edges in bounded
   pages, and inbox reads recheck current post disclosure.
