@@ -121,7 +121,9 @@ test.serial('pins are ordered, bounded, current-authorized and separate from spa
   const { board, realmId } = await createBoard();
   const threads: Thread[] = [];
   for (let index = 0; index < 6; index++) threads.push(await createThread(board.id, `Pin candidate ${index}`));
-  expect((await json<{ threads: Thread[] }>(member(), 'GET', `/v1/boards/${board.id}/threads`)).threads).toHaveLength(6);
+  expect((await json<{ threads: Thread[] }>(member(), 'GET', `/v1/boards/${board.id}/threads`)).threads).toHaveLength(
+    6,
+  );
 
   const memberAttempt = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[0]!.id}/pin`, {
     pinned: true,
@@ -142,18 +144,29 @@ test.serial('pins are ordered, bounded, current-authorized and separate from spa
 
   const firstKey = crypto.randomUUID();
   for (const index of [0, 2, 4]) {
-    const result = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[index]!.id}/pin`, {
-      pinned: true,
-    }, index === 0 ? firstKey : crypto.randomUUID());
+    const result = await request(
+      member(),
+      'POST',
+      `/v1/boards/${board.id}/threads/${threads[index]!.id}/pin`,
+      {
+        pinned: true,
+      },
+      index === 0 ? firstKey : crypto.randomUUID(),
+    );
     expect(result.status).toBe(200);
   }
   const full = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[5]!.id}/pin`, {
     pinned: true,
   });
   expect(full.status).toBe(409);
-  const existing = await json<{ pinPosition: number }>(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[0]!.id}/pin`, {
-    pinned: true,
-  });
+  const existing = await json<{ pinPosition: number }>(
+    member(),
+    'POST',
+    `/v1/boards/${board.id}/threads/${threads[0]!.id}/pin`,
+    {
+      pinned: true,
+    },
+  );
   expect(existing.pinPosition).toBe(3);
   await json(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[2]!.id}/pin`, { pinned: false });
   await json(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[5]!.id}/pin`, { pinned: true });
@@ -163,7 +176,9 @@ test.serial('pins are ordered, bounded, current-authorized and separate from spa
   const seen = new Set<string>();
   let cursor: string | null = null;
   do {
-    const path = new URL(`https://content.test/v1/boards/${board.id}/threads?limit=1&sort=newest${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    const path = new URL(
+      `https://content.test/v1/boards/${board.id}/threads?limit=1&sort=newest${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+    );
     const response = await request(member(), 'GET', `${path.pathname}${path.search}`);
     expect(response.status).toBe(200);
     const result = (await response.json()) as { threads: Thread[]; next: string | null };
@@ -177,9 +192,13 @@ test.serial('pins are ordered, bounded, current-authorized and separate from spa
   expect(seen).toEqual(new Set([threads[1]!.id, threads[2]!.id, threads[3]!.id]));
 
   const hidden = threads[0]!;
-  const hiddenDown = await request(member(), 'POST', `/v1/threads/${hidden.id}:takeDown`, { reason: 'Hide pinned thread' });
+  const hiddenDown = await request(member(), 'POST', `/v1/threads/${hidden.id}:takeDown`, {
+    reason: 'Hide pinned thread',
+  });
   expect(hiddenDown.status).toBe(200);
-  const hiddenPin = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${hidden.id}/pin`, { pinned: true });
+  const hiddenPin = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${hidden.id}/pin`, {
+    pinned: true,
+  });
   expect(hiddenPin.status).toBe(404);
   const afterHide = await json<{ pinnedThreads: Thread[] }>(member(), 'GET', `/v1/boards/${board.id}/threads`);
   expect(afterHide.pinnedThreads.map(({ id }) => id)).toEqual([threads[5]!.id, threads[4]!.id]);
@@ -187,8 +206,14 @@ test.serial('pins are ordered, bounded, current-authorized and separate from spa
   await json(moderator(), 'PUT', `/v1/realms/${realmId}/bans/${member().actor.accountId}`, {
     reason: 'Revoked moderator',
   });
-  const replay = await request(member(), 'POST', `/v1/boards/${board.id}/threads/${threads[0]!.id}/pin`, {
-    pinned: true,
-  }, firstKey);
+  const replay = await request(
+    member(),
+    'POST',
+    `/v1/boards/${board.id}/threads/${threads[0]!.id}/pin`,
+    {
+      pinned: true,
+    },
+    firstKey,
+  );
   expect(replay.status).toBe(404);
 });
