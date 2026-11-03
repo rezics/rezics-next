@@ -168,7 +168,7 @@ test('Edition bytes retain parent access, current grants and terminal native sou
 
     const erased = await f.selection();
     await delivered(f, erased);
-    await f.value(f.wire(f.publisher, `/v1/posts/${erased.post.id}`, 'DELETE'), 200);
+    expect((await f.wire(f.publisher, `/v1/posts/${erased.post.id}`, 'DELETE')).status).toBe(204);
     await refused(f, erased);
     // Compose the existing cleanup unchanged, outside the byte-read envelope.
     await clearErasedPostRevisions(
@@ -186,43 +186,56 @@ test('Edition bytes retain parent access, current grants and terminal native sou
 
     const sellerRevoked = await f.selection();
     await delivered(f, sellerRevoked);
-    const sellerRole = await f.db.admin.query<{ valid: string }>(
-      `SELECT valid::text FROM access.resource_role_grant
-       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.edition.owner'`,
-      [routeOf(sellerRevoked.editionId), sellerRevoked.editionId, f.publisher.accountId],
-    );
-    await f.value(
-      f.wire(f.publisher, '/v1/roleGrants:revoke', 'POST', {
-        resource: { route: routeOf(sellerRevoked.editionId), id: sellerRevoked.editionId },
-        subject: { kind: 'account', id: f.publisher.accountId },
-        role: 'content.edition.owner',
-        valid: sellerRole.rows[0]!.valid,
-      }),
-      200,
-    );
+    await f.revokeOwner(sellerRevoked.editionId, 'content.edition.owner');
     await refused(f, sellerRevoked, 503);
 
     const revoked = await f.selection();
     await delivered(f, revoked);
-    const role = await f.db.admin.query<{ valid: string }>(
-      `SELECT valid::text FROM access.resource_role_grant
-       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.post.owner'`,
-      [routeOf(revoked.post.id), revoked.post.id, f.publisher.accountId],
-    );
-    await f.value(
-      f.wire(f.publisher, '/v1/roleGrants:revoke', 'POST', {
-        resource: { route: routeOf(revoked.post.id), id: revoked.post.id },
-        subject: { kind: 'account', id: f.publisher.accountId },
-        role: 'content.post.owner',
-        valid: role.rows[0]!.valid,
-      }),
-      200,
-    );
+    await f.revokeOwner(revoked.post.id, 'content.post.owner');
     await refused(f, revoked, 503); // Native publisher restoration cannot supply post:revise.
   } finally {
     await f.close();
   }
 });
+
+async function raceRefusal(
+  f: Fixture,
+  selected: Selection,
+  actor: string,
+  action: string,
+  id: string,
+  mutate: () => Promise<unknown>,
+) {
+  const calibration = f.observe();
+  let boundary: ReturnType<typeof finalGuardBoundary>;
+  try {
+    await delivered(f, selected);
+    boundary = finalGuardBoundary(calibration.records, actor, action, id);
+  } finally {
+    await calibration.close();
+  }
+  const observer = f.observe();
+  const barrier = observer.hold(boundary, 'before');
+  const pending = f.wire(f.buyer, path(selected), 'GET', undefined, undefined, conditional(selected));
+  try {
+    await Promise.race([
+      barrier.entered,
+      pending.then((response) => {
+        throw new Error(`Final native ${action} boundary was not reached: ${response.status}`);
+      }),
+    ]);
+    await mutate();
+    barrier.release();
+    const response = await pending;
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.text()).not.toContain('Pinned canonical edition bytes');
+  } finally {
+    barrier.release();
+    await pending;
+    await observer.close();
+  }
+}
 
 test('Edition byte disclosure repeats the buyer grant and protected parent checks after preparation', async () => {
   const f = await growthEditionRevisionDeliveryFixture();
@@ -232,33 +245,90 @@ test('Edition byte disclosure repeats the buyer grant and protected parent check
       ['board:read', f.boardId],
       ['realm:read', f.realmId],
     ] as const) {
-      const calibration = f.observe();
-      await delivered(f);
-      const boundary = finalGuardBoundary(calibration.records, f.buyer.accountId, action, id);
-      await calibration.close();
-      const observer = f.observe();
-      const barrier = observer.hold(boundary, 'before');
-      const pending = f.wire(f.buyer, path(f.selected), 'GET', undefined, undefined, conditional(f.selected));
-      try {
-        await Promise.race([
-          barrier.entered,
-          pending.then((response) => {
-            throw new Error(`Final native ${action} boundary was not reached: ${response.status}`);
-          }),
-        ]);
-        await f.grant(id, f.buyer, [action], true, true);
-        barrier.release();
-        const response = await pending;
-        expect(response.status).toBe(404);
-        expect(await response.text()).not.toContain('Pinned canonical edition bytes');
-      } finally {
-        barrier.release();
-        await pending;
-        await observer.close();
-      }
+      await raceRefusal(f, f.selected, f.buyer.accountId, action, id, () => f.grant(id, f.buyer, [action], true, true));
+      await refused(f, f.selected);
       await f.grant(id, f.buyer, [action]);
       await delivered(f);
     }
+  } finally {
+    await f.close();
+  }
+});
+
+test('Edition byte disclosure repeats native seller authority and every reachable parent lifecycle', async () => {
+  const f = await growthEditionRevisionDeliveryFixture();
+  try {
+    for (const action of ['edition:sell', 'post:revise'] as const) {
+      const selected = await f.selection();
+      const id = action === 'edition:sell' ? selected.editionId : selected.post.id;
+      const role = action === 'edition:sell' ? 'content.edition.owner' : 'content.post.owner';
+      await raceRefusal(f, selected, f.publisher.accountId, action, id, () => f.revokeOwner(id, role, true));
+      await refused(f, selected, 503); // A fresh request can no longer restore this native publisher action.
+    }
+    for (const [kind, id, action] of [
+      ['realms', f.realmId, 'realm:read'],
+      ['spaces', f.spaceId, 'space:read'],
+    ] as const) {
+      const current = await f.containerState(kind, id);
+      let removed = current;
+      await raceRefusal(f, f.selected, f.buyer.accountId, action, id, async () => {
+        removed = await f.containerChange(kind, id, 'removal', current.container);
+      });
+      await refused(f, f.selected);
+      await f.containerChange(kind, id, 'restoration', removed.container);
+      await delivered(f);
+    }
+    // Each ancestor is withheld separately; the source and its other parents remain available.
+    for (const index of [0, 1] as const) {
+      const selected = await f.selection();
+      const id = selected.ancestors[index]!;
+      await raceRefusal(f, selected, f.buyer.accountId, 'post:read', id, () =>
+        f.value(
+          f.wire(
+            f.publisher,
+            `/v1/posts/${id}:takeDown`,
+            'POST',
+            { reason: 'Withhold independent ancestor' },
+            undefined,
+            {},
+            true,
+          ),
+          200,
+        ),
+      );
+      await refused(f, selected);
+    }
+    const selected = await f.selection();
+    await raceRefusal(f, selected, f.buyer.accountId, 'thread:read', selected.threadId, () =>
+      f.value(
+        f.wire(
+          f.publisher,
+          `/v1/threads/${selected.threadId}:takeDown`,
+          'POST',
+          { reason: 'Withhold thread' },
+          undefined,
+          {},
+          true,
+        ),
+        200,
+      ),
+    );
+    await refused(f, selected);
+    await raceRefusal(f, f.selected, f.buyer.accountId, 'board:read', f.boardId, () =>
+      f.value(
+        f.wire(
+          f.publisher,
+          `/v1/boards/${f.boardId}:takeDown`,
+          'POST',
+          { reason: 'Withhold board' },
+          undefined,
+          {},
+          true,
+        ),
+        200,
+      ),
+    );
+    await refused(f, f.selected);
   } finally {
     await f.close();
   }

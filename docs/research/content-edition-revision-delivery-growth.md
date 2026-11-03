@@ -1,7 +1,6 @@
 # Edition exact revision delivery growth
 
-Bound source: `d50464392475ae4a76362a7ed0bb1e9646126501`. The brief's inspection revision,
-`e21850110a75d916451a03711b9035610db998bf`, is not this attempt's base. The owning operation is
+Bound source: `cc67f4bcd443fc12e519d8e5a7a99529f4bea702`. The owning operation is
 “Edition sale/mechanical eligibility/byte read” in [Content Cost](../../services/kernel/src/content/README.md).
 The private suite binds its authenticated byte-delivery portion to
 `GET /v1/contentEditions/{id}/revision`, rather than invoking the eligibility helper.
@@ -25,8 +24,7 @@ the new fixture does neither. There is no public resource-denial command. The pr
 be reached through the promised selected native producers on this source. Its exact owning prerequisite is the
 Content creation/visibility seam in `src/content/{schemas,commands,routes}.ts`, requiring a subsequent owning brief.
 
-Decision: measure the reachable published-source delivery through native protected Realm/board guards; retain the
-protected-source exemption and protected-ancestor refusal as a continuation until their native producer is admitted.
+Decision: retain published-source growth, add native seller and reachable parent lifecycle races, and continue protected-source/ancestor grant cases after the owning creation/visibility seam is admitted.
 This introduces no new audience. The recipient receives direct edition, Realm and board grants through supported
 commands; the non-member receives only the edition grant. Source-post read grants are never written for either.
 Ordinary reads of a published source can already succeed through its public eligibility and authorized parents;
@@ -67,7 +65,11 @@ Only the selected post is omitted from buyer source-post checks. Actual body sel
 Native outcomes cover edition-granted non-member refusal with an authorized owner/recipient control, missing caller
 edition grant, terminal unpublication, source takedown, deletion and physical source-byte erasure, and publisher
 edition-owner and source-owner role revocation. Conditional refusals must never produce unchecked 304 or body bytes. Calibrated SQL barriers
-revoke recipient edition, board and Realm grants before their last native guard snapshots. SQL faults exercise native
+revoke recipient edition, board and Realm grants before their last native guard snapshots. Further barriers revoke
+each native seller action, remove and restore Realm and Space, and independently take down the thread, board and
+each ancestor before the recipient's last corresponding snapshot. Every race refuses bytes with 404 and private
+no-store; subsequent conditional requests also refuse. Fresh requests after seller revocation retain native
+restoration's 503. Source author deletion asserts its existing 204 response before checking byte erasure. SQL faults exercise native
 source unavailability/deadline errors; holding the actual source boundary past 1,000 ms exercises the real deadline.
 Expected errors are 401 for anonymous access, 404 for unavailable/unauthorized content and 503 for unavailable native
 publisher restoration, source connection failure or deadline expiry.
@@ -77,8 +79,14 @@ owns acceptance admission after integration. No growth row, proof registration, 
 fixture/owner specification is changed. The remaining protected-source/ancestor scenarios are explicitly retained
 in the private continuation; the existing frozen consumer tests remain untouched.
 
-Read sources: focused `edition.test.ts` and `edition-mechanical.test.ts`; Content's Edition owner/Cost section;
+Prior composition sources: focused `edition.test.ts` and `edition-mechanical.test.ts`; Content's Edition owner/Cost section;
 Content Goal Done-when/Acceptance; `edition-{reads,store,sale,sale-native,initiator,sale-consent,commands,routes}.ts`;
 Edition source guards in `reads.ts`; Content command/input and cleanup contracts; native Auth/content fixtures;
 production grant command and role catalogues; shared growth capture/classifier/seed/access-path code and the
 existing Realm asset publication growth composition. No external reference source is named by this slice.
+
+This continuation rechecked native Content input schemas and command visibility guards, Content's post-publication
+and Edition owner sections, Edition source and seller final guards, and native Content moderation/post deletion and
+Community lifecycle routes. The protected-state producer remains absent on this bound source; no selected visibility
+or grant was seeded. Protected-source read exemption and independent protected ancestor/thread grant revocations
+remain unmeasured and are assigned to `.temp/continuation/protected-edition-delivery.md`.

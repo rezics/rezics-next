@@ -364,6 +364,59 @@ export async function growthEditionRevisionDeliveryFixture() {
       );
       expect(rows.rows).toEqual([]);
     }
+    async function revokeOwner(id: string, role: string, mutation = false) {
+      const current = await db.admin.query<{ valid: string }>(
+        `SELECT valid::text FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role=$4`,
+        [routeOf(id), id, publisher.accountId, role],
+      );
+      expect(current.rows).toHaveLength(1);
+      await value(
+        wire(
+          publisher,
+          '/v1/roleGrants:revoke',
+          'POST',
+          {
+            resource: { route: routeOf(id), id },
+            subject: { kind: 'account', id: publisher.accountId },
+            role,
+            valid: current.rows[0]!.valid,
+          },
+          undefined,
+          {},
+          mutation,
+        ),
+        200,
+      );
+    }
+    async function containerState(kind: 'realms' | 'spaces', id: string) {
+      return value<{ container: { version: string; headRevisionId: string } }>(
+        wire(publisher, `/v1/${kind}/${id}/lifecycle`),
+        200,
+      );
+    }
+    async function containerChange(
+      kind: 'realms' | 'spaces',
+      id: string,
+      operation: 'removal' | 'restoration',
+      current: { version: string; headRevisionId: string },
+    ) {
+      return value<{ container: { version: string; headRevisionId: string } }>(
+        wire(
+          publisher,
+          `/v1/${kind}/${id}/${operation}`,
+          'POST',
+          {
+            expectedVersion: current.version,
+            ...(operation === 'removal' ? { reason: 'Withhold edition parent' } : {}),
+          },
+          current.headRevisionId,
+          {},
+          true,
+        ),
+        200,
+      );
+    }
     return {
       db,
       native,
@@ -383,6 +436,9 @@ export async function growthEditionRevisionDeliveryFixture() {
       grant,
       pinned,
       noPostGrant,
+      revokeOwner,
+      containerState,
+      containerChange,
       observe,
       close,
     };
