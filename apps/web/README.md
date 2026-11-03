@@ -2498,6 +2498,10 @@ review toolbar globals. No export encodes locale, width or theme.
 | Collection Preview | `patterns-collection-preview--members`, `patterns-collection-preview--empty`, `patterns-collection-preview--unavailable`                                                                                                                                                                                                              |
 | Collection Editor  | `patterns-collection-editor--details`, `patterns-collection-editor--members`, `patterns-collection-editor--selection`, `patterns-collection-editor--reordering`, `patterns-collection-editor--note`, `patterns-collection-editor--save-pending`, `patterns-collection-editor--save-error`, `patterns-collection-editor--dynamic-rule` |
 
+The owner browse-route editor join is `apps/web/src/stories/library-collection-editor.stories.tsx#OwnerEdit` through
+PageStory and AppShell. Canonical Storybook IDs for that export stay unconfirmed until an admitted index names them;
+retain the Pattern IDs above for visual review.
+
 `Pages/Library/Collections` and Collection page stories remain actual component compositions. Menu Edit, keyboard
 reorder, selection, note, Save, Cancel and shared filter opening use real play interactions. Dynamic Rule demonstrates
 the current immutable built-in and its actual view filter; saved rule editing awaits its producer.

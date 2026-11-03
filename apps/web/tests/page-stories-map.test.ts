@@ -81,7 +81,7 @@ test('page story cells accept planned dependencies and reject incomplete or unre
 
 test('Collection editing, reordering, following and privacy keep their actual owning exports at both widths', () => {
   const outcomes = {
-    editing: 'library-collection-editor.stories.tsx#Details',
+    editing: 'library-collection-editor.stories.tsx#OwnerEdit',
     reordering: 'library-collection-editor.stories.tsx#Reordering',
     following: 'library-collection-patterns.stories.tsx#FollowingEnabled',
     private: 'library-collection.stories.tsx#PrivateCurator',

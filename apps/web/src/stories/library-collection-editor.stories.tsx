@@ -12,7 +12,7 @@ import {
   type CollectionStoryMode,
 } from '../kernel/fake/collection-page-stories';
 import { m } from '../paraglide/messages.js';
-import { PatternStory, pagePaths } from './page';
+import { PageStory, PatternStory, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Patterns/Collection Editor',
@@ -81,6 +81,12 @@ async function openEditor(canvasElement: HTMLElement, details = true) {
   if (details) await canvas.findByRole('textbox', { name: m.library_collection_title() });
   return canvas;
 }
+function minimumActionTarget() {
+  return window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
+    ? 44
+    : 36;
+}
+
 async function menuForTrigger(trigger: HTMLElement, title: string) {
   const view = trigger.ownerDocument.defaultView!;
   const sheet = view.matchMedia('(max-width: 767px)').matches || view.matchMedia('(pointer: coarse)').matches;
@@ -117,6 +123,35 @@ async function openNote(row: HTMLElement) {
   if (!details.open) await userEvent.click(details.querySelector('summary')!);
 }
 
+export const OwnerEdit: Story = {
+  name: 'Owner edit from browse route',
+  parameters: { layout: 'fullscreen' },
+  render: () => {
+    setCollectionStoryMode('private', true);
+    return <PageStory visitor="Signed In" path={pagePaths['library-collection']} credentialMode="session" />;
+  },
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: m.account_menu() });
+    const main = within(await canvas.findByRole('main'));
+    await main.findByRole('heading', { level: 1, name: 'Books I come back to' });
+    const trigger = main.getByRole('button', { name: m.library_collection_actions() });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const menu = await menuForTrigger(trigger, m.library_collection_actions());
+    await userEvent.click(menu.getByText(m.library_collection_edit(), { exact: true }));
+    await main.findByRole('button', { name: m.library_collection_save() });
+    await userEvent.click(main.getByText(m.library_collection_details(), { selector: 'summary' }));
+    await main.findByRole('textbox', { name: m.library_collection_title() });
+    await expect(main.getAllByRole('checkbox')).toHaveLength(4);
+    const cancel = main.getByRole('button', { name: m.library_collection_cancel() });
+    cancel.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(main.queryByRole('button', { name: m.library_collection_save() })).toBeNull());
+    await expect(main.getByRole('heading', { level: 1, name: 'Books I come back to' })).toBeVisible();
+  },
+};
 export const Details: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
@@ -158,7 +193,7 @@ export const RowActionContext: Story = {
         const name = control.getAttribute('aria-label')!;
         names.add(name);
         await expect(control).toHaveAttribute('title', name);
-        const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
+        const minimumTarget = minimumActionTarget();
         await expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(minimumTarget);
         await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumTarget);
       }
@@ -214,7 +249,7 @@ export const Reordering: Story = {
     const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map((name) =>
       rowAction(row, name),
     );
-    const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
+    const minimumTarget = minimumActionTarget();
     for (const control of controls) {
       const target = control.getBoundingClientRect();
       await expect(target.width).toBeGreaterThanOrEqual(minimumTarget);

@@ -223,7 +223,8 @@ Collection-source contracts. Broader scope activation remains a coordinating pro
 Semantic owns whole definitions/compiler/schema/configuration/release delivery and native fact batch producers.
 Commerce owns whole kind/cover/FULL projection and editor mutation/rule slices. Content owns native image authority.
 Web owns one actual Collection browse/editor, the independent renderer, screenshots and visual review. No path-only
-serialization or duplicate writers replace those whole producers. A source/type document or scoped test proves
+serialization or duplicate writers replace those whole producers.
+Decision: the owner browse-route editor join is `library-collection-editor.stories.tsx#OwnerEdit` (PageStory in AppShell) so existing Pattern IDs stay; Details and Reordering remain pattern coverage. A source/type document or scoped test proves
 neither full native/API/UI delivery nor integrated root/main behavior.
 
 Required outcomes include owner, other account, anonymous and suspended credentials; hidden original/member and
