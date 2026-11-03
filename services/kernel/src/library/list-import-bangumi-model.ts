@@ -20,6 +20,14 @@ export type BangumiOutcome = { ordinal: number; status: 'applied' | 'skipped' | 
 export type BangumiRow = { ordinal: number; evidence: BangumiEvidence; review: BangumiReview | null; outcome: BangumiOutcome | null };
 const media: Record<string, string> = { 1: 'book', 2: 'anime', 3: 'music', 4: 'game', 6: 'live_action' };
 const roles: Record<string, string> = { 1: 'planned', 2: 'completed', 3: 'active', 4: 'paused', 5: 'dropped' };
+function dateValue(v: unknown): boolean {
+  if (typeof v !== 'string') return false;
+  const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(.+))?)?)?$/.exec(v);
+  if (!m || Number(m[1]) === 0) return false;
+  if (m[2] && (Number(m[2]) < 1 || Number(m[2]) > 12)) return false;
+  if (m[3] && (Number(m[3]) < 1 || Number(m[3]) > new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate())) return false;
+  return !m[4] || Number.isFinite(Date.parse(v));
+}
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 function safe(value: unknown, depth = 0): void {
   if (depth > BANGUMI_LIMITS.depth) throw new ProblemError('invalid_request');
@@ -74,12 +82,14 @@ export function parseBangumiUpload(upload: string): BangumiEvidence[] {
         if (!Array.isArray(value) || !value.every(v => typeof v === 'string')) meaning = 'invalid';
         reason = 'Source tags; no native label inferred';
       } else if (field.endsWith('_at') || field.endsWith('_date')) {
-        if (typeof value !== 'string' || !/^\d{4}(?:-\d{2}(?:-\d{2}(?:T.*)?)?)?$/.test(value)) meaning = 'invalid';
+        if (!dateValue(value)) meaning = 'invalid';
         reason = 'Original date and precision retained; never a command clock';
       } else if (field === 'subject') reason = 'Source display metadata only; never identity authority';
       else meaning = 'unknown';
       return { field, value, meaning, reason };
     });
-    return { source, fields, medium, stateRole };
+    const evidence = { source, fields, medium, stateRole };
+    if (Buffer.byteLength(JSON.stringify(evidence)) > 32768) throw new ProblemError('invalid_request');
+    return evidence;
   });
 }
