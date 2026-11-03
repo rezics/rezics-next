@@ -350,6 +350,7 @@ revision-keyed enrichment; exact links open in a separate tab, while admitted co
 inside the selected inspector and return focus to their trigger.
 Current names never change immutable authorship, and current votes cannot replace recorded citations or scales.
 Concealed, absent and failed context retain their native meanings; failed context retries the same history address.
+Decision: a recorded target omitted from a bounded native summary retains its original ID with withheld presentation; only an empty recorded target list is absent.
 
 Decision: requesting a new cursor retires the previous page immediately; failed and denied pages retry that
 exact cursor, while account/provenance replacement starts a new visit.
