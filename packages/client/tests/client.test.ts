@@ -49,6 +49,45 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
     headers: { 'content-type': status < 400 ? 'application/json' : 'application/problem+json', ...headers },
   });
 
+test('all six label consolidation routes retain typed requests and results', () => {
+  const typed = async (client: KernelClient) => {
+    const label = client.libraryLabels({ id: ID });
+    const selected = { subjectId: ID, assignmentId: ID, revision: 1 };
+    const options = { headers: { 'idempotency-key': '"consolidate"' } };
+    const review = await label.$reviewConsolidation.post({ targetLabelId: ID, items: [selected], limit: 4 });
+    if (review.error) throw review.error;
+    const confirmation = await label.$confirmConsolidation.post(
+      {
+        selection: review.data.selection,
+        sourceLabel: review.data.sourceLabel,
+        targetLabel: review.data.targetLabel,
+        items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' }],
+      },
+      options,
+    );
+    if (confirmation.error) throw confirmation.error;
+    const body = { confirmationId: confirmation.data.confirmationId };
+    const results = [
+      await label.$applyConsolidation.post(body, options),
+      await label.$retryConsolidation.post({ ...body, item: 0 }, options),
+      await label.$cancelConsolidation.post(body, options),
+      await label.consolidations(body).get(),
+    ];
+    for (const result of results) {
+      if (result.error) throw result.error;
+      const status: 'active' | 'completed' | 'cancelled' = result.data.status;
+      const item: number | undefined = result.data.items[0]?.item;
+      const revision: number | undefined = result.data.items[0]?.selected?.revision;
+      void [status, item, revision];
+    }
+    // @ts-expect-error retry requires the selected item index
+    await label.$retryConsolidation.post(body, options);
+    // @ts-expect-error apply requires an idempotency key
+    await label.$applyConsolidation.post(body);
+  };
+  expect(typeof typed).toBe('function');
+});
+
 test('a subject read answers like an Eden Treaty call, with the JSON as the kernel sent it', async () => {
   const { sent, fetch } = kernel([() => json(200, { subject, account: null, summary: null, related: {} })]);
   const client = createKernelClient(ORIGIN, { fetch });
