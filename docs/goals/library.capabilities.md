@@ -187,8 +187,9 @@ evidence entry points only; none ran in this inventory.
 
 **Done-when:** Owners manage exclusive states, independent labels, copies/holdings and every supported progress
 mode, including rereads and noncontiguous completed units. Clearing one personal fact preserves other facts and
-their Library presence under the existing authority. Stored subject references and accepted profile meaning remain
-intact.
+their Library presence under the existing authority. Owners also create/read/correct/clear private notes, personal
+priority and independently addressed provider-entry privacy/timestamp evidence without manufacturing state. Stored
+subject references and accepted profile meaning remain intact.
 
 Scalar sessions also retain each admitted unit independently: an owner can create and read one chapter-and-volume
 session, update or correct either measure under explicit revision control, and replay a write without duplicating its
@@ -206,10 +207,11 @@ conflicts, retention and cost bounds. Focused HTTP and account-erasure coverage 
 `account-fact-purge.test.ts`.
 
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
-immediately. The union includes live state, effective labels, retained sessions/history and holdings; following,
-curated occurrences and published snapshots alone do not create presence. Fixtures must use accepted subject
-references and actual current authorization. Historical pre-profile data and receipts require the accepted
-restoration seam; current writes cannot manufacture that history.
+immediately. The union includes live state, nonempty private annotations, reviewed source observations, effective
+labels, retained sessions/history and holdings; following, curated occurrences and published snapshots alone do not
+create presence. Source privacy never authorizes public disclosure. Fixtures must use accepted subject references
+and actual current authorization. Historical pre-profile data and receipts require the accepted restoration seam;
+current writes cannot manufacture that history.
 
 **Native acceptance entries:** specs/library-outcomes.test.ts:492 (exclusive state and CAS), :553 (incarnation
 guards and captured receipts), :646 (one progress mode/intent), :680 (sparse completed-unit changes), :738
@@ -292,8 +294,8 @@ ran in this inventory.
 disclosure contracts. Filtering and owner-local plans work wherever the common Collection abstraction appears,
 with next-read owner-write visibility, honest preparation/unavailable responses and bounded native work.
 
-**User job and fixtures:** The owner sees current Everything membership from independent facts, sees Liked only from
-the actual reaction source, resumes the current Continue destination, and uses useful filtered pages without a
+**User job and fixtures:** The owner sees current Everything membership from independent facts, including annotation-
+only and provenance-only entries, sees Liked only from the actual reaction source, resumes the current Continue destination, and uses useful filtered pages without a
 false empty result, hidden-data leak or cross-owner read. Native queries use actual writes followed by next-read
 observations, admitted filters, sparse pages and every declared growth axis. Reported scales are authored targets,
 not measured populations.
@@ -307,6 +309,12 @@ share the shelf mode), :942 (private cursor binding and expiry), :997 (owner pri
 order/progress). The Web personal outcomes at :216, :225, :260, :265, :270 and :277 verify served Library/state/
 Collection/Zone member lists. Dedicated Continue source scenarios remain in
 specs/web-personal-outcomes.test.ts and the native source owner suites.
+
+The installed rich-entry owner journey is `test/library/entry-personal.test.ts`: independent note/priority CAS,
+reviewed provider admission/correction, partial and offset source timestamps, account isolation, source retry,
+stale/duplicate refusal, and annotation-only/provenance-only Everything support. Terminal fact deletion includes
+retained source rows in `test/library/account-fact-purge.test.ts`. These focused tests do not establish the deferred
+full Everything/Web acceptance journey.
 
 **Personas and denial cases:** owner and another owner partition, anonymous public reader, suspended bearer,
 public/private/unlisted Collection, public-source revocation, hidden candidate, private filter, unsupported filter,

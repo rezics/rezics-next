@@ -1,5 +1,6 @@
 import { createFollowCountReads } from './follow-count-reads.ts';
 import { t } from 'elysia';
+import type { Static, TSchema } from 'typebox';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
@@ -26,12 +27,32 @@ import {
   LibraryEntryStateRestoreConflictError,
 } from './entries.ts';
 import type { Copy, Entry } from './entry-model.ts';
+import {
+  MAX_PERSONAL_NOTE_BYTES,
+  MAX_PERSONAL_PRIORITY,
+  MAX_SOURCE_OBSERVATIONS,
+  MAX_SOURCE_PRIVACY_VALUE_BYTES,
+  MAX_SOURCE_TIMESTAMP_LENGTH,
+} from './entry-personal-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
 import { admitShelfRead } from './shelf-admission.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
+export type {
+  PersonalEntry,
+  PersonalEntryAnnotationWrite,
+  PersonalEntryFieldChange,
+  PersonalEntryObservation,
+  PersonalEntryPrivacy,
+  PersonalEntryPrivacyValue,
+  PersonalEntrySourceAdmission,
+  PersonalEntrySourceCorrection,
+  PersonalEntryTimestamp,
+  PersonalEntryTimestampInput,
+  PersonalEntryTimestampValue,
+} from './entry-personal-model.ts';
 import {
   shelfEntrySchema,
   shelfListQuerySchema,
@@ -60,6 +81,7 @@ const nullable = t.Union([id, t.Null()]);
 // incarnations enforce the guard inside the authorized command after receipt lookup.
 const incarnationId = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
+const personalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
 const stateInput = libraryVocabularyIdSchema;
 const statusInput = libraryVocabularyIdSchema;
 const pageQuery = {
@@ -167,6 +189,76 @@ const followSchema = t.Object(
   closed,
 );
 const entryResponse = t.Object({ libraryEntry: entrySchema }, closed);
+const personalPrivacyValue = t.Union([
+  t.Object({ status: t.Literal('absent') }, closed),
+  t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })) }, closed),
+  t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
+]);
+const personalTimestampPrecision = t.Union([
+  t.Literal('year'),
+  t.Literal('month'),
+  t.Literal('day'),
+  t.Literal('minute'),
+  t.Literal('second'),
+  t.Literal('fraction'),
+]);
+const personalTimestampValue = t.Union([
+  t.Object({ status: t.Literal('absent') }, closed),
+  t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
+  t.Object({ status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }) }, closed),
+]);
+function personalChange(value: TSchema) {
+  return t.Union([
+    t.Object({ op: t.Literal('unchanged') }, closed),
+    t.Object({ op: t.Literal('clear') }, closed),
+    t.Object({ op: t.Literal('set'), value }, closed),
+  ]);
+}
+const personalObservationSchema = t.Object(
+  {
+    provider: t.String({ minLength: 1, maxLength: 64 }),
+    recordId: t.String({ minLength: 1, maxLength: 192 }),
+    revision,
+    privacy: t.Union([
+      t.Object({ status: t.Literal('absent') }, closed),
+      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })) }, closed),
+      t.Object({ status: t.Literal('cleared') }, closed),
+      t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
+    ]),
+    sourceCreated: t.Union([
+      t.Object({ status: t.Literal('absent') }, closed),
+      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
+      t.Object({ status: t.Literal('cleared') }, closed),
+      t.Object({
+        status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+        precision: personalTimestampPrecision,
+        zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+      }, closed),
+    ]),
+    sourceUpdated: t.Union([
+      t.Object({ status: t.Literal('absent') }, closed),
+      t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
+      t.Object({ status: t.Literal('cleared') }, closed),
+      t.Object({
+        status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
+        precision: personalTimestampPrecision,
+        zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
+      }, closed),
+    ]),
+    recordedAt: id,
+  },
+  closed,
+);
+const personalEntrySchema = t.Object({
+  subjectId: id,
+  annotationRevision: personalRevision,
+  note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
+  priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
+  annotationUpdatedAt: nullable,
+  sourceObservations: t.Array(personalObservationSchema, { maxItems: MAX_SOURCE_OBSERVATIONS }),
+}, closed);
+const personalEntryResponse = t.Object({ personalEntry: personalEntrySchema }, closed);
+const personalObservationResponse = t.Object({ sourceObservation: personalObservationSchema }, closed);
 const copyResponse = t.Object({ copy: copySchema }, closed);
 const followResponse = t.Object({ follow: followSchema }, closed);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
@@ -208,6 +300,14 @@ function personalDetail(operationId: string, action: string) {
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': Object.keys(bundledRelease.types),
   };
+}
+async function personalCommand<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await command(run);
+  } catch (error) {
+    if (error instanceof TypeError) throw new ProblemError('invalid_request');
+    throw error;
+  }
 }
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -471,6 +571,133 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         return { libraryEntry: entryView(result.value.entry) };
+      },
+    )
+    .get(
+      '/v1/libraryEntries/:subjectId/personal',
+      {
+        params: t.Object({ subjectId: id }, closed),
+        response: { 200: personalEntryResponse, ...failures },
+        detail: detail('library_entry_personal.get', 'library_entry:read'),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        point(actor, params.subjectId, 'library_entry:read');
+        const personalEntry = await admission.run('normal', job, () =>
+          personalCommand(() => entries().readPersonalEntry(actor, params.subjectId)),
+        );
+        set.headers['cache-control'] = 'private, no-store';
+        return {
+          personalEntry: {
+            ...personalEntry,
+            sourceObservations: personalEntry.sourceObservations.map((observation) => ({ ...observation })),
+          },
+        } satisfies Static<typeof personalEntryResponse>;
+      },
+    )
+    .put(
+      '/v1/libraryEntries/:subjectId/annotations',
+      {
+        params: t.Object({ subjectId: id }, closed),
+        headers,
+        body: t.Object(
+          {
+            revision: personalRevision,
+            note: personalChange(t.String({ minLength: 1, maxLength: MAX_PERSONAL_NOTE_BYTES })),
+            priority: personalChange(t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY })),
+          },
+          closed,
+        ),
+        response: { 200: personalEntryResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        detail: personalDetail('library_entry_annotation.put', 'library_entry:update'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        account(actor);
+        const result = await admission.run('normal', job, () =>
+          personalCommand(() =>
+            entries().saveAnnotations(actor, params.subjectId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return {
+          personalEntry: {
+            ...result.value,
+            sourceObservations: result.value.sourceObservations.map((observation) => ({ ...observation })),
+          },
+        } satisfies Static<typeof personalEntryResponse>;
+      },
+    )
+    .post(
+      '/v1/libraryEntries/:subjectId/sourceObservations',
+      {
+        params: t.Object({ subjectId: id }, closed),
+        headers,
+        body: t.Object(
+          {
+            provider: t.String({ minLength: 1, maxLength: 64 }),
+            recordId: t.String({ minLength: 1, maxLength: 192 }),
+            confirmReviewed: t.Literal(true),
+            privacy: personalPrivacyValue,
+            sourceCreated: personalTimestampValue,
+            sourceUpdated: personalTimestampValue,
+          },
+          closed,
+        ),
+        response: { 201: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        detail: personalDetail('library_entry_source_observation.post', 'library_entry:update'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        account(actor);
+        const result = await admission.run('normal', job, () =>
+          personalCommand(() =>
+            entries().admitSourceObservation(actor, params.subjectId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+          ),
+        );
+        session.record(result);
+        set.status = 201;
+        set.headers['cache-control'] = 'private, no-store';
+        return {
+          sourceObservation: { ...result.value.sourceObservation },
+        } satisfies Static<typeof personalObservationResponse>;
+      },
+    )
+    .patch(
+      '/v1/libraryEntries/:subjectId/sourceObservations',
+      {
+        params: t.Object({ subjectId: id }, closed),
+        headers,
+        body: t.Object(
+          {
+            provider: t.String({ minLength: 1, maxLength: 64 }),
+            recordId: t.String({ minLength: 1, maxLength: 192 }),
+            revision,
+            confirmReviewed: t.Literal(true),
+            privacy: personalChange(personalPrivacyValue),
+            sourceCreated: personalChange(personalTimestampValue),
+            sourceUpdated: personalChange(personalTimestampValue),
+          },
+          closed,
+        ),
+        response: { 200: personalObservationResponse, ...failures, 409: problemSchema('conflict'), 422: problemSchema('idempotency_conflict') },
+        detail: personalDetail('library_entry_source_observation.patch', 'library_entry:update'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        account(actor);
+        const result = await admission.run('normal', job, () =>
+          personalCommand(() =>
+            entries().correctSourceObservation(
+              actor,
+              params.subjectId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return {
+          sourceObservation: { ...result.value.sourceObservation },
+        } satisfies Static<typeof personalObservationResponse>;
       },
     )
     .put(

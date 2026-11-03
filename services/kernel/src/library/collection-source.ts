@@ -643,7 +643,7 @@ export function createCollectionSource(dependencies: {
                       driver,
                       storedSubjectId: after,
                       factId:
-                        driver === 'entry' || driver === 'output' ? after : 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+                      driver === 'output' ? after : 'ffffffff-ffff-ffff-ffff-ffffffffffff',
                     }
                   : null,
                 limit: 1,

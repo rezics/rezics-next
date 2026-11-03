@@ -139,7 +139,17 @@ const scopeIdentitySQL =
 const accountSQL =
   'SELECT route, account_id AS "accountId", kind, state, authn_fenced AS fenced, minimum_authn_epoch::text AS "minimumAuthnEpoch" FROM access.account WHERE route=$1 AND account_id=$2';
 const entrySQL =
-  'SELECT state IS NOT NULL AS present, state=$4 AS matches, pg_column_size(library_profile_pin) AS bytes, pg_column_compression(library_profile_pin) IS NOT NULL AS compressed FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3';
+  `SELECT COALESCE(e.state IS NOT NULL, false) OR p.fact_id IS NOT NULL AS present, e.state=$4 AS matches,
+    pg_column_size(e.library_profile_pin) AS bytes,
+    pg_column_compression(e.library_profile_pin) IS NOT NULL AS compressed,
+    COALESCE(e.subject_id,p.fact_id)::text AS "factId"
+   FROM (VALUES(1)) anchor(n)
+   LEFT JOIN library.entry e ON e.route=$1 AND e.account_id=$2 AND e.subject_id=$3
+   LEFT JOIN LATERAL (SELECT x.fact_id FROM library.entry_personal_fact x
+     WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
+       AND (x.note IS NOT NULL OR x.priority IS NOT NULL OR EXISTS(
+         SELECT 1 FROM library.entry_source_observation o WHERE o.route=x.route AND o.account_id=x.account_id
+           AND o.subject_id=x.subject_id))) p ON true`;
 const pinSQL =
   'SELECT library_profile_pin FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND $4::bigint >= 0';
 const labelSQL =
@@ -188,8 +198,8 @@ register(ordinalPage.sql, (v) => ({
   bytes: 512 * Number(v[4]),
 }));
 register(entrySQL, () => ({
-  nativeRows: 4,
-  nativePoints: 1,
+  nativeRows: 8,
+  nativePoints: 2,
   candidateKeys: 1,
   witnessKeys: 1,
   bytes: 256,
@@ -679,7 +689,7 @@ function keyInput(key: CanonicalRangeKey | null | undefined, driver?: CanonicalR
     (routeOf(key.storedSubjectId) === null ||
       routeOf(key.factId) === null ||
       !['member', 'entry', 'copy', 'session', 'label', 'output'].includes(key.driver) ||
-      ((key.driver === 'entry' || key.driver === 'output') && key.factId !== key.storedSubjectId) ||
+      (key.driver === 'output' && key.factId !== key.storedSubjectId) ||
       (driver && key.driver !== driver))
   )
     throw new ProblemError('invalid_cursor');
@@ -879,13 +889,14 @@ export async function probeNativeCollectionOriginal(
               matches: boolean | null;
               bytes: number | null;
               compressed: boolean;
+              factId: string | null;
             }>(entrySQL, [...params, current.stateId])
           ).rows[0];
           if (row?.present && current.builtinKind !== 'state')
             return done('present', {
               driver: 'entry',
               storedSubjectId: input.originalId,
-              factId: input.originalId,
+              factId: row.factId ?? input.originalId,
             });
           if (row?.matches && current.builtinKind === 'state') {
             // A compressed datum's wire expansion has no small bound. Admit the native maximum, rather than cap type IDs.

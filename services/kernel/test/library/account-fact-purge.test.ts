@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { purgeAccountFactsPage } from '../../src/library/account-fact-purge.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+configureTestReceiptKeys(pool);
 afterAll(() => pool.end());
 const route = 0x6c60;
 const id = (n: number) => `00000000-0000-7000-8000-6c60${n.toString(16).padStart(8, '0')}`;
@@ -25,6 +27,20 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
            ($1,$2,$5,$8,1,2,'planned','completed',$11,'library.entry.put',$10,false),
            ($1,$3,$4,$7,1,2,'planned','completed',$12,'library.entry.put',$10,false)`,
     [route, id(1), id(2), id(10), id(11), time, id(50), id(51), randomUUID(), time, randomUUID(), randomUUID()],
+  );
+  await pool.query(
+    `INSERT INTO library.entry_personal_fact(route,account_id,subject_id,fact_id,annotation_revision,note,priority,
+       annotation_updated_at,annotation_transaction_id,created_at,updated_at,transaction_id)
+     VALUES($1,$2,$3,$4,1,'Private annotation',8,$5,$2,$5,$5,$2)`,
+    [route, id(1), id(10), id(12), time],
+  );
+  await pool.query(
+    `INSERT INTO library.entry_source_observation(route,account_id,subject_id,provider,record_id,revision,
+       privacy_status,privacy_meaning,source_created_status,source_created_value,source_created_precision,source_created_zone,
+       source_updated_status,source_updated_value,source_updated_precision,source_updated_zone,created_at,updated_at,transaction_id)
+     VALUES($1,$2,$3,'vndb','record-1',1,'known','private','known','2024-02','month','unknown',
+       'unknown',NULL,NULL,NULL,$4,$4,$2)`,
+    [route, id(1), id(10), time],
   );
   await pool.query(
     `INSERT INTO library.copy(route,copy_id,account_id,subject_id,status,note,revision,created_at,updated_at,transaction_id) VALUES($1,$2,$4,$6,'owned','Private erased note',1,$7,$7,$4),($1,$3,$5,$6,'owned','Keep note',1,$7,$7,$5)`,
@@ -66,6 +82,22 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
     (await pool.query(`SELECT account_id FROM library.entry_state_change WHERE route=$1 ORDER BY account_id`, [route]))
       .rows,
   ).toEqual([{ account_id: id(2) }]);
+  expect(
+    (
+      await pool.query(`SELECT count(*)::int AS n FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2`, [
+        route,
+        id(1),
+      ])
+    ).rows,
+  ).toEqual([{ n: 0 }]);
+  expect(
+    (
+      await pool.query(
+        `SELECT count(*)::int AS n FROM library.entry_source_observation WHERE route=$1 AND account_id=$2`,
+        [route, id(1)],
+      )
+    ).rows,
+  ).toEqual([{ n: 0 }]);
   expect(
     (await pool.query(`SELECT account_id FROM library.entry WHERE route=$1 ORDER BY account_id`, [route])).rows,
   ).toEqual([{ account_id: id(2) }]);

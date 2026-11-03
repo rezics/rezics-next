@@ -556,9 +556,11 @@ preparation with deterministic workflowID, no deduplicationID, locators-only inp
 No receipt/event/write basis/position advance; existing DBOS recovers it and expires only terminal workflows.
 Consume the actual Core API; ordinary `runCommand`/`noEffect` or enqueue after commit is not this transaction.
 
-Everything is the unique subjects with live explicit state, effective live label assignment, retained session/history
-or retained holding. Empty entry shells, trash, follows, curated occurrences, ratings and published-log snapshots
-alone contribute nothing. Clearing state leaves other facts intact; removing the last qualifying fact removes presence.
+Everything is the unique subjects with live explicit state, nonempty private annotation, at least one reviewed source
+observation, effective live label assignment, retained session/history or retained holding. Empty/cleared annotation
+shells, trash, follows, curated occurrences, ratings and published-log snapshots alone contribute nothing. Clearing
+state leaves other facts intact; removing the last qualifying fact removes presence. Source privacy adds no public
+disclosure path.
 Labels need no profile lookup or binding. Only live entry and retained copy/session facts with actual accepted pins
 support an in-use state set and all sibling state views, even empty siblings. Labels and soft-deleted snapshots support
 none. Do not infer a historical/current type. Accepted pins keep immutable meaning; support data is derived, never a
@@ -1945,6 +1947,13 @@ native card before displaying a Collection. It has no candidate-source import or
   owner-denied and replayed commands at 256/1024/4096 native populations; it also covers concurrent arbitration and
   sequence commit/replay/rollback. `entry-undo-http.test.ts` proves the real caller and published contract. Automatic
   due delivery and complete library deletion-driver coverage remain separate.
+
+### Rich personal entry
+
+- Owner-only DTO: `GET /v1/libraryEntries/{subjectId}/personal`; note/priority CAS: `PUT /v1/libraryEntries/{subjectId}/annotations`; reviewed source admission/correction: `POST`/`PATCH /v1/libraryEntries/{subjectId}/sourceObservations`. All private reads and write responses are `no-store`.
+- Annotation revision and each provider/record observation revision are independent. Notes are at most 4,096 UTF-8 bytes; priority is 1–100. Source observations are limited to 32 per Subject, provider keys to 64 ASCII identifier characters, record IDs to 192 UTF-8 bytes, unknown privacy tokens to 192 UTF-8 bytes and source timestamp strings to 64 UTF-8 bytes. Timestamp values preserve lexical precision and zone knowledge; bounded uninterpreted timestamp tokens remain reviewable.
+- Annotation-only and provenance-only facts use the existing `entry` owner support family with no state pin. Everything sees nonempty annotations and retained reviewed observations; State Collections still use only accepted explicit state pins. Source privacy cannot grant public disclosure. Terminal account fact pages delete the parent and cascade every source observation.
+- Focused cases are `test/library/entry-personal.test.ts` and the retained-value extension in `test/library/account-fact-purge.test.ts`. Broader Everything/Web acceptance remains controller-deferred.
 
 ### Entry read
 
