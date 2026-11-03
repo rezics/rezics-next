@@ -1,19 +1,13 @@
-import {
-  AccessUnavailableError,
-  CommandUnavailableError,
-} from "../access/unavailable.ts";
-import { readPartition } from "../partition/partition.ts";
-import { accessCheck } from "../request/access.ts";
-import { partitionOf, routeOf } from "../route/route.ts";
-import { withRequestDeadline } from "../request/deadline.ts";
-import { subjectReadEligibility } from "../semantic/eligibility.ts";
-import { SubjectRedirectError } from "../semantic/merges.ts";
-import { readSubjectReference } from "../semantic/references.ts";
-import type { SubjectComponent } from "../semantic/subject.ts";
-import type {
-  PublicationDependencies,
-  PublicationReadContext,
-} from "./publication.ts";
+import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { readPartition } from '../partition/partition.ts';
+import { accessCheck } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import { readSubjectReference } from '../semantic/references.ts';
+import type { SubjectComponent } from '../semantic/subject.ts';
+import type { PublicationDependencies, PublicationReadContext } from './publication.ts';
 
 type Reference = Readonly<{
   id: string;
@@ -30,17 +24,13 @@ export type PreparationSubject = Readonly<{
 /** Consume Semantic's ordinary reference owner, including its redirect signal.
  * No labels, body, account identity or raw foreign tables enter this adapter.
  */
-async function reference(
-  deps: PublicationDependencies,
-  id: string,
-  context: PublicationReadContext,
-) {
+async function reference(deps: PublicationDependencies, id: string, context: PublicationReadContext) {
   const route = routeOf(id);
   if (route === null) return null;
   const check = await accessCheck(
     deps.access,
     context.actor,
-    "subject:read",
+    'subject:read',
     { route, id, eligibility: subjectReadEligibility({ route, id }) },
     { pool: deps.pool, deadline: context.deadline },
   );
@@ -50,13 +40,9 @@ async function reference(
       readSubjectReference(deps.pool, id, async (client) => {
         // The reference owner's RR checkout is also the native component anchor.
         const partition = await readPartition(client, partitionOf(route));
-        if (!partition) throw new AccessUnavailableError("contention");
-        if (partition.writeState !== "active")
-          throw new CommandUnavailableError(
-            partition.writeState,
-            partition.partitionNo,
-            partition.movedTo,
-          );
+        if (!partition) throw new AccessUnavailableError('contention');
+        if (partition.writeState !== 'active')
+          throw new CommandUnavailableError(partition.writeState, partition.partitionNo, partition.movedTo);
         component = {
           partition: partition.partitionNo,
           epoch: partition.epoch,
@@ -65,13 +51,10 @@ async function reference(
         return check(client);
       }),
     );
-    return value
-      ? { id: value.id, redirect: null, component: value.component }
-      : null;
+    return value ? { id: value.id, redirect: null, component: value.component } : null;
   } catch (error) {
     if (!(error instanceof SubjectRedirectError)) throw error;
-    if (!component || error.from !== id)
-      throw new AccessUnavailableError("contention");
+    if (!component || error.from !== id) throw new AccessUnavailableError('contention');
     return { id, redirect: error.to, component };
   }
 }
@@ -98,20 +81,16 @@ export async function preparePublicationSubject(
 ): Promise<PreparationSubject | null> {
   const original = await reference(deps, subjectId, context);
   if (!original) return null;
-  const terminal = original.redirect
-    ? await reference(deps, original.redirect, context)
-    : original;
+  const terminal = original.redirect ? await reference(deps, original.redirect, context) : original;
   if (!terminal) return null;
-  if (terminal.redirect) throw new AccessUnavailableError("contention");
+  if (terminal.redirect) throw new AccessUnavailableError('contention');
   const references = terminal === original ? [original] : [original, terminal];
   return {
     originalId: original.id,
     currentId: terminal.id,
     components: references.map((entry) => entry.component),
     async current() {
-      for (const entry of references)
-        if (!same(entry, await reference(deps, entry.id, context)))
-          return false;
+      for (const entry of references) if (!same(entry, await reference(deps, entry.id, context))) return false;
       return true;
     },
   };
