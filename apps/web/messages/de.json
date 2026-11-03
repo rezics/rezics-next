@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "Ausgewähltes Werk: {original} · Aktuelle Werkreferenz: {current}",
   "realm_publication_decided_at": "Entschieden am {at}",
   "realm_publication_presentation_unavailable": "Die optionale Werkdarstellung ist nicht verfügbar.",
-  "realm_publication_preparation_unavailable": "Die Vorbereitung der aktuellen Veröffentlichung ist nicht verfügbar. Das Regal bleibt verfügbar."
+  "realm_publication_preparation_unavailable": "Die Vorbereitung der aktuellen Veröffentlichung ist nicht verfügbar. Das Regal bleibt verfügbar.",
+  "library_diary_year_select": "Gemeldetes Abschlussjahr",
+  "library_diary_year_show": "Jahr anzeigen",
+  "library_diary_all_time": "Gesamter Zeitraum",
+  "library_diary_year_heading": "Gemeldete Abschlüsse im Jahr {year}",
+  "library_diary_year_help": "Nur abgeschlossene Vorgänge mit ausdrücklich gemeldetem Abschlussjahr zählen. Unbekannte Monate bleiben ohne Zuordnung.",
+  "library_diary_year_precision": "Genauigkeit des Abschlussdatums",
+  "library_diary_year_precision_counts": "Nur Jahr: {year}; Monat: {month}; Tag: {day}.",
+  "library_diary_year_coverage": "Native Abdeckung: {initialized} von {retained} Sitzungen; Abschluss fehlt: {missing}; nicht unterstützt: {unsupported}.",
+  "library_diary_year_unallocated": "Monat unbekannt (nur Jahr)",
+  "library_diary_bucket_unavailable": "Monatsgruppen und Einträge ohne Monat können noch nicht geöffnet werden. Die Liste unten zeigt weiterhin den gesamten Verlauf.",
+  "library_diary_year_unavailable": "Die Jahresübersicht wird vorbereitet oder ist nicht verfügbar. Ein fehlgeschlagener Abruf bedeutet nicht null.",
+  "library_occurrence_assessment_unavailable": "Die private Bewertung dieses Vorgangs ist nicht verfügbar. Importierte Bewertungen und Subject-Stimmen liefern keine Bewertung dafür.",
+  "library_occurrence_acknowledged": "Der Journalbefehl wurde angenommen. Aktuelle Werte konnten nicht bestätigt werden; wiederhole den ursprünglichen Befehl, um sie erneut zu lesen."
 }

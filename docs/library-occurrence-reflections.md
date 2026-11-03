@@ -117,3 +117,21 @@ original key and exact patch for explicit retry. Private reflection is never cop
 The diary distinguishes these reported dates from native started/completed audit clocks and source observation
 timestamps. Missing or partial dates are never filled with a guessed day, instant or duration. Current progress
 controls and the caller's progress-session authority stay with the existing page.
+
+## Occurrence assessment availability and editor lifetime
+
+The installed generated journal GET/PATCH declarations in
+`packages/client/src/kernel/library/progress-routes.d.ts` and `progress-model.d.ts` at source head
+`bd78d5aa5b40c51d76be768082002076b6121017` expose only dates and reflection. An occurrence-local assessment export
+is absent. The existing editor therefore names assessment as unavailable; it does not create an assessment field,
+infer one from an imported score or public Subject vote, or write an unsupported journal patch. The standard scale
+and assessment activation remain dependent on their actual published producer contracts. Older absent archive fields
+and the existing archive annotation recovery writer retain their meaning and owner.
+
+Editor commands bind exact Session identity, viewer, credential and current source/return visit. Owner, credential,
+occurrence or source replacement unmounts the prior private editor; read-exposure loss conceals it. Delayed results
+cannot navigate, replace drafts or attach private metadata after replacement. A progress revision change alone does
+not replace safe journal drafts. A command in flight prevents overlapping submissions. An uncertain write retries
+its exact original key/body, including the original journal revision; a conflict preserves the draft for explicit
+review. An accepted PATCH whose GET fails or predates its acknowledgement is shown as accepted with unconfirmed
+current values, retaining that same replay identity. Journal and progress revisions remain independent.

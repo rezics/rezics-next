@@ -38,3 +38,19 @@ export async function cancelDiaryContinuation(
   if (result.status === 401) return 'retired';
   return !result.error && result.data?.cancelled ? 'cancelled' : 'unavailable';
 }
+
+export const REPORTED_YEAR_SUMMARY_BYTES = 16_384;
+export type ReportedYearSummary = NonNullable<
+  Awaited<ReturnType<KernelClient['libraryReportedYearSummary']['get']>>['data']
+>;
+export type ReportedYearRead = { kind: 'ready'; value: ReportedYearSummary } | { kind: 'retired' | 'unavailable' };
+
+export async function readReportedYearSummary(
+  client: KernelClient,
+  authorization: string,
+  year: number,
+): Promise<ReportedYearRead> {
+  const result = await client.libraryReportedYearSummary.get({ query: { year }, headers: { authorization } });
+  if (!result.error && result.data?.year === year) return { kind: 'ready', value: result.data };
+  return result.status === 401 ? { kind: 'retired' } : { kind: 'unavailable' };
+}

@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "Obra seleccionada: {original} · Referencia actual: {current}",
   "realm_publication_decided_at": "Decidido el {at}",
   "realm_publication_presentation_unavailable": "La presentación opcional de la obra no está disponible.",
-  "realm_publication_preparation_unavailable": "La preparación de la publicación actual no está disponible. La estantería sigue disponible."
+  "realm_publication_preparation_unavailable": "La preparación de la publicación actual no está disponible. La estantería sigue disponible.",
+  "library_diary_year_select": "Año de finalización declarado",
+  "library_diary_year_show": "Mostrar año",
+  "library_diary_all_time": "Todo el historial",
+  "library_diary_year_heading": "Finalizaciones declaradas en {year}",
+  "library_diary_year_help": "Solo cuentan las experiencias completadas con un año de finalización declarado. Los meses desconocidos quedan sin asignar.",
+  "library_diary_year_precision": "Precisión de la fecha de finalización",
+  "library_diary_year_precision_counts": "Solo año: {year}; mes: {month}; día: {day}.",
+  "library_diary_year_coverage": "Cobertura nativa: {initialized} de {retained} sesiones; sin fecha final: {missing}; no admitida: {unsupported}.",
+  "library_diary_year_unallocated": "Mes desconocido (solo año)",
+  "library_diary_bucket_unavailable": "Aún no se pueden abrir los grupos por mes o sin mes. La lista inferior sigue mostrando todo el historial.",
+  "library_diary_year_unavailable": "El resumen del año se está preparando o no está disponible. Un fallo de lectura no significa cero.",
+  "library_occurrence_assessment_unavailable": "La valoración privada de esta experiencia no está disponible. Las puntuaciones importadas y los votos del Subject no aportan esta valoración.",
+  "library_occurrence_acknowledged": "Se aceptó el comando del diario. No se pudieron confirmar los valores actuales; reintenta el comando original para volver a leerlos."
 }

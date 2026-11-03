@@ -1,6 +1,7 @@
-import { useRouter } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useLocation, useRouter } from '@tanstack/react-router';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
+import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import type { useSession } from '../../session/query';
 import type { PrivateDiaryLoadResult } from './server';
@@ -10,39 +11,51 @@ import { consumptionStatistics, privateCount, reportedDate } from './presentatio
 
 type ReaderSession = ReturnType<typeof useSession>;
 
-function safeReturnTo(value: string | undefined): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\u0000-\u001f]/.test(value)) return '/library';
-  try {
-    const parsed = new URL(value, 'https://rezics.invalid');
-    return parsed.origin === 'https://rezics.invalid' && parsed.pathname !== '/library/history'
-      ? parsed.pathname + parsed.search + parsed.hash
-      : '/library';
-  } catch {
-    return '/library';
-  }
-}
+import { diarySearch, diaryReturnContext, sameDiaryAddress, safeReturnTo, type DiaryAddress } from './address';
+import { ReportedYearPanel } from './year-summary';
 
 export function PrivateDiaryPage({
   loaded,
   session,
   returnTo,
+  address = {},
 }: {
   loaded: PrivateDiaryLoadResult;
   session: ReaderSession;
   returnTo?: string | undefined;
+  address?: DiaryAddress;
 }) {
   const router = useRouter();
+  const location = useLocation();
+  const allowed = useOperation('progress_session.list');
+  const [yearInput, setYearInput] = useState(address.year === undefined ? '' : String(address.year));
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  const binding = useRef({ loaded, address, session, href: location.href });
+  binding.current = { loaded, address, session, href: location.href };
   const [closing, setClosing] = useState(false);
   const [closeUnavailable, setCloseUnavailable] = useState(false);
   const currentReturn = safeReturnTo(returnTo);
   const load =
+    allowed &&
+    location.pathname.endsWith('/library/history') &&
     loaded.kind === 'ready' &&
+    sameDiaryAddress(loaded.address, address) &&
+    sameDiaryAddress(address, diarySearch(location.search)) &&
     session.state === 'signed-in' &&
     loaded.viewer === session.subject &&
     loaded.csrfToken === session.csrfToken;
   const authorizedLoad = load ? loaded : null;
   const authenticated = authorizedLoad !== null;
-  const retired = authorizedLoad?.diary.kind === 'retired' || authorizedLoad?.summary.kind === 'retired';
+  const retired =
+    authorizedLoad?.diary.kind === 'retired' ||
+    authorizedLoad?.summary.kind === 'retired' ||
+    authorizedLoad?.reportedYear?.kind === 'retired';
   const page = !retired && authorizedLoad?.diary.kind === 'ready' ? authorizedLoad.diary.page : null;
   const statistics =
     !retired && authorizedLoad?.summary.kind === 'ready' ? consumptionStatistics(authorizedLoad.summary.value) : null;
@@ -63,7 +76,17 @@ export function PrivateDiaryPage({
         csrfToken: authorizedLoad.csrfToken,
         continuation: page.continuation,
       },
-    });
+    }).catch(() => 'unavailable' as const);
+    const current = binding.current;
+    if (
+      !live.current ||
+      current.href !== location.href ||
+      current.loaded !== loaded ||
+      current.session.subject !== session.subject ||
+      current.session.csrfToken !== session.csrfToken ||
+      !sameDiaryAddress(current.address, address)
+    )
+      return;
     setClosing(false);
     if (result === 'unavailable') {
       setCloseUnavailable(true);
@@ -99,6 +122,49 @@ export function PrivateDiaryPage({
         </p>
       ) : null}
 
+      {authenticated && !retired ? (
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const selection = diarySearch({ year: yearInput });
+            if (selection.year !== undefined)
+              void router.navigate({
+                to: '/library/history',
+                search: { year: selection.year, returnTo: currentReturn },
+              });
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">{m.library_diary_year_select()}</span>
+            <input
+              className="min-h-11 w-32 rounded-md border bg-background px-3"
+              inputMode="numeric"
+              pattern="[0-9]{1,4}"
+              required
+              value={yearInput}
+              onChange={(event) => setYearInput(event.currentTarget.value)}
+            />
+          </label>
+          <button type="submit" className="min-h-11 rounded-md border px-3">
+            {m.library_diary_year_show()}
+          </button>
+          <Link
+            className="inline-flex min-h-11 items-center rounded-md border px-3"
+            to="/library/history"
+            search={{ returnTo: currentReturn }}
+          >
+            {m.library_diary_all_time()}
+          </Link>
+        </form>
+      ) : null}
+      {address.year !== undefined && authenticated && !retired ? (
+        <ReportedYearPanel
+          year={address.year}
+          result={authorizedLoad?.reportedYear ?? { kind: 'unavailable' }}
+          retry={() => void router.invalidate()}
+        />
+      ) : null}
       {statistics ? (
         <section aria-labelledby="library-diary-statistics" className="rounded-lg border p-4">
           <h2 id="library-diary-statistics" className="text-lg font-semibold">
@@ -131,7 +197,7 @@ export function PrivateDiaryPage({
             {m.library_diary_currentness({ state: statistics.currentness.state })}
           </p>
         </section>
-      ) : !retired && authenticated ? (
+      ) : !retired && authenticated && address.year === undefined ? (
         <section aria-live="polite" className="rounded-lg border p-4">
           <h2 className="font-semibold">{m.library_diary_statistics()}</h2>
           <p>{m.library_diary_statistics_unavailable()}</p>
@@ -155,7 +221,7 @@ export function PrivateDiaryPage({
           <Link
             className="mt-2 inline-flex min-h-11 items-center rounded-md border px-3"
             to="/library/history"
-            search={{ returnTo: currentReturn }}
+            search={{ year: address.year, returnTo: currentReturn }}
           >
             {m.library_diary_restart()}
           </Link>
@@ -226,6 +292,7 @@ export function PrivateDiaryPage({
                       className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-primary-foreground"
                       to="/library/progress/$id"
                       params={{ id: occurrence.id }}
+                      search={{ history: diaryReturnContext({ ...address, returnTo: currentReturn }) }}
                     >
                       {m.library_diary_open_occurrence()}
                     </Link>
@@ -239,7 +306,7 @@ export function PrivateDiaryPage({
               className="inline-flex min-h-11 items-center rounded-md border px-4"
               to="/library/history"
               replace
-              search={{ cursor: page.next, returnTo: currentReturn }}
+              search={{ cursor: page.next, year: address.year, returnTo: currentReturn }}
             >
               {m.library_diary_next()}
             </Link>

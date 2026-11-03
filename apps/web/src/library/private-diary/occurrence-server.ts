@@ -129,6 +129,7 @@ export const readOccurrenceJournal = createServerFn({ method: 'GET' })
 
 export type JournalCommandResult =
   | { kind: 'saved'; journal: Journal }
+  | { kind: 'acknowledged'; revision: number }
   | { kind: 'conflict' | 'missing' | 'retired' | 'uncertain' };
 
 export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
@@ -165,12 +166,20 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
         if (result.status === 401) return { kind: 'retired' };
         return { kind: 'uncertain' };
       }
-      const readback = await client.progressSessions({ sessionId: data.sessionId }).journal.get();
-      if (!readback.error && readback.data?.journal?.sessionId === data.sessionId)
+      const readback = await client
+        .progressSessions({ sessionId: data.sessionId })
+        .journal.get()
+        .catch(() => null);
+      if (
+        readback &&
+        !readback.error &&
+        readback.data?.journal?.sessionId === data.sessionId &&
+        readback.data.journal.revision >= result.data.journal.revision
+      )
         return { kind: 'saved', journal: readback.data.journal };
-      if (readback.status === 404) return { kind: 'missing' };
-      if (readback.status === 401) return { kind: 'retired' };
-      return { kind: 'uncertain' };
+      if (readback?.status === 404) return { kind: 'missing' };
+      if (readback?.status === 401) return { kind: 'retired' };
+      return { kind: 'acknowledged', revision: result.data.journal.revision };
     } catch {
       return { kind: 'uncertain' };
     }

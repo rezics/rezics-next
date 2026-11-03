@@ -1,3 +1,4 @@
+import { historyReturn, diaryReturnContext } from '../../library/private-diary/address';
 import { progressSessionAddress, progressAddressIssue } from '../../library/progress-address';
 import { ProgressAddressCorrection } from '../../library/progress-address-correction';
 import { requireSignedIn } from '../../session/guard';
@@ -16,7 +17,8 @@ export const Route = createFileRoute('/library/progress/$id')({
   },
   validateSearch: (search: Record<string, unknown>) => {
     const { id, ...positions } = progressSessionAddress(search);
-    return positions;
+    const history = historyReturn(search.history);
+    return { ...positions, ...(history ? { history: diaryReturnContext(history) } : {}) };
   },
   loaderDeps: ({ search }) => ({ changes: search.changes, units: search.units, logs: search.logs }),
   loader: ({ params, deps }) =>
@@ -45,7 +47,9 @@ export const Route = createFileRoute('/library/progress/$id')({
     const address = progressSessionAddress({ ...requested.search, id: requestedId });
     const issue = progressAddressIssue(address);
     const pending =
-      requestedId !== id || (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]);
+      requestedId !== id ||
+      (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]) ||
+      requested.search.history !== search.history;
     if (issue || pending)
       return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
     if (loaded.state === 'invalid') return <ProgressAddressCorrection address={address} issue={loaded.issue} />;

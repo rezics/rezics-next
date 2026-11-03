@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "선택한 작품: {original} · 현재 작품 참조: {current}",
   "realm_publication_decided_at": "결정 시각: {at}",
   "realm_publication_presentation_unavailable": "작품의 선택적 표시 정보를 사용할 수 없습니다.",
-  "realm_publication_preparation_unavailable": "현재 게시 상태를 준비할 수 없습니다. 서가는 계속 이용할 수 있습니다."
+  "realm_publication_preparation_unavailable": "현재 게시 상태를 준비할 수 없습니다. 서가는 계속 이용할 수 있습니다.",
+  "library_diary_year_select": "신고한 완료 연도",
+  "library_diary_year_show": "연도 보기",
+  "library_diary_all_time": "전체 기간",
+  "library_diary_year_heading": "{year}년의 신고 완료 기록",
+  "library_diary_year_help": "완료 연도가 명시된 완료 기록만 집계합니다. 알 수 없는 월은 미배정 상태로 둡니다.",
+  "library_diary_year_precision": "완료 날짜 정밀도",
+  "library_diary_year_precision_counts": "연도만: {year}, 월까지: {month}, 일까지: {day}.",
+  "library_diary_year_coverage": "기본 기록 범위: {retained}개 중 {initialized}개, 완료 날짜 없음: {missing}개, 미지원: {unsupported}개.",
+  "library_diary_year_unallocated": "월 미상(연도만)",
+  "library_diary_bucket_unavailable": "월별 또는 월 미상 기록은 아직 열 수 없습니다. 아래 목록은 계속 전체 기록을 표시합니다.",
+  "library_diary_year_unavailable": "이 연도의 요약을 준비 중이거나 사용할 수 없습니다. 읽기 실패는 0을 뜻하지 않습니다.",
+  "library_occurrence_assessment_unavailable": "이 기록의 비공개 평가는 사용할 수 없습니다. 가져온 점수나 Subject 투표를 이 평가로 간주하지 않습니다.",
+  "library_occurrence_acknowledged": "일지 명령이 수락되었습니다. 현재 값을 확인하지 못했습니다. 원래 명령을 다시 시도하여 값을 다시 읽으세요."
 }

@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "Œuvre sélectionnée : {original} · Référence actuelle : {current}",
   "realm_publication_decided_at": "Décision du {at}",
   "realm_publication_presentation_unavailable": "La présentation facultative de l’œuvre est indisponible.",
-  "realm_publication_preparation_unavailable": "La préparation de la publication actuelle est indisponible. Le rayon reste disponible."
+  "realm_publication_preparation_unavailable": "La préparation de la publication actuelle est indisponible. Le rayon reste disponible.",
+  "library_diary_year_select": "Année de fin déclarée",
+  "library_diary_year_show": "Afficher l’année",
+  "library_diary_all_time": "Tout l’historique",
+  "library_diary_year_heading": "Fins déclarées en {year}",
+  "library_diary_year_help": "Seules les occurrences terminées avec une année de fin explicitement déclarée comptent. Les mois inconnus restent non attribués.",
+  "library_diary_year_precision": "Précision de la date de fin",
+  "library_diary_year_precision_counts": "Année seule : {year} ; mois : {month} ; jour : {day}.",
+  "library_diary_year_coverage": "Couverture native : {initialized} sessions sur {retained} ; fin absente : {missing} ; non prise en charge : {unsupported}.",
+  "library_diary_year_unallocated": "Mois inconnu (année seule)",
+  "library_diary_bucket_unavailable": "L’ouverture des groupes mensuels ou sans mois est indisponible. La liste ci-dessous affiche toujours tout l’historique.",
+  "library_diary_year_unavailable": "Le résumé annuel est en préparation ou indisponible. Un échec de lecture ne signifie pas zéro.",
+  "library_occurrence_assessment_unavailable": "L’évaluation privée de cette occurrence est indisponible. Les notes importées et les votes du Subject ne fournissent pas cette évaluation.",
+  "library_occurrence_acknowledged": "La commande du journal a été acceptée. Les valeurs actuelles n’ont pas pu être confirmées ; réessayez la commande d’origine pour les relire."
 }

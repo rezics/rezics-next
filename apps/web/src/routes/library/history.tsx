@@ -8,11 +8,7 @@ import { useSession } from '../../session/query';
 import { PrivateDiaryPage } from '../../library/private-diary/page';
 import { readPrivateDiary } from '../../library/private-diary/server';
 
-function diarySearch(search: Record<string, unknown>) {
-  const cursor = typeof search.cursor === 'string' && search.cursor.length <= 4096 ? search.cursor : undefined;
-  const returnTo = typeof search.returnTo === 'string' && search.returnTo.length <= 2048 ? search.returnTo : undefined;
-  return { ...(cursor ? { cursor } : {}), ...(returnTo ? { returnTo } : {}) };
-}
+import { diarySearch } from '../../library/private-diary/address';
 
 export const Route = createFileRoute('/library/history')({
   beforeLoad: async (args) => {
@@ -20,8 +16,8 @@ export const Route = createFileRoute('/library/history')({
     await prepareExposure(args.context.queryClient);
   },
   validateSearch: diarySearch,
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ deps }) => readPrivateDiary({ data: { cursor: deps.cursor } }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, year: search.year }),
+  loader: ({ deps }) => readPrivateDiary({ data: deps }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -30,6 +26,14 @@ export const Route = createFileRoute('/library/history')({
     const loaded = Route.useLoaderData();
     const search = Route.useSearch();
     const session = useSession();
-    return <PrivateDiaryPage loaded={loaded} session={session} returnTo={search.returnTo} />;
+    return (
+      <PrivateDiaryPage
+        key={JSON.stringify([session.subject, session.csrfToken, search])}
+        loaded={loaded}
+        session={session}
+        address={search}
+        returnTo={search.returnTo}
+      />
+    );
   },
 });

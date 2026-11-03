@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "所选作品：{original} · 当前作品引用：{current}",
   "realm_publication_decided_at": "决定时间：{at}",
   "realm_publication_presentation_unavailable": "作品的可选展示信息不可用。",
-  "realm_publication_preparation_unavailable": "当前发布准备不可用。书架仍可使用。"
+  "realm_publication_preparation_unavailable": "当前发布准备不可用。书架仍可使用。",
+  "library_diary_year_select": "所报完成年份",
+  "library_diary_year_show": "查看年份",
+  "library_diary_all_time": "全部时间",
+  "library_diary_year_heading": "{year} 年所报完成记录",
+  "library_diary_year_help": "仅统计明确填写完成年份的已完成记录。月份未知时保持未分配。",
+  "library_diary_year_precision": "完成日期精度",
+  "library_diary_year_precision_counts": "仅年份：{year}；精确到月：{month}；精确到日：{day}。",
+  "library_diary_year_coverage": "原生覆盖：{retained} 条会话中已初始化 {initialized} 条；缺少完成日期：{missing}；不支持的日期：{unsupported}。",
+  "library_diary_year_unallocated": "月份未知（仅年份）",
+  "library_diary_bucket_unavailable": "暂时无法打开按月或月份未知的记录分组。下方列表仍显示全部历史。",
+  "library_diary_year_unavailable": "该年份的统计正在准备或暂不可用。读取失败不表示数量为零。",
+  "library_occurrence_assessment_unavailable": "该次记录的私密评价暂不可用。导入的分数和 Subject 投票不能作为该次评价。",
+  "library_occurrence_acknowledged": "日记命令已被接受，但无法确认当前值。请重试原命令以重新读取。"
 }

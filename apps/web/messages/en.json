@@ -7637,5 +7637,18 @@
   "realm_publication_prepared_subject": "Selected work: {original} · Current work reference: {current}",
   "realm_publication_decided_at": "Decided at {at}",
   "realm_publication_presentation_unavailable": "Optional work presentation is unavailable.",
-  "realm_publication_preparation_unavailable": "Current publication preparation is unavailable. The shelf is still available."
+  "realm_publication_preparation_unavailable": "Current publication preparation is unavailable. The shelf is still available.",
+  "library_diary_year_select": "Reported finish year",
+  "library_diary_year_show": "Show year",
+  "library_diary_all_time": "All time",
+  "library_diary_year_heading": "Reported completions in {year}",
+  "library_diary_year_help": "Only completed occurrences with an explicit reported finish year count. Unknown months stay unallocated.",
+  "library_diary_year_precision": "Finish date precision",
+  "library_diary_year_precision_counts": "Year only: {year}; month: {month}; day: {day}.",
+  "library_diary_year_coverage": "Native coverage: {initialized} of {retained} sessions; missing finish: {missing}; unsupported finish: {unsupported}.",
+  "library_diary_year_unallocated": "Month unknown (year only)",
+  "library_diary_bucket_unavailable": "Opening month and year-only buckets is unavailable. The occurrence list below still shows all history.",
+  "library_diary_year_unavailable": "This year’s summary is preparing or unavailable. A failed read does not mean zero.",
+  "library_occurrence_assessment_unavailable": "Private occurrence assessment is unavailable. Imported scores and Subject votes do not supply an assessment.",
+  "library_occurrence_acknowledged": "The journal command was accepted. Current values could not be confirmed; retry the original command to read them again."
 }

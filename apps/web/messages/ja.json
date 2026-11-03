@@ -7587,5 +7587,18 @@
   "realm_publication_prepared_subject": "選択した作品: {original} · 現在の作品参照: {current}",
   "realm_publication_decided_at": "判断日時: {at}",
   "realm_publication_presentation_unavailable": "作品の追加表示情報は利用できません。",
-  "realm_publication_preparation_unavailable": "現在の公開状態を準備できません。棚は引き続き利用できます。"
+  "realm_publication_preparation_unavailable": "現在の公開状態を準備できません。棚は引き続き利用できます。",
+  "library_diary_year_select": "申告した完了年",
+  "library_diary_year_show": "年を表示",
+  "library_diary_all_time": "全期間",
+  "library_diary_year_heading": "{year}年の申告完了記録",
+  "library_diary_year_help": "完了済みで完了年が明示された記録のみを数えます。月が不明な記録は月未割り当てのままです。",
+  "library_diary_year_precision": "完了日の精度",
+  "library_diary_year_precision_counts": "年のみ：{year}、月まで：{month}、日まで：{day}。",
+  "library_diary_year_coverage": "ネイティブ対象範囲：{retained}件中{initialized}件、完了日なし：{missing}件、未対応：{unsupported}件。",
+  "library_diary_year_unallocated": "月不明（年のみ）",
+  "library_diary_bucket_unavailable": "月別・月不明の記録一覧はまだ開けません。下の一覧には引き続き全履歴を表示しています。",
+  "library_diary_year_unavailable": "この年の集計は準備中または利用できません。読み取りの失敗はゼロを意味しません。",
+  "library_occurrence_assessment_unavailable": "この記録の非公開評価は利用できません。インポートした点数やSubjectへの投票を評価として扱いません。",
+  "library_occurrence_acknowledged": "日誌のコマンドは受理されました。現在の値を確認できなかったため、元のコマンドを再試行して読み取り直してください。"
 }

@@ -8,9 +8,13 @@ import {
   cancelDiaryContinuation,
   readConsumptionSummary,
   readDiaryPage,
+  readReportedYearSummary,
+  type ReportedYearRead,
   type ConsumptionSummary,
   type DiaryPage,
 } from './native';
+
+import { diarySearch, type DiaryAddress } from './address';
 
 type PrivateIdentity = { viewer: string; csrfToken: string; authorization: string };
 
@@ -23,32 +27,40 @@ async function currentIdentity(): Promise<PrivateIdentity | null> {
 
 export type PrivateDiaryLoad = {
   kind: 'ready';
+  address: DiaryAddress;
+  reportedYear: ReportedYearRead | null;
   viewer: string;
   csrfToken: string;
   diary: { kind: 'ready'; page: DiaryPage } | { kind: 'stale' | 'retired' | 'unavailable' };
-  summary: { kind: 'ready'; value: ConsumptionSummary } | { kind: 'retired' | 'unavailable' };
+  summary: { kind: 'ready'; value: ConsumptionSummary } | { kind: 'retired' | 'unavailable' | 'not-selected' };
 };
 
 export type PrivateDiaryLoadResult = PrivateDiaryLoad | { kind: 'signed-out' | 'unavailable' };
 
 export const readPrivateDiary = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return { cursor: undefined };
-    if (!('cursor' in value) || value.cursor === undefined) return { cursor: undefined };
-    if (typeof value.cursor !== 'string' || value.cursor.length > 4096) throw new Error('Invalid diary cursor');
-    return { cursor: value.cursor };
-  })
+  .validator((value: unknown) =>
+    diarySearch(value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}),
+  )
   .handler(async ({ data }): Promise<PrivateDiaryLoadResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = await currentIdentity();
     if (!identity) return { kind: 'signed-out' };
     const client = kernelClient();
-    const [diary, summary] = await Promise.all([
+    const [diary, summary, reportedYear] = await Promise.all([
       readDiaryPage(client, identity.authorization, data.cursor).catch(() => ({ kind: 'unavailable' as const })),
-      readConsumptionSummary(client, identity.authorization).catch(() => ({ kind: 'unavailable' as const })),
+      data.year === undefined
+        ? readConsumptionSummary(client, identity.authorization).catch(() => ({ kind: 'unavailable' as const }))
+        : Promise.resolve({ kind: 'not-selected' as const }),
+      data.year === undefined
+        ? null
+        : readReportedYearSummary(client, identity.authorization, data.year).catch(() => ({
+            kind: 'unavailable' as const,
+          })),
     ]);
     return {
       kind: 'ready',
+      address: data,
+      reportedYear,
       viewer: identity.viewer,
       csrfToken: identity.csrfToken,
       diary,
@@ -57,7 +69,7 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
           ? { kind: 'ready', value: summary.summary }
           : summary.kind === 'retired'
             ? { kind: 'retired' }
-            : { kind: 'unavailable' },
+            : { kind: summary.kind },
     };
   });
 
