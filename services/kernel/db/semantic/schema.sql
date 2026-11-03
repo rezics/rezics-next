@@ -320,6 +320,57 @@ END; $$;
 
 
 --
+-- Name: capture_canonical_subject_name(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_canonical_subject_name() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.kind='label' THEN
+      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    IF NEW.kind='label' THEN
+      PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
+    END IF;
+  ELSIF OLD.kind='label' OR NEW.kind='label' THEN
+    IF (OLD.route,OLD.subject_id) IS DISTINCT FROM (NEW.route,NEW.subject_id) THEN
+      PERFORM semantic.refresh_canonical_subject_name(OLD.route,OLD.subject_id);
+    END IF;
+    PERFORM semantic.refresh_canonical_subject_name(NEW.route,NEW.subject_id);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: capture_canonical_subject_population(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_canonical_subject_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    UPDATE semantic.partition_subjects
+      SET canonical_count=canonical_count-1,canonical_generation=canonical_generation+1
+      WHERE partition_no=OLD.route/16;
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    INSERT INTO semantic.partition_subjects(partition_no,canonical_count,canonical_generation)
+      VALUES(NEW.route/16,1,1)
+      ON CONFLICT(partition_no) DO UPDATE SET canonical_count=partition_subjects.canonical_count+1,
+        canonical_generation=partition_subjects.canonical_generation+1;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: capture_context_directory_entry(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3110,6 +3161,21 @@ BEGIN
  ELSE RETURN false;
  END CASE;
 END; $$;
+
+
+--
+-- Name: refresh_canonical_subject_name(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.refresh_canonical_subject_name(r integer, id uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+  UPDATE semantic.subject SET canonical_name=(
+    SELECT f.body #>> '{}' FROM semantic.current_term_fact f
+    WHERE f.route=r AND f.subject_id=id AND f.kind='label' AND jsonb_typeof(f.body)='string'
+    ORDER BY f.language COLLATE "C",f.slot_id DESC,f.log_seq DESC LIMIT 1
+  ) WHERE route=r AND subject_id=id;
+$$;
 
 
 --
@@ -7388,6 +7454,10 @@ CREATE TABLE semantic.outbound_link_count (
 CREATE TABLE semantic.partition_subjects (
     partition_no integer NOT NULL,
     visible bigint DEFAULT 0 NOT NULL,
+    canonical_count bigint DEFAULT 0 NOT NULL,
+    canonical_generation bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
+    CONSTRAINT partition_subjects_canonical_generation_check CHECK ((canonical_generation > 0)),
     CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
 );
@@ -8390,6 +8460,7 @@ CREATE TABLE semantic.subject (
     current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
     projection_pending boolean DEFAULT false NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    canonical_name text COLLATE pg_catalog."C",
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
@@ -11811,6 +11882,13 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 
 
 --
+-- Name: partition_subjects_canonical_frontier; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX partition_subjects_canonical_frontier ON semantic.partition_subjects USING btree (partition_no) INCLUDE (canonical_generation) WHERE (canonical_count > 0);
+
+
+--
 -- Name: provider_review_queue_entry_erasure; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -12172,6 +12250,13 @@ CREATE INDEX statement_disclosure_inbound ON semantic.statement_disclosure USING
 --
 
 CREATE INDEX statement_disclosure_outbound ON semantic.statement_disclosure USING btree (subject_id, account_id, property, target_order_key, target_id, candidate_id) WHERE (NOT disclosed);
+
+
+--
+-- Name: subject_canonical_name_seek; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_canonical_name_seek ON semantic.subject USING btree (((route / 16)), ((canonical_name IS NULL)), COALESCE(canonical_name, ''::text), subject_id);
 
 
 --
@@ -12844,6 +12929,13 @@ CREATE TRIGGER external_claim_immutable BEFORE DELETE OR UPDATE ON semantic.exte
 --
 
 CREATE TRIGGER external_claim_immutable_truncate BEFORE TRUNCATE ON semantic.external_claim FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: fact fact_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER fact_canonical_name AFTER DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
 
 
 --
@@ -14347,6 +14439,13 @@ CREATE CONSTRAINT TRIGGER statement_disclosure_erasure_capture AFTER INSERT OR U
 
 
 --
+-- Name: subject subject_canonical_population; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_canonical_population AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_population();
+
+
+--
 -- Name: subject subject_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -14407,6 +14506,13 @@ CREATE TRIGGER subject_search_canonical_generation AFTER INSERT OR DELETE OR UPD
 --
 
 CREATE TRIGGER subject_security_revision BEFORE UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.guard_subject_security();
+
+
+--
+-- Name: term_head term_head_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name AFTER INSERT OR DELETE OR UPDATE ON semantic.term_head FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
 
 
 --
