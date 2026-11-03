@@ -18,7 +18,7 @@ test('ban review GET carries pagination and exact selection and preserves the co
   const viewerId = '019a1b2c-3d4e-7f00-8a00-000000000003';
   const at = '2026-11-04T00:00:00.000Z';
   const account: BanReviewIdentity = { state: 'concealed', accountId, label: 'Account', destination: null };
-  const item = {
+  const item: BanReviewPageItem = {
     accountId,
     reason: 'Current reason',
     actor: null,
