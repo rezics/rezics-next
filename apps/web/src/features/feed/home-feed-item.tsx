@@ -23,8 +23,7 @@ function homeFeedKindLabel(item: FeedItem, locale: string): string | undefined {
 function homeFeedPreview(summary: FeedItem['summary']): string | undefined {
   if ('excerpt' in summary && summary.excerpt) return summary.excerpt;
   if ('description' in summary && summary.description) return summary.description;
-  if (summary && 'address' in summary && typeof summary.summary === 'string' && summary.summary)
-    return summary.summary;
+  if (summary && 'address' in summary && typeof summary.summary === 'string' && summary.summary) return summary.summary;
 }
 
 /** Home's installed native FeedItem projection; it performs no reads and keeps each owner-provided field. */
