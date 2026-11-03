@@ -336,9 +336,9 @@ test('official capture requires physical prepared custody, runs once, and never 
       scope: 'fixture.scope',
       supervisor: { pid: 1, started: '1', group: 1 },
     });
-    for (const mode of ['complete', 'empty', 'missing', 'failed', 'stale'] as const) {
+    for (const mode of ['complete', 'empty', 'missing', 'unchanged', 'failed', 'stale'] as const) {
       const root = workspace();
-      generated(root, 1);
+      const previous = generated(root, 1);
       put(root, PROFILE.transport, 'old successful bundle');
       let runs = 0;
       const work = () =>
@@ -347,14 +347,16 @@ test('official capture requires physical prepared custody, runs once, and never 
           async () => {
             runs++;
             expect(existsSync(join(root, PROFILE.transport))).toBe(false);
-            expect(existsSync(join(root, PROFILE.root))).toBe(false);
+            for (const [path, bytes] of previous) expect(readOutputTreeFile(root, path)).toEqual(bytes);
+            if (mode === 'unchanged') return 0;
+            rmSync(join(root, PROFILE.root), { recursive: true });
             if (mode === 'complete' || mode === 'failed') generated(root);
             if (mode === 'empty') mkdirSync(join(root, PROFILE.root), { recursive: true });
             return mode === 'failed' ? 23 : 0;
           },
           { recognize, prepared: () => ({ ...source, run: mode === 'stale' ? 'earlier-run' : source.run }) },
         );
-      if (mode === 'missing' || mode === 'stale') await expect(work()).rejects.toThrow();
+      if (mode === 'missing' || mode === 'stale' || mode === 'unchanged') await expect(work()).rejects.toThrow();
       else expect(await work()).toBe(mode === 'failed' ? 23 : 0);
       expect(runs).toBe(mode === 'stale' ? 0 : 1);
       if (mode === 'complete' || mode === 'empty') {

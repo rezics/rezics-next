@@ -496,7 +496,11 @@ export async function withKernelClientOutput(
   if (source.run !== recognized.runId) fail('prepared source receipt is stale');
   const transport = safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.transport, true);
   if (existsSync(transport)) rmSync(transport);
-  removeSafeTree(root, KERNEL_CLIENT_OUTPUT.root);
+  // The compiler imports the retained client declarations. The emitter replaces
+  // this entire directory; its marker prevents publishing untouched compiler inputs.
+  const generationMarker = `${KERNEL_CLIENT_OUTPUT.root}/.generation-pending`;
+  if (existsSync(safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.root)))
+    atomic(root, generationMarker, Buffer.from(source.run));
   const stage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
   const physicalRunId = process.env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
   const artifacts = stage && physicalRunId ? await import('./check-artifacts.ts') : undefined;
@@ -509,6 +513,8 @@ export async function withKernelClientOutput(
   try {
     code = await command();
     if (code !== 0) return code; // failed output can never become a successful tree receipt
+    if (existsSync(safeOutputTreePath(root, generationMarker)))
+      fail('client generation did not replace previous declarations');
     const bytes = encodeOutputTree(root, source);
     atomic(root, KERNEL_CLIENT_OUTPUT.transport, bytes);
     return code;
