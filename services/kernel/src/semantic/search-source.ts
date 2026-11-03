@@ -152,9 +152,13 @@ export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient)
   });
 }
 
-export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages & {
-  canonicalNames: SubjectCanonicalNames;
-} {
+export function subjectSource(
+  pool: Pool,
+  routeKey?: Uint8Array,
+): SubjectSource &
+  SubjectSourceKeyPages & {
+    canonicalNames: SubjectCanonicalNames;
+  } {
   const relations = relationSource(pool, routeKey);
   return {
     readSubjectKeyPage,

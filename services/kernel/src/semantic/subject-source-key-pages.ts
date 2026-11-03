@@ -37,10 +37,12 @@ export interface SubjectCanonicalNames {
     request: Readonly<{ partition: number; after: SubjectCanonicalNameKey | null; limit: number }>,
     expected: SubjectCanonicalPopulation,
     context: { deadline: number },
-  ): Promise<Readonly<{
-    home: SubjectCanonicalHome;
-    candidates: readonly (SubjectCanonicalNameKey & Readonly<{ securityRevision: number }>)[];
-  }>>;
+  ): Promise<
+    Readonly<{
+      home: SubjectCanonicalHome;
+      candidates: readonly (SubjectCanonicalNameKey & Readonly<{ securityRevision: number }>)[];
+    }>
+  >;
 }
 
 /** Current native name order, separate from the fixed-cut ID-key rebuild inventory below.
@@ -51,30 +53,37 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
   const source: SubjectCanonicalNames = {
     async observe({ deadline }) {
       requireAccessDeadline(deadline);
-      const result = await withConnection(pool, (connection) => deadlineClient(connection, deadline).query<{
-        partition: number;
-        generation: string;
-        epoch: number | null;
-        position: string | null;
-        state: string | null;
-      }>(
-        `SELECT population.partition_no AS partition,population.canonical_generation::text AS generation,
+      const result = await withConnection(pool, (connection) =>
+        deadlineClient(connection, deadline).query<{
+          partition: number;
+          generation: string;
+          epoch: number | null;
+          position: string | null;
+          state: string | null;
+        }>(
+          `SELECT population.partition_no AS partition,population.canonical_generation::text AS generation,
                 home.epoch,home.position::text,home.write_state AS state
          FROM semantic.partition_subjects population
          LEFT JOIN core.partition home ON home.partition_no=population.partition_no
          WHERE population.canonical_count>0 ORDER BY population.partition_no LIMIT 4097`,
-      ));
+        ),
+      );
       requireAccessDeadline(deadline);
       if (result.rows.length > 4096) throw new ProblemError('index_not_ready');
       const homes = result.rows.map((row, index): SubjectCanonicalHome => {
         if (row.epoch === null || row.position === null || row.state === null || row.state === 'moved')
           throw new ProblemError('partition_unavailable');
         if (
-          !Number.isInteger(row.partition) || row.partition < 0 || row.partition > 4095 ||
+          !Number.isInteger(row.partition) ||
+          row.partition < 0 ||
+          row.partition > 4095 ||
           (index > 0 && row.partition <= result.rows[index - 1]!.partition) ||
-          !Number.isSafeInteger(row.epoch) || row.epoch < 1 ||
-          !/^[1-9][0-9]*$/.test(row.generation) || !/^[0-9]+$/.test(row.position)
-        ) throw new ProblemError('index_not_ready');
+          !Number.isSafeInteger(row.epoch) ||
+          row.epoch < 1 ||
+          !/^[1-9][0-9]*$/.test(row.generation) ||
+          !/^[0-9]+$/.test(row.position)
+        )
+          throw new ProblemError('index_not_ready');
         return { partition: row.partition, generation: row.generation, epoch: row.epoch, position: row.position };
       });
       return { generation: createHash('sha256').update(JSON.stringify(homes)).digest('hex'), homes };
@@ -83,11 +92,23 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
       const { partition, limit } = request;
       const after = request.after === null ? null : { ...request.after };
       const expectedGeneration = expected.generation;
-      if (!Number.isInteger(partition) || partition < 0 || partition > 4095 ||
-          !Number.isInteger(limit) || limit < 1 || limit > 200)
+      if (
+        !Number.isInteger(partition) ||
+        partition < 0 ||
+        partition > 4095 ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 200
+      )
         throw new ProblemError('invalid_request');
-      if (after !== null && (routeOf(after.id) === null ||
-          !(after.name === null || (typeof after.name === 'string' && after.name.length <= 512 && after.name.isWellFormed()))))
+      if (
+        after !== null &&
+        (routeOf(after.id) === null ||
+          !(
+            after.name === null ||
+            (typeof after.name === 'string' && after.name.length <= 512 && after.name.isWellFormed())
+          ))
+      )
         throw new ProblemError('invalid_cursor');
       const current = await source.observe({ deadline });
       if (current.generation !== expectedGeneration) throw new ProblemError('search_restart_required');
@@ -106,24 +127,38 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
           const result = await client.query<{ id: string; name: string | null; securityRevision: string }>(
             `SELECT subject_id::text AS id,canonical_name AS name,security_revision::text AS "securityRevision"
              FROM semantic.subject WHERE route/16=$1
-             ${after ? `AND ROW(canonical_name IS NULL,COALESCE(canonical_name,'') COLLATE "C",subject_id)
-               > ROW($3::boolean,$4::text COLLATE "C",$5::uuid)` : ''}
+             ${
+               after
+                 ? `AND ROW(canonical_name IS NULL,COALESCE(canonical_name,'') COLLATE "C",subject_id)
+               > ROW($3::boolean,$4::text COLLATE "C",$5::uuid)`
+                 : ''
+             }
              ORDER BY (canonical_name IS NULL),COALESCE(canonical_name,'') COLLATE "C",subject_id LIMIT $2`,
             parameters,
           );
           const keys = result.rows.map((row) => {
             const securityRevision = Number(row.securityRevision);
-            if (routeOf(row.id) === null || partitionOf(routeOf(row.id)!) !== partition ||
-                !Number.isSafeInteger(securityRevision) || securityRevision < 0 ||
-                !(row.name === null || (typeof row.name === 'string' && row.name.length <= 512 && row.name.isWellFormed())))
+            if (
+              routeOf(row.id) === null ||
+              partitionOf(routeOf(row.id)!) !== partition ||
+              !Number.isSafeInteger(securityRevision) ||
+              securityRevision < 0 ||
+              !(
+                row.name === null ||
+                (typeof row.name === 'string' && row.name.length <= 512 && row.name.isWellFormed())
+              )
+            )
               throw new ProblemError('index_not_ready');
             return { ...row, securityRevision };
           });
           await client.query('COMMIT');
           return keys;
         } catch (error) {
-          try { await connection.query('ROLLBACK'); }
-          catch (rollback) { discardConnection(connection, rollback as Error); }
+          try {
+            await connection.query('ROLLBACK');
+          } catch (rollback) {
+            discardConnection(connection, rollback as Error);
+          }
           throw error;
         }
       });
