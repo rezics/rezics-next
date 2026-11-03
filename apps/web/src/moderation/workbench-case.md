@@ -63,7 +63,7 @@ recovery control or admitted workbench boundary. Pointer input, moved focus, dep
 that handoff. Refresh is explicit and remains disabled until the original resolution settles; uncertain recovery
 continues to use only the original frozen command and sender.
 
-## Remaining binding
+## Generated binding
 
 The report case page and typed return builder remain bound to their existing clients. The installed generated
 board/thread Appeals GET declares only `cursor`, `limit`, `appeals` and `next`; it lacks `inspect`, `selectedAppeal`,
@@ -76,7 +76,9 @@ session custody still need to be bound. No new native DTO or endpoint is authore
 Decision: retain the installed pending list and make exact inspection explicitly unavailable until generated composed
 inspection types arrive; keep the independent selection consumer ready without deriving selection from queue rows.
 
-The next binding must preserve actor/session/source provenance and the opaque native session header, project the
+Decision: regenerate the installed declarations from the integrated Content producer before binding inspection; keep native session tokens opaque inside the server adapter.
+
+The binding must preserve actor/session/source provenance and the opaque native session header, project the
 allowlisted appellant and current destination, retain exact pending/resolved status, and bind the original command.
 Native authorization remains authoritative at execution; `canResolve` is advice. Current context has no target body,
 and original evidence must never be relabelled as current content. Source delivery, installed declarations, executed
