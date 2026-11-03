@@ -28,6 +28,8 @@ export type SpaceDiscoveryTupleWitnessInput = Readonly<{
   producerGeneration: string;
   producerEpoch: string;
   sourcePosition: string;
+  /** Native publishers bind their released source snapshot again at installation. */
+  native?: Readonly<{ epoch: number; position: string }>;
   tuples: readonly SourceFenceTuple[];
   origin: SpaceDiscoveryInvalidation['origin'];
 }>;
@@ -116,6 +118,13 @@ function checkedInput(input: SpaceDiscoveryTupleWitnessInput): SpaceDiscoveryTup
     input.producerEpoch.length > 20 ||
     !decimal.test(input.sourcePosition) ||
     input.sourcePosition.length > 20 ||
+    (input.native !== undefined &&
+      (!Number.isInteger(input.native.epoch) ||
+        input.native.epoch < 1 ||
+        !decimal.test(input.native.position) ||
+        input.native.position.length > 20 ||
+        input.native.position !== input.sourcePosition ||
+        String(input.native.epoch) !== input.producerEpoch)) ||
     !Array.isArray(input.tuples) ||
     input.tuples.length > sourceTupleLimit
   )
@@ -239,6 +248,16 @@ export async function publishSpaceDiscoveryTupleWitness(
       },
     },
     async (tx) => {
+      if (input.native) {
+        const anchor = await readPartition(tx, partition);
+        if (
+          !anchor ||
+          anchor.writeState !== 'active' ||
+          anchor.epoch !== input.native.epoch ||
+          anchor.position.toString() !== input.native.position
+        )
+          throw new TypeError('Native Space tuple source changed before publication');
+      }
       const head = await currentHead(tx, route, input.spaceId);
       if (
         !head ||
