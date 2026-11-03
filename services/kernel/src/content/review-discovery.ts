@@ -330,12 +330,9 @@ async function readDependencies(
 
 type HomeObservation = Readonly<{ partition: number; epoch: number; position: bigint }>;
 type PopulationCut = Readonly<{ homes: readonly HomeObservation[]; frontier: bigint }>;
-type CutState = Readonly<{
-  position: bigint;
-  cut: PopulationCut | null;
-  status: 'ready' | 'preparing' | 'unavailable';
-  missing?: string;
-}>;
+type CutState =
+  | Readonly<{ position: bigint; cut: PopulationCut; status: 'ready' }>
+  | Readonly<{ position: bigint; cut: null; status: 'preparing' | 'unavailable'; missing: string }>;
 
 async function captureCut(
   client: PoolClient,
@@ -611,7 +608,7 @@ function indexHydrated(
   return withSourceVersion(value, sourceVersion(candidateValue, depHomes, cut));
 }
 
-function failedSourceError(state: CutState): never {
+function failedSourceError(state: Exclude<CutState, { status: 'ready' }>): never {
   throw new ReviewDiscoverySourceError(state.status, state.missing ?? 'native-population');
 }
 
@@ -635,7 +632,7 @@ export function createReviewDiscoverySource(
       context.deadline,
     );
     if (native.status === 'unavailable') throw new ReviewDiscoverySourceError('unavailable', native.missing);
-    if (native.state.status !== 'ready' || !native.state.cut) failedSourceError(native.state);
+    if (native.state.status !== 'ready') failedSourceError(native.state);
     const hydrated = new Map<string, VersionedReview>();
     for (const item of native.candidates) {
       const value = await hydrateCandidate(dependencies, context, item);
@@ -650,8 +647,7 @@ export function createReviewDiscoverySource(
       (client) => captureCut(client, partition, native.depSet.homes),
       context.deadline,
     );
-    if (finalState.status !== 'ready' || !finalState.cut)
-      throw new ReviewDiscoverySourceError(finalState.status, finalState.missing ?? 'native-population');
+    if (finalState.status !== 'ready') failedSourceError(finalState);
     if (!sameCut(native.state.cut, finalState.cut))
       throw new ReviewDiscoverySourceError('changed', 'eligibility-dependency');
     return { position: native.position, hydrated };
@@ -668,24 +664,36 @@ export function createReviewDiscoverySource(
     let frontier: ReviewDiscoveryPageKey | null = null;
     let previousCut: PopulationCut | null = null;
     if (after !== null) {
-      frontier = checkedFrontier(partition, after);
+      const checked = checkedFrontier(partition, after);
+      if (!checked) return failedPopulationPage(partition, 'unavailable', 'invalid-population-frontier');
+      frontier = checked;
       if (!('token' in after)) return failedPopulationPage(partition, 'preparing', 'population-cut');
-      const signed = verifyCut(after.token, partition, frontier, dependencies.tokens);
+      const signed = verifyCut(after.token, partition, checked, dependencies.tokens);
       if (!signed) return failedPopulationPage(partition, 'unavailable', 'invalid-population-cut');
       previousCut = cutFromToken(signed);
     }
     const context = checkedContext(makeAnonymousContext);
     const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
+    type NativePage =
+      | Readonly<{
+          state: 'ready';
+          position: bigint;
+          candidates: readonly Candidate[];
+          selected: readonly Candidate[];
+          depSet: DependencySet;
+          cut: PopulationCut;
+        }>
+      | Readonly<{ state: 'preparing' | 'changed' | 'unavailable'; missing: string; position: bigint }>;
     const native = await withReadTransaction(
       dependencies.pool,
-      async (client) => {
+      async (client): Promise<NativePage> => {
         if (previousCut) {
           const before = await captureCut(
             client,
             partition,
             previousCut.homes.map((home) => home.partition),
           );
-          if (before.status !== 'ready' || !before.cut) return { state: before.status, missing: before.missing, position: before.position };
+          if (before.status !== 'ready') return { state: before.status, missing: before.missing, position: before.position };
           if (!sameCut(previousCut, before.cut)) return { state: 'changed' as const, missing: 'population-cut', position: before.position };
         }
         const candidates = await populationCandidates(client, partition, frontier, candidateLimit + 1);
@@ -696,7 +704,7 @@ export function createReviewDiscoverySource(
         if (homes.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
           return { state: 'unavailable' as const, missing: 'dependency-home-bound', position: 0n };
         const state = await captureCut(client, partition, homes);
-        if (state.status !== 'ready' || !state.cut)
+        if (state.status !== 'ready')
           return { state: state.status, missing: state.missing, position: state.position };
         if (previousCut && !currentSubsetMatches(previousCut, state.cut))
           return { state: 'changed' as const, missing: 'population-cut', position: state.position };
@@ -730,7 +738,7 @@ export function createReviewDiscoverySource(
       (client) => captureCut(client, partition, native.cut.homes.map((home) => home.partition)),
       context.deadline,
     );
-    if (finalState.status !== 'ready' || !finalState.cut)
+    if (finalState.status !== 'ready')
       return failedPopulationPage(
         partition,
         finalState.status,

@@ -348,7 +348,7 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
   )!.statement;
   await probe.close();
   const raceObserver = observeSql(fixture.pool);
-  const barrier = raceObserver.hold({ statement: candidateStatement, boundary: 'after' });
+  const barrier = raceObserver.hold({ statement: candidateStatement }, 'after');
   const pendingPage = source.pageWithCut!(partition, null, 1);
   await barrier.entered;
   const closed = await subjectGate(hiddenSubject, 'hidden');
