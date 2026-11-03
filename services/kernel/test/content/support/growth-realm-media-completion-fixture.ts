@@ -25,7 +25,8 @@ export type Selection = Readonly<{
 }>;
 // Encode once; every selected request and both axes use these same real image bytes.
 export const bytes = await sharp({ create: { width: 96, height: 48, channels: 3, background: '#123456' } })
-  .png().toBuffer();
+  .png()
+  .toBuffer();
 export const sha256 = createHash('sha256').update(bytes).digest('hex');
 
 export async function completionFixture() {
@@ -56,9 +57,18 @@ export async function completionFixture() {
 
   async function reserve(purpose: Selection['purpose'] = 'realm-icon'): Promise<Selection> {
     const reservationRequestId = crypto.randomUUID();
-    const result = await base.checked('POST', `/v1/realms/${realmId}/media`, {
-      purpose, mediaType: 'image/png', byteCount: bytes.length, sha256,
-    }, 201, { bearer: base.alice.bearer, key: reservationRequestId });
+    const result = await base.checked(
+      'POST',
+      `/v1/realms/${realmId}/media`,
+      {
+        purpose,
+        mediaType: 'image/png',
+        byteCount: bytes.length,
+        sha256,
+      },
+      201,
+      { bearer: base.alice.bearer, key: reservationRequestId },
+    );
     const id = result.media.id as string;
     expect(routeOf(id)).toBe(route);
     await store.putOriginal(id, bytes);
@@ -66,12 +76,21 @@ export async function completionFixture() {
     return { id, realmId, purpose, reservationRequestId, completionKey: crypto.randomUUID() };
   }
   function input(selected: Selection) {
-    return { containerId: selected.realmId, reservationRequestId: selected.reservationRequestId,
-      byteCount: bytes.length, sha256 };
+    return {
+      containerId: selected.realmId,
+      reservationRequestId: selected.reservationRequestId,
+      byteCount: bytes.length,
+      sha256,
+    };
   }
-  function complete(selected: Selection, options: {
-    bearer?: string; key?: string; body?: Record<string, unknown>;
-  } = {}) {
+  function complete(
+    selected: Selection,
+    options: {
+      bearer?: string;
+      key?: string;
+      body?: Record<string, unknown>;
+    } = {},
+  ) {
     return base.call('POST', `/v1/media/${selected.id}:complete`, {
       bearer: options.bearer ?? base.alice.websiteBearer,
       key: options.key ?? selected.completionKey,
@@ -85,7 +104,8 @@ export async function completionFixture() {
               transaction_id::text,claimed_at,claimed_realm_id,
               (SELECT count(*)::integer FROM content.media_variant v
                 WHERE v.route=m.route AND v.media_id=m.media_id) AS variants
-         FROM content.media m WHERE route=$1 AND media_id=$2`, [route, selected.id],
+         FROM content.media m WHERE route=$1 AND media_id=$2`,
+      [route, selected.id],
     );
     const receipts = await base.db.admin.query(
       `SELECT principal_kind,principal_id::text,command_kind,idempotency_key,
@@ -103,21 +123,38 @@ export async function completionFixture() {
   }
   async function assertState(selected: Selection, uploaded: boolean) {
     const state = await snapshot(selected);
-    expect(state.media).toMatchObject({ container_id: realmId, uploader_id: base.alice.accountId,
-      reservation_request_id: selected.reservationRequestId, purpose: selected.purpose,
-      media_type: 'image/png', byte_count: bytes.length, declared_sha256: sha256,
-      actual_byte_count: uploaded ? bytes.length : null, sha256: uploaded ? sha256 : null,
-      state: uploaded ? 'uploaded' : 'reserved', variants: 0, claimed_at: null, claimed_realm_id: null });
+    expect(state.media).toMatchObject({
+      container_id: realmId,
+      uploader_id: base.alice.accountId,
+      reservation_request_id: selected.reservationRequestId,
+      purpose: selected.purpose,
+      media_type: 'image/png',
+      byte_count: bytes.length,
+      declared_sha256: sha256,
+      actual_byte_count: uploaded ? bytes.length : null,
+      sha256: uploaded ? sha256 : null,
+      state: uploaded ? 'uploaded' : 'reserved',
+      variants: 0,
+      claimed_at: null,
+      claimed_realm_id: null,
+    });
     expect(state.receipts).toHaveLength(uploaded ? 1 : 0);
     expect(state.events).toHaveLength(uploaded ? 1 : 0);
     if (uploaded) {
-      expect(state.receipts[0]).toMatchObject({ principal_kind: 'account', principal_id: base.alice.accountId,
-        command_kind: 'content.media.complete', transaction_id: state.media.transaction_id,
-        response: { mediaId: selected.id, state: 'uploaded' } });
+      expect(state.receipts[0]).toMatchObject({
+        principal_kind: 'account',
+        principal_id: base.alice.accountId,
+        command_kind: 'content.media.complete',
+        transaction_id: state.media.transaction_id,
+        response: { mediaId: selected.id, state: 'uploaded' },
+      });
       expect(state.receipts[0].digest).toMatch(/^[a-f0-9]{64}$/);
-      expect(state.events[0]).toMatchObject({ transaction_id: state.media.transaction_id,
-        epoch: state.receipts[0].epoch, position: state.receipts[0].position,
-        data: { mediaId: selected.id, containerId: realmId, actorId: base.alice.accountId } });
+      expect(state.events[0]).toMatchObject({
+        transaction_id: state.media.transaction_id,
+        epoch: state.receipts[0].epoch,
+        position: state.receipts[0].position,
+        data: { mediaId: selected.id, containerId: realmId, actorId: base.alice.accountId },
+      });
     }
     return state;
   }
@@ -125,49 +162,104 @@ export async function completionFixture() {
   const pressureIds: string[] = [];
   let cohort = '';
   function population(axis: Axis): Population {
-    return { name: `${prefix}-${axis}`, hotPartition: partition, hotShare: 1,
+    return {
+      name: `${prefix}-${axis}`,
+      hotPartition: partition,
+      hotShare: 1,
       rows({ ordinal }) {
         const id = newId(route);
         pressureIds.push(id);
         const transaction_id = id;
-        if (axis === 'population') return {
-          'content.media': [{ route, media_id: id, container_id: pressureRealm,
-            uploader_id: base.alice.accountId, reservation_request_id: `${cohort}-${ordinal}`,
-            purpose: ordinal % 2 ? 'realm-icon' : 'realm-banner', media_type: 'image/png',
-            byte_count: bytes.length, declared_sha256: sha256, state: 'reserved',
-            key: `m/${id}/original`, transaction_id, created_at: '2025-01-01T00:00:00Z' }],
-        };
+        if (axis === 'population')
+          return {
+            'content.media': [
+              {
+                route,
+                media_id: id,
+                container_id: pressureRealm,
+                uploader_id: base.alice.accountId,
+                reservation_request_id: `${cohort}-${ordinal}`,
+                purpose: ordinal % 2 ? 'realm-icon' : 'realm-banner',
+                media_type: 'image/png',
+                byte_count: bytes.length,
+                declared_sha256: sha256,
+                state: 'reserved',
+                key: `m/${id}/original`,
+                transaction_id,
+                created_at: '2025-01-01T00:00:00Z',
+              },
+            ],
+          };
         const start = new Date(Date.UTC(2000, 0, 1) + historyOrdinal++ * 2000).toISOString();
         const end = new Date(Date.parse(start) + 1000).toISOString();
         return {
-          'community.realm_revision': [{ route, realm_id: pressureRealm, revision_id: id,
-            predecessor: pressureHead, title: `Retained history ${ordinal}`, summary: 'Unrelated retained revision',
-            visibility: 'protected', context_id: '00000000-0000-8000-8000-000000000000',
-            author: base.alice.accountId, created_at: start, votes: { upvote: 1, downvote: -1 } }],
-          'access.resource_grant': [{ route, resource_id: pressureRealm, subject_id: base.alice.accountId,
-            subject_role: '', subject_kind: 'identity', action: 'realm:manage',
-            valid: `[${start},${end})`, transaction_id }],
-          'core.receipt': [{ partition_no: partition, principal_kind: 'account', principal_id: base.alice.accountId,
-            command_kind: 'content.media.complete', idempotency_key: `${cohort}-${ordinal}`,
-            request_digest: Buffer.alloc(32, 7), epoch: 1, position: 0, transaction_id, response: {} }],
+          'community.realm_revision': [
+            {
+              route,
+              realm_id: pressureRealm,
+              revision_id: id,
+              predecessor: pressureHead,
+              title: `Retained history ${ordinal}`,
+              summary: 'Unrelated retained revision',
+              visibility: 'protected',
+              context_id: '00000000-0000-8000-8000-000000000000',
+              author: base.alice.accountId,
+              created_at: start,
+              votes: { upvote: 1, downvote: -1 },
+            },
+          ],
+          'access.resource_grant': [
+            {
+              route,
+              resource_id: pressureRealm,
+              subject_id: base.alice.accountId,
+              subject_role: '',
+              subject_kind: 'identity',
+              action: 'realm:manage',
+              valid: `[${start},${end})`,
+              transaction_id,
+            },
+          ],
+          'core.receipt': [
+            {
+              partition_no: partition,
+              principal_kind: 'account',
+              principal_id: base.alice.accountId,
+              command_kind: 'content.media.complete',
+              idempotency_key: `${cohort}-${ordinal}`,
+              request_digest: Buffer.alloc(32, 7),
+              epoch: 1,
+              position: 0,
+              transaction_id,
+              response: {},
+            },
+          ],
         };
-      } };
+      },
+    };
   }
   let historyOrdinal = 0;
   async function grow(axis: Axis, scale: number, previous: number) {
     // Retain completed cohorts as a fixed background for the next series; immutable history is never deleted.
-    if (previous === 0) { cohort = `${prefix}-${crypto.randomUUID()}`; pressureIds.length = 0; }
+    if (previous === 0) {
+      cohort = `${prefix}-${crypto.randomUUID()}`;
+      pressureIds.length = 0;
+    }
     await seed(base.db, population(axis), { from: previous, to: scale });
-    const relations = axis === 'population' ? ['content.media'] :
-      ['community.realm_revision', 'access.resource_grant', 'core.receipt'];
+    const relations =
+      axis === 'population' ? ['content.media'] : ['community.realm_revision', 'access.resource_grant', 'core.receipt'];
     for (const relation of relations) {
-      const predicate = relation === 'content.media' ? 'media_id=ANY($2::uuid[])' :
-        relation === 'community.realm_revision' ? 'revision_id=ANY($2::uuid[])' :
-        relation === 'access.resource_grant' ? 'transaction_id=ANY($2::uuid[])' : 'idempotency_key LIKE $2';
+      const predicate =
+        relation === 'content.media'
+          ? 'media_id=ANY($2::uuid[])'
+          : relation === 'community.realm_revision'
+            ? 'revision_id=ANY($2::uuid[])'
+            : relation === 'access.resource_grant'
+              ? 'transaction_id=ANY($2::uuid[])'
+              : 'idempotency_key LIKE $2';
       const result = await base.db.admin.query(
         `SELECT count(*)::integer AS count FROM ${relation} WHERE ${relation === 'core.receipt' ? 'partition_no' : 'route'}=$1 AND ${predicate}`,
-        [relation === 'core.receipt' ? partition : route,
-          relation === 'core.receipt' ? `${cohort}%` : pressureIds],
+        [relation === 'core.receipt' ? partition : route, relation === 'core.receipt' ? `${cohort}%` : pressureIds],
       );
       expect(result.rows[0].count).toBe(scale);
     }
@@ -175,18 +267,30 @@ export async function completionFixture() {
   async function startPublication() {
     // Auth provisioning belongs to this fixture; release its in-process executor before registering Content.
     await DBOS.shutdown({ deregister: true });
-    runtime = await composeNativeCollectionRuntime({ databaseUrl: base.db.url, pool: base.db.pool,
-      routeKey: testRouteKey(), partitions: [partition], store, clock: () => new Date() });
+    runtime = await composeNativeCollectionRuntime({
+      databaseUrl: base.db.url,
+      pool: base.db.pool,
+      routeKey: testRouteKey(),
+      partitions: [partition],
+      store,
+      clock: () => new Date(),
+    });
     // Drain the fixed setup prefix before measuring a fresh publication. No preselected future upload exists.
     const prior = await base.db.admin.query(
       `SELECT epoch,position::text,event_seq FROM core.outbox WHERE partition_no=$1
-        AND type='com.rezics.content.media.uploaded.v1' ORDER BY position,event_seq`, [partition],
+        AND type='com.rezics.content.media.uploaded.v1' ORDER BY position,event_seq`,
+      [partition],
     );
     if (prior.rows.length) {
       await runtime.relayThrough(partition, BigInt(prior.rows.at(-1)!.position));
       for (const row of prior.rows) {
-        const ids = imageWorkflowIds({ partition, epoch: row.epoch, position: BigInt(row.position),
-          eventSeq: row.event_seq, type: 'com.rezics.content.media.uploaded.v1' });
+        const ids = imageWorkflowIds({
+          partition,
+          epoch: row.epoch,
+          position: BigInt(row.position),
+          eventSeq: row.event_seq,
+          type: 'com.rezics.content.media.uploaded.v1',
+        });
         await runtime.client.retrieveWorkflow(ids.effect).getResult();
         await runtime.client.retrieveWorkflow(ids.image).getResult();
       }
@@ -205,20 +309,51 @@ export async function completionFixture() {
     expect(state.media.variants).toBeGreaterThan(0);
     expect(state.media.variants).toBeLessThanOrEqual(12);
     expect(store.inspect(`m/${selected.id}/`).length).toBe(state.media.variants + 1);
-    const workflows = await Promise.all([runtime.client.getWorkflow(ids.effect), runtime.client.getWorkflow(ids.image)]);
+    const workflows = await Promise.all([
+      runtime.client.getWorkflow(ids.effect),
+      runtime.client.getWorkflow(ids.image),
+    ]);
     expect(workflows.map((workflow) => workflow?.status)).toEqual(['SUCCESS', 'SUCCESS']);
     const original = store.objects.get(`m/${selected.id}/original`);
     expect(original).toEqual(bytes);
-    return { workflows: workflows.filter((workflow) => workflow?.status === 'SUCCESS').length,
-      originals: original!.byteLength, variants: state.media.variants };
+    return {
+      workflows: workflows.filter((workflow) => workflow?.status === 'SUCCESS').length,
+      originals: original!.byteLength,
+      variants: state.media.variants,
+    };
   }
-  return { base, realmId, route, partition, reserve, input, complete, snapshot, assertState, grow,
-    startPublication, publish,
-    async close() { try { await runtime?.close(); } finally { store.close(); await base.close(); } } };
+  return {
+    base,
+    realmId,
+    route,
+    partition,
+    reserve,
+    input,
+    complete,
+    snapshot,
+    assertState,
+    grow,
+    startPublication,
+    publish,
+    async close() {
+      try {
+        await runtime?.close();
+      } finally {
+        store.close();
+        await base.close();
+      }
+    },
+  };
 }
 
 export function recordObservations(report: GrowthReport) {
   // Machine-readable stdout is retained by the owning check runner, never committed as an evidence file.
-  console.log('REALM_COMPLETION_GROWTH', JSON.stringify({ revision: execFileSync('git', ['rev-parse', 'HEAD'],
-    { encoding: 'utf8' }).trim(), image: { bytes: bytes.length, sha256 }, ...report }));
+  console.log(
+    'REALM_COMPLETION_GROWTH',
+    JSON.stringify({
+      revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      image: { bytes: bytes.length, sha256 },
+      ...report,
+    }),
+  );
 }
