@@ -39,12 +39,13 @@ in-flight response or queued command is reused. A successful current command upd
 Zone result from its admitted intent, so it does not add another own-reaction read in the same admission. The public
 counts request remains independent of reaction count, and server rendering performs no private own-reaction read.
 
-Callers may supply an optional native source watermark to the same engine. Thread/post point reads retain their native
+Callers may supply an optional native source watermark to the same engine. Point reads retain their generated native
 `reactionsAsOf`; a missing/null or older projection cannot settle that command. Recovery then retries the
 point read without replaying a known receipt. Source watermark replacement retires the caller like target or
 session replacement. Other installed callers retain their existing settlement contract when no source watermark
 operand is supplied.
 Home's generated publication must install its page watermark before that caller can bind this operand.
+The installed post declaration also lacks its point-read watermark; that projection remains unavailable until publication.
 
 Cost is one constant-size identity/revision observer per mounted caller and constant work per relevant cache event
 or queued choice. Recovery retains one intent. Ordinary writes keep their one-request bound; each explicit recovery

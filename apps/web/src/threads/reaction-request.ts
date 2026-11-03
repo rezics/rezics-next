@@ -188,7 +188,7 @@ export async function readReactionRequest(
       ok: true,
       counts,
       value: value as ReactionKind | null,
-      ...(input.target === 'subject' ? {} : { reactionsAsOf }),
+      ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),
     };
   } catch (error) {
     return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
