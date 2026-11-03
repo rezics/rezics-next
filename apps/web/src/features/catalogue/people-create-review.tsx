@@ -97,7 +97,11 @@ export function PeopleCreateReview({
     public: { related: {}, subject: { type: item.type } },
   };
   const languages = [
-    ...new Set([...Object.keys(item.labels), ...Object.keys(item.descriptions ?? {}), ...Object.keys(item.aliases ?? {})]),
+    ...new Set([
+      ...Object.keys(item.labels),
+      ...Object.keys(item.descriptions ?? {}),
+      ...Object.keys(item.aliases ?? {}),
+    ]),
   ];
   return (
     <section
@@ -145,12 +149,7 @@ export function PeopleCreateReview({
                 {item.aliases[language]!.join(' · ')}
               </p>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              className={wrap}
-              onClick={() => onJump(`create-label-${index}`)}
-            >
+            <Button type="button" variant="outline" className={wrap} onClick={() => onJump(`create-label-${index}`)}>
               {m.people_profile_review_open({}, o)}
             </Button>
           </ContentItemFrame>

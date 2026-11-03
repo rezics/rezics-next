@@ -149,12 +149,7 @@ function CreateSubjectFormLive({
     href?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
-    fields: (
-      type: string,
-      disabled: boolean,
-      canEdit: () => boolean,
-      invalidate?: () => void,
-    ) => ReactNode;
+    fields: (type: string, disabled: boolean, canEdit: () => boolean, invalidate?: () => void) => ReactNode;
     prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
     /** Opt-in whole-item review before sealing. Default callers skip this and submit immediately. */
     review?: (state: { item: InitialSubject; stale: boolean }) => ReactNode;

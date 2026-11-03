@@ -70,7 +70,9 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
   }
   async function choose(type: string) {
     await waitFor(() => expect(canvas().getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined());
-    await act(async () => user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), type));
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), type),
+    );
   }
   async function add(fixture: ReturnType<typeof peopleProfileFixture>, property: string) {
     await act(async () => user.click(canvas().getByRole('button', { name: addName(fixture, property) })));
@@ -109,7 +111,9 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
       />,
     );
     await choose('schema:Person');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed person'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed person'),
+    );
     await add(fixture, 'schema:url');
     await add(fixture, 'schema:sameAs');
     await fillUrl('schema:url', 'https://example.org/person', 'https://example.org/person-source');
@@ -159,7 +163,9 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
       />,
     );
     await choose('schema:Person');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept person'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept person'),
+    );
     await add(switched, 'schema:url');
     await fillUrl('schema:url', 'https://example.org/person-draft', 'https://example.org/person-cite');
     await choose('schema:Organization');
@@ -185,7 +191,9 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
           return {
             ok: false as const,
             reason: 'invalid' as const,
-            errors: [{ pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' }],
+            errors: [
+              { pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' },
+            ],
           };
         return repaired.transport.create(command);
       },
@@ -201,7 +209,9 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
       />,
     );
     await choose('schema:Person');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'),
+    );
     await add(repaired, 'schema:url');
     await add(repaired, 'schema:sameAs');
     await fillUrl('schema:url', 'https://example.org/url', 'https://example.org/bad');
@@ -209,12 +219,18 @@ test('People creation reviews grouped evidence, copies references, and keeps typ
     const sameId = citation('schema:sameAs').id;
     await confirm();
     const link = await waitFor(() =>
-      canvas().getByRole('link', { name: new RegExp(definitionText(repaired.release.properties['schema:url']?.labels, 'en').text) }),
+      canvas().getByRole('link', {
+        name: new RegExp(definitionText(repaired.release.properties['schema:url']?.labels, 'en').text),
+      }),
     );
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).toBe(citation('schema:url').id);
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(sameId);
-    await act(async () => user.click(within(row('schema:url')).getByRole('button', { name: m.people_profile_remove_fact() })));
-    await act(async () => user.click(within(row('schema:url')).getByRole('button', { name: m.people_profile_remove_fact() })));
+    await act(async () =>
+      user.click(within(row('schema:url')).getByRole('button', { name: m.people_profile_remove_fact() })),
+    );
+    await act(async () =>
+      user.click(within(row('schema:url')).getByRole('button', { name: m.people_profile_remove_fact() })),
+    );
     expect(row('schema:url')).toBeNull();
     expect(citation('schema:sameAs').id).toBe(sameId);
     await confirm();

@@ -14,12 +14,7 @@ import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import type { CreateResult } from './create-subject';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import {
-  peopleBiographyGroups,
-  peopleScalarFields,
-  type PeopleRead,
-  type PeopleTransport,
-} from './people-profile';
+import { peopleBiographyGroups, peopleScalarFields, type PeopleRead, type PeopleTransport } from './people-profile';
 import { PeopleCreate } from './people-create';
 import { PeopleBiographyGroups } from './people-biography/groups';
 import {

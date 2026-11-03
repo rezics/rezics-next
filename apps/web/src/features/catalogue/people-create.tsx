@@ -311,8 +311,7 @@ export function PeopleCreate({
   ) {
     const key = JSON.stringify([type, property]);
     if (!lifetime.active() || !canEdit() || rowIds.current.get(key) !== id) return;
-    if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property))
-      return;
+    if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property)) return;
     const updatedId = change ? rowId(type, property) : undefined;
     if (!change) rowIds.current.delete(key);
     setDrafts((previous) => {
@@ -424,13 +423,7 @@ export function PeopleCreate({
             return { item, errors };
           },
           review: ({ item, stale }) => (
-            <PeopleCreateReview
-              item={item as PeopleItem}
-              read={read}
-              locale={locale}
-              stale={stale}
-              onJump={jump}
-            />
+            <PeopleCreateReview item={item as PeopleItem} read={read} locale={locale} stale={stale} onJump={jump} />
           ),
           fields: (type, disabled, canEdit, invalidate) => {
             const fields = drafts[type] ?? {};
@@ -529,5 +522,3 @@ export function PeopleCreate({
     </section>
   );
 }
-
-

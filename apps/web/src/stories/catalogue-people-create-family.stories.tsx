@@ -180,9 +180,10 @@ async function setValue(root: HTMLElement, property: string, text: string) {
   return input;
 }
 function citation(root: HTMLElement, property: string) {
-  return within(
-    within(fact(root, property)).getByRole('group', { name: `${m.correction_references()} 1` }),
-  ).getByRole('textbox', { name: m.correction_url() });
+  return within(within(fact(root, property)).getByRole('group', { name: `${m.correction_references()} 1` })).getByRole(
+    'textbox',
+    { name: m.correction_url() },
+  );
 }
 async function confirm(root: HTMLElement) {
   await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_submit() }));
@@ -286,9 +287,9 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
   await userEvent.click(within(same).getByRole('button', { name: m.people_profile_remove_fact() }));
   await expect(fact(root, 'schema:sameAs')).toBeNull();
   await add(root, 'schema:sameAs', long);
-  await expect(within(fact(root, 'schema:sameAs')).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
-    '',
-  );
+  await expect(
+    within(fact(root, 'schema:sameAs')).getAllByRole('textbox', { name: m.correction_url() })[0],
+  ).toHaveValue('');
   await setValue(root, 'schema:sameAs', longUrl);
   await expect(
     within(section).queryByRole('button', { name: m.people_profile_add_fact({ field: releasedName('schema:image') }) }),

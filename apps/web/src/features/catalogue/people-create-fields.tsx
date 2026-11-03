@@ -7,7 +7,13 @@ import { EditorFailure, PartValue, StatementFields, type StatementFieldsRead } f
 import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
 import { emptyCreationStatement, type StatementInput } from './statement-editor';
 import { ReferenceReusePanel } from './reference-reuse-view';
-import { captureReuse, cloneReferenceGroup, type ReuseCapture, type ReuseRefusal, type ReuseSource } from './reference-reuse';
+import {
+  captureReuse,
+  cloneReferenceGroup,
+  type ReuseCapture,
+  type ReuseRefusal,
+  type ReuseSource,
+} from './reference-reuse';
 import type { FactDraft } from './subject-facts';
 import type { PeopleRead } from './people-profile';
 import { peopleCreateFactsRead } from './people-create-model';
