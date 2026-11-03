@@ -1,35 +1,38 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/appeal-review-page*.ts",
-    "services/kernel/src/content/appeal-review-page*.sql",
-    "services/kernel/src/content/appeals.ts",
-    "services/kernel/src/content/appeal-routes.ts",
-    "services/kernel/src/content/register.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/*appeal-review-page*.ts",
-    "services/kernel/test/content/support/*appeal-review-page*.ts"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "9957bed4-f47e-463a-ab3a-c65e7f80aabf",
-    "70cd2a89-afd1-437c-ba19-d9ebe380cc19",
-    "29d1ca61-bc34-463a-a1d3-5d70ca19409d"
-  ],
-  "estimate": { "lines": 500, "files": 5 },
-  "acceptance": [
-    "Use the supported complete-input declaration/OpenAPI/root-export producer; the installed client must declare inspect, selectedAppeal and the current closed identity, destination, resolution and provenance variants without handwritten generated edits.",
-    "The existing Web receiver can inspect and resolve a permitted selected case, read its retained terminal result and retry an uncertain command with its original key; replacement Authorization headers retire in-flight reads even within one account and client.",
-    "Keep original-decider refusal, current account/client/delegator/session and authority checks, concurrent resolution, target concealment/erasure, both complete identity rounds and ordinary Board/thread disclosure native.",
-    "Hand the Web receiver the installed factory and methods, source/generated heads and actual populated, terminal, concealed, unavailable and retry results. Compiler or setup failure establishes zero native cases.",
-    "The controller retains the original independent growth histories, native handles, all-pool accounting, strict routed-prefix/residual plans and broader integration/browser acceptance. Run only the scoped worker typecheck and changed focused tests under the current landing policy."
-  ],
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/appeal-review-page*.ts',
+      'services/kernel/src/content/appeal-review-page*.sql',
+      'services/kernel/src/content/appeals.ts',
+      'services/kernel/src/content/appeal-routes.ts',
+      'services/kernel/src/content/register.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/*appeal-review-page*.ts',
+      'services/kernel/test/content/support/*appeal-review-page*.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after':
+    [
+      '9957bed4-f47e-463a-ab3a-c65e7f80aabf',
+      '70cd2a89-afd1-437c-ba19-d9ebe380cc19',
+      '29d1ca61-bc34-463a-a1d3-5d70ca19409d',
+    ],
+  'estimate': { 'lines': 500, 'files': 5 },
+  'acceptance':
+    [
+      'Use the supported complete-input declaration/OpenAPI/root-export producer; the installed client must declare inspect, selectedAppeal and the current closed identity, destination, resolution and provenance variants without handwritten generated edits.',
+      'The existing Web receiver can inspect and resolve a permitted selected case, read its retained terminal result and retry an uncertain command with its original key; replacement Authorization headers retire in-flight reads even within one account and client.',
+      'Keep original-decider refusal, current account/client/delegator/session and authority checks, concurrent resolution, target concealment/erasure, both complete identity rounds and ordinary Board/thread disclosure native.',
+      'Hand the Web receiver the installed factory and methods, source/generated heads and actual populated, terminal, concealed, unavailable and retry results. Compiler or setup failure establishes zero native cases.',
+      'The controller retains the original independent growth histories, native handles, all-pool accounting, strict routed-prefix/residual plans and broader integration/browser acceptance. Run only the scoped worker typecheck and changed focused tests under the current landing policy.',
+    ],
+  'inseparable': true,
 }
 ---
 
