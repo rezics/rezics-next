@@ -31,12 +31,17 @@ export type FollowingSpaceTargetDependencies = Readonly<{
 }>;
 
 type Snapshot = Awaited<ReturnType<typeof followingTargets.run>>[number];
+type KeyedSnapshot = Snapshot & { space_id: string };
 type ViewerResult = Awaited<ReturnType<typeof readViewerActions>>['resources'][number];
 type ViewerSuccess = Extract<ViewerResult, { viewerActions: readonly unknown[] }>;
 type Group = Readonly<{ spaceId: string; refs: readonly Readonly<{ type: string; id: string }>[] }>;
 
 function key(type: string, id: string) {
   return `${type}/${id}`;
+}
+
+function hasSpaceId(snapshot: Snapshot): snapshot is KeyedSnapshot {
+  return typeof snapshot.space_id === 'string';
 }
 
 function sameSpace(current: Snapshot | undefined, expected: Snapshot): boolean {
@@ -61,7 +66,7 @@ async function pageSnapshot(
   client: Parameters<ViewerActionResource['read']>[0],
   ids: readonly string[],
   at: string,
-): Promise<Map<string, Snapshot>> {
+): Promise<Map<string, KeyedSnapshot>> {
   const selected = ids.flatMap((id) => {
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
@@ -72,12 +77,12 @@ async function pageSnapshot(
     ids: selected.map(({ id }) => id),
     at,
   });
-  return new Map(rows.map((row) => [row.space_id, row]));
+  return new Map(rows.filter(hasSpaceId).map((row) => [row.space_id, row]));
 }
 
 function spaceResource(
   base: ViewerActionResource,
-  expected: ReadonlyMap<string, Snapshot>,
+  expected: ReadonlyMap<string, KeyedSnapshot>,
   activeAddressClaims: Set<string>,
 ): ViewerActionResource {
   return {
@@ -85,9 +90,7 @@ function spaceResource(
     async prepare(input) {
       const selected = input.ids.flatMap((spaceId) => {
         const snapshot = expected.get(spaceId);
-        return snapshot?.address === null || snapshot?.address === undefined
-          ? []
-          : [{ spaceId, address: snapshot.address }];
+        return typeof snapshot?.address === 'string' ? [{ spaceId, address: snapshot.address }] : [];
       });
       const claims = await withConnection(input.pool, (connection) =>
         readActiveSpaceAddressClaims(deadlineClient(connection, input.deadline), selected),
@@ -110,7 +113,7 @@ function spaceResource(
 
 function realmResource(
   base: ViewerActionResource,
-  expectedByRealm: ReadonlyMap<string, Snapshot>,
+  expectedByRealm: ReadonlyMap<string, KeyedSnapshot>,
 ): ViewerActionResource {
   return {
     ...base,
@@ -175,7 +178,7 @@ export async function followingSpaceTargets(
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
   });
-  const snapshots = new Map<string, Snapshot>();
+  const snapshots = new Map<string, KeyedSnapshot>();
   if (valid.length) {
     const at = dependencies.clock().toISOString();
     const rows = await withConnection(dependencies.pool, (connection) =>
@@ -185,10 +188,10 @@ export async function followingSpaceTargets(
         at,
       }),
     );
-    for (const row of rows) snapshots.set(row.space_id, row);
+    for (const row of rows) if (hasSpaceId(row)) snapshots.set(row.space_id, row);
   }
 
-  const expectedByRealm = new Map<string, Snapshot>();
+  const expectedByRealm = new Map<string, KeyedSnapshot>();
   const addressedGroups: Group[] = [];
   const unsupportedGroups: Group[] = [];
   const realmGroups: Group[] = [];
@@ -254,7 +257,7 @@ export async function followingSpaceTargets(
     const snapshot = snapshots.get(spaceId);
     const spaceResult = actionResults.get(key(SPACE_RESOURCE, spaceId));
     const readable = snapshot !== undefined && success(spaceResult);
-    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title } : null;
+    const target = readable && snapshot.title !== null ? { id: spaceId, type: 'space' as const, label: snapshot.title } : null;
     let destination: FollowingSpaceDestination = { kind: 'unavailable' };
     let actions: FollowingSpaceActions = { status: 'unavailable' };
     if (readable && snapshot.address !== null) {
