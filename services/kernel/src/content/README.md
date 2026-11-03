@@ -440,7 +440,6 @@ The exact reader also withholds an erased decider's expired statement even if th
 decision metadata remains readable with an empty statement. This guard does not expire other retained reasons.
 Responses are private/no-store and the history is not a public feed or search source.
 
-
 ### Cost: board action and command replay
 
 - Touches: `moderationRoutes` → `takedown` → `mutateContentPoint` → `prepareAuthorizedPoint` /
