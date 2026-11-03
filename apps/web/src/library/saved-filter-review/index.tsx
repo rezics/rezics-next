@@ -4,7 +4,6 @@ import { collectionFacetRequest, loadCollectionFacetValues, type CollectionFacet
 import { RuleEditLink } from '../saved-query-results';
 import { useCollectionOwnerCurrent } from '../collection-owner-current';
 import { requestLanguages } from '../../kernel/languages';
-import { operationIsAdmitted } from '../../kernel/exposure';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import {
@@ -26,7 +25,8 @@ export type SavedFilterReviewScope = {
 
 type ReviewAuthority = {
   subject: string | null;
-  admitted: readonly string[];
+  admitted: boolean;
+  isCurrent: () => boolean;
   generation: number;
   lifetime: string;
   isOwnerCurrent: () => boolean;
@@ -115,12 +115,13 @@ export function SavedFilterReviewPanel({
   const valueSequence = useRef(0);
   const [state, setState] = useState<PanelState>({ phase: 'closed', binding: '' });
   const [values, setValues] = useState<ValueState>({ phase: 'idle', binding: '', labels: emptyLabels() });
-  const shown = state.binding === binding ? state : ({ phase: 'closed', binding } as const);
+  const shown: PanelState = state.binding === binding ? state : { phase: 'closed', binding };
   const shownValues = values.binding === binding ? values : ({ phase: 'idle', binding, labels: emptyLabels() } as const);
   const authorized =
     scope.viewerId === scope.ownerId &&
     authority.subject === scope.viewerId &&
-    operationIsAdmitted('collection.get', authority.admitted) &&
+    authority.admitted &&
+    authority.isCurrent() &&
     authority.isOwnerCurrent();
   const expanded = shown.phase !== 'closed';
   const panelId = 'saved-filter-review-' + scope.id.replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -144,7 +145,8 @@ export function SavedFilterReviewPanel({
       bindingRef.current === expectedBinding &&
       (kind === 'read' ? readSequence.current : valueSequence.current) === sequence &&
       authorityRef.current.subject === scopeRef.current.viewerId &&
-      operationIsAdmitted('collection.get', authorityRef.current.admitted) &&
+      authorityRef.current.admitted &&
+      authorityRef.current.isCurrent() &&
       authorityRef.current.isOwnerCurrent()
     );
   }

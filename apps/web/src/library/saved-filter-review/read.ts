@@ -82,7 +82,7 @@ export async function loadSavedFilterReview(
     const collection = collectionResponse.data.collection;
     if (
       collection.membershipKind !== 'dynamic' ||
-      collection.builtinKind ||
+      ('builtinKind' in collection && collection.builtinKind) ||
       collection.curatorAccountId !== viewerId
     )
       return { state: 'denied' };

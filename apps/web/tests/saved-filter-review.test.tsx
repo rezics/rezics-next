@@ -49,7 +49,8 @@ const page: ReadyPage = {
 function owner(subject: string, generation: number) {
   return {
     subject,
-    admitted: ['collection.get'],
+    admitted: true,
+    isCurrent: () => true,
     generation,
     lifetime: 'lifetime-' + generation,
     isOwnerCurrent: () => true,
