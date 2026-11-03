@@ -50,7 +50,7 @@ export type WorkbenchRead = PrivateReaderRead & {
   reports: Report[];
   /** Original board appeals from this read generation. */
   appeals: Appeal[];
-  selectedAppeal?: Appeal;
+  selectedAppeal?: Appeal | null;
   /** Legacy presentation input; native appeal reads never hydrate current targets. */
   selectedTarget: ResolvedReportTarget | null;
   unavailableReason?: 'native-appeal-inspect';

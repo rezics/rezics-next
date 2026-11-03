@@ -45,7 +45,7 @@ export function WorkbenchPage({
         reports: [],
         appeals: [],
         selectedTarget: null,
-        selectedAppeal: undefined,
+        selectedAppeal: null,
         realms: [],
         boards: [],
         next: null,
