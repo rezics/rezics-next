@@ -17,6 +17,9 @@ import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
+import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
+import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
+import { requestReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } from './erasure.ts';
@@ -250,6 +253,10 @@ export const searchWorkModule: WorkModule = {
       clock: context.clock,
     });
     const listing = subjectListingSource(context.pool);
+    context.addEffects([{
+      name: 'search_review_discovery_receiving', types: [REVIEW_DISCOVERY_CHANGED],
+      async run(event) { await requestReviewDiscoveryReceiving(context.pool, config.prefix, event.data); },
+    }]);
     let active: PublicPreparation | undefined;
     let scoped: ReturnType<typeof createScopePreparation> | undefined;
     const scopeStore = createScopePreparationStore(context.pool, config.prefix, context.client);
@@ -285,6 +292,7 @@ export const searchWorkModule: WorkModule = {
     context.addService(async () => {
       const defaults = createKernelRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
       let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
+      let reviewSource: ReviewDiscoverySource | undefined;
       createKernel({
         pool: context.pool,
         routeKey,
@@ -292,6 +300,9 @@ export const searchWorkModule: WorkModule = {
         workClient: context.client,
         onAccessReady(access) {
           bindErasureAccess(access);
+          reviewSource = createReviewDiscoverySource({
+            pool: context.pool, access, tokens: defaults.tokens, clock: context.clock,
+          }, () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }));
           scoped = createScopePreparation({
             search,
             pool: context.pool,
@@ -310,7 +321,7 @@ export const searchWorkModule: WorkModule = {
           });
         },
       });
-      if (!runtime) throw new Error('Search worker Access composition is incomplete');
+      if (!runtime || !reviewSource) throw new Error('Search worker Access composition is incomplete');
       const publicRuntime = runtime;
       if (active) {
         await publicRuntime.close();
@@ -348,7 +359,7 @@ export const searchWorkModule: WorkModule = {
           listing,
           prefix: config.prefix,
           concurrency: 2,
-          discovery: { routeKey },
+          discovery: { routeKey, reviewSource },
           publicPreparation: preparation,
         });
       } catch (error) {
