@@ -955,8 +955,18 @@ export class RunStore<Projection = BatchStatement[]> {
     validateRun(run);
     identifier(operationId, 64, /^[0-9a-f]{64}$/u);
     this.transaction(() => {
-      const current = this.get<{ status: string; request_bytes: string; command_key: string }>(
-        'SELECT status, request_bytes, command_key FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?',
+      const current = this.get<{
+        status: string;
+        request_bytes: string;
+        command_key: string;
+        expected_observation: string | null;
+        native_reason: string | null;
+        reviewed_head_json: string | null;
+        outcome_json: string | null;
+      }>(
+        `SELECT status, request_bytes, command_key, expected_observation, native_reason,
+          reviewed_head_json, outcome_json
+         FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?`,
         run.source,
         run.id,
         operationId,
@@ -968,21 +978,16 @@ export class RunStore<Projection = BatchStatement[]> {
           request_bytes=?, command_key=?, reviewed_head_json=?, outcome_json=?
         WHERE source=? AND run_id=? AND operation_id=?`,
         update.status,
-        update.nativeReason ?? null,
-        update.expectedObservation === undefined ? null : update.expectedObservation,
+        update.nativeReason !== undefined ? update.nativeReason : current.native_reason,
+        update.expectedObservation !== undefined ? update.expectedObservation : current.expected_observation,
         sealed ? current.request_bytes : (update.requestBytes ?? current.request_bytes),
         sealed ? current.command_key : (update.commandKey ?? current.command_key),
         update.reviewedHead === undefined
-          ? this.get<{ reviewed_head_json: string | null }>(
-              'SELECT reviewed_head_json FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?',
-              run.source,
-              run.id,
-              operationId,
-            )!.reviewed_head_json
+          ? current.reviewed_head_json
           : update.reviewedHead
             ? boundedJson(update.reviewedHead, 65536)
             : null,
-        update.outcome === undefined ? null : boundedJson(update.outcome, 65536),
+        update.outcome === undefined ? current.outcome_json : boundedJson(update.outcome, 65536),
         run.source,
         run.id,
         operationId,
@@ -1099,6 +1104,7 @@ export class RunStore<Projection = BatchStatement[]> {
       'SELECT head_json FROM run_aggregate_heads WHERE source=? AND subject_id=? AND provider=?',
       source,
       subjectId,
+      'vndb',
     );
     return row ? (JSON.parse(row.head_json) as RetainedObservationHead) : null;
   }
