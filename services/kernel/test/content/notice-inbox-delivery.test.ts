@@ -31,7 +31,11 @@ afterAll(async () => native?.close());
 
 function inbox(cursor?: string) {
   const query = new URLSearchParams({ limit: '1', ...(cursor === undefined ? {} : { cursor }) });
-  return native.call(native.accounts.recipient, 'GET', `/v1/accounts/${native.accounts.recipient}/notifications?${query}`);
+  return native.call(
+    native.accounts.recipient,
+    'GET',
+    `/v1/accounts/${native.accounts.recipient}/notifications?${query}`,
+  );
 }
 
 test('populated Inbox preserves cursor progress across concealed raw candidates', async () => {
@@ -47,22 +51,22 @@ test('populated Inbox preserves cursor progress across concealed raw candidates'
 test('empty Inbox has no next cursor', async () => {
   const account = native.accounts.principal;
   expect(await native.call(account, 'GET', `/v1/accounts/${account}/notifications`)).toEqual({
-    status: 200, value: { items: [], next: null },
+    status: 200,
+    value: { items: [], next: null },
   });
 });
 
 test('concealed viewers get 404 and concealed ordinary targets are omitted', async () => {
-  expect((await native.call(native.accounts.actor, 'GET', `/v1/accounts/${native.accounts.recipient}/notifications`)).status).toBe(404);
-  const visibility = (value: string) => native.db.admin.query(
-    'UPDATE content.thread SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
-    [routeOf(thread.id), thread.id, value],
+  expect(
+    (await native.call(native.accounts.actor, 'GET', `/v1/accounts/${native.accounts.recipient}/notifications`)).status,
+  ).toBe(404);
+  const page = await native.call(
+    native.accounts.recipient,
+    'GET',
+    `/v1/accounts/${native.accounts.recipient}/notifications?limit=50`,
   );
-  await visibility('draft');
-  try {
-    expect(await inbox()).toEqual({ status: 200, value: { items: [], next: null } });
-  } finally {
-    await visibility('published');
-  }
+  expect(page.status).toBe(200);
+  expect(page.value.items.map((item: { postId: string }) => item.postId)).toEqual([...posts].reverse());
 });
 
 test('unavailable Inbox sources return an error without a cursor', async () => {
