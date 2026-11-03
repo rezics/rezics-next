@@ -32,7 +32,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
   const hidden = await f.collection({ visibility: 'private' });
   const unlisted = await f.collection({ visibility: 'unlisted' });
   const deleted = await f.collection({ visibility: 'public' });
-  expect((await f.send('DELETE', `/v1/collections/${deleted.id}`, { revision: deleted.revision })).status).toBe(200);
+  expect((await f.send('DELETE', `/v1/collections/${deleted.id}?revision=${deleted.revision}`)).status).toBe(204);
   const incomplete = await saved();
   expect((await f.send('PATCH', `/v1/collections/${incomplete.id}`, {
     revision: incomplete.revision, visibility: 'public',
