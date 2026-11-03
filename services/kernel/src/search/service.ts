@@ -211,6 +211,21 @@ function containsRealmPredicate(value: unknown): boolean {
   return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsRealmPredicate));
 }
 
+function discoveryRealmIds(value: unknown): string[] {
+  const ids = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
+    const record = node as Record<string, unknown>;
+    if ('realm' in record && record.realm && typeof record.realm === 'object' && !Array.isArray(record.realm)) {
+      const id = (record.realm as Record<string, unknown>).id;
+      if (typeof id === 'string') ids.add(id);
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(value);
+  return [...ids].sort();
+}
+
 function containsUnsupportedDiscoveryLeaf(value: unknown): boolean {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
   const node = value as Record<string, unknown>;
@@ -679,6 +694,7 @@ export function createSearchService({
       const scopedRequest = admitted !== undefined && (containsOwnerPredicate(admitted) || realmScopedRequest);
       let scope: ReturnType<typeof createSearchScopeForService> | undefined;
       let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
+      let preparedRealm: Awaited<ReturnType<NonNullable<typeof scope>['realm']['prepare']>> | undefined;
       let scopeWork: ScopeWork | undefined;
       if (scopedRequest) {
         const options = readContext?.scope;
@@ -687,13 +703,10 @@ export function createSearchService({
         scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
         if (realmScopedRequest) {
           if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
-          const realm = await sourceRequest(() =>
+          preparedRealm = await sourceRequest(() =>
             scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining()),
           );
-          scopeWork.native(realm.work);
-          // population_ready is only a prefix/evaluation preparation handle. This
-          // Search path cannot yet turn it into complete retained canonical pages.
-          throw indexNotReady();
+          scopeWork.native(preparedRealm.work);
         } else {
           const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
           preparedScope = await sourceRequest(() =>
@@ -708,7 +721,9 @@ export function createSearchService({
       }
       const cursorRequest = preparedScope
         ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
-        : bindingRequest;
+        : preparedRealm
+          ? { ...bindingRequest, realmScopeBasis: preparedRealm.scope.basis }
+          : bindingRequest;
       const binding = { operation: 'subjects.search', request: cursorRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
@@ -774,7 +789,7 @@ export function createSearchService({
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const compiledFilter =
-        admitted && !preparedScope
+        admitted && !preparedScope && !realmScopedRequest
           ? compileFilter(admitted as FilterDocument, { prefix: 'f', relationOverflow: true })
           : undefined;
       const overflowProperties = [
@@ -853,7 +868,7 @@ export function createSearchService({
             disclosureSource,
             hits,
             clauses,
-            admitted && !preparedScope ? { filter: admitted, relationProperties } : undefined,
+            admitted && !preparedScope && !realmScopedRequest ? { filter: admitted, relationProperties } : undefined,
           ),
         );
         inexact ||= relationRejected === true;
