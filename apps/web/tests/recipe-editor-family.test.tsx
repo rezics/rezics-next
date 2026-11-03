@@ -195,6 +195,11 @@ test('Recipe creation and current correction share complete frames with independ
       scope.querySelector('input')!,
       (props) => !!props.part && !!props.onChange,
     ).onChange;
+  const citationChange = (scope: HTMLElement) =>
+    retainedProps<ComponentProps<typeof ScalarControl>>(
+      url(scope),
+      (props) => props.part?.property.id === 'schema:url' && !!props.onChange,
+    ).onChange;
   const document = (scope: HTMLElement) =>
     retainedProps<ComponentProps<typeof RichTextEditor>>(
       scope.querySelector('[contenteditable]')!,
@@ -371,8 +376,8 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(ownIngredient, m.correction_language()), 'en');
     const siblingScalar = scalar(ownIngredient);
     await cite(ownIngredient, longCitation);
-    const retiredCitation = retainedChange(url(ownIngredient));
-    await act(async () => retiredCitation({ target: { value: 'https://example.test/retired' } }));
+    const retiredCitation = citationChange(ownIngredient);
+    await act(async () => retiredCitation({ type: 'value', content: 'https://example.test/retired' }));
     expect(url(ownIngredient).value).toBe(longCitation);
     await act(async () =>
       siblingScalar({
@@ -395,7 +400,7 @@ test('Recipe creation and current correction share complete frames with independ
     await click(section(b, cookTimeLabel), m.recipe_correct());
     const independentDraft = section(b, cookTimeLabel, true);
     const lockedScalar = scalar(independentDraft);
-    const lockedCitation = retainedChange(url(independentDraft));
+    const lockedCitation = citationChange(independentDraft);
     await click(independentDraft, m.recipe_remove_field());
     const uncertainRemove = queued(within(independentDraft).getByRole('button', { name: m.recipe_remove_field() }));
     correction.setScenario('uncertain');
@@ -404,7 +409,7 @@ test('Recipe creation and current correction share complete frames with independ
     const sealedRow = independentDraft.innerHTML;
     await act(async () => {
       lockedScalar({ type: 'value', content: 'locked scalar' });
-      lockedCitation({ target: { value: 'https://example.test/locked' } });
+      lockedCitation({ type: 'value', content: 'https://example.test/locked' });
     });
     expect(independentDraft.innerHTML).toBe(sealedRow);
     await act(async () => uncertainRemove());
@@ -576,7 +581,7 @@ test('Recipe creation and current correction share complete frames with independ
     const lockedDocument = document(retainedMethod);
     const lockedPicker = picker(diet);
     const lockedCreateScalar = scalar(retainedIngredient);
-    const lockedCreateCitation = retainedChange(url(retainedMethod));
+    const lockedCreateCitation = citationChange(retainedMethod);
     await reviewRecipe(a);
     await click(a, m.recipe_title());
     await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
@@ -586,9 +591,7 @@ test('Recipe creation and current correction share complete frames with independ
       lockedDocument.onChange!(fromPlainText('Locked document delivery'));
       lockedPicker([]);
       lockedCreateScalar({ type: 'novalue' });
-      lockedCreateCitation({
-        target: { value: 'https://example.test/locked-create' },
-      });
+      lockedCreateCitation({ type: 'value', content: 'https://example.test/locked-create' });
     });
     expect(a.innerHTML).toBe(sealedCreation);
     expect(creationCommands[0]!.key).not.toBe(creationCommands[1]!.key);

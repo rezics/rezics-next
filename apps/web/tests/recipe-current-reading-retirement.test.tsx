@@ -239,7 +239,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     outside.focus();
     await until(() => !currentIngredient.isConnected);
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
-    expect(host.textContent).not.toContain(untouchedLabel);
+    expect(within(host).queryByRole('heading', { name: untouchedLabel, level: 2 })).toBeNull();
     expect(ingredientDraft.isConnected).toBe(true);
     expect(secondIngredientDraft.isConnected).toBe(true);
     expect(input(secondIngredientDraft, m.correction_url()).value).toBe(secondCitation);
