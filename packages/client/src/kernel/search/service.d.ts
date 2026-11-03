@@ -7,6 +7,7 @@ export { validateSearchLimit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
+import type { RealmSubjectSource } from './realm-scope.ts';
 import type { SubjectSource } from './source.ts';
 import { type DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
@@ -45,12 +46,13 @@ type Result = {
 };
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     ratings?: PublicRatingSource;
+    realmSubjects?: RealmSubjectSource;
     cursors: KeyRing;
     clock?: KernelClock;
     release?: () => Promise<FilterRelease | null>;

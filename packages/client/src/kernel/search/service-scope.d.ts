@@ -13,5 +13,7 @@ export declare function registerSearchScopeRuntime(service: SearchService, runti
 /**
  * Reuse the constructor's runtime and the caller's actual reader context. Runtime ownership
  * permits admission, not native readiness; the Source owns capability checks during preparation.
+ * The same runtime carries the optional Content RealmSubjectSource; absent native enumeration
+ * remains unavailable through the Realm scope seam, never an empty population.
  */
 export declare function createSearchScopeForService(service: SearchService, options: LeafOptions): ReturnType<typeof createSearchScopeSource>;

@@ -39,6 +39,24 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
     originals(subjectId: string): Promise<string[]>;
     filter(filter: FilterDocument, releaseDigest: string): Promise<{
         scope: {
+            realm: {
+                prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
+                    scope: import("../search/realm-scope.ts").PreparedRealmScope;
+                    work: WorkReceipt;
+                }>>;
+                sourcePrefix(scope: import("../search/realm-scope.ts").PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
+                    subjects: readonly string[];
+                    after: string | null;
+                    exhausted: boolean;
+                    basis: string;
+                    work: WorkReceipt;
+                }>;
+                evaluate(scope: import("../search/realm-scope.ts").PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
+                    basis: string;
+                    values: import("../search/source.ts").RelationFacetMatch[];
+                    work: WorkReceipt;
+                }>;
+            };
             work(result: import("../search/scope-source.ts").PreparedSearchScope | import("../search/scope-source.ts").SearchScopeEvaluation): WorkReceipt;
             prepare(filter: FilterDocument, options?: import("../search/scope-source.ts").ScopePrepareOptions): Promise<import("../search/scope-source.ts").PreparedSearchScope>;
             orderedPrefix(prepared: import("../search/scope-source.ts").PreparedSearchScope, request: import("../search/scope-ordered.ts").ScopeOrderedPrefixRequest): Promise<import("../search/scope-ordered.ts").SearchScopeOrderedPrefix>;

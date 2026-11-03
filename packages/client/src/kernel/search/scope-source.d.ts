@@ -9,6 +9,7 @@ import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf
 import { type ScopeLeafPosition } from './scope-progress.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
+import { type RealmSubjectSource } from './realm-scope.ts';
 import { type RelationFacetMatch, type SubjectSource } from './source.ts';
 import { type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
 export type { ScopeNativeOrder, ScopeNameSortTuple, ScopeCollectionsSortTuple, ScopeOrderedPrefixRequest, SearchScopeOrderedPrefix, } from './scope-ordered.ts';
@@ -90,15 +91,34 @@ export type SearchScopeEvaluation = {
 /** Native service runtime, immutable admission and factory-local handles. Native producers
  * own structural capture, current authorization and evidence; this module owns execution.
  */
-export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, evidence, clock, }: {
+export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, evidence, realmSubjects, clock, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     release?: () => Promise<FilterRelease | null>;
     evidence?: LeafOptions;
+    realmSubjects?: RealmSubjectSource;
     clock?: KernelClock;
 }): {
+    realm: {
+        prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
+            scope: import("./realm-scope.ts").PreparedRealmScope;
+            work: WorkReceipt;
+        }>>;
+        sourcePrefix(scope: import("./realm-scope.ts").PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
+            subjects: readonly string[];
+            after: string | null;
+            exhausted: boolean;
+            basis: string;
+            work: WorkReceipt;
+        }>;
+        evaluate(scope: import("./realm-scope.ts").PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
+            basis: string;
+            values: RelationFacetMatch[];
+            work: WorkReceipt;
+        }>;
+    };
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
     work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt;
     prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope>;
