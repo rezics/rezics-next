@@ -155,7 +155,7 @@ export function StoryArcCreate({
               store={store}
               errors={errors}
               {...(store.prepared() ? { identity: store.prepared()! } : {})}
-              invalidate={invalidateReview}
+              {...(invalidateReview ? { invalidate: invalidateReview } : {})}
             />
           ) : null;
         },
