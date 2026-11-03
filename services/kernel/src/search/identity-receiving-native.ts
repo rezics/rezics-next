@@ -4,11 +4,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { currentCommandResources, runCommand } from '../command/command.ts';
 import { createIdentitySourceSupportReader } from '../semantic/identity-source-support.ts';
 import { serializeIdentityValue } from '../semantic/identity-epoch-store.ts';
-import { readRelease } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import {
+  PublicFilterSourceDefinitionError,
+  readPublicFilterSourceDefinition,
+} from '../semantic/public-filter-source-binding.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { readIdentitySourceProjection } from '../semantic/search-source.ts';
-import definitionSql from './identity-receiving-native-definition.sql';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type {
@@ -47,6 +50,7 @@ const invocations = new WeakMap<
 >();
 const key = (locator: SearchIdentityReceivingLocator) => `${locator.partition}:${locator.planId}`;
 const hash = (value: unknown) => createHash('sha256').update(serializeIdentityValue(value)).digest('hex');
+const nativeDefinitionByteLimit = 20_480;
 type Cursor = Readonly<{
   version: 1;
   identity: string;
@@ -172,29 +176,35 @@ export function createSearchIdentityReceivingNative(
     }
   }
   async function definition(id: string, releaseDigest: string, work: SearchNativeReceivingWork) {
-    work.readTransaction();
-    work.reserve({ rows: 3, points: 3, statements: 1, bytes: 2048, engineRequests: 0 });
-    const row = await withReadTransaction(
-      config.pool,
-      async (tx) =>
-        (
-          await tx.query<{ release_digest: string; subject_type: string; route_digest: string }>(definitionSql.sql, [
-            id,
-          ])
-        ).rows[0],
-      work.context.deadline,
-    );
-    if (
-      !row ||
-      row.release_digest !== releaseDigest ||
-      row.route_digest !== createHash('sha256').update(config.routeKey).digest('hex')
-    )
-      work.fail('changed', 'Original Source definition or configured route changed');
+    // The retained capture and keys are capped in SQL and charged at their maximum before loading.
+    work.reserve({ rows: 3, points: 3, statements: 1, bytes: nativeDefinitionByteLimit + 4096, engineRequests: 0 });
+    let loaded: Awaited<ReturnType<typeof readPublicFilterSourceDefinition>>;
+    try {
+      requireAccessDeadline(work.context.deadline);
+      loaded = await withRequestDeadline(work.context.deadline, () =>
+        readPublicFilterSourceDefinition(
+          id,
+          config.pool,
+          createHash('sha256').update(config.routeKey).digest('hex'),
+          nativeDefinitionByteLimit,
+        ),
+      );
+      requireAccessDeadline(work.context.deadline);
+    } catch (error) {
+      if (error instanceof PublicFilterSourceDefinitionError) {
+        const status = ['definition_missing', 'configuration_changed', 'binding_mismatch', 'source_missing'].includes(
+          error.reason,
+        )
+          ? 'changed'
+          : 'unavailable';
+        work.fail(status, 'Original Source definition is missing or changed');
+      }
+      throw error;
+    }
+    if (loaded.definition.meaning.digest !== releaseDigest)
+      work.fail('changed', 'Original Source release changed');
     // Release loading and Source reads are additionally charged by the enclosing exact SQL inventory.
-    const release = await readRelease(config.pool, releaseDigest);
-    if (!release || !release.types[row.subject_type])
-      work.fail('unavailable', 'Original Source release is unavailable');
-    return { digest: releaseDigest, release, type: row.subject_type };
+    return loaded.definition;
   }
   async function requireCompleteOriginalSource(
     plan: SearchNativeReceivingPlan,
@@ -230,7 +240,7 @@ export function createSearchIdentityReceivingNative(
         job: plan.selection.job,
         original,
         terminal: plan.source.terminal,
-        meaning: own,
+        meaning: own.meaning,
         frontier,
         inputLimit: 1,
         context: { deadline: work.context.deadline },
@@ -262,7 +272,7 @@ export function createSearchIdentityReceivingNative(
             job: selection.job,
             original,
             terminal: plan.source.terminal,
-            meaning: own,
+            meaning: own.meaning,
             frontier,
             inputLimit: 1,
             context: { deadline: work.context.deadline },

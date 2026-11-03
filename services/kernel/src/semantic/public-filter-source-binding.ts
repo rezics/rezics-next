@@ -632,10 +632,53 @@ function unpackRepairLocatorDigests(value: unknown, inputLimit: number): readonl
   return Array.from({ length: packed.length / 64 }, (_, index) => packed.slice(index * 64, (index + 1) * 64));
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-class BindingError extends Error {
+export class PublicFilterSourceDefinitionError extends Error {
   constructor(readonly reason: PublicFilterBindingFailure['reason']) {
     super(reason);
   }
+}
+class BindingError extends PublicFilterSourceDefinitionError {}
+
+/** Load only an existing immutable read definition. The optional byte cap lets native callers
+ * debit a fixed upper bound before the retained capture and dependency keys are read.
+ */
+export async function readPublicFilterSourceDefinition(
+  id: string,
+  db: Pool,
+  routeDigest: string,
+  maxBytes = Number.MAX_SAFE_INTEGER,
+): Promise<Readonly<{ definition: PublicFilterSourceDefinition; bytes: number }>> {
+  if (!uuid.test(id)) throw new BindingError('definition_missing');
+  if (!/^[a-f0-9]{64}$/.test(routeDigest)) throw new TypeError('Invalid Source route digest');
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new RangeError('Invalid Source definition byte bound');
+  const row = await readDefinition.run(db, { read_definition: id, max_bytes: maxBytes });
+  if (!row) throw new BindingError('definition_missing');
+  if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
+  const bytes = Number(row.definition_bytes);
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes)
+    throw new BindingError('binding_mismatch');
+  const release = await readRelease(db, row.release_digest);
+  if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
+  let capture: PublicSourceCaptureInput;
+  let keys: PublicFilterDependencyKey[];
+  const meaning = { digest: row.release_digest, release, type: row.subject_type };
+  try {
+    capture = decode<PublicSourceCaptureInput>(row.capture);
+    keys = allCaptureKeys(meaning, capture);
+  } catch {
+    throw new BindingError('binding_mismatch');
+  }
+  if (!isDeepStrictEqual(keys, row.dependency_keys)) throw new BindingError('binding_mismatch');
+  return {
+    definition: {
+      source: { id: row.source_id, partition: 0, epoch: row.owner_epoch, configuration: row.configuration },
+      readDefinition: id,
+      meaning,
+      capture,
+      dependencyKeys: keys,
+    },
+    bytes,
+  };
 }
 function checkDeadline(context: PublicFilterConsumerContext): void {
   if (!Number.isFinite(context.deadline) || context.deadline <= Date.now()) throw new BindingError('deadline');
@@ -833,23 +876,7 @@ export function createPublicFilterSourceBinding(
     }
   }
   async function loadDefinition(id: string, db: Pool): Promise<PublicFilterSourceDefinition> {
-    if (!uuid.test(id)) throw new BindingError('definition_missing');
-    const row = await readDefinition.run(db, { read_definition: id });
-    if (!row) throw new BindingError('definition_missing');
-    if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
-    const release = await readRelease(db, row.release_digest);
-    if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
-    const capture = decode<PublicSourceCaptureInput>(row.capture);
-    const meaning = { digest: row.release_digest, release, type: row.subject_type };
-    const keys = allCaptureKeys(meaning, capture);
-    if (!isDeepStrictEqual(keys, row.dependency_keys)) throw new BindingError('binding_mismatch');
-    return {
-      source: { id: row.source_id, partition: 0, epoch: row.owner_epoch, configuration: row.configuration },
-      readDefinition: id,
-      meaning,
-      capture,
-      dependencyKeys: keys,
-    };
+    return (await readPublicFilterSourceDefinition(id, db, routeDigest)).definition;
   }
   const readers = new Map<string, PublicFilterSource>();
   const sourceReader = (definition: PublicFilterSourceDefinition) =>

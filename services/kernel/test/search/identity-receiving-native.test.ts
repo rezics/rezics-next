@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
+import {
+  PublicFilterSourceDefinitionError,
+  readPublicFilterSourceDefinition,
+} from '../../src/semantic/public-filter-source-binding.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
@@ -156,6 +160,91 @@ test('the fixed Search participant uses genuine native original receiving custod
   expect(state?.state).toBe('pending');
   expect(state?.participants['library-private-follow-counts']).toBeNull();
   // Search completion never manufactures the independent Library ACK or whole-job publication.
+
+  const locator = saved[0]!.binding.source.locator;
+  const retained = (
+    await f.admin.query<{ definition: string; release: string }>(
+      `SELECT obligations->>'definition' AS definition, obligations->>'release' AS release
+       FROM search.identity_receiving_native_plan WHERE partition_no=$1 AND plan_id=$2`,
+      [locator.partition, locator.planId],
+    )
+  ).rows[0]!;
+  const routeDigest = createHash('sha256').update(routeKey).digest('hex');
+  const read = () => readPublicFilterSourceDefinition(retained.definition, f.pool, routeDigest, 20_480);
+  const loaded = await read();
+  const retainedCapture = (
+    await f.admin.query<{ capture: string }>(
+      'SELECT capture FROM semantic.public_filter_read_definition WHERE read_definition=$1',
+      [retained.definition],
+    )
+  ).rows[0]!.capture;
+  expect(loaded.definition).toMatchObject({
+    source: { id: expect.any(String), partition: 0, epoch: expect.any(Number), configuration: expect.any(String) },
+    readDefinition: retained.definition,
+    meaning: { digest: retained.release },
+    capture: expect.any(Object),
+    dependencyKeys: expect.any(Array),
+  });
+  expect(loaded.bytes).toBeLessThanOrEqual(20_480);
+  await expect(readPublicFilterSourceDefinition(randomUUID(), f.pool, routeDigest, 20_480)).rejects.toMatchObject({
+    reason: 'definition_missing',
+  });
+  const refuseMutation = async (
+    update: string,
+    values: unknown[],
+    restore: string,
+    restoreValues: unknown[],
+  ) => {
+    await f.admin.query(update, values);
+    try {
+      await expect(read()).rejects.toBeInstanceOf(PublicFilterSourceDefinitionError);
+    } finally {
+      await f.admin.query(restore, restoreValues);
+    }
+  };
+  await refuseMutation(
+    'UPDATE semantic.public_filter_read_definition SET release_digest=$1 WHERE read_definition=$2',
+    [`sha256:${'0'.repeat(64)}`, retained.definition],
+    'UPDATE semantic.public_filter_read_definition SET release_digest=$1 WHERE read_definition=$2',
+    [retained.release, retained.definition],
+  );
+  await refuseMutation(
+    'UPDATE semantic.public_filter_read_definition SET capture=$1 WHERE read_definition=$2',
+    ['null', retained.definition],
+    'UPDATE semantic.public_filter_read_definition SET capture=$1 WHERE read_definition=$2',
+    [retainedCapture, retained.definition],
+  );
+  await refuseMutation(
+    'UPDATE semantic.public_filter_read_definition SET dependency_keys=$1::jsonb WHERE read_definition=$2',
+    ['[]', retained.definition],
+    'UPDATE semantic.public_filter_read_definition SET dependency_keys=$1::jsonb WHERE read_definition=$2',
+    [JSON.stringify(loaded.definition.dependencyKeys), retained.definition],
+  );
+  const alternateRoute = createHash('sha256').update(randomUUID()).digest('hex');
+  const alternate = (
+    await f.admin.query<{ source_id: string; configuration: string }>(
+      `INSERT INTO semantic.public_filter_source(partition_no,route_digest,owner_epoch,family)
+       SELECT 0,$1,p.epoch,'global-subject-v1' FROM core.partition p
+       WHERE p.partition_no=0 AND p.write_state='active'
+       RETURNING source_id::text,configuration::text`,
+      [alternateRoute],
+    )
+  ).rows[0]!;
+  await f.admin.query(
+    'UPDATE semantic.public_filter_read_definition SET source_id=$1,configuration=$2 WHERE read_definition=$3',
+    [alternate.source_id, alternate.configuration, retained.definition],
+  );
+  try {
+    await expect(read()).rejects.toBeInstanceOf(PublicFilterSourceDefinitionError);
+  } finally {
+    await f.admin.query(
+      'UPDATE semantic.public_filter_read_definition SET source_id=$1,configuration=$2 WHERE read_definition=$3',
+      [loaded.definition.source.id, loaded.definition.source.configuration, retained.definition],
+    );
+    await f.admin.query('DELETE FROM semantic.public_filter_source WHERE partition_no=0 AND source_id=$1', [
+      alternate.source_id,
+    ]);
+  }
 });
 
 test('missing common applied registration rolls back the actual native final settlement', async () => {
