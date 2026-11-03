@@ -209,8 +209,7 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
         // Its original head is a witness, never a refreshed selection.
         const readable = await readRealm(deps, actor, realmId, context);
         if (!readable) return null;
-        if (readable.headRevisionId !== initial.headRevisionId || readable.spaceId !== initial.spaceId)
-          throw retry();
+        if (readable.headRevisionId !== initial.headRevisionId || readable.spaceId !== initial.spaceId) throw retry();
         const final = await round();
         if (!final) return null;
         const a = expectedSource,
@@ -236,6 +235,4 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
   };
 }
 
-export type RealmViewerObservation = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>
->;
+export type RealmViewerObservation = NonNullable<Awaited<ReturnType<ReturnType<typeof createRealmViewerObservation>>>>;
