@@ -79,16 +79,18 @@ test('dump-set is exclusive with --dump and is Open Library only', async () => {
     const key = await account(root);
     const path = await manifest(root);
     const requests: string[] = [];
-    const fetch = (async (input: Request | string | URL) => {
+    const blocked = (async (input: Request | string | URL) => {
       requests.push(input instanceof Request ? input.url : String(input));
       throw new Error('network');
-    }) as typeof fetch;
-    const both = await runImportCli([...required(root, path, key), '--dump', join(root, 'works.txt')], { fetch });
+    }) as unknown as typeof fetch;
+    const both = await runImportCli([...required(root, path, key), '--dump', join(root, 'works.txt')], {
+      fetch: blocked,
+    });
     expect(both.code).toBe(2);
     expect(requests).toEqual([]);
     const other = await runImportCli(
       ['--source', 'wikidata', '--dump-set', path, ...required(root, path, key).slice(4)],
-      { fetch },
+      { fetch: blocked },
     );
     expect(other.code).toBe(2);
     expect(requests).toEqual([]);
@@ -108,7 +110,7 @@ test('missing members never contact Auth or the catalogue', async () => {
       fetch: (async (input: Request | string | URL) => {
         requests.push(input instanceof Request ? input.url : String(input));
         throw new Error('network');
-      }) as typeof fetch,
+      }) as unknown as typeof fetch,
     });
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
@@ -131,7 +133,7 @@ test('a malformed final member produces no catalogue HTTP and keeps the prior ba
         const url = new URL(request.url);
         if (url.pathname.includes('subjects') || url.pathname.includes('source-records')) catalogue.push(url.pathname);
         throw new Error('Unexpected catalogue effect');
-      }) as typeof fetch,
+      }) as unknown as typeof fetch,
     });
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
@@ -176,7 +178,7 @@ test('help lists dump-set and single --dump stdin still parses', async () => {
         fetch: (async (input: Request | string | URL) => {
           requests.push(input instanceof Request ? input.url : String(input));
           throw new Error('network');
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       },
     );
     expect(result.code).toBe(2);

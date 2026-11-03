@@ -99,8 +99,8 @@ export function readOpenLibraryDumpSet(
           const native = openLibraryMetadata(hashed, options.signal);
           try {
             for await (const record of readDump('openlibrary', native, {
-              maxRecordBytes: options.maxRecordBytes,
-              maxChunkBytes: options.maxChunkBytes,
+              ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
+              ...(options.maxChunkBytes === undefined ? {} : { maxChunkBytes: options.maxChunkBytes }),
               counters,
               openLibraryFamily: member.family,
             })) {

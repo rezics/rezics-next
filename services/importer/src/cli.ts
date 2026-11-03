@@ -659,8 +659,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         const capture = readOpenLibraryDumpSet(dumpSet, {
           signal,
           handleCount: handles,
-          observer: options.observer,
-          progress,
+          ...(options.observer === undefined ? {} : { observer: options.observer }),
+          ...(progress === undefined ? {} : { progress }),
         });
         const run = await importer.runDumpSet(registration, capture.records, {
           ...(config.disappearanceThreshold === undefined
