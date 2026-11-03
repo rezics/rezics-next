@@ -94,9 +94,31 @@ export const ownRealmsResponseSchema = t.Object(
           realmId: id,
           name: t.String({ minLength: 1, maxLength: 1024 }),
           role: t.Literal('member'),
+          current: t.Object(
+            {
+              description: t.String({ maxLength: 4096 }),
+              avatar: t.Union([
+                t.Object({ state: t.Literal('available'), value: RealmPresentationImageSchema }, closed),
+                t.Object({ state: t.Union([t.Literal('none'), t.Literal('unavailable')]), value: t.Null() }, closed),
+              ]),
+              banner: t.Union([
+                t.Object({ state: t.Literal('available'), value: RealmPresentationImageSchema }, closed),
+                t.Object({ state: t.Union([t.Literal('none'), t.Literal('unavailable')]), value: t.Null() }, closed),
+              ]),
+              destination: t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
+              spaceId: id,
+              viewer: t.Object({
+                membership: t.Object({ state: t.Literal('member'), since: t.String({ format: 'date-time' }) }, closed),
+                participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
+              }, closed),
+              actions: t.Object({ state: t.Literal('unavailable') }, closed),
+            },
+            closed,
+          ),
         },
         closed,
       ),
+      { maxItems: 20 },
     ),
     next: t.Union([t.String(), t.Null()]),
   },
