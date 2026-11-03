@@ -31,9 +31,56 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 Includes `apps/web` and `apps/auth`, shared UI/document components, BFF/media transport, product routes, library
 pages and SEO. Follow [public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
-The adopted mixed Home journey below is in scope; personalized recommendations and personal saved queries remain
-deferred. Backend contracts stay with their product owners; preparation and privacy changes must remain visible
+The adopted mixed Home journey below is in scope; personalized recommendations remain deferred. The second scope
+includes the interfaces below, including personal saved queries. Backend contracts stay with their product owners; preparation and privacy changes must remain visible
 in the interface.
+
+### Second-scope interfaces
+
+The [second-scope plan](../research/web-second-scope-plan.md) divides these outcomes into independent interface
+slices. It follows [public scope](../scope.md), including the newly admitted features; older first-scope deferral
+wording in topic documents does not close them again. Admission to scope does not establish native availability.
+Existing editors, refinement, rows, report queues and their original acceptance remain the starting point.
+
+Decision: extend the existing routes through small owner-backed consumer seams; keep all ten interface slices
+independent rather than making shared files or unfinished producer delivery into scheduling dependencies.
+
+- **Save a query.** From an owned Collection or Library filter selection, create a private saved dynamic Collection
+  through the existing rule editor. Carry only representable admitted predicates, with explicit review before Save.
+  An unrepresentable selection stays unsaved with a useful correction. Creation does not publish membership.
+- **Advanced facets.** Extend the common Collection filter surface with released property selection and native
+  count-free value continuation for that exact Collection. Keep at most eight active properties; changing the
+  property window does not discard selected operands. This is shared by curated and built-in dynamic readers.
+- **Scopes.** Search offers viewer-self Library and exact Collection, Realm or Zone resource conditions using the
+  adopted request-only grammar. Review an explicitly resolved identity before applying it; retain a refused
+  selection for correction or removal. Choice metadata grants no membership or read authority.
+- **Rating order.** Keep the current Global standard-question order and add one explicitly selected readable Realm
+  population at a time. Native order and privacy states remain authoritative. Realm population selection is private
+  to the mounted visit and never enters public metadata or a public Search index.
+- **Board pins.** Readers recognize pins in the native board order; admitted moderators pin or unpin a currently
+  readable thread. The browser does not assemble a second pinned feed or reorder downloaded pages.
+- **Slow mode.** Show the native board posting interval and the caller's next permitted attempt beside writing.
+  An admitted moderator changes that interval. Waiting preserves the draft; a clock reaching the displayed time
+  never proves permission or submits a post automatically.
+- **Watch.** Start with a signed-in reader's thread watch toggle for in-app thread activity. Watching grants no read
+  access; existing preferences and send-time access still govern notices. Board-wide watching is a later extension.
+- **Collection discovery.** Add native public Collection hits to existing Search and mixed Home rows, with the
+  supplied title, description and canonical destination. Membership and private rule facts are not row enrichment.
+- **Review and Space discovery.** Add native review and Space hits through the same consumers. A review keeps its
+  native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
+  meaning. A Realm-backed Space does not become a second Realm hit.
+- **Moderator workbench.** Compose existing board and catalogue queues, decisions and appeals behind one navigation
+  entry. Select one authorized queue at a time, with its own filters, cursor, evidence and native resolution actions.
+  This adds no aggregate case search or platform-wide appeal adjudication.
+
+Consumer seams carry only native disclosed summaries, operation availability, revision/continuation and outcomes
+needed by that slice. Bind the generated owner API when available; otherwise keep the small boundary explicit and
+show unavailable in the installed route. An illustrative success fixture or unavailable seam alone does not complete
+the positive native journey. Producers retain all permission, execution, delivery and lifecycle semantics.
+Each slice updates this section with its delivered interface contract and the corresponding topic owner document
+where its scope or interface wording changes. Page stories cover only the brief's named states with actual native
+recordings when available; illustrative responses stay labelled as such. All launch locales and the current
+phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
 ## Ownership
 
