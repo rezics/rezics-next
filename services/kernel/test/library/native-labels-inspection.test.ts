@@ -57,7 +57,7 @@ test('native Collection inspection distinguishes empty and populated owner obser
       )
     ).rows[0];
     expect(actualWork).toBeDefined();
-    expect(owned.collectionWork).toContainEqual(actualWork);
+    expect<unknown>(owned.collectionWork).toContainEqual(actualWork);
   } finally {
     await world.close();
   }

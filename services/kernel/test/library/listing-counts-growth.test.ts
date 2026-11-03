@@ -24,15 +24,15 @@ test('native listing-count reader rejects a foreign-route id before SQL, includi
   const batch = listingCountBatch('mixed');
   await insertListingCountHits(db, batch);
   const listing = subjectListingSource(db.pool);
-  const foreign = await capture(db, () =>
+  const foreign = await capture(db, async () =>
     expect(listing.read(batch.partition, [batch.foreignId])).rejects.toBeInstanceOf(RangeError),
   );
   expect(foreign.capture.statements).toEqual([]);
-  const mixed = await capture(db, () =>
+  const mixed = await capture(db, async () =>
     expect(listing.read(batch.partition, [...batch.ids, batch.foreignId])).rejects.toBeInstanceOf(RangeError),
   );
   expect(mixed.capture.statements).toEqual([]);
-  expect(await listing.read(batch.partition, batch.ids)).toEqual(batch.expected);
+  expect<ReadonlyMap<string, number>>(await listing.read(batch.partition, batch.ids)).toEqual(batch.expected);
 });
 
 for (const input of ['all-hit', 'all-miss', 'mixed'] as const) {
@@ -50,7 +50,7 @@ for (const input of ['all-hit', 'all-miss', 'mixed'] as const) {
         await growListingCounts(db, populations, scale, previous);
       },
       async operation() {
-        expect(await readListingCounts(db, batch)).toEqual(batch.expected);
+        expect<ReadonlyMap<string, number>>(await readListingCounts(db, batch)).toEqual(batch.expected);
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...LISTING_COUNT_SCALES]);

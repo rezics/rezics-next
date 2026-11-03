@@ -316,7 +316,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     await grants.create(
       { ...context, actor },
       {
-        resource: GLOBAL_CONTEXT,
+        resource: { route: 0, id: GLOBAL_CONTEXT },
         subject: { kind: 'account', id: seller.id },
         actions: ['subject:create', 'board:create'],
         valid: '(,)',

@@ -192,7 +192,7 @@ for (const axis of axes)
             expect(local.context).toBe(context);
             for (const field of ['id', 'type', 'labels', 'descriptions', 'aliases'] as const)
               expect(local[field]).toEqual(global[field]);
-            expect(local.statements['schema:inLanguage']).toEqual(global.statements['schema:inLanguage']);
+            expect<unknown>(local.statements['schema:inLanguage']).toEqual(global.statements['schema:inLanguage']);
             expect(local.statements['schema:datePublished'] ?? []).toEqual(
               verb === 'reject' ? [] : global.statements['schema:datePublished'],
             );

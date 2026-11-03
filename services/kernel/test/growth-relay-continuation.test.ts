@@ -121,7 +121,7 @@ async function insertLargeEnvelope(
 async function restore(
   db: GrowthDatabase,
   partition: PartitionState,
-  checkpoints: readonly { partition: number; consumer: string; saved?: CheckpointState }[],
+  checkpoints: readonly { partition: number; consumer: string; saved?: CheckpointState | undefined }[],
 ): Promise<void> {
   await db.admin.query('DELETE FROM core.outbox WHERE partition_no = $1 AND position > $2', [
     partition.partition,

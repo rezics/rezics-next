@@ -369,7 +369,12 @@ async function buildHost() {
     applicationName: 'rezics-auth-accounts',
     systemDatabasePool: proofsPool,
   });
-  fenceClient = Object.assign(client, { close: () => client.destroy() });
+  fenceClient = Object.assign(client, {
+    close: () => client.destroy(),
+    async discoverLegacyLeaveChild(_workflowId: string): Promise<string | null> {
+      throw new Error('Fence fixture does not discover legacy leave children');
+    },
+  });
   fenceEffects = [];
   backgroundPages = new Promise<void>((resolve) => {
     releaseBackgroundPages = resolve;

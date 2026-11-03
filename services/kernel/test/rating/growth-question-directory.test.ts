@@ -155,7 +155,7 @@ test('rating-question directory pages retain bounded native Access work across c
             // checkGrowth samples replay this same signed position and viewer credential.
             if (scenario === 'first') {
               const result = await page(await fixture.request('/v1/rating-questions'));
-              expect(result.ratingQuestions).toEqual(prepared.expected);
+              expect<unknown>(result.ratingQuestions).toEqual(prepared.expected);
               expect(result.next).toEqual(expect.any(String));
               return result;
             }
@@ -168,7 +168,7 @@ test('rating-question directory pages retain bounded native Access work across c
             const result = await page(response);
             if (scenario === 'terminal-empty') expect(result).toEqual({ ratingQuestions: [], next: null });
             else {
-              expect(result.ratingQuestions).toEqual(prepared.expected);
+              expect<unknown>(result.ratingQuestions).toEqual(prepared.expected);
               expect(result.next).toEqual(expect.any(String));
             }
             return result;

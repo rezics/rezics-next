@@ -299,7 +299,7 @@ export async function createProfileEntryFixture(
       method: string,
       path: string,
       body?: unknown,
-      key = entryKey(),
+      key: string = entryKey(),
     ) {
       return sendWithHeaders(persona, method, path, body, { 'idempotency-key': JSON.stringify(key) });
     }
@@ -445,7 +445,7 @@ export async function createProfileEntryFixture(
           ...createProfileHistoricalNativeFixture({
             pool,
             actor: identity.actor,
-            clock: options.clock,
+            ...(options.clock === undefined ? {} : { clock: options.clock }),
             createSubject: () => createSubject('game'),
             send: (method, path, body, key) => send(identity.bearer, method, path, body, key),
             receipts,

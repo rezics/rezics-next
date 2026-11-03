@@ -189,7 +189,9 @@ export async function createGrowthReportNativeRelayFixture() {
         consumer,
         partition,
         envelopes: 1,
-        apply: async (batch) => envelopes.push(...batch),
+        apply: async (batch) => {
+          envelopes.push(...batch);
+        },
       });
       if (result.status !== 'read' || envelopes.length !== 1)
         throw new Error('Native report API did not append one source envelope');

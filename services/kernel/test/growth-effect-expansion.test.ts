@@ -161,7 +161,10 @@ async function runExpansionWorker(expansion: number): Promise<ExpansionReport> {
   let launched = false;
 
   try {
-    await within(launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) }), 'executor launch');
+    await within(
+      launchWork({ databaseUrl: databaseUrl!, systemDatabasePool: growth.openPool({ max: 4 }) }),
+      'executor launch',
+    );
     launched = true;
     const namespace = `effect-expansion-history:${expansion}:${crypto.randomUUID()}`;
     const partitionBase = freshPartition();
@@ -304,7 +307,7 @@ if (workerScale !== undefined) {
     expect(reports.map(({ typeComparisonsPerEvent }) => typeComparisonsPerEvent)).toEqual([5, 9, 17]);
     expect(reports.map(({ matchingJobs }) => matchingJobs)).toEqual([3, 5, 9]);
     for (const report of reports) {
-      expect(report.samples.map(({ scale }) => scale)).toEqual(HISTORY_SCALES);
+      expect(report.samples.map(({ scale }) => scale)).toEqual([...HISTORY_SCALES]);
       for (const sample of report.samples) {
         expect(sample.statusInserts.every((count) => count === report.matchingJobs)).toBe(true);
         expect(sample.inputInserts.every((count) => count === report.matchingJobs)).toBe(true);

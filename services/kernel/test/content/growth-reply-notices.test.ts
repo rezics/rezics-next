@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import { createReplyNoticeEffect } from '../../src/content/reply-notices.ts';
+import { contentNoticeEffects } from '../../src/content/relays.ts';
+import { createContentWorkAccess } from '../../src/content/register.ts';
 import { effectWorkflowId, launchWork, registerEffects, shutdownWork } from '../../src/events/effects.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, seed, type Population } from '../support/growth.ts';
@@ -165,7 +167,7 @@ test('reply finalization waits for a paused native preference writer at the reci
   const suffix = randomUUID().replaceAll('-', '');
   const trigger = `pause_notice_preference_${suffix}`;
   const fn = `pause_notice_preference_${suffix}`;
-  let gate: Awaited<ReturnType<typeof native.db.pool.connect>> | undefined;
+  let gate: import('pg').PoolClient | undefined;
   let preferenceWrite: Promise<{ status: number; value: unknown }> | undefined;
   let setupCreated = false;
   try {

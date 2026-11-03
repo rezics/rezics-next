@@ -124,7 +124,7 @@ beforeAll(async () => {
     scopes: native.auth.ordinaryScopes,
   });
   grant = createGrantCommands({ pool: native.database.pool, access: native.access, managementAction: 'access:grant' });
-  await grantAccess(native.actors.author.actor.accountId, GLOBAL_CONTEXT, [
+  await grantAccess(native.actors.author.actor.accountId, { route: 0, id: GLOBAL_CONTEXT }, [
     'subject:create',
     'board:create',
     'offer:create',

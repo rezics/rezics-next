@@ -90,7 +90,7 @@ export function createProfileHistoricalNativeFixture(host: HistoricalProfileHost
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Unroutable historical fixture owner');
   const ownerRoute = route;
-  const runner = createLibraryCommandRunner({ pool, clock: host.clock });
+  const runner = createLibraryCommandRunner({ pool, ...(host.clock === undefined ? {} : { clock: host.clock }) });
 
   async function commit<T>(
     action: string,

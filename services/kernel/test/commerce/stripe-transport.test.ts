@@ -485,7 +485,7 @@ test('unrelated provider history grows while selected reads, physical sends and 
     }
     const totals = [full.observation.totals, locator.observation.totals];
     baseline ??= totals;
-    expect(totals).toEqual(baseline);
+    expect<unknown>(totals).toEqual(baseline);
   }
 });
 

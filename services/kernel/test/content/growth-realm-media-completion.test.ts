@@ -145,7 +145,11 @@ for (const axis of ['population', 'history'] as const satisfies readonly Axis[])
           async operation() {
             for (const [label, status, body, bearer] of badInputs) {
               const start = trace.records.length;
-              const result = await f.complete(pending, { key: crypto.randomUUID(), body, bearer });
+              const result = await f.complete(pending, {
+                key: crypto.randomUUID(),
+                body,
+                ...(bearer === undefined ? {} : { bearer }),
+              });
               expect(result.response.status, label).toBe(status);
               expect(result.value.media, label).toBeUndefined();
               const records = trace.records.slice(start);

@@ -17,7 +17,7 @@ test('growth seeds unrelated keys and history in the measured source without rep
         populate(input, 'growth-source');
         expect(count('run_members', 'growth-source')).toBe(input.catalogueRecords);
         expect(count('run_generations', 'growth-source')).toBe(input.historyRows + 1);
-        expect(store.activeRun('growth-source')).toEqual(run);
+        expect<unknown>(store.activeRun('growth-source')).toEqual(run);
       }
     populate({ catalogueRecords: 128, historyRows: 128 }, 'g-new-1');
     expect(count('run_members', 'g-new-1')).toBe(128);

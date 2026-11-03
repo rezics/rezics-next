@@ -303,7 +303,7 @@ async function runSuccessGrowth(
     },
   });
   await assertGrowthReport(report);
-  const key = keys.get(scales[scales.length - 1]);
+  const key = keys.get(scales[scales.length - 1]!);
   if (!key) throw new Error(`The restore operation did not reach scale ${scales[scales.length - 1]}`);
   return key;
 }
