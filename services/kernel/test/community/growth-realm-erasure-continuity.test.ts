@@ -105,26 +105,29 @@ function costForStatements(capture: Capture, include: (statement: string) => boo
     const statementIndex = capture.planStatements?.[planIndex];
     return statementIndex !== undefined && remap.has(statementIndex) ? [{ plan, planIndex, statementIndex }] : [];
   });
-  const selectParallel = <T>(values: readonly T[] | undefined) =>
-    values === undefined ? undefined : indexes.map((index) => values[index]!);
+  const selectParallel = <T>(values: readonly T[]) => indexes.map((index) => values[index]!);
   const subset: Capture = {
     ...capture,
     statements: indexes.map((index) => capture.statements[index]!),
-    requestBytes: selectParallel(capture.requestBytes),
-    responseBytes: selectParallel(capture.responseBytes),
-    statementErrors: selectParallel(capture.statementErrors),
-    statementErrorMessages: selectParallel(capture.statementErrorMessages),
-    statementBackends: selectParallel(capture.statementBackends),
+    ...(capture.requestBytes === undefined ? {} : { requestBytes: selectParallel(capture.requestBytes) }),
+    ...(capture.responseBytes === undefined ? {} : { responseBytes: selectParallel(capture.responseBytes) }),
+    ...(capture.statementErrors === undefined ? {} : { statementErrors: selectParallel(capture.statementErrors) }),
+    ...(capture.statementErrorMessages === undefined
+      ? {}
+      : { statementErrorMessages: selectParallel(capture.statementErrorMessages) }),
+    ...(capture.statementBackends === undefined
+      ? {}
+      : { statementBackends: selectParallel(capture.statementBackends) }),
     plans: selectedPlans.map(({ plan }) => plan),
-    planStatements: selectedPlans.map(({ statementIndex }) => remap.get(statementIndex)),
-    planDatabases:
-      capture.planDatabases === undefined
-        ? undefined
-        : selectedPlans.map(({ planIndex }) => capture.planDatabases![planIndex]!),
-    planBackends:
-      capture.planBackends === undefined
-        ? undefined
-        : selectedPlans.map(({ planIndex }) => capture.planBackends![planIndex]!),
+    ...(capture.planStatements === undefined
+      ? {}
+      : { planStatements: selectedPlans.map(({ statementIndex }) => remap.get(statementIndex)) }),
+    ...(capture.planDatabases === undefined
+      ? {}
+      : { planDatabases: selectedPlans.map(({ planIndex }) => capture.planDatabases![planIndex]!) }),
+    ...(capture.planBackends === undefined
+      ? {}
+      : { planBackends: selectedPlans.map(({ planIndex }) => capture.planBackends![planIndex]!) }),
     backgroundStatements: [],
     backgroundRequestBytes: [],
     backgroundResponseBytes: [],
