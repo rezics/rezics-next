@@ -250,7 +250,11 @@ test('readability, management and membership never confer publication authority;
 test('optional presentation failure stays unavailable while native command advice remains current', async () => {
   const realmId = await realm();
   const observer = observeSql(runtime.system.database.pool);
-  observer.armFault({ match: { statement: summaryRead.sql }, boundary: 'before', error: new AccessUnavailableError('overloaded') });
+  observer.armFault({
+    match: { statement: summaryRead.sql },
+    boundary: 'before',
+    error: new AccessUnavailableError('overloaded'),
+  });
   try {
     const result = await inspect(realmId);
     expect(result.status).toBe(200);

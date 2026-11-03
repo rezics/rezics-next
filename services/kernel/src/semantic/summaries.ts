@@ -150,12 +150,18 @@ export async function readSubjectSummaryObservation(
   let batches: Batches = [];
   let disclosed: ReadonlySet<string> = new Set();
   let covers: ReadonlyMap<string, SummaryCoverState> = new Map();
-  const summaries = await readSummaryBatch(deps, ids, languages, (observed, selected, visible, states) => {
-    sources = observed;
-    batches = selected;
-    disclosed = visible;
-    covers = states;
-  }, boundedLabelLanguages(languages));
+  const summaries = await readSummaryBatch(
+    deps,
+    ids,
+    languages,
+    (observed, selected, visible, states) => {
+      sources = observed;
+      batches = selected;
+      disclosed = visible;
+      covers = states;
+    },
+    boundedLabelLanguages(languages),
+  );
   return {
     summaries,
     covers,

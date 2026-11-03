@@ -28,7 +28,10 @@ const command = t.Object(
   closed,
 );
 const presentationLabel = t.Union([
-  t.Object({ state: t.Literal('available'), value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
+  t.Object(
+    { state: t.Literal('available'), value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) },
+    closed,
+  ),
   t.Object({ state: t.Literal('empty') }, closed),
   t.Object({ state: t.Literal('concealed') }, closed),
   t.Object({ state: t.Literal('unavailable') }, closed),
@@ -42,9 +45,15 @@ const presentationCover = t.Union([
           media: id,
           width: t.Integer({ minimum: 1 }),
           height: t.Integer({ minimum: 1 }),
-          placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+          placeholder: t.Object(
+            { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+            closed,
+          ),
           variants: t.Array(
-            t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+            t.Object(
+              { format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) },
+              closed,
+            ),
             { maxItems: 12 },
           ),
           focalPoint: t.Union([t.Object({ x: t.Number(), y: t.Number() }, closed), t.Null()]),
@@ -216,7 +225,10 @@ function destination(href: string, subjectId: string, head: string | null) {
   };
 }
 
-function presentationValue(summary: SubjectSummary | null, coverState: 'available' | 'absent' | 'concealed' | undefined) {
+function presentationValue(
+  summary: SubjectSummary | null,
+  coverState: 'available' | 'absent' | 'concealed' | undefined,
+) {
   if (!summary) return { label: { state: 'concealed' as const }, cover: { state: 'concealed' as const } };
   const label = summary.label
     ? summary.label.value.length <= 4096 && summary.label.language.length <= 64
