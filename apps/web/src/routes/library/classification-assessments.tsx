@@ -23,7 +23,7 @@ export const Route = createFileRoute('/library/classification-assessments')({
     return frontier ? classificationSearch(frontier) : { invalidAddress: true };
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readOwnClassificationsForViewer({ data: deps.invalidAddress ? { cursor: '' } : deps }),
+  loader: ({ deps }) => readOwnClassificationsForViewer({ data: 'invalidAddress' in deps ? { cursor: '' } : deps }),
   head: ({ match }) =>
     pageHead({ title: m.own_classifications_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ClassificationAssessmentsRoute,

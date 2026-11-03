@@ -53,6 +53,11 @@ export function indexOwnClassifications(page: OwnClassificationsPage, frontier: 
     throw new Error('Invalid classification frontier');
   const result = new Map<string, OwnClassificationsPage['items'][number]>();
   for (const row of page.items) {
+    if (
+      row.state === 'withheld' &&
+      (row.subject !== null || row.target !== null || row.association !== null || row.aggregate !== null)
+    )
+      throw new Error('Disclosed context on a withheld classification');
     const key = classificationPair(row);
     if (result.has(key)) throw new Error('Duplicate original classification key');
     if (

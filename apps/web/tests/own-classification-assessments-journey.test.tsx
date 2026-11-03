@@ -1,15 +1,8 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { OwnClassificationsWorkspace } from '../src/ratings/own-classifications/page';
-import { admitOwnClassificationsPage } from '../src/ratings/own-classifications/admission';
 import { classificationFrontier, indexOwnClassifications } from '../src/ratings/own-classifications/inventory';
-import {
-  accountId,
-  classificationRow,
-  classificationsPage,
-  frontier,
-  subjectId,
-} from './own-classification-assessments-fixture';
+import { classificationRow, classificationsPage, frontier, subjectId } from './own-classification-assessments-fixture';
 
 test('native order, 20 raw slots plus one exact selected promotion, and concealed shape remain native', () => {
   for (const size of [1, 10, 20, 21]) {
@@ -19,9 +12,9 @@ test('native order, 20 raw slots plus one exact selected promotion, and conceale
       selected: size === 21 ? { subjectId, associationId: rows[20]!.associationId } : null,
     };
     const page = classificationsPage(rows, ' raw +/=%opaque ');
-    expect(admitOwnClassificationsPage(page, accountId, address)).toBe(page);
+    expect(indexOwnClassifications(page, address).size).toBe(size);
     expect([...indexOwnClassifications(page, address).values()]).toEqual(rows);
-    if (size === 21) expect(admitOwnClassificationsPage(page, accountId, frontier)).toBeNull();
+    if (size === 21) expect(() => indexOwnClassifications(page, frontier)).toThrow();
   }
   const row = classificationRow();
   const withheld = {
@@ -33,12 +26,11 @@ test('native order, 20 raw slots plus one exact selected promotion, and conceale
     aggregate: null,
     actions: { state: 'withdraw-only' as const, readback: null, set: null, clear: row.actions.clear },
   };
-  expect(admitOwnClassificationsPage(classificationsPage([withheld]), accountId, frontier)).not.toBeNull();
-  expect(
-    admitOwnClassificationsPage(classificationsPage([{ ...withheld, subject: row.subject }]), accountId, frontier),
-  ).toBeNull();
-  expect(admitOwnClassificationsPage(classificationsPage([row, row]), accountId, frontier)).toBeNull();
-  expect(admitOwnClassificationsPage(classificationsPage(), 'another-account', frontier)).toBeNull();
+  expect(indexOwnClassifications(classificationsPage([withheld]), frontier).size).toBe(1);
+  expect(() =>
+    indexOwnClassifications(classificationsPage([{ ...withheld, subject: row.subject }]), frontier),
+  ).toThrow();
+  expect(() => indexOwnClassifications(classificationsPage([row, row]), frontier)).toThrow();
 });
 
 test('withheld rows disclose only own-state and never promise withdrawal before generated binding', () => {

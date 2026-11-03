@@ -55,8 +55,8 @@ an unknown command succeeded. Stale/conflict requires fresh native inspection be
   makes zero Content reads. No polling, per-row reads, accumulation, sorting, searching or refill.
 - **Bound:** native raw page 20 plus at most one selected promotion, cursor 4096 characters, at most one selected
   editor/intent and no retained page history. Native identity/type/property bounds are 256 characters, label 2000,
-  release 128, href 128 and digests 64. The producer caps serialized response bytes at 1,048,576. Runtime shape
-  admission enforces its closed union and byte limit; it does not establish browser admission.
+  release 128, href 128 and digests 64. The producer caps serialized response bytes at 1,048,576. The installed generated
+  binding must validate the closed native union and enforce the response byte limit before browser admission.
 - **Growth check:** vary 1/10/20 raw rows, optional selected row 21, and bounded labels; the authored regression
   preserves exact order and original keys. Indexing and presentation are O(N), and selection uses one exact-pair
   lookup. One HTTP request is not constant native work. Native physical rows, authorization, nested Semantic
