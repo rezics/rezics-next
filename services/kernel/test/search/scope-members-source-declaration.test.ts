@@ -67,9 +67,7 @@ test('the Members Source subtotal composes finite named axes and refuses an inco
     fixedBytes: 1024,
   });
   expect(() =>
-    sumMembersPreparationSourceTerms([
-      { ...MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS[0]!, name: 'unpriced-child' },
-    ]),
+    sumMembersPreparationSourceTerms([{ ...MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS[0]!, name: 'unpriced-child' }]),
   ).toThrow('Unknown or unbounded Members Source term');
   expect(() =>
     sumMembersPreparationSourceTerms([

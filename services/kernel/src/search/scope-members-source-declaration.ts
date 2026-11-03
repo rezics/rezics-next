@@ -44,10 +44,7 @@ export function sumMembersPreparationSourceTerms(
   terms: readonly MembersPreparationSourceTerm[],
 ): MembersPreparationSourceCost {
   if (!Array.isArray(terms)) throw new TypeError('Invalid Members Source terms');
-  const total = Object.fromEntries(axes.map((axis) => [axis, 0])) as Record<
-    (typeof axes)[number],
-    number
-  >;
+  const total = Object.fromEntries(axes.map((axis) => [axis, 0])) as Record<(typeof axes)[number], number>;
   for (const term of terms) {
     if (
       !term ||

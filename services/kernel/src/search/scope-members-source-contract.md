@@ -13,12 +13,12 @@ emptySeeks and engineRequests. Library's existing `MEMBERS_PREPARATION_BRANCH_CO
 priced whole prefix available to Search. Its producer documents 9 step reads, 5 Source metadata reads and 2 owner
 fence reads. Their components are:
 
-| Component | candidateKeys | nativeRows | identityMetadataRows | nativePoints | witnessKeys | statements | bytes | emptySeeks | engineRequests |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 9 × step | 0 | 18 | 0 | 18 | 0 | 9 | 9,437,184 | 18 | 0 |
-| 5 × Source metadata | 0 | 25 | 0 | 25 | 0 | 5 | 10,485,760 | 25 | 0 |
-| 2 × owner fence | 0 | 2 | 0 | 2 | 0 | 2 | 2,048 | 2 | 0 |
-| Known subtotal | 0 | 45 | 0 | 45 | 0 | 16 | 19,924,992 | 45 | 0 |
+| Component           | candidateKeys | nativeRows | identityMetadataRows | nativePoints | witnessKeys | statements |      bytes | emptySeeks | engineRequests |
+| ------------------- | ------------: | ---------: | -------------------: | -----------: | ----------: | ---------: | ---------: | ---------: | -------------: |
+| 9 × step            |             0 |         18 |                    0 |           18 |           0 |          9 |  9,437,184 |         18 |              0 |
+| 5 × Source metadata |             0 |         25 |                    0 |           25 |           0 |          5 | 10,485,760 |         25 |              0 |
+| 2 × owner fence     |             0 |          2 |                    0 |            2 |           0 |          2 |      2,048 |          2 |              0 |
+| Known subtotal      |             0 |         45 |                    0 |           45 |           0 |         16 | 19,924,992 |         45 |              0 |
 
 These are the literals in `members-preparation-cost.ts`; the Search export sums that branch by name. They do not
 price Search's nested scope work or any other owner. `scope-members-work-cost.ts` also names the actual query-meter
@@ -39,15 +39,15 @@ passes. The closure is bounded by 100 raw keys; with the `ids.length + raw.keys.
 at most 49 terminal lookups, 50 fact queries, 98 owner fact reads and 98 pinned-release reads. The earliest-ordinal
 scan has at most 99 member probes. These are call maxima, not costs; nested native statement prices are still needed.
 
-| Reached operation | id path | ordinal path | Derivation |
-| --- | ---: | ---: | --- |
-| `readWorkDefinition` calls | 15 | 11 | Three direct getters; Search snapshot and order-currentness calls along the selected branch |
-| `readMembersSnapshot` calls | 8 | 4 | Prepare start/end, prefix start/end, plus four id-evaluation currentness checks |
-| Order currentness reads | 4 | 2 | Before/after prepare and before/after the selected prefix |
-| `createSearchScopeSource.prepare` | 1 | 1 | One preparation per released Source callback |
-| Selected prefix | 1 id prefix | 1 ordinal prefix | Definition sort chooses exactly one |
-| Evaluated subjects | 1 | at most 1 | Id chooses its first candidate; ordinal raw quota is 1 |
-| `readPreparationScope` / owner fence | 2 / 2 | 2 / 2 | Before Search execution and after its final currentness read |
+| Reached operation                    |     id path |     ordinal path | Derivation                                                                                  |
+| ------------------------------------ | ----------: | ---------------: | ------------------------------------------------------------------------------------------- |
+| `readWorkDefinition` calls           |          15 |               11 | Three direct getters; Search snapshot and order-currentness calls along the selected branch |
+| `readMembersSnapshot` calls          |           8 |                4 | Prepare start/end, prefix start/end, plus four id-evaluation currentness checks             |
+| Order currentness reads              |           4 |                2 | Before/after prepare and before/after the selected prefix                                   |
+| `createSearchScopeSource.prepare`    |           1 |                1 | One preparation per released Source callback                                                |
+| Selected prefix                      | 1 id prefix | 1 ordinal prefix | Definition sort chooses exactly one                                                         |
+| Evaluated subjects                   |           1 |        at most 1 | Id chooses its first candidate; ordinal raw quota is 1                                      |
+| `readPreparationScope` / owner fence |       2 / 2 |            2 / 2 | Before Search execution and after its final currentness read                                |
 
 Each `readMembersSnapshot` also calls `readCollectionSourceWorkState`, reads the current `canonical_source_scope`
 capture/revision, revalidates its identity observation and reads the owner fence. The id/ordinal counts above multiply
@@ -60,15 +60,15 @@ not add those already-declared native statements to the Source field a second ti
 The source declaration remains incomplete because the required owners have not supplied these finite child prices
 or physical authority:
 
-| Owner | Body | Missing from the nine axes |
-| --- | --- | --- |
-| Library | `MembersPreparation.readWorkDefinition` and retained release reconstruction | Current `NativeSourceIdentity`, current `CollectionSourceObservation`, cold release and header statement/row/point/byte bounds, same-client revalidation cost |
-| Library | `readCollectionSourceWorkState`, `createCollectionSource.prepare`, id prefix and raw ordinal prefix | Per-call cost declarations and transitive native statement, row, point, empty-seek and byte bounds |
-| Semantic | `createIdentityScopedObservations.revalidate` | A finite child quote for the capture/revision fence, including reached failure and cleanup |
-| Search | `readMembersSnapshot`, `membersTerminal`, `group`, `closure` facts queries and `firstMembersOrdinal` | Sum the direct query bounds and SQL/serialized-parameter byte projections across the path maxima |
-| Library | Owner fact providers, accepted release body reads and `readOwnerFilterCandidate` | Transitive native statements and the bounded fact/release byte projections over both closure passes |
-| Core | `runOperationalTransaction` around `readReleasedPreparationSource` | Work-step setup, time/owner fences, and commit or rollback/connection cleanup cost |
-| Commerce successor with Library producer ownership | `MEMBERS_SELECTED_CHILDREN.source` and `checkMembersPreparationCompletion` | The complete `SelectedCost`, the installed source field, and final physical-source authority |
+| Owner                                              | Body                                                                                                 | Missing from the nine axes                                                                                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library                                            | `MembersPreparation.readWorkDefinition` and retained release reconstruction                          | Current `NativeSourceIdentity`, current `CollectionSourceObservation`, cold release and header statement/row/point/byte bounds, same-client revalidation cost |
+| Library                                            | `readCollectionSourceWorkState`, `createCollectionSource.prepare`, id prefix and raw ordinal prefix  | Per-call cost declarations and transitive native statement, row, point, empty-seek and byte bounds                                                            |
+| Semantic                                           | `createIdentityScopedObservations.revalidate`                                                        | A finite child quote for the capture/revision fence, including reached failure and cleanup                                                                    |
+| Search                                             | `readMembersSnapshot`, `membersTerminal`, `group`, `closure` facts queries and `firstMembersOrdinal` | Sum the direct query bounds and SQL/serialized-parameter byte projections across the path maxima                                                              |
+| Library                                            | Owner fact providers, accepted release body reads and `readOwnerFilterCandidate`                     | Transitive native statements and the bounded fact/release byte projections over both closure passes                                                           |
+| Core                                               | `runOperationalTransaction` around `readReleasedPreparationSource`                                   | Work-step setup, time/owner fences, and commit or rollback/connection cleanup cost                                                                            |
+| Commerce successor with Library producer ownership | `MEMBERS_SELECTED_CHILDREN.source` and `checkMembersPreparationCompletion`                           | The complete `SelectedCost`, the installed source field, and final physical-source authority                                                                  |
 
 `MEMBERS_SELECTED_CHILDREN` currently declares native children but no `source`. `SelectedInvocation.source` therefore
 refuses before dispatch. `readWorkDefinition` also throws `dependency_unavailable` for a live retained episode, and

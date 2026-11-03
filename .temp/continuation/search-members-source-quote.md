@@ -1,38 +1,30 @@
 ---
 {
-  "goal": "search",
-  "manager": "search",
-  "kind": "implementation",
-  "riskAreas": [],
-  "criticalPath": false,
-  "waiting": [],
-  "paths": [
-    "services/kernel/src/search/scope-members-source-declaration.ts",
-    "services/kernel/src/search/scope-members-work-cost.ts",
-    "services/kernel/src/search/scope-members-work.ts",
-    "services/kernel/test/search/scope-members-source-declaration.test.ts"
-  ],
-  "acceptance": {
-    "command": [
-      "bun",
-      "run",
-      "--cwd",
-      "services/kernel",
-      "check",
-      "test/search/scope-members-source-declaration.test.ts"
+  'goal': 'search',
+  'manager': 'search',
+  'kind': 'implementation',
+  'riskAreas': [],
+  'criticalPath': false,
+  'waiting': [],
+  'paths':
+    [
+      'services/kernel/src/search/scope-members-source-declaration.ts',
+      'services/kernel/src/search/scope-members-work-cost.ts',
+      'services/kernel/src/search/scope-members-work.ts',
+      'services/kernel/test/search/scope-members-source-declaration.test.ts',
     ],
-    "tests": [
-      "Search's direct Members snapshot, id/ordinal prefix, evaluation, currentness and reached failure paths have named finite terms with literal multiplicities and SQL/parameter byte projections; the nine-axis quote composes only when each delivered Library, Semantic, Core and Selected Runtime child declaration is present and finite. Missing terms remain incomplete, and arithmetic does not bind SelectedChildren.source or enable execution."
-    ],
-    "failing": true
-  },
-  "after": [
-    "bd18969f-8587-46a3-b058-8708529f458e"
-  ],
-  "estimate": {
-    "lines": 450,
-    "files": 4
-  }
+  'acceptance':
+    {
+      'command':
+        ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/search/scope-members-source-declaration.test.ts'],
+      'tests':
+        [
+          "Search's direct Members snapshot, id/ordinal prefix, evaluation, currentness and reached failure paths have named finite terms with literal multiplicities and SQL/parameter byte projections; the nine-axis quote composes only when each delivered Library, Semantic, Core and Selected Runtime child declaration is present and finite. Missing terms remain incomplete, and arithmetic does not bind SelectedChildren.source or enable execution.",
+        ],
+      'failing': true,
+    },
+  'after': ['bd18969f-8587-46a3-b058-8708529f458e'],
+  'estimate': { 'lines': 450, 'files': 4 },
 }
 ---
 
