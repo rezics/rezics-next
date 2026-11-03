@@ -35,7 +35,13 @@ const extra = {
   title: 'Vanishing work',
 };
 
-function tsv(record: { type: { key: string }; key: string; revision: number; last_modified?: { value: string } }) {
+function tsv(record: {
+  type: { key: string };
+  key: string;
+  revision: number;
+  last_modified?: { value: string };
+  title?: string;
+}) {
   const date = record.last_modified?.value ?? '2025-01-01T00:00:00Z';
   return `${[record.type.key, record.key, record.revision, date, JSON.stringify(record)].join('\t')}\n`;
 }
