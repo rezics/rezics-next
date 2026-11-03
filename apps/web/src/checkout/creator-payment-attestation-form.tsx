@@ -20,76 +20,38 @@ function terminalPaymentResult(result: PaymentAttestationResult | null) {
   return result?.kind === 'saved' || result?.kind === 'conflict';
 }
 
-/** This region shares the statement reader's current origin; it starts no parallel reader. */
-export function CreatorPaymentAttestation({
+/** The shared form projection lets stories exercise the real attempt state without a fake server. */
+export function CreatorPaymentAttestationFormView({
   statement,
-  subject,
   locale,
-  guard,
-  refresh,
+  attempt,
+  reference,
+  onReferenceChange,
+  admitted,
+  isCurrent,
+  onSubmit,
+  onRefresh,
+  refreshing,
+  refreshFailed,
 }: {
   statement: CreatorStatement;
-  subject: string;
   locale: string;
-  guard: CreatorOfferGuard;
-  refresh(): Promise<boolean>;
+  attempt: CreatorPaymentAttempt;
+  reference: string;
+  onReferenceChange(value: string): void;
+  admitted: boolean;
+  isCurrent(): boolean;
+  onSubmit(): void | Promise<void>;
+  onRefresh(): void | Promise<void>;
+  refreshing: boolean;
+  refreshFailed: boolean;
 }) {
-  const memory = useCreatorIntent<CreatorPaymentAttempt>(guard, 'payment-attestation');
-  const sender = useCreatorIntent<(data: PaymentAttestationInput) => Promise<PaymentAttestationResult>>(
-    guard,
-    'payment-attestation-sender',
-  );
-  const [attempt] = useState(() => memory.value ?? new CreatorPaymentAttempt(statement.id, subject));
-  memory.value = attempt;
-  const [reference, setReference] = useState(attempt.request?.paidReference ?? '');
   useSyncExternalStore(attempt.subscribe, attempt.snapshot, attempt.snapshot);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshFailed, setRefreshFailed] = useState(false);
-  const active = useRef(false);
-  const referenceField = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  const current = () => active.current && guard.isCurrent();
   const fieldId = useId();
+  const referenceField = useRef<HTMLInputElement>(null);
   const result = attempt.result;
-  const admitted = guard.isCurrent() && !!guard.csrfToken();
   const locked = !!attempt.request && !attempt.correctionEditing;
   const canRetry = attempt.canRetry;
-
-  async function refreshEvidence() {
-    if (!current() || refreshing) return;
-    setRefreshing(true);
-    let accepted = false;
-    try {
-      accepted = await refresh();
-    } catch {
-      /* Keep the confirmed command result. */
-    }
-    if (!current()) return;
-    setRefreshFailed(!accepted);
-    setRefreshing(false);
-  }
-
-  async function submit() {
-    if (terminalPaymentResult(attempt.result)) return;
-    const csrfToken = guard.csrfToken();
-    if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
-    const startsFreshRequest = !attempt.request || attempt.correctionEditing;
-    if (startsFreshRequest) {
-      if (!validPaymentReference(reference) || (attempt.correctionEditing && !attempt.canSubmitCorrection(reference)))
-        return;
-      const execute = attestCreatorPayment;
-      sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
-    }
-    const pending = attempt.submit(reference, sender.value!, current);
-    await pending;
-    if (!current()) return;
-    if (attempt.result?.kind === 'saved') await refreshEvidence();
-  }
 
   return (
     <div className="space-y-4">
@@ -100,7 +62,7 @@ export function CreatorPaymentAttestation({
           aria-labelledby={`${fieldId}-heading`}
           onSubmit={(event) => {
             event.preventDefault();
-            void submit();
+            void onSubmit();
           }}
         >
           <h3 id={`${fieldId}-heading`} className="font-semibold">
@@ -123,10 +85,7 @@ export function CreatorPaymentAttestation({
               aria-describedby={`${fieldId}-help ${fieldId}-validation`}
               aria-invalid={!!reference && !validPaymentReference(reference)}
               className="min-h-11"
-              onChange={(event) => {
-                setReference(event.target.value);
-                attempt.setCorrectionDraft(event.target.value);
-              }}
+              onChange={(event) => onReferenceChange(event.target.value)}
             />
             <p id={`${fieldId}-validation`} className="text-sm text-muted-foreground">
               {m.payment_attestation_validation()}
@@ -182,8 +141,8 @@ export function CreatorPaymentAttestation({
               className="min-h-11"
               disabled={!admitted || attempt.busy}
               onClick={() => {
-                if (!current() || !attempt.beginCorrection()) return;
-                setReference(attempt.correctionDraft);
+                if (!isCurrent() || !attempt.beginCorrection()) return;
+                onReferenceChange(attempt.correctionDraft);
                 referenceField.current?.focus();
               }}
             >
@@ -214,8 +173,8 @@ export function CreatorPaymentAttestation({
               type="button"
               variant="outline"
               className="min-h-11"
-              disabled={!guard.isCurrent() || refreshing}
-              onClick={() => void refreshEvidence()}
+              disabled={!isCurrent() || refreshing}
+              onClick={() => void onRefresh()}
             >
               {m.statements_refresh()}
             </Button>
@@ -230,10 +189,95 @@ export function CreatorPaymentAttestation({
               ? reference !== attempt.request?.paidReference && hasUnsentPaymentReference(reference, false)
               : hasUnsentPaymentReference(reference, !!attempt.request)
           }
-          isCurrent={() => guard.isCurrent()}
+          isCurrent={isCurrent}
           focus={() => referenceField.current}
         />
       )}
     </div>
+  );
+}
+
+/** This region shares the statement reader's current origin; it starts no parallel reader. */
+export function CreatorPaymentAttestation({
+  statement,
+  subject,
+  locale,
+  guard,
+  refresh,
+}: {
+  statement: CreatorStatement;
+  subject: string;
+  locale: string;
+  guard: CreatorOfferGuard;
+  refresh(): Promise<boolean>;
+}) {
+  const memory = useCreatorIntent<CreatorPaymentAttempt>(guard, 'payment-attestation');
+  const sender = useCreatorIntent<(data: PaymentAttestationInput) => Promise<PaymentAttestationResult>>(
+    guard,
+    'payment-attestation-sender',
+  );
+  const [attempt] = useState(() => memory.value ?? new CreatorPaymentAttempt(statement.id, subject));
+  memory.value = attempt;
+  const [reference, setReference] = useState(attempt.request?.paidReference ?? '');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const current = () => active.current && guard.isCurrent();
+  const admitted = guard.isCurrent() && !!guard.csrfToken();
+
+  async function refreshEvidence() {
+    if (!current() || refreshing) return;
+    setRefreshing(true);
+    let accepted = false;
+    try {
+      accepted = await refresh();
+    } catch {
+      /* Keep the confirmed command result. */
+    }
+    if (!current()) return;
+    setRefreshFailed(!accepted);
+    setRefreshing(false);
+  }
+
+  async function submit() {
+    if (terminalPaymentResult(attempt.result)) return;
+    const csrfToken = guard.csrfToken();
+    if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
+    const startsFreshRequest = !attempt.request || attempt.correctionEditing;
+    if (startsFreshRequest) {
+      if (!validPaymentReference(reference) || (attempt.correctionEditing && !attempt.canSubmitCorrection(reference)))
+        return;
+      const execute = attestCreatorPayment;
+      sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
+    }
+    const pending = attempt.submit(reference, sender.value!, current);
+    await pending;
+    if (!current()) return;
+    if (attempt.result?.kind === 'saved') await refreshEvidence();
+  }
+
+  return (
+    <CreatorPaymentAttestationFormView
+      statement={statement}
+      locale={locale}
+      attempt={attempt}
+      reference={reference}
+      onReferenceChange={(value) => {
+        setReference(value);
+        attempt.setCorrectionDraft(value);
+      }}
+      admitted={admitted}
+      isCurrent={guard.isCurrent}
+      onSubmit={submit}
+      onRefresh={refreshEvidence}
+      refreshing={refreshing}
+      refreshFailed={refreshFailed}
+    />
   );
 }
