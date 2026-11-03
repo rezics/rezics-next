@@ -385,29 +385,39 @@ test('the counted reader distinguishes absent, zero, clear and unavailable and r
     observations: [{ requestedTargetId: target, state: 'absent' }],
   });
   const initialKey = crypto.randomUUID();
-  expect(await body(await fixture.request('PUT', votePath(target), { key: initialKey, body: { units: 9 } }))).toMatchObject({
+  expect(
+    await body(await fixture.request('PUT', votePath(target), { key: initialKey, body: { units: 9 } })),
+  ).toMatchObject({
     units: 9,
     revision: 1,
   });
   const zeroKey = crypto.randomUUID();
   const zero = await body(await fixture.request('PUT', votePath(target), { key: zeroKey, body: { units: 0 } }));
   expect(zero).toMatchObject({ units: 0, revision: 2 });
-  expect(await body(await fixture.request('PUT', votePath(target), { key: zeroKey, body: { units: 0 } }))).toEqual(zero);
+  expect(await body(await fixture.request('PUT', votePath(target), { key: zeroKey, body: { units: 0 } }))).toEqual(
+    zero,
+  );
   expect(await countedVoteResult(reader, request, deadline)).toMatchObject({
     status: 'current',
-    observations: [{
-      requestedTargetId: target,
-      originalTargetId: target,
-      countingTargetId: target,
-      state: 'counted',
-      units: 0,
-      revision: 2,
-      countedRevision: 2,
-    }],
+    observations: [
+      {
+        requestedTargetId: target,
+        originalTargetId: target,
+        countingTargetId: target,
+        state: 'counted',
+        units: 0,
+        revision: 2,
+        countedRevision: 2,
+      },
+    ],
   });
 
   const hundred = await countedVoteResult(reader, { actor, targetIds: Array(100).fill(target) }, deadline);
-  expect(hundred).toMatchObject({ status: 'current', requestedTargetIds: [target], observations: [{ state: 'counted' }] });
+  expect(hundred).toMatchObject({
+    status: 'current',
+    requestedTargetIds: [target],
+    observations: [{ state: 'counted' }],
+  });
   await expect(reader.prepare({ actor, targetIds: Array(101).fill(target) }, deadline)).rejects.toBeInstanceOf(
     VoteInvalidError,
   );
@@ -449,15 +459,17 @@ test('native mapping stays preparing through merge and counted reads follow the 
   await fixture.nativeFigures!.drain();
   expect(await countedVoteResult(reader, request, deadline)).toMatchObject({
     status: 'current',
-    observations: [{
-      requestedTargetId: original,
-      originalTargetId: original,
-      countingTargetId: survivor,
-      state: 'counted',
-      units: 7,
-      revision: 1,
-      countedRevision: 2,
-    }],
+    observations: [
+      {
+        requestedTargetId: original,
+        originalTargetId: original,
+        countingTargetId: survivor,
+        state: 'counted',
+        units: 7,
+        revision: 1,
+        countedRevision: 2,
+      },
+    ],
   });
 
   await body(await fixture.request('PUT', votePath(survivor), { body: { units: 0 } }));
@@ -500,13 +512,15 @@ test('equal-time merge selection and eventless losing-row cleanup leave the coun
   expect(removed.rows).toHaveLength(1);
   expect(await countedVoteResult(reader, { actor, targetIds: [second] }, deadline)).toMatchObject({
     status: 'current',
-    observations: [{
-      requestedTargetId: second,
-      originalTargetId: first,
-      countingTargetId: survivor,
-      state: 'counted',
-      units: 6,
-    }],
+    observations: [
+      {
+        requestedTargetId: second,
+        originalTargetId: first,
+        countingTargetId: survivor,
+        state: 'counted',
+        units: 6,
+      },
+    ],
   });
 }, 180_000);
 
@@ -552,7 +566,9 @@ test('account and question observations that change after the caller read requir
   const questionRead = await prepareCountedVoteRead(reader, request, deadline);
   if (questionRead.prepared.status !== 'prepared' || questionRead.read === null)
     throw new Error('Expected a prepared question observation');
-  await fixture.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+  await fixture.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [
+    STANDARD_QUESTION_ID,
+  ]);
   try {
     expect(await reader.finish(request, questionRead.prepared.preparation, questionRead.read, deadline)).toMatchObject({
       status: 'preparing',

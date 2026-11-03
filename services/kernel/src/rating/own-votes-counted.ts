@@ -43,10 +43,12 @@ export type OwnCountedVoteIdentity = Readonly<{
   sourceEpoch: string;
 }>;
 
-export type OwnCountedVotePreparedTarget = OwnCountedVoteIdentity | Readonly<{
-  requestedTargetId: string;
-  state: 'unavailable';
-}>;
+export type OwnCountedVotePreparedTarget =
+  | OwnCountedVoteIdentity
+  | Readonly<{
+      requestedTargetId: string;
+      state: 'unavailable';
+    }>;
 
 export type OwnCountedVoteQuestionObservation = Readonly<{
   questionId: string;
@@ -119,30 +121,33 @@ export type OwnCountedVoteReadResult =
     }>;
 
 export type OwnCountedVoteObservation =
-  | (OwnCountedVoteIdentity & Readonly<{
-      state: 'counted';
-      measurement: StandardRatingMeasurement;
-      originalTargetId: string;
-      units: number;
-      revision: number;
-      countedRevision: number;
-      changedAt: string;
-      transactionId: string;
-    }>)
-  | (OwnCountedVoteIdentity & Readonly<{
-      state: 'clear';
-      measurement: StandardRatingMeasurement;
-      originalTargetId: string;
-      units: null;
-      revision: number;
-      countedRevision: number;
-      changedAt: string;
-      transactionId: string;
-    }>)
-  | (OwnCountedVoteIdentity & Readonly<{
-      state: 'absent';
-      measurement: StandardRatingMeasurement;
-    }>)
+  | (OwnCountedVoteIdentity &
+      Readonly<{
+        state: 'counted';
+        measurement: StandardRatingMeasurement;
+        originalTargetId: string;
+        units: number;
+        revision: number;
+        countedRevision: number;
+        changedAt: string;
+        transactionId: string;
+      }>)
+  | (OwnCountedVoteIdentity &
+      Readonly<{
+        state: 'clear';
+        measurement: StandardRatingMeasurement;
+        originalTargetId: string;
+        units: null;
+        revision: number;
+        countedRevision: number;
+        changedAt: string;
+        transactionId: string;
+      }>)
+  | (OwnCountedVoteIdentity &
+      Readonly<{
+        state: 'absent';
+        measurement: StandardRatingMeasurement;
+      }>)
   | Readonly<{ requestedTargetId: string; state: 'unavailable' }>;
 
 export type OwnCountedVoteResult =
@@ -154,7 +159,13 @@ export type OwnCountedVoteResult =
     }>
   | Readonly<{
       status: 'preparing';
-      reason: 'request-changed' | 'preparation-changed' | 'account-changed' | 'question-changed' | 'identity-changed' | 'vote-changed';
+      reason:
+        | 'request-changed'
+        | 'preparation-changed'
+        | 'account-changed'
+        | 'question-changed'
+        | 'identity-changed'
+        | 'vote-changed';
       retry: 'same-input';
     }>;
 
@@ -181,7 +192,10 @@ function accountObservation(row: Account): OwnCountedVoteAccountObservation {
   };
 }
 
-async function readAccountObservation(client: Queryable, actor: AccountActor): Promise<OwnCountedVoteAccountObservation> {
+async function readAccountObservation(
+  client: Queryable,
+  actor: AccountActor,
+): Promise<OwnCountedVoteAccountObservation> {
   const route = routeOf(actor.accountId);
   if (route === null) throw new GrantDeniedError();
   const row = await readAccount(client, route, actor.accountId);
@@ -215,7 +229,9 @@ function requestFingerprint(request: OwnCountedVoteRequest): string {
     .digest('hex');
 }
 
-function questionObservation(row: NonNullable<Awaited<ReturnType<typeof readVisibleRatingQuestion>>>): OwnCountedVoteQuestionObservation {
+function questionObservation(
+  row: NonNullable<Awaited<ReturnType<typeof readVisibleRatingQuestion>>>,
+): OwnCountedVoteQuestionObservation {
   return {
     questionId: row.id,
     revision: Number(row.revision),
@@ -259,7 +275,9 @@ function identityObservationsEqual(left: readonly IdentityMapping[], right: read
 }
 
 function identityFingerprint(mappings: readonly IdentityMapping[]): string {
-  return createHash('sha256').update(JSON.stringify(mappings.map(identityValue))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(mappings.map(identityValue)))
+    .digest('hex');
 }
 
 function visibilityFingerprint(ids: readonly string[]): string {
@@ -307,7 +325,9 @@ function preparationFingerprint(
 }
 
 function readFingerprint(requestHash: string, preparationHash: string, rows: readonly OwnCountedVoteRow[]): string {
-  return createHash('sha256').update(JSON.stringify([requestHash, preparationHash, rows])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([requestHash, preparationHash, rows]))
+    .digest('hex');
 }
 
 async function readRows(
@@ -369,10 +389,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
   const identityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly IdentityMapping[]>();
   const visibilityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly string[]>();
 
-  async function prepare(
-    request: OwnCountedVoteRequest,
-    deadline: number,
-  ): Promise<OwnCountedVotePrepareResult> {
+  async function prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult> {
     const ids = targetIds(request);
     const actor = owner(request.actor);
     const account = await withReadTransaction(
@@ -454,7 +471,14 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       targets,
       account,
       question,
-      preparationFingerprint: preparationFingerprint(requestHash, targets, account, question, identityHash, visibleHash),
+      preparationFingerprint: preparationFingerprint(
+        requestHash,
+        targets,
+        account,
+        question,
+        identityHash,
+        visibleHash,
+      ),
     } satisfies OwnCountedVotePreparation;
     identityWitnesses.set(preparation, last);
     visibilityWitnesses.set(preparation, visibleIds);
@@ -519,10 +543,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
     const ids = targetIds(request);
     if (ids.length) {
       const question = await readQuestionObservation(deps, actor, deadline);
-      if (
-        !validStandardQuestion(question) ||
-        JSON.stringify(question) !== JSON.stringify(preparation.question)
-      )
+      if (!validStandardQuestion(question) || JSON.stringify(question) !== JSON.stringify(preparation.question))
         return { status: 'preparing', reason: 'question-changed', retry: 'same-input' };
     }
 
