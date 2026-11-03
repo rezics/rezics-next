@@ -152,6 +152,10 @@ export type RunResultCollection = Readonly<{
 
 export type ImportProgressPhase =
   | 'acquiring'
+  | 'verifying'
+  | 'loading'
+  | 'validating'
+  | 'publishing'
   | 'materializing'
   | 'staging'
   | 'resuming'

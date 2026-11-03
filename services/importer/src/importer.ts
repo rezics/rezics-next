@@ -1992,7 +1992,8 @@ export class Importer {
     ]);
     this.runControllers.set(signal, runController);
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
-    const ownership = this.session.acquire(registration.source);
+    const existing = this.session.heldOwnership(registration.source);
+    const ownership = existing ?? this.session.acquire(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
     if (options.progress) this.progressObservers.set(signal, options.progress);
@@ -2113,7 +2114,7 @@ export class Importer {
       this.progressObservers.delete(signal);
       this.planInflight.delete(signal);
       this.planningStack.delete(signal);
-      this.session.release(ownership);
+      if (!existing) this.session.release(ownership);
     }
   }
 }

@@ -7,7 +7,22 @@ import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, observeDumpRetention } from './dumps-bytes.ts';
-import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
+import {
+  DEFAULT_VNDB_ARCHIVE_BYTES,
+  DEFAULT_VNDB_ARCHIVE_ENTRIES,
+  type VndbTablesStore,
+} from './vndb-tables.ts';
+import {
+  VNDB_ACQUISITION_COST,
+  VNDB_ACQUISITION_MISSING_STATE,
+  VNDB_ACQUISITION_UNSUPPORTED,
+  VndbAcquisitionError,
+  captureVndbIdentity,
+  isVndbAcquisitionId,
+  resumeVndbAcquisitionInvocation,
+  vndbCodec,
+  type VndbAcquisitionIdentity,
+} from './vndb-acquisition.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
 import type {
@@ -50,7 +65,7 @@ import {
   parseDumpCompression,
   type DumpCompression,
 } from './compressed-dump.ts';
-import { probeZstdExecutable, resolveZstdExecutable } from './zstd-input.ts';
+import { DEFAULT_DECODED_ZSTD_BYTES, probeZstdExecutable, resolveZstdExecutable } from './zstd-input.ts';
 import {
   DumpInputError,
   fileChunks,
@@ -140,8 +155,9 @@ type Config = {
   compression: DumpCompression;
   decodeBudget?: number;
   zstdExecutable?: string;
-  mode: 'ordinary' | 'checkpoint-staging' | 'resume-staging';
+  mode: 'ordinary' | 'checkpoint-staging' | 'resume-staging' | 'checkpoint-acquisition' | 'resume-acquisition';
   generation?: string;
+  acquisition?: string;
 };
 
 class InputFailure extends DumpInputError {}
@@ -153,6 +169,7 @@ function usage(): string {
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
+    '       [--checkpoint-acquisition] [--resume-acquisition --acquisition <id>]',
     '       rezics-import resume --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--progress <human|jsonl>]',
@@ -172,10 +189,12 @@ function usage(): string {
     '       rezics-import batch --manifest <path> --run --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--progress human|jsonl] [--json]',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --help',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
     '--checkpoint-staging and --resume-staging apply only to one uncompressed Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation. Default import still discards unsealed staging. After sealing, resume with the ordinary command; do not replace input. Dump-set manifests are not a checkpointed capture.',
     STAGING_COST,
+    '--checkpoint-acquisition and --resume-acquisition apply only to one regular local VNDB archive with plain tar or owned zstd decoding. They re-hash the complete original file before table mutation. Stdin cannot resume. Table acquisition IDs are distinct from source generation IDs. After tables are ready, resume publication with --resume-acquisition; after sealing, use the ordinary command.',
+    VNDB_ACQUISITION_COST,
   ].join('\n');
 }
 
@@ -207,9 +226,15 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--compression',
     '--decode-budget',
     '--generation',
+    '--acquisition',
     '--zstd-executable',
   ]);
-  const booleanFlags = new Set(['--checkpoint-staging', '--resume-staging']);
+  const booleanFlags = new Set([
+    '--checkpoint-staging',
+    '--resume-staging',
+    '--checkpoint-acquisition',
+    '--resume-acquisition',
+  ]);
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
     if (booleanFlags.has(flag)) {
@@ -263,13 +288,22 @@ function parse(argv: readonly string[]): Config | 'help' {
 
   const checkpointStaging = flags.has('--checkpoint-staging');
   const resumeStaging = flags.has('--resume-staging');
-  if (checkpointStaging && resumeStaging) throw new InputFailure();
+  const checkpointAcquisition = flags.has('--checkpoint-acquisition');
+  const resumeAcquisition = flags.has('--resume-acquisition');
+  const modeCount = [checkpointStaging, resumeStaging, checkpointAcquisition, resumeAcquisition].filter(Boolean).length;
+  if (modeCount > 1) throw new InputFailure();
   const generation = values.get('--generation');
+  const acquisition = values.get('--acquisition');
   if (resumeStaging) {
     if (!generation || !/^[1-9][0-9]*$/.test(generation)) throw new InputFailure();
-  } else if (generation !== undefined && !checkpointStaging) {
+  } else if (generation !== undefined) {
     throw new InputFailure();
-  } else if (checkpointStaging && generation !== undefined) throw new InputFailure();
+  }
+  if (resumeAcquisition) {
+    if (!acquisition || !isVndbAcquisitionId(acquisition)) throw new InputFailure();
+  } else if (acquisition !== undefined) {
+    throw new InputFailure();
+  }
   const result: Config = {
     source: source as SourceKind,
     ...(dump === undefined ? {} : { dump }),
@@ -281,8 +315,17 @@ function parse(argv: readonly string[]): Config | 'help' {
     client,
     auth,
     compression: 'none',
-    mode: resumeStaging ? 'resume-staging' : checkpointStaging ? 'checkpoint-staging' : 'ordinary',
+    mode: resumeStaging
+      ? 'resume-staging'
+      : checkpointStaging
+        ? 'checkpoint-staging'
+        : resumeAcquisition
+          ? 'resume-acquisition'
+          : checkpointAcquisition
+            ? 'checkpoint-acquisition'
+            : 'ordinary',
     ...(generation ? { generation } : {}),
+    ...(acquisition ? { acquisition } : {}),
   };
   const compression = values.get('--compression');
   if (compression !== undefined) result.compression = parseDumpCompression(compression);
@@ -315,7 +358,7 @@ function parse(argv: readonly string[]): Config | 'help' {
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new InputFailure();
     result.disappearanceThreshold = parsed;
   }
-  if (result.mode !== 'ordinary') {
+  if (result.mode === 'checkpoint-staging' || result.mode === 'resume-staging') {
     if (
       result.dumpSet !== undefined ||
       result.dump === '-' ||
@@ -323,6 +366,15 @@ function parse(argv: readonly string[]): Config | 'help' {
       !isStagingCheckpointSource(result.source)
     )
       throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+  }
+  if (result.mode === 'checkpoint-acquisition' || result.mode === 'resume-acquisition') {
+    if (
+      result.dumpSet !== undefined ||
+      result.dump === '-' ||
+      result.source !== 'vndb' ||
+      result.compression === 'gzip'
+    )
+      throw new DumpInputError(VNDB_ACQUISITION_UNSUPPORTED, 'checkpoint-unsupported');
   }
   return result;
 }
@@ -524,6 +576,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   let importer: Importer | undefined;
   let lastHttpStatus: number | undefined;
   let capture: StagingCaptureIdentity | undefined;
+  let vndbCapture: VndbAcquisitionIdentity | undefined;
+  let tableAcquisitionId = config.acquisition;
   const clock = options.clock ?? {
     now: () => Date.now(),
     sleep: async (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
@@ -533,7 +587,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     lastHttpStatus = response.status;
     return response;
   }) as unknown as typeof fetch;
-  let tokenProvider: Awaited<ReturnType<typeof createAccountTokenProvider>>;
+  let tokenProvider: Awaited<ReturnType<typeof createAccountTokenProvider>> | undefined;
   try {
     if (config.dumpSet) {
       try {
@@ -554,27 +608,56 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     } else {
       dumpHandle = await openDump(config.dump!, handles);
       if (config.mode !== 'ordinary') {
-        if (!dumpHandle) throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+        if (!dumpHandle)
+          throw new DumpInputError(
+            config.mode === 'checkpoint-acquisition' || config.mode === 'resume-acquisition'
+              ? VNDB_ACQUISITION_UNSUPPORTED
+              : STAGING_UNSUPPORTED_INPUT,
+            'checkpoint-unsupported',
+          );
         const fingerprint = await fingerprintDump(dumpHandle, signal, options.observer);
-        capture = captureIdentity({
-          sha256: fingerprint.sha256,
-          bytes: fingerprint.bytes,
-          sourceAlias: config.sourceAlias ?? config.source,
-          sourceKind: config.source,
-          converterRevision: registration.converter_revision,
-          disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
-        });
-        if (config.mode === 'resume-staging') {
+        if (config.mode === 'checkpoint-acquisition' || config.mode === 'resume-acquisition') {
+          vndbCapture = captureVndbIdentity({
+            sha256: fingerprint.sha256,
+            bytes: fingerprint.bytes,
+            codec: vndbCodec(config.compression),
+            sourceAlias: config.sourceAlias ?? config.source,
+            converterRevision: registration.converter_revision,
+            childCap: 64,
+            maxRows: 2_000_000,
+            maxSourceRecords: 500_000,
+            maxArchiveBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
+            maxArchiveEntries: DEFAULT_VNDB_ARCHIVE_ENTRIES,
+            decodeBudget:
+              config.compression === 'zstd' ? (config.decodeBudget ?? DEFAULT_DECODED_ZSTD_BYTES) : 0,
+          });
+        } else {
+          capture = captureIdentity({
+            sha256: fingerprint.sha256,
+            bytes: fingerprint.bytes,
+            sourceAlias: config.sourceAlias ?? config.source,
+            sourceKind: config.source,
+            converterRevision: registration.converter_revision,
+            disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+          });
+        }
+        if (config.mode === 'resume-staging' || config.mode === 'resume-acquisition') {
           let stateStat: Awaited<ReturnType<typeof lstat>>;
           try {
             stateStat = await lstat(config.state);
           } catch {
-            throw new DumpInputError(STAGING_MISSING_STATE);
+            throw new DumpInputError(
+              config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
+            );
           }
-          if (!stateStat.isFile()) throw new DumpInputError(STAGING_MISSING_STATE);
+          if (!stateStat.isFile())
+            throw new DumpInputError(
+              config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
+            );
         }
       }
     }
+    if (config.mode !== 'checkpoint-acquisition' && config.mode !== 'resume-acquisition') {
     tokenProvider = await createAccountTokenProvider({
       accountKeyPath: config.accountKey,
       account: config.account,
@@ -596,6 +679,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         },
       },
     });
+    }
   } catch (error) {
     credentialLifetime.abort();
     if (dumpHandle) {
@@ -622,13 +706,44 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     };
   }
 
-  const importTransport = createImportTransport({
-    origin: validateOrigin(config.api, options.testOrigin),
-    tokenProvider,
-    fetch: guardedFetch,
-    now: () => clock.now(),
-    sleep: (ms) => clock.sleep(ms),
-  });
+  let importTransport: ReturnType<typeof createImportTransport> | undefined;
+  const connectTransport = async () => {
+    if (importTransport) return importTransport;
+    tokenProvider ??= await createAccountTokenProvider({
+      accountKeyPath: config.accountKey,
+      account: config.account,
+      client: config.client,
+      authOrigin: config.auth,
+      scopes:
+        config.source === 'vndb'
+          ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
+          : config.source === 'bangumi'
+            ? [...IMPORTER_SCOPES, 'subject:read']
+            : IMPORTER_SCOPES,
+      fetch: guardedFetch,
+      signal: AbortSignal.any([signal, credentialLifetime.signal]),
+      now: () => clock.now(),
+      observer: {
+        onAccountKey(path, observation) {
+          options.observer?.onTokenRead?.(path, observation.bytes);
+          options.observer?.onAccountKey?.(path, observation);
+        },
+      },
+    });
+    importTransport = createImportTransport({
+      origin: validateOrigin(config.api, options.testOrigin),
+      tokenProvider,
+      fetch: guardedFetch,
+      now: () => clock.now(),
+      sleep: (ms) => clock.sleep(ms),
+    });
+    return importTransport;
+  };
+  if (tokenProvider) await connectTransport();
+  const liveTransport = () => {
+    if (!importTransport) throw new Error('VNDB publication has not started');
+    return importTransport;
+  };
   const progress = config.progressMode
     ? new ImportProgressReporter({
         source: config.source,
@@ -687,21 +802,22 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return track(() => result);
   };
   const signalTransport = {
-    setSourceRecordMetadata: (input: Parameters<typeof importTransport.setSourceRecordMetadata>[0]) =>
-      track(() => importTransport.setSourceRecordMetadata(input, signal)),
-    batchWrite: (request: Parameters<typeof importTransport.batch>[0]) =>
-      track(() => importTransport.batch(request, signal)),
-    clearSourceStatistic: (input: Parameters<typeof importTransport.clearSourceStatistic>[0]) =>
-      track(() => importTransport.clearSourceStatistic(input, signal)),
-    writeSourceStatistic: (input: Parameters<NonNullable<typeof importTransport.writeSourceStatistic>>[0]) =>
-      track(() => importTransport.writeSourceStatistic(input, signal)),
-    readSourceStatistics: (input: Parameters<typeof importTransport.readSourceStatistics>[0]) =>
-      track(() => importTransport.readSourceStatistics(input, signal)),
-    readPublicFigure: (input: Parameters<typeof importTransport.readPublicFigure>[0]) =>
-      track(() => importTransport.readPublicFigure(input, signal)),
+    setSourceRecordMetadata: (input: Parameters<ReturnType<typeof createImportTransport>['setSourceRecordMetadata']>[0]) =>
+      track(() => liveTransport().setSourceRecordMetadata(input, signal)),
+    batchWrite: (request: Parameters<ReturnType<typeof createImportTransport>['batch']>[0]) =>
+      track(() => liveTransport().batch(request, signal)),
+    clearSourceStatistic: (input: Parameters<ReturnType<typeof createImportTransport>['clearSourceStatistic']>[0]) =>
+      track(() => liveTransport().clearSourceStatistic(input, signal)),
+    writeSourceStatistic: (
+      input: Parameters<NonNullable<ReturnType<typeof createImportTransport>['writeSourceStatistic']>>[0],
+    ) => track(() => liveTransport().writeSourceStatistic(input, signal)),
+    readSourceStatistics: (input: Parameters<ReturnType<typeof createImportTransport>['readSourceStatistics']>[0]) =>
+      track(() => liveTransport().readSourceStatistics(input, signal)),
+    readPublicFigure: (input: Parameters<ReturnType<typeof createImportTransport>['readPublicFigure']>[0]) =>
+      track(() => liveTransport().readPublicFigure(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       readFence(() =>
-        importTransport.fence(
+        liveTransport().fence(
           { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },
           signal,
         ),
@@ -710,16 +826,17 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
 
   const mediaPort = {
     readFence: (tuple: { source: string; externalId: string; fieldGroup: 'cover' }, mediaSignal: AbortSignal) =>
-      readFence(() => importTransport.fence(tuple, mediaSignal)),
+      readFence(() => liveTransport().fence(tuple, mediaSignal)),
     importFromUrl: (bytes: string, key: string, mediaSignal: AbortSignal) =>
-      track(() => importTransport.requestMedia(bytes, key, mediaSignal)),
-    importStatus: (id: string, mediaSignal: AbortSignal) => track(() => importTransport.mediaStatus(id, mediaSignal)),
+      track(() => liveTransport().requestMedia(bytes, key, mediaSignal)),
+    importStatus: (id: string, mediaSignal: AbortSignal) => track(() => liveTransport().mediaStatus(id, mediaSignal)),
   };
 
   let output: ImportCliResult = { code: 1, stdout: '', stderr: diagnostic('Import failed safely.'), openHandles: 0 };
   try {
-    await progress?.setPhase('acquiring');
+    await progress?.setPhase(vndbCapture ? 'verifying' : 'acquiring');
     if (capture) progress?.add('inputBytes', capture.bytes);
+    if (vndbCapture) progress?.add('inputBytes', vndbCapture.bytes);
     options.observer?.onDatabaseOpen?.(config.state);
     const importerOptions: ImporterOptions = {
       path: config.state,
@@ -728,7 +845,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       // Keep Importer's cancellable native timer unless a clock was explicitly supplied.
       ...(options.clock ? { sleep: (ms: number, sleepSignal: AbortSignal) => clockSleep(clock, ms, sleepSignal) } : {}),
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
-      ...(config.mode === 'resume-staging' ? { create: false } : {}),
+      ...(config.mode === 'resume-staging' || config.mode === 'resume-acquisition' ? { create: false } : {}),
     };
     importer = (options.createImporter ?? createImporter)(importerOptions);
     const media = createMediaResolver({
@@ -765,114 +882,160 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     // production RecordBindings handle owned by this coordinator.
     importerOptions.mediaResolver = mediaAdapter;
     if (config.source === 'bangumi')
-      importerOptions.identifierLookup = createReviewedCatalogueLookup(importer.session.bindings, importTransport);
+      importerOptions.identifierLookup = createReviewedCatalogueLookup(importer.session.bindings, liveTransport());
 
     const decoderModule =
       config.source === 'vndb' ? import.meta.resolve('./vndb-tables.ts') : import.meta.resolve('./dumps.ts');
     if (config.source === 'vndb') {
       const materialization = new VndbMaterialization(importer, registration);
       options.observer?.onVndbStore?.({ importer, store: materialization.tables });
-      const acquisition = materialization.begin();
-      progress?.setSourceRun(acquisition);
-      await progress?.setPhase('materializing');
-      const entries =
-        options.entries !== undefined
-          ? observedEntries(options.entries, signal, options.observer, progress)
-          : readArchive(
-              decodeDumpBytes(
-                ownedChunks(
-                  dumpHandle
-                    ? fileChunks(dumpHandle, signal)
-                    : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
-                  signal,
-                  'dump',
-                  options.observer,
-                  dumpHandle !== undefined,
-                  progress,
-                ),
-                {
-                  compression: config.compression,
-                  signal,
-                  ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
-                  ...(progress ? { progress } : {}),
-                  observer: { onDecodedChunk: (_bytes, backing) => options.observer?.onInputBuffer?.(backing) },
-                  ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
-                  zstdProbe: false,
-                },
-              ),
-              {
-                maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
-                maxChunkBytes: DEFAULT_DUMP_CHUNK_BYTES,
-                maxMetadataBytes: 4096,
-                signal,
-                onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes),
-              },
-            );
-      // The table reader deliberately rejects an empty catalogue. A complete,
-      // validated empty native archive still needs the ordinary loss-all guard
-      // when this source already has a completed baseline. Observe only framing;
-      // table/header validation remains with the existing table reader.
-      let completeEmptyTables = false;
-      const verifiedEntries = (async function* () {
-        const required = new Set([
-          'db/vn',
-          'db/vn.header',
-          'db/vn_titles',
-          'db/vn_titles.header',
-          'db/entry_meta',
-          'db/entry_meta.header',
-        ]);
-        let empty = true;
-        for await (const entry of entries) {
-          if (required.has(entry.path)) {
-            required.delete(entry.path);
-            if (!entry.path.endsWith('.header') && entry.declaredBytes !== 0) empty = false;
+      const tracked = config.mode === 'checkpoint-acquisition' || config.mode === 'resume-acquisition';
+      const ownership = tracked ? importer.session.acquire(registration.source) : undefined;
+      if (ownership === 'busy') {
+        output = {
+          code: 5,
+          stdout: '',
+          stderr: diagnostic('This source already has an active import.'),
+          openHandles: 0,
+        };
+      } else
+        try {
+          let acquisition: string;
+          let publishOnly = false;
+          if (config.mode === 'resume-acquisition') {
+            if (!vndbCapture || !config.acquisition) throw new InputFailure();
+            const compatibility = materialization.resumeCompatibility(config.acquisition, vndbCapture);
+            if (!compatibility.ok) throw new VndbAcquisitionError(compatibility.code, compatibility.message);
+            acquisition = config.acquisition;
+            publishOnly = compatibility.action === 'publish';
+            progress?.setSourceRun(acquisition);
+          } else if (config.mode === 'checkpoint-acquisition') {
+            if (!vndbCapture) throw new InputFailure();
+            acquisition = materialization.beginCheckpointed(vndbCapture);
+            tableAcquisitionId = acquisition;
+            progress?.setSourceRun(acquisition);
+          } else {
+            acquisition = materialization.begin();
+            progress?.setSourceRun(acquisition);
           }
-          yield entry;
-        }
-        // Reaching EOF here also proves that stage consumed every preceding
-        // member, including all validated headers and any ignored members.
-        completeEmptyTables = empty && required.size === 0;
-      })();
-      let emptyCatalogue = false;
-      try {
-        await materialization.stage(
-          acquisition,
-          verifiedEntries as unknown as Parameters<VndbMaterialization['stage']>[1],
-        );
-      } catch (error) {
-        if (
-          !completeEmptyTables ||
-          !(error instanceof VndbInputError) ||
-          importer.session.store.source(registration.source).count === 0
-        )
-          throw error;
-        emptyCatalogue = true;
-      }
-      options.observer?.onCoordinator?.({
-        importer,
-        registration,
-        state: config.state,
-        converterModule: converterModule(config.source),
-        decoderModule,
-      });
-      const runOptions = {
-        ...(config.disappearanceThreshold === undefined
-          ? {}
-          : { disappearanceThreshold: config.disappearanceThreshold }),
-        signal,
-        ...(progressHooks ? { progress: progressHooks } : {}),
-      };
-      const run = emptyCatalogue
-        ? await importer.runRecords(registration, (async function* () {})(), runOptions)
-        : await materialization.commit(acquisition, {
-            ...runOptions,
-            onPageRecords: (count) => {
-              options.observer?.onPageRecords?.(count);
-              progress?.add('materializedRecords', count);
-            },
+          let emptyCatalogue = false;
+          if (!publishOnly) {
+            await progress?.setPhase(tracked ? 'loading' : 'materializing');
+            const loadProgress = tracked ? undefined : progress;
+            const entries =
+              options.entries !== undefined
+                ? observedEntries(options.entries, signal, options.observer, loadProgress)
+                : readArchive(
+                    decodeDumpBytes(
+                      ownedChunks(
+                        dumpHandle
+                          ? fileChunks(dumpHandle, signal)
+                          : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
+                        signal,
+                        'dump',
+                        options.observer,
+                        dumpHandle !== undefined,
+                        loadProgress,
+                      ),
+                      {
+                        compression: config.compression,
+                        signal,
+                        ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
+                        ...(progress ? { progress } : {}),
+                        observer: { onDecodedChunk: (_bytes, backing) => options.observer?.onInputBuffer?.(backing) },
+                        ...(zstdExecutable === undefined ? {} : { zstdExecutable }),
+                        zstdProbe: false,
+                      },
+                    ),
+                    {
+                      maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
+                      maxChunkBytes: DEFAULT_DUMP_CHUNK_BYTES,
+                      maxMetadataBytes: 4096,
+                      signal,
+                      onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes),
+                    },
+                  );
+            let completeEmptyTables = false;
+            const verifiedEntries = (async function* () {
+              const required = new Set([
+                'db/vn',
+                'db/vn.header',
+                'db/vn_titles',
+                'db/vn_titles.header',
+                'db/entry_meta',
+                'db/entry_meta.header',
+              ]);
+              let empty = true;
+              for await (const entry of entries) {
+                if (required.has(entry.path)) {
+                  required.delete(entry.path);
+                  if (!entry.path.endsWith('.header') && entry.declaredBytes !== 0) empty = false;
+                }
+                yield entry;
+              }
+              completeEmptyTables = empty && required.size === 0;
+            })();
+            try {
+              await materialization.stage(
+                acquisition,
+                verifiedEntries as unknown as Parameters<VndbMaterialization['stage']>[1],
+                tracked && vndbCapture
+                  ? {
+                      identity: vndbCapture,
+                      resume: config.mode === 'resume-acquisition',
+                      onCommitted: (count) => progress?.add('verifiedPrefix', count),
+                      onVerified: (count) => progress?.add('verifiedPrefix', count),
+                    }
+                  : undefined,
+              );
+            } catch (error) {
+              if (
+                !completeEmptyTables ||
+                !(error instanceof VndbInputError) ||
+                importer.session.store.source(registration.source).count === 0
+              )
+                throw error;
+              emptyCatalogue = true;
+            }
+            if (tracked) await progress?.setPhase('validating');
+          }
+          options.observer?.onCoordinator?.({
+            importer,
+            registration,
+            state: config.state,
+            converterModule: converterModule(config.source),
+            decoderModule,
           });
-      output = resultFor(run, lastHttpStatus, signal);
+          await connectTransport();
+          await progress?.setPhase(tracked ? 'publishing' : 'staging');
+          const runOptions = {
+            ...(config.disappearanceThreshold === undefined
+              ? {}
+              : { disappearanceThreshold: config.disappearanceThreshold }),
+            signal,
+            ...(progressHooks ? { progress: progressHooks } : {}),
+          };
+          const run = emptyCatalogue
+            ? await importer.runRecords(registration, (async function* () {})(), runOptions)
+            : await materialization.commit(acquisition, {
+                ...runOptions,
+                onPageRecords: (count) => {
+                  options.observer?.onPageRecords?.(count);
+                  progress?.add('materializedRecords', count);
+                },
+              });
+          if (tracked && run.status === 'interrupted')
+            output = {
+              ...resultFor(run, lastHttpStatus, signal),
+              stderr: diagnostic(
+                `Import interrupted; last valid VNDB table checkpoint remains recoverable. Resume with --resume-acquisition --acquisition ${acquisition} and the original file.`,
+              ),
+            };
+          else output = resultFor(run, lastHttpStatus, signal);
+        } finally {
+          if (ownership && importer.session.heldOwnership(registration.source) === ownership)
+            importer.session.release(ownership);
+        }
     } else if (dumpSet || resumeSealedDumpSet) {
       const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));
       try {
@@ -949,7 +1112,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     const missingState =
-      config.mode === 'resume-staging' &&
+      (config.mode === 'resume-staging' || config.mode === 'resume-acquisition') &&
       error instanceof Error &&
       /unable to open database|SQLITE_CANTOPEN|no such file/i.test(error.message);
     output = {
@@ -957,6 +1120,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         ? 130
         : error instanceof InputFailure ||
             error instanceof VndbInputError ||
+            error instanceof VndbAcquisitionError ||
             error instanceof DumpInputError ||
             missingState
           ? 2
@@ -964,12 +1128,16 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       stdout: '',
       stderr: diagnostic(
         interrupted
-          ? config.mode !== 'ordinary'
-            ? 'Import interrupted; last valid staging checkpoint remains recoverable and no native batch was sent.'
-            : 'Import interrupted; durable state is retained for resume.'
+          ? config.mode === 'checkpoint-acquisition' || config.mode === 'resume-acquisition'
+            ? `Import interrupted; last valid VNDB table checkpoint remains recoverable and no native batch was sent.${tableAcquisitionId ? ` Next: ${resumeVndbAcquisitionInvocation(tableAcquisitionId)}` : ''}`
+            : config.mode !== 'ordinary'
+              ? 'Import interrupted; last valid staging checkpoint remains recoverable and no native batch was sent.'
+              : 'Import interrupted; durable state is retained for resume.'
           : missingState
-            ? STAGING_MISSING_STATE
-            : error instanceof OpenLibraryDumpSetError
+            ? config.mode === 'resume-acquisition'
+              ? VNDB_ACQUISITION_MISSING_STATE
+              : STAGING_MISSING_STATE
+            : error instanceof VndbAcquisitionError || error instanceof OpenLibraryDumpSetError
               ? error.message
               : error instanceof DumpInputError
                 ? error.message

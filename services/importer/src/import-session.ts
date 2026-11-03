@@ -108,6 +108,10 @@ export class ImportSession {
     }
   }
 
+  heldOwnership(source: string): ImportOwnership | undefined {
+    return this.held.get(source);
+  }
+
   acquire(source: string): ImportOwnership | 'busy' {
     if (this.closed) throw new Error('Import session is closed');
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');

@@ -7,7 +7,13 @@ import { DEFAULT_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { Importer, ImportRunOptions } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore } from './vndb-tables.ts';
+import {
+  evaluateVndbResume,
+  VndbAcquisitionError,
+  VNDB_ACQUISITION_MISSING,
+  type VndbAcquisitionIdentity,
+} from './vndb-acquisition.ts';
+import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore, type VndbStageTracking } from './vndb-tables.ts';
 
 export type VndbEntries = Parameters<VndbTablesStore['stage']>[2];
 export class VndbInputError extends Error {
@@ -65,11 +71,43 @@ export class VndbMaterialization {
     return run;
   }
 
-  async stage(run: string, entries: VndbEntries): Promise<void> {
+  beginCheckpointed(identity: VndbAcquisitionIdentity): string {
+    const run = randomUUID();
+    this.tables.beginCheckpointed(this.source, run, identity);
+    return run;
+  }
+
+  acquisition(run: string) {
+    const inspect = this.tables.inspect(this.source, run);
+    const row = this.importer.session.store.database
+      .query(`SELECT materialized_generation AS generation FROM vndb_table_runs
+        WHERE source=? AND run_id=?`)
+      .get(this.source, run) as { generation: string | null } | null;
+    return {
+      ...inspect,
+      materializedGeneration: row?.generation ?? null,
+      checkpoint: this.tables.checkpoint(this.source, run),
+    };
+  }
+
+  resumeCompatibility(run: string, identity: VndbAcquisitionIdentity) {
+    let inspect: ReturnType<VndbMaterialization['acquisition']>;
     try {
-      await this.tables.stage(this.source, run, entries);
+      inspect = this.acquisition(run);
+    } catch {
+      throw new VndbAcquisitionError('missing', VNDB_ACQUISITION_MISSING);
+    }
+    return evaluateVndbResume(inspect.checkpoint, identity, {
+      status: inspect.state,
+      materializedGeneration: inspect.materializedGeneration,
+    });
+  }
+
+  async stage(run: string, entries: VndbEntries, tracking?: VndbStageTracking): Promise<void> {
+    try {
+      await this.tables.stage(this.source, run, entries, tracking);
     } catch (error) {
-      if (error instanceof DumpInputError) throw error;
+      if (error instanceof DumpInputError || error instanceof VndbAcquisitionError) throw error;
       throw new VndbInputError();
     }
   }
@@ -131,7 +169,7 @@ export class VndbMaterialization {
     return this.importer.runRecords(this.registration, records(), runOptions);
   }
 
-  private acquisition(generation: string): string | null {
+  private linkedAcquisition(generation: string): string | null {
     const row = this.importer.session.store.database
       .query(`SELECT run_id FROM vndb_table_runs
         WHERE source=? AND materialized_generation=?`)
@@ -144,7 +182,7 @@ export class VndbMaterialization {
     const generation = store.source(this.source).generation;
     const row = store.key(this.source, key).baseline;
     if (!generation || !row || row.state !== 'present') return null;
-    const run = this.acquisition(generation);
+    const run = this.linkedAcquisition(generation);
     if (!run) return null;
     return {
       run,

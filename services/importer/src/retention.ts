@@ -41,6 +41,8 @@ const KNOWN_RUN_ID_TABLES = new Set([
   'vndb_table_runs',
   'vndb_table_rows',
   'vndb_table_spool',
+  'vndb_acquisition_checkpoints',
+  'vndb_acquisition_members',
 ]);
 const DELETE_PHASES = [
   'envelopes',
@@ -1200,8 +1202,28 @@ function runPhasePage(
     }
     case 'vndb_runs': {
       if (!tables.has('vndb_table_runs')) return { cursor, done: true, deleted: 0 };
+      const columns = database.query('PRAGMA table_info(vndb_table_runs)').all() as { name: string }[];
+      const linked = columns.some((column) => column.name === 'materialized_generation')
+        ? (database
+            .query(`SELECT run_id FROM vndb_table_runs WHERE source=? AND materialized_generation=?`)
+            .all(source, runId) as { run_id: string }[])
+        : [];
+      const ids = [runId, ...linked.map((row) => row.run_id)];
+      let extra = 0;
+      if (tables.has('vndb_acquisition_checkpoints'))
+        for (const id of ids)
+          extra += Number(
+            database.query('DELETE FROM vndb_acquisition_checkpoints WHERE source=? AND run_id=?').run(source, id)
+              .changes ?? 0,
+          );
+      if (tables.has('vndb_acquisition_members'))
+        for (const id of ids)
+          extra += Number(
+            database.query('DELETE FROM vndb_acquisition_members WHERE source=? AND run_id=?').run(source, id)
+              .changes ?? 0,
+          );
       const changes = database.query('DELETE FROM vndb_table_runs WHERE source=? AND run_id=?').run(source, runId);
-      return { cursor: '', done: true, deleted: Number(changes.changes ?? 0) };
+      return { cursor: '', done: true, deleted: Number(changes.changes ?? 0) + extra };
     }
     case 'entries':
       return deletePage(
