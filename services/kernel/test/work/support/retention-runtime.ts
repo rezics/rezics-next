@@ -11,6 +11,7 @@ const [application, mode] = process.argv.slice(2);
 if (application === undefined || !application.startsWith('retention-recovery:'))
   throw new Error('A retention-recovery application is required');
 const databaseUrl = process.env.DATABASE_URL!;
+const pool = createPool(databaseUrl);
 const client = await createWorkClient(databaseUrl);
 let selections = 0;
 const pause = async () => {
@@ -22,13 +23,8 @@ const pause = async () => {
 // and schedule installation are isolated; no fixture worker polls shared queues.
 const isolated = new Proxy(client, {
   get(target, property) {
+    if (property === 'applicationName') return application;
     if (property === 'applySchedules') return async () => {};
-    if (property === 'listWorkflows')
-      return async (input: Parameters<typeof client.listWorkflows>[0]) => {
-        console.log(`selection:${input.completedBefore}`);
-        if (mode === 'after' && ++selections === 2) await pause();
-        return client.listWorkflows({ ...input, applicationName: application });
-      };
     if (property === 'deleteWorkflows')
       return async (ids: string[], children: boolean) => {
         assert.equal(children, false);
@@ -41,6 +37,19 @@ const isolated = new Proxy(client, {
     return typeof value === 'function' ? value.bind(target) : value;
   },
 });
+
+const originalQuery = pool.query.bind(pool);
+pool.query = ((query: unknown, values?: unknown) => {
+  const config = typeof query === 'string' ? { text: query, values } : (query as { text?: string; values?: unknown });
+  const text = String(config.text ?? '');
+  if (text.includes('work:workflow-retention-select') || text.includes('ORDER BY completed_at, workflow_uuid')) {
+    const params = Array.isArray(config.values) ? config.values : Array.isArray(values) ? values : [];
+    const cutoff = params.find((value) => Number(value) > 1_000_000_000_000);
+    console.log(`selection:${String(cutoff)}`);
+    if (mode === 'after' && ++selections === 2) return pause() as never;
+  }
+  return values === undefined ? originalQuery(query as never) : originalQuery(query as never, values as never);
+}) as typeof pool.query;
 
 DBOS.setConfig({
   name: application,
@@ -56,7 +65,7 @@ const unexpectedCapability = () => {
   throw new Error('Retention fixture requested an unrelated worker capability');
 };
 await workflowRetentionWorkModule.register({
-  pool: createPool(databaseUrl),
+  pool,
   clock: systemClock,
   getAuthorization: unexpectedCapability,
   addEffects: unexpectedCapability,

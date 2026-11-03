@@ -13,41 +13,16 @@ The production retention workflow records its starting time and retention config
 subsequent batch is a separate durable step using the registered `DBOSClient`; replay skips committed batch results.
 A batch that fails before its checkpoint reselects work and repeats the supported SDK deletion without descendants.
 There are at most 60 batch steps per scheduled invocation, each with at most three attempts, plus the starting step.
-The current selector still returns at most 1,000 workflows per batch. Its creation/completion filters are not the
-indexed retention traversal required by the cleanup contract; that conversion remains separate work. These constants
-bound dispatch and returned IDs, and do not certify the existing selector's examined rows.
+Each batch returns at most 1,000 workflow IDs. The scheduled path uses the repository indexed selector, not
+`listWorkflows`.
 
-Decision: keep the installed compatibility selector until the native owner supplies a supported indexed terminal
-selector; expose `WorkflowRetentionSelector` as an optional batch/sweep adapter without changing scheduled replay.
-The adapter receives the current application, all four terminal statuses, an exclusive completion cutoff in epoch
-milliseconds and a limit of 1,000. It must return only eligible IDs; it must not select by payload age. Existing
-callers retain their signatures and behaviour. No indexed completion is claimed for the installed default.
+Decision: scheduled retention selects `client.applicationName ?? rezics-kernel` through
+`createWorkflowRetentionSelector` on WorkContext's existing pool, so recovery can isolate an application without a
+new WorkClient signature. Repository bootstrap waits for Postgres, creates the database if needed, installs the SDK
+schema, then applies dbmate migrations so `workflow_retention_selector` is created only after `dbos.workflow_status`
+exists. `dbos schema` reruns leave that index in place.
 
-The installed version is `5.5.3-preview`. Its `DBOSClient.listWorkflows(GetWorkflowsInput)` delegates to
-`SystemDatabase.#listWorkflows` (`dist/src/system_database.js:3808`). With the current retention input, the actual
-selection is equivalent to:
-
-```sql
-SELECT workflow_uuid, status, completed_at /* remaining status columns omitted */
-FROM dbos.workflow_status
-WHERE application_name = $application
-  AND status IN ('SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
-  AND completed_at <= $cutoff_minus_one_ms
-  AND created_at <= $cutoff_minus_one_ms
-ORDER BY created_at ASC
-LIMIT 1000;
-```
-
-`GetWorkflowsInput` (`dist/src/workflow.d.ts:101–132`) offers completion filters and `sortDesc`, but no completion
-ordering or indexed terminal selection port. The implementation fixes ordering to `created_at` in `#listWorkflows`.
-The completion-only index `idx_workflow_status_completed_at` does not key application or terminal status; payload
-`retention_timestamp` indexes do not decide workflow eligibility. Either creation ordering or application/status
-residual filtering may traverse unrelated history. Returned IDs do not measure that traversal.
-
-Required native interface: `DBOSClient.selectTerminalWorkflowsForRetention(input)` with the
-`WorkflowRetentionSelector` argument/result contract. This is a requested port, not an installed method. One ordinary
-implementation is a partial index on `(application_name, completed_at, workflow_uuid)` restricted to the four terminal
-statuses, paired with this query using the same literal terminal predicate:
+The production query and matching partial index:
 
 ```sql
 SELECT workflow_uuid FROM dbos.workflow_status
@@ -56,20 +31,33 @@ WHERE application_name = $application AND completed_at < $cutoff
 ORDER BY completed_at, workflow_uuid LIMIT 1000;
 ```
 
-That index/query pair is not installed here. Selection must have no application/status residual traversal before
-growth assertions can certify empty, short or full batches. No custom native discovery producer is required.
-Once available, selection examines at most 1,000 eligible keys per call; SDK deletion with `false` reaches no child
-discovery and issues six transaction statements (BEGIN, four exact-ID DELETEs, COMMIT). A sweep dispatches at most
-60 batches, or 180 attempts under the three-attempt retry cap, with at most 180,000 selected IDs across attempts.
-These are control/identity bounds: deletion also follows owned payload rows and FK cascades, whose count is not
-bounded by the workflow count. Permanent writer fence records are retained. Native growth and interrupted replay
-remain required evidence; no unit adapter assertion supplies that evidence. Database MVCC visibility work is excluded.
+```sql
+CREATE INDEX workflow_retention_selector
+  ON dbos.workflow_status (application_name, completed_at, workflow_uuid)
+  WHERE status IN ('SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED');
+```
+
+The seek is on `(application_name, completed_at)` and stops after `LIMIT 1000` or exhaustion, so examined keys are
+the returned batch plus logarithmic index descent. Unrelated applications, nonterminal rows (absent from the partial
+index), recent completions and long-lived terminals completed after the cutoff are outside that range. Eligible
+backlog beyond 1,000 stays unvisited. SDK `deleteWorkflows(ids, false)` is charged separately: six transaction
+statements (BEGIN, four exact-ID DELETEs, COMMIT) plus owned payload rows and FK cascades, which grow with those
+payloads rather than with unrelated history. Permanent writer fences stay. MVCC visibility work is excluded.
+
+`test/work/growth-retention.test.ts` measures empty, short (10) and full (1,000) batches at scales 64, 512 and 4,096
+history units (16 rows each) with selected work fixed, and a fourth series that grows selected-application eligible
+backlog with the returned batch fixed at 1,000. Plans must use `workflow_retention_selector` with no sequential scan.
+Measured rows/statements/blocks are logged from that native check.
+
+Remaining limits: deletion still follows owned payload/cascade rows, so a batch with large per-workflow payloads is
+not bounded by workflow count; interrupted recovery still uses the production selector and frozen cutoff. The
+installed SDK `listWorkflows` path stays creation-ordered and is unused by scheduled retention. No custom scheduler
+or cancelled reporting producer is introduced.
 
 Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts` reference at
 `627990fc59619d3584ce88511ab546bc7483f4b9`, `src/enqueue_options.ts`, `src/client.ts`, the outcome/cancellation/deletion
 sections of `src/system_database.ts`, and migrations 108–112; installed SDK client/queue declarations, deletion and
-native migration implementation. The installed retention indexes are on payload timestamps, not a terminal-status
-projection. No new native discovery or retention reporting primitive is introduced.
+native migration implementation. Payload `retention_timestamp` indexes do not decide workflow eligibility.
 
 ## Bounded legacy membership child discovery
 

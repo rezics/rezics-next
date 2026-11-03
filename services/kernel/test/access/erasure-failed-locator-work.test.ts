@@ -15,6 +15,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { runWorkflowRetentionSweep } from '../../src/work/retention.ts';
+import { createWorkflowRetentionSelector } from '../../src/work/retention-selector.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 
 const locator = 'failed_locator_test';
@@ -248,7 +249,12 @@ test('retention deletes failed DBOS history before the first tombstone without l
     failed.workflowId,
     old,
   ]);
-  expect(await within(runWorkflowRetentionSweep(30, client), 'retention sweep')).toBe(1);
+  expect(
+    await within(
+      runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), createWorkflowRetentionSelector(db.pool)),
+      'retention sweep',
+    ),
+  ).toBe(1);
   expect(await within(client.getWorkflow(failed.workflowId), 'retained workflow lookup')).toBeUndefined();
   const accountId = await tombstone();
   await expectHeld(accountId);
