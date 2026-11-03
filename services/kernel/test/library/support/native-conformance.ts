@@ -1,31 +1,25 @@
-import type { Pool } from "pg";
-import type { Release } from "@rezics/definitions";
-import type {
-  Anchor,
-  LibraryDriver,
-} from "../../../../../specs/library-driver.ts";
-import type { WorkClient } from "../../../src/work/client.ts";
-import type { Capture } from "../../support/growth.ts";
-import type { GrowthDatabase } from "../../support/growth.ts";
-import type {
-  ReadTrace,
-  Principal,
-} from "../../../../../specs/follow-counts-driver.ts";
-import type { LibraryAccountHost } from "./native-account-host.ts";
-import { createLibraryDriver } from "./outcome-driver.ts";
+import type { Pool } from 'pg';
+import type { Release } from '@rezics/definitions';
+import type { Anchor, LibraryDriver } from '../../../../../specs/library-driver.ts';
+import type { WorkClient } from '../../../src/work/client.ts';
+import type { Capture } from '../../support/growth.ts';
+import type { GrowthDatabase } from '../../support/growth.ts';
+import type { ReadTrace, Principal } from '../../../../../specs/follow-counts-driver.ts';
+import type { LibraryAccountHost } from './native-account-host.ts';
+import { createLibraryDriver } from './outcome-driver.ts';
 
 export type NativePersona =
-  | "owner"
-  | "other"
-  | "anonymous"
-  | "suspended"
-  | "steward"
-  | "ownerReadOnly"
-  | "unscoped"
-  | "libraryOnly"
-  | "progressOnly"
-  | "ungranted";
-export type NativeRequest = Parameters<LibraryDriver["request"]>[1];
+  | 'owner'
+  | 'other'
+  | 'anonymous'
+  | 'suspended'
+  | 'steward'
+  | 'ownerReadOnly'
+  | 'unscoped'
+  | 'libraryOnly'
+  | 'progressOnly'
+  | 'ungranted';
+export type NativeRequest = Parameters<LibraryDriver['request']>[1];
 export interface NativeConformanceWorld extends LibraryDriver {
   native: {
     accountHost: LibraryAccountHost;
@@ -36,22 +30,12 @@ export interface NativeConformanceWorld extends LibraryDriver {
     workClient: WorkClient;
     /** Existing Auth provisioning and kernel transport, with no asserted Actor. */
     principal(partition: number): Promise<Principal>;
-    reauthenticate(
-      accountId: string,
-      scopes?: readonly string[],
-    ): Promise<Principal>;
-    bearerRequest(
-      credential: string | null,
-      path: string,
-      init?: RequestInit,
-    ): Promise<Response>;
-    observeManagement(
-      observer:
-        ((check: ReadTrace["managementChecks"][number]) => void) | undefined,
-    ): void;
+    reauthenticate(accountId: string, scopes?: readonly string[]): Promise<Principal>;
+    bearerRequest(credential: string | null, path: string, init?: RequestInit): Promise<Response>;
+    observeManagement(observer: ((check: ReadTrace['managementChecks'][number]) => void) | undefined): void;
     /** The same database/capture used by the established growth classifier. */
     growth: GrowthDatabase;
-    token(persona: Exclude<NativePersona, "anonymous">): string;
+    token(persona: Exclude<NativePersona, 'anonymous'>): string;
     request(persona: NativePersona, input: NativeRequest): Promise<Response>;
     rawRequest(
       persona: NativePersona,
@@ -64,9 +48,7 @@ export interface NativeConformanceWorld extends LibraryDriver {
     rotateCursorKeys(): Promise<void>;
     hold(): Promise<void>;
     resume(): Promise<void>;
-    capture<T>(
-      operation: () => Promise<T>,
-    ): Promise<{ value: T; capture: Capture }>;
+    capture<T>(operation: () => Promise<T>): Promise<{ value: T; capture: Capture }>;
   };
 }
 
@@ -78,15 +60,13 @@ export const requestKey = () => `"${Bun.randomUUIDv7()}"`;
 export async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
   if (response.status !== status)
-    throw new Error(
-      `Native fixture HTTP ${response.status}, expected ${status}: ${text}`,
-    );
+    throw new Error(`Native fixture HTTP ${response.status}, expected ${status}: ${text}`);
   return JSON.parse(text) as T;
 }
 export function write(
   world: NativeConformanceWorld,
   persona: NativePersona,
-  method: NativeRequest["method"],
+  method: NativeRequest['method'],
   path: string,
   body?: unknown,
   key = requestKey(),
@@ -95,30 +75,26 @@ export function write(
     method,
     path,
     body,
-    headers: { "Idempotency-Key": key },
+    headers: { 'Idempotency-Key': key },
   });
 }
 export async function publish(world: NativeConformanceWorld, release: Release) {
   const { digest } = await json<{ digest: string }>(
-    await write(world, "steward", "POST", "/v1/definitions/releases", {
+    await write(world, 'steward', 'POST', '/v1/definitions/releases', {
       release,
     }),
     201,
   );
   const head = await json<{ head: number }>(
-    await world.native.request("anonymous", {
-      method: "GET",
-      path: "/v1/definitions/active",
+    await world.native.request('anonymous', {
+      method: 'GET',
+      path: '/v1/definitions/active',
     }),
   );
   await json(
-    await write(
-      world,
-      "steward",
-      "POST",
-      `/v1/definitions/releases/${digest}:activate`,
-      { expected_head: head.head },
-    ),
+    await write(world, 'steward', 'POST', `/v1/definitions/releases/${digest}:activate`, {
+      expected_head: head.head,
+    }),
   );
   return digest;
 }
@@ -132,18 +108,9 @@ export async function worldWithRelease(release: Release) {
     throw error;
   }
 }
-export async function setGate(
-  world: NativeConformanceWorld,
-  gate: string,
-  open: boolean,
-) {
+export async function setGate(world: NativeConformanceWorld, gate: string, open: boolean) {
   await json(
-    await write(
-      world,
-      "steward",
-      "POST",
-      `/v1/platform/exposure/${gate}:${open ? "open" : "close"}`,
-    ),
+    await write(world, 'steward', 'POST', `/v1/platform/exposure/${gate}:${open ? 'open' : 'close'}`),
   );
 }
 export async function setEntry(
@@ -153,7 +120,7 @@ export async function setEntry(
   state: string | null,
 ) {
   const existing = await world.native.request(persona, {
-    method: "GET",
+    method: 'GET',
     path: `/v1/libraryEntries/${subjectId}`,
   });
   if (existing.status !== 200 && existing.status !== 404) return existing;
@@ -166,48 +133,36 @@ export async function setEntry(
         ).libraryEntry
       : undefined;
   if (state !== null)
-    return write(world, persona, "PUT", `/v1/libraryEntries/${subjectId}`, {
+    return write(world, persona, 'PUT', `/v1/libraryEntries/${subjectId}`, {
       state,
-      ...(guard
-        ? { revision: guard.revision, incarnationId: guard.incarnationId }
-        : {}),
+      ...(guard ? { revision: guard.revision, incarnationId: guard.incarnationId } : {}),
     });
   const query = new URLSearchParams();
   if (guard) {
-    query.set("revision", String(guard.revision));
-    query.set("incarnationId", guard.incarnationId);
+    query.set('revision', String(guard.revision));
+    query.set('incarnationId', guard.incarnationId);
   }
-  return write(
-    world,
-    persona,
-    "DELETE",
-    `/v1/libraryEntries/${subjectId}?${query}`,
-  );
+  return write(world, persona, 'DELETE', `/v1/libraryEntries/${subjectId}?${query}`);
 }
-export async function addLabel(
-  world: NativeConformanceWorld,
-  subjectId: string,
-  name: string,
-) {
+export async function addLabel(world: NativeConformanceWorld, subjectId: string, name: string) {
   const { label } = await json<{ label: { id: string } }>(
-    await write(world, "owner", "POST", "/v1/libraryLabels", { name }),
+    await write(world, 'owner', 'POST', '/v1/libraryLabels', { name }),
     201,
   );
-  return write(world, "owner", "POST", `/v1/libraryLabels/${label.id}:assign`, {
+  return write(world, 'owner', 'POST', `/v1/libraryLabels/${label.id}:assign`, {
     subjectId,
   });
 }
 /** Preserve the original Response interface, carrying Accounts' committed T receipt. */
 export async function deleteAccount(
   world: NativeConformanceWorld,
-  persona: NativePersona = "owner",
+  persona: NativePersona = 'owner',
 ): Promise<Response> {
-  if (persona === "anonymous")
-    return unavailable("anonymous account deletion authority");
+  if (persona === 'anonymous') return unavailable('anonymous account deletion authority');
   const accountId =
-    persona === "steward"
+    persona === 'steward'
       ? world.native.steward.id
-      : persona === "other" || persona === "suspended"
+      : persona === 'other' || persona === 'suspended'
         ? world.accounts[persona].id
         : world.accounts.owner.id;
   return Response.json(await world.native.accountHost.delete(accountId));
@@ -215,26 +170,20 @@ export async function deleteAccount(
 export async function grantSubjectRead(
   world: NativeConformanceWorld,
   subjectId: string,
-  viewer: "owner" | "other",
+  viewer: 'owner' | 'other',
   readable: boolean,
 ) {
   const resource = {
-    route: (await import("../../../src/route/route.ts")).routeOf(subjectId),
+    route: (await import('../../../src/route/route.ts')).routeOf(subjectId),
     id: subjectId,
   };
   await json(
-    await write(
-      world,
-      "steward",
-      "POST",
-      `/v1/grants${readable ? "" : ":revoke"}`,
-      {
-        resource,
-        subject: { kind: "account", id: world.accounts[viewer].id },
-        actions: ["subject:read"],
-        valid: "(,)",
-      },
-    ),
+    await write(world, 'steward', 'POST', `/v1/grants${readable ? '' : ':revoke'}`, {
+      resource,
+      subject: { kind: 'account', id: world.accounts[viewer].id },
+      actions: ['subject:read'],
+      valid: '(,)',
+    }),
     readable ? 201 : 200,
   );
 }

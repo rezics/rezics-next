@@ -1,14 +1,10 @@
-import type { JWK } from "jose";
-import type { Pool } from "pg";
-import type { Principal } from "../../../../../specs/follow-counts-driver.ts";
-import type { Anchor } from "../../../../../specs/library-driver.ts";
-import {
-  cookies,
-  nativeFixture,
-  password,
-} from "../../access/native-account-bindings-fixture.ts";
-import { deletePersona } from "../../support/account-deletion.ts";
-import { partitionOf, routeOf } from "../../../src/route/route.ts";
+import type { JWK } from 'jose';
+import type { Pool } from 'pg';
+import type { Principal } from '../../../../../specs/follow-counts-driver.ts';
+import type { Anchor } from '../../../../../specs/library-driver.ts';
+import { cookies, nativeFixture, password } from '../../access/native-account-bindings-fixture.ts';
+import { deletePersona } from '../../support/account-deletion.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 
 /** Library borrows Accounts' host, approvals and exact receipt verifiers. */
 export async function createLibraryAccountHost(input: {
@@ -26,7 +22,7 @@ export async function createLibraryAccountHost(input: {
   });
   try {
     await fixture.host.service.internal.registerClient({
-      clientId: "web",
+      clientId: 'web',
       firstParty: true,
       scopes: input.scopes,
     });
@@ -35,26 +31,19 @@ export async function createLibraryAccountHost(input: {
     throw error;
   }
   const actingHumans = new Map<string, string>();
-  async function signIn(
-    accountId: string,
-    scopes: readonly string[] = input.scopes,
-  ) {
-    const signed = await fixture.request("/signin", {
+  async function signIn(accountId: string, scopes: readonly string[] = input.scopes) {
+    const signed = await fixture.request('/signin', {
       account_id: accountId,
       password,
-      client_id: "web",
+      client_id: 'web',
       scope: scopes,
     });
     if (signed.status !== 200)
-      throw new Error(
-        `Library Auth sign-in failed: ${signed.status} ${await signed.text()}`,
-      );
+      throw new Error(`Library Auth sign-in failed: ${signed.status} ${await signed.text()}`);
     const headers = cookies(signed);
-    const issued = await fixture.request("/token", {}, headers);
+    const issued = await fixture.request('/token', {}, headers);
     if (issued.status !== 200)
-      throw new Error(
-        `Library Auth token failed: ${issued.status} ${await issued.text()}`,
-      );
+      throw new Error(`Library Auth token failed: ${issued.status} ${await issued.text()}`);
     const { access_token: credential } = (await issued.json()) as {
       access_token: string;
     };
@@ -67,26 +56,22 @@ export async function createLibraryAccountHost(input: {
     async person(partition: number): Promise<Anchor & Principal> {
       // Choose a registration key, never substitute the host's routed account identity.
       const prefix = Bun.randomUUIDv7();
-      let key = "";
+      let key = '';
       for (let candidate = 0; candidate < 1_000_000; candidate++) {
         key = `${prefix}_${candidate}`;
         const id = fixture.bindings.workflowPorts.registrationTarget(key);
         if (partitionOf(routeOf(id)!) === partition) break;
-        key = "";
+        key = '';
       }
-      if (!key)
-        throw new Error(
-          "Library native registration could not place the requested partition",
-        );
+      if (!key) throw new Error('Library native registration could not place the requested partition');
       const registered = await fixture.host.workflows.register({
         key,
-        handle: `library_${key.replaceAll("-", "")}`,
+        handle: `library_${key.replaceAll('-', '')}`,
         email: `${key}@example.test`,
         password,
       });
       const route = routeOf(registered.accountId)!;
-      if (partitionOf(route) !== partition)
-        throw new Error("Auth changed the native registration placement");
+      if (partitionOf(route) !== partition) throw new Error('Auth changed the native registration placement');
       const signed = await signIn(registered.accountId);
       return {
         id: registered.accountId,
@@ -96,19 +81,15 @@ export async function createLibraryAccountHost(input: {
         credential: signed.credential,
       };
     },
-    async managed(kind: "automated" | "organization", human: Principal) {
+    async managed(kind: 'automated' | 'organization', human: Principal) {
       const signed = await signIn(human.accountId);
-      const key = `library_${Bun.randomUUIDv7().replaceAll("-", "")}`;
+      const key = `library_${Bun.randomUUIDv7().replaceAll('-', '')}`;
       const context = { pool: input.pool, deadline: Date.now() + 10000 };
-      if (kind === "organization") {
-        const operation = { kind, handle: key, authorization: "request" };
+      if (kind === 'organization') {
+        const operation = { kind, handle: key, authorization: 'request' };
         const approval = await fixture
           .approval()
-          .approve(
-            signed.credential,
-            { operationKey: key, operation },
-            context,
-          );
+          .approve(signed.credential, { operationKey: key, operation }, context);
         const created = await fixture.host.workflows.createOrganization({
           key,
           handle: key,
@@ -122,19 +103,15 @@ export async function createLibraryAccountHost(input: {
         bearer: signed.credential,
       });
       const operation = {
-        kind: "opening" as const,
+        kind: 'opening' as const,
         operatorAccountId: human.accountId,
         subjectAccountId: created.accountId,
-        authorization: "request",
+        authorization: 'request',
       };
       const openingKey = `${key}_opening`;
       const approval = await fixture
         .approval()
-        .approve(
-          signed.credential,
-          { operationKey: openingKey, operation },
-          context,
-        );
+        .approve(signed.credential, { operationKey: openingKey, operation }, context);
       const opened = await fixture.host.workflows.openOperatorSession({
         ...operation,
         key: openingKey,
@@ -142,14 +119,10 @@ export async function createLibraryAccountHost(input: {
         headers: signed.headers,
       });
       if (opened.status !== 200)
-        throw new Error(
-          `Library operator session failed: ${opened.status} ${await opened.text()}`,
-        );
-      const issued = await fixture.request("/token", {}, cookies(opened));
+        throw new Error(`Library operator session failed: ${opened.status} ${await opened.text()}`);
+      const issued = await fixture.request('/token', {}, cookies(opened));
       if (issued.status !== 200)
-        throw new Error(
-          `Library operator token failed: ${issued.status} ${await issued.text()}`,
-        );
+        throw new Error(`Library operator token failed: ${issued.status} ${await issued.text()}`);
       const { access_token: credential } = (await issued.json()) as {
         access_token: string;
       };
@@ -169,6 +142,4 @@ export async function createLibraryAccountHost(input: {
     },
   };
 }
-export type LibraryAccountHost = Awaited<
-  ReturnType<typeof createLibraryAccountHost>
->;
+export type LibraryAccountHost = Awaited<ReturnType<typeof createLibraryAccountHost>>;
