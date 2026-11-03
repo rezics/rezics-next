@@ -18,9 +18,17 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
     expect(Object.keys(summary.properties)).toContain('viewerReaction');
     expect(Object.keys(summary.properties)).toContain('reactions');
   }
+  const review = content[0].summary.properties.reviewContext.properties;
+  const citation = review.citation.anyOf[0].properties;
+  expect(citation.question.properties.revision.minimum).toBe(1);
+  expect(citation.units.type).toBe('integer');
+  expect(citation.voteRevision.minimum).toBe(1);
   const parent = content[2].summary.properties.parentContext.anyOf[1].properties.parent.anyOf;
   expect(parent[0].properties.excerpt.maxLength).toBe(160);
   expect(parent[0].properties.revisionId.format).toBe('uuid');
+  expect(parent[0].properties).toHaveProperty('author');
+  expect(parent[0].properties).toHaveProperty('language');
+  expect(parent[0].properties).toHaveProperty('spoiler');
   expect(Object.keys(parent[1].properties)).toEqual(['id', 'state']);
   expect(Object.keys(parent[2].properties)).toEqual(['state']);
 });
