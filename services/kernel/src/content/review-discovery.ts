@@ -12,6 +12,14 @@ import { readSubjectReference } from '../semantic/references.ts';
 import { feedExcerpt } from './feed-summary.ts';
 import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
 import type { ReadContext } from './model.ts';
+import {
+  createReviewCensus,
+  REVIEW_CENSUS_PAGE_SIZE,
+  type ReviewCensusCoverage,
+  type ReviewCensusCut,
+  type ReviewCensusEpisode,
+  type ReviewCensusStep,
+} from './review-census.ts';
 
 export const REVIEW_DISCOVERY_READ_LIMIT = 100;
 export const REVIEW_DISCOVERY_PAGE_LIMIT = 25;
@@ -92,6 +100,14 @@ export type ReviewDiscoverySource = Readonly<{
     after: ReviewDiscoveryPageKey | ReviewDiscoveryContinuation | null,
     limit: number,
   ): Promise<ReviewDiscoveryPopulationPage>;
+}>;
+
+/** Additional native maintenance ports. Search's legacy Count remains compatible;
+ * candidate installation does not grant it anonymous eligibility coverage. */
+export type NativeReviewDiscoverySource = ReviewDiscoverySource & Readonly<{
+  pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
+  maintainCensus(partition: number): Promise<ReviewCensusStep>;
+  censusCoverage(partition: number): Promise<ReviewCensusCoverage>;
 }>;
 
 export const REVIEW_DISCOVERY_BOUNDS = Object.freeze({
@@ -334,7 +350,7 @@ type CutState =
   | Readonly<{ position: bigint; cut: PopulationCut; status: 'ready' }>
   | Readonly<{ position: bigint; cut: null; status: 'preparing' | 'unavailable'; missing: string }>;
 
-async function captureCut(client: PoolClient, partition: number, homes: readonly number[]): Promise<CutState> {
+async function captureCut(client: Pick<PoolClient, 'query'>, partition: number, homes: readonly number[]): Promise<CutState> {
   const selected = [...new Set([partition, ...homes])].sort((a, b) => a - b);
   if (selected.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
     return { position: 0n, cut: null, status: 'unavailable', missing: 'dependency-home-bound' };
@@ -616,7 +632,7 @@ function failedSourceError(state: Exclude<CutState, { status: 'ready' }>): never
 export function createReviewDiscoverySource(
   dependencies: ContentReadDependencies,
   makeAnonymousContext: () => ReadContext,
-): ReviewDiscoverySource {
+): NativeReviewDiscoverySource {
   async function readCurrent(partition: number, ids: readonly string[]) {
     const context = checkedContext(makeAnonymousContext);
     const native = await withReadTransaction(
@@ -658,7 +674,8 @@ export function createReviewDiscoverySource(
     partition: number,
     after: ReviewDiscoveryPageKey | ReviewDiscoveryContinuation | null,
     limit: number,
-  ): Promise<ReviewDiscoveryPopulationPage> {
+    retainEpisodes = false,
+  ): Promise<ReviewDiscoveryPopulationPage & { census?: { cut: ReviewCensusCut; episodes: ReviewCensusEpisode[] } }> {
     assertPartition(partition);
     if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_LIMIT)
       throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_LIMIT}`);
@@ -721,6 +738,7 @@ export function createReviewDiscoverySource(
     if (native.state !== 'ready')
       return failedPopulationPage(partition, native.state, native.missing ?? 'native-population', native.position);
     const reviews: IndexedReview[] = [];
+    const episodes: ReviewCensusEpisode[] = [];
     let examined = 0;
     for (const item of native.selected) {
       examined += 1;
@@ -728,6 +746,12 @@ export function createReviewDiscoverySource(
       if (value) {
         reviews.push(indexRecord(indexHydrated(value, item, native.depSet.byReview.get(item.id) ?? [], native.cut)));
       }
+      if (retainEpisodes) episodes.push({
+        route: item.route, id: item.id, boardId: item.boardId, realmId: item.realmId,
+        subjectId: item.subjectId, openingId: item.firstPostId, revisionId: item.revisionId,
+        sourceVersion: sourceVersion(item, native.depSet.byReview.get(item.id) ?? [], native.cut),
+        eligible: value !== null,
+      });
       if (reviews.length === limit) break;
     }
     const finalState = await withReadTransaction(
@@ -766,10 +790,38 @@ export function createReviewDiscoverySource(
         return failedPopulationPage(partition, 'unavailable', 'continuation-signing-key', finalState.position);
       next = { ...key, token };
     }
-    return { state: 'ready', partition, position: finalState.position, reviews, next };
+    return { state: 'ready', partition, position: finalState.position, reviews, next,
+      ...(retainEpisodes ? { census: {
+        cut: { homes: tokenObservation(finalState.cut), frontier: finalState.cut.frontier.toString() }, episodes,
+      } } : {}),
+    };
   }
 
+  const census = createReviewCensus(dependencies.pool, {
+    async page(partition, after) {
+      const page = await coherentPage(partition, after, REVIEW_CENSUS_PAGE_SIZE, true);
+      if (page.state !== 'ready') return page;
+      if (!page.census) throw new Error('Review census native observation unavailable');
+      return { state: 'ready', position: page.position, cut: page.census.cut,
+        episodes: page.census.episodes, next: page.next };
+    },
+    async observe(client, partition, cut) {
+      const current = await captureCut(client, partition, cut?.homes.map((home) => home.partition) ?? []);
+      if (current.status !== 'ready') return { state: current.status, position: current.position, missing: current.missing };
+      return { state: 'ready', position: current.position,
+        cut: { homes: tokenObservation(current.cut), frontier: current.cut.frontier.toString() } };
+    },
+  });
+
   return Object.freeze({
+    async maintainCensus(partition) {
+      const context = checkedContext(makeAnonymousContext);
+      return census.step(partition, context.deadline);
+    },
+    async censusCoverage(partition) {
+      const context = checkedContext(makeAnonymousContext);
+      return census.coverage(partition, context.deadline);
+    },
     async read(partition, ids) {
       const keys = checkedKeys(partition, ids);
       const { position: at, hydrated } = await readCurrent(partition, keys);

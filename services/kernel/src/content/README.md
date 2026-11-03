@@ -888,6 +888,58 @@ adds or removes the document. Count remains explicitly unavailable until a bound
 anonymous gate without exposing a protected population. Realm discussion-popularity counts continue to exclude
 reviews.
 
+#### Retained census installation
+
+Decision: retain candidate installation as a private native projection; exhausting it remains `preparing` until
+complete native eligibility authority and physical work have been established.
+
+`createReviewDiscoverySource` additionally returns `NativeReviewDiscoverySource`, with
+`maintainCensus(partition): Promise<ReviewCensusStep>` and
+`censusCoverage(partition): Promise<ReviewCensusCoverage>`. The types and `createReviewCensus` are exported from
+`review-census.ts`. This is installation groundwork, not the completed public-total capability. Search's existing
+`count`, page, query-count adapter and final hydration retain their contracts. Web remains the owner of the existing
+review reader, personal score/write-review controls and action/recovery experience; that experience is pending.
+
+Each maintenance call consumes at most one existing coherent native page. It commits the signed continuation, cut,
+generation and private contribution deltas together. A resumed factory uses the same stored key; duplicate workers
+CAS the installation revision and cannot apply the same delta twice. Each replacement subtracts the previous
+contribution in the same generation before adding the current observation. The retained episode keeps original
+board/place, target Subject, opening revision and real `sourceVersion`, even after a later generation or physical
+source removal. A changed cut starts a new generation without deleting old cleanup identities. No review body or
+author presentation is copied into this store. Normal producer pages never include the private episode envelope.
+
+Installation writes follow the existing native candidate projection transaction: they fence the owning home and
+do not allocate a domain publication position. They release the checkout before native owner hydration. The final
+CAS reobserves core home metadata and native lifecycle progress; it cannot certify missing authority coverage.
+`installed: true` means the candidate keyset was exhausted at its captured cut. It never means a complete anonymous
+count, including for an empty partition. Native maintenance registration, ongoing invalidation repair, complete
+Access/citation/Semantic/source proof, ready total/current equality and three-scale physical acceptance remain to be
+delivered together before this installation may back a public total.
+
+##### Cost: retained census page
+
+- **Touches:** one coherent producer page and its real Content/Access/Semantic owner calls; one installation point
+  before that page; one locked installation point, bounded previous-contribution points, retained episode inserts,
+  contribution replacements and installation CAS after it. The existing coherent cut is reobserved before writes.
+- **Bound:** the page retains at most 100 episodes and 256 home observations. Installation adds at most 14 SQL
+  statements and four transaction controls to the existing coherent-page operation. Previous contributions use
+  exact `(route, thread_id)` keys; episode conflicts and foreign keys use exact `(route, thread_id, source_version)`
+  keys. This bounds the store's work only. Nested authority examined rows/bytes and complete invalidation coverage
+  still need derivation and Performance review before any public count ceiling or completeness claim.
+- **Growth check:** `test/content/review-census.test.ts` exercises native exact-target writes, resumed installation,
+  duplicate completion, revision replacement, retained cleanup keys, empty installation and fenced reads. The
+  independent 256/1024/4096 installation/transition/count measurements remain pending.
+
+##### Cost: installation coverage
+
+- **Touches:** one installation primary-key read and the existing native cut observation; no candidate page,
+  contribution history, body, member enumeration or author presentation.
+- **Bound:** at most four SQL statements and two transaction controls, one installation row, at most 256 keyed
+  home observations, one indexed pending-work probe and one native frontier point. Changed, missing and fenced
+  observations cannot report installed coverage. An installed cut still reports missing native eligibility coverage.
+- **Growth check:** the focused census test distinguishes preparing, stale, empty and unavailable without reading
+  retained episodes on a coverage request; three-scale physical coverage measurement remains pending.
+
 `read` and `hydrate` accept at most 100 IDs from one partition. Legacy `page` keeps its key and result shape and accepts
 the initial page position as an optional `cut`. A continuation without that cut returns `cut-required`; a changed
 partition position returns `cut-changed`, with no rows or exhaustion claim. This source-partition cut detects late

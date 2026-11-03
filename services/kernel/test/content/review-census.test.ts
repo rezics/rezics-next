@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { createThread } from '../../src/content/commands.ts';
+import { createThread, revisePost } from '../../src/content/commands.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -26,15 +26,29 @@ test('a retained native census resumes at its committed cut without promoting ca
      VALUES($1,$2,'schema:Book',$2,'visible',1)`,
     [routeOf(subject), subject],
   );
-  const written = await createThread(
+  const create = (target: string) => createThread(
     { pool: fixture.pool, access: fixture.access, routeKey }, author,
     { kind: 'review', title: 'A census review', body: fromPlainText('A readable opening.'), licence: 'MIT',
-      subjectIds: [subject], boardId: board.board_id, visibility: 'published' },
+      subjectIds: [target], boardId: board.board_id, visibility: 'published' },
     { idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 },
   );
+  const written = await create(subject);
+  for (let index = 1; index < 26; index++) {
+    const target = newId(0x6bd0);
+    await fixture.reader.query(
+      `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+       VALUES($1,$2,'schema:Book',$2,'visible',1)`, [routeOf(target), target],
+    );
+    await create(target);
+  }
   const partition = partitionOf(routeOf(written.value.threadId)!);
   expect(await source.censusCoverage(partition)).toMatchObject({ state: 'preparing', installed: false });
-  expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 1 });
+  expect(await source.maintainCensus(partition)).toMatchObject({ state: 'progress', examined: 25 });
+  expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'census-installation' });
+  const resumed = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
+    actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000,
+  }));
+  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 1 });
   const installed = await source.censusCoverage(partition);
   expect(installed).toMatchObject({ state: 'preparing', installed: true, missing: 'native-eligibility-coverage' });
   expect(await source.count(partition)).toMatchObject({ unavailable: true });
@@ -46,6 +60,21 @@ test('a retained native census resumes at its committed cut without promoting ca
   );
   expect(retained.rows).toEqual([expect.objectContaining({ board_id: board.board_id, subject_id: subject,
     opening_id: written.value.itemId, source_version: expect.stringMatching(/^rv1_/), eligible: true })]);
+  await revisePost(
+    { pool: fixture.pool, access: fixture.access, routeKey }, author,
+    { postId: written.value.itemId, body: fromPlainText('A replacement opening.'), subjectIds: [subject],
+      mediaIds: [], licence: 'MIT', title: 'A replacement title' },
+    { idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 },
+  );
+  expect(await resumed.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'changed' });
+  expect((await fixture.reader.query('SELECT count(*)::integer AS count FROM content.review_census_episode WHERE route=$1 AND thread_id=$2',
+    [routeOf(written.value.threadId), written.value.threadId])).rows[0]?.count).toBe(1);
+  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'progress' });
+  expect(await resumed.maintainCensus(partition)).toMatchObject({ state: 'exhausted' });
+  expect((await fixture.reader.query('SELECT observed_public::integer AS count FROM content.review_census_installation WHERE route=$1',
+    [partition * 16])).rows[0]?.count).toBe(26);
+  expect((await source.pageWithCut(partition, null, 1))).not.toHaveProperty('census');
 });
 
 test('an empty census and a stale cut remain distinguishable from a complete zero total', async () => {
