@@ -1182,10 +1182,16 @@ export function ShelfScoreUnavailable({ locale, view }: { locale: string; view: 
     <div data-shelf-score-state="unavailable" className="flex min-w-0 flex-col items-start gap-3">
       <p role="alert">{m.library_score_unavailable()}</p>
       <div className="flex max-w-full flex-wrap gap-2">
-        <a href={shelfHref(locale, restart)} className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}>
+        <a
+          href={shelfHref(locale, restart)}
+          className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}
+        >
           {m.library_entries_first_page()}
         </a>
-        <a href={shelfHref(locale, { ...restart, ...dateOrder })} className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}>
+        <a
+          href={shelfHref(locale, { ...restart, ...dateOrder })}
+          className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}
+        >
           {m.library_score_date_order()}
         </a>
       </div>

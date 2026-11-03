@@ -227,19 +227,28 @@ export function SortControls({
         <select
           name="orderBy"
           defaultValue={sort.orderBy}
-          onChange={(event) => setSelectedOrder(validateShelfSearch({ orderBy: event.target.value }).orderBy ?? sort.orderBy)}
+          onChange={(event) =>
+            setSelectedOrder(validateShelfSearch({ orderBy: event.target.value }).orderBy ?? sort.orderBy)
+          }
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
-          <option value="personalScore" disabled>{m.library_score_order()}</option>
+          <option value="personalScore" disabled>
+            {m.library_score_order()}
+          </option>
         </select>
       </label>
       <label className="grid gap-1 text-sm">
         {m.library_sort_direction()}
         {scoreOrder ? <input type="hidden" name="direction" value={sort.direction} /> : null}
-        <select name="direction" disabled={scoreOrder} defaultValue={sort.direction} className="min-h-11 max-w-full rounded-md border bg-background p-2">
+        <select
+          name="direction"
+          disabled={scoreOrder}
+          defaultValue={sort.direction}
+          className="min-h-11 max-w-full rounded-md border bg-background p-2"
+        >
           <option value="desc">{scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
           <option value="asc">{scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
         </select>

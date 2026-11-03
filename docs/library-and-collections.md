@@ -3,7 +3,6 @@
 [Personal-score shelf ordering](library-personal-score-order.md) defines the native standard-question order,
 bounded explicit installation and Content currentness prerequisite.
 
-
 ## Web personal-score availability
 
 Decision: retain an explicit `personalScore` address as an unavailable visit until the generated native score contract

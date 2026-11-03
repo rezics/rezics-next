@@ -51,7 +51,14 @@ export function libraryOrderFromShelf(sort: ShelfPreferenceSort | undefined): Sh
 
 export function shelfOrderFromLibrary(sort: ShelfSort): ShelfPreferenceSort {
   return {
-    field: sort.orderBy === 'personalScore' ? 'rating' : sort.orderBy === 'createdAt' ? 'added' : sort.orderBy === 'finishedAt' ? 'finished' : 'last_activity',
+    field:
+      sort.orderBy === 'personalScore'
+        ? 'rating'
+        : sort.orderBy === 'createdAt'
+          ? 'added'
+          : sort.orderBy === 'finishedAt'
+            ? 'finished'
+            : 'last_activity',
     direction: sort.direction,
   };
 }
