@@ -1,23 +1,18 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from "node:crypto";
-import type { Pool, PoolClient } from "pg";
-import { deadlineClient } from "../access/authenticate.ts";
-import { GLOBAL_CONTEXT } from "../access/gates/catalogue.ts";
-import { readRealm } from "../community/realm.ts";
-import { discardConnection, withConnection } from "../database/pool.ts";
-import { ProblemError } from "../http/problem.ts";
-import { readPartition } from "../partition/partition.ts";
-import { accessCheck, type Access, type Actor } from "../request/access.ts";
-import { partitionOf, routeOf } from "../route/route.ts";
-import { subjectReadEligibility } from "../semantic/eligibility.ts";
-import readIdentity from "../semantic/read-subject-identity.sql";
-import { seal, unseal, type KeyRing } from "../tokens/seal.ts";
-import { STANDARD_QUESTION_ID } from "./votes.ts";
-import readFreshness from "./aggregate-read-freshness.sql";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { readRealm } from '../community/realm.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import { readPartition } from '../partition/partition.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import readIdentity from '../semantic/read-subject-identity.sql';
+import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
+import { STANDARD_QUESTION_ID } from './votes.ts';
+import readFreshness from './aggregate-read-freshness.sql';
 import {
   ratingQuestionIdentity,
   ratingQuestionView,
@@ -25,13 +20,13 @@ import {
   realmRankQuestionEligible,
   type QuestionMetadata,
   type RatingQuestionView,
-} from "./question-directory.ts";
+} from './question-directory.ts';
 
 export type RealmRankRequest = Readonly<{
   realmId: string;
   questionId: string;
   partition: number;
-  sort: "score_desc";
+  sort: 'score_desc';
   limit: number;
   cursor?: string;
 }>;
@@ -53,14 +48,10 @@ export type RealmRankPage = Readonly<{
 }>;
 /** Scored-only compatibility port; it is not Search's complete Realm order provider. */
 export interface RealmRankSource {
-  page(
-    actor: Actor,
-    request: RealmRankRequest,
-    context: { deadline: number },
-  ): Promise<RealmRankPage>;
+  page(actor: Actor, request: RealmRankRequest, context: { deadline: number }): Promise<RealmRankPage>;
 }
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing };
-type Row = Omit<RealmRankCandidate, "count" | "mean" | "score" | "asOf"> & {
+type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
   count: string;
   mean: string;
   score: string;
@@ -78,7 +69,7 @@ type Position = {
 /** Publication metadata is separate from measurement identity: a caption or provenance
  * change must restart a page without assigning a new meaning to published scores. */
 function questionPublication(question: QuestionMetadata): string {
-  return createHash("sha256")
+  return createHash('sha256')
     .update(
       JSON.stringify([
         ratingQuestionIdentity(question),
@@ -92,47 +83,32 @@ function questionPublication(question: QuestionMetadata): string {
         question.lifecycleRevision,
       ]),
     )
-    .digest("hex");
+    .digest('hex');
 }
 
 export class RealmRankQuestionUnavailableError extends Error {
-  constructor(readonly reason: "unavailable" | "retired") {
-    super(
-      reason === "retired"
-        ? "Rating question is retired"
-        : "Rating question is unavailable",
-    );
-    this.name = "RealmRankQuestionUnavailableError";
+  constructor(readonly reason: 'unavailable' | 'retired') {
+    super(reason === 'retired' ? 'Rating question is retired' : 'Rating question is unavailable');
+    this.name = 'RealmRankQuestionUnavailableError';
   }
 }
 
 // Signed AND encrypted: a consumed candidate may have become unreadable. Its key must stay private.
 function encryptionKey(tokens: KeyRing, kid: number): Buffer {
   const key = tokens.keys.get(kid);
-  if (!key || key.byteLength < 32)
-    throw new Error("Realm rank cursor key unavailable");
-  return createHash("sha256")
-    .update("rating.realm-rank.encryption.v1\0")
-    .update(key)
-    .digest();
+  if (!key || key.byteLength < 32) throw new Error('Realm rank cursor key unavailable');
+  return createHash('sha256').update('rating.realm-rank.encryption.v1\0').update(key).digest();
 }
 function encode(tokens: KeyRing, scope: string, position: Position): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv(
-    "aes-256-gcm",
-    encryptionKey(tokens, tokens.current),
-    iv,
-  );
+  const cipher = createCipheriv('aes-256-gcm', encryptionKey(tokens, tokens.current), iv);
   cipher.setAAD(Buffer.from(scope));
-  const data = Buffer.concat([
-    cipher.update(JSON.stringify(position), "utf8"),
-    cipher.final(),
-  ]);
+  const data = Buffer.concat([cipher.update(JSON.stringify(position), 'utf8'), cipher.final()]);
   return seal(tokens, scope, {
     kid: tokens.current,
-    iv: iv.toString("base64url"),
-    tag: cipher.getAuthTag().toString("base64url"),
-    data: data.toString("base64url"),
+    iv: iv.toString('base64url'),
+    tag: cipher.getAuthTag().toString('base64url'),
+    data: data.toString('base64url'),
   });
 }
 function decode(tokens: KeyRing, scope: string, token: string): Position {
@@ -144,17 +120,14 @@ function decode(tokens: KeyRing, scope: string, token: string): Position {
       data: string;
     };
     const cipher = createDecipheriv(
-      "aes-256-gcm",
+      'aes-256-gcm',
       encryptionKey(tokens, value.kid),
-      Buffer.from(value.iv, "base64url"),
+      Buffer.from(value.iv, 'base64url'),
     );
     cipher.setAAD(Buffer.from(scope));
-    cipher.setAuthTag(Buffer.from(value.tag, "base64url"));
+    cipher.setAuthTag(Buffer.from(value.tag, 'base64url'));
     const position = JSON.parse(
-      Buffer.concat([
-        cipher.update(Buffer.from(value.data, "base64url")),
-        cipher.final(),
-      ]).toString("utf8"),
+      Buffer.concat([cipher.update(Buffer.from(value.data, 'base64url')), cipher.final()]).toString('utf8'),
     ) as Position;
     if (
       !/^[0-9]+$/.test(position.generation) ||
@@ -167,10 +140,10 @@ function decode(tokens: KeyRing, scope: string, token: string): Position {
       routeOf(position.subject) === null ||
       !/^(?:[0-9]|10)(?:\.[0-9]{1,4})?$/.test(position.score)
     )
-      throw new Error("Invalid position");
+      throw new Error('Invalid position');
     return position;
   } catch {
-    throw new ProblemError("invalid_cursor");
+    throw new ProblemError('invalid_cursor');
   }
 }
 
@@ -183,17 +156,16 @@ async function observe<T>(
 ): Promise<T> {
   return withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, deadline) as PoolClient;
-    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       const home = await readPartition(client, partition);
-      if (!home || home.writeState === "moved")
-        throw new ProblemError("partition_unavailable");
+      if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
       const value = await read(client, home.epoch);
-      await client.query("COMMIT");
+      await client.query('COMMIT');
       return value;
     } catch (error) {
       try {
-        await connection.query("ROLLBACK");
+        await connection.query('ROLLBACK');
       } catch (rollback) {
         discardConnection(connection, rollback as Error);
       }
@@ -201,16 +173,13 @@ async function observe<T>(
     }
   });
 }
-async function generation(
-  client: PoolClient,
-  input: RealmRankRequest,
-): Promise<string> {
+async function generation(client: PoolClient, input: RealmRankRequest): Promise<string> {
   const result = await client.query<{ generation: string }>(
     `SELECT generation::text FROM rating.realm_rank_generation
      WHERE partition_no=$1 AND question_id=$2 AND population_id=$3`,
     [input.partition, input.questionId, input.realmId],
   );
-  return result.rows[0]?.generation ?? "0";
+  return result.rows[0]?.generation ?? '0';
 }
 
 /** Production native Search port. No caller-supplied eligibility or disclosure flags are accepted. */
@@ -221,7 +190,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         routeOf(input.realmId) === null ||
         input.realmId === GLOBAL_CONTEXT.id ||
         routeOf(input.questionId) === null ||
-        input.sort !== "score_desc" ||
+        input.sort !== 'score_desc' ||
         !Number.isInteger(input.partition) ||
         input.partition < 0 ||
         input.partition > 4095 ||
@@ -229,37 +198,23 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         input.limit < 1 ||
         input.limit > 100
       )
-        throw new ProblemError("invalid_request");
+        throw new ProblemError('invalid_request');
       const authorizeRealm = async () => {
-        if (!(await readRealm(deps, actor, input.realmId, { deadline })))
-          throw new ProblemError("not_found");
+        if (!(await readRealm(deps, actor, input.realmId, { deadline }))) throw new ProblemError('not_found');
       };
       await authorizeRealm();
       const readQuestion = async () => {
-        const question = await readVisibleRatingQuestion(
-          deps,
-          actor,
-          input.questionId,
-          deadline,
-        );
-        if (
-          !question ||
-          (question.realmId !== null && question.realmId !== input.realmId)
-        )
-          throw new ProblemError("not_found");
-        if (question.lifecycleState === "retired")
-          throw new RealmRankQuestionUnavailableError("retired");
-        if (!realmRankQuestionEligible(question))
-          throw new ProblemError("invalid_request");
+        const question = await readVisibleRatingQuestion(deps, actor, input.questionId, deadline);
+        if (!question || (question.realmId !== null && question.realmId !== input.realmId))
+          throw new ProblemError('not_found');
+        if (question.lifecycleState === 'retired') throw new RealmRankQuestionUnavailableError('retired');
+        if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
         return question;
       };
       const question = await readQuestion();
       const identity = ratingQuestionIdentity(question);
       const publication = questionPublication(question);
-      const authority =
-        actor.kind === "anonymous"
-          ? actor
-          : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
+      const authority = actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
       const scope = `rating.realm-rank.v1\0${JSON.stringify({
         realm: input.realmId,
         question: input.questionId,
@@ -268,75 +223,54 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         partition: input.partition,
         sort: input.sort,
         limit: input.limit,
-        authority: createHash("sha256")
-          .update(JSON.stringify(authority))
-          .digest("hex"),
+        authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
       })}`;
-      const after =
-        input.cursor === undefined
-          ? null
-          : decode(deps.tokens, scope, input.cursor);
-      if (after && partitionOf(routeOf(after.subject)!) !== input.partition)
-        throw new ProblemError("invalid_cursor");
+      const after = input.cursor === undefined ? null : decode(deps.tokens, scope, input.cursor);
+      if (after && partitionOf(routeOf(after.subject)!) !== input.partition) throw new ProblemError('invalid_cursor');
       const populationRoute = routeOf(input.realmId)!;
       const readPrior = () =>
-        observe(
-          deps.pool,
-          partitionOf(populationRoute),
-          deadline,
-          async (client) => {
-            const freshness = await readFreshness.run(client, {
-              route: populationRoute,
-              population_id: input.realmId,
-            });
-            const result = await client.query<{
-              generation: string;
-              active: boolean;
-              identity: string | null;
-            }>(
-              `SELECT generation::text,start_count IS NOT NULL AS active, question_identity AS identity FROM rating.population_prior_epoch
+        observe(deps.pool, partitionOf(populationRoute), deadline, async (client) => {
+          const freshness = await readFreshness.run(client, {
+            route: populationRoute,
+            population_id: input.realmId,
+          });
+          const result = await client.query<{
+            generation: string;
+            active: boolean;
+            identity: string | null;
+          }>(
+            `SELECT generation::text,start_count IS NOT NULL AS active, question_identity AS identity FROM rating.population_prior_epoch
            WHERE route=$1 AND question_id=$2 AND population_id=$3`,
-              [populationRoute, input.questionId, input.realmId],
-            );
-            return {
-              ...(result.rows[0] ?? {
-                generation: "0",
-                active: false,
-                identity: null,
-              }),
-              updating: freshness!.updating,
-            };
-          },
-        );
+            [populationRoute, input.questionId, input.realmId],
+          );
+          return {
+            ...(result.rows[0] ?? {
+              generation: '0',
+              active: false,
+              identity: null,
+            }),
+            updating: freshness!.updating,
+          };
+        });
       const prior = await readPrior();
-      const observed = await observe(
-        deps.pool,
-        input.partition,
-        deadline,
-        async (client, epoch) => {
-          const current = await generation(client, input);
-          if (
-            after &&
-            (after.generation !== current ||
-              after.epoch !== epoch ||
-              after.prior !== prior.generation)
-          )
-            throw new ProblemError("invalid_cursor");
-          // This port proves only the scored set. An empty scored page never proves an unscored complement.
-          if (!prior.active || prior.identity !== identity)
-            return { generation: current, epoch, rows: [] as Row[] };
-          // Separate first/continuation statements retain a strict composite B-tree seek without an OR filter.
-          const parameters: unknown[] = [
-            input.partition,
-            input.questionId,
-            input.realmId,
-            prior.generation,
-            input.limit,
-            identity,
-          ];
-          if (after) parameters.push(after.score, after.subject);
-          const result = await client.query<Row>(
-            `SELECT rank.subject_id::text AS "subjectId",rank.count::text,rank.mean::text,rank.score::text,
+      const observed = await observe(deps.pool, input.partition, deadline, async (client, epoch) => {
+        const current = await generation(client, input);
+        if (after && (after.generation !== current || after.epoch !== epoch || after.prior !== prior.generation))
+          throw new ProblemError('invalid_cursor');
+        // This port proves only the scored set. An empty scored page never proves an unscored complement.
+        if (!prior.active || prior.identity !== identity) return { generation: current, epoch, rows: [] as Row[] };
+        // Separate first/continuation statements retain a strict composite B-tree seek without an OR filter.
+        const parameters: unknown[] = [
+          input.partition,
+          input.questionId,
+          input.realmId,
+          prior.generation,
+          input.limit,
+          identity,
+        ];
+        if (after) parameters.push(after.score, after.subject);
+        const result = await client.query<Row>(
+          `SELECT rank.subject_id::text AS "subjectId",rank.count::text,rank.mean::text,rank.score::text,
                   rank.prior_epoch AS "priorEpoch",rank.revision::text,rank.as_of AS "asOf",
                   figure.pending_position IS NOT NULL AS updating
            FROM rating.realm_rank AS rank
@@ -345,22 +279,20 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
             AND figure.question_id=rank.question_id AND figure.population_id=rank.population_id
             AND figure.subject_id=rank.subject_id
            WHERE rank.partition_no=$1 AND rank.question_id=$2 AND rank.population_id=$3 AND rank.prior_generation=$4 AND rank.question_identity=$6
-           ${after ? "AND (rank.score,rank.subject_id) < ($7::numeric,$8::uuid)" : ""}
+           ${after ? 'AND (rank.score,rank.subject_id) < ($7::numeric,$8::uuid)' : ''}
            ORDER BY rank.score DESC,rank.subject_id DESC LIMIT $5`,
-            parameters,
-          );
-          return { generation: current, epoch, rows: result.rows };
-        },
-      );
-      if (prior.updating && observed.rows.length === 0)
-        throw new RealmRankQuestionUnavailableError("unavailable");
+          parameters,
+        );
+        return { generation: current, epoch, rows: result.rows };
+      });
+      if (prior.updating && observed.rows.length === 0) throw new RealmRankQuestionUnavailableError('unavailable');
       const candidates: RealmRankCandidate[] = [];
       for (const row of observed.rows) {
         const route = routeOf(row.subjectId)!;
         const check = await accessCheck(
           deps.access,
           actor,
-          "subject:read",
+          'subject:read',
           {
             route,
             id: row.subjectId,
@@ -375,48 +307,35 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
             subject_id: row.subjectId,
             partition_no: input.partition,
           });
-          return (
-            identity && identity.redirect === null && (await check(client))
-          );
+          return identity && identity.redirect === null && (await check(client));
         });
         if (!readable) continue;
         const count = Number(row.count);
-        if (!Number.isSafeInteger(count))
-          throw new Error("Realm rank count exceeds safe range");
+        if (!Number.isSafeInteger(count)) throw new Error('Realm rank count exceeds safe range');
         candidates.push({
           ...row,
           count,
-          mean:
-            Number(row.mean) *
-            (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
-          score:
-            Number(row.score) *
-            (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
+          mean: Number(row.mean) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
+          score: Number(row.score) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
           asOf: row.asOf.toISOString(),
           updating: row.updating || prior.updating,
         });
       }
       await authorizeRealm();
       const latestQuestion = await readQuestion();
-      if (questionPublication(latestQuestion) !== publication)
-        throw new ProblemError("invalid_cursor");
+      if (questionPublication(latestQuestion) !== publication) throw new ProblemError('invalid_cursor');
       const latest = await readPrior();
-      await observe(
-        deps.pool,
-        input.partition,
-        deadline,
-        async (client, epoch) => {
-          if (
-            epoch !== observed.epoch ||
-            (await generation(client, input)) !== observed.generation ||
-            latest.generation !== prior.generation ||
-            latest.active !== prior.active ||
-            latest.identity !== prior.identity ||
-            latest.updating !== prior.updating
-          )
-            throw new ProblemError("invalid_cursor");
-        },
-      );
+      await observe(deps.pool, input.partition, deadline, async (client, epoch) => {
+        if (
+          epoch !== observed.epoch ||
+          (await generation(client, input)) !== observed.generation ||
+          latest.generation !== prior.generation ||
+          latest.active !== prior.active ||
+          latest.identity !== prior.identity ||
+          latest.updating !== prior.updating
+        )
+          throw new ProblemError('invalid_cursor');
+      });
       const last = observed.rows.at(-1);
       return {
         question: ratingQuestionView(question),
