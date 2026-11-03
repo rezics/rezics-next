@@ -9,7 +9,7 @@ import { rulesKey } from '../../../src/content/community-presentation-rules.ts';
 import type { Access } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
-import { openGrowthDatabase, type Population, type Row } from '../../support/growth.ts';
+import { openGrowthDatabase, seed, type Population, type Row } from '../../support/growth.ts';
 import { startReactionEffects } from '../reaction-relay-convergence-fixture.ts';
 import { createNativeContentSystem } from './native-system.ts';
 
@@ -189,7 +189,7 @@ export function unavailableRules(native: Access): Access {
 /** Clone native shapes only for unselected pressure, outside observation. Both axes keep
  * the selected keys, ancestry, document bytes, partitions and fixed page unchanged.
  */
-export async function pressure(f: RulesFixture, anchor: Target, axis: 'population' | 'history'): Promise<Population> {
+export async function pressure(f: RulesFixture, anchor: Target, axis: 'population' | 'history', selected: Target): Promise<Population> {
   const read = async (table: string, column: string, id: string): Promise<Row> => {
     const result = await f.db.admin.query(`SELECT * FROM ${table} WHERE route=$1 AND ${column}=$2`, [routeOf(id), id]);
     if (result.rows.length !== 1) throw new Error(`Missing pressure template ${table}`);
@@ -203,10 +203,35 @@ export async function pressure(f: RulesFixture, anchor: Target, axis: 'populatio
     read('content.board', 'board_id', anchor.boardId), read('content.thread', 'thread_id', anchor.threadId),
     read('content.post', 'post_id', anchor.rootId), read('content.revision', 'revision_id', anchor.revisionId),
   ]);
-  const contentRoute = routeOf(anchor.postId)!;
-  const realmRoute = routeOf(anchor.realmId)!;
+  const contentRoute = routeOf(selected.postId)!;
+  const realmRoute = routeOf(selected.realmId)!;
+  const boardRoute = routeOf(selected.boardId)!;
   const owner = f.system.actors.author.actor.accountId;
   const at = '2000-01-01T00:00:00.000Z';
+  const graph = () => {
+    const spaceId = newId(realmRoute), realmId = newId(realmRoute), boardId = newId(boardRoute);
+    const threadId = newId(contentRoute), postId = newId(contentRoute), revisionId = newId(contentRoute);
+    const spaceRevisionId = newId(realmRoute), realmRevisionId = newId(realmRoute);
+    return { realmId, spaceId, postId, threadId, boardId, rows: {
+      'community.space': [{ ...space, route: realmRoute, space_id: spaceId, head_revision_id: spaceRevisionId }],
+      'community.space_revision': [{ ...spaceRevision, route: realmRoute, space_id: spaceId, revision_id: spaceRevisionId, predecessor: null }],
+      'community.realm': [{ ...realm, route: realmRoute, realm_id: realmId, space_id: spaceId, head_revision_id: realmRevisionId }],
+      'community.realm_revision': [{ ...realmRevision, route: realmRoute, realm_id: realmId, revision_id: realmRevisionId, predecessor: null, presentation: emptyPresentation }],
+      'content.board': [{ ...board, route: boardRoute, board_id: boardId, realm_id: realmId }],
+      'content.thread': [{ ...thread, route: contentRoute, thread_id: threadId, board_id: boardId, first_post_id: postId }],
+      'content.post': [{ ...post, route: contentRoute, thread_id: threadId, post_id: postId, reply_to_post_id: null, head_revision_id: revisionId }],
+      'content.revision': [{ ...revision, route: contentRoute, thread_id: threadId, post_id: postId, revision_id: revisionId, board_id: boardId }],
+      'access.resource_role_grant': [{ route: realmRoute, resource_id: realmId, subject_kind: 'identity', subject_id: owner,
+        grant_role: 'community.realm.owner', valid: '(,)', transaction_id: randomUUID() }],
+    } };
+  };
+  // Only this unrelated graph is SQL-seeded. Place it on the selected full routes,
+  // rather than growing an easier disjoint route or adding selected siblings.
+  const history = graph();
+  if (axis === 'history') await seed(f.db, {
+    name: `rules-history-anchor-${randomUUID()}`, hotPartition: partitionOf(contentRoute), hotShare: 1,
+    rows: () => history.rows,
+  }, { from: 0, to: 1 });
   return {
     name: `rules-${axis}-${randomUUID()}`, hotPartition: partitionOf(contentRoute), hotShare: 1,
     async finish(admin) {
@@ -220,35 +245,25 @@ export async function pressure(f: RulesFixture, anchor: Target, axis: 'populatio
       const transaction = randomUUID();
       const revisionId = newId(contentRoute), realmRevisionId = newId(realmRoute), spaceRevisionId = newId(realmRoute);
       if (axis === 'history') return {
-        'content.revision': [{ ...revision, revision_id: revisionId, recorded_at: at, recorded_transaction_id: transaction }],
-        'community.realm_revision': [{ ...realmRevision, revision_id: realmRevisionId, predecessor: null, created_at: at }],
-        'community.space_revision': [{ ...spaceRevision, revision_id: spaceRevisionId, predecessor: null, created_at: at }],
-        'access.resource_role_grant': [{ route: realmRoute, resource_id: anchor.realmId, subject_kind: 'identity',
+        'content.revision': [{ ...revision, route: contentRoute, thread_id: history.threadId, post_id: history.postId,
+          board_id: history.boardId, revision_id: revisionId, recorded_at: at, recorded_transaction_id: transaction }],
+        'community.realm_revision': [{ ...realmRevision, route: realmRoute, realm_id: history.realmId,
+          revision_id: realmRevisionId, predecessor: null, created_at: at }],
+        'community.space_revision': [{ ...spaceRevision, route: realmRoute, space_id: history.spaceId,
+          revision_id: spaceRevisionId, predecessor: null, created_at: at }],
+        'access.resource_role_grant': [{ route: realmRoute, resource_id: history.realmId, subject_kind: 'identity',
           subject_id: newId(realmRoute), grant_role: 'community.realm.owner', valid: '[2000-01-01,2001-01-01)', transaction_id: transaction }],
         'core.receipt': [{ partition_no: partitionOf(contentRoute), principal_kind: 'account', principal_id: owner,
           command_kind: 'content.post.revise', idempotency_key: `rules-history-${revisionId}`, request_digest: Buffer.alloc(32),
           epoch: 1, position: 1_000_000 + ordinal, transaction_id: transaction, response: { revisionId } }],
         'core.outbox': [{ partition_no: partitionOf(contentRoute), epoch: 1, position: 1_000_000 + ordinal,
           event_seq: 0, event_count: 1, id: randomUUID(), type: 'com.rezics.content.post.revised.v1',
-          subject: anchor.postId, data: { revisionId } }],
+          subject: history.postId, data: { revisionId } }],
         'editorial.write_basis': [{ partition_no: partitionOf(contentRoute), transaction_id: transaction,
           epoch: 1, position: 1_000_000 + ordinal, principal_kind: 'account', principal_id: owner,
           client_id: f.system.actors.author.actor.clientId, requested_by: null, recorded_at: at }],
       };
-      const spaceId = newId(realmRoute), realmId = newId(realmRoute), boardId = newId(routeOf(anchor.boardId)!);
-      const threadId = newId(contentRoute), postId = newId(contentRoute);
-      return {
-        'community.space': [{ ...space, space_id: spaceId, head_revision_id: spaceRevisionId }],
-        'community.space_revision': [{ ...spaceRevision, space_id: spaceId, revision_id: spaceRevisionId, predecessor: null }],
-        'community.realm': [{ ...realm, realm_id: realmId, space_id: spaceId, head_revision_id: realmRevisionId }],
-        'community.realm_revision': [{ ...realmRevision, realm_id: realmId, revision_id: realmRevisionId, predecessor: null, presentation: emptyPresentation }],
-        'content.board': [{ ...board, board_id: boardId, realm_id: realmId }],
-        'content.thread': [{ ...thread, thread_id: threadId, board_id: boardId, first_post_id: postId }],
-        'content.post': [{ ...post, thread_id: threadId, post_id: postId, reply_to_post_id: null, head_revision_id: revisionId }],
-        'content.revision': [{ ...revision, thread_id: threadId, post_id: postId, revision_id: revisionId, board_id: boardId }],
-        'access.resource_role_grant': [{ route: realmRoute, resource_id: realmId, subject_kind: 'identity', subject_id: owner,
-          grant_role: 'community.realm.owner', valid: '(,)', transaction_id: transaction }],
-      };
+      return graph().rows;
     },
   };
 }

@@ -121,7 +121,7 @@ for (const axis of ['population', 'history'] as const) {
       });
       const expected = (await f.exact([pin])).get(rulesKey(pin, pin.realmId))!;
       expect(expected).toBeDefined();
-      const population = await pressure(f, unselected, axis);
+      const population = await pressure(f, unselected, axis, target);
       const missing = { ...pin, revisionId: newId(routeOf(pin.postId)!) };
       const mismatches = [{ ...pin, realmId: unselected.realmId }, { ...pin, postId: target.rootId }, missing];
       const page = [target.realmId, target.realmId, unselected.realmId] as const;

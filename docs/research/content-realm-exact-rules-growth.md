@@ -43,7 +43,9 @@ bytes. The next ordinary read must use current native evidence.
 Each axis starts in a separate isolated native fixture. The fixed selected chain has three posts and a 4,096-byte
 immutable document; later unadopted bytes, selected IDs, parent depth, route/partition count and page size remain
 fixed at all scales. Pressure templates come from another natively authored Realm/thread. SQL seeding is confined
-to unrelated pressure outside observation; shared fixtures and runtime contracts remain unchanged.
+to unrelated pressure outside observation; shared fixtures and runtime contracts remain unchanged. The unrelated
+pressure graph uses the selected post, Realm and board routes. Retained history grows that private graph without
+changing its heads or adding ancestors or siblings to the selected thread.
 
 | Axis | 256 | 1,024 | 4,096 | Grown records |
 | --- | --- | --- | --- | --- |
