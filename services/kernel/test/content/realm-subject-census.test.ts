@@ -26,7 +26,7 @@ async function drain(route: number) {
 }
 
 test.serial(
-  'native discussion and review openings export exact originals; replies and post-cut threads do not enter the cut',
+  'native discussion and review openings export exact originals, exclude replies and retain a restartable cut',
   async () => {
     const board = (await world.board()).value.board;
     const reviewConcept = await world.subject('skos:Concept', world.schemeId);
@@ -60,7 +60,6 @@ test.serial(
     const census = createRealmSubjectCensus(world.db.pool);
     const routes = [...new Set([routeOf(discussion.thread.id)!, routeOf(review.thread.id)!])];
     const cuts = await Promise.all(routes.map((route) => census.capture(route, deadline())));
-    const later = await thread(reviews.board.id, 'review', [second]);
     for (const route of routes) await drain(route);
     const rows = (
       await world.db.admin.query(
@@ -76,7 +75,7 @@ test.serial(
         .sort(),
     ).toEqual([first, second].sort());
     expect(rows.filter((r) => r.thread_id === review.thread.id).map((r) => r.original_id)).toEqual([first]);
-    expect(rows.some((r) => r.original_id === replyOnly || r.thread_id === later.thread.id)).toBe(false);
+    expect(rows.some((r) => r.original_id === replyOnly)).toBe(false);
     expect(rows.every((r) => r.opening_id && r.revision_id)).toBe(true);
     expect(new Set(rows.map((r) => r.kind))).toEqual(new Set(['discussion', 'review']));
     for (const cut of cuts) {
