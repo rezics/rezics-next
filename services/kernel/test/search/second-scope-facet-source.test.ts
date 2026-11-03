@@ -52,7 +52,9 @@ test('the default adapter uses only an admission-bound source and fails closed w
   const bound = { identity, request: bindScopedFacetPorts(ports, admission.request) };
 
   expect((await source.observe(admission, context)).status).toBe('unavailable');
-  expect((await source.readPage(bound, null, 1, context)).subjects).toEqual([
+  const page = await source.readPage(bound, null, 1, context);
+  if (!('subjects' in page)) throw new Error('Expected the admission-bound source to return subjects');
+  expect(page.subjects).toEqual([
     { partition: subjectPartition(alice), subject: alice },
   ]);
 });
