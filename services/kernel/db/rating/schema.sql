@@ -693,11 +693,13 @@ CREATE TABLE rating.source_statistic (
     transaction_id uuid NOT NULL,
     source_alias text DEFAULT 'vndb'::text NOT NULL,
     observation_digest text,
+    figures jsonb,
     CONSTRAINT source_statistic_attribution_check CHECK (((char_length(attribution) >= 1) AND (char_length(attribution) <= 2000))),
     CONSTRAINT source_statistic_check CHECK ((scale_max > scale_min)),
     CONSTRAINT source_statistic_check1 CHECK (((mean >= (scale_min)::numeric) AND (mean <= (scale_max)::numeric))),
     CONSTRAINT source_statistic_check2 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT source_statistic_count_check CHECK ((count > 0)),
+    CONSTRAINT source_statistic_figures_check CHECK (((figures IS NULL) OR ((source = 'bangumi'::text) AND (jsonb_typeof(figures) = 'object'::text) AND ((figures ->> 'schemaVersion'::text) = '1'::text) AND (octet_length((figures)::text) <= 4096)))),
     CONSTRAINT source_statistic_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 1024))),
     CONSTRAINT source_statistic_observation_digest_check CHECK ((observation_digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT source_statistic_provider_check CHECK (((scale_max <= 4096) AND ((source = 'vndb'::text) OR ((scale_min = 0) AND (scale_max = 10) AND (source_record_id ~ '^[1-9][0-9]*$'::text) AND (length(source_record_id) <= 16) AND
@@ -739,6 +741,7 @@ CREATE TABLE rating.source_statistic_observation (
     as_of date NOT NULL,
     payload jsonb NOT NULL,
     transaction_id uuid NOT NULL,
+    CONSTRAINT source_observation_bytes_check CHECK ((octet_length((payload)::text) <= 32768)),
     CONSTRAINT source_statistic_observation_check CHECK (((source = 'vndb'::text) OR ((source_record_id ~ '^[1-9][0-9]{0,15}$'::text) AND
 CASE
     WHEN (source_record_id ~ '^[1-9][0-9]{0,15}$'::text) THEN ((source_record_id)::numeric <= ('9007199254740991'::bigint)::numeric)

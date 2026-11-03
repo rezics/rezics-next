@@ -17,7 +17,7 @@ const figures = () => ({
     bins: Array.from({ length: 10 }, (_, i) => ({ score: i + 1, count: i === 9 ? 17 : 0 })),
   },
   rank: { unit: 'subjects', position: 3, population: 100 },
-});
+} as const);
 const value = () => ({
   sourceRecordId: '123', sourceAlias: 'permitted-bangumi', scale: { min: 0, max: 10 },
   mean: 10, count: 17, asOf: '2026-11-01', licence: 'LicenseRef-Authorized-Test', attribution: 'Bangumi users',
