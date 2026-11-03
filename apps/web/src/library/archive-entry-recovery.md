@@ -16,13 +16,13 @@ its route declaration. `KernelClient` exposes `libraryArchiveMerges`, including 
 not a capability probe: arbitrary property access can manufacture methods. Web must not cast that proxy to a
 handwritten interface or treat the decoder as an HTTP method.
 
-Immutable confirmation remains a native continuation. `PATCH /:id/review` returns only `{ordinal,status}`; preview returns the saved
-review without `review_revision`. `POST /:id/apply` accepts only `{ordinals}`. Although the native journal binds a
-command to the stored review revision and current entry incarnation/revision, another review can replace that
-stored decision between Web confirmation and apply. Web cannot express which reviewed effects the person confirmed.
-Commerce must deliver an immutable review identity or expected review revision in preview/review and selected apply,
-reject replaced selections, and preserve the original binding during uncertain replay. Regenerating the client alone
-does not close this gap. This continuation has been sent to Commerce.
+The native implementation now returns `reviewRevision` in preview and review and requires
+`{items:[{ordinal,reviewRevision}]}` for selected apply. It rejects replaced reviews and preserves original command
+bindings. The installed generated declaration still omits those revisions and accepts `{ordinals}` instead.
+Its upload body remains `unknown`, rather than the producer's declared original text or admitted envelope.
+Publication of the matching declarations remains with the existing native/shared producer; Web does not generate,
+cast or replace them. The producer's transport example in `packages/client/tests/library-archive-merge.test.ts`
+proves original text/envelope upload and preview, not immutable selected apply.
 
 The current page accepts no file, holds no private preview and issues no archive request. Its route requires sign-in,
 prepares existing exposure, marks responses `private, no-store`, uses noindex metadata and caches no private loader
@@ -68,7 +68,7 @@ one projected page of at most one hundred rows, that selection, one confirmed op
 It copies and freezes JSON values, replaces pages, invalidates review on choice changes, preserves exact original
 uncertain operands and keeps acknowledged receipts during cancellation. If cancellation overlaps a claimed apply,
 retain its original review and key until the native receipt is checkpointed, then show accepted partial results. Stale
-admission retains choices as context and requires a fresh review. Viewer, credential/CSRF epoch, source, route,
+admission retains choices as context and requires a fresh review. Viewer, credential/CSRF epoch, source, route, locale, exposure,
 replacement and visit deadline retire private callbacks. Decision: evidence expiry clears upload, preview, selection
 and replay operands while retaining accepted
 native result pages until session retirement, explicit upload replacement or unmount; expiry grants no retry permission.
@@ -81,6 +81,14 @@ native `failed` outcomes retain their result page and require fresh explicit rev
 The generated adapter must project bounded native pages without duplicating their rows in page context, carry the
 native exact review identity and original request credentials/keys, and enforce native admission and receipts.
 Local state tests do not establish artifact admission, native effects, response-byte bounds or mounted completion.
+
+Decision: deliver cancellation checkpointing and bounded selected-result projection while keeping route admission
+closed on the stale generated confirmation contract. A partial `recoverable` or stale cancellation response does
+not checkpoint the unresolved command, and a read racing its apply cannot release the original review/key.
+`archive-entry-recovery/results.tsx` projects the installed native results type in supplied order, retaining only
+selected Entry/label/assignment outcomes and the page continuation. Canonical destinations require an acknowledged
+receipt for the matching native effect. Arbitrary result JSON, including `progressSession` and `completedEpisodes`,
+never enters this projection. This reader boundary is prepared for the mounted continuation; it does not enable upload.
 
 After the native continuation, use only generated methods for raw upload, owner status, indexed preview/results,
 selected review/apply, cancel and expired-evidence pruning. Keep one upload, one current page, one bounded selection
@@ -123,8 +131,15 @@ partial receipts, original replay, cancellation and mounted source/session retir
 1/50/100 rows while independently varying unrelated archive rows at 64/512/4096; navigation, review, apply, retry
 and cancel must not add account-size reads. Controller acceptance and Storybook/browser inspection remain deferred.
 
-References read for this visit: the native owner and export format above; the portability criterion in
+References for this visit: the native owner and export format above; the portability criterion in
 [API-first platform coverage](../../../../docs/research/api-first-platform-coverage.md#gaps-ranked-for-vndb-and-bangumi-users);
 `legacy-final:apps/web/features/library/library-import.tsx` and `library-import-rows.tsx` (upload, deliberate row
 resolution, conflict choices and result recovery, with all-row loading to replace); and the older app's
 `apps/web/features/progress/components/progress-import-dialog.tsx` (token-help navigation, not history import).
+
+
+The current continuation also consulted the installed generated merge declaration, mounted merge route/service,
+the generated client's original-text/envelope transport example, and the final producer-artifact assembly in
+`services/kernel/test/library/library-archive-merge.test.ts` (retained V2 capture), plus the decoder examples in
+`services/kernel/test/library/library-archive.test.ts`. Fixed V3 assessment and inert V4 provider evidence retain
+their existing producer/consumer ownership; this change does not widen admitted formats or restored sections.

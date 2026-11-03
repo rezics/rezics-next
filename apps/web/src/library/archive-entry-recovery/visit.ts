@@ -12,6 +12,8 @@ export type RecoveryBinding = Readonly<{
   csrfEpoch: string;
   source: string;
   route: string;
+  locale: string;
+  exposure: string;
 }>;
 
 type Channel = 'upload' | 'page' | 'review' | 'apply' | 'results' | 'cancel';
@@ -39,7 +41,9 @@ const sameBinding = (left: RecoveryBinding, right: RecoveryBinding | null) =>
   left.credentialEpoch === right.credentialEpoch &&
   left.csrfEpoch === right.csrfEpoch &&
   left.source === right.source &&
-  left.route === right.route;
+  left.route === right.route &&
+  left.locale === right.locale &&
+  left.exposure === right.exposure;
 
 /**
  * Transport-neutral private custody. The future adapter must supply generated DTOs for these generics,
@@ -270,7 +274,9 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       throw new Error('invalid_result_page');
     }
     if (reconcilingCancellation) {
-      if (admitted !== undefined) this.#cancelCheckpointed = true;
+      // A partial page is not a receipt for the unresolved original command. In particular,
+      // recoverable responses must keep the exact review/key available for explicit replay.
+      if (admitted !== undefined && (outcome === 'complete' || outcome === 'failed')) this.#cancelCheckpointed = true;
     } else this.#phase = outcome;
     if (admitted !== undefined) this.#results = admitted;
     if (!reconcilingCancellation && !retainsOriginal(outcome)) {
@@ -289,7 +295,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>, checkpointed = false): boolean {
     if (!this.#accept('results', request)) return false;
     this.#results = ownRecoveryPage(results);
-    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed) this.#cancelCheckpointed = true;
+    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed && !this.#pending.has('apply'))
+      this.#cancelCheckpointed = true;
     return true;
   }
 

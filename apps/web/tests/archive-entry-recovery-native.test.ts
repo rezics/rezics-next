@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { archiveRecoveryAdmission } from '../src/library/archive-entry-recovery/native';
+import { archiveRecoveryAdmission, type NativeArchiveResults } from '../src/library/archive-entry-recovery/native';
+import { selectedArchiveRecoveryResults } from '../src/library/archive-entry-recovery/results';
 import { RecoverySelection } from '../src/library/archive-entry-recovery/selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding } from '../src/library/archive-entry-recovery/visit';
 
@@ -15,6 +16,8 @@ const binding: RecoveryBinding = {
   csrfEpoch: 'csrf-1',
   source: 'private-library',
   route: '/library/recover-archive',
+  locale: 'en',
+  exposure: 'original-exposure',
 };
 type Choice = { action: 'preserve' | 'update'; stateId?: string; labelIds?: string[] };
 type Confirm = { identity: string; key?: string; operands: { ordinal: number; revision: number }[] };
@@ -226,5 +229,52 @@ test('Evidence expiry keeps accepted outcomes, refuses replay and clears receipt
     if (retire === 'deadline') expire(10_000);
     if (retire === 'unmount') visit.retire();
     expect(visit.state).toBeNull();
+  }
+});
+
+test('Cancellation with a recoverable partial page retains the exact original command until checkpoint', () => {
+  const { visit } = fixture();
+  try {
+    visit.choose(1, 'entries', { action: 'preserve' });
+    visit.admitReview(visit.startReview(), { identity: 'original', key: 'apply-key', operands: [{ ordinal: 1, revision: 2 }] });
+    const first = visit.startApply();
+    const cancel = visit.startCancel();
+    visit.admitResults(visit.startResults(), page([]), true);
+    expect(visit.admitCancel(cancel)).toBe(false);
+    visit.settleApply(first.request, 'recoverable', page([{ ordinal: 1, status: 'recoverable' }]));
+    expect(visit.admitCancel(cancel)).toBe(false);
+    const replay = visit.startApply();
+    expect(replay.operand).toBe(first.operand);
+    visit.settleApply(replay.request, 'stale', page([]));
+    expect(visit.admitCancel(cancel)).toBe(false);
+    const checkpoint = visit.startApply();
+    expect(checkpoint.operand).toBe(first.operand);
+    visit.settleApply(checkpoint.request, 'complete', page([{ ordinal: 1, status: 'acknowledged' }]));
+    expect(visit.admitCancel(cancel)).toBe(true);
+  } finally {
+    visit.retire();
+  }
+});
+
+test('Supplied native results expose only selected supported outcomes and checkpointed destinations', () => {
+  const id = '019a1b2c-3d4e-7f00-8a00-000000000001';
+  for (const supplied of [1, 50, 100]) {
+    const result = { effect: 'entry.put', subjectId: id, progressSession: { private: true }, completedEpisodes: [1] };
+    const native: NativeArchiveResults = {
+      uploadId: id, state: 'ready', next: 400,
+      results: Array.from({ length: supplied }, (_, ordinal) => ({ ordinal, section: 'entries', status: 'recoverable', result })),
+    };
+    const selected = [{ ordinal: 0, section: 'entries' as const }];
+    expect(selectedArchiveRecoveryResults(native, selected)).toEqual({
+      rows: [{ ordinal: 0, section: 'entries', status: 'recoverable', subjectId: null }],
+      context: { uploadId: id, state: 'ready', next: 400 },
+    });
+    native.results[0]!.status = 'acknowledged';
+    const accepted = selectedArchiveRecoveryResults(native, selected);
+    expect(accepted.rows[0]?.subjectId).toBe(id);
+    expect(JSON.stringify(accepted)).not.toMatch(/progressSession|completedEpisodes/);
+    expect(Object.isFrozen(accepted.rows[0])).toBe(true);
+    native.results[0]!.section = 'sessions';
+    expect(selectedArchiveRecoveryResults(native, selected).rows).toEqual([]);
   }
 });
