@@ -33,10 +33,17 @@ const sectionV2 = t.Union([
   t.Literal('provenance'),
   t.Literal('journals'),
 ]);
-const sectionsV1 = t.Tuple(exportSections.map((section) => t.Literal(section)) as never);
-const sectionsV2 = t.Tuple(exportSectionsV2.map((section) => t.Literal(section)) as never);
-const sectionsV3 = t.Tuple(exportSectionsV3.map((section) => t.Literal(section)) as never);
-const sectionsV4 = t.Tuple(exportSectionsV4.map((section) => t.Literal(section)) as never);
+function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
+  return t.Tuple(
+    sections.map((section) => t.Literal(section)) as {
+      [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
+    },
+  );
+}
+const sectionsV1 = sectionTuple(exportSections);
+const sectionsV2 = sectionTuple(exportSectionsV2);
+const sectionsV3 = sectionTuple(exportSectionsV3);
+const sectionsV4 = sectionTuple(exportSectionsV4);
 const manifestV1Fields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
   version: t.Literal(1),

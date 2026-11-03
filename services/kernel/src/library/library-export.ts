@@ -86,7 +86,7 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
         seek.after,
         seek.rows,
         seek.bytes,
-        ...(capture.format_version >= 2 ? [seek.sectionTotals] : []),
+        ...(capture.format_version >= 2 ? [seek.sectionTotals!] : []),
       ],
     },
     Date.parse(capture.created_at),
