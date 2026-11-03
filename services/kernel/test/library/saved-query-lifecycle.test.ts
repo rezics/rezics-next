@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { runCommand } from '../../src/command/command.ts';
-import { beginCollectionSourceOutput } from '../../src/library/collection-source-output.ts';
+import {
+  beginCollectionSourceOutput,
+  appendCollectionSourceOutput,
+  completeCollectionSourceOutput,
+} from '../../src/library/collection-source-output.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deletePersona } from '../support/account-deletion.ts';
@@ -67,7 +71,7 @@ test('ordinary saved Collection Undo keeps its actual identity and exact stored 
   expect((await f.request(as, 'POST', `${path}:restore`, { ...undo, revision: undo.revision + 1 })).status).toBe(409);
   expect((await f.json(as, 'POST', `${path}:restore`, 200, undo)).collection.id).toBe(collection.id);
   const after = await f.json(as, 'GET', `${path}/rule`, 200);
-  expect(after.rule).toEqual(before.rule);
+  expect(after.rule).toEqual({ ...before.rule, collectionRevision: 3, sourceGeneration: '3' });
   const again = await f.request(as, 'DELETE', `${path}?revision=${undo.revision + 1}`);
   expect(again.status).toBe(204);
   expect((await f.request(as, 'POST', `${path}:restore`, undo)).status).toBe(409);
@@ -91,13 +95,24 @@ test('terminal saved views retain only completed public A; pending B, private an
     collection = await saved(as),
     privateView = await saved(as);
   const subjectId = await f.subject();
-  await f.json(as, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
-  const published = await f.json(as, 'POST', `/v1/collections/${collection.id}:publishSelected`, 200, {
-    revision: collection.revision,
-    subjectIds: [subjectId],
-  });
   const route = routeOf(collection.id)!,
-    generation = newId(route);
+    a = { route, collectionId: collection.id, generation: newId(route) };
+  // The native producer commits actual A and its Core publication proof. Private
+  // evaluation/preparation is a different owner and is not fabricated at erasure T.
+  await runCommand(f.db.pool, { partition: partitionOf(route), deadline: Date.now() + 30000 }, async (tx) => {
+    await beginCollectionSourceOutput(tx, { ...a, expectedMembers: 1 });
+    await appendCollectionSourceOutput(tx, { ...a, after: null, subjectIds: [subjectId] });
+    await tx.query(
+      `UPDATE library.collection SET visibility='public',revision=revision+1 WHERE route=$1 AND collection_id=$2`,
+      [route, collection.id],
+    );
+    await completeCollectionSourceOutput(tx, a);
+    return {
+      value: null,
+      events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: collection.id } }],
+    };
+  });
+  const generation = newId(route);
   const b = { route, collectionId: collection.id, generation, expectedMembers: 1 };
   const writeB = () =>
     runCommand(f.db.pool, { partition: partitionOf(route), deadline: Date.now() + 30000 }, async (tx) => {
@@ -140,7 +155,7 @@ test('terminal saved views retain only completed public A; pending B, private an
         [route, collection.id],
       )
     ).rows,
-  ).toEqual([{ generation: published.publication.generation, account_id: null }]);
+  ).toEqual([{ generation: a.generation, account_id: null }]);
   expect(
     (
       await f.db.admin.query(
