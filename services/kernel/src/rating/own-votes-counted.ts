@@ -354,6 +354,7 @@ async function readRows(
     counted_target_ids: [...new Set(countingTargetIds)],
   });
   const result = rows.map((row: QueryRow): OwnCountedVoteRow => {
+    if (row.countingTargetId === null) throw new VoteReviewUnavailableError('own_vote_observation_unavailable');
     if (row.changedAt === null) throw new Error('Rating vote has no change time');
     const units = row.units === null ? null : Number(row.units);
     const revision = Number(row.revision);
@@ -637,7 +638,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
     const rowsByCountingTarget = new Map(current.rows.map((row) => [row.countingTargetId, row]));
     const slotsByTarget = new Map(current.slots.map((slot) => [slot.targetId, slot.vote]));
     const observations: OwnCountedVoteObservation[] = preparation.targets.map((target) => {
-      if (target.state === 'unavailable') return target;
+      if (!('countingTargetId' in target)) return target;
       const row = rowsByCountingTarget.get(target.countingTargetId);
       const review: VoteReviewGuard = {
         version: 1,
