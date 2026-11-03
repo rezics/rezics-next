@@ -254,8 +254,8 @@ Subject calls until its owner binds this mounted transport; this shelf alone is 
 ## Realm home page
 
 Decision: expose the initial native assembly at `GET /v1/realms/:realmId/home` and a fixed twenty-row
-`GET /v1/realms/:realmId/boardShelf` continuation; keep viewer standing/actions explicitly unavailable until the
-native viewer observation producer is installed, and exclude the older presentation `join` projection.
+`GET /v1/realms/:realmId/boardShelf` continuation; include the installed native viewer observation for signed-in
+readers, preserve anonymous sign-in advice, and exclude the older presentation `join` projection.
 
 `createRealmHomeReader({pool,access,routeKey,tokens,clock?})` returns `RealmHomePage | null` with separate Realm
 and Space identity, presentation, boards and publications. `RealmHomePageSchema` is closed and mounted through
@@ -296,12 +296,13 @@ populated member home carries its `since`, reservation and publication transacti
 home is 404; dependency failure keeps its native unavailable problem; and changed Realm, containing-Space, membership
 episode, participation or action source returns `transaction_retry_exhausted` for the exact input to be retried.
 
-The installed producer signature is `createRealmHomeReader({pool,access,routeKey,tokens,clock?})`; its closed
-response is `RealmHomePageSchema`, mounted at `GET /v1/realms/:realmId/home`. The generated KernelClient exposes
-that mounted operation and the public `RealmHomePage` type. The existing Web Realm-home receiver can adopt this
-envelope and continue using the native board and publication cursors. This server delivery does not claim a
-rendered Web pass or change its presentation, lifetime or mutation ownership. No second frontend or Search
-dependency is introduced.
+The installed producer signature is `createRealmHomeReader(deps: RealmHomeDependencies)`, where
+`RealmHomeDependencies` extends `RealmDependencies` with `tokens: KeyRing`; it returns the closed
+`RealmHomePageSchema` DTO, mounted at `GET /v1/realms/:realmId/home`. The full-input OpenAPI generator includes
+that operation. KernelClient declarations remain uninstalled because the supported declaration generator exits
+on existing Kernel compiler diagnostics; Web can adopt this envelope and its native board and publication cursors
+after those generated declarations are available. This server delivery does not claim a rendered Web pass or
+change its presentation, lifetime or mutation ownership. No second frontend or Search dependency is introduced.
 
 ### Cost
 
@@ -359,9 +360,9 @@ dependency is introduced.
   or twelve-key byte claim substitutes for it. The real baseline is up to12 mounted Subject requests per selected
   cover plus separate identity, presentation, board and viewer calls; the home replaces that transport with bounded
   native batches but does not claim constant examined work from small emitted output.
-- **Growth check:** Focused mounted scenarios exercise the initial empty/populated envelope, twenty-board and
-  twelve-publication limits, independent ordinary cursor continuation, unknown count, unavailable viewer advice,
-  anonymous sign-in, empty nonmember and current member advice, owner leave unavailability, exact join receipt
+- **Growth check:** Focused mounted scenarios cover the initial empty/populated envelope, twenty-board and
+  twelve-publication limits, independent ordinary cursor continuation, unknown count, anonymous sign-in, empty
+  nonmember and current member advice, owner leave unavailability, exact join receipt
   readback, leave/rejoin, role revocation, Realm and containing-Space change during summary hydration, exact
   publication replacement and dependency retry.
   No native growth evidence has been reached here. Controller admission must independently grow unrelated
@@ -371,7 +372,7 @@ dependency is introduced.
   participating pools and runner phases, initial and both continuations, empty/denied/stale/retry branches. Fixture
   or approved-host failure contributes zero evidence. Performance review must resolve nested producer terms in
   this journey. Native growth, shared checks and Web's populated/empty/retry/account-switch rendered review remain
-  controller obligations; unavailable standing and source-only delivery do not complete the person journey.
+  controller obligations; a source-only delivery does not complete the person journey.
 
 ## Public Space discovery source
 
