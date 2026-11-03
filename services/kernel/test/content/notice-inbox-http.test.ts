@@ -88,6 +88,20 @@ test("the inbox lists only the viewer's notices newest first with an opaque curs
   expect(JSON.stringify(filtered.value)).not.toContain(inaccessiblePost);
 });
 
+test('the Inbox and unread summary omit notices without a current disclosed source', async () => {
+  await seed(3);
+  const base = `/v1/accounts/${fixture.accountId}/notifications`;
+  const page = await call(`${base}?limit=50`);
+  expect(page.response.status).toBe(200);
+  expect(page.value.items).toEqual([]);
+  expect((await call(`${base}/count`)).value).toMatchObject({
+    count: 0,
+    capped: false,
+    basis: 'current-visible-unread',
+    witness: { kind: 'current-disclosure', at: expect.any(String) },
+  });
+});
+
 test('the unread count stops at 100 and the seen marker never moves backward', async () => {
   const ids = await seed(102);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
