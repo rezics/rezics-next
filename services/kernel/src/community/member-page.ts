@@ -272,12 +272,7 @@ export async function selectRealmMembers(
       if (
         rawMembers.some((member) => {
           const observed = current.get(member.accountId);
-          return (
-            !observed ||
-            !observed.committed ||
-            observed.terminalized ||
-            !sameMemberAnchor(member, observed)
-          );
+          return !observed || !observed.committed || observed.terminalized || !sameMemberAnchor(member, observed);
         })
       )
         return { state: 'preparing', members: [], next: request.cursor ?? null, selected: null };
