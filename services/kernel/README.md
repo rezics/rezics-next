@@ -1045,10 +1045,26 @@ Growth check: `test/growth-effects.test.ts`: “Effect enqueue stays within its 
   “Empty keyset continuation stays bounded as selected history grows”;
   “Empty keyset continuation stays bounded as unrelated population grows”.
 
-Decision: retain `pageSubjects`' existing partition-only cursor boundary for this SQL proof; viewer/query-bound
-production pagination with native Access and label expansion requires separate coverage. This helper takes no
-viewer or Access callback, binds only the partition, and returns no cursor on its terminal page; the fixture's
-disappearing lookahead must not stand in for production eligibility or lifecycle proof.
+Production continuation: `createContextDirectory.list` is the owner-supported viewer/query-bound pagination
+boundary. Its opaque cursor binds the original viewer, normalized query, page size, deleted selection, authority and
+directory epoch. A request selects at most 100 raw candidates, including rejected candidates and lookahead; for
+`k <= 100` raw rows, at most `k` unique Context IDs reach one `authorizedContextMetadata` call and its fixed three
+Access actions. Native Context metadata, owner-grant/account anchors and final eligibility revalidation remain
+bounded by those IDs and their homes. Candidate rejection still pays that Access work. Each emitted Context expands
+its admitted labels within the existing 64 KiB response bound.
+
+Growth check: `test/growth-keyset-continuation.test.ts`, “Viewer/query-bound deep and empty production continuation
+retains bounded native SQL and Access work at three independent history and unrelated scales”. The mounted route
+issues every cursor and resumes it with the same viewer and full query. At fixed `limit = 100`, the deep suffix
+examines 100 candidate rows, admits two bilingual Contexts and denies 98; the resulting cursor examines the last
+three denied rows and reaches empty exhaustion. Selected matching history and nonmatching unrelated Contexts each
+grow independently through 100, 200 and 400 rows. Native measurements assert candidate and Access relation rows,
+plan rows, statements and buffers; cursor CPU is outside those SQL/Access measurements.
+
+Decision: retain `pageSubjects`' partition-only cursor boundary for the raw SQL proof and use the production Context
+directory for viewer/query-bound eligibility. The helper has no viewer or Access argument, binds only the partition
+and returns no cursor on its terminal page; its disappearing-lookahead fixture remains SQL evidence only. No runtime
+pagination or cursor binding changed.
 
 ### Replay authorization and aborted commands
 
