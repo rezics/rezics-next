@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import {
+  createConversationActivityBatch,
   createConversationActivityEffect,
+  repairConversationActivityPage,
   readConversationActivitySources,
 } from '../../src/content/conversation-activity.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -27,6 +29,22 @@ test.serial(
       await runtime.consume(created.envelopes);
       const source = async () =>
         (await readConversationActivitySources(world.pool, [thread.id], Date.now() + 30_000))[0]!;
+      const activity = createConversationActivityBatch(world.pool);
+      const current = async () => {
+        for (let page = 0; page < 10; page++) {
+          await repairConversationActivityPage(world.pool, partition, Date.now() + 30_000);
+          const result = (await activity.select([thread.id], Date.now() + 30_000))[0]!;
+          if (result.status === 'current') return result;
+        }
+        throw new Error('Conversation activity repair did not converge');
+      };
+      const opening = await current();
+      expect(opening).toMatchObject({
+        status: 'current',
+        cohort: 'public',
+        replyCount: { kind: 'exact', value: 0 },
+        lastContributionAt: plus(world.start, 0),
+      });
       expect((await source()).contributions.map(({ postId }) => postId)).toEqual([thread.postId]);
 
       const first = await world.reply(thread, world.base.author, plus(world.start, 1));
@@ -44,6 +62,13 @@ test.serial(
       expect(full[0]!.contributedAt).toBe(plus(world.start, 2));
       expect(full[2]!.opening).toBe(true);
       expect(full.slice(0, 2).every(({ opening }) => !opening)).toBe(true);
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      const populated = await current();
+      expect(populated).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 2 },
+        lastContributionAt: plus(world.start, 2),
+      });
 
       await world.time(plus(world.start, 3));
       const edited = await world.capture(partition, () =>
@@ -55,6 +80,8 @@ test.serial(
       );
       await runtime.consume(edited.envelopes);
       expect((await source()).contributions).toEqual(full);
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await current()).lastContributionAt).toBe(plus(world.start, 2));
 
       const erased = await world.capture(partition, async () => {
         const result = await world.call('DELETE', `/v1/posts/${second.value.post.id}`, {
@@ -65,6 +92,13 @@ test.serial(
       });
       await runtime.consume(erased.envelopes);
       expect((await source()).contributions.map(({ postId }) => postId)).toEqual([first.value.post.id, thread.postId]);
+      expect((await activity.confirm(populated, Date.now() + 30_000)).status).toBe('withheld');
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect(await current()).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 1 },
+        lastContributionAt: plus(world.start, 1),
+      });
       // Delayed publication cannot re-admit a now erased episode.
       for (const event of latestEvents) await effect.run(event);
       expect((await source()).contributions.map(({ postId }) => postId)).toEqual([first.value.post.id, thread.postId]);
@@ -78,6 +112,11 @@ test.serial(
       });
       await runtime.consume(restored.envelopes);
       expect((await source()).contributions).toEqual(full);
+      expect(await current()).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 2 },
+        lastContributionAt: plus(world.start, 2),
+      });
       const before = (await source()).anchor.position;
       for (const event of [...latestEvents].reverse()) await effect.run(event);
       expect((await source()).anchor.position).toBe(before);
