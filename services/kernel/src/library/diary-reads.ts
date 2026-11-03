@@ -137,7 +137,8 @@ export function createDiaryReads(deps: Dependencies) {
           )
             throw new ProblemError('forbidden');
           const partition = await readPartition(client, partitionOf(route));
-          if (!partition) throw new ProblemError('partition_unavailable');
+          if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+            throw new ProblemError('partition_unavailable');
           const result = await body(client, partition.epoch, new Date(authoritativeTimeValue(at)));
           await client.query('COMMIT');
           return result;

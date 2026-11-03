@@ -116,12 +116,6 @@ test('native owner pages across subjects and separate repeats, then reopens exac
 test('native subject concealment withholds labels without hiding private occurrences or leaking them to others', async () => {
   const hidden = await native.createSubject('game', 'Concealed catalogue title');
   const recorded = await start(hidden);
-  expect(
-    (await native.send('steward', 'POST', `/v1/subjects/${hidden}:hide`, { reason: 'Diary privacy scenario' })).status,
-  ).toBe(200);
-  const result = await page(undefined, owner.bearer, 25);
-  expect(result.occurrences.find((row) => row.id === recorded.id)).toMatchObject({ subjectId: hidden, subject: null });
-  expect(JSON.stringify(result)).not.toContain('Concealed catalogue title');
   expect((await page(undefined, other.bearer)).occurrences).toEqual([]);
   await json(await send('GET', `/v1/progressSessions/${recorded.id}?presentation=FULL`, undefined, other.bearer), 404);
   await json(await native.send('anonymous', 'GET', '/v1/libraryDiary'), 401);
@@ -131,6 +125,20 @@ test('native subject concealment withholds labels without hiding private occurre
     scopes: ['subject:read'],
   });
   await json(await send('GET', '/v1/libraryDiary', undefined, reduced), 403);
+  const privateOnly = await accountToken({
+    accountId: owner.actor.accountId,
+    clientId: owner.actor.clientId,
+    scopes: ['progress_session:list'],
+  });
+  const denied = await page(undefined, privateOnly, 25);
+  expect(denied.occurrences.find((row) => row.id === recorded.id)?.subject).toBeNull();
+  expect(JSON.stringify(denied)).not.toContain('Concealed catalogue title');
+  expect(
+    (await native.send('steward', 'POST', `/v1/subjects/${hidden}:hide`, { reason: 'Diary privacy scenario' })).status,
+  ).toBe(200);
+  const result = await page(undefined, owner.bearer, 25);
+  expect(result.occurrences.find((row) => row.id === recorded.id)).toMatchObject({ subjectId: hidden, subject: null });
+  expect(JSON.stringify(result)).not.toContain('Concealed catalogue title');
 });
 
 test('continuations bind caller and page size; cancellation retires native state and is idempotent', async () => {
@@ -206,4 +214,39 @@ test('native identity fencing rejects retained navigation and occurrence reopeni
     await send('GET', `/v1/progressSessions/${sessions[0].id}?presentation=FULL`, undefined, identity.bearer),
     401,
   );
+});
+
+test('unavailable native authority refuses pages and reopening; epoch replacement requires a fresh navigation', async () => {
+  const identity = await native.identity(scopes);
+  const subject = await native.createSubject('game');
+  const recorded = await start(subject, identity.bearer);
+  await start(subject, identity.bearer);
+  const first = await page(undefined, identity.bearer, 1);
+  const partition = Math.floor(routeOf(identity.actor.accountId)! / 16);
+  await native.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
+  try {
+    await json(await send('GET', '/v1/libraryDiary', undefined, identity.bearer), 503);
+    await json(
+      await send('GET', `/v1/progressSessions/${recorded.id}?presentation=FULL`, undefined, identity.bearer),
+      503,
+    );
+  } finally {
+    await native.pool.query("UPDATE core.partition SET write_state='active', epoch=epoch+1 WHERE partition_no=$1", [
+      partition,
+    ]);
+  }
+  expect(
+    (
+      await json(
+        await send(
+          'GET',
+          `/v1/libraryDiary?limit=1&cursor=${encodeURIComponent(first.next!)}`,
+          undefined,
+          identity.bearer,
+        ),
+        409,
+      )
+    ).code,
+  ).toBe('stale_cursor');
+  expect((await page(undefined, identity.bearer, 1)).occurrences).toHaveLength(1);
 });
