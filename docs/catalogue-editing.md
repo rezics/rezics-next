@@ -1071,6 +1071,7 @@ is omitted where unsupported. Decision: a ConceptScheme admits its actual emitte
 `schema:url` and `schema:sameAs`); the form does not invent statements to fill gaps. Terms remain multilingual subject
 terms, separate from statement evidence. Decision: Concept creation reuses the existing CreateSubjectForm identity
 search and review seams rather than a second writer.
+Decision: generic Type-directory handoff prefers `/catalogue/file` for admitted file or release-group Types, then `/catalogue/concept` for admitted Concept or ConceptScheme Types.
 
 A direct visit ends at the ordinary Concept reader. A classification-return caller may offer an explicit return; the
 creator never writes a parent-work classification or grants adoption. Unknown delivery retries the same bytes and key;
