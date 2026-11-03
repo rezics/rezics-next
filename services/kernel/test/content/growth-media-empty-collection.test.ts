@@ -213,9 +213,7 @@ async function readGuardState(options: {
     rows: rows.rows,
     physical: [options.guard.claimed, options.guard.fresh].map((media) => ({
       mediaId: media.id,
-      objects: options.store
-        .inspect(`m/${media.id}/`)
-        .sort((left, right) => left.key.localeCompare(right.key)),
+      objects: options.store.inspect(`m/${media.id}/`).sort((left, right) => left.key.localeCompare(right.key)),
     })),
     collectionReceipts: receipts.rows,
     collectionEvents: events.rows,
@@ -322,9 +320,12 @@ async function assertCollectedBatch(options: {
   );
   expect(receipts.rows).toHaveLength(2 * options.targets.length);
   for (const media of options.targets) {
-    expect(receipts.rows.filter(({ idempotency_key }) => idempotency_key === media.id).map(({ command_kind }) =>
-      command_kind,
-    ).sort()).toEqual(['content.media.collection.fence', 'content.media.collection.finish']);
+    expect(
+      receipts.rows
+        .filter(({ idempotency_key }) => idempotency_key === media.id)
+        .map(({ command_kind }) => command_kind)
+        .sort(),
+    ).toEqual(['content.media.collection.fence', 'content.media.collection.finish']);
     expect(options.store.inspect(`m/${media.id}/`)).toEqual([]);
   }
   const eventCounts = await options.database.admin.query<{ subject: string; count: number }>(
@@ -337,354 +338,357 @@ async function assertCollectedBatch(options: {
   expect(eventCounts.rows).toEqual(ids.map((subject) => ({ subject, count: 2 })));
 }
 
-test(
-  'Empty eligible selection and the post-batch empty page stay bounded through the registered native collector.',
-  async () => {
-    const store = createMediaObjectStore();
-    let system: ContentSystem | undefined;
-    let database: GrowthDatabase | undefined;
-    let runtime: NativeCollectionRuntime | undefined;
-    const reports: { readonly operation: string; readonly report: GrowthReport }[] = [];
-    const populations: unknown[] = [];
-    const operations: unknown[] = [];
-    let workerTime = '2031-01-02T00:00:00.000Z';
-    try {
-      expect(COLLECTION_BOUNDS.batch).toBe(MAX_EXPECTED_BATCH);
-      system = await createContentSystem({
-        databaseUrl,
-        namespace: `media_empty_collection_${crypto.randomUUID().replaceAll('-', '')}`,
-      });
-      const { containers } = await provisionMediaContainers(system, { namespace: crypto.randomUUID() });
-      const thread = containers.thread;
-      const systemUrl = await databaseUrlForSystem(system, databaseUrl);
-      database = await openGrowthDatabase(systemUrl);
-      if (!DBOS.isInitialized()) throw new Error('Native Auth did not retain its setup executor');
-      await DBOS.shutdown({ deregister: true });
-      if (DBOS.isInitialized()) throw new Error('Native Auth executor remained registered before content work');
-      runtime = await composeNativeCollectionRuntime({
-        databaseUrl: systemUrl,
-        routeKey: system.routeKey,
-        partitions: [thread.partition],
-        store,
-        clock: () => new Date(workerTime),
-        pool: database.pool,
-      });
-      const bytes = await pngFixture();
-      const guard = await createClaimedAndFreshGuards({ system, runtime, store, container: thread, bytes });
-      const guardBaseline = await readGuardState({ system, database, store, partition: thread.partition, guard });
-      expect(guardBaseline.rows.find(({ media_id }) => media_id === guard.claimed.id)).toMatchObject({
-        state: 'available',
-        claimed_item_id: guard.claimedPostId,
-        collection_pending: false,
-      });
-      expect(guardBaseline.rows.find(({ media_id }) => media_id === guard.fresh.id)).toMatchObject({
-        state: 'available',
-        claimed_item_id: null,
-        claimed_at: null,
-        collection_pending: false,
-      });
-      expect(guardBaseline.collectionReceipts).toEqual([]);
-      expect(guardBaseline.collectionEvents).toEqual([]);
+test('Empty eligible selection and the post-batch empty page stay bounded through the registered native collector.', async () => {
+  const store = createMediaObjectStore();
+  let system: ContentSystem | undefined;
+  let database: GrowthDatabase | undefined;
+  let runtime: NativeCollectionRuntime | undefined;
+  const reports: { readonly operation: string; readonly report: GrowthReport }[] = [];
+  const populations: unknown[] = [];
+  const operations: unknown[] = [];
+  let workerTime = '2031-01-02T00:00:00.000Z';
+  try {
+    expect(COLLECTION_BOUNDS.batch).toBe(MAX_EXPECTED_BATCH);
+    system = await createContentSystem({
+      databaseUrl,
+      namespace: `media_empty_collection_${crypto.randomUUID().replaceAll('-', '')}`,
+    });
+    const { containers } = await provisionMediaContainers(system, { namespace: crypto.randomUUID() });
+    const thread = containers.thread;
+    const systemUrl = await databaseUrlForSystem(system, databaseUrl);
+    database = await openGrowthDatabase(systemUrl);
+    if (!DBOS.isInitialized()) throw new Error('Native Auth did not retain its setup executor');
+    await DBOS.shutdown({ deregister: true });
+    if (DBOS.isInitialized()) throw new Error('Native Auth executor remained registered before content work');
+    runtime = await composeNativeCollectionRuntime({
+      databaseUrl: systemUrl,
+      routeKey: system.routeKey,
+      partitions: [thread.partition],
+      store,
+      clock: () => new Date(workerTime),
+      pool: database.pool,
+    });
+    const bytes = await pngFixture();
+    const guard = await createClaimedAndFreshGuards({ system, runtime, store, container: thread, bytes });
+    const guardBaseline = await readGuardState({ system, database, store, partition: thread.partition, guard });
+    expect(guardBaseline.rows.find(({ media_id }) => media_id === guard.claimed.id)).toMatchObject({
+      state: 'available',
+      claimed_item_id: guard.claimedPostId,
+      collection_pending: false,
+    });
+    expect(guardBaseline.rows.find(({ media_id }) => media_id === guard.fresh.id)).toMatchObject({
+      state: 'available',
+      claimed_item_id: null,
+      claimed_at: null,
+      collection_pending: false,
+    });
+    expect(guardBaseline.collectionReceipts).toEqual([]);
+    expect(guardBaseline.collectionEvents).toEqual([]);
 
-      async function growAxis(axis: EmptyCollectionAxis, prefix: string, scale: number, previous: number) {
-        if (axis === 'other-routes' && previous === 0) {
-          await seedEmptyCollectionHistory(database!, {
-            axis: 'same-route',
-            prefix,
-            partition: thread.partition,
-            hotRoute: thread.route,
-            hotContainerId: thread.id,
-            scale: 4096,
-            previous: 0,
-          });
-        }
+    async function growAxis(axis: EmptyCollectionAxis, prefix: string, scale: number, previous: number) {
+      if (axis === 'other-routes' && previous === 0) {
         await seedEmptyCollectionHistory(database!, {
-          axis,
+          axis: 'same-route',
           prefix,
           partition: thread.partition,
           hotRoute: thread.route,
           hotContainerId: thread.id,
-          scale,
-          previous,
+          scale: 4096,
+          previous: 0,
         });
-        const counts = await emptyCollectionPopulationCounts(database!, {
-          prefix: `${prefix}%`,
-          partition: thread.partition,
-          hotRoute: thread.route,
-          hotContainerId: thread.id,
-          eligibleBefore: '2031-01-01T00:00:00.000Z',
-        });
-        const expectedHot = axis === 'same-route' ? scale : 4096;
-        const expectedOther = axis === 'same-route' ? 0 : scale;
-        expect(counts).toEqual({
-          hot: expectedHot,
-          other: expectedOther,
-          total: expectedHot + expectedOther,
-          variants: 2 * (expectedHot + expectedOther),
-          receipts: expectedHot + expectedOther,
-          events: expectedHot + expectedOther,
-          writeBasis: expectedHot + expectedOther,
-          eligible: 0,
-        });
-        populations.push({ prefix, axis, scale, ...counts });
       }
+      await seedEmptyCollectionHistory(database!, {
+        axis,
+        prefix,
+        partition: thread.partition,
+        hotRoute: thread.route,
+        hotContainerId: thread.id,
+        scale,
+        previous,
+      });
+      const counts = await emptyCollectionPopulationCounts(database!, {
+        prefix: `${prefix}%`,
+        partition: thread.partition,
+        hotRoute: thread.route,
+        hotContainerId: thread.id,
+        eligibleBefore: '2031-01-01T00:00:00.000Z',
+      });
+      const expectedHot = axis === 'same-route' ? scale : 4096;
+      const expectedOther = axis === 'same-route' ? 0 : scale;
+      expect(counts).toEqual({
+        hot: expectedHot,
+        other: expectedOther,
+        total: expectedHot + expectedOther,
+        variants: 2 * (expectedHot + expectedOther),
+        receipts: expectedHot + expectedOther,
+        events: expectedHot + expectedOther,
+        writeBasis: expectedHot + expectedOther,
+        eligible: 0,
+      });
+      populations.push({ prefix, axis, scale, ...counts });
+    }
 
-      async function measureEmptySelection(axis: EmptyCollectionAxis) {
-        const prefix = `${EMPTY_COLLECTION_GROWTH_PREFIX}${axis}-empty:`;
-        const report = await checkGrowth(database!, {
-          name: `native registered empty selection ${axis}`,
-          scales: SCALE,
-          repetitions: REPETITIONS,
-          warmups: 1,
-          rule: 'series',
-          bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-          grow: async (_db, scale, previous) => growAxis(axis, prefix, scale, previous),
-          async warmup(_db, scale, repetition) {
-            const run = await runRegisteredSweep({
-              runtime: runtime!,
-              partition: thread.partition,
-              setWorkerTime: (at) => (workerTime = at),
-            });
-            assertEmptySelection(run, thread.partition);
-            await assertGuardState({
-              system: system!,
-              database: database!,
-              store,
-              partition: thread.partition,
-              guard,
-              baseline: guardBaseline,
-            });
-            operations.push({ operation: 'initially empty eligible selection', axis, scale, repetition, warmup: true, ...run });
-          },
-          async prepare() {
-            await assertGuardState({
-              system: system!,
-              database: database!,
-              store,
-              partition: thread.partition,
-              guard,
-              baseline: guardBaseline,
-            });
-          },
-          async operation(_db, scale, repetition) {
-            const run = await runRegisteredSweep({
-              runtime: runtime!,
-              partition: thread.partition,
-              setWorkerTime: (at) => (workerTime = at),
-            });
-            assertEmptySelection(run, thread.partition);
-            operations.push({
-              operation: 'initially empty eligible selection',
-              axis,
-              scale,
-              repetition,
-              warmup: false,
-              ...run,
-            });
-            return run;
-          },
-        });
-        assertMeasuredReport(report);
-        reports.push({ operation: `initially empty eligible selection ${axis}`, report });
+    async function measureEmptySelection(axis: EmptyCollectionAxis) {
+      const prefix = `${EMPTY_COLLECTION_GROWTH_PREFIX}${axis}-empty:`;
+      const report = await checkGrowth(database!, {
+        name: `native registered empty selection ${axis}`,
+        scales: SCALE,
+        repetitions: REPETITIONS,
+        warmups: 1,
+        rule: 'series',
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        grow: async (_db, scale, previous) => growAxis(axis, prefix, scale, previous),
+        async warmup(_db, scale, repetition) {
+          const run = await runRegisteredSweep({
+            runtime: runtime!,
+            partition: thread.partition,
+            setWorkerTime: (at) => (workerTime = at),
+          });
+          assertEmptySelection(run, thread.partition);
+          await assertGuardState({
+            system: system!,
+            database: database!,
+            store,
+            partition: thread.partition,
+            guard,
+            baseline: guardBaseline,
+          });
+          operations.push({
+            operation: 'initially empty eligible selection',
+            axis,
+            scale,
+            repetition,
+            warmup: true,
+            ...run,
+          });
+        },
+        async prepare() {
+          await assertGuardState({
+            system: system!,
+            database: database!,
+            store,
+            partition: thread.partition,
+            guard,
+            baseline: guardBaseline,
+          });
+        },
+        async operation(_db, scale, repetition) {
+          const run = await runRegisteredSweep({
+            runtime: runtime!,
+            partition: thread.partition,
+            setWorkerTime: (at) => (workerTime = at),
+          });
+          assertEmptySelection(run, thread.partition);
+          operations.push({
+            operation: 'initially empty eligible selection',
+            axis,
+            scale,
+            repetition,
+            warmup: false,
+            ...run,
+          });
+          return run;
+        },
+      });
+      assertMeasuredReport(report);
+      reports.push({ operation: `initially empty eligible selection ${axis}`, report });
+    }
+
+    async function createTargetBatch(scale: number, repetition: number) {
+      const targets: HttpMedia[] = [];
+      for (let index = 0; index < COLLECTION_BOUNDS.batch; index++) {
+        targets.push(
+          await makeHttpMedia(
+            system!,
+            runtime!,
+            store,
+            thread.id,
+            bytes,
+            `empty-collection-batch-${scale}-${repetition}-${index}`,
+          ),
+        );
       }
-
-      async function createTargetBatch(scale: number, repetition: number) {
-        const targets: HttpMedia[] = [];
-        for (let index = 0; index < COLLECTION_BOUNDS.batch; index++) {
-          targets.push(
-            await makeHttpMedia(
-              system!,
-              runtime!,
-              store,
-              thread.id,
-              bytes,
-              `empty-collection-batch-${scale}-${repetition}-${index}`,
-            ),
-          );
-        }
-        const ids = targets.map(({ id }) => id);
-        expect(new Set(ids).size).toBe(COLLECTION_BOUNDS.batch);
-        const selected = await system!.database.pool.query<{ count: number }>(
-          `SELECT count(*)::integer AS count FROM content.media
+      const ids = targets.map(({ id }) => id);
+      expect(new Set(ids).size).toBe(COLLECTION_BOUNDS.batch);
+      const selected = await system!.database.pool.query<{ count: number }>(
+        `SELECT count(*)::integer AS count FROM content.media
             WHERE route=$1 AND container_id=$2 AND media_id=ANY($3::uuid[])
               AND claimed_at IS NULL AND NOT erased AND NOT collection_pending
               AND created_at <= $4::timestamptz`,
-          [thread.route, thread.id, ids, MEDIA_NATIVE_GROWTH_BASE],
-        );
-        expect(selected.rows[0]?.count).toBe(COLLECTION_BOUNDS.batch);
-        return targets;
-      }
+        [thread.route, thread.id, ids, MEDIA_NATIVE_GROWTH_BASE],
+      );
+      expect(selected.rows[0]?.count).toBe(COLLECTION_BOUNDS.batch);
+      return targets;
+    }
 
-      async function measureTerminalPage(axis: EmptyCollectionAxis) {
-        const prefix = `${EMPTY_COLLECTION_GROWTH_PREFIX}${axis}-terminal:`;
-        let prepared: readonly HttpMedia[] | undefined;
-        const report = await checkGrowth(database!, {
-          name: `native registered terminal empty page ${axis}`,
-          scales: SCALE,
-          repetitions: REPETITIONS,
-          warmups: 1,
-          rule: 'series',
-          bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-          grow: async (_db, scale, previous) => growAxis(axis, prefix, scale, previous),
-          async warmup(_db, scale, repetition) {
-            await system!.clock.setCommandTime(MEDIA_NATIVE_GROWTH_BASE);
-            const target = await makeHttpMedia(
-              system!,
-              runtime!,
-              store,
-              thread.id,
-              bytes,
-              `empty-collection-warmup-${axis}-${scale}-${repetition}`,
-            );
-            const run = await runRegisteredSweep({
-              runtime: runtime!,
-              partition: thread.partition,
-              setWorkerTime: (at) => (workerTime = at),
-            });
-            assertSingleTargetSelection(run, thread.partition);
-            await assertCollectedBatch({
-              system: system!,
-              database: database!,
-              store,
-              partition: thread.partition,
-              targets: [target],
-            });
-            await assertGuardState({
-              system: system!,
-              database: database!,
-              store,
-              partition: thread.partition,
-              guard,
-              baseline: guardBaseline,
-            });
-            operations.push({
-              operation: 'bounded selection warmup',
-              axis,
-              scale,
-              repetition,
-              warmup: true,
-              targetId: target.id,
-              ...run,
-            });
-          },
-          async prepare(_db, scale, repetition) {
-            if (prepared) {
-              await assertCollectedBatch({
-                system: system!,
-                database: database!,
-                store,
-                partition: thread.partition,
-                targets: prepared,
-              });
-              prepared = undefined;
-            }
-            await assertGuardState({
-              system: system!,
-              database: database!,
-              store,
-              partition: thread.partition,
-              guard,
-              baseline: guardBaseline,
-            });
-            await system!.clock.setCommandTime(MEDIA_NATIVE_GROWTH_BASE);
-            prepared = await createTargetBatch(scale, repetition);
-          },
-          async operation(_db, scale, repetition) {
-            const targets = prepared;
-            if (!targets || targets.length !== COLLECTION_BOUNDS.batch)
-              throw new Error('The measured terminal page lacks one full native media batch');
-            const run = await runRegisteredSweep({
-              runtime: runtime!,
-              partition: thread.partition,
-              setWorkerTime: (at) => (workerTime = at),
-            });
-            assertFullBatchAndTerminalPage(run, thread.partition);
-            operations.push({
-              operation: 'final empty page after bounded batch',
-              axis,
-              scale,
-              repetition,
-              batchSize: targets.length,
-              targetIds: targets.map(({ id }) => id),
-              pageOutcomes: run.pageOutcomes,
-              workflowId: run.workflowId,
-              partitionWorkflowId: run.partitionWorkflowId,
-              replayResult: run.replayResult,
-              workflowStatus: run.workflowStatus,
-              partitionStatus: run.partitionStatus,
-              steps: run.steps,
-            });
-            return run;
-          },
-        });
-        if (prepared)
+    async function measureTerminalPage(axis: EmptyCollectionAxis) {
+      const prefix = `${EMPTY_COLLECTION_GROWTH_PREFIX}${axis}-terminal:`;
+      let prepared: readonly HttpMedia[] | undefined;
+      const report = await checkGrowth(database!, {
+        name: `native registered terminal empty page ${axis}`,
+        scales: SCALE,
+        repetitions: REPETITIONS,
+        warmups: 1,
+        rule: 'series',
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        grow: async (_db, scale, previous) => growAxis(axis, prefix, scale, previous),
+        async warmup(_db, scale, repetition) {
+          await system!.clock.setCommandTime(MEDIA_NATIVE_GROWTH_BASE);
+          const target = await makeHttpMedia(
+            system!,
+            runtime!,
+            store,
+            thread.id,
+            bytes,
+            `empty-collection-warmup-${axis}-${scale}-${repetition}`,
+          );
+          const run = await runRegisteredSweep({
+            runtime: runtime!,
+            partition: thread.partition,
+            setWorkerTime: (at) => (workerTime = at),
+          });
+          assertSingleTargetSelection(run, thread.partition);
           await assertCollectedBatch({
             system: system!,
             database: database!,
             store,
             partition: thread.partition,
-            targets: prepared,
+            targets: [target],
           });
-        prepared = undefined;
-        assertMeasuredReport(report);
-        reports.push({ operation: `final empty page after bounded batch ${axis}`, report });
-      }
-
-      await measureEmptySelection('same-route');
-      await measureEmptySelection('other-routes');
-      await measureTerminalPage('same-route');
-      await measureTerminalPage('other-routes');
-      await assertGuardState({ system, database, store, partition: thread.partition, guard, baseline: guardBaseline });
-
-      const repo = resolve(import.meta.dir, '../../../..');
-      const evidencePath = join(repo, '.temp', 'goal', 'content-empty-media-collection-growth.json');
-      mkdirSync(resolve(evidencePath, '..'), { recursive: true });
-      writeFileSync(
-        evidencePath,
-        `${JSON.stringify(
-          {
-            source: 'registered content.collection.hourly with isolated media storage',
-            revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
-            command: 'bun run --cwd services/kernel check test/content/growth-media-empty-collection.test.ts',
-            fixtures: [
-              'media-native-collection-fixture.ts: native Auth, Access, HTTP, registered effects, Sharp, and isolated R2-compatible storage',
-              'growth-media-empty-collection-fixture.ts: seeded unrelated same-route and other-route retained histories',
-            ],
+          await assertGuardState({
+            system: system!,
+            database: database!,
+            store,
             partition: thread.partition,
-            targetRoute: thread.route,
-            targetContainerId: thread.id,
-            scheduledPartitions: [thread.partition],
-            batchBound: COLLECTION_BOUNDS.batch,
-            guardMediaIds: { claimed: guard.claimed.id, fresh: guard.fresh.id },
-            growthScales: SCALE,
-            repetitions: REPETITIONS,
-            populations,
-            operations,
-            reports,
-            executionLimits: ['isolated R2-compatible storage only; no live provider configuration was exercised'],
-          },
-          (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value),
-          2,
-        )}\n`,
-      );
-    } finally {
-      if (runtime) {
-        try {
-          await runtime.client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
-        } finally {
-          await runtime.close();
-        }
-      }
+            guard,
+            baseline: guardBaseline,
+          });
+          operations.push({
+            operation: 'bounded selection warmup',
+            axis,
+            scale,
+            repetition,
+            warmup: true,
+            targetId: target.id,
+            ...run,
+          });
+        },
+        async prepare(_db, scale, repetition) {
+          if (prepared) {
+            await assertCollectedBatch({
+              system: system!,
+              database: database!,
+              store,
+              partition: thread.partition,
+              targets: prepared,
+            });
+            prepared = undefined;
+          }
+          await assertGuardState({
+            system: system!,
+            database: database!,
+            store,
+            partition: thread.partition,
+            guard,
+            baseline: guardBaseline,
+          });
+          await system!.clock.setCommandTime(MEDIA_NATIVE_GROWTH_BASE);
+          prepared = await createTargetBatch(scale, repetition);
+        },
+        async operation(_db, scale, repetition) {
+          const targets = prepared;
+          if (!targets || targets.length !== COLLECTION_BOUNDS.batch)
+            throw new Error('The measured terminal page lacks one full native media batch');
+          const run = await runRegisteredSweep({
+            runtime: runtime!,
+            partition: thread.partition,
+            setWorkerTime: (at) => (workerTime = at),
+          });
+          assertFullBatchAndTerminalPage(run, thread.partition);
+          operations.push({
+            operation: 'final empty page after bounded batch',
+            axis,
+            scale,
+            repetition,
+            batchSize: targets.length,
+            targetIds: targets.map(({ id }) => id),
+            pageOutcomes: run.pageOutcomes,
+            workflowId: run.workflowId,
+            partitionWorkflowId: run.partitionWorkflowId,
+            replayResult: run.replayResult,
+            workflowStatus: run.workflowStatus,
+            partitionStatus: run.partitionStatus,
+            steps: run.steps,
+          });
+          return run;
+        },
+      });
+      if (prepared)
+        await assertCollectedBatch({
+          system: system!,
+          database: database!,
+          store,
+          partition: thread.partition,
+          targets: prepared,
+        });
+      prepared = undefined;
+      assertMeasuredReport(report);
+      reports.push({ operation: `final empty page after bounded batch ${axis}`, report });
+    }
+
+    await measureEmptySelection('same-route');
+    await measureEmptySelection('other-routes');
+    await measureTerminalPage('same-route');
+    await measureTerminalPage('other-routes');
+    await assertGuardState({ system, database, store, partition: thread.partition, guard, baseline: guardBaseline });
+
+    const repo = resolve(import.meta.dir, '../../../..');
+    const evidencePath = join(repo, '.temp', 'goal', 'content-empty-media-collection-growth.json');
+    mkdirSync(resolve(evidencePath, '..'), { recursive: true });
+    writeFileSync(
+      evidencePath,
+      `${JSON.stringify(
+        {
+          source: 'registered content.collection.hourly with isolated media storage',
+          revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
+          command: 'bun run --cwd services/kernel check test/content/growth-media-empty-collection.test.ts',
+          fixtures: [
+            'media-native-collection-fixture.ts: native Auth, Access, HTTP, registered effects, Sharp, and isolated R2-compatible storage',
+            'growth-media-empty-collection-fixture.ts: seeded unrelated same-route and other-route retained histories',
+          ],
+          partition: thread.partition,
+          targetRoute: thread.route,
+          targetContainerId: thread.id,
+          scheduledPartitions: [thread.partition],
+          batchBound: COLLECTION_BOUNDS.batch,
+          guardMediaIds: { claimed: guard.claimed.id, fresh: guard.fresh.id },
+          growthScales: SCALE,
+          repetitions: REPETITIONS,
+          populations,
+          operations,
+          reports,
+          executionLimits: ['isolated R2-compatible storage only; no live provider configuration was exercised'],
+        },
+        (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value),
+        2,
+      )}\n`,
+    );
+  } finally {
+    if (runtime) {
       try {
-        await database?.close();
+        await runtime.client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       } finally {
-        try {
-          await system?.close();
-        } finally {
-          store.close();
-        }
+        await runtime.close();
       }
     }
-  },
-  1_800_000,
-);
+    try {
+      await database?.close();
+    } finally {
+      try {
+        await system?.close();
+      } finally {
+        store.close();
+      }
+    }
+  }
+}, 1_800_000);
