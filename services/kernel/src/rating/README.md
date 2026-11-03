@@ -1084,6 +1084,19 @@ source witnesses, owner fencing and exact request on retry. The reader adds no r
 Decision: native own-score reads prepare identity and disclosure before the caller checkout, read only counted-target
 rows in the caller snapshot, then return `preparing` with the same input when final native observations differ.
 
+Commerce and own-score consumers import `OwnCountedVoteRequest`, `OwnCountedVotePreparation`,
+`OwnCountedVoteReadResult`, `OwnCountedVoteResult`, `OwnCountedVoteObservation` and their supporting types from
+`@rezics/client`. `packages/client/src/index.ts` re-exports these source declarations from
+`services/kernel/src/rating/own-votes-counted.ts`, generated as
+`packages/client/src/kernel/rating/own-votes-counted.d.ts`; generate that module and OpenAPI together from the
+complete mounted source with `bun run --cwd services/kernel typecheck --emit-client --emit-openapi`.
+Consumers use observations only when the result is `current`; `preparing` retries the same reader instance, actor and
+ordered target IDs. Preserve `counted` (including zero), `clear`, `absent` and `unavailable` as distinct states, and
+retain source epochs and vote revisions for currentness checks.
+
+Decision: Commerce and own-score consumers use these source-derived DTOs, retry `preparing` with identical input and
+preserve each observation state.
+
 #### Native counted own-score reader Cost
 
 - Touches: preparation reads the account once, then reads the standard question and native identity mappings outside the caller checkout. The identity producer double-collects each supplied source/control home; Subject disclosure repeats a bounded identity collection and prepares and evaluates Access for each original and terminal. The caller phase binds the account home, reads the account once and probes at most 100 exact counted-target keys. Finish reads the question, mappings and Subject disclosure again, then re-reads the account and those same counted-target keys in one final account-home snapshot. It releases every foreign home before the caller checkout and before the final account snapshot.
