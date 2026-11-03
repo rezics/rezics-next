@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connectPool } from './app-server.ts';
+import { readControlPolicy } from './policy.ts';
 
 // Stands in for `codex app-server --listen ws://127.0.0.1:<port>` (port 0 picks one), printing its readiness URL to
 // stderr as codex-cli 0.163.0 does, and answering JSON-RPC over the WebSocket.
@@ -30,6 +31,51 @@ function installFake(directory: string, source: string): string {
   chmodSync(executable, 0o755);
   return executable;
 }
+
+test('pool policy bounds readiness diagnostics and request deadlines', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-policy-'));
+  const policy = readControlPolicy({
+    appServer: {
+      readinessTimeoutMs: 1000,
+      diagnosticCharacters: 32,
+      requestTimeoutMs: 25,
+      terminationGraceMs: 25,
+    },
+  }).appServer;
+  const executable = installFake(
+    directory,
+    '#!/usr/bin/env bun\nconsole.error("x".repeat(200) + "bounded-tail"); setInterval(() => {}, 1000);',
+  );
+  let failure = '';
+  try {
+    await connectPool({ id: 'policy', codexHome: directory, executable }, undefined, undefined, policy);
+  } catch (error) {
+    failure = String(error);
+  }
+  expect(failure).toContain('Timed out waiting for app-server readiness:');
+  expect(failure).toContain('bounded-tail');
+  expect(failure.length).toBeLessThan(100);
+  installFake(
+    directory,
+    fake.replace(
+      'if (message.id === undefined) return;',
+      "if (message.id === undefined || message.method === 'no-response') return;",
+    ),
+  );
+  // The request deadline is independent of the intentionally tiny startup diagnostic tail above.
+  const requestPolicy = readControlPolicy({ appServer: { requestTimeoutMs: 25, terminationGraceMs: 25 } }).appServer;
+  const server = await connectPool(
+    { id: 'policy', codexHome: directory, executable },
+    undefined,
+    undefined,
+    requestPolicy,
+  );
+  try {
+    await expect(server.request('no-response', {})).rejects.toThrow('App-server request timed out: no-response');
+  } finally {
+    await server.close();
+  }
+});
 
 test('a pool app-server listens on a loopback WebSocket owned by the caller and serves JSON-RPC', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'goal-ws-'));
