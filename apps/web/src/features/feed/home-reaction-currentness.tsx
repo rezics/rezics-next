@@ -26,9 +26,11 @@ export function useHomeReactionCurrentness(
     input?.ratingQuestionId,
     signedIn,
     page?.sources,
-    page?.reactionsAsOf,
   ]);
-  const retired = busy || result.state !== 'ready' || (signedIn && !!client && (!observation.healthy() || !reader));
+  const retired =
+    busy ||
+    result.state !== 'ready' ||
+    (signedIn && !!client && (!observation.healthy() || !reader || !session?.csrfToken));
   const [binding, setBinding] = useState({ result, source, observation, revision, retired, visit: 0 });
   if (binding.result !== result)
     setBinding({ result, source, observation, revision, retired, visit: binding.visit + 1 });

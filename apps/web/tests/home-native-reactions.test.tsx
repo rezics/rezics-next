@@ -1,10 +1,8 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ComponentProps } from 'react';
+import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
-import type { FeedReaction } from '../src/features/feed/vote-control';
-import type { ReactionSnapshot } from '../src/threads/reaction-request';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -35,76 +33,42 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { HomeFeed } = await import('../src/features/pages/home-feed');
-const { homeReactionAdmission } = await import('../src/features/feed/home-reaction-admission');
+const { ThreadReactions } = await import('../src/threads/thread-reactions');
+const { useHomeReactionCurrentness } = await import('../src/features/feed/home-reaction-currentness');
 const { m } = await import('../src/paraglide/messages.js');
 const nativeFetch = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected native request'));
 const id = '00000000-0000-7000-8000-000000000001';
-function row(index = 0): FeedItem {
+const result = {
+  state: 'ready' as const,
+  page: {
+    feedItems: [],
+    next: null,
+    asOf: '2026-11-04T00:00:00Z',
+    sources: { following: 'ready', discovery: 'not_requested', continue: 'not_requested' },
+  } satisfies FeedPage,
+};
+function row(index: number): FeedItem {
   return {
     id: `occurrence:${index}`,
     source: 'following',
     occurredAt: null,
     key: { owner: 'content', kind: 'thread', route: 0, id },
     summary: {
-      id: 'different-summary-id',
+      id,
       kind: index % 2 ? 'review' : 'discussion',
       title: `Card ${index}`,
       createdAt: '2026-11-04T00:00:00Z',
-      reactionTarget: { targetKind: 'thread', targetId: id },
-      reactions: { upvote: 8, downvote: 2 },
-      viewerReaction: null,
     },
     destination: { kind: 'thread', id, title: `Card ${index}` },
   };
 }
-function page(count = 1): FeedPage {
-  return {
-    feedItems: Array.from({ length: count }, (_, index) => row(index)),
-    next: null,
-    asOf: '2026-11-04T00:00:00Z',
-    reactionsAsOf: { epoch: 1, position: '7' },
-    sources: { following: 'ready', discovery: 'not_requested', continue: 'not_requested' },
-  };
-}
-type Props = ComponentProps<typeof HomeFeed>;
-type Transport = NonNullable<FeedReaction['preparedTransport']>;
 const host = window.document.createElement('div');
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: QueryClient;
-let props: Props;
-const writes: Parameters<Transport['change']>[0][] = [];
-let reads = 0;
-let value: FeedReaction['value'];
-let failure: 'refused' | 'unknown' | undefined;
-const transport: Transport = {
-  change: async (input) => {
-    writes.push(input);
-    if (failure === 'unknown') throw new Error('lost response');
-    if (failure === 'refused') return { ok: false, reason: 'forbidden' };
-    value = input.data.kind;
-    return { ok: true };
-  },
-  read: async () => {
-    reads++;
-    return {
-      ok: true,
-      counts: { upvote: 8 + Number(value === 'upvote'), downvote: 2 + Number(value === 'downvote') },
-      value,
-      reactionsAsOf: { epoch: 1, position: '8' },
-    };
-  },
-};
-const buttons = () => [...host.querySelectorAll<HTMLButtonElement>('[data-slot="vote-control"] button')];
-const pressed = () => buttons().filter((button) => button.getAttribute('aria-pressed') === 'true');
-async function paint(patch: Partial<Props> = {}) {
-  props = { ...props, ...patch };
+async function paint(element: ReactNode) {
   await act(async () => {
-    root.render(
-      <QueryClientProvider client={client}>
-        <HomeFeed {...props} />
-      </QueryClientProvider>,
-    );
+    root.render(<QueryClientProvider client={client}>{element}</QueryClientProvider>);
   });
 }
 async function click(button: HTMLElement) {
@@ -116,16 +80,6 @@ async function click(button: HTMLElement) {
 beforeEach(() => {
   client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
-  props = {
-    result: { state: 'ready', page: page() },
-    locale: 'en',
-    signedIn: true,
-    preparedReactionTransport: transport,
-  };
-  writes.length = 0;
-  reads = 0;
-  value = null;
-  failure = undefined;
   nativeFetch.mockClear();
   root = createRoot(host);
 });
@@ -144,14 +98,13 @@ afterAll(async () => {
 });
 
 test.each([1, 10, 20])(
-  '%i duplicate targets and mixed unsupported rows do not read reactions on mount',
+  '%i duplicate Content targets and unsupported rows stay unavailable without mount reads',
   async (count) => {
-    const native = page(count);
-    native.feedItems = native.feedItems.map((item, index) =>
+    const feedItems = Array.from({ length: count }, (_, index): FeedItem =>
       index % 3 !== 2
-        ? item
+        ? row(index)
         : {
-            id: item.id,
+            id: `collection:${index}`,
             source: 'following',
             occurredAt: null,
             key: { owner: 'library', kind: 'collection', route: 0, id },
@@ -159,152 +112,92 @@ test.each([1, 10, 20])(
             destination: { kind: 'collection', id, title: 'Collection' },
           },
     );
-    await paint({ result: { state: 'ready', page: native } });
-    expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(count);
-    expect(host.querySelectorAll('[data-slot="vote-control"]')).toHaveLength(count - Math.floor(count / 3));
+    for (const signedIn of [false, true]) {
+      await paint(
+        <HomeFeed result={{ state: 'ready', page: { ...result.page, feedItems } }} locale="en" signedIn={signedIn} />,
+      );
+      expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(count);
+      expect(host.querySelectorAll('[data-slot="vote-unavailable"]')).toHaveLength(count - Math.floor(count / 3));
+      expect(host.querySelector('[data-slot="vote-control"]')).toBeNull();
+    }
     expect(nativeFetch).not.toHaveBeenCalled();
-    expect(reads).toBe(0);
-    expect(writes).toHaveLength(0);
   },
 );
 
-test('post and reply targets require their supplied post and thread destination relationship', () => {
-  const item: FeedItem = {
-    id: 'reply',
-    source: 'following',
-    occurredAt: null,
-    key: { owner: 'content', kind: 'post', route: 0, id },
-    summary: {
-      id: 'other-summary-id',
-      threadId: 'parent',
-      title: 'Reply',
-      createdAt: '2026-11-04T00:00:00Z',
-      reactionTarget: { targetKind: 'post', targetId: id },
-      reactions: {},
-      viewerReaction: null,
-    },
-    destination: { kind: 'post', id, postId: id, threadId: 'parent', title: 'Reply' },
-  };
-  expect(homeReactionAdmission(item, true)?.target).toEqual({ kind: 'post', id });
-  item.destination.threadId = 'different-parent';
-  expect(homeReactionAdmission(item, true)).toBeUndefined();
-  item.destination.threadId = 'parent';
-  item.summary.reactionTarget = { targetKind: 'post', targetId: 'different-target' };
-  expect(homeReactionAdmission(item, true)).toBeUndefined();
-});
-
-test('known empty, unavailable, anonymous omission and signed-in null stay distinct', async () => {
-  const item = row();
-  if (!('reactionTarget' in item.summary)) throw new Error('Content summary required');
-  item.summary.reactions = {};
-  delete item.summary.viewerReaction;
-  expect(homeReactionAdmission(item, true)?.personalReady).toBe(false);
-  expect(homeReactionAdmission(item, false)).toMatchObject({ counts: {}, value: null, personalReady: true });
-  item.summary.viewerReaction = null;
-  expect(homeReactionAdmission(item, true)?.personalReady).toBe(true);
-  const native = page();
-  native.feedItems = [item];
-  await paint({ result: { state: 'ready', page: native } });
-  expect(host.querySelector('output')?.textContent).toBe('0');
-  delete item.summary.reactions;
-  expect(homeReactionAdmission(item, true)).toBeUndefined();
-  item.summary.reactions = { upvote: 9 };
-  item.summary.reactionTarget = { targetKind: 'post', targetId: id };
-  expect(homeReactionAdmission(item, true)).toBeUndefined();
-  delete item.summary.reactionTarget;
-  expect(homeReactionAdmission(item, true)).toBeUndefined();
-});
-
-test('select, switch and clear use the supplied target and the installed engine readback', async () => {
-  await paint();
-  for (const index of [0, 1, 1]) await click(buttons()[index]!);
-  expect(writes.map((call) => call.data.kind)).toEqual(['upvote', 'downvote', null]);
-  expect(
-    writes.every(
-      (call) => call.data.id === id && call.data.target === 'thread' && call.data.expectedReader === 'reader',
-    ),
-  ).toBe(true);
-  expect(reads).toBe(3);
-  expect(pressed()).toHaveLength(0);
-});
-
-test('refusal rolls back and unknown retry retains the same immutable command before readback', async () => {
-  await paint();
-  failure = 'refused';
-  await click(buttons()[0]!);
-  expect(pressed()).toHaveLength(0);
-  expect(reads).toBe(0);
-  failure = 'unknown';
-  await click(buttons()[0]!);
-  const command = writes.at(-1)!;
-  failure = undefined;
-  await click([...host.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry())!);
-  expect(writes.at(-1)).toEqual(command);
-  expect(reads).toBe(1);
-});
-
-test('request, source watermark and equal session replacement retire old private observations', async () => {
-  await paint();
-  await click(buttons()[0]!);
-  expect(pressed()).toHaveLength(1);
-  await paint({ busy: true, input: { stream: 'following', spaceId: 'replacement-space' } });
-  expect(pressed()).toHaveLength(0);
-  expect(host.querySelector('[data-slot="vote-unavailable"]')).not.toBeNull();
-  const next = page();
-  next.reactionsAsOf = { epoch: 2, position: '1' };
-  await paint({ busy: false, result: { state: 'ready', page: next } });
-  await click(buttons()[0]!);
+test('a Home baseline cannot be rebound after a viewer or request observation changes', async () => {
+  function Probe({
+    current = result,
+    spaceId,
+    busy = false,
+  }: {
+    current?: typeof result;
+    spaceId?: string;
+    busy?: boolean;
+  }) {
+    const scope = useHomeReactionCurrentness(
+      current,
+      { stream: 'following', ...(spaceId ? { spaceId } : {}) },
+      'following',
+      true,
+      busy,
+    );
+    return <output>{scope.available ? 'current' : 'retired'}</output>;
+  }
+  await paint(<Probe />);
+  expect(host.textContent).toBe('current');
   await act(async () => {
     client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   });
-  expect(pressed()).toHaveLength(0);
-  expect(host.querySelector('[data-slot="vote-unavailable"]')).not.toBeNull();
-});
-
-test('a retired point read cannot restore old private state into a replacement page', async () => {
-  let resolve!: (snapshot: ReactionSnapshot) => void;
-  const readback = new Promise<ReactionSnapshot>((done) => {
-    resolve = done;
-  });
-  await paint({
-    preparedReactionTransport: {
-      ...transport,
-      read: async () => {
-        reads++;
-        return readback;
-      },
-    },
-  });
-  await click(buttons()[0]!);
-  const replacement = page();
-  const item = replacement.feedItems[0]!;
-  if ('viewerReaction' in item.summary) item.summary.viewerReaction = 'downvote';
-  await paint({ result: { state: 'ready', page: replacement } });
-  await act(async () => {
-    resolve({ ok: true, counts: { upvote: 999 }, value: 'upvote' });
-  });
-  expect(pressed()).toHaveLength(1);
-  expect(pressed()[0]?.getAttribute('aria-label')).toContain(m.reaction_downvote());
-  expect(host.textContent).not.toContain('999');
+  expect(host.textContent).toBe('retired');
+  const replacement = { ...result };
+  await paint(<Probe current={replacement} />);
+  expect(host.textContent).toBe('current');
+  await paint(<Probe current={replacement} spaceId="another-space" />);
+  expect(host.textContent).toBe('retired');
+  await paint(<Probe current={replacement} />);
+  expect(host.textContent).toBe('retired');
+  await paint(<Probe current={{ ...result }} busy />);
+  expect(host.textContent).toBe('retired');
+  expect(nativeFetch).not.toHaveBeenCalled();
 });
 
 test.each([null, { epoch: 1, position: '6' }])(
-  'unavailable or older point projection %j retries only readback',
-  async (watermark) => {
-    let current = watermark;
-    await paint({
-      preparedReactionTransport: {
-        ...transport,
-        read: async (input) => ({ ...(await transport.read(input)), reactionsAsOf: current }),
-      },
-    });
-    await click(buttons()[0]!);
-    expect(writes).toHaveLength(1);
+  'a supplied source watermark keeps %j readback in explicit recovery',
+  async (initial) => {
+    let watermark = initial;
+    let writes = 0;
+    let reads = 0;
+    await paint(
+      <ThreadReactions
+        target={{ kind: 'thread', id }}
+        counts={{ upvote: 8 }}
+        value={null}
+        signedIn
+        returnTo="/en/threads/one/reading"
+        presentation="vote"
+        sourceWatermark={{ epoch: 1, position: '7' }}
+        settleWithRead
+        preparedTransport={{
+          change: async () => {
+            writes++;
+            return { ok: true };
+          },
+          read: async () => {
+            reads++;
+            return { ok: true, counts: { upvote: 9 }, value: 'upvote', reactionsAsOf: watermark };
+          },
+        }}
+      />,
+    );
+    expect(reads).toBe(0);
+    expect(writes).toBe(0);
+    await click(host.querySelector<HTMLButtonElement>('[data-slot="vote-control"] button')!);
+    expect(writes).toBe(1);
     expect(reads).toBe(1);
-    current = { epoch: 1, position: '8' };
+    watermark = { epoch: 1, position: '8' };
     await click([...host.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry())!);
-    expect(writes).toHaveLength(1);
+    expect(writes).toBe(1);
     expect(reads).toBe(2);
-    expect(pressed()).toHaveLength(1);
+    expect(host.querySelectorAll('[data-slot="vote-control"] [aria-pressed="true"]')).toHaveLength(1);
   },
 );

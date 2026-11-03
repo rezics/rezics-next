@@ -6,9 +6,7 @@ import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
 import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-empty-state';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
-import { homeReactionAdmission } from '../feed/home-reaction-admission';
 import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
-import type { FeedReaction } from '../feed/vote-control';
 import type { VerificationConfig } from '../../report/turnstile';
 import { createHomeKindChoices, homeKindChoice, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
@@ -60,7 +58,6 @@ export function HomeFeed({
   questionControl,
   catalogue,
   verification,
-  preparedReactionTransport,
   suppressResultMessage = false,
   onRetry,
   onNext,
@@ -83,8 +80,6 @@ export function HomeFeed({
   /** Native route TypeLists; the feed and Search retain their own adapters. */
   catalogue?: ReactNode;
   verification?: VerificationConfig | undefined;
-  /** Illustrative connected stories only; normal Home commands use the installed reaction transports. */
-  preparedReactionTransport?: FeedReaction['preparedTransport'];
   /** The selected metadata control already explains and recovers its own blocked selection. */
   suppressResultMessage?: boolean;
   onRetry?: () => void;
@@ -226,7 +221,6 @@ export function HomeFeed({
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
           const presentation = homeFeedItemPresentation(item, locale);
-          const reaction = reactions.available ? homeReactionAdmission(item, signedIn, page?.reactionsAsOf) : undefined;
           return {
             ...presentation,
             actions: (
@@ -237,15 +231,6 @@ export function HomeFeed({
                 signedIn={signedIn}
                 verification={verification}
                 origin={reactions.origin}
-                reaction={
-                  reaction
-                    ? {
-                        ...reaction,
-                        reactionOrigin: reactions.origin,
-                        ...(preparedReactionTransport ? { preparedTransport: preparedReactionTransport } : {}),
-                      }
-                    : undefined
-                }
               >
                 {presentation.actions}
               </HomeFeedActions>

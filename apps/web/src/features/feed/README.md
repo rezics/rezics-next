@@ -142,10 +142,11 @@ Decision: phone Share and vote-presentation reaction pickers use compact labeled
 and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
 
 The installed Kernel source emits optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
-thread/post summaries and optional `reactionsAsOf` on the page. The generated Web contract is published through
-`bun run --cwd services/kernel typecheck --emit-client`. Home consumes those exact generated fields; absent targets
-or count maps keep reactions unavailable. It does not add a browser DTO or cast, infer a thread target from
-`summary.id`, or read each row. Bind the exact
+thread/post summaries and optional `reactionsAsOf` on the page. The current generated Web client has not published
+those fields: its `FeedContentSummary` still has only author and excerpt, and its page type lacks `reactionsAsOf`.
+Until normal client generation publishes them, Home keeps reactions unavailable and binds none of these values.
+Publish with `bun run --cwd services/kernel typecheck --emit-client` before binding them. Do not add a browser DTO
+or cast, infer a thread target from `summary.id`, or read each row. Once present, bind the exact
 target: use `reactionTarget` verbatim. The installed thread projector supplies its thread ID; never infer it from
 `summary.id` or replace it with an opening post. A post target keeps its supplied post ID only after the native
 thread/destination relationship is admitted. The count map uses the seven native kinds and positive integer entries;
@@ -153,23 +154,20 @@ an empty map means known zero, absent counts mean unavailable. Anonymous viewer-
 authenticated `null`, and a null watermark does not prove a later write converged. Following projection failure
 withholds its rows and preserves its input frontier for retry.
 
-`homeReactionAdmission` admits only Content thread/post destinations matching the supplied target discriminant and
-ID; post destinations also retain their supplied parent-thread relationship. Discussion, review, post and reply
-cards all use the installed `ThreadReactions` queue. An omitted signed-in viewer slot leaves the known public
-counts visible but disables personal commands; authenticated null admits an unselected slot. Anonymous omission
-keeps the localized sign-in destination and never supplies a private selection.
-
 `useHomeReactionCurrentness` binds one displayed page to its result, request/cursor, stream, filters, Space, source
-states, projection watermark and existing session-cache observation. Beginning a replacement read, changing any
-binding or observing session replacement retires the old baseline immediately, including equal session success.
-Only a new result can admit it again. Old commands and point reads cannot restore a retired selection or failure.
-The engine retains the original command for unknown recovery and retries only the point read after a receipt.
-Home point-read settlement requires a supplied projection watermark at least as recent as its source baseline;
-an absent/null or older point-read watermark retains explicit recovery rather than claiming convergence.
+states and existing session-cache observation. Beginning a replacement read, changing any binding or observing
+session replacement retires the old action origin immediately, including equal session success. Only a new result
+can admit it again. This observer makes no reads and does not install a missing reaction baseline.
 
-`home-native-reactions` stories connect prepared native-shaped page baselines to Home and the real reaction engine
-at 390 and 1280, light/dark. Exact counts, unavailable counts, anonymous/current-viewer state, target mismatch,
-replacement and revocation remain prepared inspection states, not evidence of native or rendered delivery.
+The existing reaction engine accepts an optional native `sourceWatermark` operand. Its point-read settlement then
+requires a supplied projection watermark at least as recent as that baseline; an absent/null or older point-read
+watermark retains explicit recovery rather than claiming convergence. Known receipts retry only the point read.
+Home can supply this operand when its generated page field is published; other callers keep their existing contract.
+
+`home-native-reactions` stories connect prepared pages without reaction fields to Home at 390 and 1280, light/dark,
+with anonymous/current-viewer admission, replacement and revocation. Counts remain unavailable. Exact-count and
+target-mismatch receiving remain dependent on generated publication. These stories do not prove native or rendered
+delivery, including anonymous Content discovery.
 
 Home receives the existing public verification configuration with its page result and reuses `PostActions` for
 reporting. The row's canonical destination also feeds that owner's copy/recovery flow. Missing verification
