@@ -21,11 +21,11 @@ ordinal, source identifier or version Subject becomes a canonical Episode ID.
 `POST /v1/progressSessions/{sessionId}:recordEpisodes`, action `progress_session:update`, takes exactly one of:
 
 ```json
-{"revision": 1, "add": ["canonical-episode-uuid"], "remove": ["another-canonical-episode-uuid"]}
+{ "revision": 1, "add": ["canonical-episode-uuid"], "remove": ["another-canonical-episode-uuid"] }
 ```
 
 ```json
-{"revision": 2, "clear": true}
+{ "revision": 2, "clear": true }
 ```
 
 `add` and `remove` are optional individually; at least one ID is required. Together they admit at most 20 distinct
