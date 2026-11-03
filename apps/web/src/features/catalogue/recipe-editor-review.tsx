@@ -246,12 +246,7 @@ export function RecipeCorrectionReview({
         <ContentItemFrame as="div" className="min-w-0 space-y-2 rounded-xl bg-muted/30 p-4">
           <h4 className="text-sm font-semibold text-muted-foreground">{m.recipe_review_current({}, o)}</h4>
           {current ? (
-            <RecipeAssertionPreview
-              statement={current}
-              definition={row.definition}
-              read={read}
-              locale={locale}
-            />
+            <RecipeAssertionPreview statement={current} definition={row.definition} read={read} locale={locale} />
           ) : (
             <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
           )}

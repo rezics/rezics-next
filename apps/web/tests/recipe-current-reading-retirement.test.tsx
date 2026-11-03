@@ -121,7 +121,11 @@ test('Recipe recovery retires current authority and keeps the private draft and 
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
             address="recipe-retirement"
-            observed={{ state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+            observed={{
+              state: 'signed-in',
+              subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+              csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+            }}
           >
             {node}
           </CandidateReaderBoundary>
@@ -155,7 +159,9 @@ test('Recipe recovery retires current authority and keeps the private draft and 
   const queued = (element: HTMLElement) => {
     const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'))!;
     const onClick = (
-      Reflect.get(element, key) as { onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void }
+      Reflect.get(element, key) as {
+        onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void;
+      }
     ).onClick;
     return () => onClick({ preventDefault() {}, stopPropagation() {} });
   };

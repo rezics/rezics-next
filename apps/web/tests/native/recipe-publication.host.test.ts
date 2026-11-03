@@ -298,7 +298,9 @@ test('complete original recipe evidence groups survive a later native correction
   );
   expect(proposal.status).toBe(201);
   const current = await read(created.id);
-  expect(current.subject.statements['schema:recipeIngredient']).toEqual(original.subject.statements['schema:recipeIngredient']);
+  expect(current.subject.statements['schema:recipeIngredient']).toEqual(
+    original.subject.statements['schema:recipeIngredient'],
+  );
   expect(current.subject.statements['schema:cookTime']![0]!.value).toEqual({
     type: 'value',
     content: { amount: '+25', unit: minute },

@@ -90,18 +90,20 @@ test('complete independent evidence groups survive create and a later correction
   item.statements['schema:cookTime']![0]!.references = [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/time' } }] },
   ];
-  const draft = recipeDraft(read.release, 'en', [{ language: 'en', label: 'Lentil soup', description: '', aliases: '' }], [
-    ingredient,
-    item.statements['schema:cookTime']![0]!,
-    item.statements['schema:recipeInstructions']![0]!,
-  ]);
+  const draft = recipeDraft(
+    read.release,
+    'en',
+    [{ language: 'en', label: 'Lentil soup', description: '', aliases: '' }],
+    [ingredient, item.statements['schema:cookTime']![0]!, item.statements['schema:recipeInstructions']![0]!],
+  );
   expect(draft.errors).toEqual([]);
   const created = await fixture.transport.create({ item: draft.item, key: crypto.randomUUID() });
   expect(created.ok).toBe(true);
-  expect(fixture.publicRead.subject.statements['schema:recipeIngredient']![0]!.references.map((group) => group.parts.map((part) => part.property.id))).toEqual([
-    ['schema:url', 'schema:inLanguage'],
-    ['schema:url'],
-  ]);
+  expect(
+    fixture.publicRead.subject.statements['schema:recipeIngredient']![0]!.references.map((group) =>
+      group.parts.map((part) => part.property.id),
+    ),
+  ).toEqual([['schema:url', 'schema:inLanguage'], ['schema:url']]);
   const untouched = fixture.publicRead.subject.statements['schema:cookTime']![0]!;
   const source = fixture.publicRead.subject.statements['schema:recipeIngredient']![0]!;
   const correction = statementInput(source);
@@ -109,7 +111,9 @@ test('complete independent evidence groups survive create and a later correction
     correction.references[0]!,
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://cook.example/revised' } }] },
   ];
-  expect(await fixture.transport.propose({ id: recipeId, statement: correction, key: crypto.randomUUID() })).toMatchObject({
+  expect(
+    await fixture.transport.propose({ id: recipeId, statement: correction, key: crypto.randomUUID() }),
+  ).toMatchObject({
     ok: true,
     kind: 'proposed-awaiting-review',
   });
@@ -133,7 +137,9 @@ test('empty citation scaffolds are omitted; evidence changes classify retained a
   const statement = recipeExample().statements['schema:recipeIngredient']![0]!;
   statement.references.push({ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] });
   statement.qualifiers = [{ property: { id: 'schema:position' }, value: { type: 'value', content: '' } }];
-  expect(recipeEvidence(statement).references).toEqual(recipeExample().statements['schema:recipeIngredient']![0]!.references);
+  expect(recipeEvidence(statement).references).toEqual(
+    recipeExample().statements['schema:recipeIngredient']![0]!.references,
+  );
   expect(recipeEvidence(statement).qualifiers).toEqual([]);
   const current = recipeExample().statements['schema:recipeIngredient']![0]!.references;
   const next = [

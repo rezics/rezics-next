@@ -111,14 +111,15 @@ test('Recipe creation and current correction share complete frames with independ
   };
   const cite = async (scope: HTMLElement, url: string) => {
     await click(scope, m.correction_add_reference());
-    const group = [...scope.querySelectorAll('fieldset')].filter((node) =>
-      node.querySelector('legend')?.textContent?.includes(m.correction_references()),
-    ).at(-1)!;
+    const group = [...scope.querySelectorAll('fieldset')]
+      .filter((node) => node.querySelector('legend')?.textContent?.includes(m.correction_references()))
+      .at(-1)!;
     await choosePart(group, 'schema:url');
     await click(group, m.correction_add());
     await replace(within(group).getByRole('textbox', { name: m.correction_url() }), url);
   };
-  const url = (scope: HTMLElement) => within(scope).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
+  const url = (scope: HTMLElement) =>
+    within(scope).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
   const reviewRecipe = (scope: HTMLElement) => click(scope, m.recipe_review());
   const propose = async (scope: HTMLElement) => {
     await reviewRecipe(scope);
@@ -170,7 +171,9 @@ test('Recipe creation and current correction share complete frames with independ
   const queued = (element: HTMLElement) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
     const onClick = (
-      Reflect.get(element, key) as { onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void }
+      Reflect.get(element, key) as {
+        onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void;
+      }
     ).onClick;
     return () => onClick({ preventDefault() {}, stopPropagation() {} });
   };
@@ -216,8 +219,7 @@ test('Recipe creation and current correction share complete frames with independ
     ).onChange;
   const document = (scope: HTMLElement) =>
     retainedProps<ComponentProps<typeof RichTextEditor>>(
-      scope.querySelector('[contenteditable="true"][role="textbox"]') ??
-        scope.querySelector('[contenteditable]')!,
+      scope.querySelector('[contenteditable="true"][role="textbox"]') ?? scope.querySelector('[contenteditable]')!,
       (props) => !!props.labels && !!props.onChange,
     );
   const picker = (scope: HTMLElement) =>
@@ -873,8 +875,14 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(within(firstGroup).getByRole('textbox', { name: m.correction_value() }), 'en');
     await reviewRecipe(host);
     await click(host, m.recipe_title());
-    await until(() => within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })[1]?.getAttribute('aria-invalid') === 'true');
-    const survivingUrl = within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })[1]! as HTMLInputElement;
+    await until(
+      () =>
+        within(nestedRow).getAllByRole('textbox', { name: m.correction_url() })[1]?.getAttribute('aria-invalid') ===
+        'true',
+    );
+    const survivingUrl = within(nestedRow).getAllByRole('textbox', {
+      name: m.correction_url(),
+    })[1]! as HTMLInputElement;
     expect(window.document.activeElement).toBe(survivingUrl);
     const described = survivingUrl.getAttribute('aria-describedby');
     await click(firstGroup, m.correction_remove_reference());

@@ -47,14 +47,15 @@ import {
   type RecipeRead,
 } from './recipe-editor';
 import { RecipeCorrectionReview, RecipeCreateReview } from './recipe-editor-review';
-import { statementInput, type ProposalCommand, type ProposalResult, type SnakInput, type StatementInput } from './statement-editor';
-import { statementDraftChanged } from './statement-editor-navigation';
 import {
-  EditorFailure,
-  StatementFields,
-  statementHolderKey,
-  type StatementFieldsRead,
-} from './statement-editor-view';
+  statementInput,
+  type ProposalCommand,
+  type ProposalResult,
+  type SnakInput,
+  type StatementInput,
+} from './statement-editor';
+import { statementDraftChanged } from './statement-editor-navigation';
+import { EditorFailure, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
 import { controlId, type StatementFeedback } from './statement-validation-presentation';
 import {
   focusRecipeCorrection,
@@ -514,8 +515,7 @@ function RecipeEditorLive({
       const index = positions.get(property) ?? 0;
       positions.set(property, index + 1);
       if (read.release.properties[property]?.datatype !== 'document') continue;
-      const content =
-        row.statement.value.type === 'value' ? (row.statement.value.content as AuthoredField) : undefined;
+      const content = row.statement.value.type === 'value' ? (row.statement.value.content as AuthoredField) : undefined;
       const authored = !!content && typeof content === 'object';
       if (!authored || !hasDocumentContent(content.document)) {
         draft.errors.push({
@@ -702,9 +702,7 @@ function RecipeEditorLive({
               catalogueEntries.recipe({
                 id: created.id,
                 label:
-                  created.reader.state === 'ready'
-                    ? (created.reader.identity?.label ?? createdLabel)
-                    : createdLabel,
+                  created.reader.state === 'ready' ? (created.reader.identity?.label ?? createdLabel) : createdLabel,
                 locale,
               }).href
             }
@@ -1173,7 +1171,8 @@ function RecipeItemPart({
         ? [
             {
               id: part.value.content,
-              title: pickText(related?.[part.value.content]?.labels ?? {}, locale).text || m.subject_value_unlabelled({}, o),
+              title:
+                pickText(related?.[part.value.content]?.labels ?? {}, locale).text || m.subject_value_unlabelled({}, o),
               types: [],
               typeLabel: '',
               cover: null,
@@ -1186,7 +1185,9 @@ function RecipeItemPart({
       label={pickText(release.properties[property]?.labels ?? {}, locale).text || property}
       value={selected}
       search={async (text, signal) =>
-        (await search(text, signal)).filter((entry) => entry.types.some((type) => recipeTarget(release, property, type)))
+        (await search(text, signal)).filter((entry) =>
+          entry.types.some((type) => recipeTarget(release, property, type)),
+        )
       }
       src={coverSrc}
       onValueChange={(items) => {
@@ -1464,7 +1465,12 @@ function RecipeFieldLive({
                 id: fieldId,
                 errors: corrections
                   .filter((error) => error.owner === fieldId && !!error.target)
-                  .map((error) => ({ id: error.id, target: error.target!, label: error.label, instruction: error.instruction })),
+                  .map((error) => ({
+                    id: error.id,
+                    target: error.target!,
+                    label: error.label,
+                    instruction: error.instruction,
+                  })),
               } satisfies StatementFeedback
             }
             guideReturn={
@@ -1551,8 +1557,10 @@ function RecipeFieldLive({
                               {
                                 id: row.statement.value.content,
                                 title:
-                                  pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale)
-                                    .text || m.subject_value_unlabelled({}, o),
+                                  pickText(
+                                    currentRead?.public?.related[row.statement.value.content]?.labels ?? {},
+                                    locale,
+                                  ).text || m.subject_value_unlabelled({}, o),
                                 types: [],
                                 typeLabel: '',
                                 cover: null,
@@ -1615,10 +1623,7 @@ function RecipeFieldLive({
               const valueChanged = statement.value !== current.value;
               const referencesChanged = statement.references !== current.references;
               if (valueChanged === referencesChanged) {
-                if (
-                  valueChanged ||
-                  (statement.qualifiers === current.qualifiers && statement.rank === current.rank)
-                )
+                if (valueChanged || (statement.qualifiers === current.qualifiers && statement.rank === current.rank))
                   return;
                 if (editing.current.row.statement !== row.statement) return;
                 changeRow((entry) => (entry.statement === row.statement ? { ...entry, statement } : entry));
@@ -1769,9 +1774,7 @@ function RecipeFieldLive({
                 }}
                 locale={locale}
                 stale={!statementReviewCurrent}
-                onJump={() =>
-                  focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`)
-                }
+                onJump={() => focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`)}
               />
             )}
             {(currentRead?.public || (command && wasUncertain)) && (
