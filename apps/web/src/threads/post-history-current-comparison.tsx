@@ -28,6 +28,7 @@ export function HistoryComparisonReader({
   const generation = useRef(0);
   const live = useRef(false);
   const pending = useRef(false);
+  const returnFocus = useRef(false);
   const identity = { postId: comparison.postId, revisionId: comparison.toRevisionId };
   useLayoutEffect(() => {
     live.current = true;
@@ -37,7 +38,12 @@ export function HistoryComparisonReader({
     };
   }, []);
   useLayoutEffect(() => {
-    if (open && isCurrent()) target.current?.focus({ preventScroll: true });
+    if (!isCurrent()) return;
+    if (open) target.current?.focus({ preventScroll: true });
+    else if (returnFocus.current) {
+      returnFocus.current = false;
+      trigger.current?.focus({ preventScroll: true });
+    }
   }, [open]);
   async function read() {
     if (!client || pending.current || !live.current || !isCurrent()) return;
@@ -66,9 +72,9 @@ export function HistoryComparisonReader({
     if (!live.current || !isCurrent()) return;
     generation.current++;
     pending.current = false;
+    returnFocus.current = true;
     setOpen(false);
     setVisit(undefined);
-    trigger.current?.focus({ preventScroll: true });
   }
   const admitted =
     visit &&
