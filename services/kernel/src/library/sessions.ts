@@ -7,13 +7,12 @@ import {
   mintReadTime,
   noEffect,
   releaseOperationalTime,
-  type AuthoritativeTime,
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -451,27 +450,22 @@ export function createSessionCommands(config: Dependencies) {
         async function time() {
           return withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
         }
-        async function observed(at: AuthoritativeTime) {
-          // Preparation may visit principal/denial homes; finish it before taking the owner snapshot.
-          const check = await accessCheck(
-            access,
-            owner,
-            'progress_session:read',
-            { route, id: owner.accountId },
-            { pool, deadline, time: at },
-          );
+        async function observed() {
+          // Use the same private owner authority as readSession: client scope,
+          // current native account, and the occurrence's exact owning account.
           return snapshot(owner, 'progress_session:read', async (client) => {
             const bounded = deadlineClient(client, deadline);
-            if (!(await check(bounded, at))) throw new GrantDeniedError();
             const partition = await readPartition(bounded, partitionOf(route));
+            if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+              throw new ProblemError('partition_unavailable');
             const fact = await store.readSessionFact(bounded, route, sessionId);
-            if (!partition || !fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+            if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
             return { fact, epoch: partition.epoch };
           });
         }
         const at = await time();
         try {
-          const before = await observed(at);
+          const before = await observed();
           const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
           const result = await render(
             before.fact.session,
@@ -482,7 +476,7 @@ export function createSessionCommands(config: Dependencies) {
           const finalTime = await time();
           try {
             await prepared.verify(finalTime);
-            const after = await observed(finalTime);
+            const after = await observed();
             if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
               throw new ProgressConflictError();
           } finally {

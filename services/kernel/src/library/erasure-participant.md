@@ -12,6 +12,11 @@ current deleted/fenced native account and its committed version-1 erasure under 
 and shared row locks. Missing accounts, missing obligations, unsupported versions and query failures throw;
 none means **no data applies**, never unavailable or dispatch success.
 
+`diary_navigation` adds at most eight owner-prefix navigation keys. Native account locks fence their creation
+against terminal deletion; the appended `diary_navigation` graph phase deletes those keys, and the native probe
+reports their actual presence. Expiry retires authority immediately and slot reuse bounds residual metadata.
+This adds no claim about the independent shared custody gaps below.
+
 ## Current outcome
 
 The worker now performs bounded local cleanup of entry episodes, copies, follows, progress sessions and history,
