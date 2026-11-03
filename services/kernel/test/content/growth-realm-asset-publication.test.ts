@@ -269,12 +269,7 @@ function mediaPopulation(fixture: Fixture, sourceDigest: string, sourceBytes: nu
   };
 }
 
-function imageHistoryPopulation(
-  fixture: Fixture,
-  from: number,
-  positionBase: bigint,
-  epoch: number,
-): Population {
+function imageHistoryPopulation(fixture: Fixture, from: number, positionBase: bigint, epoch: number): Population {
   return {
     name: 'growth-realm-asset-publication-retained-image-history',
     hotPartition: fixture.partition,
@@ -350,7 +345,9 @@ function assertGrowthEvidence(report: GrowthReport): void {
     expect(Object.keys(sample.cost.relations).length).toBeGreaterThan(0);
   }
   const relations = [
-    ...new Set(report.samples.flatMap((sample) => sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)))),
+    ...new Set(
+      report.samples.flatMap((sample) => sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations))),
+    ),
   ].sort();
   expect(relations.length).toBeGreaterThan(0);
   assertGrowthAccessPaths(report.name, report.samples, relations);
@@ -359,7 +356,9 @@ function assertGrowthEvidence(report: GrowthReport): void {
 test('Registered Realm image publication stays within its Cost bounds across independent growth axes', async () => {
   const fixture = await growthRealmAssetPublicationFixture();
   const sourceBytes = new Uint8Array(
-    await sharp({ create: { width: 96, height: 64, channels: 3, background: '#2c7891' } }).png().toBuffer(),
+    await sharp({ create: { width: 96, height: 64, channels: 3, background: '#2c7891' } })
+      .png()
+      .toBuffer(),
   );
   const sourceDigest = digest(sourceBytes);
   expect(sourceBytes.byteLength).toBeGreaterThan(0);
