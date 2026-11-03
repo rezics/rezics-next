@@ -65,8 +65,7 @@ async function waitForSuggestions(page: Page): Promise<void> {
   while (Date.now() < deadline) {
     if ((await page.getByRole('checkbox').count()) > 0) return;
     const empty = page.getByRole('status').filter({ hasText: 'No suggestions match this scope.' });
-    if (await empty.count())
-      throw new Error('Queue presented a complete empty page before native rows were available');
+    if (await empty.count()) throw new Error('Queue presented a complete empty page before native rows were available');
     for (const name of ['Prepare index', 'Continue', 'Retry'] as const) {
       const button = page.getByRole('button', { name, exact: true });
       if ((await button.count()) && (await button.isEnabled())) {
@@ -80,16 +79,18 @@ async function waitForSuggestions(page: Page): Promise<void> {
 }
 
 async function confirmDecision(page: Page, operation: 'accept' | 'reject'): Promise<void> {
-  await page
-    .getByRole('button', { name: operation === 'accept' ? 'Accept suggestion' : 'Reject suggestion' })
-    .click();
+  await page.getByRole('button', { name: operation === 'accept' ? 'Accept suggestion' : 'Reject suggestion' }).click();
   const dialog = page.getByRole('alertdialog');
   await dialog.waitFor({ state: 'visible' });
   await dialog
     .getByRole('button', { name: operation === 'accept' ? 'Confirm acceptance' : 'Confirm rejection' })
     .click();
   await page
-    .getByText(operation === 'accept' ? 'Accepted. Review public selection separately.' : 'Rejected. The candidate was not deleted.')
+    .getByText(
+      operation === 'accept'
+        ? 'Accepted. Review public selection separately.'
+        : 'Rejected. The candidate was not deleted.',
+    )
     .waitFor();
 }
 
@@ -139,17 +140,22 @@ nativeTest(
     expect(pageBody.candidates.every((row) => row.adoption === null)).toBe(true);
 
     const queueTraffic = await bffQueueRequests();
-    expect(queueTraffic.some((request) => request.method === 'POST' && request.url === '/v1/review-candidates:prepare')).toBe(
-      true,
+    expect(
+      queueTraffic.some((request) => request.method === 'POST' && request.url === '/v1/review-candidates:prepare'),
+    ).toBe(true);
+    const reads = queueTraffic.filter(
+      (request) => request.method === 'GET' && request.url.startsWith('/v1/review-candidates?'),
     );
-    const reads = queueTraffic.filter((request) => request.method === 'GET' && request.url.startsWith('/v1/review-candidates?'));
     expect(reads.length).toBeGreaterThan(0);
-    expect(reads.every((request) => new URL(request.url, current.stack.kernelOrigin).searchParams.get('limit') === '20')).toBe(
-      true,
-    );
-    expect(reads.every((request) => new URL(request.url, current.stack.kernelOrigin).searchParams.get('source') === providerReviewSource)).toBe(
-      true,
-    );
+    expect(
+      reads.every((request) => new URL(request.url, current.stack.kernelOrigin).searchParams.get('limit') === '20'),
+    ).toBe(true);
+    expect(
+      reads.every(
+        (request) =>
+          new URL(request.url, current.stack.kernelOrigin).searchParams.get('source') === providerReviewSource,
+      ),
+    ).toBe(true);
     expect(reads.some((request) => request.failure?.status === 503)).toBe(true);
     expect(reads.some((request) => !request.failure)).toBe(true);
 
