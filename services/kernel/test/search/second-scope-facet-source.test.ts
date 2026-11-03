@@ -54,9 +54,7 @@ test('the default adapter uses only an admission-bound source and fails closed w
   expect((await source.observe(admission, context)).status).toBe('unavailable');
   const page = await source.readPage(bound, null, 1, context);
   if (!('subjects' in page)) throw new Error('Expected the admission-bound source to return subjects');
-  expect(page.subjects).toEqual([
-    { partition: subjectPartition(alice), subject: alice },
-  ]);
+  expect(page.subjects).toEqual([{ partition: subjectPartition(alice), subject: alice }]);
 });
 
 test('scope candidate pages emit only current members under the admitted observation', async () => {
