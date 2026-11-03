@@ -28,6 +28,14 @@ Search state. Browse and rating discovery deliberately open the complete scoped 
 than borrowing an unsent query. Normal links/forms preserve browser history; returning through Back
 can restore the same visit, or remount a fresh empty draft. A new community never inherits a draft.
 
+Decision: subject links from scoped Search carry a bounded same-locale return through the existing
+Subject `via` field; browser Back retains the full visit when the return cannot be admitted.
+
+Opening a subject from catalogue results retains the exact query, filter, facets, cursor and rating
+selection in its Search return. The return targets the Search results region so the existing Subject
+Connections action can restore keyboard focus. Invalid, non-Realm, cross-locale, private or over-
+2,048-character Search URLs do not become in-page returns.
+
 ## Rating meaning and unavailable seams
 
 Decision: RealmHome provides no authorized rating choices or readiness, so rating discovery opens
@@ -81,6 +89,11 @@ Encoding and validation are O(Q), with Q at most 512 UTF-8 bytes, and source ide
 Navigation retains no result page and makes no page, row, background, population or command request.
 It does not iterate publications. Existing twelve-publication windows and separate board limits and
 native continuations remain unchanged.
+
+The Search handoff performs no reads. Its source URL is at most 2,048 characters and is checked
+against the installed Search schema and Realm scope before it is carried into a Subject link. Link
+construction is bounded by the current URL length; returning reuses the existing `via` sanitizer
+and focuses `#search-results` without changing the preserved query bytes.
 
 The focused entry and navigation tests cover parser admission, rendered forms/links, browser return,
 replacement fencing, limits and supplied 1/6/12 publication windows. Connected Storybook examples use

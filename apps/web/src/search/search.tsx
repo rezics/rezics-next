@@ -50,6 +50,7 @@ import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 import { ResultKindNavigation } from './result-kind-navigation';
 import { DiscoveryResults } from './discovery-results';
+import { realmCatalogueSubjectHref } from './realm-catalogue-handoff';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
 import { SearchRealmDiscovery } from './realm-discovery';
@@ -559,6 +560,7 @@ export function SearchPage({
   onRetry,
   locale: localeProp,
   session = null,
+  searchHref,
 }: {
   query: string;
   cursor?: string;
@@ -570,6 +572,7 @@ export function SearchPage({
   onRetry?: (() => void) | undefined;
   locale?: string;
   session?: string | null;
+  searchHref?: string | undefined;
 }) {
   const sourceData = data;
   const currentData = useRef(data);
@@ -774,6 +777,7 @@ export function SearchPage({
     onRetry,
     committedState,
     retryFocus,
+    searchHref,
   );
   const navigate = (href: string, removingCondition = false) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
@@ -1187,9 +1191,13 @@ function renderResults(
   onRetry?: (() => void) | undefined,
   retryState = data?.queryState,
   retryFocus?: ReturnType<typeof useSearchRetryFocus>,
+  searchHref?: string | undefined,
 ) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
+  const subjectHrefFor = searchHref
+    ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, searchHref)
+    : undefined;
   const next = continuationAllowed
     ? data?.discovery?.status === 'ready'
       ? data.discovery.page.next
@@ -1248,7 +1256,13 @@ function renderResults(
           </a>
         </p>
       )}
-      <section ref={retryFocus?.regionRef} tabIndex={-1} aria-label={m.search_results({}, options)} data-search-results>
+      <section
+        id="search-results"
+        ref={retryFocus?.regionRef}
+        tabIndex={-1}
+        aria-label={m.search_results({}, options)}
+        data-search-results
+      >
         {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
           <SearchRecovery
             state={data.recovery}
@@ -1263,6 +1277,7 @@ function renderResults(
             state={data.discovery}
             locale={locale}
             yearProperties={data.yearProperties}
+            subjectHrefFor={subjectHrefFor}
             restartHref={
               data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
             }
@@ -1280,6 +1295,7 @@ function renderResults(
               locale={locale}
               hitTypes={data?.hitTypes ?? {}}
               yearProperties={data?.yearProperties ?? []}
+              subjectHrefFor={subjectHrefFor}
             />
           </>
         )}

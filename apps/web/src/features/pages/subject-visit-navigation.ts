@@ -1,10 +1,13 @@
 import { subjectHref } from '../../subject/subject-href';
+import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const destination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/(?:subjects/${uuid}/[^/?#]+|realms/${uuid})$`);
 
-/** A single public return address. Never carry a nested return chain, private rows, credentials or cursors. */
+/** A public return address; scoped Search alone may carry its current opaque cursor and supported intent. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
+  const catalogueReturn = realmCatalogueReturnHref(value, locale);
+  if (catalogueReturn) return catalogueReturn;
   if (typeof value !== 'string' || value.length > 2048 || !value.startsWith('/') || value.startsWith('//')) return;
   try {
     const url = new URL(value, 'https://rezics.invalid');
