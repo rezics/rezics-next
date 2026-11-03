@@ -130,12 +130,11 @@ test('occurrence and creation stay distinct, null does not borrow creation, and 
   for (const page of [window, missing, deleted, withheld]) page.happyDOM.abort();
 });
 
-test('missing native targets remain unlinked and subject kinds are not all called works', () => {
+test('missing account and reviewed-Subject targets stay unlinked while native Space keeps its address', () => {
   const items = preparedFeedCardReading();
   const account = items[5]!;
   if ('handle' in account.summary) account.summary.handle = null;
   const space = items[6]!;
-  if (space.destination.kind === 'space') space.destination.address = null;
   const review = items[3]!;
   if ('subject' in review.summary) delete review.summary.subject;
   const subject = items[0]!;
@@ -145,7 +144,8 @@ test('missing native targets remain unlinked and subject kinds are not all calle
   expect(homeFeedDestination(account, 'en')).toBeUndefined();
   expect(rows[0]!.querySelector('[data-content-item-slot="visual"] a')).toBeNull();
   expect(rows[0]!.querySelector('a[aria-labelledby]')).toBeNull();
-  expect(rows[1]!.querySelector('a')).toBeNull();
+  expect(homeFeedDestination(space, 'en')).toBe('/en/spaces/prepared-reading-room');
+  expect(rows[1]!.querySelector('a')?.getAttribute('href')).toBe('/en/spaces/prepared-reading-room');
   expect(rows[2]!.querySelector('[data-feed-card-reviewed-subject]')).toBeNull();
   expect(rows[3]!.querySelector('[data-feed-card-kind]')?.getAttribute('data-feed-card-kind')).toBe('subject');
   expect(window.document.body.textContent).not.toContain('/realms/');

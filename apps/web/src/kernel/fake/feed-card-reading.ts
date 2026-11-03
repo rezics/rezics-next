@@ -29,14 +29,19 @@ export function preparedFeedCardReading(long = false): FeedItem[] {
     destination: { kind: 'thread', id, title },
   };
   const review: FeedItem = {
-    ...thread,
     id: 'prepared:review',
+    source: 'discovery',
+    key: { owner: 'content', kind: 'review', route: 4660, id: 'prepared-review' },
+    occurredAt: null,
     summary: {
-      ...thread.summary,
+      id: 'prepared-review',
       kind: 'review',
       title: 'Prepared: a careful reread',
+      author: { displayName: author.displayName, handle: author.handle },
+      excerpt: 'Prepared review: the opening supports another reading.',
       subject: { id: work.summary.id, title: 'Prepared reviewed Subject' },
     },
+    destination: { kind: 'thread', id: 'prepared-review', title: 'Prepared: a careful reread' },
   };
   const reply: FeedItem = {
     id: 'prepared:reply',
@@ -76,9 +81,9 @@ export function preparedFeedCardReading(long = false): FeedItem[] {
     reply,
     review,
     {
-      id: 'prepared:collection',
-      source: 'following',
-      key: { owner: 'library', kind: 'collection', route: 4660, id: 'prepared-collection' },
+      id: 'discovery:commerce:prepared-collection',
+      source: 'discovery',
+      key: { owner: 'commerce', kind: 'collection', route: 4660, id: 'prepared-collection' },
       occurredAt: null,
       summary: {
         id: 'prepared-collection',
@@ -89,9 +94,9 @@ export function preparedFeedCardReading(long = false): FeedItem[] {
     },
     account,
     {
-      id: 'prepared:space',
-      source: 'following',
-      key: { owner: 'community', kind: 'space', route: 4660, id: 'prepared-space' },
+      id: 'discovery:content:prepared-space',
+      source: 'discovery',
+      key: { owner: 'content', kind: 'space', route: 4660, id: 'prepared-space' },
       occurredAt: null,
       summary: {
         id: 'prepared-space',

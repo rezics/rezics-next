@@ -13,7 +13,7 @@ function Reading({ long = false }: { long?: boolean }) {
     <main className="mx-auto max-w-5xl p-4 sm:p-8">
       <h1 className="text-2xl font-semibold">Prepared mixed-feed reading</h1>
       <p className="my-3 text-sm text-muted-foreground">
-        Prepared examples, including pending native seams. Not native feed evidence.
+        Prepared native-shaped examples. Not native eligibility or coverage evidence.
       </p>
       <button type="button" className="mb-4 min-h-11 rounded border px-3" onClick={() => setRetired(!retired)}>
         {retired ? 'Restore prepared source' : 'Retire prepared source'}

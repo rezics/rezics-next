@@ -203,13 +203,13 @@ old identity, preview, image and destination. Reader/session/source retirement s
   discriminator: web cannot distinguish deleted from unknown when no identity is delivered.
 - Semantic summaries supply kind, selected label and cover, but no work credits, publication time, excerpt, ratings
   or endorsement counts. Those remain unavailable until supplied by the native feed contract.
-- Reviewed-Subject metadata remains the pre-existing optional Home receiving seam; the installed generated native
-  summary does not yet carry that field. No review target is inferred from title or fetched separately.
-- Public Collection/review/Space discovery registration remains with Search. Home's existing pending Collection and
-  Space seams do not make those branches natively available. Community must supply Space address/summary/carrier;
-  a Realm never substitutes for a missing Space address. Collections expose no private rule or invented cover strip.
+- Search's current Review summary supplies author name/handle, excerpt and optional reviewed Subject. It supplies no
+  avatar or rating; Home does not infer either fact or fetch the Subject separately.
+- Home receives public Collection, Review and Space cards through the generated Feed response. Collection summaries
+  currently supply title/description only; Space summaries require current title/address and may supply Realm carrier
+  text. Native eligibility still depends on Search's Review coverage and Community's complete Space/Realm tuple.
 
-`10-feed-card-reading` stories use visibly prepared examples, including those pending seams, not native evidence.
+`10-feed-card-reading` stories use visibly prepared native-shaped examples, not native source evidence.
 They exercise the same shared FeedResults projection at 390 and 1280, in light/dark, long text and keyboard states.
 The focused reading tests pin all installed branches, occurrence/creation meaning, independent destinations, missing
 metadata and 1/10/20-row read cost; existing Home lifetime tests retain ownership of request and session retirement.
