@@ -166,6 +166,16 @@ render unavailable. Decision: bind the installed Eden `libraryExports` surface w
 export engine or copy missing fields from other private reads. Details and Cost live in
 [personal Library export](../library-export.md).
 
+### Personal list import
+
+Web owns the signed-in visit for a person's own uploaded list. VNDB remains a separate Commerce producer, not a
+provider-catalogue import or a second parser. The Kernel routes and native contract exist, but the installed
+`@rezics/client` composition does not expose typed `libraryImports.vndb` methods. Decision: keep the VNDB visit
+unavailable until those generated methods are delivered; Web will not infer or hand-author native calls. Details,
+source-field limits, private evidence and retry boundaries live in
+[personal list import](../../apps/web/src/library/personal-list-import.md) and
+[Personal VNDB list import](../library-import-vndb.md). MAL keeps its existing format and journey owner.
+
 ## Ownership
 
 Owns `apps/web/**`, `apps/auth/**`, `packages/ui/**` and `packages/document/**`.

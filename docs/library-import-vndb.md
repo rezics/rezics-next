@@ -42,10 +42,13 @@ commands already in flight allowed to finish. Cancellation/deletion orders again
 owner lock, stops new rows and leaves acknowledged effects intact. Each row returns applied/skipped/stale/unsupported/
 failed. Unstarted rows are omitted when `stopped` is deadline/cancelled; resume the same selection. Uploads expire
 after 24 hours for new work, are removed on the next upload or explicit DELETE, and belong to Library terminal erasure.
-DTD/entity declarations, malformed XML and XML bounds return 400; the JSON wire bound returns 413. Evidence and review payloads never enter public Search,
-events, logs or error details. Responses use `Cache-Control: private, no-store`; mutation receipts carry only bounded
-identifiers/outcomes, while source evidence stays in the owner table. HTTP admission also requires personal Library
-exposure and the current `library_entry:update` scope; native entry reads require `library_entry:read`.
+The XML and JSON limits are independent: DTD/entity declarations, malformed XML and XML over 2 MiB return HTTP 400;
+the escaped JSON request wire bound over 12 MiB + 64 bytes returns HTTP 413. Browser `File.size` is not the escaped
+JSON wire size and cannot predict that limit; only native admission decides whether a request fits. Evidence and review
+payloads never enter public Search, events, logs or error details. Responses use `Cache-Control: private, no-store`;
+mutation receipts carry only bounded identifiers/outcomes, while source evidence stays in the owner table. HTTP
+admission also requires personal Library exposure and the current `library_entry:update` scope; native entry reads
+require `library_entry:read`.
 
 The following are constructed typed request/result examples for Web, not execution evidence. All mutations except
 apply require the ordinary quoted `Idempotency-Key`; apply reuses the stable commands named by its review IDs.
