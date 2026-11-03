@@ -723,6 +723,7 @@ Rating's [protected Realm rank source](../rating/README.md#protected-realm-rank-
 currently supplies scored-only, partition-local pages with descending UUID ties; it supplies neither the
 unscored population nor the name/filter traversal required here. Search cannot establish the requested order
 by sorting those returned pages, so that partial source alone does not make this selector ready.
+Predicates without a matching native recheck adapter, including owner predicates, remain `index_not_ready`.
 
 The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
 revision, strict tuples and matching subject-home snapshot positions. Both phases

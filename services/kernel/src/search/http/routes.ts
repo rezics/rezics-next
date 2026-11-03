@@ -399,6 +399,7 @@ export function searchRoutes<App>(
               throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             const scopeAccess: Access | undefined =
+              realmAccess ??
               gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
             const scopeOptions = scopeAccess
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }

@@ -199,7 +199,9 @@ export async function readRealmRatingOrder(options: {
     if (decoded.generation !== context.generation) throw restart();
     frontier = { after: decoded.after, ratingPhase: decoded.phase };
   }
-  const compiled = query.filter ? compileFilter(query.filter, { prefix: 'f', relationOverflow: true }) : undefined;
+  const compiled = query.filter
+    ? await native(async () => compileFilter(query.filter!, { prefix: 'f', relationOverflow: true }))
+    : undefined;
   const clauses = new Map<string, FactClause>(compiled?.leaves.map((leaf) => [leaf.name, leaf]));
   const relationProperties = query.release
     ? [
