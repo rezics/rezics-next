@@ -18,14 +18,14 @@ Read primary reference: retained `search-header-and-scopes/bangumi-api`, revisio
 [Official pinned schema](https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml).
 No third-party exporter format is claimed supported. The HTTP test uses real-shaped records from those fields.
 
-| Source | Native proposal / retained evidence |
-| --- | --- |
+| Source                                  | Native proposal / retained evidence                                                                                                                                                                                  |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `subject_id`, `subject_type`, `subject` | Admitted Bangumi external claim resolves to currently readable canonical subject; nested title is display only. Types 1/2/3/4/6 remain book/anime/music/game/live action. Unknown types never gain a state proposal. |
-| `type` | 1 planned, 2 completed, 3 active, 4 paused, 5 dropped roles; only one state with that role in the current released target profile maps. Unknown/invalid values remain evidence. |
-| `rate` | Original 1–10 scale, 0 means unrated, missing means absent; never a native vote or aggregate. |
-| `ep_status`, `vol_status` | Original counts including zero: book chapters and volumes, anime/live-action episodes; other ep_status measures remain unverified. No sessions inferred. |
-| `tags`, `comment`, `notes`, `private` | Private retained source evidence, never labels, reviews or public disclosure. |
-| `*_at`, `*_date`, unknown fields | Original values and precision remain evidence with reasons. Bangumi warns updated_at is unreliable as collection time; no timestamp orders a command. |
+| `type`                                  | 1 planned, 2 completed, 3 active, 4 paused, 5 dropped roles; only one state with that role in the current released target profile maps. Unknown/invalid values remain evidence.                                      |
+| `rate`                                  | Original 1–10 scale, 0 means unrated, missing means absent; never a native vote or aggregate.                                                                                                                        |
+| `ep_status`, `vol_status`               | Original counts including zero: book chapters and volumes, anime/live-action episodes; other ep_status measures remain unverified. No sessions inferred.                                                             |
+| `tags`, `comment`, `notes`, `private`   | Private retained source evidence, never labels, reviews or public disclosure.                                                                                                                                        |
+| `*_at`, `*_date`, unknown fields        | Original values and precision remain evidence with reasons. Bangumi warns updated_at is unreliable as collection time; no timestamp orders a command.                                                                |
 
 `fields[]` contains each present source field, original value, known/unknown/invalid meaning and retention
 reason. Missing fields have no entry; they never become zero or null. No unsupported field is reported applied.
