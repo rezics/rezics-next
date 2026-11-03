@@ -68,7 +68,8 @@ test('an editor compares pinned and current field definitions without rewriting 
   expect(html).toContain('rezics:AnimeRelease');
   expect(html).toContain(m.guide_changed({}, { locale: 'en' }));
   expect(html).not.toContain(m.guide_no_change({}, { locale: 'en' }));
-  expect(html).toContain(editor);
+  expect(html).toContain('/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit');
+  expect(html).toContain('statement=selected');
   expect(html).toContain(m.guide_close_compare({}, { locale: 'en' }));
   expect(new URL(definitionGuideHref('en', { ...address, compare: undefined }), 'https://site.test').searchParams.get('returnTo')).toBe(
     editor,
@@ -122,7 +123,7 @@ test('an editor compares pinned and current field definitions without rewriting 
   );
   expect(offer).toContain(m.guide_compare({}, { locale: 'en' }));
   expect(offer).toContain(`compare=${guideCompareValue}`);
-  expect(offer).toContain(editor);
+  expect(offer).toContain('statement=selected');
   const browsing = renderToStaticMarkup(
     createElement(DefinitionGuideContent, {
       address: { type: 'schema:Book', property: 'rezics:representativeEdition', release: historicalGuideDigest },
