@@ -145,11 +145,18 @@ export function backlogWorkerCap(stateDirectory: string): number {
 }
 
 /** Tasks that hold or are about to take a worker slot. */
+// A task whose current attempt waits for a check holds no worker: counting it stopped all dispatch on 2026-11-03,
+// when 68 of 77 running tasks were waiting and 8 workers were live. Host admission still bounds live workers.
 function activeTaskCount(db: Database): number {
   if (!tableExists(db, 'worker_tasks')) return 0;
+  const waiting = tableExists(db, 'worker_attempts')
+    ? " AND NOT EXISTS (SELECT 1 FROM worker_attempts a WHERE a.task_id = worker_tasks.id AND a.attempt = worker_tasks.current_attempt AND json_extract(a.body, '$.state') = 'waiting')"
+    : '';
   return (
     db
-      .query("SELECT count(*) AS count FROM worker_tasks WHERE json_extract(body, '$.state') IN ('running', 'ready')")
+      .query(
+        `SELECT count(*) AS count FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' OR (json_extract(body, '$.state') = 'running'${waiting})`,
+      )
       .get() as { count: number }
   ).count;
 }
