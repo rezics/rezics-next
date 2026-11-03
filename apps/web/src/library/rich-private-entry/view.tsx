@@ -3,12 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import type { useSession } from '../../session/query';
-import {
-  PRIVATE_NOTE_BYTES,
-  annotationWrite,
-  draftOf,
-  type AnnotationDraft,
-} from './contract';
+import { PRIVATE_NOTE_BYTES, annotationWrite, draftOf, type AnnotationDraft } from './contract';
 import {
   readPrivateEntryForSubject,
   savePrivateAnnotations,
@@ -113,13 +108,17 @@ export function RichPrivateEntry({
     entry: PersonalEntry;
   } | null>(null);
   const entry = ready
-    ? acceptedEntry?.subjectId === subject.id && acceptedEntry.viewer === viewer && acceptedEntry.csrfToken === csrfToken
+    ? acceptedEntry?.subjectId === subject.id &&
+      acceptedEntry.viewer === viewer &&
+      acceptedEntry.csrfToken === csrfToken
       ? acceptedEntry.entry
       : result.entry
     : null;
   const [draft, setDraft] = useState<AnnotationDraft | null>(null);
   const [annotationCommand, setAnnotationCommand] = useState<AnnotationCommand | null>(null);
-  const [annotationNotice, setAnnotationNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(null);
+  const [annotationNotice, setAnnotationNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(
+    null,
+  );
   const [annotationConflictRevision, setAnnotationConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
   const [sourceEditor, setSourceEditor] = useState<string | null>(null);
@@ -272,7 +271,7 @@ export function RichPrivateEntry({
             ? { op: 'set' as const, value: { status: 'known' as const, meaning: 'source_visible' as const } }
             : sourceChoice === 'absent'
               ? { op: 'set' as const, value: { status: 'absent' as const } }
-            : { op: 'set' as const, value: { status: 'unknown' as const } };
+              : { op: 'set' as const, value: { status: 'unknown' as const } };
     const command: PrivacyCommand = {
       subjectId: subject.id,
       viewer,
@@ -291,7 +290,11 @@ export function RichPrivateEntry({
   );
 
   if (privateAuthorityRetired) {
-    return <p role="status" className="mt-4 text-sm text-muted-foreground">{m.library_rich_entry_signed_out()}</p>;
+    return (
+      <p role="status" className="mt-4 text-sm text-muted-foreground">
+        {m.library_rich_entry_signed_out()}
+      </p>
+    );
   }
   if (session.state === 'signed-out') {
     return <p className="mt-4 text-sm text-muted-foreground">{m.library_rich_entry_signed_out()}</p>;
@@ -300,13 +303,22 @@ export function RichPrivateEntry({
     return <p className="mt-4 text-sm text-muted-foreground">{m.library_rich_entry_unavailable()}</p>;
   }
   if (query.isPending) {
-    return <section aria-label={m.library_rich_entry_heading()} className="mt-5 rounded-lg border p-4">{m.library_rich_entry_loading()}</section>;
+    return (
+      <section aria-label={m.library_rich_entry_heading()} className="mt-5 rounded-lg border p-4">
+        {m.library_rich_entry_loading()}
+      </section>
+    );
   }
   if (!entry) {
     return (
       <section aria-label={m.library_rich_entry_heading()} className="mt-5 rounded-lg border p-4">
         <p>{m.library_rich_entry_unavailable()}</p>
-        <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={query.isFetching} onClick={() => void query.refetch()}>
+        <button
+          type="button"
+          className="mt-2 min-h-11 rounded-md border px-3"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
           {m.library_selection_retry()}
         </button>
       </section>
@@ -317,7 +329,9 @@ export function RichPrivateEntry({
     <section aria-labelledby="rich-private-entry-heading" className="mt-5 space-y-4 rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="rich-private-entry-heading" className="text-lg font-semibold">{m.library_rich_entry_heading()}</h2>
+          <h2 id="rich-private-entry-heading" className="text-lg font-semibold">
+            {m.library_rich_entry_heading()}
+          </h2>
           <p className="text-sm font-medium">{subject.label}</p>
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_private_help()}</p>
         </div>
@@ -331,7 +345,9 @@ export function RichPrivateEntry({
 
       <form className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(12rem,1fr)]" onSubmit={submitAnnotation}>
         <div className="space-y-2">
-          <label htmlFor={'private-note-' + subject.id} className="block text-sm font-medium">{m.library_rich_entry_note()}</label>
+          <label htmlFor={'private-note-' + subject.id} className="block text-sm font-medium">
+            {m.library_rich_entry_note()}
+          </label>
           <textarea
             id={'private-note-' + subject.id}
             className="min-h-28 w-full rounded-md border bg-background p-3"
@@ -340,15 +356,24 @@ export function RichPrivateEntry({
             disabled={!writeAllowed || annotationCommand !== null}
             onChange={(event) => setDraft({ ...workingDraft, note: event.currentTarget.value })}
           />
-          <p className="text-sm text-muted-foreground">{m.library_rich_entry_note_bytes({ count: new TextEncoder().encode(workingDraft.note).byteLength })}</p>
+          <p className="text-sm text-muted-foreground">
+            {m.library_rich_entry_note_bytes({ count: new TextEncoder().encode(workingDraft.note).byteLength })}
+          </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="min-h-11 rounded-md border px-3" disabled={!writeAllowed || annotationCommand !== null} onClick={() => setDraft({ ...workingDraft, note: '' })}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md border px-3"
+              disabled={!writeAllowed || annotationCommand !== null}
+              onClick={() => setDraft({ ...workingDraft, note: '' })}
+            >
               {m.library_rich_entry_clear_note()}
             </button>
           </div>
         </div>
         <div className="space-y-2">
-          <label htmlFor={'private-priority-' + subject.id} className="block text-sm font-medium">{m.library_rich_entry_priority()}</label>
+          <label htmlFor={'private-priority-' + subject.id} className="block text-sm font-medium">
+            {m.library_rich_entry_priority()}
+          </label>
           <input
             id={'private-priority-' + subject.id}
             className="min-h-11 w-full rounded-md border bg-background px-3"
@@ -361,31 +386,62 @@ export function RichPrivateEntry({
             onChange={(event) => setDraft({ ...workingDraft, priority: event.currentTarget.value })}
           />
           <p className="text-sm text-muted-foreground">
-            {entry.priority === null ? m.library_rich_entry_unranked() : m.library_rich_entry_priority_value({ value: entry.priority })}
+            {entry.priority === null
+              ? m.library_rich_entry_unranked()
+              : m.library_rich_entry_priority_value({ value: entry.priority })}
           </p>
-          <button type="button" className="min-h-11 rounded-md border px-3" disabled={!writeAllowed || annotationCommand !== null} onClick={() => setDraft({ ...workingDraft, priority: '' })}>
+          <button
+            type="button"
+            className="min-h-11 rounded-md border px-3"
+            disabled={!writeAllowed || annotationCommand !== null}
+            onClick={() => setDraft({ ...workingDraft, priority: '' })}
+          >
             {m.library_rich_entry_clear_priority()}
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:col-span-2">
-          <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50" disabled={!writeAllowed || !write || !validDraft(workingDraft) || annotationCommand !== null || (conflictWaiting && reviewedRevision !== entry.annotationRevision)}>
+          <button
+            type="submit"
+            className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+            disabled={
+              !writeAllowed ||
+              !write ||
+              !validDraft(workingDraft) ||
+              annotationCommand !== null ||
+              (conflictWaiting && reviewedRevision !== entry.annotationRevision)
+            }
+          >
             {m.library_rich_entry_save()}
           </button>
           {annotationCommand ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void sendAnnotation(annotationCommand)}>
+            <button
+              type="button"
+              className="min-h-11 rounded-md border px-3"
+              onClick={() => void sendAnnotation(annotationCommand)}
+            >
               {m.library_rich_entry_retry()}
             </button>
           ) : null}
-          {annotationNotice === 'uncertain' ? <p role="status" aria-live="polite">{m.library_rich_entry_uncertain()}</p> : null}
+          {annotationNotice === 'uncertain' ? (
+            <p role="status" aria-live="polite">
+              {m.library_rich_entry_uncertain()}
+            </p>
+          ) : null}
           {annotationNotice === 'denied' ? <p role="status">{m.library_rich_entry_denied()}</p> : null}
           {annotationNotice === 'missing' ? <p role="status">{m.library_rich_entry_missing()}</p> : null}
         </div>
       </form>
 
       {conflictWaiting ? (
-        <div role="group" aria-label={m.library_rich_entry_conflict()} className="space-y-2 rounded-md border border-amber-600 p-3">
+        <div
+          role="group"
+          aria-label={m.library_rich_entry_conflict()}
+          className="space-y-2 rounded-md border border-amber-600 p-3"
+        >
           <p>{m.library_rich_entry_conflict()}</p>
-          {query.isFetching ? <p>{m.library_rich_entry_refreshing()}</p> : entry.annotationRevision !== annotationConflictRevision ? (
+          {query.isFetching ? (
+            <p>{m.library_rich_entry_refreshing()}</p>
+          ) : entry.annotationRevision !== annotationConflictRevision ? (
             <button
               type="button"
               className="min-h-11 rounded-md border px-3"
@@ -397,7 +453,11 @@ export function RichPrivateEntry({
             >
               {m.library_rich_entry_review_latest()}
             </button>
-          ) : <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>{m.library_selection_retry()}</button>}
+          ) : (
+            <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>
+              {m.library_selection_retry()}
+            </button>
+          )}
         </div>
       ) : null}
 
@@ -406,31 +466,64 @@ export function RichPrivateEntry({
           <h3 className="font-semibold">{m.library_rich_entry_sources()}</h3>
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_sources_help()}</p>
         </div>
-        {entry.sourceObservations.length === 0 ? <p>{m.library_rich_entry_no_sources()}</p> : (
+        {entry.sourceObservations.length === 0 ? (
+          <p>{m.library_rich_entry_no_sources()}</p>
+        ) : (
           <ul className="grid gap-3">
             {entry.sourceObservations.map((observation) => {
               const open = sourceEditor === observation.provider + '\u0000' + observation.recordId;
               return (
                 <li key={observation.provider + ':' + observation.recordId} className="rounded-md border p-3">
                   <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_provider()}</dt><dd>{observation.provider}</dd></div>
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_record()}</dt><dd className="break-all">{observation.recordId}</dd></div>
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_privacy()}</dt><dd>{privacyText(observation.privacy)}</dd></div>
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_source_created()}</dt><dd className="break-words">{timestampText(observation.sourceCreated)}</dd></div>
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_source_updated()}</dt><dd className="break-words">{timestampText(observation.sourceUpdated)}</dd></div>
-                    <div><dt className="text-sm font-medium">{m.library_rich_entry_native_recorded()}</dt><dd>{observation.recordedAt}</dd></div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_provider()}</dt>
+                      <dd>{observation.provider}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_record()}</dt>
+                      <dd className="break-all">{observation.recordId}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_privacy()}</dt>
+                      <dd>{privacyText(observation.privacy)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_source_created()}</dt>
+                      <dd className="break-words">{timestampText(observation.sourceCreated)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_source_updated()}</dt>
+                      <dd className="break-words">{timestampText(observation.sourceUpdated)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium">{m.library_rich_entry_native_recorded()}</dt>
+                      <dd>{observation.recordedAt}</dd>
+                    </div>
                   </dl>
-                  <button type="button" className="mt-3 min-h-11 rounded-md border px-3" disabled={!writeAllowed || annotationCommand !== null || sourceCommand !== null} onClick={() => openSource(observation)}>
+                  <button
+                    type="button"
+                    className="mt-3 min-h-11 rounded-md border px-3"
+                    disabled={!writeAllowed || annotationCommand !== null || sourceCommand !== null}
+                    onClick={() => openSource(observation)}
+                  >
                     {m.library_rich_entry_edit_privacy()}
                   </button>
                   {open ? (
-                    <form className="mt-3 space-y-3 border-t pt-3" onSubmit={(event) => submitSource(event, observation)}>
+                    <form
+                      className="mt-3 space-y-3 border-t pt-3"
+                      onSubmit={(event) => submitSource(event, observation)}
+                    >
                       <label className="block">
                         <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_privacy()}</span>
-                        <select className="min-h-11 w-full rounded-md border bg-background px-3" value={sourceChoice} disabled={sourceCommand !== null} onChange={(event) => {
-                          setSourceChoice(event.currentTarget.value);
-                          setSourceReviewed(false);
-                        }}>
+                        <select
+                          className="min-h-11 w-full rounded-md border bg-background px-3"
+                          value={sourceChoice}
+                          disabled={sourceCommand !== null}
+                          onChange={(event) => {
+                            setSourceChoice(event.currentTarget.value);
+                            setSourceReviewed(false);
+                          }}
+                        >
                           <option value="keep">{m.library_rich_entry_keep_privacy()}</option>
                           <option value="private">{m.library_rich_source_private()}</option>
                           <option value="visible">{m.library_rich_source_visible()}</option>
@@ -440,18 +533,36 @@ export function RichPrivateEntry({
                         </select>
                       </label>
                       <label className="flex min-h-11 items-center gap-2">
-                        <input type="checkbox" checked={sourceReviewed} onChange={(event) => setSourceReviewed(event.currentTarget.checked)} />
+                        <input
+                          type="checkbox"
+                          checked={sourceReviewed}
+                          onChange={(event) => setSourceReviewed(event.currentTarget.checked)}
+                        />
                         <span>{m.library_rich_entry_confirm_source()}</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50" disabled={!sourceReviewed || !writeAllowed || sourceCommand !== null || sourceChoice === 'keep'}>
+                        <button
+                          type="submit"
+                          className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+                          disabled={
+                            !sourceReviewed || !writeAllowed || sourceCommand !== null || sourceChoice === 'keep'
+                          }
+                        >
                           {m.library_rich_entry_save_privacy()}
                         </button>
-                        <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => setSourceEditor(null)}>
+                        <button
+                          type="button"
+                          className="min-h-11 rounded-md border px-3"
+                          onClick={() => setSourceEditor(null)}
+                        >
                           {m.library_rich_entry_cancel()}
                         </button>
                         {sourceCommand ? (
-                          <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void sendSource(sourceCommand)}>
+                          <button
+                            type="button"
+                            className="min-h-11 rounded-md border px-3"
+                            onClick={() => void sendSource(sourceCommand)}
+                          >
                             {m.library_rich_entry_retry()}
                           </button>
                         ) : null}
@@ -462,13 +573,29 @@ export function RichPrivateEntry({
                       {sourceNotice === 'conflict' ? (
                         <div className="space-y-2" role="status">
                           <p>{m.library_rich_entry_source_conflict()}</p>
-                          {query.isFetching ? <p>{m.library_rich_entry_refreshing()}</p> : displayedSource && displayedSource.revision !== sourceConflictRevision ? (
-                            <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => {
-                              setSourceConflictRevision(null);
-                              setSourceNotice(null);
-                              setSourceReviewed(false);
-                            }}>{m.library_rich_entry_review_latest()}</button>
-                          ) : <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>{m.library_selection_retry()}</button>}
+                          {query.isFetching ? (
+                            <p>{m.library_rich_entry_refreshing()}</p>
+                          ) : displayedSource && displayedSource.revision !== sourceConflictRevision ? (
+                            <button
+                              type="button"
+                              className="min-h-11 rounded-md border px-3"
+                              onClick={() => {
+                                setSourceConflictRevision(null);
+                                setSourceNotice(null);
+                                setSourceReviewed(false);
+                              }}
+                            >
+                              {m.library_rich_entry_review_latest()}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="min-h-11 rounded-md border px-3"
+                              onClick={() => void query.refetch()}
+                            >
+                              {m.library_selection_retry()}
+                            </button>
+                          )}
                         </div>
                       ) : null}
                     </form>

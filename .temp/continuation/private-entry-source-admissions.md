@@ -1,37 +1,36 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/library/personal-anilist-import",
-    "apps/web/src/library/personal-bangumi-import",
-    "apps/web/src/library/personal-mal-import",
-    "apps/web/src/library/personal-list-import.md",
-    "apps/web/src/library/personal-anilist-import.md",
-    "apps/web/src/library/personal-bangumi-import.md",
-    "apps/web/src/library/personal-mal-import.md",
-    "apps/web/src/library/rich-private-entry",
-    "apps/web/src/library/private-diary",
-    "docs/library-entry-provenance.md",
-    "docs/library-entry-state-history.md",
-    "docs/library-and-collections.md"
-  ],
-  "riskAreas": [],
-  "criticalPath": false,
-  "after": [
-    "46c55ef1-fdd9-4da8-9b0e-c7d97dbd524a",
-    "52899c3b-b1f7-4b58-939f-aa403e19e0c6",
-    "9e07d83f-3ef7-4c9f-8a12-788022e6727a",
-    "1e4e6f38-c0ef-4c56-b2ed-123dd6928ee3",
-    "8375cd2f-0d50-41d6-8e32-f92f5720c012",
-    "294e3e0a-600a-4ec9-aac6-266431cc6654"
-  ],
-  "waiting": [],
-  "estimate": {
-    "lines": 700,
-    "files": 12
-  }
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/library/personal-anilist-import',
+      'apps/web/src/library/personal-bangumi-import',
+      'apps/web/src/library/personal-mal-import',
+      'apps/web/src/library/personal-list-import.md',
+      'apps/web/src/library/personal-anilist-import.md',
+      'apps/web/src/library/personal-bangumi-import.md',
+      'apps/web/src/library/personal-mal-import.md',
+      'apps/web/src/library/rich-private-entry',
+      'apps/web/src/library/private-diary',
+      'docs/library-entry-provenance.md',
+      'docs/library-entry-state-history.md',
+      'docs/library-and-collections.md',
+    ],
+  'riskAreas': [],
+  'criticalPath': false,
+  'after':
+    [
+      '46c55ef1-fdd9-4da8-9b0e-c7d97dbd524a',
+      '52899c3b-b1f7-4b58-939f-aa403e19e0c6',
+      '9e07d83f-3ef7-4c9f-8a12-788022e6727a',
+      '1e4e6f38-c0ef-4c56-b2ed-123dd6928ee3',
+      '8375cd2f-0d50-41d6-8e32-f92f5720c012',
+      '294e3e0a-600a-4ec9-aac6-266431cc6654',
+    ],
+  'waiting': [],
+  'estimate': { 'lines': 700, 'files': 12 },
 }
 ---
 

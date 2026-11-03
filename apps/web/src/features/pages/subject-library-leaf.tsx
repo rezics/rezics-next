@@ -192,7 +192,11 @@ export function SubjectLibraryLeaf({
         data={current}
       />
       <RichPrivateEntry
-        key={frame.id + ':' + (session.state === 'signed-in' ? session.subject + ':' + (session.csrfToken ?? '') : session.state)}
+        key={
+          frame.id +
+          ':' +
+          (session.state === 'signed-in' ? session.subject + ':' + (session.csrfToken ?? '') : session.state)
+        }
         subject={{ id: frame.id, label: frame.title.text }}
         session={session}
         admitted={admitted && query.enabled === true}

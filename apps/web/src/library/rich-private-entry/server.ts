@@ -71,7 +71,11 @@ function annotationInput(value: unknown) {
 function privacyValue(value: unknown): PersonalEntryPrivacyValue | null {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !('status' in value)) return null;
   if (value.status === 'absent') return { status: 'absent' };
-  if (value.status === 'known' && 'meaning' in value && (value.meaning === 'private' || value.meaning === 'source_visible'))
+  if (
+    value.status === 'known' &&
+    'meaning' in value &&
+    (value.meaning === 'private' || value.meaning === 'source_visible')
+  )
     return { status: 'known', meaning: value.meaning };
   if (value.status === 'unknown') {
     if ('sourceValue' in value && typeof value.sourceValue === 'string' && value.sourceValue.length <= 192)
@@ -134,14 +138,7 @@ export const savePrivateAnnotations = createServerFn({ method: 'POST' })
     const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
     const viewer = typeof item.viewer === 'string' ? item.viewer : null;
     const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
-    if (
-      !id ||
-      !body ||
-      !key ||
-      !viewer ||
-      !csrfToken
-    )
-      throw new Error('Invalid annotation command');
+    if (!id || !body || !key || !viewer || !csrfToken) throw new Error('Invalid annotation command');
     return { subjectId: id, body, key, viewer, csrfToken };
   })
   .handler(async ({ data }): Promise<PrivateEntryCommandResult> => {
@@ -223,12 +220,13 @@ export const savePrivateSourcePrivacy = createServerFn({ method: 'POST' })
       });
       if (result.kind !== 'saved') return result;
       const refreshed = await readPrivateEntry(kernelClient(), data.subjectId, identity.authorization);
-      return refreshed.kind === 'ready' && refreshed.entry.sourceObservations.some(
-        (observation) =>
-          observation.provider === data.body.provider &&
-          observation.recordId === data.body.recordId &&
-          observation.revision >= result.observation.revision,
-      )
+      return refreshed.kind === 'ready' &&
+        refreshed.entry.sourceObservations.some(
+          (observation) =>
+            observation.provider === data.body.provider &&
+            observation.recordId === data.body.recordId &&
+            observation.revision >= result.observation.revision,
+        )
         ? { kind: 'saved', entry: refreshed.entry, observation: result.observation }
         : { kind: 'uncertain' };
     } catch {

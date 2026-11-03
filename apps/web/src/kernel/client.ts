@@ -64,9 +64,7 @@ export function kernelClient(locale?: string, authorization?: string) {
   };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (origin)
-    return withPlatformClosedRecognition(
-      createKernelClient(origin, { headers, fetch: pageFetch(globalThis.fetch) }),
-    );
+    return withPlatformClosedRecognition(createKernelClient(origin, { headers, fetch: pageFetch(globalThis.fetch) }));
   if (import.meta.env.DEV) {
     return withPlatformClosedRecognition(
       createKernelClient('http://kernel.local', {

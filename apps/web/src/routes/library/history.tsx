@@ -24,7 +24,8 @@ export const Route = createFileRoute('/library/history')({
   loader: ({ deps }) => readPrivateDiary({ data: { cursor: deps.cursor } }),
   staleTime: 0,
   gcTime: 0,
-  head: ({ match }) => pageHead({ title: m.library_diary_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+  head: ({ match }) =>
+    pageHead({ title: m.library_diary_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function PrivateDiaryRoute() {
     const loaded = Route.useLoaderData();
     const search = Route.useSearch();

@@ -10,28 +10,17 @@ export function draftOf(entry: PersonalEntry): AnnotationDraft {
   return { note: entry.note ?? '', priority: entry.priority === null ? '' : String(entry.priority) };
 }
 
-function fieldChange<T>(
-  unchanged: boolean,
-  cleared: boolean,
-  value: T,
-): PersonalEntryFieldChange<T> {
+function fieldChange<T>(unchanged: boolean, cleared: boolean, value: T): PersonalEntryFieldChange<T> {
   if (unchanged) return { op: 'unchanged' };
   if (cleared) return { op: 'clear' };
   return { op: 'set', value };
 }
 
 /** Build field-local operations so changing a note cannot erase a priority or provider observation. */
-export function annotationWrite(
-  entry: PersonalEntry,
-  draft: AnnotationDraft,
-): PersonalEntryAnnotationWrite | null {
+export function annotationWrite(entry: PersonalEntry, draft: AnnotationDraft): PersonalEntryAnnotationWrite | null {
   const noteBytes = new TextEncoder().encode(draft.note).byteLength;
   if (noteBytes > PRIVATE_NOTE_BYTES) return null;
-  const note = fieldChange(
-    draft.note === (entry.note ?? ''),
-    draft.note === '',
-    draft.note,
-  );
+  const note = fieldChange(draft.note === (entry.note ?? ''), draft.note === '', draft.note);
   const priorityText = draft.priority.trim();
   let priorityValue: number | null = null;
   if (priorityText !== '') {
@@ -52,4 +41,3 @@ export function annotationWrite(
   if (note.op === 'unchanged' && priority.op === 'unchanged') return null;
   return { revision: entry.annotationRevision, note, priority };
 }
-

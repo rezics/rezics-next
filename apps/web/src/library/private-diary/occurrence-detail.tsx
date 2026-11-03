@@ -75,11 +75,7 @@ function journalDraft(journal: PrivateJournal): JournalDraft {
   };
 }
 
-function changedJournalBody(
-  revision: number,
-  current: JournalDraft,
-  draft: JournalDraft,
-): JournalBody | null {
+function changedJournalBody(revision: number, current: JournalDraft, draft: JournalDraft): JournalBody | null {
   const body: JournalBody = { revision };
   let changed = false;
   if (current.startDate !== draft.startDate) {
@@ -101,7 +97,12 @@ function changedJournalBody(
   return changed ? body : null;
 }
 
-function currentJournal(result: JournalReadResult | undefined, sessionId: string, viewer: string | null, csrfToken: string | null) {
+function currentJournal(
+  result: JournalReadResult | undefined,
+  sessionId: string,
+  viewer: string | null,
+  csrfToken: string | null,
+) {
   return result?.kind === 'ready' &&
     result.journal.sessionId === sessionId &&
     result.viewer === viewer &&
@@ -125,8 +126,8 @@ export function PrivateOccurrenceControls({
   const reopenAllowed = useOperation('progress_session.reopen');
   const retireAllowed = useOperation('progress_session.retire');
   const sessionState = useSession();
-  const currentViewer = sessionState.state === 'signed-in' ? sessionState.subject ?? null : null;
-  const csrfToken = sessionState.state === 'signed-in' ? sessionState.csrfToken ?? null : null;
+  const currentViewer = sessionState.state === 'signed-in' ? (sessionState.subject ?? null) : null;
+  const csrfToken = sessionState.state === 'signed-in' ? (sessionState.csrfToken ?? null) : null;
   const enabled = readAllowed && journalReadAllowed && currentViewer !== null && csrfToken !== null && isCurrent();
   const queryKey = useMemo(
     () => ['private-occurrence-journal', currentViewer, csrfToken, session.id] as const,
@@ -165,7 +166,9 @@ export function PrivateOccurrenceControls({
   const [conflictRevision, setConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
   const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleCommand | null>(null);
-  const [lifecycleNotice, setLifecycleNotice] = useState<'conflict' | 'uncertain' | 'missing' | 'retired' | 'saved' | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<
+    'conflict' | 'uncertain' | 'missing' | 'retired' | 'saved' | null
+  >(null);
   const [lifecycleConflictRevision, setLifecycleConflictRevision] = useState<number | null>(null);
   const [confirmAction, setConfirmAction] = useState<'reopen' | 'retire' | null>(null);
   const [terminal, setTerminal] = useState(false);
@@ -232,7 +235,8 @@ export function PrivateOccurrenceControls({
 
   function submitJournal(event: FormEvent) {
     event.preventDefault();
-    if (!journal || !body || !journalUpdateAllowed || journalCommand || terminal || !currentViewer || !csrfToken) return;
+    if (!journal || !body || !journalUpdateAllowed || journalCommand || terminal || !currentViewer || !csrfToken)
+      return;
     if (conflictRevision !== null && reviewedRevision !== journal.revision) return;
     const command: JournalCommand = {
       sessionId: session.id,
@@ -281,7 +285,15 @@ export function PrivateOccurrenceControls({
   }
 
   function chooseLifecycle(action: 'reopen' | 'retire') {
-    if (!(action === 'reopen' ? reopenAllowed : retireAllowed) || !isCurrent() || !currentViewer || !csrfToken || terminal || lifecycleConflictRevision !== null) return;
+    if (
+      !(action === 'reopen' ? reopenAllowed : retireAllowed) ||
+      !isCurrent() ||
+      !currentViewer ||
+      !csrfToken ||
+      terminal ||
+      lifecycleConflictRevision !== null
+    )
+      return;
     setConfirmAction(action);
     setLifecycleCommand({
       action,
@@ -298,7 +310,9 @@ export function PrivateOccurrenceControls({
       <section className="space-y-2 border-t pt-4" aria-live="polite">
         <h2 className="font-semibold">{m.library_occurrence_heading()}</h2>
         <p>{m.library_occurrence_retired()}</p>
-        <Link className="inline-flex min-h-11 items-center rounded-md border px-3" to="/library/history">{m.library_diary_return()}</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-md border px-3" to="/library/history">
+          {m.library_diary_return()}
+        </Link>
       </section>
     );
   }
@@ -314,13 +328,17 @@ export function PrivateOccurrenceControls({
       {query.data?.kind === 'unavailable' ? (
         <div className="space-y-2">
           <p role="status">{m.library_occurrence_unavailable()}</p>
-          <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>{m.library_selection_retry()}</button>
+          <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>
+            {m.library_selection_retry()}
+          </button>
         </div>
       ) : null}
 
       {journal ? (
         <form className="space-y-4" onSubmit={submitJournal}>
-          <p id="library-occurrence-date-help" className="text-sm text-muted-foreground">{m.library_occurrence_date_help()}</p>
+          <p id="library-occurrence-date-help" className="text-sm text-muted-foreground">
+            {m.library_occurrence_date_help()}
+          </p>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_occurrence_start_date()}</span>
@@ -332,7 +350,14 @@ export function PrivateOccurrenceControls({
                 disabled={!journalUpdateAllowed || journalCommand !== null}
                 onChange={(event) => setDraft({ ...working, startDate: event.currentTarget.value })}
               />
-              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, startDate: '' })}>{m.library_occurrence_clear_date()}</button>
+              <button
+                type="button"
+                className="mt-2 min-h-11 rounded-md border px-3"
+                disabled={!journalUpdateAllowed || journalCommand !== null}
+                onClick={() => setDraft({ ...working, startDate: '' })}
+              >
+                {m.library_occurrence_clear_date()}
+              </button>
             </label>
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_occurrence_finish_date()}</span>
@@ -344,7 +369,14 @@ export function PrivateOccurrenceControls({
                 disabled={!journalUpdateAllowed || journalCommand !== null}
                 onChange={(event) => setDraft({ ...working, finishDate: event.currentTarget.value })}
               />
-              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, finishDate: '' })}>{m.library_occurrence_clear_date()}</button>
+              <button
+                type="button"
+                className="mt-2 min-h-11 rounded-md border px-3"
+                disabled={!journalUpdateAllowed || journalCommand !== null}
+                onClick={() => setDraft({ ...working, finishDate: '' })}
+              >
+                {m.library_occurrence_clear_date()}
+              </button>
             </label>
           </div>
           <label className="block">
@@ -355,18 +387,39 @@ export function PrivateOccurrenceControls({
               disabled={!journalUpdateAllowed || journalCommand !== null}
               onChange={(event) => setDraft({ ...working, reflection: event.currentTarget.value })}
             />
-            <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, reflection: '' })}>{m.library_occurrence_clear_reflection()}</button>
+            <button
+              type="button"
+              className="mt-2 min-h-11 rounded-md border px-3"
+              disabled={!journalUpdateAllowed || journalCommand !== null}
+              onClick={() => setDraft({ ...working, reflection: '' })}
+            >
+              {m.library_occurrence_clear_reflection()}
+            </button>
           </label>
-          {body === null && (
-            (working.startDate !== dateText(journal.startDate) && parseDate(working.startDate) === 'invalid') ||
-            (working.finishDate !== dateText(journal.finishDate) && parseDate(working.finishDate) === 'invalid')
-          ) ? <p role="alert">{m.library_occurrence_date_invalid()}</p> : null}
+          {body === null &&
+          ((working.startDate !== dateText(journal.startDate) && parseDate(working.startDate) === 'invalid') ||
+            (working.finishDate !== dateText(journal.finishDate) && parseDate(working.finishDate) === 'invalid')) ? (
+            <p role="alert">{m.library_occurrence_date_invalid()}</p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50" disabled={!journalUpdateAllowed || !body || journalCommand !== null || (conflictRevision !== null && reviewedRevision !== journal.revision)}>
+            <button
+              type="submit"
+              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+              disabled={
+                !journalUpdateAllowed ||
+                !body ||
+                journalCommand !== null ||
+                (conflictRevision !== null && reviewedRevision !== journal.revision)
+              }
+            >
               {m.library_occurrence_save()}
             </button>
             {journalCommand ? (
-              <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void sendJournal(journalCommand)}>
+              <button
+                type="button"
+                className="min-h-11 rounded-md border px-3"
+                onClick={() => void sendJournal(journalCommand)}
+              >
                 {m.library_rich_entry_retry()}
               </button>
             ) : null}
@@ -376,30 +429,60 @@ export function PrivateOccurrenceControls({
             <div className="rounded-md border p-3">
               <p>{m.library_occurrence_conflict()}</p>
               {journal.revision !== conflictRevision ? (
-                <button type="button" className="mt-2 min-h-11 rounded-md border px-3" onClick={() => {
-                  setReviewedRevision(journal.revision);
-                  setConflictRevision(journal.revision);
-                  setJournalNotice(null);
-                }}>{m.library_occurrence_review_latest()}</button>
+                <button
+                  type="button"
+                  className="mt-2 min-h-11 rounded-md border px-3"
+                  onClick={() => {
+                    setReviewedRevision(journal.revision);
+                    setConflictRevision(journal.revision);
+                    setJournalNotice(null);
+                  }}
+                >
+                  {m.library_occurrence_review_latest()}
+                </button>
               ) : (
-                <button type="button" className="mt-2 min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>{m.library_selection_retry()}</button>
+                <button
+                  type="button"
+                  className="mt-2 min-h-11 rounded-md border px-3"
+                  onClick={() => void query.refetch()}
+                >
+                  {m.library_selection_retry()}
+                </button>
               )}
             </div>
           ) : null}
           {lifecycleConflictRevision !== null ? (
-            <div role="group" aria-label={m.library_occurrence_conflict()} className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label={m.library_occurrence_conflict()}
+              className="flex flex-wrap items-center gap-2"
+            >
               <p>{m.library_occurrence_conflict()}</p>
               {session.revision !== lifecycleConflictRevision ? (
-                <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => {
-                  setLifecycleConflictRevision(null);
-                  setLifecycleNotice(null);
-                }}>{m.library_occurrence_review_latest()}</button>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-md border px-3"
+                  onClick={() => {
+                    setLifecycleConflictRevision(null);
+                    setLifecycleNotice(null);
+                  }}
+                >
+                  {m.library_occurrence_review_latest()}
+                </button>
               ) : (
-                <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void router.invalidate()}>{m.library_selection_retry()}</button>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-md border px-3"
+                  onClick={() => void router.invalidate()}
+                >
+                  {m.library_selection_retry()}
+                </button>
               )}
             </div>
           ) : null}
-          {journalNotice === 'missing' || journalNotice === 'retired' ? <p role="status">{m.library_occurrence_retired()}</p> : null}
+          {journalNotice === 'missing' || journalNotice === 'retired' ? (
+            <p role="status">{m.library_occurrence_retired()}</p>
+          ) : null}
         </form>
       ) : null}
 
@@ -407,30 +490,66 @@ export function PrivateOccurrenceControls({
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             {reopenAllowed && (session.state === 'completed' || session.state === 'abandoned') ? (
-              <button type="button" className="min-h-11 rounded-md border px-3" disabled={lifecycleConflictRevision !== null} onClick={() => chooseLifecycle('reopen')}>{m.library_occurrence_reopen()}</button>
+              <button
+                type="button"
+                className="min-h-11 rounded-md border px-3"
+                disabled={lifecycleConflictRevision !== null}
+                onClick={() => chooseLifecycle('reopen')}
+              >
+                {m.library_occurrence_reopen()}
+              </button>
             ) : null}
             {retireAllowed ? (
-              <button type="button" className="min-h-11 rounded-md border px-3" disabled={lifecycleConflictRevision !== null} onClick={() => chooseLifecycle('retire')}>{m.library_occurrence_retire()}</button>
+              <button
+                type="button"
+                className="min-h-11 rounded-md border px-3"
+                disabled={lifecycleConflictRevision !== null}
+                onClick={() => chooseLifecycle('retire')}
+              >
+                {m.library_occurrence_retire()}
+              </button>
             ) : null}
           </div>
           {confirmAction ? (
             <div className="flex flex-wrap gap-2" role="group" aria-label={m.library_occurrence_confirm_heading()}>
-              <p className="w-full">{confirmAction === 'reopen' ? m.library_occurrence_confirm_reopen() : m.library_occurrence_confirm_retire()}</p>
-              <button type="button" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground" onClick={() => lifecycleCommand && void submitLifecycle(lifecycleCommand)}>
+              <p className="w-full">
+                {confirmAction === 'reopen'
+                  ? m.library_occurrence_confirm_reopen()
+                  : m.library_occurrence_confirm_retire()}
+              </p>
+              <button
+                type="button"
+                className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground"
+                onClick={() => lifecycleCommand && void submitLifecycle(lifecycleCommand)}
+              >
                 {m.library_occurrence_confirm_heading()}
               </button>
-              <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => {
-                setConfirmAction(null);
-                setLifecycleCommand(null);
-              }}>{m.library_progress_cancel()}</button>
+              <button
+                type="button"
+                className="min-h-11 rounded-md border px-3"
+                onClick={() => {
+                  setConfirmAction(null);
+                  setLifecycleCommand(null);
+                }}
+              >
+                {m.library_progress_cancel()}
+              </button>
             </div>
           ) : null}
           {lifecycleCommand && lifecycleNotice === 'uncertain' ? (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void submitLifecycle(lifecycleCommand)}>{m.library_rich_entry_retry()}</button>
+            <button
+              type="button"
+              className="min-h-11 rounded-md border px-3"
+              onClick={() => void submitLifecycle(lifecycleCommand)}
+            >
+              {m.library_rich_entry_retry()}
+            </button>
           ) : null}
           {lifecycleNotice === 'uncertain' ? <p role="status">{m.library_occurrence_uncertain()}</p> : null}
           {lifecycleNotice === 'saved' ? <p role="status">{m.library_occurrence_reopened()}</p> : null}
-          {lifecycleNotice === 'missing' || lifecycleNotice === 'retired' ? <p role="status">{m.library_occurrence_retired()}</p> : null}
+          {lifecycleNotice === 'missing' || lifecycleNotice === 'retired' ? (
+            <p role="status">{m.library_occurrence_retired()}</p>
+          ) : null}
         </div>
       ) : null}
     </section>

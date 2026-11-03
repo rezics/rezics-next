@@ -25,8 +25,13 @@ async function currentIdentity(): Promise<Identity | null> {
 function validDate(value: unknown): value is JournalDate {
   if (value === null) return true;
   if (!value || typeof value !== 'object' || Array.isArray(value) || !('year' in value)) return false;
-  if (typeof value.year !== 'number' || !Number.isInteger(value.year) || value.year < 1 || value.year > 9999) return false;
-  if ('month' in value && (typeof value.month !== 'number' || !Number.isInteger(value.month) || value.month < 1 || value.month > 12)) return false;
+  if (typeof value.year !== 'number' || !Number.isInteger(value.year) || value.year < 1 || value.year > 9999)
+    return false;
+  if (
+    'month' in value &&
+    (typeof value.month !== 'number' || !Number.isInteger(value.month) || value.month < 1 || value.month > 12)
+  )
+    return false;
   if ('day' in value) {
     if (typeof value.day !== 'number' || !Number.isInteger(value.day) || !('month' in value)) return false;
     const last = new Date(Date.UTC(value.year, value.month as number, 0)).getUTCDate();
@@ -91,7 +96,14 @@ export type JournalReadResult =
 
 export const readOccurrenceJournal = createServerFn({ method: 'GET' })
   .validator((value: unknown) => {
-    if (!value || typeof value !== 'object' || !('sessionId' in value) || typeof value.sessionId !== 'string' || !value.sessionId || value.sessionId.length > 128)
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('sessionId' in value) ||
+      typeof value.sessionId !== 'string' ||
+      !value.sessionId ||
+      value.sessionId.length > 128
+    )
       throw new Error('Invalid occurrence address');
     return { sessionId: value.sessionId };
   })
@@ -100,9 +112,11 @@ export const readOccurrenceJournal = createServerFn({ method: 'GET' })
     const identity = await currentIdentity();
     if (!identity) return { kind: 'retired' };
     try {
-      const result = await kernelClient().progressSessions({ sessionId: data.sessionId }).journal.get({
-        headers: { authorization: identity.authorization },
-      });
+      const result = await kernelClient()
+        .progressSessions({ sessionId: data.sessionId })
+        .journal.get({
+          headers: { authorization: identity.authorization },
+        });
       if (!result.error && result.data?.journal?.sessionId === data.sessionId)
         return { kind: 'ready', viewer: identity.viewer, csrfToken: identity.csrfToken, journal: result.data.journal };
       if (result.status === 401) return { kind: 'retired' };
@@ -138,7 +152,8 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<JournalCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = await currentIdentity();
-    if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken) return { kind: 'retired' };
+    if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken)
+      return { kind: 'retired' };
     try {
       const client = kernelClient(undefined, identity.authorization);
       const result = await client.progressSessions({ sessionId: data.sessionId }).journal.patch(data.body, {
@@ -162,7 +177,10 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
   });
 
 export type LifecycleResult =
-  | { kind: 'saved'; session: { id: string; state: 'active' | 'completed' | 'abandoned' | 'retired'; revision: number } }
+  | {
+      kind: 'saved';
+      session: { id: string; state: 'active' | 'completed' | 'abandoned' | 'retired'; revision: number };
+    }
   | { kind: 'conflict' | 'missing' | 'retired' | 'uncertain' };
 
 export const changeOccurrenceLifecycle = createServerFn({ method: 'POST' })
@@ -176,14 +194,19 @@ export const changeOccurrenceLifecycle = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<LifecycleResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = await currentIdentity();
-    if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken) return { kind: 'retired' };
+    if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken)
+      return { kind: 'retired' };
     try {
       const client = kernelClient(undefined, identity.authorization);
       const options = { headers: { 'idempotency-key': data.key } };
       const result =
         data.action === 'reopen'
-          ? await client.progressSessions({ sessionId: data.sessionId }).$reopen.post({ revision: data.revision }, options)
-          : await client.progressSessions({ sessionId: data.sessionId }).$retire.post({ revision: data.revision }, options);
+          ? await client
+              .progressSessions({ sessionId: data.sessionId })
+              .$reopen.post({ revision: data.revision }, options)
+          : await client
+              .progressSessions({ sessionId: data.sessionId })
+              .$retire.post({ revision: data.revision }, options);
       if (!result.error && result.data?.progressSession?.id === data.sessionId) {
         const session = result.data.progressSession;
         return { kind: 'saved', session: { id: session.id, state: session.state, revision: session.revision } };
