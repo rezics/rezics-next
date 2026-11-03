@@ -304,6 +304,12 @@ test.serial(
     const afterHide = await json<{ pinnedThreads: Thread[] }>(member(), 'GET', `/v1/boards/${board.id}/threads`);
     expect(afterHide.pinnedThreads.map(({ id }) => id)).toEqual(pinned.filter((id) => id !== hidden.id));
 
+    // Realm bans require the fixture's curation role to be withdrawn first.
+    await system.database.pool.query(
+      `DELETE FROM access.resource_role_grant
+       WHERE route = $1 AND resource_id = $2 AND subject_id = $3 AND grant_role = 'community.realm.moderator'`,
+      [routeOf(realmId), realmId, member().actor.accountId],
+    );
     await json(moderator(), 'PUT', `/v1/realms/${realmId}/bans/${member().actor.accountId}`, {
       reason: 'Revoked moderator',
     });
