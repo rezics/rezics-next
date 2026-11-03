@@ -215,7 +215,8 @@ test('From an admitted non-credit work relationship, a contributor creates a mis
       ),
     );
     await click(m.relation_propose());
-    await click(m.relation_propose());
+    const confirm = canvas().getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) });
+    await act(async () => user.click(within(confirm).getByRole('button', { name: m.relation_propose() })));
     await waitFor(() => canvas().getByRole('alert'));
     expect(canvas().queryByRole('button', { name: m.relation_create_related_work() })).toBeNull();
     expect(proposals).toBe(1);
