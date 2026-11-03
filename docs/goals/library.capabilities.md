@@ -330,6 +330,10 @@ Selected priority and private-note correction is installed in `test/library/entr
 the [selected correction contract](../library-entry-selected-correction.md). It binds fixed Subject IDs to entry
 incarnation, entry revision, annotation revision and review epoch; cancellation leaves accepted items intact, and
 native receipt replay does not repeat their annotation effects. Native64/512/4096 growth acceptance remains deferred.
+Retained provider metadata composition is owned by [library-import-entry-metadata](../library-import-entry-metadata.md):
+it reviews actual retained provider fields, requires explicit per-field confirmation, and uses the native annotation
+and provenance commands. Focused import metadata scenarios live in `test/library/entry-import-metadata.test.ts`;
+native growth acceptance remains deferred to the controller.
 
 **Personas and denial cases:** owner and another owner partition, anonymous public reader, suspended bearer,
 public/private/unlisted Collection, public-source revocation, hidden candidate, private filter, unsupported filter,
