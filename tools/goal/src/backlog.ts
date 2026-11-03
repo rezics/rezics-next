@@ -7,6 +7,7 @@ import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { continuationOverlap, continuationReview, continuationReleased, proposeContinuation } from './continuation.ts';
 import { readBriefContinuation } from './briefs.ts';
 import type { BriefContinuation } from './types.ts';
 
@@ -461,7 +462,25 @@ async function dispatchReady(
     let taskId: string;
     let continuation: BriefContinuation | undefined;
     try {
-      continuation = readBriefContinuation(readFileSync(claimed, 'utf8'));
+      const markdown = readFileSync(claimed, 'utf8');
+      continuation = readBriefContinuation(markdown);
+      if (basename(claimed).startsWith('continuation-') || continuation) {
+        const source = continuation?.taskId ?? (
+          runtime.db.query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
+            .all(pick.goal) as { id: string }[]
+        ).find((row) => basename(claimed).startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
+        const overlap = continuationOverlap(runtime.db, runtime.stateDirectory, pick.goal, markdown,
+          source, [claimed], runtime.policy?.brief);
+        const reason = overlap ?? (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
+          !continuationReleased(runtime.stateDirectory, pick.goal, basename(claimed), markdown)
+          ? 'Goal continuation review is enabled; release or retire this proposal' : undefined);
+        if (reason) {
+          const proposed = proposeContinuation(claimed, runtime.stateDirectory, pick.goal, reason);
+          runtime.inbox.deliver({ managerId: pick.goal, goalId: pick.goal, kind: 'instruction',
+            summary: `Continuation proposed at ${proposed}: ${reason}` });
+          continue;
+        }
+      }
       if (continuation) {
         await runtime.continueTask(pick.goal, continuation, claimed);
         taskId = continuation.taskId;

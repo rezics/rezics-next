@@ -1515,14 +1515,32 @@ every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
-moves each brief to `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md`, where the backlog is dispatched
-like any other brief, and records a `continuation-queued` event. A name that normalizes or truncates onto a file
+harvests only regular files created after that attempt started (creation time, not modification time). Older files
+are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
+Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its paths and normalized
+title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held, claimed
+and proposed briefs. The source task is exempt because the continuation depends on it. Any overlapping path or
+matching title sends the brief to `proposed/` with a `.reason` naming the overlapping task or brief and an inbox
+notice to the manager, so the manager can merge the remaining scope. Dispatch checks overlap again under the same
+backlog lease used by harvest. Nonoverlapping briefs outside review mode move to
+`<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md` and record `continuation-queued`. A name that normalizes or truncates onto a file
 already holding the same brief is left in place. A different brief is published under a stable distinct name, and the
 source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
 is recorded. A brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
 anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
 list the remainder in their summary instead.
+
+Set `policy.backlog.continuationReview` to a per-Goal boolean map, for example
+`{ "search": true, "web": false }`. A Goal in review mode keeps continuations in `proposed/` and records
+`continuation-proposed` until the manager releases or retires them. Decision: absent an override, count worker
+continuations versus manager briefs across the Goal's ready, proposed, dispatched, continued, failed, retired and
+claimed files, including the incoming brief; enable review when continuations outnumber manager briefs.
+To release a proposal, move its Markdown file into the Goal's ready directory under the same name, keeping its
+`.reason` in `proposed/`; the reason's content fingerprint binds that release to the reviewed brief. A changed brief
+is proposed again on the next sweep, so the manager can release its revised contents. Overlap still prevents dispatch after
+release. To retire it, move it into `retired/`. Proposed and retired files never dispatch or count as ready.
+A later attempt cannot enqueue the remainder again once an earlier attempt queued or proposed it.
 
 Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
 starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded

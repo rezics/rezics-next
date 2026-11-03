@@ -167,6 +167,7 @@
   },
   "policy": {
     "backlog": {
+      "continuationReview": {},
       "lowWater": 8,
       "wakeIntervalMs": 3600000,
       "stoppedTaskLimitMs": 3600000,

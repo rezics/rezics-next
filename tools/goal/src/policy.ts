@@ -2,7 +2,9 @@ import defaults from '../defaults.json';
 
 /** Pure defaults and parsing live here so settings consumers do not import the runtime composition. */
 export const defaultPolicy = defaults.policy;
-export type ControlPolicy = typeof defaultPolicy;
+export type ControlPolicy = Omit<typeof defaultPolicy, 'backlog'> & {
+  backlog: typeof defaultPolicy.backlog & { continuationReview: Record<string, boolean> };
+};
 
 /** Merge leaves and reject unknown names; fractional and list policies have field-specific validation. */
 export function readControlPolicy(value: unknown = {}): ControlPolicy {
@@ -15,6 +17,13 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
       Object.entries(base).map(([key, fallback]) => {
         const label = `${path}.${key}`;
         const candidate = input[key] === undefined ? fallback : input[key];
+        if (label === 'policy.backlog.continuationReview') {
+          if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
+            Object.entries(candidate).some(([goal, enabled]) =>
+              !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(goal) || typeof enabled !== 'boolean'))
+            throw new Error(`invalid ${label}`);
+          return [key, { ...candidate }];
+        }
         if (Array.isArray(fallback)) {
           // Tool retries may deliberately wait zero milliseconds; settlement pauses remain positive.
           const minimum = label === 'policy.worker.toolRetryBackoffMs' ? 0 : 1;
