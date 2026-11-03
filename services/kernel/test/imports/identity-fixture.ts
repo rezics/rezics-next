@@ -1060,10 +1060,9 @@ export async function runIdentityBootstrap(
   if (required && exitCode !== 0) {
     const stdoutText = bootstrapDiagnostic(stdout, url);
     const stderrText = bootstrapDiagnostic(stderr, url);
-    const output = [
-      stderrText && `stderr: ${stderrText}`,
-      stdoutText && `stdout: ${stdoutText}`,
-    ].filter((line): line is string => line !== undefined);
+    const output = [stderrText && `stderr: ${stderrText}`, stdoutText && `stdout: ${stdoutText}`].filter(
+      (line): line is string => line !== undefined,
+    );
     throw new Error([`Deployment governance bootstrap exited ${exitCode}`, ...output].join('\n'), {
       cause: {
         exitCode,
