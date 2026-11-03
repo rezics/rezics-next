@@ -111,7 +111,6 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
   return {
     'data-feed-id': item.id,
     'data-feed-source': item.source,
-    'data-feed-kind': item.key.kind,
     title,
     ...(href === undefined ? {} : { href }),
     ...(titleLang === undefined ? {} : { titleLang }),
