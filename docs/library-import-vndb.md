@@ -19,14 +19,14 @@ Candidate arrays distinguish matched, ambiguous, unmatched, unavailable and unsu
 the ambiguous shape is reserved for multiple disclosed canonical candidates, never generated from titles.
 Unmatched rows accept an explicit readable target obtained through ordinary catalogue search.
 
-| Source field | Review and native treatment |
-| --- | --- |
-| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID. |
-| Other labels and per-label attributes | Private evidence; no automatic local label creation. |
-| Vote | Preserve value and original 1–10, step 0.1 scale; no native vote or aggregate write. Zero is invalid on this source scale. |
-| Started / finished | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred. |
-| Progress and measure | Preserve original value, including zero, and supplied unit; no session or counted activity is inferred. |
-| Notes, privacy, review, metadata, unknown XML | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews. |
+| Source field                                             | Review and native treatment                                                                                                                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; the person explicitly selects an actual released state ID.                                                            |
+| Other labels and per-label attributes                    | Private evidence; no automatic local label creation.                                                                                                                                 |
+| Vote                                                     | Preserve value and original 1–10, step 0.1 scale; no native vote or aggregate write. Zero is invalid on this source scale.                                                           |
+| Started / finished                                       | Preserve year/month/day precision, including trailing unknown `00` components; invalid and unknown dates remain distinguishable. No command clock or historical session is inferred. |
+| Progress and measure                                     | Preserve original value, including zero, and supplied unit; no session or counted activity is inferred.                                                                              |
+| Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                     |
 
 Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
 No absent value clears native facts. Existing entries are preserved by default; `replace:true` captures the current
@@ -53,17 +53,31 @@ The exported `createVndbImport` result types and mounted `vndbImportRoutes` form
 
 ```ts
 // POST /v1/libraryImports/vndb:preview
-const previewRequest: { xml: string } = { xml: '<vndb-export version="1.0"><vns><vn id="v123"><title>Title</title></vn></vns></vndb-export>' };
+const previewRequest: { xml: string } = {
+  xml: '<vndb-export version="1.0"><vns><vn id="v123"><title>Title</title></vn></vns></vndb-export>',
+};
 // 200: {uploadId: UUID, rows: 2, limits: {bytes:2097152,depth:32,rows:5000,evidenceBytes:16777216,page:8,uploads:4,lifetimeMs:86400000,applyMs:5000}}
 // GET /v1/libraryImports/vndb/{uploadId}?offset=0
 // 200: {uploadId,state:"active",expiresAt:ISODate,total:2,next:null,rows:[{ordinal:0,kind:"vn",identifier:{provider:"vndb",kind:"vn",value:"v123"},title:"Title",labels:[],suggestedRole:null,fields,retainedReason,evidence,match:{status:"unmatched",candidates:[]},target:null,decision:null,fieldsTreatment}, metadataRow]}
 // POST /v1/libraryImports/vndb/{uploadId}:review
-const reviewRequest: {ordinal:number;action:'state';targetId:string;state:string;replace:boolean} = {ordinal:0,action:'state',targetId:'01900000-0000-7000-8000-000000000001',state:'playing',replace:false};
+const reviewRequest: { ordinal: number; action: 'state'; targetId: string; state: string; replace: boolean } = {
+  ordinal: 0,
+  action: 'state',
+  targetId: '01900000-0000-7000-8000-000000000001',
+  state: 'playing',
+  replace: false,
+};
 // 200: {reviewId:UUID,status:"reviewed",targetId:UUID,state:"playing",baseline:null,replace:false}
 // GET again shows current candidate states, conflicts, retained fields and the stored decision before confirmation.
-const applyRequest: {rows:{ordinal:number;reviewId:string}[]} = {rows:[{ordinal:0,reviewId:'01900000-0000-7000-8000-000000000002'}]};
+const applyRequest: { rows: { ordinal: number; reviewId: string }[] } = {
+  rows: [{ ordinal: 0, reviewId: '01900000-0000-7000-8000-000000000002' }],
+};
 type Service = ReturnType<typeof import('../services/kernel/src/library/list-import-vndb.ts').createVndbImport>;
-const applyResult: Awaited<ReturnType<Service['apply']>> = {uploadId:'01900000-0000-7000-8000-000000000003',outcomes:[{ordinal:0,reviewId:applyRequest.rows[0]!.reviewId,status:'applied'}],stopped:null};
+const applyResult: Awaited<ReturnType<Service['apply']>> = {
+  uploadId: '01900000-0000-7000-8000-000000000003',
+  outcomes: [{ ordinal: 0, reviewId: applyRequest.rows[0]!.reviewId, status: 'applied' }],
+  stopped: null,
+};
 // POST /v1/libraryImports/vndb/{uploadId}:apply
 // 200: {uploadId:UUID,outcomes:[{ordinal:0,reviewId:UUID,status:"applied"}],stopped:null}
 // action:"skip" => skipped; action:"retain" => unsupported, with evidence still readable.
