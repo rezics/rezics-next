@@ -244,8 +244,17 @@ only exact id/subject/candidate/language/digest matches with an available valida
 Each selected body costs one native read and one requested-value slot. The plan admits at most fifteen distinct
 bodies (one subject read plus fifteen bodies reaches the existing sixteen-read ceiling) and shares the page's
 128-slot budget. The final subject guard and other probes or reads reduce the available body allowance. Admission
-rejects an oversized effective plan instead of truncating selected values. Bodies remain request-local and the
-aggregate page response stays `private, no-store`.
+rejects an oversized effective plan instead of truncating selected values. Overflow of that fifteen-body ceiling is
+admitted from the disclosed observation; a Recipe page selects at most its two document-typed properties and is not
+an overflow fixture. Bodies remain request-local and the aggregate page response stays `private, no-store`.
+
+- Touches: the disclosed subject observation, then one standalone `GET /v1/documents/{id}` per selected unique body
+  with that body's current Access check. Unrelated authored-field and subject rows in the selected subject's partition
+  are not returned.
+- Bound: constant native requests, Access checks and response bytes for a fixed selected neighbourhood; constant SQL
+  rows and statements; logarithmic indexed blocks as that partition's unrelated history grows.
+- Growth check: `test/presentation/public-documents.test.ts`: “fixed public bodies keep native request, SQL, Access and
+  byte bounds at unrelated histories 64/512/4096”.
 
 ## Configured catalogue lists
 

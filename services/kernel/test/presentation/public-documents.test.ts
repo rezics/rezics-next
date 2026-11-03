@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText, checkDocument, serializeDocument } from '@rezics/document';
-import { planReads, platformRegistry } from '@rezics/composition';
+import { MAX_PAGE_DOCUMENTS, planReads, platformRegistry } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createApp } from '../../src/http/app.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
@@ -11,8 +11,8 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { platformProfile } from '../../src/presentation/setup.ts';
-import { PageReadBudget, PageReadError, readPage } from '../../src/presentation/reads.ts';
-import { newId } from '../../src/route/route.ts';
+import { MAX_PAGE_READS, PageReadBudget, PageReadError, readPage } from '../../src/presentation/reads.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
@@ -353,13 +353,28 @@ test('native document.get cannot be rebound to a different subject, candidate, d
 });
 
 test('the effective dependent plan charges all native slots and refuses overflow before document I/O', async () => {
-  const subject = await created({
-    'schema:abstract': Array.from({ length: 16 }, (_, index) =>
-      cited('schema:abstract', fromPlainText(`Instruction ${index}.`)),
-    ),
-  });
+  const subject = await created();
   const observed = await call('GET', `/v1/subjects/${subject.id}`);
   expect(observed.response.status).toBe(200);
+  const route = routeOf(subject.id)!;
+  const properties = Array.from({ length: MAX_PAGE_DOCUMENTS + 1 }, (_, index) => `schema:p${index}`);
+  const observation = structuredClone(observed.body);
+  observation.subject.statements = Object.fromEntries(
+    properties.map((id) => [
+      id,
+      [
+        {
+          id: newId(route),
+          rank: 'normal',
+          property: { id, data_type: 'document' },
+          value: {
+            type: 'value',
+            content: { document: newId(route), digest: 'a'.repeat(64), language: 'en' },
+          },
+        },
+      ],
+    ]),
+  );
   const calls: string[] = [];
   await expect(
     readPage({
@@ -369,20 +384,35 @@ test('the effective dependent plan charges all native slots and refuses overflow
       },
       incoming: new Request('http://kernel.test/v1/pages:read'),
       reads: { subject: { kind: 'subject', id: subject.id } },
-      documents: { kind: 'documents', id: subject.id, properties: ['schema:abstract'] },
+      documents: { kind: 'documents', id: subject.id, properties },
       session: { ring: tokens, scope: 'anonymous' },
+      observed: new Map([[canonicalize({ kind: 'subject', id: subject.id })!, { status: 200, body: observation }]]),
+    }),
+  ).rejects.toMatchObject({ errors: [{ pointer: '/reads', code: 'out_of_range' }] });
+  expect(calls).toEqual([]);
+  const remaining = Object.assign(new PageReadBudget(), { reads: MAX_PAGE_READS - 1, cost: MAX_PAGE_READS - 1 });
+  calls.length = 0;
+  await expect(
+    readPage({
+      dispatch: async (request) => {
+        calls.push(new URL(request.url).pathname);
+        return app.handle(request);
+      },
+      incoming: new Request('http://kernel.test/v1/pages:read'),
+      reads: { subject: { kind: 'subject', id: subject.id } },
+      documents: { kind: 'documents', id: subject.id, properties: [property] },
+      session: { ring: tokens, scope: 'anonymous' },
+      budget: remaining,
     }),
   ).rejects.toBeInstanceOf(PageReadError);
   expect(calls).toEqual([`/v1/subjects/${subject.id}`]);
-  const rejected = await aggregate(subject.id);
-  expect(rejected.response.status).toBe(400);
-  expect(rejected.body.errors).toContainEqual({ pointer: '/reads', code: 'out_of_range' });
 });
 
 test('fixed public bodies keep native request, SQL, Access and byte bounds at unrelated histories 64/512/4096', async () => {
   const subject = await created();
   const document = subject.statements[property][0].value.content;
   const bodyBytes = Buffer.from(serializeDocument(english));
+  const subjectPartition = partitionOf(routeOf(subject.id)!);
   let counts = { requests: 0, access: 0, bytes: 0 };
   const report = await checkGrowth(db, {
     name: 'configured page document bodies',
@@ -398,7 +428,7 @@ test('fixed public bodies keep native request, SQL, Access and byte bounds at un
         target,
         {
           name: 'unrelated page document history',
-          hotPartition: 0xc84,
+          hotPartition: subjectPartition,
           hotShare: 1,
           rows: ({ route }) => {
             const id = newId(route);
