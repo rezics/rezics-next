@@ -262,6 +262,7 @@ export function ThreadReading({
     () => ({}),
     [
       readAuthority,
+      sourcePage,
       thread.id,
       posts.posts,
       authors,

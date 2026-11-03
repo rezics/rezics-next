@@ -6,6 +6,11 @@ import { ThreadReadingPost } from '../routes/threads/$id_.$slug';
 import { m } from '../paraglide/messages.js';
 import recording from '../kernel/recorded/thread.json';
 import accounts from '../kernel/recorded/accounts.json';
+import { PatternStory } from './page';
+import { useSession, sessionQuery } from '../session/query';
+import { useQueryClient } from '@tanstack/react-query';
+import { AuthoringDepartureProvider } from '../threads/authoring-departure';
+import { threadHref } from '../threads/thread-href';
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const first = recording.thread.firstPost;
@@ -65,7 +70,10 @@ const boundaries: ThreadReadingPage = {
 };
 
 /** Prepared page projection: no fixture implies native hierarchy or additional read authority. */
-function Journey({ boundaryStates = false }: { boundaryStates?: boolean }) {
+function PreparedReading({ boundaryStates = false }: { boundaryStates?: boolean }) {
+  const session = useSession();
+  const client = useQueryClient();
+  const viewerId = client.getQueryData(sessionQuery.queryKey)?.subject ?? null;
   const supplied = boundaryStates ? boundaries : page;
   return (
     <div className="min-h-screen bg-background p-3 text-foreground sm:p-6">
@@ -75,8 +83,10 @@ function Journey({ boundaryStates = false }: { boundaryStates?: boolean }) {
       <ThreadReading
         page={supplied}
         Post={ThreadReadingPost}
-        session="signed-in"
-        personal={{ viewerId: author.id, idempotencyKey: id(800), reactions: {}, reviewVotes: {} }}
+        session={session}
+        personal={
+          session === 'signed-in' ? { viewerId, idempotencyKey: id(800), reactions: {}, reviewVotes: {} } : undefined
+        }
         returnTo="/"
         signedOut={null}
         renderHeader={() => <h1 className="text-2xl font-semibold">Prepared bounded conversation</h1>}
@@ -86,6 +96,16 @@ function Journey({ boundaryStates = false }: { boundaryStates?: boolean }) {
     </div>
   );
 }
+function Journey(props: { boundaryStates?: boolean }) {
+  return (
+    <PatternStory visitor="Signed In" path={`${threadHref(page.thread)}?cursor=prepared-page-cursor`}>
+      <AuthoringDepartureProvider>
+        <PreparedReading {...props} />
+      </AuthoringDepartureProvider>
+    </PatternStory>
+  );
+}
+
 const meta = {
   title: 'Pages/Community/Bounded conversation branches',
   component: Journey,
