@@ -19,7 +19,7 @@ type Assignment = {
 
 export type SetLabelAssignmentResult =
   | { kind: 'applied' | 'existing'; assignment: Assignment }
-  | { kind: 'capacity' | 'not_found' | 'migration_required' | 'changed' };
+  | { kind: 'capacity' | 'not_found' | 'migration_required' | 'changed' | 'stale' };
 
 type Observed = Awaited<ReturnType<typeof reservations.run>>[number];
 
@@ -77,6 +77,7 @@ export async function setLabelAssignment(
     subjectId: string;
     labelId: string;
     expectedLabelRevision?: number;
+    staleOnRevisionMismatch?: boolean;
     expectedSource?: { labelId: string; assignmentId: string; revision: number; labelRevision: number };
     expectedTarget?: { id: string; revision: number; effective: boolean } | null;
   },
@@ -111,7 +112,7 @@ export async function setLabelAssignment(
   const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
   if (input.expectedLabelRevision !== undefined && parent.revision !== input.expectedLabelRevision)
-    return { kind: 'changed' };
+    return input.staleOnRevisionMismatch ? { kind: 'stale' } : { kind: 'changed' };
   if (input.expectedSource) {
     const sourceParent = current.get(input.expectedSource.labelId);
     if (

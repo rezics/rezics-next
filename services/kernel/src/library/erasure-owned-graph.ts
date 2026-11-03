@@ -69,6 +69,7 @@ export const OWNED_PHASES = [
   'diary_navigation',
   'label_consolidation',
   'vndb_import',
+  'library_archive_merge',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -102,7 +103,8 @@ type Kind =
   | 'list_import_mal'
   | 'library_export'
   | 'copy_archive'
-  | 'vndb_import';
+  | 'vndb_import'
+  | 'library_archive_merge';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -200,6 +202,51 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         if (!removed) return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false });
         return {
           value: { kind, removed, parent: null, retain: false, blocked: false },
+          events: [
+            {
+              type: 'com.rezics.library.account-graph.purged.v1',
+              subject: accountId,
+              data: { accountId, kind, removed },
+            },
+          ],
+        };
+      }
+      if (kind === 'library_archive_merge') {
+        const root = (
+          await tx.query<{ upload_id: string }>(
+            'SELECT upload_id FROM library.library_archive_merge_upload WHERE route=$1 AND account_id=$2 FOR UPDATE',
+            [route, accountId],
+          )
+        ).rows[0];
+        if (!root)
+          return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, hasMore: false });
+        const rows = await tx.query(
+          `WITH keys AS MATERIALIZED (
+            SELECT ordinal FROM library.library_archive_merge_item
+            WHERE route=$1 AND account_id=$2 AND upload_id=$3 ORDER BY ordinal LIMIT 100
+          )
+          DELETE FROM library.library_archive_merge_item item USING keys
+          WHERE item.route=$1 AND item.account_id=$2 AND item.upload_id=$3 AND item.ordinal=keys.ordinal`,
+          [route, accountId, root.upload_id],
+        );
+        const remaining = await tx.query(
+          `SELECT 1 FROM library.library_archive_merge_item
+          WHERE route=$1 AND account_id=$2 AND upload_id=$3 LIMIT 1`,
+          [route, accountId, root.upload_id],
+        );
+        let removed = rows.rowCount ?? 0;
+        if (!remaining.rowCount) {
+          const deleted = await tx.query(
+            `DELETE FROM library.library_archive_merge_upload
+            WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
+            [route, accountId, root.upload_id],
+          );
+          removed += deleted.rowCount ?? 0;
+        }
+        if (!removed)
+          return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, hasMore: false });
+        return {
+          value: { kind, removed, parent: null, retain: false, blocked: false, hasMore: Boolean(remaining.rowCount) },
           events: [
             {
               type: 'com.rezics.library.account-graph.purged.v1',

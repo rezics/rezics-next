@@ -33,6 +33,7 @@ import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './l
 import { admitShelfRead } from './shelf-admission.ts';
 import { readLibraryEntryTiles, type LibraryEntryTile } from './library-entry-tiles.ts';
 import { readPersonalLabel } from './label-store.ts';
+import { readLibraryProfileAnchor } from './profile-source.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
@@ -45,6 +46,7 @@ type ExpectedTarget =
   | { id: string; revision: number; effective: boolean }
   | null
   | { labelId: string; assignmentId: string; revision: number; labelRevision: number };
+export type AssignmentReviewGuard = { subjectId: string; identityEpoch: string; labelRevision: number };
 type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
 function object(input: unknown, keys: string[]): Record<string, unknown> {
@@ -135,6 +137,7 @@ export function createLabelAssignmentCommands(deps: {
     expectedLabelRevision?: number,
     expectedSource?: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
     expectedTarget?: ExpectedTarget,
+    reviewGuard?: AssignmentReviewGuard,
   ) {
     const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
     const malLabelFence = importGuard && 'subject' in importGuard ? importGuard : undefined;
@@ -155,6 +158,7 @@ export function createLabelAssignmentCommands(deps: {
         ...(expectedSource === undefined ? {} : { expectedSource }),
         ...(expectedTarget === undefined ? {} : { expectedTarget }),
         ...(admission ? { review: admission.input } : {}),
+        ...(reviewGuard === undefined ? {} : { reviewGuard }),
       },
       requestKey: key,
     };
@@ -174,6 +178,11 @@ export function createLabelAssignmentCommands(deps: {
         accountId: account.accountId,
         labelId,
         subjectId: operation === 'assign' ? prepared.subjectId! : parsed.subjectId,
+        ...(operation === 'assign' && reviewGuard === undefined
+          ? {}
+          : operation === 'assign'
+            ? { expectedLabelRevision: reviewGuard!.labelRevision }
+            : {}),
       };
       const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
       if (operation === 'assign') {
@@ -192,6 +201,7 @@ export function createLabelAssignmentCommands(deps: {
           {
             ...tuple,
             ...(expectedLabelRevision === undefined ? {} : { expectedLabelRevision }),
+            ...(reviewGuard === undefined ? {} : { staleOnRevisionMismatch: true }),
             ...(expectedSource === undefined ? {} : { expectedSource }),
             ...(expectedTarget === null || (expectedTarget && 'id' in expectedTarget) ? { expectedTarget } : {}),
           },
@@ -200,6 +210,8 @@ export function createLabelAssignmentCommands(deps: {
         switch (result.kind) {
           case 'not_found':
             throw new LibraryNotFoundError();
+          case 'stale':
+            throw new LibraryConflictError();
           case 'capacity':
             throw new ProblemError('library_label_capacity');
           case 'migration_required':
@@ -295,6 +307,20 @@ export function createLabelAssignmentCommands(deps: {
             );
             if (!resolved) throw new LibraryNotFoundError();
             if (malLabelFence && resolved.subjectId !== malLabelFence.subject) throw new LibraryConflictError();
+            if (reviewGuard !== undefined) {
+              const anchor = await withRequestDeadline(deadline, () =>
+                readLibraryProfileAnchor(
+                  { pool, access: deps.access, actor: account, at: attempt.time, deadline },
+                  parsed.subjectId,
+                ),
+              );
+              if (
+                !anchor ||
+                anchor.subjectId !== reviewGuard.subjectId ||
+                anchor.identityEpoch.toString() !== reviewGuard.identityEpoch
+              )
+                throw new LibraryConflictError();
+            }
             return {
               subjectId: resolved.subjectId,
               ...(admission ? { validate: await admission.prepare(attempt.time) } : {}),
@@ -314,6 +340,7 @@ export function createLabelAssignmentCommands(deps: {
     value: { subjectId: string },
     key: string,
     importGuard?: AniListLabelGuard | MalLabelFence | LabelCommandAdmission,
+    reviewGuard?: AssignmentReviewGuard,
   ) {
     return (await mutate(
       actor,
@@ -322,7 +349,13 @@ export function createLabelAssignmentCommands(deps: {
       key,
       'assign',
       importGuard,
-    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
+      undefined,
+      undefined,
+      undefined,
+      reviewGuard,
+    )) as import('../command/command.ts').CommandOutcome<
+      ReturnType<typeof minimal> & { unchanged?: boolean }
+    >;
   }
   async function assignLabelAtRevision(
     actor: Actor,
