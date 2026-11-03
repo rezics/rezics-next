@@ -196,7 +196,7 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
       })) as Array<{
         subjectId: string;
         associationId: string;
-        bindingHash: Buffer;
+        bindingHash: Uint8Array;
         assessment: Assessment;
         falsePositive: boolean;
       }>;
@@ -297,12 +297,14 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
         association_id: data.associationId,
         binding_hash: bindingHash,
       };
-      const aggregate = (await aggregateLock.run(tx, aggregateAddress)) as {
+      const aggregateRows = (await aggregateLock.run(tx, aggregateAddress)) as Array<{
         supportCount: number;
         opposeCount: number;
         falsePositiveCount: number;
         generation: string;
-      } | null;
+        asOf: string;
+      }>;
+      const aggregate = aggregateRows[0] ?? null;
       const delta = classificationBallotCountDelta(previous, next);
       if (!aggregate && previous?.eligible && previous.assessment !== null)
         throw new Error('Classification ballot aggregate is missing a retained contribution');
@@ -314,7 +316,7 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
       await contributionUpsert.run(tx, {
         ...address,
         binding_hash: bindingHash,
-        assessment: data.assessment,
+        assessment: data.assessment ?? '',
         false_positive: data.falsePositive,
         revision: data.revision,
         source_epoch: envelope.epoch,

@@ -383,7 +383,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       async ({ actor, params, body, headers, admission, job }) => {
         requireClassificationAccount(actor, CLASSIFICATION_BALLOT_SET, params.id, params.associationId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        return admission.run('normal', job, () =>
+        const result = await admission.run('normal', job, () =>
           command(() =>
             classificationBallots().set(
               actor,
@@ -397,6 +397,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             ),
           ),
         );
+        return result as { revision: string; delivery: 'unchanged' | 'enqueued' };
       },
     )
     .delete(

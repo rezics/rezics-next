@@ -145,7 +145,7 @@ export async function readCurrentClassificationAssociation(input: {
       return {
         id: input.subjectId,
         type: visible.type,
-        securityRevision: String(visible.security_revision),
+        securityRevision: visible.securityRevision,
         revision: subjectVersion.revision,
         transactionId: subjectVersion.transactionId,
         binding: {
@@ -186,7 +186,7 @@ export async function readCurrentClassificationAssociation(input: {
       if (visible?.visibility !== 'visible' || visible.type !== 'skos:Concept') return null;
       const version = await readItemIdentityVersion(client, first.binding.targetId);
       if (!version || version.redirect !== null) return null;
-      return { type: visible.type, securityRevision: String(visible.security_revision), version };
+      return { type: visible.type, securityRevision: visible.securityRevision, version };
     }, input.deadline);
 
   const firstTarget = await targetSnapshot();

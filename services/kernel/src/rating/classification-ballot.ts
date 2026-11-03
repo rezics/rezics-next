@@ -217,7 +217,10 @@ export function createClassificationBallotCommands(config: Dependencies) {
           return current;
         },
       },
-      async (tx, _command, prepared) => {
+      async (tx, _command, prepared): Promise<{
+        value: { revision: string; delivery: 'unchanged' | 'enqueued' };
+        events: readonly CommandEvent[];
+      }> => {
         const route = requireRoute(owner.accountId);
         let state = await ensureActorState(tx, route, owner.accountId);
         const activation = await reactivateActorState(tx, route, owner.accountId, state);
@@ -320,7 +323,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
           subject_id: subjectId,
           association_id: associationId,
           binding_hash: prior.binding_hash,
-          assessment: null,
+          assessment: '',
           false_positive: false,
           revision,
           eligibility_generation: state.generation,
@@ -413,14 +416,15 @@ export function createClassificationBallotCommands(config: Dependencies) {
       deadline,
     });
     if (!association) throw new ClassificationBallotNotFoundError();
-    const row = (await withReadTransaction(pool, (client) =>
+    const rows = (await withReadTransaction(pool, (client) =>
       aggregateRead.run(client, {
         route: association.subjectRoute,
         subject_id: subjectId,
         association_id: associationId,
         binding_hash: Buffer.from(association.bindingHash, 'hex'),
       }),
-    deadline)) as Aggregate | null;
+    deadline)) as Aggregate[];
+    const row = rows[0] ?? null;
     return classificationAggregateView(associationId, row);
   }
 

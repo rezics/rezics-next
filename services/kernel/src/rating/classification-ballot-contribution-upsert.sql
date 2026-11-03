@@ -2,7 +2,7 @@ INSERT INTO rating.classification_contribution
   (route, subject_id, association_id, binding_hash, actor_route, actor_id, assessment,
    false_positive, revision, source_epoch, source_position, eligibility_generation, eligible)
 VALUES (:route::integer, :subject_id::uuid, :association_id::uuid, :binding_hash::bytea,
-        :actor_route::integer, :actor_id::uuid, :assessment::text, :false_positive::boolean,
+        :actor_route::integer, :actor_id::uuid, NULLIF(:assessment::text, ''), :false_positive::boolean,
         :revision::bigint, :source_epoch::integer, :source_position::bigint,
         :eligibility_generation::bigint, :eligible::boolean)
 ON CONFLICT (route, subject_id, association_id, actor_route, actor_id) DO UPDATE

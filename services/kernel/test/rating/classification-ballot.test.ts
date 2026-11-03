@@ -147,6 +147,7 @@ async function driveWorker(partitions: readonly number[]): Promise<void> {
     for (const partition of homes) {
       const result = await relay.run(partition);
       if (result.status === 'stopped') throw new Error(`Classification ballot relay stopped: ${result.reason}`);
+      if (result.status === 'busy') throw new Error('Classification ballot relay is already running');
       delivered += result.envelopes;
     }
     if (delivered === 0) return;
