@@ -59,8 +59,10 @@ function unavailable(detail: string): never {
 }
 
 function compareEnvelope(left: Envelope, right: Envelope): number {
-  return left.partition - right.partition ||
-    (left.position < right.position ? -1 : left.position > right.position ? 1 : left.epoch - right.epoch);
+  return (
+    left.partition - right.partition ||
+    (left.position < right.position ? -1 : left.position > right.position ? 1 : left.epoch - right.epoch)
+  );
 }
 
 function captureEnvelopes(rows: readonly ReplayRow[]): ReplayEnvelope[] {
