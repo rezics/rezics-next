@@ -16,7 +16,7 @@ const rows = Array.from({ length: 12 }, (_, index) => ({
   threadId: recording.thread.id,
   parentId: index === 0 || index === 2 ? null : index === 1 ? first.id : id(299 + index),
   availability: 'available' as const,
-  visibility: 'public' as const,
+  visibility: 'published' as const,
   authorId: author.id,
   mediaIds: [],
   body: fromPlainText(
