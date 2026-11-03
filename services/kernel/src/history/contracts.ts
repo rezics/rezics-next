@@ -270,6 +270,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.library.entry.updated.v1': personal('owner'),
   'com.rezics.library.follow.updated.v1': personal('owner', 'subject'),
   'com.rezics.library.label.changed.v1': personal('subject'),
+  'com.rezics.library.label.consolidation.changed.v1': personal('subject'),
   'com.rezics.library.label.retention-purged.v1': personal('subject'),
   'com.rezics.library.entry.purged.v1': personal('subject'),
   'com.rezics.library.progress_session.updated.v1': personal('owner'),

@@ -41,6 +41,10 @@ export const LABEL_CONSOLIDATION_LIMITS = Object.freeze({
   retainedPerOwner: 8,
 });
 
+const consolidationEvents = (accountId: string, confirmationId: string) => [
+  { type: 'com.rezics.library.label.consolidation.changed.v1', subject: accountId, data: { confirmationId } },
+];
+
 export type LabelConsolidationSelection = { subjectId: string; assignmentId: string; revision: number };
 type LabelSnapshot = { id: string; name: string; revision: number };
 type AssignmentSnapshot = { id: string; revision: number; effective: boolean };
@@ -523,6 +527,7 @@ export function createLabelConsolidationCommands(deps: {
               status: 'active' as const,
               itemCount: evidenceValue.items.length,
             },
+            events: consolidationEvents(owner.accountId, confirmationId),
           };
         },
       );
@@ -591,7 +596,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { updated: true } };
+        return { value: { updated: true }, events: consolidationEvents(owner.accountId, plan.confirmationId) };
       },
     );
   }
@@ -660,7 +665,7 @@ export function createLabelConsolidationCommands(deps: {
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3`,
           [route, owner.accountId, plan.confirmationId, nextItem, complete, now, command.transactionId],
         );
-        return { value: { status, nextItem, complete } };
+        return { value: { status, nextItem, complete }, events: consolidationEvents(owner.accountId, plan.confirmationId) };
       },
     );
   }
@@ -984,7 +989,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, item: current.itemNo } };
+        return { value: { confirmationId, item: current.itemNo }, events: consolidationEvents(owner.accountId, confirmationId) };
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, operation.value.item) };
@@ -1024,7 +1029,7 @@ export function createLabelConsolidationCommands(deps: {
           ),
           item = (await readItems(tx, owner, sourceLabelId, confirmationId, true))[itemNo];
         if (!plan || !item || item.status !== 'applying') throw new LibraryConflictError();
-        return { value: { confirmationId, item: itemNo } };
+        return noEffect({ confirmationId, item: itemNo });
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, itemNo) };
@@ -1086,7 +1091,7 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, status: 'cancelled' as const } };
+        return { value: { confirmationId, status: 'cancelled' as const }, events: consolidationEvents(owner.accountId, confirmationId) };
       },
     );
     return { operation, result: await result(owner, sourceLabelId, confirmationId) };
@@ -1264,7 +1269,8 @@ export async function purgeExpiredLabelConsolidations(
                RETURNING consolidation_id`,
               [row.route, row.accountId, row.confirmationId, authoritativeTimeValue(command.time)],
             );
-            return { value: { removed: deleted.rows.length > 0 } };
+            if (!deleted.rows.length) return noEffect({ removed: false });
+            return { value: { removed: true }, events: consolidationEvents(row.accountId, row.confirmationId) };
           },
         );
         if (outcome.value.removed) removed++;
