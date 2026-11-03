@@ -502,7 +502,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         pool: dependencies.pool,
         tokens,
         clock,
-        access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+        access: resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
       }));
       const value = Reflect.get(commands, property, commands);
       return typeof value === 'function' ? value.bind(commands) : value;
