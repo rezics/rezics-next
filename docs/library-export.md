@@ -101,7 +101,8 @@ own section; no importer-to-journal provenance link or new completion is inferre
 ## Version 4 provider evidence and assessment seam
 
 Decision: version 4 appends `vndbUploads`, `vndbEvidence`, `anilistUploads`, `anilistEvidence`, in that order,
-uses coverage `private-library-owner-facts-v4`, epoch 4 cursors and totals for all 21 sections. V1/V2/V3 sections,
+uses coverage `private-library-owner-facts-v4`, epoch 4 cursors and totals for all 21 sections. V4 binds the
+fixed counter pairs as a JSON string cursor component; retained epochs keep their original component shape. V1/V2/V3 sections,
 byte accounting, cursor shapes and decoding remain fixed. New captures never reinterpret an older identity.
 `fullExport` remains false. V4 `personalImportEvidence` declares retained Bangumi, unexpired MAL and VNDB, and
 retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities are excluded.
@@ -176,7 +177,7 @@ whole-caller budget measurements remain unmeasured here and belong to controller
 References inspected: `legacy-final:packages/model/src/native-export.ts` (bounded continuation and revision binding),
 `legacy-final:services/main/src/modules/library-import/formats/vndb.ts` (private identifiers and precision), installed
 VNDB/AniList parsers and upload lifetime owners, and the retained AniList MediaList/FuzzyDate reference. No legacy
-code was copied. The existing Web export interface and canonical archive consumer retain their owners for the V3 handoff.
+code was copied. The existing Web export interface and canonical archive consumer retain their owners for the V4 handoff.
 
 ## Version 2 accounting and work bounds
 
@@ -189,7 +190,7 @@ without scanning unrelated owner history. A deep cursor uses the same keyset pre
 work.
 
 Each SQL-projected row is capped at 65,536 encoded bytes before it reaches the driver, preserving the original
-version 1 bound. Versions 2 and 3 also refuse a serialized record above 65,536 bytes; all versions cap serialized page
+version 1 bound. Versions 2, 3 and 4 also refuse a serialized record above 65,536 bytes; all versions cap serialized page
 records at 120,000 UTF-8 bytes. The worst-case version 2 source buffer is 17 rows times 65,536 bytes, plus fixed SQL
 row metadata. Version 3 adds only the fixed assessment meaning revision and nullable integer to journal records.
 `recordBytes` is the sum of UTF-8 bytes of each exact `JSON.stringify(record)` value; it excludes

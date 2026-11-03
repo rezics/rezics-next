@@ -86,7 +86,12 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
         seek.after,
         seek.rows,
         seek.bytes,
-        ...(capture.format_version >= 2 ? [seek.sectionTotals!] : []),
+        ...(capture.format_version === 4
+          ? [JSON.stringify(seek.sectionTotals)]
+          : capture.format_version >= 2
+            ? // Retained epochs keep their original nested-array wire representation.
+              [seek.sectionTotals as unknown as Parameters<typeof encodeCursor>[2]['after'][number]]
+            : []),
       ],
     },
     Date.parse(capture.created_at),
@@ -101,7 +106,16 @@ function seekOf(
 ): ExportSeek {
   const result = decodeCursor(deps.tokens, binding(accountId, capture), token, now);
   if (!result.ok) throw new ProblemError('invalid_cursor');
-  const [section, parent, after, rows, bytes, sectionTotals] = result.after;
+  const [section, parent, after, rows, bytes, counters] = result.after;
+  let sectionTotals: unknown = counters;
+  if (capture.format_version === 4) {
+    if (typeof counters !== 'string') throw new ProblemError('invalid_cursor');
+    try {
+      sectionTotals = JSON.parse(counters);
+    } catch {
+      throw new ProblemError('invalid_cursor');
+    }
+  }
   const expectedLength = capture.format_version === 1 ? 5 : 6;
   const sections = sectionsForVersion(capture.format_version);
   if (
