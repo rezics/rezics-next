@@ -1,4 +1,4 @@
-export type DiaryAddress = { cursor?: string; year?: number; returnTo?: string };
+export type DiaryAddress = { cursor?: string | undefined; year?: number | undefined; returnTo?: string | undefined };
 
 export function diarySearch(search: Record<string, unknown>): DiaryAddress {
   const cursor = typeof search.cursor === 'string' && search.cursor.length <= 2048 ? search.cursor : undefined;
