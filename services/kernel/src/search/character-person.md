@@ -40,6 +40,8 @@ disclosure also invalidate the witness.
 Decision: spoiler equality uses canonical decimal string operands in the existing qualifier
 grammar; absence does not invent a level. Journey-wide threshold policy remains separate.
 
+Decision: a selected threshold admits only exact released spoiler levels at or below it; absent or uncertain levels remain unknown, including under NOT.
+
 Released classification facets, including `schema:keywords` and `schema:gender`, use the
 same bounded selected-value source and current target checks as other relation groups.
 They retain exact concept UUID operands, with no concept seeding or alias inference.
