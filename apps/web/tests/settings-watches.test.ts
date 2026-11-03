@@ -3,15 +3,30 @@ import { QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../src/session/query';
 import { SettingsSessionOwner } from '../src/settings/settings-session-owner';
 import { WatchController, watchPageLimit } from '../src/settings/watch-controller';
-import { unavailableWatchManagement, type ManagedWatch, type WatchManagementIO, type WatchRead, type StopWatch } from '../src/settings/watch-native';
+import {
+  unavailableWatchManagement,
+  type ManagedWatch,
+  type WatchManagementIO,
+  type WatchRead,
+  type StopWatch,
+} from '../src/settings/watch-native';
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'alice-token' };
-const readable: ManagedWatch = { subscriptionId: 'owner-subscription', kind: 'thread', target: { title: 'Readable', href: '/threads/a/readable' } };
+const readable: ManagedWatch = {
+  subscriptionId: 'owner-subscription',
+  kind: 'thread',
+  target: { title: 'Readable', href: '/threads/a/readable' },
+};
 const inaccessible: ManagedWatch = { subscriptionId: 'owner-board-subscription', kind: 'board', target: null };
-const page = (watches: readonly ManagedWatch[], next: string | null = null): WatchRead => ({ kind: 'page', page: { watches, next } });
+const page = (watches: readonly ManagedWatch[], next: string | null = null): WatchRead => ({
+  kind: 'page',
+  page: { watches, next },
+});
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => { resolve = yes; });
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
   return { promise, resolve };
 }
 function setup(io: WatchManagementIO) {
@@ -41,9 +56,13 @@ test('sparse continuation uses the exact opaque cursor, fixed request size and o
     read: async ({ cursor, limit }) => {
       expect(limit).toBe(watchPageLimit);
       cursors.push(cursor);
-      if (fail) { fail = false; throw new Error('read failed'); }
+      if (fail) {
+        fail = false;
+        throw new Error('read failed');
+      }
       return cursor === null ? page([], opaque) : page([readable]);
-    }, stop: async () => ({ kind: 'removed' }),
+    },
+    stop: async () => ({ kind: 'removed' }),
   });
   await controller.first();
   expect(controller.snapshot()).toMatchObject({ rows: [], next: opaque });
@@ -62,8 +81,14 @@ test('failed refresh withdraws old rows and their write authority; oversized own
   let fail = false;
   let writes = 0;
   const { controller } = setup({
-    read: async () => { if (fail) throw new Error('offline'); return result; },
-    stop: async () => { writes++; return { kind: 'removed' }; },
+    read: async () => {
+      if (fail) throw new Error('offline');
+      return result;
+    },
+    stop: async () => {
+      writes++;
+      return { kind: 'removed' };
+    },
   });
   await controller.first();
   fail = true;
@@ -79,11 +104,14 @@ test('failed refresh withdraws old rows and their write authority; oversized own
 
 test('lost target access still permits removal by owner subscription identity, with the installed CSRF credential', async () => {
   const commands: StopWatch[] = [];
-  const { controller } = setup({ read: async () => page([inaccessible, readable]), stop: async (input, token) => {
-    expect(token).toBe(identity.csrfToken);
-    commands.push(input);
-    return { kind: 'removed' };
-  } });
+  const { controller } = setup({
+    read: async () => page([inaccessible, readable]),
+    stop: async (input, token) => {
+      expect(token).toBe(identity.csrfToken);
+      commands.push(input);
+      return { kind: 'removed' };
+    },
+  });
   await controller.first();
   await controller.stop(inaccessible.subscriptionId);
   expect(commands[0]?.subscriptionId).toBe(inaccessible.subscriptionId);
@@ -94,11 +122,14 @@ test('lost target access still permits removal by owner subscription identity, w
 test('unknown stop preserves the immutable original through list refresh; only explicit retry sends it again', async () => {
   const commands: StopWatch[] = [];
   let current = page([readable, inaccessible]);
-  const { controller } = setup({ read: async () => current, stop: async (input) => {
-    commands.push(input);
-    if (commands.length === 1) throw new Error('reply lost');
-    return { kind: 'removed' };
-  } });
+  const { controller } = setup({
+    read: async () => current,
+    stop: async (input) => {
+      commands.push(input);
+      if (commands.length === 1) throw new Error('reply lost');
+      return { kind: 'removed' };
+    },
+  });
   await controller.first();
   await controller.stop(readable.subscriptionId);
   const original = controller.snapshot().command;
@@ -121,7 +152,10 @@ test('viewer replacement or failed session refresh retires rows, pending command
     let writes = 0;
     const { controller, client } = setup({
       read: async () => page([readable]),
-      stop: async () => { writes++; return lateCommand.promise; },
+      stop: async () => {
+        writes++;
+        return lateCommand.promise;
+      },
     });
     await controller.first();
     const write = controller.stop(readable.subscriptionId);

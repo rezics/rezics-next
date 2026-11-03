@@ -23,18 +23,41 @@ function Preview({ view }: { view: View }) {
   const [io] = useState<WatchManagementIO>(() => ({
     read: async () => {
       if (view === 'failed') throw new Error('Illustrative read failure');
-      return { kind: 'page', page: { next: null, watches: view === 'inaccessible' ? [
-        { subscriptionId: 'private-unavailable', kind: 'board', target: null },
-      ] : [
-        { subscriptionId: 'private-thread', kind: 'thread', target: { title: 'Reading together: autumn discoveries', href: '/threads/preview/reading-together' } },
-        { subscriptionId: 'private-board', kind: 'board', target: { title: 'Books and reading', href: '/boards/preview/books' } },
-      ] } };
+      return {
+        kind: 'page',
+        page: {
+          next: null,
+          watches:
+            view === 'inaccessible'
+              ? [{ subscriptionId: 'private-unavailable', kind: 'board', target: null }]
+              : [
+                  {
+                    subscriptionId: 'private-thread',
+                    kind: 'thread',
+                    target: {
+                      title: 'Reading together: autumn discoveries',
+                      href: '/threads/preview/reading-together',
+                    },
+                  },
+                  {
+                    subscriptionId: 'private-board',
+                    kind: 'board',
+                    target: { title: 'Books and reading', href: '/boards/preview/books' },
+                  },
+                ],
+        },
+      };
     },
     stop: async () => ({ kind: view === 'uncertain' ? 'uncertain' : 'removed' }),
   }));
-  useEffect(() => { void readSettingsPage().then(setPage); }, []);
-  return page ? <SettingsPageView page={page} csrfToken={null} watchesIO={io} /> :
-    <p role="status">{m.settings_watches_loading()}</p>;
+  useEffect(() => {
+    void readSettingsPage().then(setPage);
+  }, []);
+  return page ? (
+    <SettingsPageView page={page} csrfToken={null} watchesIO={io} />
+  ) : (
+    <p role="status">{m.settings_watches_loading()}</p>
+  );
 }
 
 function story(view: View, viewport: 'phone390' | 'desktop1280'): Story {
@@ -42,7 +65,9 @@ function story(view: View, viewport: 'phone390' | 'desktop1280'): Story {
     globals: { viewport: { value: viewport, isRotated: false } },
     render: () => (
       <PatternStory visitor="Signed In" path="/settings#watches">
-        <AppShell><Preview view={view} /></AppShell>
+        <AppShell>
+          <Preview view={view} />
+        </AppShell>
       </PatternStory>
     ),
     play: async ({ canvasElement }) => {

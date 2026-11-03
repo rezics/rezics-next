@@ -2,7 +2,16 @@ import { m } from '../paraglide/messages.js';
 import type { MouseEvent } from 'react';
 
 export type SettingsSection = {
-  id: 'watches' | 'reading' | 'display' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
+  id:
+    | 'watches'
+    | 'reading'
+    | 'display'
+    | 'notifications'
+    | 'privacy'
+    | 'verification'
+    | 'profile'
+    | 'public-activity'
+    | 'account';
   label: string;
   status?: string | undefined;
 };

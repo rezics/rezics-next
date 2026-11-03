@@ -18,7 +18,13 @@ export type WatchState = Readonly<{
   retired: boolean;
 }>;
 const initial: WatchState = {
-  read: 'idle', rows: [], cursor: null, next: null, command: null, write: 'idle', retired: false,
+  read: 'idle',
+  rows: [],
+  cursor: null,
+  next: null,
+  command: null,
+  write: 'idle',
+  retired: false,
 };
 
 /** One bounded page and one original unresolved intent, scoped to the installed Settings observation. */
@@ -28,12 +34,17 @@ export class WatchController {
   private generation = 0;
   private request: AbortController | undefined;
   private unsubscribe: (() => void) | undefined;
-  constructor(private io: WatchManagementIO, private owner: WatchOwner) {}
+  constructor(
+    private io: WatchManagementIO,
+    private owner: WatchOwner,
+  ) {}
 
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
   private update(patch: Partial<WatchState>) {
     this.state = { ...this.state, ...patch };
@@ -44,7 +55,9 @@ export class WatchController {
     return !this.state.retired;
   }
   mount = () => {
-    this.unsubscribe ??= this.owner.subscribe(() => { this.current(); });
+    this.unsubscribe ??= this.owner.subscribe(() => {
+      this.current();
+    });
     this.current();
   };
   retire = () => {
@@ -61,13 +74,15 @@ export class WatchController {
 
   refresh = () => this.load(this.state.cursor);
   first = () => this.load(null);
-  next = () => this.state.read === 'ready' && this.state.next !== null
-    ? this.load(this.state.next) : Promise.resolve();
+  next = () =>
+    this.state.read === 'ready' && this.state.next !== null ? this.load(this.state.next) : Promise.resolve();
 
   private validPage(page: WatchPage) {
-    return page.watches.length <= watchPageLimit &&
+    return (
+      page.watches.length <= watchPageLimit &&
       new Set(page.watches.map((row) => row.subscriptionId)).size === page.watches.length &&
-      (page.next === null || (typeof page.next === 'string' && page.next.length > 0));
+      (page.next === null || (typeof page.next === 'string' && page.next.length > 0))
+    );
   }
   private async load(cursor: string | null) {
     if (!this.current() || this.state.read === 'loading' || this.state.write === 'sending') return;
@@ -77,7 +92,8 @@ export class WatchController {
     this.update({ read: 'loading', rows: [], cursor, next: null });
     try {
       const result = await withManagedReadDeadline(
-        (signal) => this.io.read({ limit: watchPageLimit, cursor, signal }), this.request.signal,
+        (signal) => this.io.read({ limit: watchPageLimit, cursor, signal }),
+        this.request.signal,
       );
       if (!this.current() || generation !== this.generation) return;
       if (result.kind === 'unavailable') {
@@ -93,8 +109,13 @@ export class WatchController {
   }
 
   stop = async (subscriptionId: string) => {
-    if (!this.canWrite() || this.state.read !== 'ready' || this.state.command ||
-      !this.state.rows.some((row) => row.subscriptionId === subscriptionId)) return;
+    if (
+      !this.canWrite() ||
+      this.state.read !== 'ready' ||
+      this.state.command ||
+      !this.state.rows.some((row) => row.subscriptionId === subscriptionId)
+    )
+      return;
     const command = Object.freeze({ subscriptionId, idempotencyKey: crypto.randomUUID() });
     this.update({ command, write: 'sending' });
     await this.send(command);
@@ -115,7 +136,8 @@ export class WatchController {
       if (result.kind === 'removed') {
         this.update({
           rows: this.state.rows.filter((row) => row.subscriptionId !== command.subscriptionId),
-          command: null, write: 'removed',
+          command: null,
+          write: 'removed',
         });
       } else if (result.kind === 'rejected') {
         this.update({ command: null, write: 'rejected', read: 'failed', rows: [], next: null });

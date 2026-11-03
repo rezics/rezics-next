@@ -14,8 +14,14 @@ const { WatchesSection } = await import('../src/settings/watches');
 const { m } = await import('../src/paraglide/messages.js');
 const window = new Window({ url: 'https://site.test/en/settings#watches' });
 const saved = new Map<string, PropertyDescriptor | undefined>();
-for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator,
-  HTMLElement: window.HTMLElement, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true })) {
+for (const [key, value] of Object.entries({
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  Node: window.Node,
+  IS_REACT_ACT_ENVIRONMENT: true,
+})) {
   saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 }
@@ -34,14 +40,27 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  let response: WatchRead = { kind: 'page', page: { watches: [
-    { subscriptionId: 'hidden-owner-id', kind: 'board', target: null },
-    { subscriptionId: 'readable-owner-id', kind: 'thread', target: { title: 'Readable thread', href: '/threads/a/readable' } },
-  ], next: null } };
+  let response: WatchRead = {
+    kind: 'page',
+    page: {
+      watches: [
+        { subscriptionId: 'hidden-owner-id', kind: 'board', target: null },
+        {
+          subscriptionId: 'readable-owner-id',
+          kind: 'thread',
+          target: { title: 'Readable thread', href: '/threads/a/readable' },
+        },
+      ],
+      next: null,
+    },
+  };
   let fail = false;
   let writes = 0;
   const io: WatchManagementIO = {
-    read: async () => { if (fail) throw new Error('offline'); return response; },
+    read: async () => {
+      if (fail) throw new Error('offline');
+      return response;
+    },
     stop: async () => ({ kind: ++writes === 1 ? 'uncertain' : 'removed' }),
   };
   const click = async (text: string) => {
@@ -50,11 +69,17 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     await act(async () => button!.click());
   };
   try {
-    await act(async () => root.render(
-      <StrictMode><QueryClientProvider client={client}><SettingsSessionContext.Provider value={owner}>
-        <WatchesSection io={io} />
-      </SettingsSessionContext.Provider></QueryClientProvider></StrictMode>,
-    ));
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <SettingsSessionContext.Provider value={owner}>
+              <WatchesSection io={io} />
+            </SettingsSessionContext.Provider>
+          </QueryClientProvider>
+        </StrictMode>,
+      ),
+    );
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
     expect(host.textContent).toContain(m.settings_watches_access_lost());
     expect(host.textContent).not.toContain('hidden-owner-id');
@@ -82,7 +107,9 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     response = { kind: 'unavailable' };
     await click(m.settings_retry());
     expect(host.textContent).toContain(m.settings_watches_unavailable());
-    await act(async () => client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }));
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }),
+    );
     expect(host.textContent).toBe('');
   } finally {
     await act(async () => root.unmount());
