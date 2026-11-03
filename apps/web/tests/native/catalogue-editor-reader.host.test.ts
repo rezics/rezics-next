@@ -171,22 +171,29 @@ async function signOut(page: Page): Promise<void> {
   expect((await signedOut).status()).toBeGreaterThanOrEqual(300);
 }
 
-async function replay(page: Page, captured: CapturedFunction, csrf: string): Promise<{ status: number; cache: string | null; body: unknown; text: string }> {
-  return page.evaluate(async ({ captured, csrf }) => {
-    const headers = { ...captured.headers, 'X-CSRF-Token': csrf };
-    const response = await fetch(captured.url, {
-      method: captured.method,
-      headers,
-      credentials: 'same-origin',
-      body: captured.body,
-    });
-    const text = await response.text();
-    let body: unknown = text;
-    try {
-      body = JSON.parse(text);
-    } catch {}
-    return { status: response.status, cache: response.headers.get('cache-control'), body, text };
-  }, { captured, csrf });
+async function replay(
+  page: Page,
+  captured: CapturedFunction,
+  csrf: string,
+): Promise<{ status: number; cache: string | null; body: unknown; text: string }> {
+  return page.evaluate(
+    async ({ captured, csrf }) => {
+      const headers = { ...captured.headers, 'X-CSRF-Token': csrf };
+      const response = await fetch(captured.url, {
+        method: captured.method,
+        headers,
+        credentials: 'same-origin',
+        body: captured.body,
+      });
+      const text = await response.text();
+      let body: unknown = text;
+      try {
+        body = JSON.parse(text);
+      } catch {}
+      return { status: response.status, cache: response.headers.get('cache-control'), body, text };
+    },
+    { captured, csrf },
+  );
 }
 
 test('replacing the editor reader retires protected catalogue work without cancelling an accepted native write', async () => {
@@ -306,9 +313,9 @@ test('replacing the editor reader retires protected catalogue work without cance
   await bobPage.getByRole('heading', { name: 'Edit facts', exact: true }).waitFor({ state: 'visible' });
   await ui(bobPage.getByText('Private proposal draft')).toHaveCount(0);
   await ui(bobPage.getByText('Proposed, awaiting review.', { exact: false })).toHaveCount(0);
-  await ui(bobPage.getByRole('button', { name: 'Submit included changes / retry unresolved', exact: true })).toHaveCount(
-    0,
-  );
+  await ui(
+    bobPage.getByRole('button', { name: 'Submit included changes / retry unresolved', exact: true }),
+  ).toHaveCount(0);
   await ui(bobPage.locator('[data-candidate-item]')).toHaveCount(0);
   expect(new URL(bobPage.url()).search).toBe('');
   for (const token of [...protectedTokens, ...aliceSessions]) expect(bobPage.url()).not.toContain(token);
@@ -334,7 +341,9 @@ test('replacing the editor reader retires protected catalogue work without cance
   expect(writesAfterReplay).toHaveLength(writesBeforeReplacement);
   expect(writesAfterReplay.some((request) => request.authorization === bobAuthorization)).toBe(false);
   expect(
-    writesAfterReplay.some((request) => request.body?.includes(bobAccountId) || request.body?.includes('expectedReader')),
+    writesAfterReplay.some(
+      (request) => request.body?.includes(bobAccountId) || request.body?.includes('expectedReader'),
+    ),
   ).toBe(false);
 
   const stillAccepted = (await nativeCandidates('schema:inLanguage', 'alice')).find(
@@ -351,7 +360,7 @@ test('replacing the editor reader retires protected catalogue work without cance
     expect(logs).not.toContain(token);
   }
   expect(editorLoads.every((response) => response.headers()['cache-control']?.includes('no-store'))).toBe(true);
-  expect(functionCalls.some((response) => expectedReader(postData(response.request())) === fixture.aliceAccountId)).toBe(
-    true,
-  );
+  expect(
+    functionCalls.some((response) => expectedReader(postData(response.request())) === fixture.aliceAccountId),
+  ).toBe(true);
 });
