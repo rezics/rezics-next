@@ -31,6 +31,7 @@ import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
+import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
 import {
   DumpInputError,
@@ -308,6 +309,11 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return runPreviewCli(argv.slice(1), {
       ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
       ...(options.entries === undefined ? {} : { entries: options.entries }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+  if (Array.isArray(argv) && argv[0] === 'compare')
+    return runCompareCli(argv.slice(1), {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });

@@ -38,6 +38,45 @@ bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/w
 bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
 ```
 
+## Compare two completed preview plans
+
+`rezics-import compare` reads two completed persistent dump-preview directories and builds a derived before/after
+index of exact source-key membership and retained native field/evidence differences. It does not decode dumps, load
+historical converters, construct credentials or HTTP clients, write import state, or apply a preview. Help is
+available without opening a path:
+
+```sh
+bun services/importer/src/cli.ts compare --help
+bun services/importer/src/cli.ts compare --left /srv/previews/left --right /srv/previews/right --output-dir /srv/comparisons/refresh
+```
+
+Both plans must be complete, share the exact configured source alias and provider kind, and capture the same baseline
+generation. Two first-import plans (both without a baseline) may be compared; that view does not establish server
+emptiness. Different baseline captures are refused with a bounded mismatch asking for a fresh common capture. Missing
+or unavailable metadata is never treated as equality. Different admitted input paths and different converter revisions
+may coexist; both are reported and neither is assigned as the cause.
+
+Pages default to 20 rows and accept at most 100. Use `--page only-left|only-right|changed|unchanged|skipped|unavailable`,
+`--limit`, the printed opaque cursor, `--record` for exact-record drill-down, or `--json` for the version 1 document.
+A record absent from the right dump is an input comparison difference; source withdrawal eligibility remains that
+plan's complete acquisition. Title-equal records with changed references or qualifier precision stay changed. A digest
+change with equal retained rendered fields is reported as a digest/revision distinction, not complete semantic
+equivalence. Unresolved targets stay unresolved on each side. Ordered reference groups are not paired by index when
+no stable matching key exists.
+
+`--output-dir` retains the derived comparison for later `--comparison-dir` page reads without reopening the dumps.
+Cursors bind to the comparison identity and capture digest. Cancellation or a storage ceiling leaves no completed
+marker. The printed ordinary import invocation uses placeholders and the plans' actual source kind/alias.
+
+Decision: comparison reopens retained preview.sqlite files read-only using the delivered preview plan schema; it does
+not call DumpPreview.open (a writable reader) or invent a second conversion pipeline. Reopen uses `--comparison-dir`.
+
+```sh
+bun services/importer/src/cli.ts compare --left /srv/previews/left --right /srv/previews/right --page changed --record Q1 --json
+bun services/importer/src/cli.ts compare --comparison-dir /srv/comparisons/refresh --page only-right
+bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
+```
+
 ## Inspect retained source-dump work
 
 `rezics-import inspect` opens an existing importer state file for local read-only inspection. It needs only the state
@@ -276,7 +315,7 @@ Converters already return `{ pointer, code }` diagnostics on `ConvertedRecord`. 
 vector with the exact source, generation, record, digest, converter revision and phase it describes, then offers a
 read-only `diagnostics` CLI command. Journal rows are not native publication, request acknowledgement or candidate
 selection. API47 keeps generation/pending-envelope/cover inspection; this command owns a separate read model and does
-not take a writer lease. Decision: inspect, preview and diagnostics remain separate CLI subcommands.
+not take a writer lease. Decision: inspect, preview, compare and diagnostics remain separate CLI subcommands.
 
 Phases are `staging` for dump conversion and `application` for dependency-driven reconversion. A recognized empty
 vector is stored; missing journal rows on a generation are unavailable historical evidence. Resume of the same
