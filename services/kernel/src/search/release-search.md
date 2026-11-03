@@ -8,6 +8,8 @@ Research inventory and property presence do not establish facet admission.
 
 Decision: a partial Gregorian date matches an inclusive range when their represented intervals overlap;
 unknown components remain absent from facts, and interval edges are never displayed as recorded dates.
+Decision: `rebuildSubjects` defaults to a fresh calendar successor; legacy generations stay immutable, and precise
+compilation requires readiness for the exact physical UUID.
 
 `CalendarDate` in `@rezics/filter` records astronomical `year`, optional `month`, and optional `day`.
 A day requires a month. These shapes mean year, month and day precision respectively. Native time content must
