@@ -1,3 +1,10 @@
+import {
+  publishedSpace as published, publishedRealm,
+  createRealmHomeReader, createRealmHomeBoardReader,
+  RealmHomePageSchema, RealmHomeQuerySchema, realmHomeResponse,
+} from './realm-home.ts';
+import { RealmHomeBoardPageSchema, RealmHomeBoardQuerySchema, realmHomeBoardResponse } from '../content/realm-board-home.ts';
+import { ContentNotFoundError } from '../content/reads.ts';
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
 import { readOwnRealmClaim } from './realm-claim-status.ts';
@@ -26,7 +33,6 @@ import { ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
-import { REACTION_KINDS } from '../content/events.ts';
 import { MediaUnavailableError } from '../content/media.ts';
 import { SitemapQuerySchema } from '../content/schemas.ts';
 import { SitemapRealmPageSchema, SitemapSpacePageSchema } from './schemas.ts';
@@ -85,7 +91,7 @@ import {
   RealmHomePublicationQuerySchema,
   realmHomePublicationResponse,
 } from './realm-home-publications.ts';
-import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
+import { ownRealmsQuerySchema, ownRealmsResponseSchema, SpaceSchema as space, RealmSchema as realm, RealmVotesSchema as votes } from './schemas.ts';
 import {
   listPublications,
   publish,
@@ -105,27 +111,6 @@ const id = t.String({ format: 'uuid' });
 const instant = t.String({ format: 'date-time' });
 const title = t.String({ minLength: 1, maxLength: 1024 });
 const summary = t.String({ maxLength: 4096 });
-const space = t.Object(
-  {
-    spaceId: id,
-    realmId: t.Union([id, t.Null()], {
-      readOnly: true,
-      description:
-        'The active Realm carried by this Space, if the viewer passes its ordinary realm:read check; otherwise null. Derived per viewer and outside the Space revision chain. The Space ETag remains its head revision id, the If-Match token for Space writes.',
-    }),
-    state: t.Literal('active'),
-    headRevisionId: id,
-    createdAt: instant,
-    creator: id,
-    predecessor: t.Union([id, t.Null()]),
-    address: t.Union([t.String(), t.Null()]),
-    title,
-    summary,
-    revisionCreatedAt: instant,
-    author: id,
-  },
-  closed,
-);
 const claimReviewResponse = t.Object(
   {
     claimRequests: t.Array(
@@ -157,44 +142,6 @@ const claimReviewQuery = t.Object(
 
 const spaceResponse = t.Object({ space }, closed);
 const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
-const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
-const votes = t.Object(
-  {
-    upvote: t.Optional(voteWeight),
-    downvote: t.Optional(voteWeight),
-    like: t.Optional(voteWeight),
-    love: t.Optional(voteWeight),
-    laugh: t.Optional(voteWeight),
-    insightful: t.Optional(voteWeight),
-    sad: t.Optional(voteWeight),
-  } satisfies Record<(typeof REACTION_KINDS)[number], unknown>,
-  closed,
-);
-const realm = t.Object(
-  {
-    realmId: id,
-    spaceId: id,
-    state: t.Literal('active'),
-    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
-    contextId: id,
-    boardSchemeId: t.Union([id, t.Null()]),
-    ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
-    orphanedAt: t.Union([instant, t.Null()]),
-    claimEligibleAt: t.Union([instant, t.Null()]),
-    governanceReadOnly: t.Boolean(),
-    headRevisionId: id,
-    createdAt: instant,
-    creator: id,
-    predecessor: t.Union([id, t.Null()]),
-    title,
-    summary,
-    revisionCreatedAt: instant,
-    author: id,
-    votes,
-    presentation: RealmPresentationSchema,
-  },
-  closed,
-);
 const realmResponse = t.Object({ realm }, closed);
 const realmClaimStatus = t.Object(
   {
@@ -410,6 +357,8 @@ export type CommunityRouteDependencies = {
 };
 
 function communityProblem(error: unknown): never {
+  if (error instanceof ContentNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof TypeError && error.message === 'Invalid content cursor') throw new ProblemError('invalid_cursor');
   // Preserve the native ownership subclass for the central problem mapper.
   if (error instanceof ResourceAccessWriteDeniedError) throw error;
   if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
@@ -446,50 +395,6 @@ function matchHead(header: string): string {
   }
   if (typeof value !== 'string' || value.length < 1 || value.length > 255) throw new ProblemError('invalid_request');
   return value;
-}
-
-function published(space: Space, realmId: string | null = null) {
-  if (space.state !== 'active') throw new ProblemError('not_found');
-  return {
-    spaceId: space.spaceId,
-    realmId,
-    state: 'active' as const,
-    headRevisionId: space.headRevisionId,
-    createdAt: space.createdAt,
-    creator: space.creator,
-    predecessor: space.predecessor,
-    address: space.address,
-    title: space.title,
-    summary: space.summary,
-    revisionCreatedAt: space.revisionCreatedAt,
-    author: space.author,
-  };
-}
-
-function publishedRealm(value: RealmView) {
-  if (value.state !== 'active') throw new ProblemError('not_found');
-  return {
-    realmId: value.realmId,
-    spaceId: value.spaceId,
-    state: 'active' as const,
-    visibility: value.visibility as 'public' | 'protected',
-    contextId: value.contextId,
-    boardSchemeId: value.boardSchemeId,
-    ownershipState: value.ownershipState,
-    orphanedAt: value.orphanedAt,
-    claimEligibleAt: value.claimEligibleAt,
-    governanceReadOnly: value.governanceReadOnly,
-    headRevisionId: value.headRevisionId,
-    createdAt: value.createdAt,
-    creator: value.creator,
-    predecessor: value.predecessor,
-    title: value.title,
-    summary: value.summary,
-    revisionCreatedAt: value.revisionCreatedAt,
-    author: value.author,
-    votes: value.votes,
-    presentation: value.presentation,
-  };
 }
 
 function publishedPublication(value: PublicationHead | PublicationResult) {
@@ -1226,6 +1131,67 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const representation = publishedRealm(current);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { realm: representation };
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/home',
+      {
+        params: realmParams,
+        query: strict(RealmHomeQuerySchema),
+        response: { 200: strict(RealmHomePageSchema), ...readFailures },
+        detail: {
+          operationId: 'realm.home',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const page = await admission.run('normal', job, () =>
+            createRealmHomeReader({ ...realmDependencies(), tokens: dependencies.tokens })(
+              realmId, { actor, deadline: job.deadline }, query,
+            ),
+          );
+          if (!page) throw new ProblemError('not_found');
+          return realmHomeResponse(page);
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/boardShelf',
+      {
+        params: realmParams,
+        query: strict(RealmHomeBoardQuerySchema),
+        response: {
+          200: strict(RealmHomeBoardPageSchema), ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'realm.boardShelf',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const page = await admission.run('normal', job, () =>
+            createRealmHomeBoardReader({ ...realmDependencies(), tokens: dependencies.tokens })(
+              realmId, { actor, deadline: job.deadline }, query,
+            ),
+          );
+          if (!page) throw new ProblemError('not_found');
+          return realmHomeBoardResponse(page);
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     )
     .get(

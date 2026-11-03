@@ -153,7 +153,7 @@ Changed evidence produces a retryable failure with the caller's original cursor;
 
 Concealed/missing Subjects are omitted with the raw frontier retained, without refill or an unavailable-row count.
 Failed hydration propagates its native failure rather than a successful empty page. An absent active Semantic
-release is failed preparation for this composed shelf. A genuinely empty raw window needs no Semantic read.
+release is failed preparation for this composed shelf. A genuinely empty raw window needs no Semantic data hydration; final observation still dispatches Semantic BEGIN, SET LOCAL and COMMIT.
 Shelf exhaustion never certifies the complete Realm population. The existing Web reader still issues per-cover
 Subject calls until its owner binds this mounted transport; this shelf alone is not the complete Realm-home journey.
 
@@ -164,11 +164,12 @@ Subject calls until its owner binds this mounted transport; this shelf alone is 
   exact heads and rechecks the original container. Semantic deduplicates selected identities, groups each native
   batch by home, and uses its existing maximum three representative-plan attempts. Each attempt resolves the active
   release, exact Subject/current labels, image/original-language slots, representative-edition selection, native
-  media references and source fences. Preparation executes before snapshots. Final Semantic equality reads native
-  metadata for only participating homes and rechecks admitted Subject/edition disclosure. All these operations use
+  media references and source fences. Preparation executes before snapshots. Final Semantic equality performs both metadata batches (`partitionReadClients` and `readPartitions`) for
+  participating homes and rechecks admitted Subject/edition disclosure. Charge preparation and all three possible
+  representative-plan attempts, including unsuccessful dispatched statements and failed rollback attempts. All these operations use
   the supplied Kernel pool, including Access preparation/verification and partition dispatch; there is no HTTP or
   additional membership, ban, member-count, board or presentation reader in this shelf. Native executor/Access
-  retries retain their own controls and the original deadline. Empty selection skips Semantic; denial conceals;
+  retries retain their own controls and the original deadline. Empty selection skips Semantic data hydration but still dispatches final BEGIN/SET/COMMIT; denial conceals;
   missing preparation, failed dependencies and changed sources propagate failure without another raw selection.
 - **Bound:** Twelve limits selected keys, not examined rows or bytes. Publication seeks use
   `(route,realm_id,published_at,subject_id)` and exact heads `(route,realm_id,subject_id)`; Semantic uses its native
@@ -184,6 +185,103 @@ Subject calls until its owner binds this mounted transport; this shelf alone is 
   evidence, all participating pool/runner costs at256/1024/4096, independent history/label/media growth and nested
   Performance review remain required for the complete home. No measured constant-work or byte ceiling is claimed
   by a small emitted page. Compare the real batch calls with Web's current one-Subject-request-per-cover pattern.
+
+## Realm home page
+
+Decision: expose the initial native assembly at `GET /v1/realms/:realmId/home` and a fixed twenty-row
+`GET /v1/realms/:realmId/boardShelf` continuation; keep viewer standing/actions explicitly unavailable until the
+native viewer observation producer is installed, and exclude the older presentation `join` projection.
+
+`createRealmHomeReader({pool,access,routeKey,tokens,clock?})` returns `RealmHomePage | null` with separate Realm
+and Space identity, presentation, boards and publications. `RealmHomePageSchema` is closed and mounted through
+Community's existing dependency pattern. The initial query accepts only native summary language preferences.
+The board and publication cursors go exclusively to their respective continuations, without a second raw window,
+refill, sibling shelf read or cursor translation. Board items carry the existing native board fields without
+repeating community presentation on every row. The ordinary board/publication routes and command inputs persist.
+
+`createRealmHomePublicationObservationReader` retains the delivered summary and exact publication-head observations
+through the entire assembly. The ordinary publication reader delegates to it and finalizes immediately, preserving
+its existing behavior. Board selection extracts the existing raw page/cursor implementation. Its observation uses
+the ordinary native exact-key batch disclosure and private row signature, refreshing Access preparation for its
+final round; concealed rows remain absent. Empty board selection needs no board hydration. Neither shelf certifies
+complete catalogue population.
+
+The page selects one raw board limit20 and one publication limit12 window, then invokes the existing presentation
+producer once. That producer owns optional avatar/banner/rules and member-count treatment; unknown remains unknown.
+The page finalizes the original board and publication observations, then freshly reads the Realm, prepares Space
+read authorization and revalidates the original native container binding. Head/lifecycle/context/Space relocation
+changes fail retryably without returning earlier descriptions or covers. Connections are released before preparing
+another authority. The Space address is read freshly at finalization; it remains distinct from Realm identity.
+`Cache-Control: private, no-store` applies to the initial page and both continuations, including failures.
+
+The viewer state is currently `anonymous` or `unavailable`; advice is `sign-in` for anonymous readers and
+`unavailable` for authenticated readers. These are intermediate states, not completed membership/ban/participation
+or join/leave/claim/manage admission. The native viewer/action producer must supply its actual factory, closed types,
+mounted permission advice and exact final leave-holder/lifecycle/precondition observations before this page can
+return current standing or admitted actions. Public Realm JSON equality cannot replace that protocol. Existing
+mutation routes continue to authorize their own requests. Web keeps RealmHomeHeader, RealmShelf and SpacePage;
+its existing reader still makes individual Subject requests until that owner adopts the generated home transport.
+No second frontend or Search dependency is introduced.
+
+### Cost
+
+- **Touches:** Initial home reads Realm identity/Access, mints a released native time and reads one exact container
+  binding. Board selection freshly prepares Realm read, then dispatches BEGIN/SET LOCAL, partition metadata,
+  Realm decision, one raw seek of at most21 board identities and COMMIT (or rollback). Initial and final board
+  hydration each prepare the ordinary board/Realm decision bundle outside their snapshots, then dispatch BEGIN,
+  one partition metadata batch, full-key board and containing-Realm batches, native disclosure/authority work and
+  COMMIT. Only up to20 selected keys hydrate; final raw-page partition metadata checks the original placement epoch,
+  including empty pages; no second page is selected. Presentation invokes its existing two
+  released Realm/Space rounds: prepared Realm/Space/join decisions, BEGIN, native read time, Realm/Space and
+  partition batches, own membership/ban rows, join decisions and optional native member-count reads, then COMMIT.
+  Between these rounds it resolves exact selected rules and at most two selected presentation media keys using
+  their existing source/disclosure protocols. Publication adds the complete shelf cost above: at most13 raw heads,
+  up to12 exact initial heads/Subject checks, original container binding and Semantic hydration grouped by homes.
+  All three possible Semantic representative-plan attempts count, including preparation, unsuccessful queries,
+  rollback and failed rollback dispatch. Each batch has representative-slot and summary statements; original and
+  extra representative sets can each contain12 distinct identities. Final Semantic equality dispatches BEGIN/SET,
+  both metadata batches (`partitionReadClients`, then `readPartitions`), admitted-key checks and COMMIT, including
+  BEGIN/SET/COMMIT with zero selected Subjects. Final publication observation freshly prepares Realm and admitted
+  Subject decisions, reads exact heads and rechecks its original container. Home additionally freshly reads the
+  final Realm and its native Access evidence, prepares Space authorization, mints fresh time, reads final Space
+  and revalidates the initial container binding. Board continuation omits publication and presentation work;
+  publication continuation keeps its original shelf-only path. Empty/denied/stale/failure paths charge all work
+  reached before stopping, including retries, controls and cleanup; no failure is counted as a zero result. These
+  calls use the supplied Kernel pool and each dependency's actual authority/executor preparations and participating
+  homes; sharing a pool does not combine their native source tuples. The missing viewer producer's costs are not
+  guessed or included as zero. Native executor attempts, Access/catalogue/ban/membership preparation and deadline
+  controls remain nested producer terms requiring review, not a fitted per-item allowance.
+- **Bound:** Board raw SQL is driven by `(route,realm_id,board_id < cursor)` with descending board identity and
+  LIMIT21; exact board batches use `(route,board_id)` LATERAL LIMIT1 and containing-Realm full keys. Membership
+  presentation uses `(route,realm_id,account_id)` with open/current validity and LIMIT1; history examined beneath
+  that predicate remains an independent source term until physical-prefix plans are reached. Publication uses its
+  existing raw `(route,realm_id,published_at,subject_id)` and exact head keys. A page's selected keys do not bound
+  examined membership/ban, label languages, selected compact statement histories or expanded adoption/candidates.
+  Let R/S be admitted Realm/Space source bytes, B the selected board bytes, P exact publication-head bytes, L all
+  selected stored labels, F selected fact/representative histories, M materialized media/variants/credit/fences, D
+  selected rules body and A dependency preparation/bind bytes. Source materialization and retained memory include
+  R+S+B+P+L+F+M+D+A plus all native per-attempt inputs/results, maps, original/representative copies, both presentation
+  rounds, returned objects and serialization buffers. Realm/Space titles admit1024 Unicode scalars and summaries4096, totaling5120
+  scalars per identity: UTF-8 can use four bytes per scalar; JSON may use six
+  ASCII bytes per escaped BMP scalar, plus field/framing overhead. Count actual strings for every producer, escaping
+  and repeated serialization; character counts and16 language preferences are not byte admission. Selected board
+  titles, rules, all-language labels, source fact histories, media credit/variants and dependency binds retain their
+  actual independent producer limits; the uninstalled Semantic UTF-8 display-label/reference extension is required
+  before a fixed complete source/response/retained-memory ceiling can be certified. No local all-language truncation
+  or twelve-key byte claim substitutes for it. The real baseline is up to12 mounted Subject requests per selected
+  cover plus separate identity, presentation, board and viewer calls; the home replaces that transport with bounded
+  native batches but does not claim constant examined work from small emitted output.
+- **Growth check:** Focused mounted scenarios exercise the initial empty/populated envelope, twenty-board and
+  twelve-publication limits, independent ordinary cursor continuation, unknown count, unavailable viewer advice,
+  protected disclosure, exact publication replacement, Realm change during summary hydration and dependency retry.
+  No native growth evidence has been reached here. Controller admission must independently grow unrelated
+  Realm/Space/board/publication/Subject/authority rows at256/1024/4096 while fixing raw limits, selected keys, homes
+  and admitted bytes; independently grow publication and membership/ban histories and unrelated Semantic labels,
+  facts and media. Capture actual route+identity/cursor physical-prefix plans and strict withholding across all
+  participating pools and runner phases, initial and both continuations, empty/denied/stale/retry branches. Fixture
+  or approved-host failure contributes zero evidence. Performance review must resolve nested producer terms in
+  this journey. Native growth, shared checks and Web's populated/empty/retry/account-switch rendered review remain
+  controller obligations; unavailable standing and source-only delivery do not complete the person journey.
 
 ## Public Space discovery source
 

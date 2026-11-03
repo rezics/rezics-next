@@ -287,16 +287,19 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & React
     closed,
   ),
 );
+export const BoardRecordSchema = t.Object(
+  {
+    ...metadata,
+    realmId: nullableId,
+    title: t.Union([t.String(), t.Null()]),
+    purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
+    availability,
+  },
+  closed,
+);
 export const BoardViewSchema = t.Unsafe<BoardView>(
   t.Object(
-    {
-      ...metadata,
-      realmId: nullableId,
-      community: t.Union([CommunityPresentationSchema, t.Null()]),
-      title: t.Union([t.String(), t.Null()]),
-      purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
-      availability,
-    },
+    { ...BoardRecordSchema.properties, community: t.Union([CommunityPresentationSchema, t.Null()]) },
     closed,
   ),
 );

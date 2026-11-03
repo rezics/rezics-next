@@ -117,12 +117,12 @@ export async function readRealmBoard(
 
 /** Keyset page of one Realm's boards. Candidate ids carry no authority; each
  * returned item goes through the current board and Realm disclosure checks. */
-export async function listRealmBoards(
+export async function selectRealmBoardPage(
   dependencies: ContentBoardDependencies,
   realmId: string,
   context: ReadContext,
   input: RealmBoardPageInput = {},
-): Promise<RealmBoardPage> {
+): Promise<Readonly<{ ids: readonly string[]; next: string | null; anchor: AnchoredPosition }>> {
   const realmRoute = routeOf(realmId);
   const limit = input.limit ?? 20;
   if (realmRoute === null) throw new ContentNotFoundError();
@@ -179,29 +179,29 @@ export async function listRealmBoards(
     }),
   );
 
-  const anchors: AnchoredPosition[] = [
-    { partition: result.partition, epoch: result.partition.epoch, position: result.partition.position },
-  ];
-  const items: BoardView[] = [];
-  let after: string | null = null;
-  let scanned = 0;
   const selected = result.candidates.slice(0, limit);
-  const disclosed = await readBoards(dependencies, selected, context);
-  for (let index = 0; index < selected.length; index++) {
-    after = selected[index]!;
-    scanned++;
-    const visible = disclosed[index]!;
-    anchors.push(visible.anchor);
-    if (visible.value?.realmId === realmId) items.push(visible.value);
-  }
-  const more = scanned < result.candidates.length || result.candidates.length > limit;
+  const after = selected.at(-1);
   return {
-    items,
-    next:
-      more && after
-        ? encodeCursor(dependencies.tokens, binding, { epoch: result.partition.epoch, after: [after] }, now)
-        : null,
-    anchors,
+    ids: selected,
+    next: result.candidates.length > limit && after
+      ? encodeCursor(dependencies.tokens, binding, { epoch: result.partition.epoch, after: [after] }, now)
+      : null,
+    anchor: { partition: result.partition, epoch: result.partition.epoch, position: result.partition.position },
+  };
+}
+
+export async function listRealmBoards(
+  dependencies: ContentBoardDependencies,
+  realmId: string,
+  context: ReadContext,
+  input: RealmBoardPageInput = {},
+): Promise<RealmBoardPage> {
+  const selected = await selectRealmBoardPage(dependencies, realmId, context, input);
+  const disclosed = await readBoards(dependencies, selected.ids, context);
+  return {
+    items: disclosed.flatMap(({ value }) => value?.realmId === realmId ? [value] : []),
+    next: selected.next,
+    anchors: [selected.anchor, ...disclosed.map(({ anchor }) => anchor)],
   };
 }
 

@@ -1,8 +1,13 @@
+import { REACTION_KINDS } from '../content/events.ts';
+import { RealmPresentationSchema } from './presentation.ts';
 import { t } from 'elysia';
 import { RealmPresentationImageSchema } from '../content/realm-media.ts';
 import { ContentIdSchema, sitemapPageSchema } from '../content/schemas.ts';
 
 const closed = { additionalProperties: false } as const;
+const instant = t.String({ format: 'date-time' });
+const title = t.String({ minLength: 1, maxLength: 1024 });
+const summary = t.String({ maxLength: 4096 });
 const id = t.String({ format: 'uuid' });
 
 export const realmClaimApprovalResponseSchema = t.Object(
@@ -99,6 +104,68 @@ export const ownRealmsResponseSchema = t.Object(
       ),
     ),
     next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
+export const SpaceSchema = t.Object(
+  {
+    spaceId: id,
+    realmId: t.Union([id, t.Null()], {
+      readOnly: true,
+      description:
+        'The active Realm carried by this Space, if the viewer passes its ordinary realm:read check; otherwise null. Derived per viewer and outside the Space revision chain. The Space ETag remains its head revision id, the If-Match token for Space writes.',
+    }),
+    state: t.Literal('active'),
+    headRevisionId: id,
+    createdAt: instant,
+    creator: id,
+    predecessor: t.Union([id, t.Null()]),
+    address: t.Union([t.String(), t.Null()]),
+    title,
+    summary,
+    revisionCreatedAt: instant,
+    author: id,
+  },
+  closed,
+);
+
+const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
+export const RealmVotesSchema = t.Object(
+  {
+    upvote: t.Optional(voteWeight),
+    downvote: t.Optional(voteWeight),
+    like: t.Optional(voteWeight),
+    love: t.Optional(voteWeight),
+    laugh: t.Optional(voteWeight),
+    insightful: t.Optional(voteWeight),
+    sad: t.Optional(voteWeight),
+  } satisfies Record<(typeof REACTION_KINDS)[number], unknown>,
+  closed,
+);
+
+export const RealmSchema = t.Object(
+  {
+    realmId: id,
+    spaceId: id,
+    state: t.Literal('active'),
+    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+    contextId: id,
+    boardSchemeId: t.Union([id, t.Null()]),
+    ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
+    orphanedAt: t.Union([instant, t.Null()]),
+    claimEligibleAt: t.Union([instant, t.Null()]),
+    governanceReadOnly: t.Boolean(),
+    headRevisionId: id,
+    createdAt: instant,
+    creator: id,
+    predecessor: t.Union([id, t.Null()]),
+    title,
+    summary,
+    revisionCreatedAt: instant,
+    author: id,
+    votes: RealmVotesSchema,
+    presentation: RealmPresentationSchema,
   },
   closed,
 );
