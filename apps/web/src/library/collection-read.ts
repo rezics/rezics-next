@@ -27,8 +27,9 @@ export async function loadCollectionDestination(
     }),
   );
   if (
+    collection.id !== id ||
     collection.curatorAccountId !== viewer ||
-    ('membershipKind' in collection && collection.membershipKind === 'dynamic') ||
+    collection.membershipKind !== 'curated' ||
     !Number.isSafeInteger(collection.revision) ||
     collection.revision < 1
   )

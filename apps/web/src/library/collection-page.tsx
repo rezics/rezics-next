@@ -2,7 +2,12 @@ import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { useCollectionDraftNavigation } from './collection-draft-navigation';
-import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-move-chooser';
+import {
+  CollectionMoveChooser,
+  type CollectionMoveChoice,
+} from './collection-move-chooser';
+import { readCollectionDestination } from './collection-read';
+import { readCollectionMovePlacements } from './collection-move-read';
 import { CollectionAddMembers } from './collection-add-members';
 import { CollectionMemberDetails } from './collection-member-row';
 import { CollectionNoteReader } from './collection-note-reader';
@@ -270,6 +275,28 @@ type BoundaryMove = {
   refusal?: string;
 };
 
+type CollectionTransferReview = CollectionMoveChoice & {
+  sourceId: string;
+  sourceTitle: string;
+  sourceRevision: number;
+  sourceHref: string;
+  destinationHref: string;
+  occurrences: ReadonlyArray<{ id: string; title: string }>;
+  idempotencyKey: string;
+};
+
+type CollectionTransferReceipt = {
+  sourceId: string;
+  destinationId: string;
+  sourceTitle: string;
+  destinationTitle: string;
+  sourceHref: string;
+  destinationHref: string;
+  sourceRevision: number;
+  destinationRevision: number;
+  state: 'reading' | 'ready' | 'unavailable';
+};
+
 /** Members read recovery shares the active editor's fence, but never starts a writer. */
 export function CollectionMembersStatus({
   state,
@@ -383,7 +410,14 @@ function CollectionPageLifetime({
   const membersReadActive = useRef(false);
   const [adding, setAdding] = useState(false);
   const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
-  const [transfer, setTransfer] = useState<(CollectionMoveChoice & { memberIds: string[] }) | null>(null);
+  const [transfer, setTransfer] = useState<(CollectionTransferReview & { memberIds: string[] }) | null>(null);
+  const [chooserEpoch, setChooserEpoch] = useState(0);
+  const [transferState, setTransferState] = useState<
+    'review' | 'pending' | 'unknown' | 'refused' | 'confirmed' | null
+  >(null);
+  const [transferReceipt, setTransferReceipt] = useState<CollectionTransferReceipt | null>(null);
+  const transferReceiptHeading = useRef<HTMLHeadingElement>(null);
+  const transferReviewHeading = useRef<HTMLHeadingElement>(null);
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
   const [removalConfirmation, setRemovalConfirmation] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
@@ -578,6 +612,12 @@ function CollectionPageLifetime({
       mounted.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (transfer && transferState === 'review') transferReviewHeading.current?.focus();
+  }, [transfer?.idempotencyKey, transferState]);
+  useEffect(() => {
+    if (transferReceipt?.state === 'reading') transferReceiptHeading.current?.focus();
+  }, [transferReceipt?.state === 'reading']);
   useEffect(() => {
     if (editing) {
       setConflict(true);
@@ -786,6 +826,7 @@ function CollectionPageLifetime({
       setSelectedIds(new Set());
       setBatchRemovalIds(new Set());
       setTransfer(null);
+      setTransferState(null);
       setMoveChoice(null);
       setBulkUnavailable(false);
       setSaveConfirmed(false);
@@ -804,6 +845,7 @@ function CollectionPageLifetime({
     setSavedNoteIds(new Set());
     setBatchRemovalIds(new Set());
     setTransfer(null);
+    setTransferState(null);
     setMoveChoice(null);
     setBulkUnavailable(false);
     setMembers(source.members);
@@ -829,9 +871,10 @@ function CollectionPageLifetime({
     collectionTextIssue('description', description) ||
     members.some((member) => collectionTextIssue('note', member.note));
 
-  async function save(event?: FormEvent<HTMLFormElement>, confirmed = false) {
+  async function save(event?: FormEvent<HTMLFormElement>, confirmed = false, confirmedTransfer = false) {
     event?.preventDefault();
     if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
+    if (transfer && !confirmedTransfer) return;
     // Validate the entire new Save before capture or any independently receipted write.
     // An uncertain plan already owns its exact operands, sender and credential.
     if (saveIntent.current === null) {
@@ -863,7 +906,8 @@ function CollectionPageLifetime({
       coverMediaId,
     } = (saveIntent.current ??= captureSave());
     let committed = 0;
-    let currentRevision: number | undefined = page.revision;
+    let currentRevision: number | undefined = transfer?.sourceRevision ?? page.revision;
+    let transferRevisions: { source: number; destination: number } | null = null;
 
     const keyFor = (operation: unknown) => {
       const fingerprint = JSON.stringify(operation);
@@ -875,8 +919,10 @@ function CollectionPageLifetime({
       return key;
     };
     try {
-      const initial = (editorMembers ?? page.members).filter((member) => !transfer?.memberIds.includes(member.id));
-      const plan = buildCollectionMemberEditPlan(initial, members, page.firstPage);
+      const transferIds = new Set(transfer?.memberIds ?? []);
+      const initial = (editorMembers ?? page.members).filter((member) => !transferIds.has(member.id));
+      const remainingMembers = members.filter((member) => !transferIds.has(member.id));
+      const plan = buildCollectionMemberEditPlan(initial, remainingMembers, page.firstPage);
       const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
         if (!isCurrent()) return;
         if (committed > 0) {
@@ -921,7 +967,6 @@ function CollectionPageLifetime({
       if (
         plan.some((operation) => operation.kind !== 'remove') ||
         (!batchRemoval && removals.length > 0) ||
-        transfer !== null ||
         title !== page.title ||
         description !== (page.description ?? '') ||
         visibility !== page.visibility ||
@@ -958,26 +1003,38 @@ function CollectionPageLifetime({
 
       if (transfer) {
         if (!isCurrent()) return;
-        if (currentRevision === undefined) throw new Error('Missing source revision');
         const data = {
-          collectionId: page.id,
-          revision: currentRevision,
+          collectionId: transfer.sourceId,
+          revision: transfer.sourceRevision,
           memberIds: transfer.memberIds,
           destinationCollectionId: transfer.destination.id,
           destinationRevision: transfer.destination.revision,
           after: transfer.after,
         };
+        setTransferState('pending');
         const result = await send.transferCollectionMembers({
-          data: { ...data, idempotencyKey: keyFor(data) },
+          data: { ...data, idempotencyKey: transfer.idempotencyKey },
           headers: headers('collection_member.transfer', credential),
         });
         if (!isCurrent('collection_member.transfer')) return;
         if (!result.ok) {
-          await fail(result);
+          if (result.reason === 'unavailable') {
+            setTransferState('unknown');
+            setFailure(m.library_collection_move_unknown());
+          } else {
+            saveIntent.current = null;
+            setTransferState('refused');
+            setConflict(false);
+            setFailure(
+              result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result),
+            );
+          }
           return;
         }
         currentRevision = result.revision;
+        transferRevisions = { source: result.revision, destination: result.destinationRevision };
         committed += 1;
+        saveIntent.current = null;
       }
       const applied = await applyCollectionMemberEditPlan(
         batchRemoval ? plan.filter((operation) => operation.kind !== 'remove') : plan,
@@ -1033,15 +1090,120 @@ function CollectionPageLifetime({
         }
         return;
       }
+      if (transfer && transferRevisions) {
+        const receipt: CollectionTransferReceipt = {
+          sourceId: transfer.sourceId,
+          destinationId: transfer.destination.id,
+          sourceTitle: transfer.sourceTitle,
+          destinationTitle: transfer.destination.title,
+          sourceHref: transfer.sourceHref,
+          destinationHref: transfer.destinationHref,
+          sourceRevision: transferRevisions.source,
+          destinationRevision: transferRevisions.destination,
+          state: 'reading',
+        };
+        setTransferReceipt(receipt);
+        setTransferState('confirmed');
+        setSaveConfirmed(true);
+        const [sourceRead, destinationRead] = await Promise.allSettled([
+          reloadCollection(true),
+          readCollectionMovePlacements({
+            data: { collectionId: transfer.destination.id, revision: transferRevisions.destination },
+          }),
+        ]);
+        if (!isCurrent()) return;
+        const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
+        const sourceReady = !!sourcePage && sourcePage.id === transfer.sourceId;
+        const destinationReady = destinationRead.status === 'fulfilled';
+        if (sourceReady) resetEditor(sourcePage);
+        setTransferReceipt({ ...receipt, state: sourceReady && destinationReady ? 'ready' : 'unavailable' });
+        return;
+      }
       setSaveConfirmed(true);
       const refreshed = await reloadCollection(true);
       if (refreshed) resetEditor(refreshed);
     } catch {
       if (!isCurrent()) return;
-      if (committed > 0) {
+      if (transfer && transferRevisions) {
+        // The native receipt is definitive. Reconciliation cannot repeat a confirmed transfer.
+        setTransferReceipt((receipt) => (receipt ? { ...receipt, state: 'unavailable' } : receipt));
+      } else if (transfer) {
+        setTransferState('unknown');
+        setFailure(m.library_collection_move_unknown());
+      } else if (committed > 0) {
         setConflict(true);
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
+    } finally {
+      finishRequest(request);
+    }
+  }
+
+  async function rereadRefusedTransfer() {
+    if (!transfer || transferState !== 'refused' || !isCurrent() || inFlight.current) return;
+    const request = startRequest();
+    if (!request) return;
+    setFailure('');
+    try {
+      const [source, target] = await Promise.all([
+        refreshPage(),
+        readCollectionDestination({ data: transfer.destination.id }),
+      ]);
+      if (!isCurrent()) return;
+      if (
+        source.id !== transfer.sourceId ||
+        (source.memberState ?? 'ready') !== 'ready' ||
+        !target ||
+        target.id !== transfer.destination.id
+      )
+        throw new Error('Collection transfer recovery unavailable');
+      await readCollectionMovePlacements({ data: { collectionId: target.id, revision: target.revision } });
+      if (!isCurrent()) return;
+      queryClient.setQueryData(queryKey, source);
+      await router.invalidate();
+      if (!isCurrent()) return;
+      resetEditor(source);
+      setFailure(m.library_collection_move_reselect());
+    } catch {
+      if (isCurrent()) setFailure(m.library_collection_move_read_failed());
+    } finally {
+      finishRequest(request);
+    }
+  }
+
+  async function rereadTransferReceipt() {
+    if (!transferReceipt || transferReceipt.state !== 'unavailable' || !isCurrent() || inFlight.current) return;
+    const previousReceipt = transferReceipt;
+    const request = startRequest();
+    if (!request) return;
+    setTransferReceipt({ ...previousReceipt, state: 'reading' });
+    try {
+      const [source, target] = await Promise.all([
+        refreshPage(),
+        readCollectionDestination({ data: previousReceipt.destinationId }),
+      ]);
+      if (!isCurrent()) return;
+      if (
+        source.id !== previousReceipt.sourceId ||
+        (source.memberState ?? 'ready') !== 'ready' ||
+        !target ||
+        target.id !== previousReceipt.destinationId
+      )
+        throw new Error('Collection transfer reconciliation unavailable');
+      await readCollectionMovePlacements({ data: { collectionId: target.id, revision: target.revision } });
+      if (!isCurrent()) return;
+      queryClient.setQueryData(queryKey, source);
+      await router.invalidate();
+      if (!isCurrent()) return;
+      if (editing) resetEditor(source);
+      setTransferReceipt({
+        ...previousReceipt,
+        sourceRevision: source.revision,
+        destinationRevision: target.revision,
+        state: 'ready',
+      });
+    } catch {
+      if (isCurrent()) setTransferReceipt({ ...previousReceipt, state: 'unavailable' });
     } finally {
       finishRequest(request);
     }
@@ -1185,14 +1347,21 @@ function CollectionPageLifetime({
     editing &&
     buildCollectionMemberEditPlan(
       (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
-      members,
+      transfer ? members.filter((member) => !transfer.memberIds.includes(member.id)) : members,
       draftPage.firstPage,
     ).length > 0;
   const removalCount = buildCollectionMemberEditPlan(
     (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
-    members,
+    transfer ? members.filter((member) => !transfer.memberIds.includes(member.id)) : members,
     draftPage.firstPage,
   ).filter((operation) => operation.kind === 'remove').length;
+  const transferHasIndependentDraft =
+    memberDraftChanged ||
+    title !== draftPage.title ||
+    description !== (draftPage.description ?? '') ||
+    visibility !== draftPage.visibility ||
+    kind !== storedKind ||
+    coverMediaId !== (draftPage.coverMediaId ?? null);
   const draftChanged =
     editing &&
     (memberDraftChanged ||
@@ -1380,6 +1549,53 @@ function CollectionPageLifetime({
           </div>
         ) : null}
         {failure ? <p role="alert">{failure}</p> : null}
+        {transferReceipt && isCurrent() ? (
+          <section
+            className="space-y-3 rounded-xl border p-3"
+            data-collection-transfer-receipt
+            aria-labelledby="collection-transfer-receipt-heading"
+          >
+            <h2 id="collection-transfer-receipt-heading" ref={transferReceiptHeading} tabIndex={-1} className="font-semibold">
+              {m.library_collection_move_receipt()}
+            </h2>
+            <p>
+              {m.library_collection_move_receipt_revisions({
+                source: transferReceipt.sourceRevision,
+                destination: transferReceipt.destinationRevision,
+              })}
+            </p>
+            {transferReceipt.state === 'reading' ? <p role="status">{m.library_collection_move_reconciling()}</p> : null}
+            {transferReceipt.state === 'ready' ? <p role="status">{m.library_collection_move_reconciled()}</p> : null}
+            {transferReceipt.state === 'unavailable' ? (
+              <div role="alert" className="space-y-2">
+                <p>{m.library_collection_move_reconcile_failed()}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                  disabled={pending}
+                  onClick={() => void rereadTransferReceipt()}
+                >
+                  {m.library_collection_move_read_current()}
+                </Button>
+              </div>
+            ) : null}
+            <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.library_collection_move_return_links()}>
+              <a
+                className="inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere]"
+                href={transferReceipt.sourceHref}
+              >
+                {m.library_collection_move_source_link({ title: transferReceipt.sourceTitle })}
+              </a>
+              <a
+                className="inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere]"
+                href={transferReceipt.destinationHref}
+              >
+                {m.library_collection_move_destination_link({ title: transferReceipt.destinationTitle })}
+              </a>
+            </nav>
+          </section>
+        ) : null}
         {boundary ? (
           <div role="status" className="space-y-2 rounded-xl bg-muted/40 p-3" data-collection-boundary>
             <p>
@@ -1456,13 +1672,23 @@ function CollectionPageLifetime({
             textSubmitted={textSubmitted}
             title={title}
             description={description}
-            disabled={pending || draftFrozen || !isCurrent('collection.update')}
+            disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             onSubmit={(event) => void save(event)}
             onTitleChange={(value) => {
-              if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null) setTitle(value);
+              if (
+                isCurrent('collection.update') &&
+                !inFlight.current &&
+                saveIntent.current === null &&
+                transfer === null
+              ) setTitle(value);
             }}
             onDescriptionChange={(value) => {
-              if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+              if (
+                isCurrent('collection.update') &&
+                !inFlight.current &&
+                saveIntent.current === null &&
+                transfer === null
+              )
                 setDescription(value);
             }}
           >
@@ -1470,23 +1696,38 @@ function CollectionPageLifetime({
               types={page.presentationTypes}
               kind={kind}
               onKindChange={(value) => {
-                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null) setKind(value);
+                if (
+                  isCurrent('collection.update') &&
+                  !inFlight.current &&
+                  saveIntent.current === null &&
+                  transfer === null
+                ) setKind(value);
               }}
               coverMediaId={coverMediaId}
               onCoverChange={(value) => {
-                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                if (
+                  isCurrent('collection.update') &&
+                  !inFlight.current &&
+                  saveIntent.current === null &&
+                  transfer === null
+                )
                   setCoverMediaId(value);
               }}
               members={page.members}
-              disabled={pending || draftFrozen || !isCurrent('collection.update')}
+              disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             />
             <VisibilityField
               onChange={(value) => {
-                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                if (
+                  isCurrent('collection.update') &&
+                  !inFlight.current &&
+                  saveIntent.current === null &&
+                  transfer === null
+                )
                   setVisibility(value);
               }}
               value={visibility}
-              disabled={pending || draftFrozen || !isCurrent('collection.update')}
+              disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             />
             <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
           </CollectionMetadataEditor>
@@ -1557,10 +1798,16 @@ function CollectionPageLifetime({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0}
+                disabled={
+                  pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0 || transfer !== null
+                }
                 onClick={() => {
-                  if (!isCurrent('collection_member.batch_remove') || inFlight.current || saveIntent.current !== null)
-                    return;
+                  if (
+                    !isCurrent('collection_member.batch_remove') ||
+                    inFlight.current ||
+                    saveIntent.current !== null ||
+                    transfer !== null
+                  ) return;
                   setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());
@@ -1587,24 +1834,27 @@ function CollectionPageLifetime({
                 {m.library_bulk_occurrence_remove_preview()}
               </Button>
               <CollectionMoveChooser
+                key={chooserEpoch}
                 sourceId={page.id}
-                disabled={pending || draftFrozen || conflict || transfer !== null}
-                current={() => isCurrent('collection_member.transfer')}
+                disabled={pending || draftFrozen || conflict || transfer !== null || transferHasIndependentDraft}
+                focusHeadingOnMount={chooserEpoch > 0}
+                current={() => isCurrent('collection_member.transfer') && transfer === null}
                 onChange={(choice) => {
-                  if (isCurrent('collection_member.transfer')) setMoveChoice(choice);
+                  if (isCurrent('collection_member.transfer') && transfer === null) setMoveChoice(choice);
                 }}
               />
               <Button
                 type="button"
                 variant="outline"
+                className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
                 disabled={
                   pending ||
                   conflict ||
                   bulkUnavailable ||
                   draftFrozen ||
+                  transferHasIndependentDraft ||
                   !moveChoice ||
                   selectedIds.size === 0 ||
-                  memberDraftChanged ||
                   transfer !== null
                 }
                 onClick={() => {
@@ -1615,23 +1865,144 @@ function CollectionPageLifetime({
                     !moveChoice
                   )
                     return;
-                  const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);
-                  setTransfer({ ...moveChoice, memberIds });
-                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
-                  setSelectedIds(new Set());
+                  const source = editorPage.current ?? page;
+                  const sourceMembers = editorMembers ?? page.members;
+                  const selected = sourceMembers.filter((member) => selectedIds.has(member.id));
+                  if (
+                    source.id !== page.id ||
+                    !Number.isSafeInteger(source.revision) ||
+                    selected.length !== selectedIds.size ||
+                    moveChoice.destination.id === source.id
+                  ) {
+                    setFailure(m.library_collection_move_read_failed());
+                    return;
+                  }
+                  const occurrences = selected.map((member) => ({
+                    id: member.id,
+                    title: member.subject
+                      ? pageText(libraryTitleValue(member.subject.label), getLocale()).text
+                      : m.library_collection_move_occurrence_unavailable(),
+                  }));
+                  setTransfer({
+                    ...moveChoice,
+                    sourceId: source.id,
+                    sourceTitle: source.title,
+                    sourceRevision: source.revision,
+                    sourceHref: collectionViewAddress(source.id, layout, cursor, search),
+                    destinationHref: collectionViewAddress(moveChoice.destination.id, 'list', undefined),
+                    occurrences,
+                    memberIds: selected.map((member) => member.id),
+                    idempotencyKey: crypto.randomUUID(),
+                  });
+                  setTransferState('review');
+                  setFailure('');
                 }}
               >
-                {m.library_collection_move_selected()}
+                {m.library_collection_move_review_button()}
               </Button>
               {transfer ? (
-                <p role="status" className="basis-full text-sm">
-                  {m.library_collection_move_pending({
-                    count: transfer.memberIds.length,
-                    title: transfer.destination.title,
-                  })}
-                </p>
+                <section
+                  className="basis-full space-y-3 rounded-xl border p-3"
+                  data-collection-transfer-review
+                  aria-labelledby="collection-transfer-review-heading"
+                >
+                  <h3 id="collection-transfer-review-heading" ref={transferReviewHeading} tabIndex={-1} className="font-semibold">
+                    {m.library_collection_move_review_heading()}
+                  </h3>
+                  <p>
+                    <strong>{m.library_collection_move_review_source()}</strong> {transfer.sourceTitle}
+                  </p>
+                  <p>{m.library_collection_move_review_occurrences({ count: transfer.occurrences.length })}</p>
+                  <ul className="min-w-0 space-y-1">
+                    {transfer.occurrences.map((occurrence) => (
+                      <li key={occurrence.id} className="min-w-0 break-words [overflow-wrap:anywhere]">
+                        {occurrence.title} <code className="break-all text-xs">{occurrence.id}</code>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="break-words [overflow-wrap:anywhere]">
+                    <strong>{m.library_collection_move_review_destination()}</strong>{' '}
+                    <a href={transfer.destinationHref} className="underline underline-offset-4">
+                      {transfer.destination.title}
+                    </a>{' '}
+                    {m.library_collection_move_review_revision({ revision: transfer.destination.revision })}
+                  </p>
+                  {transfer.anchor ? (
+                    <p>
+                      <strong>{m.library_collection_move_review_placement()}</strong>{' '}
+                      {m.library_collection_move_anchor_review({
+                        page: transfer.anchor.page,
+                        position: transfer.anchor.position,
+                        title: transfer.anchor.title,
+                      })}{' '}
+                      <code className="break-all text-xs">{transfer.anchor.id}</code>
+                    </p>
+                  ) : (
+                    <p>
+                      <strong>{m.library_collection_move_review_placement()}</strong> {m.library_collection_move_first()}
+                    </p>
+                  )}
+                  <p className="text-sm">{m.library_collection_move_atomic()}</p>
+                  {transferState === 'pending' ? <p role="status">{m.library_collection_move_sending()}</p> : null}
+                  {transferState === 'unknown' ? (
+                    <div role="alert" className="space-y-2">
+                      <p>{m.library_collection_move_unknown()}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                        disabled={pending || !isCurrent('collection_member.transfer')}
+                        onClick={() => void save(undefined, false, true)}
+                      >
+                        {m.library_collection_move_retry_exact()}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {transferState === 'refused' ? (
+                    <div role="alert" className="space-y-2">
+                      <p>{failure || m.library_collection_move_refused()}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                        disabled={pending || !isCurrent()}
+                        onClick={() => void rereadRefusedTransfer()}
+                      >
+                        {m.library_collection_move_read_current()}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {transferState === 'review' ? (
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                        disabled={pending || conflict || !isCurrent('collection_member.transfer')}
+                        onClick={() => void save(undefined, false, true)}
+                      >
+                        {m.library_collection_move_confirm()}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                        disabled={pending || draftFrozen || transferState !== 'review'}
+                        onClick={() => {
+                          if (!isCurrent() || saveIntent.current !== null) return;
+                          setTransfer(null);
+                          setTransferState(null);
+                          setMoveChoice(null);
+                          setChooserEpoch((value) => value + 1);
+                          setFailure('');
+                        }}
+                      >
+                        {m.library_collection_move_cancel_review()}
+                      </Button>
+                    </div>
+                  ) : null}
+                </section>
               ) : null}
-              {memberDraftChanged && !transfer ? (
+              {transferHasIndependentDraft && !transfer ? (
                 <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_save_first()}</p>
               ) : null}
               {bulkUnavailable ? (
@@ -1696,11 +2067,11 @@ function CollectionPageLifetime({
               listPresentations={page.listPresentations}
               editing={editing && owner}
               firstPage={page.firstPage}
-              busy={pending || draftFrozen}
+              busy={pending || draftFrozen || transfer !== null}
               selectedIds={selectedIds}
               savedNoteIds={savedNoteIds}
               onSelectionChange={(memberId, selected) => {
-                if (!isCurrent() || inFlight.current || saveIntent.current !== null) return;
+                if (!isCurrent() || inFlight.current || saveIntent.current !== null || transfer !== null) return;
                 setSelectedIds((current) => {
                   const next = new Set(current);
                   if (selected && next.size < 100 && members.some((member) => member.id === memberId))
@@ -1709,11 +2080,18 @@ function CollectionPageLifetime({
                   return next;
                 });
               }}
-              onMove={setMemberOrder}
+                onMove={(memberId, after) => {
+                  if (transfer === null) setMemberOrder(memberId, after);
+                }}
               onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
               boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
               onNoteChange={(memberId, note) => {
-                if (!isCurrent('collection_member.update') || inFlight.current || saveIntent.current !== null) return;
+                if (
+                  !isCurrent('collection_member.update') ||
+                  inFlight.current ||
+                  saveIntent.current !== null ||
+                  transfer !== null
+                ) return;
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
                 );
@@ -1725,7 +2103,12 @@ function CollectionPageLifetime({
                 });
               }}
               onRemove={(memberId) => {
-                if (!isCurrent('collection_member.delete') || inFlight.current || saveIntent.current !== null) return;
+                if (
+                  !isCurrent('collection_member.delete') ||
+                  inFlight.current ||
+                  saveIntent.current !== null ||
+                  transfer !== null
+                ) return;
                 setMembers((current) => current.filter((member) => member.id !== memberId));
                 setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
               }}
@@ -1747,7 +2130,7 @@ function CollectionPageLifetime({
             className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
             data-collection-save
           >
-            <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict}>
+            <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict || transfer !== null}>
               {writing ? m.library_collection_save_pending() : m.library_collection_save()}
             </Button>
             <Button

@@ -111,9 +111,15 @@ spyOn(dynamicModule, 'DynamicCollectionPage').mockImplementation((props) => {
 const { Route } = await import('../src/routes/collections/$id');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
+const moveReads = await import('../src/library/collection-move-read');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 setLocale('en', { reload: false });
+const moveChoicesRead = spyOn(moveReads, 'readCollectionMoveChoices').mockResolvedValue({
+  collections: [{ id: collectionRecording.collection.id, title: 'Destination' }],
+  next: null,
+});
+const movePlacementsRead = spyOn(moveReads, 'readCollectionMovePlacements').mockResolvedValue({ members: [], next: null });
 let address: { id: string; cursor?: string; filters?: Record<string, string | string[]> } = { id: 'original' };
 let initialPage: CollectionPageResult | undefined;
 spyOn(Route, 'useParams').mockImplementation(() => ({ id: address.id }) as never);
@@ -148,7 +154,12 @@ function ready(call: Call, viewerId = 'alice', change: Partial<CollectionPageRes
     ...(call.input.cursor ? { cursor: call.input.cursor } : {}),
     viewerActions: {
       state: 'ready',
-      actions: [{ action: 'collection:update', operations: ['collection.update', 'collection_member.move'] }],
+      actions: [
+        {
+          action: 'collection:update',
+          operations: ['collection.update', 'collection_member.move', 'collection_member.transfer', 'collection_member.batch_remove'],
+        },
+      ],
     },
     provenance: provenance(call, viewerId),
     ...change,
@@ -189,12 +200,12 @@ function CommitSnapshot({ observe }: { observe: () => void }) {
   useLayoutEffect(observe);
   return null;
 }
-async function mount() {
+async function mount(initialAddress: typeof address = { id: 'original' }) {
   calls.length = 0;
   pageProps = undefined;
   dynamicProps = undefined;
   initialPage = undefined;
-  address = { id: 'original' };
+  address = initialAddress;
   const host = window.document.createElement('div') as unknown as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
@@ -345,7 +356,11 @@ test('admission, address, native authority and unmount retire reads while ordina
   }
 });
 
-async function beginEditing(ui: Awaited<ReturnType<typeof mount>>, viewer = 'alice') {
+async function beginEditing(
+  ui: Awaited<ReturnType<typeof mount>>,
+  viewer = 'alice',
+  change: Partial<CollectionPageResult> = {},
+) {
   await settle(() =>
     ui.host.querySelector<HTMLButtonElement>(`button[aria-label="${m.library_collection_actions()}"]`)!.click(),
   );
@@ -358,7 +373,7 @@ async function beginEditing(ui: Awaited<ReturnType<typeof mount>>, viewer = 'ali
   });
   const call = calls.at(-1)!;
   expect(call.input.editor).toBe(true);
-  await ui.answer(call, ready(call, viewer));
+  await ui.answer(call, ready(call, viewer, change));
   expect(ui.host.querySelector('#collection-edit-form')).not.toBeNull();
 }
 
@@ -448,19 +463,29 @@ async function clickNamed(ui: MountedCollection, name: string) {
   await settle(() => button!.click());
 }
 async function submitDraft(ui: MountedCollection) {
+  const confirmTransfer = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === m.library_collection_move_confirm(),
+  );
+  if (confirmTransfer) {
+    await settle(() => confirmTransfer.click());
+    return;
+  }
   await settle(() =>
     ui.host
       .querySelector('#collection-edit-form')!
       .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
   );
+  const confirmRemoval = ui.host.querySelector<HTMLButtonElement>(
+    '[data-collection-removal-confirmation] button[data-slot="alert-dialog-action"]',
+  );
+  if (confirmRemoval) await settle(() => confirmRemoval.click());
 }
-async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'member' | 'chain') {
-  if (next === 'member' || next === 'chain') {
+async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'member') {
+  if (next === 'member') {
     const notes = ui.host.querySelectorAll<HTMLTextAreaElement>('textarea[id^="collection-member-note-"]');
-    if (next === 'chain') await changeValue(notes[notes.length - 2]!, 'First originating private note');
     await changeValue(notes[notes.length - 1]!, 'Originating private note');
   }
-  if (next === 'transfer' || next === 'chain') {
+  if (next === 'transfer') {
     const destination = collectionRecording.collection;
     await settle(() =>
       ui.client.setQueryData(libraryNavigationQuery('en', 100).queryKey, {
@@ -469,25 +494,22 @@ async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'm
       }),
     );
     await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
-    await settle(() => {
-      const select = ui.host.querySelector<HTMLSelectElement>('[data-collection-selection] select')!;
-      select.value = destination.id;
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
-    await clickNamed(ui, m.library_collection_move_selected());
+    await settle();
+    await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destination.id}"]`)!.click());
+    await clickNamed(ui, m.library_collection_move_review_button());
   }
-  if (next === 'batch' || next === 'chain') {
+  if (next === 'batch') {
     await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
     await clickNamed(ui, m.library_collection_remove_selected());
   }
 }
 
-test('originating parent saves stop transfer, batch and member continuations on viewer, admission, address retirement and unmount', async () => {
+test('originating member saves stop their continuation on viewer, admission, address retirement and unmount', async () => {
   const edits = await import('../src/library/collection-edit');
   const commands = await import('../src/library/collection-commands');
   const reads = await import('../src/library/collection-read');
   for (const retirement of ['viewer', 'admission', 'authority', 'address', 'unmount'] as const) {
-    for (const next of ['transfer', 'batch', 'member'] as const) {
+    for (const next of ['member'] as const) {
       const ui = await mount();
       const parent = deferred<{ ok: true; id: string; revision: number }>();
       const update = spyOn(edits, 'updateCollection').mockImplementation(() => parent.promise);
@@ -577,25 +599,28 @@ test('retirement during transfer, batch or member IO keeps its native outcome wi
       await ui.show();
       await ui.answer();
       await beginEditing(ui);
-      await stageDraft(ui, 'chain');
+      await stageDraft(ui, pending);
       await submitDraft(ui);
-      expect(transfer).toHaveBeenCalledTimes(1);
-      expect(batch).toHaveBeenCalledTimes(pending === 'transfer' ? 0 : 1);
+      expect(update).toHaveBeenCalledTimes(pending === 'member' ? 1 : 0);
+      expect(transfer).toHaveBeenCalledTimes(pending === 'transfer' ? 1 : 0);
+      expect(batch).toHaveBeenCalledTimes(pending === 'batch' ? 1 : 0);
       expect(note).toHaveBeenCalledTimes(pending === 'member' ? 1 : 0);
       await ui.show('bob');
       const replacement = calls.at(-1)!;
       await ui.answer(replacement, ready(replacement, 'bob'));
+      if (pending === 'transfer') await ui.show(null, { state: 'signed-out', csrf: null });
       const readCount = calls.length;
       await settle(() => {
         transferResult.resolve({ ok: true, revision: 3, destinationRevision: 2 });
         batchResult.resolve({ ok: true, revision: 4, undo: [] });
         memberResult.resolve({ ok: true, id: 'member' });
       });
-      expect(batch).toHaveBeenCalledTimes(pending === 'transfer' ? 0 : 1);
+      expect(batch).toHaveBeenCalledTimes(pending === 'batch' ? 1 : 0);
       expect(note).toHaveBeenCalledTimes(pending === 'member' ? 1 : 0);
       expect(calls).toHaveLength(readCount);
       expect(ui.invalidations).not.toHaveBeenCalled();
-      expect(ui.host.textContent).toContain('bob private Collection');
+      if (pending !== 'transfer') expect(ui.host.textContent).toContain('bob private Collection');
+      expect(ui.host.textContent).not.toContain('alice private Collection');
       expect(ui.host.querySelector('[role="alert"]')).toBeNull();
     } finally {
       update.mockRestore();
@@ -822,4 +847,203 @@ test('server provenance comes from the actual prepared subject for curated/dynam
   ).rejects.toMatchObject({ isNotFound: true });
   expect(requests).toHaveLength(count);
   expect(requests.every((request) => request.cache === 'no-store' && request.redirect === 'manual')).toBe(true);
+});
+
+test('the real Collection editor keeps and retries one exact duplicate-preserving transfer through deep browsing', async () => {
+  const commands = await import('../src/library/collection-commands');
+  const reads = await import('../src/library/collection-read');
+  const edits = await import('../src/library/collection-edit');
+  const sourceMembers = [0, 1].map((index) => {
+    const source = membersRecording.members[0]!;
+    return {
+      ...source,
+      id: `source-occurrence-${index + 1}`,
+      subject: subjectOf({ ...source.subject!, id: 'same-subject' }),
+    };
+  });
+  const ui = await mount({
+    id: 'original',
+    cursor: 'source-cursor-17',
+    filters: { 'f.schema:genre': ['one', 'two'] },
+  });
+  const destinationRead = spyOn(reads, 'readCollectionDestination').mockImplementation(({ data }) =>
+    Promise.resolve({ id: data, title: 'Deep Destination', revision: 31 }),
+  );
+  const move = spyOn(commands, 'transferCollectionMembers')
+    .mockResolvedValueOnce({ ok: false, reason: 'unavailable' })
+    .mockResolvedValue({ ok: true, revision: 12, destinationRevision: 32 });
+  const metadata = spyOn(edits, 'updateCollection').mockRejectedValue(new Error('unexpected metadata write'));
+  moveChoicesRead.mockImplementation(({ data }) =>
+    Promise.resolve(
+      data === 'destination-frontier-2'
+        ? { collections: [], next: 'destination-frontier-3' }
+        : data === 'destination-frontier-3'
+          ? { collections: [{ id: 'deep-destination', title: 'Deep Destination' }], next: null }
+          : { collections: [{ id: 'original', title: 'Source itself' }], next: 'destination-frontier-2' },
+    ),
+  );
+  movePlacementsRead.mockImplementation(({ data }) =>
+    Promise.resolve(
+      data.cursor === 'anchor-frontier-2'
+        ? { members: [], next: 'anchor-frontier-3' }
+        : data.cursor === 'anchor-frontier-3'
+          ? {
+              members: [
+                { id: 'anchor-duplicate-a', title: 'Repeated Subject' },
+                { id: 'anchor-duplicate-b', title: 'Repeated Subject' },
+              ],
+              next: null,
+            }
+          : { members: [{ id: 'anchor-first', title: 'First page occurrence' }], next: 'anchor-frontier-2' },
+    ),
+  );
+  try {
+    await ui.show();
+    await ui.answer(calls[0]!, ready(calls[0]!, 'alice', { revision: 11, members: sourceMembers, firstPage: false }));
+    await beginEditing(ui, 'alice', { revision: 11, members: sourceMembers, firstPage: false });
+    await settle(() => ui.host.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')[0]!.click());
+    await settle(() => ui.host.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')[1]!.click());
+    await settle();
+    expect(ui.host.querySelector('[data-move-destination="original"]')).toBeNull();
+    expect(ui.host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
+    await clickNamed(ui, m.library_collection_move_more_destinations());
+    expect(ui.host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
+    await clickNamed(ui, m.library_collection_move_more_destinations());
+    expect(ui.host.querySelectorAll('[data-move-destination]')).toHaveLength(1);
+    await settle(() => ui.host.querySelector<HTMLButtonElement>('[data-move-destination="deep-destination"]')!.click());
+    await clickNamed(ui, m.library_collection_move_more_members());
+    expect(ui.host.querySelectorAll('[data-move-anchor]')).toHaveLength(0);
+    await clickNamed(ui, m.library_collection_move_more_members());
+    expect(ui.host.querySelectorAll('[data-move-anchor]')).toHaveLength(2);
+    await settle(() => ui.host.querySelector<HTMLButtonElement>('[data-move-anchor="anchor-duplicate-b"]')!.click());
+    await clickNamed(ui, m.library_collection_move_review_button());
+    expect(ui.host.textContent).toContain('Repeated Subject');
+    expect(ui.host.textContent).toContain('source-occurrence-1');
+    expect(ui.host.textContent).toContain('source-occurrence-2');
+    await submitDraft(ui);
+    expect(move).toHaveBeenCalledTimes(1);
+    expect(metadata).not.toHaveBeenCalled();
+    const original = structuredClone(move.mock.calls[0]![0]!);
+    expect(original.data).toMatchObject({
+      collectionId: 'original',
+      revision: 11,
+      memberIds: ['source-occurrence-1', 'source-occurrence-2'],
+      destinationCollectionId: 'deep-destination',
+      destinationRevision: 31,
+      after: 'anchor-duplicate-b',
+    });
+    expect(new Headers(original.headers).get('X-CSRF-Token')).toBe('csrf');
+    expect(ui.host.textContent).toContain(m.library_collection_move_unknown());
+    expect(ui.host.querySelector<HTMLButtonElement>('[data-move-destination]')?.disabled).toBe(true);
+    await ui.show('alice', { csrf: 'rotated-after-lost-response' });
+    await clickNamed(ui, m.library_collection_move_retry_exact());
+    expect(move).toHaveBeenCalledTimes(2);
+    expect(move.mock.calls[1]![0]!.data).toEqual(original.data);
+    expect(new Headers(move.mock.calls[1]![0]!.headers).get('X-CSRF-Token')).toBe('csrf');
+    const reconcile = calls.at(-1)!;
+    expect(reconcile.kind).toBe('page');
+    await ui.answer(reconcile, ready(reconcile, 'alice', { revision: 12, members: [] }));
+    await settle();
+    const links = [...ui.host.querySelectorAll<HTMLAnchorElement>('[data-collection-transfer-receipt] a')];
+    const sourceLink = links.find((link) => new URL(link.href).pathname === '/en/collections/original')!;
+    expect(sourceLink.textContent).toContain('alice private Collection');
+    const sourceAddress = new URL(sourceLink.href);
+    expect(sourceAddress.pathname).toBe('/en/collections/original');
+    expect(sourceAddress.searchParams.get('cursor')).toBe('source-cursor-17');
+    expect(sourceAddress.searchParams.getAll('f.schema:genre')).toEqual(['one', 'two']);
+    expect(links.some((link) => link.href === 'https://site.test/en/collections/deep-destination')).toBe(true);
+    expect(movePlacementsRead).toHaveBeenCalledTimes(4); // First page, two explicit continuations, one reconciliation read.
+  } finally {
+    destinationRead.mockRestore();
+    move.mockRestore();
+    metadata.mockRestore();
+    await ui.close();
+  }
+});
+
+test('abandoned transfer review is inert and a capacity refusal keeps review until current reads finish', async () => {
+  const commands = await import('../src/library/collection-commands');
+  const reads = await import('../src/library/collection-read');
+  const ui = await mount();
+  moveChoicesRead.mockResolvedValue({
+    collections: [{ id: collectionRecording.collection.id, title: 'Destination' }],
+    next: null,
+  });
+  movePlacementsRead.mockResolvedValue({ members: [], next: null });
+  const destination = spyOn(reads, 'readCollectionDestination').mockResolvedValue(collectionRecording.collection);
+  const transfer = spyOn(commands, 'transferCollectionMembers').mockResolvedValue({ ok: false, reason: 'full' });
+  try {
+    await ui.show();
+    await ui.answer();
+    await beginEditing(ui);
+    await settle(() => ui.host.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')[0]!.click());
+    await settle();
+    const destinationId = collectionRecording.collection.id;
+    await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destinationId}"]`)!.click());
+    await clickNamed(ui, m.library_collection_move_review_button());
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).not.toBeNull();
+    await clickNamed(ui, m.library_collection_move_cancel_review());
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).toBeNull();
+    expect(transfer).not.toHaveBeenCalled();
+    await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destinationId}"]`)!.click());
+    await clickNamed(ui, m.library_collection_move_review_button());
+    await submitDraft(ui);
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(ui.host.querySelector('[data-collection-transfer-review]')?.textContent).toContain('Destination');
+    expect(ui.host.querySelector('[role="alert"]')?.textContent).toContain(m.library_collection_full());
+    await clickNamed(ui, m.library_collection_move_read_current());
+    const sourceRead = calls.at(-1)!;
+    expect(sourceRead.kind).toBe('page');
+    await ui.answer(sourceRead, ready(sourceRead, 'alice', { revision: 2 }));
+    await settle();
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).toBeNull();
+    expect(ui.host.textContent).toContain(m.library_collection_move_reselect());
+  } finally {
+    destination.mockRestore();
+    transfer.mockRestore();
+    await ui.close();
+  }
+});
+
+test('source revision conflict keeps the captured transfer review until an explicit current-source read', async () => {
+  const commands = await import('../src/library/collection-commands');
+  const reads = await import('../src/library/collection-read');
+  const ui = await mount();
+  moveChoicesRead.mockResolvedValue({
+    collections: [{ id: collectionRecording.collection.id, title: 'Destination' }],
+    next: null,
+  });
+  movePlacementsRead.mockResolvedValue({ members: [], next: null });
+  const destination = spyOn(reads, 'readCollectionDestination').mockResolvedValue(collectionRecording.collection);
+  const transfer = spyOn(commands, 'transferCollectionMembers').mockResolvedValue({
+    ok: false,
+    reason: 'conflict',
+  });
+  try {
+    await ui.show();
+    await ui.answer();
+    await beginEditing(ui);
+    await stageDraft(ui, 'transfer');
+    await submitDraft(ui);
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(transfer.mock.calls[0]![0]!.data.revision).toBe(1);
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).not.toBeNull();
+    await clickNamed(ui, m.library_collection_move_read_current());
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).not.toBeNull();
+    expect(transfer).toHaveBeenCalledTimes(1);
+    const request = calls.at(-1)!;
+    expect(request.kind).toBe('page');
+    await ui.answer(request, ready(request, 'alice', { revision: 2 }));
+    await settle();
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(ui.host.querySelector('[data-collection-transfer-review]')).toBeNull();
+    expect(ui.host.textContent).toContain(m.library_collection_move_reselect());
+    expect(destination).toHaveBeenCalledTimes(2);
+    expect(movePlacementsRead).toHaveBeenCalledTimes(2);
+  } finally {
+    destination.mockRestore();
+    transfer.mockRestore();
+    await ui.close();
+  }
 });

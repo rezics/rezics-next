@@ -265,6 +265,8 @@ results support navigation and retries without repeating completed effects. The
 
 Decision: Web bulk add captures only the loaded selected canonical Subjects in first-selection order before destination choice; choosing a destination freezes its identity and revision independently of subsequent list refreshes.
 
+Decision: Collection placement browsing retains the current page plus one previous cursor; Previous steps back once, and Restart explicitly rereads page one, so deep browsing never stores cursor history. The [Web placement journey](../apps/web/src/library/collection-placement-journey.md) owns bounded destination/anchor browsing, exact occurrence review, native transfer recovery and destination-only bulk-add reuse.
+
 Decision: Web occurrence-removal review captures only loaded selected member IDs in first-selection order, retaining duplicate Subjects and the source Collection independently of later edits.
 Decision: Inline bulk add recovery reads one native outcome page at a time; a new confirmation uses the preview's captured sender, credential and headers with its own key, and uncertain retries retain that entire command.
 

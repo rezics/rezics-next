@@ -13,6 +13,9 @@ capabilities and disclosure rules on every page and device.
   boards, threads, posting/replies and the scoped community, Zone, moderation and notification surfaces.
 - Collections, the personal library, independent labels, holdings, progress and explicit publication are usable
   through their real APIs. Filters remain available wherever the common Collection abstraction appears.
+- The Collection editor supports bounded destination and occurrence-anchor browsing, exact duplicate-preserving
+  transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and
+  consumer authorities are recorded in the [placement journey](../../apps/web/src/library/collection-placement-journey.md).
 - Checkout start/return and entitlements expose the commerce outcomes without treating a redirect as fulfilment.
 - Auth pages support sign-in, sign-up, consent, security settings and step-up through the accounts contract.
 - The session BFF, upload completion and every download preserve caller identity and current API decisions.

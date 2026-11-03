@@ -71,11 +71,7 @@ test('requires an explicit private destination, preserves it across choice refre
   const submit = () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!;
   expect(submit().disabled).toBe(true);
   expect(captures).toEqual([]);
-  await settle(() => {
-    const select = host.querySelector('select')!;
-    select.value = original.id;
-    select.dispatchEvent(new window.Event('change', { bubbles: true }));
-  });
+  await settle(() => host.querySelector<HTMLButtonElement>(`[data-move-destination="${original.id}"]`)!.click());
   expect(submit().disabled).toBe(false);
   expect(placementReads).toBe(0);
   await settle(() =>
@@ -83,6 +79,7 @@ test('requires an explicit private destination, preserves it across choice refre
       .find((button) => button.textContent === m.library_collection_move_more_destinations())!
       .click(),
   );
+  expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(1);
   await settle(() => submit().click());
   expect(captures).toEqual([
     {
@@ -96,6 +93,37 @@ test('requires an explicit private destination, preserves it across choice refre
   );
   expect(captures).toHaveLength(1);
   expect(placementReads).toBe(0);
+  const replacement = { ...selection, subjects: [...selection.subjects, 'later-subject'] };
+  await settle(() =>
+    root.render(
+      <BulkAddDestination selection={replacement} current={() => true} onCapture={(value) => captures.push(value)} />,
+    ),
+  );
+  expect(host.textContent).toContain(m.library_bulk_add_captured_destination({ title: original.title }));
+  await settle(() => root.unmount());
+  host.remove();
+});
+
+test('producer selection change retires an unsubmitted bulk destination and requires a new choice', async () => {
+  const selection = captureBulkAddSelection(members.members);
+  if (!selection.ok) throw new Error('Missing loaded selection');
+  const replacement = { ...selection, subjects: [...selection.subjects, 'later-subject'] };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const captures: BulkAddCapture[] = [];
+  const render = (value: typeof selection) =>
+    root.render(<BulkAddDestination selection={value} current={() => true} onCapture={(capture) => captures.push(capture)} />);
+  await settle(() => render(selection));
+  await settle(() => host.querySelector<HTMLButtonElement>(`[data-move-destination="${original.id}"]`)!.click());
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+  await settle(() => render(replacement));
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+  expect(captures).toEqual([]);
+  await settle(() => host.querySelector<HTMLButtonElement>(`[data-move-destination="${original.id}"]`)!.click());
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+  await settle(() => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
+  expect(captures[0]?.subjects).toEqual(replacement.subjects);
   await settle(() => root.unmount());
   host.remove();
 });

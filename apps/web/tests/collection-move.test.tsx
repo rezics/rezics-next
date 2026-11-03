@@ -44,7 +44,10 @@ const { transferCollectionMembersRecord } = await import('../src/library/collect
 const { m } = await import('../src/paraglide/messages.js');
 const request = new Request('https://site.test/collection');
 let nativeRevision = 7,
-  unsupported = false;
+  unsupported = false,
+  destinationKind: 'curated' | 'dynamic' = 'curated',
+  destinationIdentity = 'destination',
+  emptyCatalogue = false;
 const calls: Request[] = [];
 const client = createKernelClient('https://kernel.test', {
   fetch: async (input, init) => {
@@ -59,28 +62,55 @@ const client = createKernelClient('https://kernel.test', {
             destination: { ...recording.collection, revision: 8 },
             members: [],
           });
+    if (url.pathname === '/v1/collections' && emptyCatalogue)
+      return Response.json({
+        collections: [
+          { ...recording.collection, id: 'source', membershipKind: 'curated' },
+          { ...recording.collection, id: 'dynamic', membershipKind: 'dynamic' },
+        ],
+        next: null,
+      });
     if (url.pathname === '/v1/collections')
       return Response.json({
-        collections: url.searchParams.has('cursor')
+        collections: url.searchParams.get('cursor') === 'destinations-page-3'
           ? [{ ...recording.collection, id: 'destination', title: 'Destination', membershipKind: 'curated' }]
-          : [
+          : url.searchParams.get('cursor') === 'destinations-page-2'
+            ? []
+            : [
               { ...recording.collection, id: 'source', membershipKind: 'curated' },
               { ...recording.collection, id: 'dynamic', membershipKind: 'dynamic' },
             ],
-        next: url.searchParams.has('cursor') ? null : 'destinations-page-2',
+        next:
+          url.searchParams.get('cursor') === 'destinations-page-3'
+            ? null
+            : url.searchParams.get('cursor') === 'destinations-page-2'
+              ? 'destinations-page-3'
+              : 'destinations-page-2',
       });
-    if (url.pathname.endsWith('/members'))
+    if (url.pathname.endsWith('/members')) {
+      const cursor = url.searchParams.get('cursor');
+      const occurrence = (id: string) => ({
+        ...members.members[0]!,
+        id,
+        subject: { ...members.members[0]!.subject!, id: 'repeated-subject' },
+      });
       return Response.json({
-        members: [{ ...members.members[0]!, id: url.searchParams.has('cursor') ? 'second' : 'first' }],
-        next: url.searchParams.has('cursor') ? null : 'members-page-2',
+        members:
+          cursor === 'anchors-page-2'
+            ? []
+            : cursor === 'anchors-page-3'
+              ? [occurrence('duplicate-a'), occurrence('duplicate-b')]
+              : [occurrence('anchor-first')],
+        next: cursor === 'anchors-page-2' ? 'anchors-page-3' : cursor === 'anchors-page-3' ? null : 'anchors-page-2',
       });
+    }
     return Response.json({
       collection: {
         ...recording.collection,
-        id: 'destination',
+        id: destinationIdentity,
         curatorAccountId: 'owner',
         revision: nativeRevision,
-        membershipKind: 'curated',
+        membershipKind: destinationKind,
       },
     });
   },
@@ -98,13 +128,8 @@ const settle = (work: () => void = () => {}) =>
     work();
     await Bun.sleep(10);
   });
-function props(element: Element) {
-  return Object.entries(element).find(([key]) => key.startsWith('__reactProps$'))![1] as {
-    onChange: (event: { target: { value: string } }) => void;
-  };
-}
 
-test('destination and occurrence pages lead to one native move with both revisions, exact selection and chosen anchor', async () => {
+test('bounded deep destination and placement browsing preserves duplicate occurrences and one native move', async () => {
   spyOn(reads, 'readCollectionMoveChoices').mockImplementation(({ data }) =>
     reads.loadMoveChoices(client, request, {}, data),
   );
@@ -123,6 +148,7 @@ test('destination and occurrence pages lead to one native move with both revisio
     await settle(() =>
       root.render(
         createElement(CollectionMoveChooser, {
+          key: 'empty-catalogue',
           sourceId: 'source',
           disabled: false,
           current: () => current,
@@ -132,27 +158,44 @@ test('destination and occurrence pages lead to one native move with both revisio
         }),
       ),
     );
-    expect(host.querySelectorAll('option')).toHaveLength(1);
-    await settle(() => (host.querySelector('button') as HTMLButtonElement).click());
-    expect(host.textContent).toContain('Destination');
-    await settle(() => props(host.querySelector('select')!).onChange({ target: { value: 'destination' } }));
+    expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
+    expect(host.querySelector<HTMLButtonElement>('button')!.textContent).toBe(m.library_collection_move_more_destinations());
+    await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());
+    expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
+    await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());
+    expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(1);
+    await settle(() => host.querySelector<HTMLButtonElement>('[data-move-destination="destination"]')!.click());
     expect(choice).toEqual({
       destination: { id: 'destination', title: recording.collection.title, revision: 7 },
       after: null,
+      anchor: null,
     });
-    const more = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent === m.library_collection_move_more_members(),
-    )!;
-    await settle(() => more.click());
-    await settle(() => props(host.querySelectorAll('select')[1]!).onChange({ target: { value: 'second' } }));
-    expect(choice!.after).toBe('second');
+    const more = () =>
+      [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === m.library_collection_move_more_members(),
+      )!;
+    await settle(() => more().click());
+    expect(host.querySelectorAll('[data-move-anchor]')).toHaveLength(0);
+    expect(host.textContent).toContain(m.library_collection_move_no_anchors());
+    await settle(() => more().click());
+    expect(host.querySelectorAll('[data-move-anchor]')).toHaveLength(2);
+    await settle(() => host.querySelector<HTMLButtonElement>('[data-move-anchor="duplicate-b"]')!.click());
+    expect(choice!.after).toBe('duplicate-b');
+    const originalChoice = choice!;
+    const fixtureLabel = members.members[0]!.subject!.label;
+    expect(choice!.anchor).toEqual({
+      id: 'duplicate-b',
+      title: typeof fixtureLabel === 'string' ? fixtureLabel : fixtureLabel?.value,
+      page: 3,
+      position: 2,
+    });
     const input = {
       collectionId: 'source',
       revision: 11,
       memberIds: ['selected-2', 'selected-1'],
-      destinationCollectionId: choice!.destination.id,
-      destinationRevision: choice!.destination.revision,
-      after: choice!.after,
+      destinationCollectionId: originalChoice.destination.id,
+      destinationRevision: originalChoice.destination.revision,
+      after: originalChoice.after,
       idempotencyKey: '10203040-5060-4070-8090-102030405060',
     };
     expect(await transferCollectionMembersRecord(client, request, {}, input)).toEqual({
@@ -166,21 +209,40 @@ test('destination and occurrence pages lead to one native move with both revisio
       memberIds: input.memberIds,
       destinationCollectionId: 'destination',
       destinationRevision: 7,
-      after: 'second',
+      after: 'duplicate-b',
     });
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer owner')).toBe(true);
-    expect(calls.filter((call) => new URL(call.url).pathname.endsWith('/members'))).toHaveLength(2);
+    expect(calls.filter((call) => new URL(call.url).pathname.endsWith('/members'))).toHaveLength(3);
     unsupported = true;
     expect(await transferCollectionMembersRecord(client, request, {}, input)).toEqual({
       ok: false,
       reason: 'unsupported',
     });
+    unsupported = false;
+    destinationKind = 'dynamic';
+    expect(await destinationReads.loadCollectionDestination(client, request, {}, 'destination')).toBeNull();
+    destinationKind = 'curated';
+    destinationIdentity = 'different-identity';
+    expect(await destinationReads.loadCollectionDestination(client, request, {}, 'destination')).toBeNull();
+    destinationIdentity = 'destination';
+    const placement = host.querySelector<HTMLElement>('[data-placement-browse]')!;
+    await settle(() =>
+      [...placement.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.library_collection_move_previous())!
+        .click(),
+    );
+    expect(placement.querySelectorAll('[data-move-anchor]')).toHaveLength(0);
+    expect(host.querySelector('[data-selected-move-anchor]')?.textContent).toContain('duplicate-b');
     nativeRevision++;
-    await settle(() => props(host.querySelector('select')!).onChange({ target: { value: 'destination' } }));
-    expect(choice!.destination.revision).toBe(8);
+    await settle(() =>
+      [...placement.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.library_collection_move_more_members())!
+        .click(),
+    );
+    expect(host.textContent).toContain(m.library_collection_move_destination_changed());
+    expect(host.querySelector('[data-selected-move-anchor]')).toBeNull();
+    expect(choice).toBeNull();
     current = false;
-    await settle(() => props(host.querySelectorAll('select')[1]!).onChange({ target: { value: 'first' } }));
-    expect(choice!.after).toBeNull();
     current = true;
     let resolve!: (value: CollectionMoveChoice['destination']) => void;
     const delayed = new Promise<CollectionMoveChoice['destination']>((done) => {
@@ -188,11 +250,27 @@ test('destination and occurrence pages lead to one native move with both revisio
     });
     destinationRead.mockImplementationOnce(() => delayed);
     const beforeRetirement = calls.length;
-    await settle(() => props(host.querySelector('select')!).onChange({ target: { value: 'destination' } }));
+    await settle(() => host.querySelector<HTMLButtonElement>('[data-move-destination="destination"]')!.click());
     current = false;
     await settle(() => resolve({ id: 'destination', title: 'Destination', revision: 8 }));
     expect(calls).toHaveLength(beforeRetirement);
     expect(choice).toBeNull();
+    current = true;
+    emptyCatalogue = true;
+    await settle(() =>
+      root.render(
+        createElement(CollectionMoveChooser, {
+          sourceId: 'source',
+          disabled: false,
+          current: () => current,
+          onChange: (value) => {
+            choice = value;
+          },
+        }),
+      ),
+    );
+    expect(host.textContent).toContain(m.library_collection_move_no_destinations());
+    expect(host.querySelector<HTMLButtonElement>(`[data-move-destination="dynamic"]`)).toBeNull();
   } finally {
     await settle(() => root.unmount());
     host.remove();

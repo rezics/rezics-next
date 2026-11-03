@@ -6,6 +6,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
+import { COLLECTION_MOVE_CURSOR_MAX_LENGTH } from './collection-placement-journey/model';
 
 export type MoveChoices = { collections: { id: string; title: string }[]; next: string | null };
 export type MovePlacements = { members: { id: string; title: string }[]; next: string | null };
@@ -13,8 +14,13 @@ type PlacementInput = { collectionId: string; revision: number; cursor?: string 
 
 function cursor(input: unknown): string | undefined {
   if (input === undefined) return undefined;
-  if (typeof input !== 'string' || !input || input.length > 8192) throw new Error('Invalid move cursor');
+  if (typeof input !== 'string' || !input || input.length > COLLECTION_MOVE_CURSOR_MAX_LENGTH)
+    throw new Error('Invalid move cursor');
   return input;
+}
+function frontier(input: unknown): string | null {
+  if (input === null) return null;
+  return cursor(input) ?? null;
 }
 function placementInput(input: PlacementInput): PlacementInput {
   if (
@@ -36,13 +42,14 @@ export async function loadMoveChoices(
   sessionEnv: Partial<SessionEnv>,
   next?: string,
 ): Promise<MoveChoices> {
+  const continuation = cursor(next);
   if (await prepareSession(request, sessionEnv)) throw new Error('Move session unavailable');
   const authorization = viewerCredential(request),
     owner = sessionSubject(request);
   if (!authorization || !owner) throw new Error('Move session unavailable');
   const page = readLibraryResult(
     await client.collections.get({
-      query: { ...libraryListQuery(next), curatorAccountId: owner },
+      query: { ...libraryListQuery(continuation), curatorAccountId: owner },
       headers: { authorization },
     }),
   );
@@ -50,7 +57,7 @@ export async function loadMoveChoices(
     collections: page.collections.flatMap((collection) =>
       collection.membershipKind === 'curated' ? [{ id: collection.id, title: collection.title ?? collection.id }] : [],
     ),
-    next: page.next,
+    next: frontier(page.next),
   };
 }
 
@@ -86,7 +93,7 @@ export async function loadMovePlacements(
       const label = member.subject.label;
       return [{ id: member.id, title: typeof label === 'string' ? label : (label?.value ?? member.subject.id) }];
     }),
-    next: page.next,
+    next: frontier(page.next),
   };
 }
 
