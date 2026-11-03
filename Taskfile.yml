@@ -15,6 +15,7 @@ tasks:
 
   dev:infra:
     desc: Start the persistent development PostgreSQL and OpenSearch services
+    run: once
     cmds:
       - bun run --cwd services/kernel db up
       - bun run --cwd services/kernel search up
