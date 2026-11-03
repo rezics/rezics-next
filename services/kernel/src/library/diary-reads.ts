@@ -15,7 +15,14 @@ import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { reportedYearRevision } from './reported-year-summary.ts';
-import { DIARY_LIMIT, DIARY_PAYLOAD_BYTES, type DiaryFilter, type DiaryQuery, type DiaryPage, type DiarySubject } from './diary-model.ts';
+import {
+  DIARY_LIMIT,
+  DIARY_PAYLOAD_BYTES,
+  type DiaryFilter,
+  type DiaryQuery,
+  type DiaryPage,
+  type DiarySubject,
+} from './diary-model.ts';
 import {
   cancelDiaryNavigation,
   createDiaryNavigation,
@@ -76,9 +83,14 @@ function filterOf(options: PageOptions): DiaryFilter | null {
     if (options.month !== undefined) throw new ProblemError('invalid_request');
     return null;
   }
-  if (!Number.isInteger(options.year) || options.year < 1 || options.year > 9999 ||
-      (options.month !== undefined && options.month !== 'unallocated' &&
-        (!Number.isInteger(options.month) || options.month < 1 || options.month > 12)))
+  if (
+    !Number.isInteger(options.year) ||
+    options.year < 1 ||
+    options.year > 9999 ||
+    (options.month !== undefined &&
+      options.month !== 'unallocated' &&
+      (!Number.isInteger(options.month) || options.month < 1 || options.month > 12))
+  )
     throw new ProblemError('invalid_request');
   return { year: options.year, ...(options.month === undefined ? {} : { month: options.month }) };
 }
@@ -108,16 +120,25 @@ export function createDiaryReads(deps: Dependencies) {
     const expected = filterKey(filter);
     if (
       (!filtered && decoded.after.length !== 2 && decoded.after.length !== 4) ||
-      (filtered && (typeof year !== 'number' || !Number.isInteger(year) || year < 1 || year > 9999 ||
-        typeof bucket !== 'number' || !Number.isInteger(bucket) || bucket < 0 || bucket > 13 ||
-        typeof revision !== 'string' || revision.length > 36)) ||
+      (filtered &&
+        (typeof year !== 'number' ||
+          !Number.isInteger(year) ||
+          year < 1 ||
+          year > 9999 ||
+          typeof bucket !== 'number' ||
+          !Number.isInteger(bucket) ||
+          bucket < 0 ||
+          bucket > 13 ||
+          typeof revision !== 'string' ||
+          revision.length > 36)) ||
       typeof id !== 'string' ||
       routeOf(id) !== routeOf(owner.accountId) ||
       typeof size !== 'number' ||
       !Number.isInteger(size) ||
       size < 1 ||
       size > DIARY_LIMIT ||
-      (limit !== undefined && (size !== limit || keys.length !== 2 || year !== expected[0] || bucket !== expected[1])) ||
+      (limit !== undefined &&
+        (size !== limit || keys.length !== 2 || year !== expected[0] || bucket !== expected[1])) ||
       (keys.length === 2 &&
         (typeof time !== 'string' ||
           !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(time) ||
@@ -237,7 +258,7 @@ export function createDiaryReads(deps: Dependencies) {
           navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
             if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
             const current = await diaryRows(client, route, owner.accountId, after, limit + 1, filter);
-            if (filter && await reportedYearRevision(client, route, owner.accountId) !== before.revision)
+            if (filter && (await reportedYearRevision(client, route, owner.accountId)) !== before.revision)
               throw new ProblemError('conflict');
             if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
             if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);

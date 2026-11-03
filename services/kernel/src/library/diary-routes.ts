@@ -161,7 +161,9 @@ export function diaryRoutes(
             limit: t.Optional(t.Numeric({ minimum: 1, maximum: DIARY_LIMIT, multipleOf: 1, default: 20 })),
             cursor: t.Optional(token),
             year: t.Optional(t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 })),
-            month: t.Optional(t.Union([t.Literal('unallocated'), t.Numeric({ minimum: 1, maximum: 12, multipleOf: 1 })])),
+            month: t.Optional(
+              t.Union([t.Literal('unallocated'), t.Numeric({ minimum: 1, maximum: 12, multipleOf: 1 })]),
+            ),
           },
           closed,
         ),
