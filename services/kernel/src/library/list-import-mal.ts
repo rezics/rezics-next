@@ -492,12 +492,21 @@ export function createMalImport(deps: Dependencies) {
           },
           async binding() {
             const current = await observe(actor, row, r.target, deadline);
-            if (
-              current.target !== r.target ||
-              hash(current.binding) !== hash(r.binding) ||
-              hash(current.source) !== hash(r.source)
-            )
-              return null;
+            const sameBinding =
+              current.binding === null
+                ? r.binding === null
+                : r.binding !== null &&
+                  current.binding.subject === r.binding.subject &&
+                  current.binding.route === r.binding.route &&
+                  current.binding.source === r.binding.source &&
+                  current.binding.externalId === r.binding.externalId;
+            const sameSource =
+              current.source !== null &&
+              r.source !== null &&
+              current.source.release === r.source.release &&
+              current.source.epoch === r.source.epoch &&
+              current.source.acceptingType === r.source.acceptingType;
+            if (current.target !== r.target || !sameBinding || !sameSource) return null;
             return current.profileBinding;
           },
           async save(progress, admission = false) {
