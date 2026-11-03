@@ -135,8 +135,7 @@ export function aniListFieldLabel(field: AniListSourceField, mediaType: string |
 }
 
 export function aniListIdentifierLabel(identifier: AniListIdentifier): string {
-  if (identifier.source === 'myanimelist')
-    return m.library_anilist_mal_identifier({ value: identifier.externalId });
+  if (identifier.source === 'myanimelist') return m.library_anilist_mal_identifier({ value: identifier.externalId });
   return m.library_anilist_identifier({ value: identifier.externalId });
 }
 

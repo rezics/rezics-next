@@ -1,12 +1,7 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
-import {
-  ANILIST_ROWS,
-  ANILIST_SCORE_FORMATS,
-  ANILIST_UPLOAD_BYTES,
-  type AniListScoreFormat,
-} from './contract';
+import { ANILIST_ROWS, ANILIST_SCORE_FORMATS, ANILIST_UPLOAD_BYTES, type AniListScoreFormat } from './contract';
 import { AniListAction } from './controls';
 import { aniListScoreFormatLabel } from './meaning';
 

@@ -17,14 +17,14 @@ Mounted under `/v1/libraryImports/anilist` after Commerce dependency `69b73c6a`.
 The generated client snapshot may lag the kernel source; missing methods render unavailable rather than a
 local parser or successful fixture.
 
-| Step    | Native                                                                              | Page                                                                                          |
-| ------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Upload  | `POST :preview` `{ upload, scoreFormat? }` with quoted Idempotency-Key              | File stays local until submit; bytes drop after native ownership                              |
-| Preview | `GET :importId?after=-1` pages of 20                                                | Current page only; titles assist display/search, never automatic identity                     |
-| Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace }`           | Default `replace:false`; only `status` is selectable; REPEATING stays unsupported             |
-| Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId }] }` batches of 20   | Exact stored review ids; `complete:false` is resumable                                        |
-| Stop    | `POST :importId:cancel` `{ remove:false }`                                          | Stops new admission; acknowledged effects remain                                              |
-| Discard | `POST :importId:cancel` `{ remove:true }`                                           | Clears this upload's evidence now; Library facts stay                                         |
+| Step    | Native                                                                            | Page                                                                              |
+| ------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Upload  | `POST :preview` `{ upload, scoreFormat? }` with quoted Idempotency-Key            | File stays local until submit; bytes drop after native ownership                  |
+| Preview | `GET :importId?after=-1` pages of 20                                              | Current page only; titles assist display/search, never automatic identity         |
+| Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace }`         | Default `replace:false`; only `status` is selectable; REPEATING stays unsupported |
+| Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId }] }` batches of 20 | Exact stored review ids; `complete:false` is resumable                            |
+| Stop    | `POST :importId:cancel` `{ remove:false }`                                        | Stops new admission; acknowledged effects remain                                  |
+| Discard | `POST :importId:cancel` `{ remove:true }`                                         | Clears this upload's evidence now; Library facts stay                             |
 
 Accepted shapes are a MediaList array, `{lists:[{entries:[]}]}`, `{MediaListCollection:…}` or
 `{data:{MediaListCollection:…}}`. Deprecated `statusLists`/`customLists` wrappers are refused. Repeated

@@ -42,10 +42,7 @@ import {
 type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
 type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
 type PreviewResource = {
-  post: (
-    body: { upload: string; scoreFormat?: string },
-    options: { headers: NativeHeaders },
-  ) => Promise<NativeResult>;
+  post: (body: { upload: string; scoreFormat?: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
 };
 type ReviewResource = {
   post: (
@@ -325,7 +322,9 @@ export function kernelAniListPort(
           const preview = anilist.$preview ?? anilist.preview;
           if (!preview) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
           return preview.post(
-            command.scoreFormat ? { upload: command.upload, scoreFormat: command.scoreFormat } : { upload: command.upload },
+            command.scoreFormat
+              ? { upload: command.upload, scoreFormat: command.scoreFormat }
+              : { upload: command.upload },
             { headers: headers(authorization, command.key) },
           );
         },
@@ -407,4 +406,10 @@ export function kernelAniListPort(
   };
 }
 
-export type { AniListApplyCallResult, AniListMutateResult, AniListPageResult, AniListPreviewResult, AniListReviewResult };
+export type {
+  AniListApplyCallResult,
+  AniListMutateResult,
+  AniListPageResult,
+  AniListPreviewResult,
+  AniListReviewResult,
+};

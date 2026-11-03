@@ -11,21 +11,8 @@ export const ANILIST_GROUP_BYTES = 8_192;
 export const ANILIST_UPLOADS = 5;
 export const SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const ANILIST_SCORE_FORMATS = [
-  'POINT_100',
-  'POINT_10_DECIMAL',
-  'POINT_10',
-  'POINT_5',
-  'POINT_3',
-] as const;
-export const ANILIST_STATUSES = [
-  'CURRENT',
-  'PLANNING',
-  'COMPLETED',
-  'DROPPED',
-  'PAUSED',
-  'REPEATING',
-] as const;
+export const ANILIST_SCORE_FORMATS = ['POINT_100', 'POINT_10_DECIMAL', 'POINT_10', 'POINT_5', 'POINT_3'] as const;
+export const ANILIST_STATUSES = ['CURRENT', 'PLANNING', 'COMPLETED', 'DROPPED', 'PAUSED', 'REPEATING'] as const;
 export const ANILIST_ROLES = {
   CURRENT: 'active',
   PLANNING: 'planned',
@@ -40,13 +27,7 @@ export type AniListMatchState = 'matched' | 'ambiguous' | 'unmatched' | 'unavail
 export type AniListOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
 export type AniListFieldValidity = 'valid' | 'unknown' | 'invalid';
 export type AniListWrapper = 'array' | 'lists' | 'MediaListCollection' | 'data' | 'unknown';
-export type AniListJson =
-  | string
-  | number
-  | boolean
-  | null
-  | AniListJson[]
-  | { readonly [key: string]: AniListJson };
+export type AniListJson = string | number | boolean | null | AniListJson[] | { readonly [key: string]: AniListJson };
 export type AniListRecord = { readonly [key: string]: AniListJson };
 
 export type AniListIdentifier = { source: 'anilist' | 'myanimelist'; externalId: string };
@@ -179,14 +160,8 @@ export type AniListReviewResult =
   | { kind: 'reviewed'; ordinal: number; review: AniListReview }
   | AniListFailure
   | AniListUnknown;
-export type AniListApplyCallResult =
-  | { kind: 'applied'; result: AniListApplyResult }
-  | AniListFailure
-  | AniListUnknown;
-export type AniListMutateResult =
-  | { kind: 'cancelled'; removed: boolean }
-  | AniListFailure
-  | AniListUnknown;
+export type AniListApplyCallResult = { kind: 'applied'; result: AniListApplyResult } | AniListFailure | AniListUnknown;
+export type AniListMutateResult = { kind: 'cancelled'; removed: boolean } | AniListFailure | AniListUnknown;
 
 export type AniListImportPort = {
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;
@@ -208,10 +183,7 @@ export function encodedBytes(value: unknown): number {
   return new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value)).length;
 }
 
-export function chunkConfirmations(
-  rows: AniListConfirmation[],
-  size = ANILIST_APPLY,
-): AniListConfirmation[][] {
+export function chunkConfirmations(rows: AniListConfirmation[], size = ANILIST_APPLY): AniListConfirmation[][] {
   const batches: AniListConfirmation[][] = [];
   for (let index = 0; index < rows.length; index += size) batches.push(rows.slice(index, index + size));
   return batches;
@@ -231,9 +203,7 @@ function hasNextChunk(value: unknown): boolean {
 
 /** Read wrapper and chunk flags from native header.document. Do not admit fields from it. */
 export function completenessOf(document: unknown, rows: { source: AniListSource }[]): AniListCompleteness {
-  const groups = new Set(
-    rows.filter((row) => row.source.group).map((row) => JSON.stringify(row.source.group)),
-  );
+  const groups = new Set(rows.filter((row) => row.source.group).map((row) => JSON.stringify(row.source.group)));
   if (Array.isArray(document)) {
     return { wrapper: 'array', hasNextChunk: false, listedGroups: groups.size };
   }
