@@ -88,45 +88,38 @@ function GameItemControl({
   const target = value ? picked.find((item) => item.id === value) : undefined;
   return (
     <div className="min-w-0 space-y-2">
-    <EntityPicker
-      label={label.text}
-      src={coverSrc}
-      value={
-        value
-          ? [
-              {
-                id: value,
-                title:
-                  relatedName?.text ||
-                  target?.title ||
-                  m.subject_value_unlabelled({}, { locale: locale as never }),
-                types: target?.types ?? [],
-                typeLabel: target?.typeLabel ?? '',
-                cover: target?.cover ?? null,
-              },
-            ]
-          : []
-      }
-      search={async (text, signal) =>
-        (await search(text, signal)).filter((item) =>
-          item.types.some((type) => gameTarget(context.release, property, type)),
-        )
-      }
-      onValueChange={(items) => {
-        if (editAllowed && !editAllowed()) return;
-        setPicked(items);
-        change({ type: 'value', content: items[0]?.id ?? '' });
-      }}
-    />
+      <EntityPicker
+        label={label.text}
+        src={coverSrc}
+        value={
+          value
+            ? [
+                {
+                  id: value,
+                  title:
+                    relatedName?.text || target?.title || m.subject_value_unlabelled({}, { locale: locale as never }),
+                  types: target?.types ?? [],
+                  typeLabel: target?.typeLabel ?? '',
+                  cover: target?.cover ?? null,
+                },
+              ]
+            : []
+        }
+        search={async (text, signal) =>
+          (await search(text, signal)).filter((item) =>
+            item.types.some((type) => gameTarget(context.release, property, type)),
+          )
+        }
+        onValueChange={(items) => {
+          if (editAllowed && !editAllowed()) return;
+          setPicked(items);
+          change({ type: 'value', content: items[0]?.id ?? '' });
+        }}
+      />
       {value && (
         <p className="text-sm text-muted-foreground">
           {m.game_classification_target({ id: value }, { locale: locale as never })}
-          {!related && (
-            <>
-              {' '}
-              {m.candidate_value_unavailable({}, { locale: locale as never })}
-            </>
-          )}
+          {!related && <> {m.candidate_value_unavailable({}, { locale: locale as never })}</>}
         </p>
       )}
     </div>
@@ -892,9 +885,7 @@ function GameClassificationsLive({
                                 }
                               : undefined
                           }
-                          focusReference={
-                            focusCopy && factHolder(draft) === focusCopy.holder ? focusCopy : undefined
-                          }
+                          focusReference={focusCopy && factHolder(draft) === focusCopy.holder ? focusCopy : undefined}
                           change={(statement) =>
                             canEdit(draft) &&
                             setDrafts((rows) =>
@@ -1013,9 +1004,7 @@ function GameClassificationsLive({
             admitted={fields}
             read={context}
             locale={locale}
-            onSelected={(selected) =>
-              lifetime.active() && setReuse({ ...reuse, selected, applied: [], refused: [] })
-            }
+            onSelected={(selected) => lifetime.active() && setReuse({ ...reuse, selected, applied: [], refused: [] })}
             onRefresh={() => {
               if (!lifetime.active()) return;
               const next = refreshGameReuse(reuse, drafts);
@@ -1027,10 +1016,15 @@ function GameClassificationsLive({
               setDrafts(result.drafts);
               setReuse(result.reuse);
               setCopies((items) => [
-                ...items.filter((item) => !result.copies.some((copy) => copy.holder === item.holder && copy.index === item.index)),
+                ...items.filter(
+                  (item) => !result.copies.some((copy) => copy.holder === item.holder && copy.index === item.index),
+                ),
                 ...result.copies,
               ]);
-              setChangedReview({ status: 'stale', fingerprint: changedSetFingerprint(result.drafts.filter((row) => fields.includes(row.property))) });
+              setChangedReview({
+                status: 'stale',
+                fingerprint: changedSetFingerprint(result.drafts.filter((row) => fields.includes(row.property))),
+              });
               const first = result.reuse.applied[0];
               if (first) openHolder(first.holder, first.index);
             }}

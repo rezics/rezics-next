@@ -84,7 +84,13 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
                 read={read}
                 locale="en"
                 search={async () => [
-                  { id: extraPlatform, title: 'Another platform', types: ['skos:Concept'], typeLabel: 'Concept', cover: null },
+                  {
+                    id: extraPlatform,
+                    title: 'Another platform',
+                    types: ['skos:Concept'],
+                    typeLabel: 'Concept',
+                    cover: null,
+                  },
                 ]}
                 transport={{
                   read: fixture.transport.facts.read,

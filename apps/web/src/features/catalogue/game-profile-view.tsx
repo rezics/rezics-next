@@ -617,7 +617,9 @@ function GameStatement({
 }) {
   const o = { locale: locale as never };
   const target =
-    statement.value.type === 'value' && typeof statement.value.content === 'string' && gameUuid.test(statement.value.content)
+    statement.value.type === 'value' &&
+    typeof statement.value.content === 'string' &&
+    gameUuid.test(statement.value.content)
       ? statement.value.content
       : undefined;
   const rank =
@@ -632,12 +634,7 @@ function GameStatement({
       {target && (
         <p className="text-sm text-muted-foreground">
           {m.game_classification_target({ id: target }, o)}
-          {!read.public.related[target] && (
-            <>
-              {' '}
-              {m.candidate_value_unavailable({}, o)}
-            </>
-          )}
+          {!read.public.related[target] && <> {m.candidate_value_unavailable({}, o)}</>}
         </p>
       )}
       <p className="text-sm">

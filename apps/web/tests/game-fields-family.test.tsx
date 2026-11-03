@@ -138,9 +138,8 @@ function deferred<T>() {
 // One actual-component campaign covers both initial-fact consumers and the complete correction journey.
 test('Game and Addon complete fields family preserves independent labels, native drafts, bounded controls, outcomes and retired sessions', async () => {
   await mounted(async ({ host, render, user, within, waitFor }) => {
-    const { GameInitialFacts: InitialFacts, GameClassifications } = await import(
-      '../src/features/catalogue/game-profile-fields'
-    );
+    const { GameInitialFacts: InitialFacts, GameClassifications } =
+      await import('../src/features/catalogue/game-profile-fields');
     const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
     const GameInitialFacts = catalogueEditor(InitialFacts);
     const { InitialFieldChoice } = await import('../src/features/catalogue/initial-field-choice');

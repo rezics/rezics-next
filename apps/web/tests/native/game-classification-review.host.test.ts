@@ -175,7 +175,9 @@ test('Game classification reuses evidence, reviews independent native candidates
   await pick(page, 'game platform', platform);
   await cite(page, 'game platform', `${fixture.citation}/platform`);
   await pick(page, 'genre', fixture.concept);
-  await field(page, 'game platform').getByRole('button', { name: /Reuse this reference/ }).click();
+  await field(page, 'game platform')
+    .getByRole('button', { name: /Reuse this reference/ })
+    .click();
   const reuse = page.locator('[data-fact-reuse]');
   await reuse.waitFor({ state: 'visible' });
   await reuse.getByRole('checkbox', { name: 'genre', exact: true }).click();
@@ -198,9 +200,13 @@ test('Game classification reuses evidence, reviews independent native candidates
   await fixture.stack.syncKernelRequests();
 
   const writes = candidatePosts(game.id);
-  const properties = new Set(writes.filter((request) => request.responseStatus === 201).map((request) => proposalProperty(request.body!)));
+  const properties = new Set(
+    writes.filter((request) => request.responseStatus === 201).map((request) => proposalProperty(request.body!)),
+  );
   expect(properties).toEqual(new Set(['schema:gamePlatform', 'schema:genre']));
-  expect(new Set(writes.filter((request) => request.responseStatus === 201).map((request) => request.idempotencyKey)).size).toBe(2);
+  expect(
+    new Set(writes.filter((request) => request.responseStatus === 201).map((request) => request.idempotencyKey)).size,
+  ).toBe(2);
 
   const listed = await nativeCandidates(game.id, 'schema:genre');
   const candidate = listed.candidates.find((row) => row.statement.value.content === fixture.concept.id);

@@ -40,8 +40,7 @@ export function GameClassificationAssertion({
 }) {
   const o = { locale: locale as never };
   if (!statement) return <p className="text-sm text-muted-foreground">{missing}</p>;
-  const shownRank =
-    rank ?? ('rank' in statement ? (statement.rank as string | undefined) : undefined) ?? 'normal';
+  const shownRank = rank ?? ('rank' in statement ? (statement.rank as string | undefined) : undefined) ?? 'normal';
   const current: StatementInput =
     'references' in statement
       ? {
@@ -68,12 +67,7 @@ export function GameClassificationAssertion({
       {target && (
         <p className="text-sm text-muted-foreground">
           {m.game_classification_target({ id: target }, o)}
-          {!related && (
-            <>
-              {' '}
-              {m.candidate_value_unavailable({}, o)}
-            </>
-          )}
+          {!related && <> {m.candidate_value_unavailable({}, o)}</>}
         </p>
       )}
       <p className="text-sm">
