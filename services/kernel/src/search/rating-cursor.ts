@@ -12,12 +12,7 @@ export type RatingCursorContext = {
 };
 export type RatingPhase = 'scored' | 'unscored';
 export type RatingCursorResult =
-  | {
-      ok: true;
-      generation: number;
-      phase: RatingPhase;
-      after: SearchSortValue[];
-    }
+  | { ok: true; generation: number; phase: RatingPhase; after: SearchSortValue[] }
   | { ok: false; reason: 'invalid' | 'expired' | 'restart' };
 
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
@@ -78,11 +73,7 @@ export async function encodeRatingCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
   context: RatingCursorContext,
-  cursor: {
-    generation: number;
-    phase: RatingPhase;
-    after: readonly SearchSortValue[];
-  },
+  cursor: { generation: number; phase: RatingPhase; after: readonly SearchSortValue[] },
   now = Date.now(),
 ): Promise<string> {
   if (!validContext(context) || !cursor || !validPosition(context.priorEpoch, cursor.phase, cursor.after))
@@ -92,14 +83,7 @@ export async function encodeRatingCursor(
     binding,
     {
       generation: cursor.generation,
-      after: [
-        prefix(context),
-        context.questionId,
-        context.populationId,
-        context.priorEpoch,
-        cursor.phase,
-        ...cursor.after,
-      ],
+      after: [prefix(context), context.questionId, context.populationId, context.priorEpoch, cursor.phase, ...cursor.after],
     },
     now,
   );
@@ -137,10 +121,5 @@ export async function decodeRatingCursor(
     priorEpoch !== context.priorEpoch
   )
     return { ok: false, reason: 'restart' };
-  return {
-    ok: true,
-    generation: decoded.generation,
-    phase: phase as RatingPhase,
-    after,
-  };
+  return { ok: true, generation: decoded.generation, phase: phase as RatingPhase, after };
 }

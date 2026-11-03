@@ -105,9 +105,7 @@ function unsupported(pointer: string, code: FieldErrorCode = 'unsupported'): nev
 }
 
 function indexNotReady(): ProblemError {
-  return new ProblemError('index_not_ready', {
-    headers: { 'retry-after': '1' },
-  });
+  return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
 
 /** Unavailable current evidence must fail the response, including under negation. */
@@ -117,17 +115,12 @@ async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
   } catch (error) {
     if (error instanceof ProblemError) throw error;
     if (error instanceof SearchUnavailableError) throw indexNotReady();
-    throw new ProblemError('semantic_not_ready', {
-      headers: { 'retry-after': '1' },
-    });
+    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
   }
 }
 
 function project(subject: IndexedSubject, languages?: readonly string[]): Result {
-  const hit = projectHit(subject, {
-    descriptions: false,
-    ...(languages === undefined ? {} : { languages }),
-  });
+  const hit = projectHit(subject, { descriptions: false, ...(languages === undefined ? {} : { languages }) });
   return {
     id: hit.id,
     type: hit.type,
@@ -138,11 +131,7 @@ function project(subject: IndexedSubject, languages?: readonly string[]): Result
 // OpenSearch may wrap a missing script in a search phase error with root causes.
 function missingTemplate(error: unknown): boolean {
   if (error === null || typeof error !== 'object') return false;
-  const details = error as {
-    reason?: unknown;
-    caused_by?: unknown;
-    root_cause?: unknown;
-  };
+  const details = error as { reason?: unknown; caused_by?: unknown; root_cause?: unknown };
   if (
     typeof details.reason === 'string' &&
     (/unable to find script \[/.test(details.reason) ||
@@ -173,10 +162,7 @@ function validate(request: SearchRequest) {
   } catch (error) {
     if (error instanceof FilterError)
       throw new ProblemError(error.problem, {
-        errors: error.errors.map(({ pointer, code }) => ({
-          pointer: `/filter${pointer}`,
-          code,
-        })),
+        errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
       });
     throw error;
   }
@@ -325,11 +311,7 @@ export function createSearchService({
         !(value.priorEpoch === null || (Number.isSafeInteger(value.priorEpoch) && value.priorEpoch > 0))
       )
         throw indexNotReady();
-      return {
-        questionId: value.questionId,
-        populationId: value.populationId,
-        priorEpoch: value.priorEpoch,
-      };
+      return { questionId: value.questionId, populationId: value.populationId, priorEpoch: value.priorEpoch };
     } catch {
       throw indexNotReady();
     }
@@ -413,19 +395,13 @@ export function createSearchService({
     let admitted;
     if (filter) {
       const active = current ?? (await release());
-      if (!active)
-        throw new ProblemError('semantic_not_ready', {
-          headers: { 'retry-after': '1' },
-        });
+      if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       try {
         admitted = admitFilter(filter, active);
       } catch (error) {
         if (error instanceof FilterError)
           throw new ProblemError(error.problem, {
-            errors: error.errors.map(({ pointer, code }) => ({
-              pointer: `/filter${pointer}`,
-              code,
-            })),
+            errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
           });
         throw error;
       }
@@ -459,9 +435,7 @@ export function createSearchService({
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
       if ((filter || hitOptions.properties) && !current)
-        throw new ProblemError('semantic_not_ready', {
-          headers: { 'retry-after': '1' },
-        });
+        throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       const admitted = await admitQuery(text, filter, current ?? undefined, request.population !== undefined);
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
@@ -516,17 +490,10 @@ export function createSearchService({
         await ordered.finalize();
         return response;
       }
-      const binding = {
-        operation: 'subjects.search',
-        request: bindingRequest,
-        principal,
-      };
+      const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
-      const lowerBoundBinding = {
-        ...binding,
-        operation: 'subjects.search.lower_bound',
-      };
+      const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
       let inexact = false;
       let cursor =
         request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
@@ -638,11 +605,7 @@ export function createSearchService({
                 return snapshot;
               },
               count: (partition) => source.count(partition),
-              ...(source.matchRelationFacets
-                ? {
-                    matchRelationFacets: source.matchRelationFacets.bind(source),
-                  }
-                : {}),
+              ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
             }
           : source;
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
@@ -663,9 +626,7 @@ export function createSearchService({
       };
       const runtime = publicFilters?.();
       if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
-      const context = {
-        deadline: readContext?.deadline ?? Date.now() + 10_000,
-      };
+      const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
       const capturePlan = {
         ...plan,
         generation,
@@ -675,10 +636,7 @@ export function createSearchService({
         size: Math.min(200, 2 * limit + 1),
         ...(retained?.frontier.after ? { after: retained.frontier.after } : {}),
         ...(rating
-          ? {
-              rating,
-              ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}),
-            }
+          ? { rating, ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}) }
           : {}),
       };
       let operations: PublicFilterConsumerOperations | undefined;
@@ -800,11 +758,7 @@ export function createSearchService({
                     cursors,
                     cursorBinding,
                     rating,
-                    {
-                      generation: generation!,
-                      phase: ratingPhase!,
-                      after: after!,
-                    },
+                    { generation: generation!, phase: ratingPhase!, after: after! },
                     now,
                   )
                 : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
@@ -855,10 +809,7 @@ export function createSearchService({
         now,
       });
       const current = await release();
-      if (!current)
-        throw new ProblemError('semantic_not_ready', {
-          headers: { 'retry-after': '1' },
-        });
+      if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       validateFacetCursorRelease(positions, current);
       const admitted = await admitQuery(text, filter, current);
       admitFacets(facets, admitted, current);
@@ -889,10 +840,7 @@ export function createSearchService({
       q: string,
       limit = 8,
       languages?: string[],
-      read?: {
-        deadline: number;
-        complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
-      },
+      read?: { deadline: number; complete(page: { subjects: Result[]; as_of: string }): Promise<void> },
     ) {
       languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
@@ -954,13 +902,7 @@ export function createSearchService({
           }
         }
       }
-      const hits = await indexRequest(() =>
-        suggestSubjects(client, prefix, {
-          text: q,
-          size: 2 * limit,
-          generation,
-        }),
-      );
+      const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit, generation }));
       const { passed } = await sourceRequest(() =>
         checkHits(
           source,
@@ -989,10 +931,7 @@ export function createSearchService({
   return service;
 }
 
-const bindingFor = (binding: SearchCursorBinding) => ({
-  ...binding,
-  operation: 'subjects.search.kinds',
-});
+const bindingFor = (binding: SearchCursorBinding) => ({ ...binding, operation: 'subjects.search.kinds' });
 function encodeKindCursor(
   ring: KeyRing,
   binding: SearchCursorBinding,
@@ -1014,15 +953,11 @@ async function decodeKindCursor(
   const decoded = await decodeSearchCursor(ring, bindingFor(binding), token, now);
   if (!decoded.ok) {
     if (decoded.reason === 'expired') throw new ProblemError('search_restart_required');
-    throw new ProblemError('invalid_request', {
-      errors: [{ pointer: '/kindCursor', code: 'invalid_format' }],
-    });
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
   }
   if (decoded.generation !== generation || decoded.after[0] !== digest)
     throw new ProblemError('search_restart_required');
   if (decoded.after.length !== 2 || typeof decoded.after[1] !== 'string')
-    throw new ProblemError('invalid_request', {
-      errors: [{ pointer: '/kindCursor', code: 'invalid_format' }],
-    });
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
   return decoded.after[1];
 }
