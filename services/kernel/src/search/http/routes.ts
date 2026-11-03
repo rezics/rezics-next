@@ -387,11 +387,28 @@ export function searchRoutes<App>(
             if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const ownerAccess: Access | undefined = routeAccess();
             if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const observeRelationRelease = async () => {
+              const active = await activeRelease(pool);
+              return active
+                ? {
+                    digest: active.digest,
+                    head: active.head ?? 0,
+                    release: active.release as import('@rezics/filter').FilterRelease,
+                  }
+                : null;
+            };
             return discoveryHttpPage(
               await discovery(
                 actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
                 { ...body, representation: 'discovery-v1' },
-                { access: ownerAccess, actor, deadline: job.deadline },
+                {
+                  access: ownerAccess,
+                  actor,
+                  deadline: job.deadline,
+                  ...(body.languages === undefined ? {} : { languages: body.languages }),
+                  ...(body.spoilerThreshold === undefined ? {} : { spoilerThreshold: body.spoilerThreshold }),
+                  observeRelationRelease,
+                },
               ),
             );
           });

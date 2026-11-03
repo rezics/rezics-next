@@ -88,7 +88,23 @@ export type AccountDiscoverySummary = {
 export type DiscoverySummary =
   | { kind: 'subject'; value: SubjectSummary }
   | { kind: 'account'; value: AccountDiscoverySummary };
-export type DiscoveryHit = { key: DiscoveryKey; summary: DiscoverySummary };
+export type DiscoveryContextSubject = {
+  id: string;
+  labels: Record<string, string>;
+  aliases?: Record<string, string[]>;
+};
+export type DiscoveryContextList = { items: DiscoveryContextSubject[]; next: boolean };
+export type CharacterPersonDiscoveryContexts = {
+  credits: DiscoveryContextList;
+  appearances: DiscoveryContextList;
+};
+export type DiscoveryHit = {
+  key: DiscoveryKey;
+  summary: DiscoverySummary;
+  labels?: Record<string, string>;
+  aliases?: Record<string, string[]>;
+  contexts?: CharacterPersonDiscoveryContexts;
+};
 export type PublicCollectionDiscoverySummary = Readonly<{ id: string; title: string; description: string | null }>;
 export type PublicReviewDiscoverySummary = Readonly<{
   id: string;
@@ -136,7 +152,11 @@ export type DiscoveryRequest = SearchRequest & {
   spaceId?: string;
 };
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
-export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'>;
+export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
+  languages?: readonly string[];
+  spoilerThreshold?: 0 | 1 | 2;
+  observeRelationRelease?: () => Promise<{ digest: string; head: number; release: import('@rezics/filter').FilterRelease } | null>;
+};
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';

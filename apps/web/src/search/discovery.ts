@@ -103,6 +103,16 @@ const catalogueFields = {
     }),
   ),
 };
+const contextSubject = v.object({
+  id: resourceId,
+  labels: textMap,
+  aliases: v.exactOptional(v.record(v.string(), v.array(v.string()))),
+});
+const contextList = v.strictObject({
+  items: v.pipe(v.array(contextSubject), v.maxLength(3)),
+  next: v.boolean(),
+});
+const characterPersonContexts = v.strictObject({ credits: contextList, appearances: contextList });
 const legacyHit = v.object({
   id: v.string(),
   type: v.string(),
@@ -157,6 +167,7 @@ const hit = v.union([
     key: v.strictObject({ owner: v.literal('semantic'), kind: v.string(), route, id: resourceId }),
     summary: v.object({ kind: v.literal('subject'), value: subjectSummary }),
     ...catalogueFields,
+    contexts: v.exactOptional(characterPersonContexts),
   }),
   v.object({
     key: v.strictObject({ owner: v.literal('accounts'), kind: v.literal('account'), route, id: resourceId }),
@@ -246,6 +257,11 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
     switch (hit.summary.kind) {
       case 'subject':
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
+        if (
+          hit.contexts &&
+          [hit.contexts.credits, hit.contexts.appearances].some((list) => list.next && list.items.length !== 3)
+        )
+          return;
         break;
       case 'account':
         if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account') return;

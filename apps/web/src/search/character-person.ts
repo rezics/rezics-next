@@ -1,5 +1,5 @@
 import { FILTER_LIMITS } from '@rezics/filter';
-import type { DiscoveryRequest } from './discovery';
+import type { DiscoveryRequest, DiscoveryState } from './discovery';
 
 export type CharacterPersonMode = 'characters' | 'people';
 export type CharacterPersonSort = 'name' | 'relevance';
@@ -148,6 +148,22 @@ export function characterPersonRequest(search: CharacterPersonSearch): Discovery
     ...(search.name.trim() ? { text: search.name } : {}),
     ...(search.cursor ? { cursor: search.cursor } : {}),
   };
+}
+
+/** Query identity prevents a prior request, principal, or locale from supplying visible rows. */
+export function characterPersonQueryKey(locale: string, principal: string, search: CharacterPersonSearch) {
+  return ['character-person-search', locale, principal, characterPersonRequest(search)] as const;
+}
+
+/** Empty the result region while a replacement is in flight; a server restart is shown as repairable state. */
+export function characterPersonVisibleState(
+  parsed: ParsedCharacterPersonSearch,
+  fetching: boolean,
+  data: { discovery: DiscoveryState; restarted: boolean } | undefined,
+): DiscoveryState {
+  if (parsed.error) return { status: 'invalid' };
+  if (fetching || !data) return { status: 'loading' };
+  return data.discovery;
 }
 
 export function characterPersonHref(locale: string, search: CharacterPersonSearch, cursor?: string): string {

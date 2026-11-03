@@ -42,6 +42,8 @@ it does not itself certify inverse membership.
 
 Decision: when a journey threshold is supplied, every portrayed character on a voice-credit statement must have its own permitted appearance on that same work; credits without a portrayed character remain unknown.
 
+Decision: each admitted Character or Person result shows at most three current credit and three current appearance work contexts; a list continues only when a fourth permitted context is proven.
+
 Universal current checks forward the threshold through both forward and inverse probes, including
 negative leaves. For each matching selected `wdt:P725` statement, the native source checks its own
 `wdt:P453` characters through selected-value `schema:character` probes with explicit spoiler levels

@@ -24,6 +24,9 @@ import { SearchUnavailableError } from './opensearch.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { admitDiscoveryHit } from './discovery-http.ts';
 import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts';
+import { projectCharacterPersonContexts } from './character-person.ts';
+import { chooseTexts } from './hits.ts';
+import { ProblemError } from '../http/problem.ts';
 
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
@@ -308,9 +311,18 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         relationProperties: Object.keys(release.properties).filter((property) =>
           relationFacetProperty(release, property),
         ),
+        ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
+        ...(context.observeRelationRelease === undefined
+          ? {}
+          : { observeRelationRelease: context.observeRelationRelease }),
       });
+      const checkedSubjects = new Map(
+        checked.passed
+          .filter(({ subject }) => subject.type === entry.kind)
+          .map(({ subject }) => [subject.id, subject]),
+      );
       const accepted = new Set(
-        checked.passed.filter(({ subject }) => subject.type === entry.kind).map(({ subject }) => subject.id),
+        checkedSubjects.keys(),
       );
       selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
     }
@@ -323,9 +335,82 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       );
       for (const candidate of selectedSemantic) {
         const summary = summaries.get(candidate.key.id);
-        const hit = { key: candidate.key, summary: { kind: 'subject', value: summary } };
+        const subject = checkedSubjects.get(candidate.key.id);
+        if (!summary || !subject) continue;
+        const labels = Object.fromEntries(
+          Object.entries(
+            chooseTexts(
+              subject.labels,
+              context.languages,
+              subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value,
+            ),
+          ).sort(([first], [second]) => first.localeCompare(second)),
+        );
+        const aliasesByLanguage = new Map<string, Set<string>>();
+        for (const alias of subject.aliases) {
+          if (context.languages?.length && !context.languages.includes(alias.language)) continue;
+          const values = aliasesByLanguage.get(alias.language) ?? new Set<string>();
+          values.add(alias.value);
+          aliasesByLanguage.set(alias.language, values);
+        }
+        const aliases = Object.fromEntries(
+          [...aliasesByLanguage]
+            .sort(([first], [second]) => first.localeCompare(second))
+            .map(([language, values]) => [language, [...values].sort()]),
+        );
+        const selectedLabel = Object.entries(labels)[0];
+        const contexts =
+          context.observeRelationRelease === undefined
+            ? null
+            : await projectCharacterPersonContexts(source, subject, filter, {
+                ...(context.languages === undefined ? {} : { languages: context.languages }),
+                ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
+                observeRelationRelease: context.observeRelationRelease,
+              });
+        if (
+          context.observeRelationRelease !== undefined &&
+          (subject.type === 'schema:Person' || subject.type === 'schema:Character') &&
+          contexts === null
+        )
+          throw new ProblemError('search_restart_required');
+        const hit = {
+          key: candidate.key,
+          summary: {
+            kind: 'subject' as const,
+            value: { ...summary, label: selectedLabel ? { language: selectedLabel[0], value: selectedLabel[1] } : null },
+          },
+          labels,
+          ...(Object.keys(aliases).length ? { aliases } : {}),
+          ...(contexts === null ? {} : { contexts }),
+        };
         admitDiscoveryHit(hit);
         passed.set(candidate, hit);
+      }
+      // Hydration and context disclosure can cross native I/O. Retire the whole semantic window
+      // if its candidate anchors changed after the first current-source snapshot.
+      for (const [partition, group] of partitioned(selectedSemantic.map(({ key }) => key))) {
+        const baseline = snapshots.get(partition);
+        const ids = [...new Set(group.map(({ id }) => id))];
+        for (let offset = 0; offset < ids.length; offset += 256) {
+          const chunk = ids.slice(offset, offset + 256);
+          const after = await source.read(partition, chunk);
+          const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
+          if (!baseline || after.position !== baseline.position) throw new ProblemError('search_restart_required');
+          const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
+          for (const id of chunk) {
+            const previous = previousRows.get(id);
+            const current = currentRows.get(id);
+            if (
+              !previous ||
+              !current ||
+              current.visibility !== 'visible' ||
+              current.redirect !== null ||
+              current.securityRevision !== previous.securityRevision ||
+              current.type !== previous.type
+            )
+              throw new ProblemError('search_restart_required');
+          }
+        }
       }
     }
   }

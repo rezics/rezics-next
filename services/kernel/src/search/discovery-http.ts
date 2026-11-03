@@ -77,6 +77,45 @@ const count = t.Union([
   t.Object({ kind: t.String(), value: t.Integer({ minimum: 1 }), exact: t.Literal(false) }, closed),
   t.Object({ kind: t.String(), unavailable: t.Literal(true) }, closed),
 ]);
+const characterPersonContexts = t.Object(
+  {
+    credits: t.Object(
+      {
+        items: t.Array(
+          t.Object(
+            {
+              id,
+              labels: t.Record(t.String(), t.String()),
+              aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+            },
+            closed,
+          ),
+          { maxItems: 3 },
+        ),
+        next: t.Boolean(),
+      },
+      closed,
+    ),
+    appearances: t.Object(
+      {
+        items: t.Array(
+          t.Object(
+            {
+              id,
+              labels: t.Record(t.String(), t.String()),
+              aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+            },
+            closed,
+          ),
+          { maxItems: 3 },
+        ),
+        next: t.Boolean(),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
@@ -86,6 +125,9 @@ export const DiscoveryPageSchema = t.Object(
           {
             key: key('semantic'),
             summary: t.Object({ kind: t.Literal('subject'), value: SubjectSummarySchema }, closed),
+            labels: t.Optional(t.Record(t.String(), t.String())),
+            aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+            contexts: t.Optional(characterPersonContexts),
           },
           closed,
         ),
@@ -144,7 +186,12 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
   if (!hitCheck.Check(value)) unavailable();
   const { key, summary } = value as Static<typeof hitSchema>;
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
-  if (summary.kind === 'subject' && (key.owner !== 'semantic' || key.kind !== summary.value.type)) unavailable();
+  if (summary.kind === 'subject') {
+    if (key.owner !== 'semantic' || key.kind !== summary.value.type) unavailable();
+    const contexts = (value as { contexts?: { credits: { items: unknown[]; next: boolean }; appearances: { items: unknown[]; next: boolean } } }).contexts;
+    if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
+      unavailable();
+  }
   if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
   if (summary.kind === 'collection' && (key.owner !== 'library' || key.kind !== 'collection')) unavailable();
   if (summary.kind === 'review' && (key.owner !== 'content' || key.kind !== 'review')) unavailable();
@@ -194,7 +241,25 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       }
       if (hit.summary.kind === 'subject') {
         if (hit.key.owner !== 'semantic') throw new SearchUnavailableError('Discovery summary owner disagrees');
-        return { key: hit.key, summary: { kind: 'subject' as const, value: hit.summary.value } };
+        return {
+          key: { ...hit.key },
+          summary: { kind: 'subject' as const, value: { ...hit.summary.value } },
+          ...(hit.labels === undefined ? {} : { labels: { ...hit.labels } }),
+          ...(hit.aliases === undefined
+            ? {}
+            : { aliases: Object.fromEntries(Object.entries(hit.aliases).map(([language, values]) => [language, [...values]])) }),
+          ...(hit.contexts === undefined
+            ? {}
+            : {
+                contexts: {
+                  credits: { items: hit.contexts.credits.items.map((item) => structuredClone(item)), next: hit.contexts.credits.next },
+                  appearances: {
+                    items: hit.contexts.appearances.items.map((item) => structuredClone(item)),
+                    next: hit.contexts.appearances.next,
+                  },
+                },
+              }),
+        };
       }
       const value = hit.summary.value;
       if (hit.summary.kind === 'collection') {

@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -141,20 +142,51 @@ export function DiscoveryResults({
           return <DiscoveryPublicRow key={discoveryKey(hit)} hit={hit} kind={kind} locale={locale} />;
         const summary = hit.summary.value;
         const label = summary.label;
+        const contextLists = hit.contexts
+          ? [
+              { key: 'credits', label: m.subject_credits({}, messageOptions(locale)), value: hit.contexts.credits },
+              {
+                key: 'appearances',
+                label: m.subject_appearances({}, messageOptions(locale)),
+                value: hit.contexts.appearances,
+              },
+            ].filter(({ value }) => value.items.length > 0)
+          : [];
         return (
-          <ResultRow
-            key={discoveryKey(hit)}
-            hit={{
-              id: hit.key.id,
-              type: hit.key.kind,
-              ...hit,
-              labels: hit.labels ?? (label ? { [label.language]: label.value } : {}),
-              summary,
-            }}
-            locale={locale}
-            hitTypes={kinds}
-            yearProperties={yearProperties}
-          />
+          <Fragment key={discoveryKey(hit)}>
+            <ResultRow
+              hit={{
+                id: hit.key.id,
+                type: hit.key.kind,
+                ...hit,
+                labels: hit.labels ?? (label ? { [label.language]: label.value } : {}),
+                summary,
+              }}
+              locale={locale}
+              hitTypes={kinds}
+              yearProperties={yearProperties}
+            />
+            {contextLists.map(({ key, label: heading, value }) => (
+              <li key={`${discoveryKey(hit)}:${key}`} className="ml-6 list-none rounded-md border px-3 py-2 text-sm">
+                <p className="font-medium">{heading}</p>
+                <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {value.items.map((context) => {
+                    const contextLabel = localizedLabel(context.labels, locale).text || context.id;
+                    return (
+                      <li key={context.id}>
+                        <a
+                          className="text-primary underline underline-offset-4"
+                          href={subjectHref({ id: context.id, label: contextLabel }, locale).href}
+                        >
+                          {contextLabel}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
+          </Fragment>
         );
       })}
     </ul>

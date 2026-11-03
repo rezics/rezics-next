@@ -11,8 +11,9 @@ import { readDiscovery, type DiscoveryState } from './discovery';
 import { DiscoveryResults } from './discovery-results';
 import {
   type CharacterPersonSearch,
+  characterPersonQueryKey,
   characterPersonHref,
-  characterPersonRequest,
+  characterPersonVisibleState,
   type CharacterPersonForm as CharacterPersonFormState,
   type ParsedCharacterPersonSearch,
 } from './character-person';
@@ -38,9 +39,8 @@ const readCharacterPerson = createServerFn({ method: 'GET' })
   });
 
 export function characterPersonQueryOptions(locale: string, search: CharacterPersonSearch, principal: string) {
-  const request = characterPersonRequest(search);
   return queryOptions({
-    queryKey: ['character-person-search', locale, principal, request],
+    queryKey: characterPersonQueryKey(locale, principal, search),
     queryFn: async ({ signal }): Promise<{ discovery: DiscoveryState; restarted: boolean }> => {
       try {
         return await readCharacterPerson({ data: { locale, search }, signal });
@@ -161,11 +161,7 @@ export function CharacterPersonSearchPage({
 }) {
   const options = messageOptions(locale);
   const query = useQuery({ ...characterPersonQueryOptions(locale, parsed.search, principal), enabled: !parsed.error });
-  const state: DiscoveryState = parsed.error
-    ? { status: 'invalid' }
-    : query.isFetching || !query.data
-      ? { status: 'loading' }
-      : query.data.discovery;
+  const state: DiscoveryState = characterPersonVisibleState(parsed, query.isFetching, query.data);
   const restartHref = characterPersonHref(locale, parsed.search);
   const next = state.status === 'ready' ? state.page.next : null;
   const pageEmpty = state.status === 'ready' && state.page.hits.length === 0 && next !== null;
