@@ -9,11 +9,7 @@ import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from './relation-editor';
 import { relationTargetSearch } from './relation-editor-search';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
-import {
-  claimCreditTargetReturn,
-  discardCreditTargetHandoff,
-  type CreditTargetHandoff,
-} from './credit-target-handoff';
+import { claimCreditTargetReturn, discardCreditTargetHandoff, type CreditTargetHandoff } from './credit-target-handoff';
 
 export const RelationEditorSession = candidateSession(RelationEditorSessionLive);
 
@@ -36,9 +32,7 @@ function RelationEditorSessionLive({
       setCreditHandoff(undefined);
       return;
     }
-    const handoff = editorWork.live()
-      ? claimCreditTargetReturn(creditHandoffToken, id, editorWork.reader)
-      : undefined;
+    const handoff = editorWork.live() ? claimCreditTargetReturn(creditHandoffToken, id, editorWork.reader) : undefined;
     if (!handoff) {
       discardCreditTargetHandoff(creditHandoffToken);
       setCreditHandoff(undefined);

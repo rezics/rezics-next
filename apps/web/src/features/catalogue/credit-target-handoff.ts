@@ -48,7 +48,9 @@ function validValue(value: unknown): boolean {
 function validSnak(value: unknown): boolean {
   const item = record(value);
   const property = record(item?.property);
-  return typeof property?.id === 'string' && property.id.length > 0 && property.id.length <= 256 && validValue(item?.value);
+  return (
+    typeof property?.id === 'string' && property.id.length > 0 && property.id.length <= 256 && validValue(item?.value)
+  );
 }
 
 function validIdentity(value: unknown, createdId?: string): value is CreatedCreditIdentity {
@@ -150,9 +152,7 @@ export function createCreditTargetHandoff(
     input.context !== candidateContext ||
     !input.releaseDigest ||
     !input.admittedTypes.length ||
-    !input.admittedTypes.every(
-      (type) => creditIdentityTypes.includes(type) && input.targets.includes(type),
-    ) ||
+    !input.admittedTypes.every((type) => creditIdentityTypes.includes(type) && input.targets.includes(type)) ||
     !validDraft(input.draft, input.propertyId)
   )
     return undefined;
@@ -198,9 +198,8 @@ export function recordCreatedCreditIdentity(
     return undefined;
   }
   value.createdId = id;
-  const createdIdentity = identity && value.admittedTypes.includes(identity.type) && validIdentity(identity, id)
-    ? identity
-    : undefined;
+  const createdIdentity =
+    identity && value.admittedTypes.includes(identity.type) && validIdentity(identity, id) ? identity : undefined;
   if (createdIdentity) value.identity = createdIdentity;
   else delete value.identity;
   value.phase = createdIdentity ? 'ready' : 'creating';
