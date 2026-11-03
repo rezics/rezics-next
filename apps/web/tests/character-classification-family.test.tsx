@@ -618,10 +618,7 @@ test('unchanged connected CharacterProfile parent retires a pending classificati
         });
       expect(field()).toBeDefined();
       await act(async () => button(field()!, m.facts_edit_field()).click());
-      await enter(
-        field()!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!,
-        replacement,
-      );
+      await enter(field()!.querySelector<HTMLInputElement>('input[type="url"]')!, evidence + 'pending');
       await act(async () => button(host, m.facts_submit()).click());
       await act(async () => button(host, 'Retire illustrative reader').click());
       await act(async () =>
@@ -840,7 +837,9 @@ for (const family of ['Character', 'StoryArc'] as const) {
         });
       const label = original.properties[property]!.labels.en;
       const field = () =>
-        [...host.querySelectorAll('h3')].find((heading) => heading.textContent === label)?.closest('section');
+        family === 'Character'
+          ? host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`)
+          : [...host.querySelectorAll('h3')].find((heading) => heading.textContent === label)?.closest('section');
       const beforeUnload = () => {
         const event = new host.ownerDocument.defaultView!.Event('beforeunload', { cancelable: true });
         host.ownerDocument.defaultView!.dispatchEvent(event);

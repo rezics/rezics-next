@@ -18,7 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from './relation-editor';
 import { useConsentFocus } from './statement-consent-focus';
 import { partCorrection, type WorkPartsRead, type PartStream, type PartRow } from './work-parts';
-import { locateCreatedChild, screenSeriesId } from './screen-episode-membership';
+import { locateCreatedChild, screenSeriesId } from './screen-episode-membership.ts';
 import {
   admitOrderingDrafts,
   advanceOrderingReview,

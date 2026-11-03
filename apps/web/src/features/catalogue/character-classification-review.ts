@@ -1,5 +1,5 @@
 import type { Release } from '@rezics/definitions';
-import { pageText } from '../pages/data';
+import { pageText } from '../pages/shared';
 import { previewReuse, type ReusePreview, type ReuseRefusal } from './reference-reuse';
 import type { StatementInput } from './statement-editor';
 import {

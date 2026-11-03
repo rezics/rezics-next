@@ -25,7 +25,12 @@ import {
 } from './subject-facts';
 import { statementInput, type EditorRead, type StatementInput } from './statement-editor';
 import { EditorFailure, StatementFields } from './statement-editor-view';
-import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
+import {
+  catalogueEditor,
+  useCurrentReadingActive,
+  useCurrentReadingVisible,
+  useEditorLifetime,
+} from './editor-lifetime';
 import { factStatementFeedback, StatementViolationFeedback } from './fact-violation-feedback';
 import {
   applyReuse,
@@ -112,7 +117,9 @@ function IndependentClassifications({
   ));
 }
 
-function CharacterClassificationSet({
+const CharacterClassificationSet = catalogueEditor(CharacterClassificationSetLive);
+
+function CharacterClassificationSetLive({
   properties,
   read,
   locale,
@@ -135,6 +142,7 @@ function CharacterClassificationSet({
   const [orphans, setOrphans] = useState<RemovedHolderDiagnostic[]>([]);
   const [overlay, setOverlay] = useState<EditorRead | null>(null);
   const running = useRef(false);
+  const lifetime = useEditorLifetime();
   const subjectId = read.public.subject.id;
   const subjectRef = useRef(subjectId);
   if (subjectRef.current !== subjectId) {
@@ -163,7 +171,6 @@ function CharacterClassificationSet({
     .filter((draft) => !!draft.command || classificationNeedsDeparture(draft))
     .map((draft) => draft.property);
   const fields = [...new Set([...properties, ...held])];
-  const lifetime = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
@@ -178,7 +185,7 @@ function CharacterClassificationSet({
       );
   }
   function assign(property: string, next: FactDraft | undefined) {
-    if (!lifetime()) return;
+    if (!lifetime.active()) return;
     const original = drafts.find((draft) => draft.property === property);
     if (original && next === undefined) setOrphans((items) => retainOrphanedClassificationDiagnostic(original, items));
     setDrafts((previous) =>
@@ -189,18 +196,22 @@ function CharacterClassificationSet({
   }
   function openHolder(holder: string, index?: number) {
     if (index != null) setFocusCopy({ holder, index, nonce: Date.now() });
-    const heading = document.querySelector<HTMLElement>(`[data-fact-holder="${CSS.escape(holder)}"]`);
+    const escaped =
+      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(holder)
+        : holder.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const heading = document.querySelector<HTMLElement>(`[data-fact-holder="${escaped}"]`);
     heading?.focus();
     heading?.scrollIntoView?.({ block: 'center' });
   }
   function jumpTo(holder: string) {
-    if (!lifetime()) return;
+    if (!lifetime.active()) return;
     const focusable = focusableClassificationHolder(holder, drafts, orphans);
     setChangedReview(advanceChangedSetReview(changedReview, fingerprint, true));
     if (focusable) openHolder(focusable);
   }
   async function confirm() {
-    if (!lifetime() || running.current) return;
+    if (!lifetime.active() || running.current) return;
     if (
       !classificationConfirmable({
         drafts,
@@ -218,31 +229,32 @@ function CharacterClassificationSet({
       await sendFacts(
         sealed,
         (command) => {
-          if (!lifetime()) throw new Error('Retired catalogue editor');
+          if (!lifetime.active()) throw new Error('Retired catalogue editor');
           return transport.propose(command);
         },
         (property, result) =>
-          lifetime() && setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
+          lifetime.active() &&
+          setDrafts((previous) => previous.map((draft) => (draft.property === property ? { ...draft, result } : draft))),
       );
     } finally {
-      if (!lifetime()) return;
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
   }
   async function readCurrent() {
-    if (!lifetime() || running.current) return;
+    if (!lifetime.active() || running.current) return;
     running.current = true;
     setBusy(true);
     try {
       const next = await transport.read();
-      if (!lifetime()) return;
+      if (!lifetime.active()) return;
       setOverlay(next);
     } catch {
-      if (!lifetime()) return;
+      if (!lifetime.active()) return;
       setOverlay({ ok: false, reason: 'unavailable' });
     } finally {
-      if (!lifetime()) return;
+      if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
     }
@@ -267,7 +279,7 @@ function CharacterClassificationSet({
             parentBusy={busy}
             reviewChangedSet
             onReuse={(index) => {
-              if (!lifetime() || !draft) return;
+              if (!lifetime.active() || !draft) return;
               const group = draft.statement.references[index];
               if (!group) return;
               const source = {
@@ -304,13 +316,15 @@ function CharacterClassificationSet({
         readFailed={readFailed}
         reuse={reuse}
         orphans={orphans}
-        onReview={() => lifetime() && setChangedReview({ status: 'current', fingerprint })}
+        onReview={() => lifetime.active() && setChangedReview({ status: 'current', fingerprint })}
         onConfirm={() => void confirm()}
         onJump={jumpTo}
         onReadCurrent={() => void readCurrent()}
-        onReuseSelected={(selected) => lifetime() && reuse && setReuse({ ...reuse, selected, applied: [], refused: [] })}
+        onReuseSelected={(selected) =>
+          lifetime.active() && reuse && setReuse({ ...reuse, selected, applied: [], refused: [] })
+        }
         onReuseRefresh={() => {
-          if (!lifetime() || !reuse) return;
+          if (!lifetime.active() || !reuse) return;
           const origin = drafts.find((draft) => factHolder(draft) === reuse.source.holder);
           const group = origin?.statement.references[reuse.source.groupIndex];
           if (!origin || !group) return;
@@ -318,7 +332,7 @@ function CharacterClassificationSet({
           setReuse({ ...reuse, source, capture: captureReuse(source, drafts), applied: [], refused: [] });
         }}
         onReuseApply={() => {
-          if (!lifetime() || !reuse) return;
+          if (!lifetime.active() || !reuse) return;
           const chosen = reuse.selected.filter((holder) => {
             const target = drafts.find((draft) => factHolder(draft) === holder);
             return !!target && admitted.has(target.property) && !factLocked(target);
@@ -333,16 +347,18 @@ function CharacterClassificationSet({
         onReuseCancel={() => {
           const trigger = reuse?.trigger;
           setReuse(null);
-          if (lifetime() && trigger?.isConnected) trigger.focus();
+          if (lifetime.active() && trigger?.isConnected) trigger.focus();
         }}
-        onReuseOpen={(holder, index) => lifetime() && openHolder(holder, index)}
+        onReuseOpen={(holder, index) => lifetime.active() && openHolder(holder, index)}
       />
     </div>
   );
 }
 
 /** Classification uses field-wide native review, with the same sealed per-field command and reference controls. */
-export function CharacterClassification({
+export const CharacterClassification = catalogueEditor(CharacterClassificationLive);
+
+function CharacterClassificationLive({
   property,
   read,
   locale,
@@ -408,9 +424,10 @@ export function CharacterClassification({
     running.current = false;
     setLocalBusy(false);
     setConfirmation(undefined);
-    setDraft((previous) =>
-      previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
-    );
+    if (!onDraft)
+      setDraft((previous) =>
+        previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
+      );
   }
   const chooser = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLFieldSetElement>(null);
@@ -480,9 +497,11 @@ export function CharacterClassification({
   );
   const latestState = useRef({ draft, confirmation, busy, active: usable });
   latestState.current = { draft, confirmation, busy, active: usable };
+  const sameHolder = (left?: FactDraft, right?: FactDraft) =>
+    !!left && !!right && factHolder(left) === factHolder(right);
   const confirming =
     !!draft &&
-    confirmation?.draft === draft &&
+    sameHolder(confirmation?.draft, draft) &&
     confirmation.active() &&
     active() &&
     !busy &&
@@ -500,8 +519,8 @@ export function CharacterClassification({
   const result = draft?.result;
   const feedback = admitted && draft ? factStatementFeedback(draft, read.release, locale, feedbackId) : undefined;
   const reviewTransport = useMemo(
-    () => review(property, result?.ok ? result.session : undefined),
-    [review, property, result],
+    () => (reviewing && result?.ok ? review(property, result.session) : null),
+    [review, property, result, reviewing],
   );
   const label = admitted
     ? pageText(definition.labels, locale)
@@ -510,7 +529,7 @@ export function CharacterClassification({
   const stage = (id: string | null, event: MouseEvent<HTMLButtonElement>) => {
     openingFocus.current?.cancel();
     if (!usable() || !admitted) return;
-    if (currentDraft.current !== draft) return;
+    if (draft && !sameHolder(currentDraft.current, draft)) return;
     if (running.current || (draft && factLocked(draft))) return;
     const currentRead = latestRead.current;
     const currentDefinition = currentRead.release.properties[property];
@@ -574,14 +593,17 @@ export function CharacterClassification({
     const latest = latestState.current;
     if (
       !latest.active() ||
-      latest.draft !== original ||
-      currentDraft.current !== original ||
+      !sameHolder(latest.draft, original) ||
+      !sameHolder(currentDraft.current, original) ||
       latest.busy ||
       running.current ||
       factLocked(original) ||
       (!admitted && !!original.command) ||
       (pending &&
-        (latest.confirmation !== pending || pending.draft !== original || !pending.active() || !latest.active()))
+        (!sameHolder(latest.confirmation?.draft, pending.draft) ||
+          !sameHolder(pending.draft, original) ||
+          !pending.active() ||
+          !latest.active()))
     )
       return;
     returnFocus.current = true;
@@ -593,7 +615,7 @@ export function CharacterClassification({
   };
   const discard = () => {
     if (!usable() || !draft || running.current || busy || factLocked(draft) || (!admitted && draft.command)) return;
-    if (currentDraft.current !== draft) return;
+    if (!sameHolder(currentDraft.current, draft)) return;
     if (factChanged(draft) && (draft.baseline !== null || hasAuthoredClassificationContent(draft.statement))) {
       setConfirmation({ draft, active: usable });
       return;
@@ -605,7 +627,7 @@ export function CharacterClassification({
     if (
       !latest.active() ||
       !latest.confirmation ||
-      latest.confirmation.draft !== latest.draft ||
+      !sameHolder(latest.confirmation.draft, latest.draft) ||
       !latest.confirmation.active()
     )
       return;
@@ -615,14 +637,14 @@ export function CharacterClassification({
   const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) => closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
     if (!usable() || !admitted) return false;
-    if (!draft || currentDraft.current !== draft || running.current || factLocked(draft)) return false;
+    if (!draft || !sameHolder(currentDraft.current, draft) || running.current || factLocked(draft)) return false;
     setDraft({ ...draft, statement, command: undefined, result: undefined, submission: undefined });
     return true;
   };
   async function submit() {
     if (!usable()) return;
     if (!draft || running.current || (!admitted && !draft.command)) return;
-    if (currentDraft.current !== draft) return;
+    if (!sameHolder(currentDraft.current, draft)) return;
     if (reviewChangedSet && !draft.command) return;
     const sealed = draft.command ? draft : sealFacts(read.public.subject.id, read.release, [draft])[0];
     if (!sealed) return;
@@ -644,7 +666,7 @@ export function CharacterClassification({
   if (!visible || (!admitted && !holding)) return null;
   const fieldSubmit = !reviewChangedSet || !!draft?.command;
   return (
-    <section className="min-w-0">
+    <section className="min-w-0" data-classification-property={property}>
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 [overflow-wrap:anywhere] sm:p-6">
         <ContentItemHeading
           level={3}
@@ -799,7 +821,7 @@ export function CharacterClassification({
                     {m.classification_read_current({}, o)}
                   </Button>
                 )}
-                {reviewing && (
+                {reviewing && reviewTransport && (
                   <div className="min-w-0 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button]:[overflow-wrap:anywhere] [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_[data-slot=native-select-wrapper]]:w-full [&_select]:min-h-11 [&_label]:flex-wrap [&_label]:whitespace-normal">
                     <CandidateReview
                       id={read.public.subject.id}

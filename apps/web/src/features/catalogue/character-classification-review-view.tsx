@@ -1,7 +1,7 @@
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { pageText } from '../pages/data';
+import { pageText } from '../pages/shared';
 import { PartValue } from './statement-editor-view';
 import { type ReuseCapture, type ReuseRefusal, type ReuseSource } from './reference-reuse';
 import { ReferenceReusePanel } from './reference-reuse-view';
@@ -16,7 +16,9 @@ import {
   type FactsCurrent,
 } from './subject-facts';
 import {
+  classificationAdmitted,
   classificationBaselineKind,
+  classificationConfirmable,
   classificationReuseReason,
   classificationRetainedOutcomes,
   focusableClassificationHolder,
@@ -220,8 +222,15 @@ export function ClassificationReviewWorkspace({
   const changed = includedChanges(drafts);
   const items = projectChangedSet(drafts);
   const retained = classificationRetainedOutcomes(drafts, read);
-  const unsealed = changed.some((draft) => !draft.command);
-  const confirmable = !!changed.length && (!unsealed || changedReview.status === 'current') && !readFailed;
+  const admitted = new Set(
+    [...new Set(drafts.map((draft) => draft.property))].filter((property) => classificationAdmitted(read, property)),
+  );
+  const confirmable = classificationConfirmable({
+    drafts,
+    reviewCurrent: changedReview.status === 'current',
+    admitted,
+    readFailed,
+  });
   return (
     <div className="min-w-0 space-y-4">
       {changedReview.status !== 'closed' && (

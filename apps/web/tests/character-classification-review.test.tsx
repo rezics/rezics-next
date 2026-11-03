@@ -11,6 +11,7 @@ async function mounted(
     host: HTMLElement;
     render: (node: ReactNode) => Promise<void>;
     enter: (input: HTMLInputElement, value: string) => Promise<void>;
+    choose: (select: HTMLSelectElement, value: string) => Promise<void>;
   }) => Promise<void>,
 ) {
   const require = createRequire(import.meta.url);
@@ -43,6 +44,12 @@ async function mounted(
           input.dispatchEvent(new window.Event('input', { bubbles: true }));
         });
       },
+      choose: async (select, value) => {
+        await act(async () => {
+          select.value = value;
+          select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+      },
     });
   } finally {
     await act(async () => root.unmount());
@@ -60,6 +67,12 @@ function button(region: ParentNode, name: string) {
   return found!;
 }
 
+function field(root: ParentNode, property: string) {
+  const region = root.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
+  expect(region).toBeDefined();
+  return region!;
+}
+
 const keywords = 'schema:keywords';
 const gender = 'schema:gender';
 const concept = '00000000-0000-4000-8000-00000000d101';
@@ -67,7 +80,7 @@ const replacement = '00000000-0000-4000-8000-00000000d102';
 const evidence = 'https://archive.example/character/original';
 
 test('Character classifications review the changed set, copy evidence, repair a nested part, and return independent native outcomes', async () => {
-  await mounted(async ({ host, render, enter }) => {
+  await mounted(async ({ host, render, enter, choose }) => {
     const { CharacterClassifications } = await import('../src/features/catalogue/character-profile-classification');
     const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
     const { statementInput } = await import('../src/features/catalogue/statement-editor');
@@ -160,7 +173,15 @@ test('Character classifications review the changed set, copy evidence, repair a 
           properties: [keywords, gender],
           read,
           locale: 'en',
-          search: async () => [],
+          search: async () => [
+            {
+              id: concept,
+              title: '出典で明示された分類',
+              types: ['skos:Concept'],
+              typeLabel: 'Concept',
+              cover: null,
+            },
+          ],
           transport,
           review,
         }),
@@ -171,33 +192,27 @@ test('Character classifications review the changed set, copy evidence, repair a 
     expect(root.textContent).toContain('出典で明示された分類');
     expect(root.textContent).toContain(replacement);
     expect(root.textContent).not.toContain('A search label');
-    const field = (name: string) =>
-      [...root.querySelectorAll('h3')].find((heading) => heading.textContent === read.release.properties[name]!.labels.en)!
-        .closest('section')!;
-    const choose = async (name: string, id: string) => {
-      const select = field(name).querySelector<HTMLSelectElement>('select')!;
-      await act(async () => {
-        select.value = id;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    };
-    await choose(keywords, read.public.subject.statements[keywords]![0]!.id);
-    await act(async () => button(field(keywords), m.facts_edit_field()).click());
-    await enter(field(keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/edited`);
-    await act(async () => button(field(gender), m.facts_edit_field()).click());
-    await enter(field(gender).querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, concept);
+    await choose(
+      field(root, keywords).querySelector<HTMLSelectElement>('select')!,
+      read.public.subject.statements[keywords]![0]!.id,
+    );
+    await act(async () => button(field(root, keywords), m.facts_edit_field()).click());
+    await enter(field(root, keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/edited`);
+    await act(async () => button(field(root, gender), m.facts_edit_field()).click());
     await act(async () =>
-      [...field(keywords).querySelectorAll('button')].find((node) => node.textContent === m.facts_reuse_reference())!.click(),
+      [...field(root, keywords).querySelectorAll('button')]
+        .find((node) => node.textContent === m.facts_reuse_reference())!
+        .click(),
     );
     const reusePanel = root.querySelector('[data-fact-reuse]')!;
     const check = reusePanel.querySelector<HTMLElement>('button[role="checkbox"], input[type="checkbox"]')!;
     await act(async () => check.click());
     await act(async () => button(root, m.facts_reuse_apply()).click());
-    expect(field(gender).querySelectorAll('input[type="url"]').length).toBeGreaterThan(0);
+    expect(field(root, gender).querySelectorAll('input[type="url"]').length).toBeGreaterThan(0);
     expect(root.textContent).toContain(m.classification_siblings_retained());
     await act(async () => button(root, m.facts_review_open_field()).click());
     expect(root.textContent).toContain(m.facts_review_stale());
-    const nested = field(keywords).querySelector<HTMLInputElement>('input[type="url"]')!;
+    const nested = field(root, keywords).querySelector<HTMLInputElement>('input[type="url"]')!;
     await enter(nested, `${evidence}/repaired`);
     await act(async () => button(root, m.facts_review()).click());
     expect(root.textContent).toContain(`${evidence}/repaired`);
@@ -213,9 +228,9 @@ test('Character classifications review the changed set, copy evidence, repair a 
     expect(keywordCommand.statement.qualifiers).toEqual(statementInput(read.public.subject.statements[keywords]![0]!).qualifiers);
     expect(root.querySelector('#candidate-review')).toBeNull();
     const original = commands.find((command) => command.statement.property.id === keywords)!;
-    await enter(field(gender).querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await enter(field(root, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/sibling-only`);
     expect(commands.find((command) => command.statement.property.id === keywords)).toBe(original);
-    await act(async () => button(field(keywords), m.correction_review()).click());
+    await act(async () => button(field(root, keywords), m.correction_review()).click());
     expect(reviews.at(-1)).toEqual({ property: keywords, session: 'character-session' });
     await act(async () => button(root, m.classification_read_current()).click());
     expect(root.textContent).toContain(m.facts_result_proposed());
@@ -226,6 +241,7 @@ test('Character classifications review the changed set, copy evidence, repair a 
 test('failed current read, stale copy review and a removed holder diagnostic stay on that holder', async () => {
   await mounted(async ({ host, render, enter }) => {
     const { CharacterClassifications } = await import('../src/features/catalogue/character-profile-classification');
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
     const { m } = await import('../src/paraglide/messages.js');
     const { characterProfileFixture, characterProfileId } =
       await import('../src/kernel/fake/catalogue-character-profile');
@@ -260,34 +276,37 @@ test('failed current read, stale copy review and a removed holder diagnostic sta
       read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
     };
     await render(
-      h(CharacterClassifications, {
-        changedSetReview: true,
-        properties: [keywords, gender],
-        read,
-        locale: 'en',
-        search: async () => [],
-        transport,
-        review: () => fixture.props.review(characterProfileId, keywords),
-      }),
+      h(
+        CatalogueCurrentReading,
+        { visible: true, ready: true, revision: 'current' },
+        h(CharacterClassifications, {
+          changedSetReview: true,
+          properties: [keywords, gender],
+          read,
+          locale: 'en',
+          search: async () => [],
+          transport,
+          review: () => fixture.props.review(characterProfileId, keywords),
+        }),
+      ),
     );
-    const field = (name: string) =>
-      [...host.querySelectorAll('h3')].find((heading) => heading.textContent === read.release.properties[name]!.labels.en)!
-        .closest('section')!;
-    await act(async () => button(field(keywords), m.facts_edit_field()).click());
-    await enter(field(keywords).querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
-    await act(async () => button(field(gender), m.facts_edit_field()).click());
-    await enter(field(gender).querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await act(async () => button(field(host, keywords), m.facts_edit_field()).click());
+    await enter(field(host, keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/keywords`);
+    await act(async () => button(field(host, gender), m.facts_edit_field()).click());
+    await enter(field(host, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/gender`);
     await act(async () =>
-      [...field(keywords).querySelectorAll('button')].find((node) => node.textContent === m.facts_reuse_reference())!.click(),
+      [...field(host, keywords).querySelectorAll('button')]
+        .find((node) => node.textContent === m.facts_reuse_reference())!
+        .click(),
     );
-    await enter(field(keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/stale`);
+    await enter(field(host, keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/stale`);
     expect(host.textContent).toContain(m.facts_reuse_stale());
     await act(async () => button(host, m.candidate_cancel()).click());
     await act(async () => button(host, m.facts_submit()).click());
-    await act(async () => button(field(keywords), m.curation_view_discard()).click());
-    await act(async () => button(field(keywords), m.curation_view_discard()).click());
+    await act(async () => button(field(host, keywords), m.curation_view_discard()).click());
+    await act(async () => button(field(host, keywords), m.curation_view_discard()).click());
     expect(host.textContent).toContain(m.classification_removed_holder());
-    await enter(field(gender).querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await enter(field(host, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/after-read`);
     await act(async () => button(host, m.classification_read_current()).click());
     expect(host.textContent).toContain(m.classification_read_failed());
     expect(button(host, m.facts_submit()).disabled).toBe(true);
