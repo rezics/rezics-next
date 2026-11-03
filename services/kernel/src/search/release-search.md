@@ -49,6 +49,9 @@ unavailability. This prevents an old year-only index from establishing false neg
 The universal condition editor preserves imported typed endpoints as text, with its existing localized bound
 labels, rather than coercing them into numeric years. These primitives do not enable the release journey.
 
+Decision: when a platform is selected, release languages constrain that same `schema:gamePlatform` statement
+through its `schema:inLanguage` qualifier; without a platform, they use the release-level language facet.
+
 ## Remaining integration
 
 Install calendar preparation, publication, mixed/universal producer codecs and actual-physical-generation
