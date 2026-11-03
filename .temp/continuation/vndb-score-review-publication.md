@@ -18,7 +18,7 @@ after:
   - d45a389d-5107-4ef0-b7ad-7cb2d75932f5
 waiting: []
 acceptance:
-  command: [bun, apps/web/scripts/focused.ts, "--private-network", "--", bun, test, tests/personal-list-import.test.tsx]
+  command: [bun, apps/web/scripts/focused.ts, '--private-network', '--', bun, test, tests/personal-list-import.test.tsx]
   placement: default
   failing: true
   tests:
