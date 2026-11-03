@@ -229,7 +229,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
     rows: archiveRecords.length,
     recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
   };
-  const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })));
+  const decoded = decodeLibraryArchive(
+    Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })),
+  );
   expect<unknown>(decoded.records).toEqual(archiveRecords);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
     rows: 18,
@@ -244,7 +246,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(decoded.fullRestoration).toBe(false);
 
   await fixture.grant({ route, id: subjectIds[4]! }, 'owner', 'subject:read');
-  const archiveBase64 = Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })).toString('base64');
+  const archiveBase64 = Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })).toString(
+    'base64',
+  );
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${fixture.bearer('owner')}` },
     fetch: (async (input, init) => app.handle(new Request(input, init))) as typeof fetch,
@@ -559,7 +563,8 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
   const aborted = new AbortController();
   aborted.abort();
   const abortKey = randomUUID();
-  const beforeExport = await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`;
+  const beforeExport =
+    await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`;
   const beforeReceipts = await sql`SELECT count(*)::int AS count FROM core.receipt
     WHERE principal_id=${owner} AND command_kind='library.export.capture'`;
   const beforeEvents = await sql`SELECT count(*)::int AS count FROM core.outbox
@@ -570,12 +575,23 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
   expect(cancelledRequest === null || cancelledRequest.status >= 400 || (await cancelledRequest.text()) === '').toBe(
     true,
   );
-  expect((await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`)
-    .rows).toEqual(beforeExport.rows);
-  expect((await sql`SELECT count(*)::int AS count FROM core.receipt
-    WHERE principal_id=${owner} AND command_kind='library.export.capture'`).rows).toEqual(beforeReceipts.rows);
-  expect((await sql`SELECT count(*)::int AS count FROM core.outbox
-    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`).rows).toEqual(beforeEvents.rows);
+  expect(
+    (
+      await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`
+    ).rows,
+  ).toEqual(beforeExport.rows);
+  expect(
+    (
+      await sql`SELECT count(*)::int AS count FROM core.receipt
+    WHERE principal_id=${owner} AND command_kind='library.export.capture'`
+    ).rows,
+  ).toEqual(beforeReceipts.rows);
+  expect(
+    (
+      await sql`SELECT count(*)::int AS count FROM core.outbox
+    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`
+    ).rows,
+  ).toEqual(beforeEvents.rows);
   const cancelled = await capture();
   const path = `/v1/libraryExports/${cancelled.exportId}`;
   expect((await request('GET', `${path}/pages?cursor=forged`)).status).toBe(400);
@@ -695,10 +711,15 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
     const sectionRecords = records.filter((record) => record.section === section);
     expect(final.manifest.sectionTotals[section]).toEqual({
       rows: sectionRecords.length,
-      recordBytes: sectionRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
+      recordBytes: sectionRecords.reduce(
+        (bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'),
+        0,
+      ),
     });
   }
-  const annotation = records.find((record) => record.section === 'annotations' && record.subjectId === annotationSubject);
+  const annotation = records.find(
+    (record) => record.section === 'annotations' && record.subjectId === annotationSubject,
+  );
   const entry = await sql`SELECT incarnation_id::text AS id,library_profile_pin FROM library.entry
     WHERE route=${route} AND account_id=${owner} AND subject_id=${annotationSubject}`;
   expect(annotation).toMatchObject({
@@ -709,8 +730,12 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
     entryIncarnationId: entry.rows[0]!.id,
     libraryProfilePin: legacyPin,
   });
-  expect(records.some((record) => record.section === 'provenance' && record.subjectId === annotationSubject)).toBe(false);
-  const provenance = records.find((record) => record.section === 'provenance' && record.subjectId === provenanceSubject);
+  expect(records.some((record) => record.section === 'provenance' && record.subjectId === annotationSubject)).toBe(
+    false,
+  );
+  const provenance = records.find(
+    (record) => record.section === 'provenance' && record.subjectId === provenanceSubject,
+  );
   expect(provenance).toMatchObject({
     accountId: owner,
     observation: {

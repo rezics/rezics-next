@@ -58,19 +58,19 @@ versions and cursor shapes are refused. The archive-entry/label merge continues 
 
 ## Version matrix and section additions
 
-| Version | Capture use | Sections | Final accounting |
-| --- | --- | --- | --- |
-| 1 | Existing stored captures and their retries | The original 14 sections listed in the first installed manifest | `rows` and `recordBytes`; no new section claim or counters |
-| 2 | New captures | The version 1 sections followed by `annotations`, `provenance`, and `journals` | `rows`, `recordBytes`, and `sectionTotals` for all 17 sections |
+| Version | Capture use                                | Sections                                                                       | Final accounting                                               |
+| ------- | ------------------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| 1       | Existing stored captures and their retries | The original 14 sections listed in the first installed manifest                | `rows` and `recordBytes`; no new section claim or counters     |
+| 2       | New captures                               | The version 1 sections followed by `annotations`, `provenance`, and `journals` | `rows`, `recordBytes`, and `sectionTotals` for all 17 sections |
 
-| Omission | Version 1 | Version 2 |
-| --- | --- | --- |
-| `trash` | Excluded; current live facts and retained session history only | Same |
-| `providerIdentifiers` | Stored personal import evidence only; no shared custody scan or inferred identifiers | Explicitly reviewed owner observations and retained import evidence only; no shared custody scan or inferred identifiers |
+| Omission                 | Version 1                                                                                                             | Version 2                                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `trash`                  | Excluded; current live facts and retained session history only                                                        | Same                                                                                                                      |
+| `providerIdentifiers`    | Stored personal import evidence only; no shared custody scan or inferred identifiers                                  | Explicitly reviewed owner observations and retained import evidence only; no shared custody scan or inferred identifiers  |
 | `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded |
-| `commerce` | Excluded; orders and financial evidence use Commerce retention/export policy | Same |
-| `publication` | Excluded; stored rules only, no dynamic evaluation or working publication output | Same |
-| `reimport` | Unavailable; no installed re-import endpoint is promised | Version 1 archive recovery only; version 2 annotations, provenance and journals are not imported |
+| `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      |
+| `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      |
+| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | Version 1 archive recovery only; version 2 annotations, provenance and journals are not imported                          |
 
 Version 2 additions use independent owner-indexed selections. An annotation record preserves the account and Subject,
 the current entry incarnation and profile pin when an entry row exists, `annotationRevision`, note, priority and
@@ -132,21 +132,21 @@ Record keys use native snake_case. UUIDs retain their entire routable identity, 
 requested/version anchors separately; the routable Subject URL follows later identity redirects. They assert no
 current metadata visibility, provider identity or entitlement. No subject metadata is fetched to make the export.
 
-| Section        | Meaning                                                                                                                                                                                                               |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| entries        | `subject_id`, `requested_subject_id`, `incarnation_id`, stored exclusive `state`, `revision`, `library_profile_pin`; `created_at`, `updated_at`, `activity_at`, `finished_at` remain independent timestamps           |
-| labels         | `label_id`, `normalized_name`, `revision`, `created_at`, `updated_at`; only live owner labels                                                                                                                         |
-| assignments    | Composite `(subject_id,label_id)`, nullable historical `assignment_id`, revision and dates; only live assignments with a live label parent                                                                            |
+| Section        | Meaning                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| entries        | `subject_id`, `requested_subject_id`, `incarnation_id`, stored exclusive `state`, `revision`, `library_profile_pin`; `created_at`, `updated_at`, `activity_at`, `finished_at` remain independent timestamps                                |
+| labels         | `label_id`, `normalized_name`, `revision`, `created_at`, `updated_at`; only live owner labels                                                                                                                                              |
+| assignments    | Composite `(subject_id,label_id)`, nullable historical `assignment_id`, revision and dates; only live assignments with a live label parent                                                                                                 |
 | sessions       | `session_id`, subject/version anchors, mode/unit, total, amount, additional measures, locator, position, completed-unit count, state/revision/pin, started/completed/last-changed dates; active, completed and abandoned retained sessions |
-| units          | `session_id`, exact opaque `unit_id` and `added_at`; a sparse completed set, never a derived interval                                                                                                                 |
-| history        | `session_id`, `change_no`, original `intent`, `recorded_at`; independent recorded progress intents                                                                                                                    |
-| holdings       | `copy_id`, subject, kind/status, all three stored profile pins, location/source, acquired/disposed dates, note, revision and creation/update timestamps; only retained live copies                                    |
-| collections    | Own active metadata: identity, title/description/privacy/revision, membership kind, builtin identity/pins, presentation kind, stored rule/filter/sort/release/revision and dates                                      |
-| collectionPins | Owner `collection_ids` ordering and revision; references do not disclose referenced Collections                                                                                                                       |
-| occurrences    | Own curated live `member_id`, parent/subject IDs, note, `ordinal_key`, member revision and `added_at`; duplicates retain independent identity and order                                                               |
-| annotations    | Version 2 only; owner/Subject identity, entry incarnation and pin when present, note/priority and annotation revision/update time; independent of other optional rows |
-| provenance     | Version 2 only; one accepted owner observation with declared provider/record ID, native revision, privacy and source timestamp precision |
-| journals       | Version 2 only; one live occurrence with owner/session identity, original profile pin, independent journal/progress revisions and partial reported dates |
+| units          | `session_id`, exact opaque `unit_id` and `added_at`; a sparse completed set, never a derived interval                                                                                                                                      |
+| history        | `session_id`, `change_no`, original `intent`, `recorded_at`; independent recorded progress intents                                                                                                                                         |
+| holdings       | `copy_id`, subject, kind/status, all three stored profile pins, location/source, acquired/disposed dates, note, revision and creation/update timestamps; only retained live copies                                                         |
+| collections    | Own active metadata: identity, title/description/privacy/revision, membership kind, builtin identity/pins, presentation kind, stored rule/filter/sort/release/revision and dates                                                           |
+| collectionPins | Owner `collection_ids` ordering and revision; references do not disclose referenced Collections                                                                                                                                            |
+| occurrences    | Own curated live `member_id`, parent/subject IDs, note, `ordinal_key`, member revision and `added_at`; duplicates retain independent identity and order                                                                                    |
+| annotations    | Version 2 only; owner/Subject identity, entry incarnation and pin when present, note/priority and annotation revision/update time; independent of other optional rows                                                                      |
+| provenance     | Version 2 only; one accepted owner observation with declared provider/record ID, native revision, privacy and source timestamp precision                                                                                                   |
+| journals       | Version 2 only; one live occurrence with owner/session identity, original profile pin, independent journal/progress revisions and partial reported dates                                                                                   |
 
 | bangumiUploads / bangumiEvidence | Owner upload identity/cancellation and original ordinal/evidence, including stored provider IDs and field meanings; no reviews, choice tokens or apply internals |
 | malImports / malEvidence | Unexpired owner upload identity/cancellation/expiry and indexed parsed source rows, including original provider IDs, dates/precision and unknown vocabulary; credential-shaped fields excluded |

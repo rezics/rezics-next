@@ -10,10 +10,7 @@ import {
 } from './library-export-format.ts';
 export { exportSections, exportSectionsV2 } from './library-export-format.ts';
 
-type JournalDate =
-  | { year: number }
-  | { year: number; month: number }
-  | { year: number; month: number; day: number };
+type JournalDate = { year: number } | { year: number; month: number } | { year: number; month: number; day: number };
 type PrivacyFact =
   | { status: 'absent' | 'cleared' }
   | { status: 'unknown'; sourceValue?: string }
@@ -218,7 +215,10 @@ export async function readExportSourcePage(
   capturedAt: string,
   version: LibraryExportVersion = 1,
 ): Promise<ExportSourcePage> {
-  const seek = { ...input, sectionTotals: input.sectionTotals?.map(([rows, bytes]) => [rows, bytes] as [number, number]) };
+  const seek = {
+    ...input,
+    sectionTotals: input.sectionTotals?.map(([rows, bytes]) => [rows, bytes] as [number, number]),
+  };
   const sections = sectionsForVersion(version);
   const section = sections[seek.section] as LibraryExportSectionV2 | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
@@ -229,7 +229,8 @@ export async function readExportSourcePage(
     const sourceSql = queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
-    const after = seek.after ||
+    const after =
+      seek.after ||
       (section === 'assignments'
         ? `${ZERO}/${ZERO}`
         : section === 'bangumiEvidence'

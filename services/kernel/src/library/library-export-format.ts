@@ -99,7 +99,9 @@ export type LibraryExportFinalManifest = LibraryExportFinalManifestV1 | LibraryE
 
 export function libraryExportManifest(capture: Capture & { format_version?: 1 }): LibraryExportManifestV1;
 export function libraryExportManifest(capture: Capture & { format_version: 2 }): LibraryExportManifestV2;
-export function libraryExportManifest(capture: Capture & { format_version?: LibraryExportVersion }): LibraryExportManifest;
+export function libraryExportManifest(
+  capture: Capture & { format_version?: LibraryExportVersion },
+): LibraryExportManifest;
 
 export function libraryExportManifest(
   capture: Capture & { format_version?: LibraryExportVersion },

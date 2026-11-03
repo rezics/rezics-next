@@ -27,7 +27,12 @@ const sectionV1 = t.Union([
   t.Literal('occurrences'),
   t.Literal('malEvidence'),
 ]);
-const sectionV2 = t.Union([...sectionV1.anyOf, t.Literal('annotations'), t.Literal('provenance'), t.Literal('journals')]);
+const sectionV2 = t.Union([
+  ...sectionV1.anyOf,
+  t.Literal('annotations'),
+  t.Literal('provenance'),
+  t.Literal('journals'),
+]);
 const sectionsV1 = t.Tuple(exportSections.map((section) => t.Literal(section)) as never);
 const sectionsV2 = t.Tuple(exportSectionsV2.map((section) => t.Literal(section)) as never);
 const manifestV1Fields = {
@@ -68,7 +73,10 @@ const statusSchema = t.Union([
   t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
-const sectionTotalsV2 = t.Object(Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])), closed);
+const sectionTotalsV2 = t.Object(
+  Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])),
+  closed,
+);
 const year = t.Integer({ minimum: 1, maximum: 9999 });
 const month = t.Integer({ minimum: 1, maximum: 12 });
 const day = t.Integer({ minimum: 1, maximum: 31 });
@@ -82,7 +90,10 @@ const privacyFact = t.Union([
   t.Object({ status: t.Literal('absent') }, closed),
   t.Object({ status: t.Literal('cleared') }, closed),
   t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(text) }, closed),
-  t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
+  t.Object(
+    { status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) },
+    closed,
+  ),
 ]);
 const timestampFact = t.Union([
   t.Object({ status: t.Literal('absent') }, closed),
