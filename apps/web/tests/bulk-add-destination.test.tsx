@@ -113,7 +113,9 @@ test('producer selection change retires an unsubmitted bulk destination and requ
   const root = createRoot(host);
   const captures: BulkAddCapture[] = [];
   const render = (value: typeof selection) =>
-    root.render(<BulkAddDestination selection={value} current={() => true} onCapture={(capture) => captures.push(capture)} />);
+    root.render(
+      <BulkAddDestination selection={value} current={() => true} onCapture={(capture) => captures.push(capture)} />,
+    );
   await settle(() => render(selection));
   await settle(() => host.querySelector<HTMLButtonElement>(`[data-move-destination="${original.id}"]`)!.click());
   expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);

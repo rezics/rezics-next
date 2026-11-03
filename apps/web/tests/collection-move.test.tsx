@@ -72,14 +72,15 @@ const client = createKernelClient('https://kernel.test', {
       });
     if (url.pathname === '/v1/collections')
       return Response.json({
-        collections: url.searchParams.get('cursor') === 'destinations-page-3'
-          ? [{ ...recording.collection, id: 'destination', title: 'Destination', membershipKind: 'curated' }]
-          : url.searchParams.get('cursor') === 'destinations-page-2'
-            ? []
-            : [
-              { ...recording.collection, id: 'source', membershipKind: 'curated' },
-              { ...recording.collection, id: 'dynamic', membershipKind: 'dynamic' },
-            ],
+        collections:
+          url.searchParams.get('cursor') === 'destinations-page-3'
+            ? [{ ...recording.collection, id: 'destination', title: 'Destination', membershipKind: 'curated' }]
+            : url.searchParams.get('cursor') === 'destinations-page-2'
+              ? []
+              : [
+                  { ...recording.collection, id: 'source', membershipKind: 'curated' },
+                  { ...recording.collection, id: 'dynamic', membershipKind: 'dynamic' },
+                ],
         next:
           url.searchParams.get('cursor') === 'destinations-page-3'
             ? null
@@ -159,7 +160,9 @@ test('bounded deep destination and placement browsing preserves duplicate occurr
       ),
     );
     expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
-    expect(host.querySelector<HTMLButtonElement>('button')!.textContent).toBe(m.library_collection_move_more_destinations());
+    expect(host.querySelector<HTMLButtonElement>('button')!.textContent).toBe(
+      m.library_collection_move_more_destinations(),
+    );
     await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());
     expect(host.querySelectorAll('[data-move-destination]')).toHaveLength(0);
     await settle(() => host.querySelector<HTMLButtonElement>('button')!.click());

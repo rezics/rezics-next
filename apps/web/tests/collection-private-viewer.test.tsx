@@ -119,7 +119,10 @@ const moveChoicesRead = spyOn(moveReads, 'readCollectionMoveChoices').mockResolv
   collections: [{ id: collectionRecording.collection.id, title: 'Destination' }],
   next: null,
 });
-const movePlacementsRead = spyOn(moveReads, 'readCollectionMovePlacements').mockResolvedValue({ members: [], next: null });
+const movePlacementsRead = spyOn(moveReads, 'readCollectionMovePlacements').mockResolvedValue({
+  members: [],
+  next: null,
+});
 let address: { id: string; cursor?: string; filters?: Record<string, string | string[]> } = { id: 'original' };
 let initialPage: CollectionPageResult | undefined;
 spyOn(Route, 'useParams').mockImplementation(() => ({ id: address.id }) as never);
@@ -157,7 +160,12 @@ function ready(call: Call, viewerId = 'alice', change: Partial<CollectionPageRes
       actions: [
         {
           action: 'collection:update',
-          operations: ['collection.update', 'collection_member.move', 'collection_member.transfer', 'collection_member.batch_remove'],
+          operations: [
+            'collection.update',
+            'collection_member.move',
+            'collection_member.transfer',
+            'collection_member.batch_remove',
+          ],
         },
       ],
     },
@@ -495,7 +503,9 @@ async function stageDraft(ui: MountedCollection, next: 'transfer' | 'batch' | 'm
     );
     await settle(() => ui.host.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click());
     await settle();
-    await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destination.id}"]`)!.click());
+    await settle(() =>
+      ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destination.id}"]`)!.click(),
+    );
     await clickNamed(ui, m.library_collection_move_review_button());
   }
   if (next === 'batch') {

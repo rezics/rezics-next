@@ -364,9 +364,7 @@ export function CollectionMoveChooser({
                 else restartChoices();
               }}
             >
-              {destinationId
-                ? m.library_collection_move_reread_destination()
-                : m.library_collection_move_retry()}
+              {destinationId ? m.library_collection_move_reread_destination() : m.library_collection_move_retry()}
             </Button>
           </div>
         ) : null}
@@ -458,11 +456,13 @@ export function CollectionMoveChooser({
           ) : null}
           {selectedAnchor ? (
             <div className="min-w-0 rounded-lg bg-muted/40 p-3 text-sm" data-selected-move-anchor>
-              <p>{m.library_collection_move_anchor_review({
-                page: selectedAnchor.page,
-                position: selectedAnchor.position,
-                title: selectedAnchor.title,
-              })}</p>
+              <p>
+                {m.library_collection_move_anchor_review({
+                  page: selectedAnchor.page,
+                  position: selectedAnchor.position,
+                  title: selectedAnchor.title,
+                })}
+              </p>
               <code className="break-all">{selectedAnchor.id}</code>
               {!selectionReady ? <p>{m.library_collection_move_reselect_anchor()}</p> : null}
             </div>
@@ -475,7 +475,9 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={placementIssue === 'changed' || placementIssue === 'denied' ? retryPlacementPage : restartPlacements}
+                onClick={
+                  placementIssue === 'changed' || placementIssue === 'denied' ? retryPlacementPage : restartPlacements
+                }
               >
                 {placementIssue === 'changed' || placementIssue === 'denied'
                   ? m.library_collection_move_reread_destination()

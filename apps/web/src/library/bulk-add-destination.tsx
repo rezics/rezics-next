@@ -33,8 +33,7 @@ export function BulkAddDestination({
       setSelectionEpoch((epoch) => epoch + 1);
     }
   }, [selectionKey]);
-  const chooserCurrent = () =>
-    current() && !submitted.current && selectionKeyRef.current === selectionKey;
+  const chooserCurrent = () => current() && !submitted.current && selectionKeyRef.current === selectionKey;
   function capture(event: FormEvent) {
     event.preventDefault();
     if (disabled || !chooserCurrent() || !destination) return;

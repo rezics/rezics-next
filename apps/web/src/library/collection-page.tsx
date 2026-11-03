@@ -2,10 +2,7 @@ import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { useCollectionDraftNavigation } from './collection-draft-navigation';
-import {
-  CollectionMoveChooser,
-  type CollectionMoveChoice,
-} from './collection-move-chooser';
+import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-move-chooser';
 import { readCollectionDestination } from './collection-read';
 import { readCollectionMovePlacements } from './collection-move-read';
 import { CollectionAddMembers } from './collection-add-members';
@@ -412,9 +409,9 @@ function CollectionPageLifetime({
   const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
   const [transfer, setTransfer] = useState<(CollectionTransferReview & { memberIds: string[] }) | null>(null);
   const [chooserEpoch, setChooserEpoch] = useState(0);
-  const [transferState, setTransferState] = useState<
-    'review' | 'pending' | 'unknown' | 'refused' | 'confirmed' | null
-  >(null);
+  const [transferState, setTransferState] = useState<'review' | 'pending' | 'unknown' | 'refused' | 'confirmed' | null>(
+    null,
+  );
   const [transferReceipt, setTransferReceipt] = useState<CollectionTransferReceipt | null>(null);
   const transferReceiptHeading = useRef<HTMLHeadingElement>(null);
   const transferReviewHeading = useRef<HTMLHeadingElement>(null);
@@ -1025,9 +1022,7 @@ function CollectionPageLifetime({
             saveIntent.current = null;
             setTransferState('refused');
             setConflict(false);
-            setFailure(
-              result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result),
-            );
+            setFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
           }
           return;
         }
@@ -1555,7 +1550,12 @@ function CollectionPageLifetime({
             data-collection-transfer-receipt
             aria-labelledby="collection-transfer-receipt-heading"
           >
-            <h2 id="collection-transfer-receipt-heading" ref={transferReceiptHeading} tabIndex={-1} className="font-semibold">
+            <h2
+              id="collection-transfer-receipt-heading"
+              ref={transferReceiptHeading}
+              tabIndex={-1}
+              className="font-semibold"
+            >
               {m.library_collection_move_receipt()}
             </h2>
             <p>
@@ -1564,7 +1564,9 @@ function CollectionPageLifetime({
                 destination: transferReceipt.destinationRevision,
               })}
             </p>
-            {transferReceipt.state === 'reading' ? <p role="status">{m.library_collection_move_reconciling()}</p> : null}
+            {transferReceipt.state === 'reading' ? (
+              <p role="status">{m.library_collection_move_reconciling()}</p>
+            ) : null}
             {transferReceipt.state === 'ready' ? <p role="status">{m.library_collection_move_reconciled()}</p> : null}
             {transferReceipt.state === 'unavailable' ? (
               <div role="alert" className="space-y-2">
@@ -1680,7 +1682,8 @@ function CollectionPageLifetime({
                 !inFlight.current &&
                 saveIntent.current === null &&
                 transfer === null
-              ) setTitle(value);
+              )
+                setTitle(value);
             }}
             onDescriptionChange={(value) => {
               if (
@@ -1701,7 +1704,8 @@ function CollectionPageLifetime({
                   !inFlight.current &&
                   saveIntent.current === null &&
                   transfer === null
-                ) setKind(value);
+                )
+                  setKind(value);
               }}
               coverMediaId={coverMediaId}
               onCoverChange={(value) => {
@@ -1807,7 +1811,8 @@ function CollectionPageLifetime({
                     inFlight.current ||
                     saveIntent.current !== null ||
                     transfer !== null
-                  ) return;
+                  )
+                    return;
                   setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
                   setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
                   setSelectedIds(new Set());
@@ -1906,7 +1911,12 @@ function CollectionPageLifetime({
                   data-collection-transfer-review
                   aria-labelledby="collection-transfer-review-heading"
                 >
-                  <h3 id="collection-transfer-review-heading" ref={transferReviewHeading} tabIndex={-1} className="font-semibold">
+                  <h3
+                    id="collection-transfer-review-heading"
+                    ref={transferReviewHeading}
+                    tabIndex={-1}
+                    className="font-semibold"
+                  >
                     {m.library_collection_move_review_heading()}
                   </h3>
                   <p>
@@ -1939,7 +1949,8 @@ function CollectionPageLifetime({
                     </p>
                   ) : (
                     <p>
-                      <strong>{m.library_collection_move_review_placement()}</strong> {m.library_collection_move_first()}
+                      <strong>{m.library_collection_move_review_placement()}</strong>{' '}
+                      {m.library_collection_move_first()}
                     </p>
                   )}
                   <p className="text-sm">{m.library_collection_move_atomic()}</p>
@@ -2080,9 +2091,9 @@ function CollectionPageLifetime({
                   return next;
                 });
               }}
-                onMove={(memberId, after) => {
-                  if (transfer === null) setMemberOrder(memberId, after);
-                }}
+              onMove={(memberId, after) => {
+                if (transfer === null) setMemberOrder(memberId, after);
+              }}
               onBoundaryMove={boundaryAdmitted ? moveToBoundary : undefined}
               boundaryBlocked={draftChanged || conflict || session.state !== 'signed-in' || !session.subject}
               onNoteChange={(memberId, note) => {
@@ -2091,7 +2102,8 @@ function CollectionPageLifetime({
                   inFlight.current ||
                   saveIntent.current !== null ||
                   transfer !== null
-                ) return;
+                )
+                  return;
                 setMembers((current) =>
                   current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
                 );
@@ -2108,7 +2120,8 @@ function CollectionPageLifetime({
                   inFlight.current ||
                   saveIntent.current !== null ||
                   transfer !== null
-                ) return;
+                )
+                  return;
                 setMembers((current) => current.filter((member) => member.id !== memberId));
                 setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
               }}
@@ -2130,7 +2143,11 @@ function CollectionPageLifetime({
             className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
             data-collection-save
           >
-            <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict || transfer !== null}>
+            <Button
+              type="submit"
+              form="collection-edit-form"
+              disabled={!hydrated || pending || conflict || transfer !== null}
+            >
               {writing ? m.library_collection_save_pending() : m.library_collection_save()}
             </Button>
             <Button
