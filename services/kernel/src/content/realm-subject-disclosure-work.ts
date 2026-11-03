@@ -36,7 +36,7 @@ export async function realmSubjectPoint<R extends QueryResultRow>(
   if (!work) return dispatch();
   const bound: AccessWork = {
     keys: plan.keys,
-    points: 1,
+    points: plan.keys + 1,
     witnesses: 0,
     rows: plan.rows,
     bytes: size(parameters) + plan.bytes,

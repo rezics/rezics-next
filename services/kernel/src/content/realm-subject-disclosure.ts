@@ -60,6 +60,17 @@ type Binding = NonNullable<(typeof bindingRead)['~reylo']['element']>;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** A reanchored home must retain its epoch and move only forward. Unrelated
+ * commits may advance position without changing any of the exact observations.
+ * A new epoch needs a new census attempt, never reuse of this prepared evidence.
+ */
+function currentHome(before: Observation, after: Observation): boolean {
+  return before.anchors.every((previous) => after.anchors.some((current) =>
+    current.partition.partitionNo === previous.partition.partitionNo &&
+    current.epoch === previous.epoch && current.position >= previous.position,
+  ));
+}
+
 function route(id: string): number {
   const value = typeof id === 'string' && uuid.test(id) ? routeOf(id) : null;
   if (value === null) throw new TypeError('Invalid Realm Subject candidate identity');
@@ -231,12 +242,13 @@ export async function prepareRealmSubjectDisclosure(
       for (let index = 0; index < prepared.length; index++) {
         const item = prepared[index]!;
         if ('state' in item) { results.push(item); continue; }
-        if (!finalParent || finalParent.signature !== item.parent.signature) {
+        if (!finalParent || finalParent.signature !== item.parent.signature || !currentHome(item.parent, finalParent)) {
           results.push({ state: 'withheld' }); continue;
         }
         const candidate = request.candidates[index]!;
         const subject = await observeSubject(dependencies, candidate.subjectId, context);
-        const source = subject && subject.signature === item.subject.signature ? await item.source.final() : null;
+        const source = subject && subject.signature === item.subject.signature && currentHome(item.subject, subject)
+          ? await item.source.final() : null;
         if (!subject || !source) {
           results.push({ state: 'withheld' }); continue;
         }

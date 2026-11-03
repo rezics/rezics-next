@@ -1629,7 +1629,8 @@ export async function prepareRealmSubjectThreadDisclosure(
     async final() {
       // Reuse the original baseline. Re-reading cannot bless a changed source.
       const current = await snapshot(dependencies, candidate.threadId, context, allowed);
-      if (!current.value || !(await boardObservation.recheck())) return null;
+      if (!current.value || current.anchor.epoch !== observed.anchor.epoch ||
+          current.anchor.position < observed.anchor.position || !(await boardObservation.recheck())) return null;
       return {
         signature: createHash('sha256').update(baseline).digest('hex'),
         anchors: [current.anchor],
