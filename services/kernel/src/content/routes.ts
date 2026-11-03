@@ -1064,11 +1064,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const context = { actor, deadline: job.deadline };
             const threadId = await containingThread(id, context);
             const page = await listPostRevisions(dependencies, threadId, id, context, query.cursor, query.limit ?? 20);
-            const posts = [];
-            for (const revision of page.entries) posts.push(await exactPost(threadId, id, context, revision.id));
-            session.record(sessionComponent(page.anchor));
-            for (const post of posts) session.record(sessionComponent(post.anchor));
-            return { revisions: posts.map((post) => post.value), next: page.nextCursor };
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { revisions: [...page.posts], next: page.nextCursor };
           }),
         ),
     )
