@@ -146,7 +146,9 @@ function nativeRecord(value: unknown, partition: number): ReviewDiscoveryRecord 
 function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord {
   if (
     !object(value) ||
-    Object.keys(value).some((field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId'].includes(field)) ||
+    Object.keys(value).some(
+      (field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId'].includes(field),
+    ) ||
     !['id', 'subjectId', 'authorId', 'title', 'revisionId'].every((field) => Object.hasOwn(value, field)) ||
     typeof value.authorId !== 'string' ||
     routeOf(value.authorId) === null
@@ -367,8 +369,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       const next = raw.next === null ? null : key(raw.next, partition);
       if (
         next !== null &&
-        ((previous !== null && compare(previous, next) >= 0) ||
-          (prior !== null && compare(prior, next) > 0))
+        ((previous !== null && compare(previous, next) >= 0) || (prior !== null && compare(prior, next) > 0))
       )
         throw new TypeError('Review continuation must advance past every returned eligible key');
       return {
@@ -401,7 +402,11 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
         const owned = saved.filter((row) => row.partition === partition);
         for (let offset = 0; offset < owned.length; offset += REVIEW_DISCOVERY_BATCH_SIZE) {
           const chunk = owned.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE);
-          const current = await currentRows(ownerSource, partition, chunk.map((row) => row.id));
+          const current = await currentRows(
+            ownerSource,
+            partition,
+            chunk.map((row) => row.id),
+          );
           const byId = new Map(current.reviews.map((row) => [row.id, row]));
           for (const indexed of chunk) {
             const observed = byId.get(indexed.id);

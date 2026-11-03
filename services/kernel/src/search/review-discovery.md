@@ -35,12 +35,12 @@ the opening revision or a global position.
 
 ## Cost, bounds and growth
 
-| Operation | Static bound |
-| --- | --- |
-| Content page | One indexed candidate query with `LIMIT <= 101`; at most 100 candidates hydrated. Each candidate gets one Content thread read and one Semantic subject read, at most 200 owner reads. |
-| Count | One partition-position read; zero candidate reads. Content's exact count remains unavailable. |
-| Search current summaries | At most 160 documents, grouped by partition and sent in Content batches of 100; at most 320 current owner reads. |
-| Shared registry current reader | At most 200 identities, sent in batches of 100; at most 400 current owner reads. |
+| Operation                      | Static bound                                                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Content page                   | One indexed candidate query with `LIMIT <= 101`; at most 100 candidates hydrated. Each candidate gets one Content thread read and one Semantic subject read, at most 200 owner reads. |
+| Count                          | One partition-position read; zero candidate reads. Content's exact count remains unavailable.                                                                                         |
+| Search current summaries       | At most 160 documents, grouped by partition and sent in Content batches of 100; at most 320 current owner reads.                                                                      |
+| Shared registry current reader | At most 200 identities, sent in batches of 100; at most 400 current owner reads.                                                                                                      |
 
 Growth is bounded by the fixed page, candidate and current-read limits. Page cost does not grow with the population;
 continuations advance by the last examined native key. Content owns board, review, opening, subject eligibility and
