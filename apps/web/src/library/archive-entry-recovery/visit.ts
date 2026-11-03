@@ -289,8 +289,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>, checkpointed = false): boolean {
     if (!this.#accept('results', request)) return false;
     this.#results = ownRecoveryPage(results);
-    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed)
-      this.#cancelCheckpointed = true;
+    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed) this.#cancelCheckpointed = true;
     return true;
   }
 
