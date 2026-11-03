@@ -489,45 +489,94 @@ boards live in other partitions.
 
 `createReviewDiscoverySource` exports the Search producer contract: `ReviewDiscoverySource`, `IndexedReview`,
 `ReviewDiscoverySummary`, `ReviewDiscoverySnapshot`, `ReviewDiscoveryHydration`, `ReviewDiscoveryPageKey`,
-`ReviewDiscoveryPage`, `ReviewDiscoveryIncompletePage` and `ReviewDiscoveryCount`. Search keeps the existing thread
-ID as the document identity.
-The index candidate contains only the subject ID, current title, a 160-code-point excerpt and the opening revision
-ID and an opaque `sourceVersion`; author IDs and presentation stay out of the indexed document. Final hydration
-returns the current author ID,
-title and excerpt through Content's `readSubjectThread`; Search resolves current author presentation through
-Accounts. Semantic's `readSubjectReference` separately requires the pinned subject to remain visible and readable
-without following redirects.
+`ReviewDiscoveryPage`, `ReviewDiscoveryIncompletePage`, `ReviewDiscoveryHomeObservation`,
+`ReviewDiscoveryContinuation`, `ReviewDiscoveryPopulationPage` and `ReviewDiscoveryCount`. Search keeps the existing
+thread ID as the document identity. `sourceVersion` is an enumerable opaque value on candidate, read and hydration
+records; it is equality evidence for refresh ordering, never disclosure authority or content identity.
 
-Every source operation reads `core.partition.position` and its native rows in one repeatable-read snapshot. Anonymous
-`readSubjectThread` supplies the final current board, Realm/Space, placement, source-fence, review lifecycle,
-author-standing and opening-post checks. The separate Semantic reference read enforces current subject visibility and
-anonymous `subject:read`. Protected or stale candidates are omitted, so a hit that is no longer eligible becomes a
-native deletion when Search refreshes that thread ID. The native lifecycle producer below supplies incremental
-identity invalidations; eligibility always comes from these current reads.
+The `rv1_` value is SHA-256 over the review ID, opening revision ID, thread security revision, opening-post security
+revision, latest unique per-review receiving journal position, and each observed dependency home with its own epoch
+and position. The latest journal position is allocated by the review-partition receiver from an authenticated original;
+replaying the same original does not allocate another position. Positions from different homes remain keyed by home and
+are never compared as a shared clock. Native home observations also make an unincorporated scope or Access change
+change the version or make readiness incomplete. Current `readSubjectThread`, `accessCheck` and
+`readSubjectReference` results remain authoritative. A delayed invalidation can change the equality version, but it
+cannot restore old content or make a concealed review public.
 
-`sourceVersion` binds the exact opening revision ID, thread security revision and opening-post security revision,
-read together from native rows and matched against current hydration. `read`, `page` and `hydrate` export the same
-binding. Opening revision changes and deletion/restoration change it even when restoration keeps `revisionId`;
-unrelated partition writes do not. Search compares it for equality and copies it to the document version. The
-separate partition `position` remains an observation/cut, never a per-review lifecycle version.
+Each current candidate comes from native thread, board, opening-post and lifecycle rows. Anonymous
+`readSubjectThread` checks the current containing board, Realm/Space placement, source fence, review lifecycle,
+author standing and opening post. The separate Semantic subject read checks the pinned subject and anonymous
+`subject:read`. Protected or stale candidates are omitted; only current hydration determines whether a Search refresh
+adds or removes the document. Count remains explicitly unavailable until a bounded native census can prove every
+anonymous gate without exposing a protected population. Realm discussion-popularity counts continue to exclude
+reviews.
 
-Decision: page continuations require the initial page's `position` as `cut`; missing or changed cuts return typed
-incomplete readiness and require a fresh traversal.
+`read` and `hydrate` accept at most 100 IDs from one partition. Legacy `page` keeps its key and result shape and accepts
+the initial page position as an optional `cut`. A continuation without that cut returns `cut-required`; a changed
+partition position returns `cut-changed`, with no rows or exhaustion claim. This source-partition cut detects late
+local publications, but it cannot prove that all cross-home eligibility dependencies stayed stable. Search currently
+uses this legacy interface; its pages do not claim the stronger population coverage below.
 
-`read` and `hydrate` accept at most 100 IDs from one partition. `page` accepts limits 1–25, examines at most four
-candidates per requested result (100 maximum), and advances its full `(route, thread ID)` key past every examined
-candidate, including sparse or empty pages. The partial thread index supports that keyset. Each page
-uses the same native partition cut throughout a traversal: pass `page(partition, next, limit, cut)` on continuation.
-If the cut is absent or the partition has advanced, `ReviewDiscoveryIncompletePage` returns `cut-required` or
-`cut-changed`, with no rows or exhaustion claim. This detects late publication even before the retained frontier;
-restart from the beginning at a new cut. A cut is not a historical permission snapshot: final anonymous eligibility
-remains current, and an empty eligible page never proves an exact census. Each examined candidate
-gets one current Content read and one current Semantic subject read; no reply/history walk or review text table is
-added. Count reports unavailable until a bounded native census can prove every anonymous gate without exposing a
-protected population. Realm discussion-popularity counts continue to exclude reviews.
+`pageWithCut` is the coherent continuation API. It signs the full last-examined `(route, thread ID)` key, population
+frontier and all source/dependency home epoch and position observations. It raw-seeks every review identity, including
+concealed or withdrawn candidates, and captures dependency rows before owner reads. It reobserves the same finite home
+set after final hydration. A changed cut returns typed `changed`; pending invalidations return `preparing`; missing or
+fenced native capabilities return `unavailable` with the named capability. Passing a bare key returns
+`preparing` with `missing: population-cut`. New eligibility behind the raw frontier changes the source-home cut and
+requires a restart. Installation, an empty eligible page, the durable census frontier or a local partition position
+alone never certifies full population coverage.
 
-Search owns the closed kind union, generation writer and query integration; its consumer maps unavailable review
-counts to its existing unavailable count evidence and hydrates author presentation through Accounts.
+Both page paths accept limits 1–25, seek at most `C + 1` rows for `C = 4L ≤ 100`, hydrate at most C candidates and
+advance by the last examined full native key. Concealed rows count against C and are never refilled. Empty and sparse
+pages preserve that progress; a continuation is returned only when an unseen raw row exists. `pageWithCut` reads at
+most `D = 512` dependency rows and retains at most `H = 256` distinct homes. Exceeding either bound is typed
+unavailable. The population index supports the ordered raw seek, the latest-change index supports the keyed journal
+probe and the pending-work index supports the fixed existence check. No all-partition scan, count sweep, history walk,
+request-time replay or second candidate store is added.
+
+Decision: keep Search's `page(..., cut)` contract compatible and require signed `pageWithCut` for coherent continued-population coverage.
+
+#### Cost: current reads and hydration
+
+- **Touches:** at most L ≤ 100 candidate identities, D ≤ 512 dependency rows, H ≤ 256 keyed home observations, one
+  before and one final observation, two bounded pending-work probes and two bounded frontier reads. Each public
+  candidate gets one Content owner read and one Semantic subject owner read. Concealed candidates return no document.
+- **Bound:** fixed producer work is at most 9 SQL statements and 6 transaction controls before owner calls. Define
+  `ContentOwner = (Sc, Kc)` for the bounded `readSubjectThread` plus its Access callees, and `SubjectOwner = (Ss, Ks)`
+  for `subject:read` authorization plus `readSubjectReference`. Then SQL statements are at most
+  `9 + L × (Sc + Ss)` and transaction controls at most `6 + L × (Kc + Ks)`. The existing owner methods retain their
+  deadline, row and ancestry bounds. Dependency lookup is keyed; observations use partition keys; pending work and
+  lifecycle version use their partial/latest indexes.
+- **Growth check:** `test/content/growth-review-discovery.test.ts` measures current hydration after committed lifecycle
+  changes at 256, 1024 and 4096 native reviews.
+
+#### Cost: legacy partition-cut pages
+
+- **Touches:** one ordered eligible seek of at most C + 1 candidates, dependency rows for at most C selected
+  candidates, two cut observations and at most C current owner hydrations.
+- **Bound:** fixed producer work is at most 9 SQL statements and 6 transaction controls, plus
+  `C × (Sc + Ss)` statements and `C × (Kc + Ks)` controls. L ≤ 25, C = 4L ≤ 100 and D ≤ 512. This preserves the
+  established Search call shape, but the root-only continuation cannot certify cross-home population coverage.
+- **Growth check:** the same three-scale test checks sparse page progress and current hydration.
+
+#### Cost: signed coherent population pages
+
+- **Touches:** one ordered raw seek of C + 1 rows, D dependency rows, two population observations over H homes, two
+  indexed pending-work probes, two indexed frontier probes and at most C current owner hydrations. Continued pages
+  also reobserve the prior signed cut before seeking. The durable lifecycle receiver still delivers identity-only
+  work in fixed pages of at most 100 keys; the source does not infer receiver or Search drainage from Content work.
+- **Bound:** an initial page uses at most 8 fixed SQL statements and 6 transaction controls; a continued page uses at
+  most 11 and 6. Add `C × (Sc + Ss)` statements and `C × (Kc + Ks)` controls for owner calls. C ≤ 4L ≤ 100,
+  L ≤ 25, D ≤ 512 and H ≤ 256. These are whole-journey bounds, including empty and concealed candidates; no
+  refill loop resets the deadline or work budget.
+- **Growth check:** `test/content/growth-review-discovery.test.ts` checks the 256/1024/4096 native populations,
+  committed lifecycle invalidation, current reads, physical rows/statements/controls, bounded frontier memory and the
+  ordered population index without a sort.
+
+Search owns the journal receiver, exact target writes, committed receiving progress, generation writer and default
+supervisor. Its current producer adapter consumes legacy `page(..., cut)` and enumerable `sourceVersion`; adopting
+`pageWithCut` remains necessary before Search can claim coherent cross-home continued coverage. Content changes here
+do not infer Search convergence or main promotion.
 
 ### Review discovery lifecycle and Search handoff
 
