@@ -145,7 +145,11 @@ export function RealmCatalogueNavigation({
                   </p>
                 ) : null}
               </div>
-              <p id={destination} className="max-w-prose text-sm leading-relaxed text-muted-foreground" aria-live="polite">
+              <p
+                id={destination}
+                className="max-w-prose text-sm leading-relaxed text-muted-foreground"
+                aria-live="polite"
+              >
                 {draft.overflow
                   ? m.realm_catalogue_query_fix({}, options)
                   : draft.query

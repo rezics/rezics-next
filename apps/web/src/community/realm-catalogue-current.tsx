@@ -20,11 +20,11 @@ export function RealmCatalogueCurrent({ page, available }: { page: SpacePageData
   const realm = page.realm;
   const admitted = Boolean(
     available &&
-      realm &&
-      realm.presentation?.state !== 'hidden' &&
-      realm.continuity?.ownershipState !== 'orphaned' &&
-      (realm.credentialMode !== 'session' || (session.state === 'signed-in' && session.subject)) &&
-      (!lifetime || lifetime.admitted()),
+    realm &&
+    realm.presentation?.state !== 'hidden' &&
+    realm.continuity?.ownershipState !== 'orphaned' &&
+    (realm.credentialMode !== 'session' || (session.state === 'signed-in' && session.subject)) &&
+    (!lifetime || lifetime.admitted()),
   );
   const source = useMemo(
     () => ({ serial: ++serial.current, active: true, connected: false }),
@@ -52,11 +52,7 @@ export function RealmCatalogueCurrent({ page, available }: { page: SpacePageData
     };
   }, [source]);
   const isCurrent = () =>
-    source.active &&
-    source.connected &&
-    current.current === source &&
-    admitted &&
-    (!lifetime || lifetime.current());
+    source.active && source.connected && current.current === source && admitted && (!lifetime || lifetime.current());
   const community = realm?.presentation?.state === 'available' ? realm.presentation.value : null;
   return (
     <RealmCatalogueNavigation

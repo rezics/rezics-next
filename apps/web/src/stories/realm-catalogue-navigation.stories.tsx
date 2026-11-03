@@ -127,20 +127,25 @@ const longName = `A community for readers across languages — ${'UnbrokenCommun
 function preparedSource(state: 'long' | 'unreadable') {
   return () => {
     const previous = globalThis.fetch;
-    globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      const url = new URL(request.url);
-      if (url.origin !== 'http://kernel.local' || request.method !== 'GET') return previous(input, init);
-      if (state === 'unreadable' && /^\/v1\/realms\/[^/]+$/.test(url.pathname))
-        return Response.json({ code: 'not_found' }, { status: 404 });
-      const response = await previous(input, init);
-      if (state !== 'long' || !response.ok || !url.pathname.startsWith('/v1/realms/')) return response;
-      const body = await response.clone().json();
-      if (body.realm) body.realm.title = longName;
-      if (body.community) body.community.name = longName;
-      return Response.json(body, { status: response.status, headers: response.headers });
-    }, { preconnect: previous.preconnect }) as typeof fetch;
-    return () => { globalThis.fetch = previous; };
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const url = new URL(request.url);
+        if (url.origin !== 'http://kernel.local' || request.method !== 'GET') return previous(input, init);
+        if (state === 'unreadable' && /^\/v1\/realms\/[^/]+$/.test(url.pathname))
+          return Response.json({ code: 'not_found' }, { status: 404 });
+        const response = await previous(input, init);
+        if (state !== 'long' || !response.ok || !url.pathname.startsWith('/v1/realms/')) return response;
+        const body = (await response.clone().json()) as { realm?: { title: string }; community?: { name: string } };
+        if (body.realm) body.realm.title = longName;
+        if (body.community) body.community.name = longName;
+        return Response.json(body, { status: response.status, headers: response.headers });
+      },
+      { preconnect: previous.preconnect },
+    ) as typeof fetch;
+    return () => {
+      globalThis.fetch = previous;
+    };
   };
 }
 
