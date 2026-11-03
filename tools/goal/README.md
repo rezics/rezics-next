@@ -408,6 +408,62 @@ Each member's acceptance command runs concurrently against the final batch candi
 times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
+### Control-plane policy
+
+The table is the policy reference for values supplied by `defaults.json`. Local settings use the same dotted
+paths as nested objects and override individual leaves; omitted leaves retain the package default. For example,
+`{"policy":{"capacity":{"maxWorkers":16},"backlog":{"lowWater":4}}}` changes only those two limits.
+`config.ts` validates policy values before composing the runtime. Numeric `policy` leaves are positive safe integers,
+except `minAvailableMiB`, which also accepts zero. A host still opts into admission with `capacity.json`; its explicit
+worker and memory fields override `policy.capacity`. A missing capacity file continues to disable host admission.
+Managers choose implementation estimate size; routing has no line or file estimate cap.
+
+| Setting                                          | Default      | Purpose                                                                |
+| ------------------------------------------------ | ------------ | ---------------------------------------------------------------------- |
+| `terminationGraceMs`                             | `1500`       | Grace between termination signals when stopping an owned worker (ms).  |
+| `silenceMs`                                      | `2400000`    | Maximum running-worker log silence before recovery (ms).               |
+| `promotionParallelism`                           | `4`          | Concurrent promotion checks.                                           |
+| `integration.batchSize`                          | `4`          | Dev landings sharing one integration candidate.                        |
+| `integration.devLandingChecks`                   | `true`       | Run configured dev landing checks.                                     |
+| `integration.batchAcceptanceConcurrency`         | `8`          | Concurrent acceptance commands within a landing batch.                 |
+| `integration.gateConcurrency`                    | `1`          | Concurrent gate work.                                                  |
+| `integration.gateTimeoutMs`                      | `1800000`    | Integration check deadline (ms).                                       |
+| `integration.managerCompactTokens`               | `300000`     | Manager context compaction token threshold.                            |
+| `integration.checkResultReuse`                   | `false`      | Reuse matching check results.                                          |
+| `integration.hourlyReportTimeoutMs`              | `20000`      | Hourly report notifier deadline (ms).                                  |
+| `integration.managerLimits.turns`                | `100`        | Maximum manager turns per session.                                     |
+| `integration.managerLimits.turnsWithoutDecision` | `10`         | Manager turns allowed without a decision.                              |
+| `integration.managerLimits.wallMs`               | `43200000`   | Manager session wall deadline (ms).                                    |
+| `integration.devPrelandingTypecheck`             | `false`      | Run the dev compiler guard before landing.                             |
+| `codex.compactTokens.sol`                        | `160000`     | Sol context compaction token threshold.                                |
+| `codex.compactTokens.luna`                       | `200000`     | Luna context compaction token threshold.                               |
+| `codex.solContextWindow`                         | `500000`     | Sol context window tokens.                                             |
+| `codex.toolOutputTokens`                         | `4000`       | Maximum tokens returned by a worker tool call.                         |
+| `codex.backgroundTerminalMaxTimeoutMs`           | `7200000`    | Background terminal maximum wait (ms).                                 |
+| `flow.efficiencyBelow`                           | `0.4`        | Alarm below this useful-work efficiency ratio.                         |
+| `flow.oldestQueueMs`                             | `3600000`    | Alarm when the oldest queue entry exceeds this age (ms).               |
+| `flow.landingP90Ms`                              | `1800000`    | Alarm when the landing p90 exceeds this duration (ms).                 |
+| `flow.attemptsPerIntegrated`                     | `1.5`        | Alarm above this attempts-per-integrated-task ratio.                   |
+| `policy.backlog.lowWater`                        | `8`          | Ready briefs below which a running manager is woken.                   |
+| `policy.backlog.wakeIntervalMs`                  | `3600000`    | Minimum interval between low-backlog wakeups (ms).                     |
+| `policy.backlog.stoppedTaskLimitMs`              | `3600000`    | Stopped product task age before cancellation into failed backlog (ms). |
+| `policy.backlog.stoppedTasksPerGoalPerRun`       | `20`         | Maximum stopped tasks cancelled per Goal per sweep.                    |
+| `policy.backlog.dispatchesPerSweep`              | `4`          | Maximum briefs dispatched by one synchronous sweep.                    |
+| `policy.backlog.settleMs`                        | `10000`      | Minimum unchanged brief age before dispatch (ms).                      |
+| `policy.backlog.refusalBriefs`                   | `4`          | Maximum refused briefs listed in a notification.                       |
+| `policy.backlog.refusalReasonCharacters`         | `160`        | Maximum characters per listed refusal reason.                          |
+| `policy.backlog.refusalSummaryCharacters`        | `1000`       | Maximum refusal notification characters.                               |
+| `policy.capacity.maxWorkers`                     | `32`         | Default worker cap for host admission and backlog dispatch.            |
+| `policy.capacity.minAvailableMiB`                | `6144`       | Available memory floor for host admission; zero disables the floor.    |
+| `policy.capacity.criticalHeadStartMs`            | `1800000`    | Queue ticket head start for critical and stabilize work (ms).          |
+| `policy.capacity.admissionRetryMs`               | `50`         | Retry interval for a busy admission lease (ms).                        |
+| `policy.capacity.pollIntervalMs`                 | `15000`      | Worker and memory capacity poll interval (ms).                         |
+| `policy.capacity.reservationPollMs`              | `250`        | Poll interval until an admitted start is recorded (ms).                |
+| `policy.validation.notifierArguments`            | `32`         | Maximum notifier command argument count.                               |
+| `policy.validation.notifierArgumentCharacters`   | `4096`       | Maximum characters per notifier argument.                              |
+| `policy.validation.hourlyReportMaxTimeoutMs`     | `120000`     | Maximum accepted notifier deadline (ms).                               |
+| `policy.flowHistoryMs`                           | `2592000000` | Delivery flow reporting lookback (ms).                                 |
+
 ### Delivery flow telemetry
 
 `report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
@@ -456,7 +512,7 @@ product work.
 
 Set `integration.hourlyReportNotifier` in untracked local settings to an argv array to enable one report per completed
 UTC hour. Goal appends the report as the final argument, runs without a shell, discards notifier output, and stops the
-notifier after `integration.hourlyReportTimeoutMs` (default `20000`, maximum `120000`). Keep credentials in the
+notifier after `integration.hourlyReportTimeoutMs` (default `20000`, maximum from `policy.validation.hourlyReportMaxTimeoutMs`). Keep credentials in the
 notifier's secret store; Goal logs only a fixed delivery status and discards notifier output. Each hour's report and delivery outcome are stored
 durably; a sent, failed or uncertain outcome is not retried in that bucket. The manager host starts the report runner
 as a child and continues serving commands while it runs. Without a configured notifier, the report remains available

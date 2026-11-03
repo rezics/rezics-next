@@ -63,16 +63,26 @@ function currentStates(store: WorkerStore): Map<string, IncidentState> {
   return states;
 }
 
+// A probe task that finished can never run the probe attempt, so its incident would hold retries forever: one held
+// six tasks from 02:43 to 08:20 on 2026-11-03 after its probe task integrated on a later attempt.
+function probeFinished(store: WorkerStore, incident: ToolIncident): boolean {
+  try {
+    return ['integrated', 'merged', 'cancelled'].includes(store.taskState(incident.probe.taskId) ?? '');
+  } catch {
+    return false;
+  }
+}
+
 export function listOpenToolIncidents(store: WorkerStore): ToolIncident[] {
   return [...currentStates(store).values()]
-    .filter((state) => state.status === 'open')
+    .filter((state) => state.status === 'open' && !probeFinished(store, state.incident))
     .map((state) => structuredClone(state.incident))
     .sort((a, b) => a.openedAt.localeCompare(b.openedAt));
 }
 
 function openIncidentForFingerprint(store: WorkerStore, fingerprint: string): ToolIncident | null {
   const state = currentStates(store).get(fingerprint);
-  return state?.status === 'open' ? structuredClone(state.incident) : null;
+  return state?.status === 'open' && !probeFinished(store, state.incident) ? structuredClone(state.incident) : null;
 }
 
 function blockerLine(attempt: Attempt): string {
@@ -322,7 +332,7 @@ export function resolveToolIncidentsAfterAttempt(
   for (const incident of listOpenToolIncidents(store)) {
     if (
       incident.probe.taskId !== ref.taskId ||
-      ref.attempt !== incident.probe.attempt + 1 ||
+      ref.attempt <= incident.probe.attempt ||
       fingerprint === incident.fingerprint
     )
       continue;

@@ -157,5 +157,39 @@
     "backgroundTerminalMaxTimeoutMs": 7200000
   },
   "launchSmokePaths": ["tools/goal/**"],
-  "gate": ["bun", "scripts/gate.ts"]
+  "gate": ["bun", "scripts/gate.ts"],
+  "promotionParallelism": 4,
+  "flow": {
+    "efficiencyBelow": 0.4,
+    "oldestQueueMs": 3600000,
+    "landingP90Ms": 1800000,
+    "attemptsPerIntegrated": 1.5
+  },
+  "policy": {
+    "backlog": {
+      "lowWater": 8,
+      "wakeIntervalMs": 3600000,
+      "stoppedTaskLimitMs": 3600000,
+      "stoppedTasksPerGoalPerRun": 20,
+      "dispatchesPerSweep": 4,
+      "settleMs": 10000,
+      "refusalBriefs": 4,
+      "refusalReasonCharacters": 160,
+      "refusalSummaryCharacters": 1000
+    },
+    "capacity": {
+      "maxWorkers": 32,
+      "minAvailableMiB": 6144,
+      "criticalHeadStartMs": 1800000,
+      "admissionRetryMs": 50,
+      "pollIntervalMs": 15000,
+      "reservationPollMs": 250
+    },
+    "validation": {
+      "notifierArguments": 32,
+      "notifierArgumentCharacters": 4096,
+      "hourlyReportMaxTimeoutMs": 120000
+    },
+    "flowHistoryMs": 2592000000
+  }
 }

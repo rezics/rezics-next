@@ -2,6 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
+import { readControlPolicy } from './policy.ts';
+export { readControlPolicy } from './policy.ts';
 import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
@@ -166,14 +168,25 @@ function positiveInteger(value: unknown, label: string): number {
   if (!Number.isInteger(parsed)) throw new Error(`invalid ${label}`);
   return parsed;
 }
-function readArgvPrefix(value: unknown): string[] | undefined {
+function readArgvPrefix(
+  value: unknown,
+  policy: ReturnType<typeof readControlPolicy>['validation'],
+): string[] | undefined {
   if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) return undefined;
   if (
     !Array.isArray(value) ||
-    value.length > 32 ||
-    value.some((part) => typeof part !== 'string' || !part.trim() || part.length > 4096 || part.includes('\0'))
+    value.length > policy.notifierArguments ||
+    value.some(
+      (part) =>
+        typeof part !== 'string' ||
+        !part.trim() ||
+        part.length > policy.notifierArgumentCharacters ||
+        part.includes('\0'),
+    )
   )
-    throw new Error('hourlyReportNotifier must be a nonempty command array with at most 32 arguments');
+    throw new Error(
+      `hourlyReportNotifier must be a nonempty command array with at most ${policy.notifierArguments} arguments of ${policy.notifierArgumentCharacters} characters`,
+    );
   return value as string[];
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
@@ -253,10 +266,12 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'pools',
       'notes',
       'flow',
+      'policy',
     ],
     'settings',
   );
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
+  const policy = readControlPolicy(local.policy);
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
   const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', localFile], { cwd: main, encoding: 'utf8' });
@@ -347,9 +362,10 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     flowThresholds.attemptsPerIntegrated <= 0
   )
     throw new Error('invalid flow alarm thresholds');
-  const hourlyReportNotifier = readArgvPrefix(integration.hourlyReportNotifier);
+  const hourlyReportNotifier = readArgvPrefix(integration.hourlyReportNotifier, policy.validation);
   const hourlyReportTimeoutMs = positiveInteger(integration.hourlyReportTimeoutMs, 'hourlyReportTimeoutMs');
-  if (hourlyReportTimeoutMs > 120_000) throw new Error('hourlyReportTimeoutMs must be at most 120000');
+  if (hourlyReportTimeoutMs > policy.validation.hourlyReportMaxTimeoutMs)
+    throw new Error(`hourlyReportTimeoutMs must be at most ${policy.validation.hourlyReportMaxTimeoutMs}`);
   return {
     version: 1,
     mainCheckout: main,
@@ -361,7 +377,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     stabilizeBranch: text(local.stabilizeBranch ?? 'stabilize', 'stabilizeBranch'),
-    promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
+    promotionParallelism: positive(local.promotionParallelism ?? defaults.promotionParallelism, 'promotionParallelism'),
     ...(promotionPlacement === undefined ? {} : { promotionPlacement }),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
     gate: gate as string[],
@@ -375,6 +391,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     pools,
     notes: parseNotes(local.notes),
     flowThresholds,
+    policy,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     silenceMs: positive(local.silenceMs ?? defaults.silenceMs, 'silenceMs'),
     codex: {
@@ -782,6 +799,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       sweepBacklog({
         db,
         stateDirectory: settings.stateDirectory,
+        policy: settings.policy,
         inbox,
         async dispatch(brief) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
@@ -807,7 +825,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       const now = new Date();
       const metrics = await lifecycleMetricsAsync(db, now);
       const flow = flowReport(
-        readFlow(db, new Date(now.getTime() - 30 * 86400_000).toISOString()),
+        readFlow(db, new Date(now.getTime() - (settings.policy ?? defaults.policy).flowHistoryMs).toISOString()),
         readFlowTasks(db),
         now.getTime(),
       );

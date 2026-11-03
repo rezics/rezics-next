@@ -1,3 +1,4 @@
+import defaults from '../defaults.json';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import type { Task } from './types.ts';
@@ -369,12 +370,7 @@ export type FlowThresholds = {
   landingP90Ms: number;
   attemptsPerIntegrated: number;
 };
-export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = {
-  efficiencyBelow: 0.4,
-  oldestQueueMs: 60 * 60_000,
-  landingP90Ms: 30 * 60_000,
-  attemptsPerIntegrated: 1.5,
-};
+export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = defaults.flow;
 export function checkFlowAlarms(
   db: Database,
   report: ReturnType<typeof flowReport>,
