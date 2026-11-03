@@ -49,9 +49,10 @@ export async function growthRealmImageDownloadFixture(): Promise<GrowthRealmImag
        WHERE r.route=$1 AND r.realm_id=$2 AND r.state='active' AND s.state='active'`,
       [route, realmId],
     );
-    if (anchors.rows.length !== 1 || anchors.rows[0]?.route !== anchors.rows[0]?.space_route)
+    const anchor = anchors.rows[0];
+    if (anchors.rows.length !== 1 || !anchor || anchor.route !== anchor.space_route)
       throw new Error(`Expected one active Realm and independently anchored Space at route ${route}`);
-    const spaceId = anchors.rows[0].space_id;
+    const spaceId = anchor.space_id;
 
     await base.grant(reader.accountId, realmId, ['realm:manage']);
     const readable = await base.readRealm(realmId, reader.bearer);

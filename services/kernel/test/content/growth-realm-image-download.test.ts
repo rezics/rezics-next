@@ -281,7 +281,7 @@ function assertGrowthReport(name: string, report: Awaited<ReturnType<typeof chec
   ).toBe(true);
 
   const observedRelations = growsHistory
-    ? relations.filter((relation) => relation !== 'community.space_revision' && relation !== 'content.media_variant')
+    ? relations.filter((relation) => relation !== 'content.media_variant')
     : relations.filter((relation) => relation !== 'community.realm_ban' && relation !== 'access.resource_grant');
   for (const relation of observedRelations) {
     const rowCounts = report.samples.map(({ cost }) => cost.relations[relation]?.rows);
