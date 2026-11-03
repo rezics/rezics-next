@@ -2,8 +2,12 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
-import { discoveryPublicHref } from './discovery-public-links';
-import type { PublicDiscoveryHit } from './discovery';
+import {
+  discoveryCollectionHref,
+  discoveryReviewHref,
+  discoverySpaceHref,
+} from './discovery-public-links';
+import type { PublicCollectionSummary, PublicDiscoveryHit, PublicReviewSummary, PublicSpaceSummary } from './discovery';
 
 function options(locale: string) {
   return { locale: locale as Locale };
@@ -14,20 +18,21 @@ function reviewTitle(title: string | null, locale: string): string {
 }
 
 function PublicCollectionRow({
-  hit,
+  id,
+  summary,
   kind,
   locale,
 }: {
-  hit: Extract<PublicDiscoveryHit, { summary: { kind: 'collection' } }>;
+  id: string;
+  summary: PublicCollectionSummary;
   kind: string;
   locale: string;
 }) {
-  const { summary } = hit.summary;
   return (
     <ContentItem
-      data-discovery-collection={hit.key.id}
+      data-discovery-collection={id}
       title={summary.title}
-      href={discoveryPublicHref(hit, locale)}
+      href={discoveryCollectionHref(id, locale)}
       metadata={<span>{kind}</span>}
       preview={summary.description ? <p className="line-clamp-2 break-words">{summary.description}</p> : undefined}
     />
@@ -35,15 +40,16 @@ function PublicCollectionRow({
 }
 
 function ReviewRow({
-  hit,
+  id,
+  summary,
   kind,
   locale,
 }: {
-  hit: Extract<PublicDiscoveryHit, { summary: { kind: 'review' } }>;
+  id: string;
+  summary: PublicReviewSummary;
   kind: string;
   locale: string;
 }) {
-  const summary = hit.summary.value;
   const reviewedSubject = summary.subject;
   const reviewedTitle = reviewedSubject?.title;
   const context = (
@@ -59,9 +65,9 @@ function ReviewRow({
 
   return (
     <ContentItem
-      data-discovery-review={hit.key.id}
+      data-discovery-review={id}
       title={reviewTitle(summary.title, locale)}
-      href={discoveryPublicHref(hit, locale)}
+      href={discoveryReviewHref(id, summary.title, locale)}
       context={context}
       metadata={authorName ? <span>{authorName}{authorHandle ? ` ${authorHandle}` : ''}</span> : undefined}
       preview={summary.excerpt ? <p className="line-clamp-3 break-words">{summary.excerpt}</p> : undefined}
@@ -70,21 +76,22 @@ function ReviewRow({
 }
 
 function SpaceRow({
-  hit,
+  id,
+  summary,
   kind,
   locale,
 }: {
-  hit: Extract<PublicDiscoveryHit, { summary: { kind: 'space' } }>;
+  id: string;
+  summary: PublicSpaceSummary;
   kind: string;
   locale: string;
 }) {
-  const summary = hit.summary.value;
   const realmTitle = summary.realm?.title;
   return (
     <ContentItem
-      data-discovery-space={hit.key.id}
+      data-discovery-space={id}
       title={summary.title}
-      href={discoveryPublicHref(hit, locale)}
+      href={discoverySpaceHref(summary.address, locale)}
       context={
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span>{kind}</span>
@@ -99,12 +106,14 @@ function SpaceRow({
 
 /** Current public summaries only; rendering does not read, hydrate, rank, or enrich a row. */
 export function DiscoveryPublicRow({ hit, kind, locale }: { hit: PublicDiscoveryHit; kind: string; locale: string }) {
-  switch (hit.summary.kind) {
+  const { id } = hit.key;
+  const summary = hit.summary;
+  switch (summary.kind) {
     case 'collection':
-      return <PublicCollectionRow hit={hit} kind={kind} locale={locale} />;
+      return <PublicCollectionRow id={id} summary={summary.value} kind={kind} locale={locale} />;
     case 'review':
-      return <ReviewRow hit={hit} kind={kind} locale={locale} />;
+      return <ReviewRow id={id} summary={summary.value} kind={kind} locale={locale} />;
     case 'space':
-      return <SpaceRow hit={hit} kind={kind} locale={locale} />;
+      return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />;
   }
 }
