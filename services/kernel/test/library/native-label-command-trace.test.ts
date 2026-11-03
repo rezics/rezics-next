@@ -26,8 +26,11 @@ test('a returned refusal is observed; a thrown failure never manufactures a deni
   const trace = new NativeLabelCommandTrace();
   const result = await trace.trace(async () => {
     expect(await trace.authorize('subject:read', async () => false)).toBe(false);
-    await expect(trace.authorize('subject:read', async () => { throw new Error('storage failure'); }))
-      .rejects.toThrow('storage failure');
+    await expect(
+      trace.authorize('subject:read', async () => {
+        throw new Error('storage failure');
+      }),
+    ).rejects.toThrow('storage failure');
     trace.query(['SELECT * FROM core.receipt ORDER BY command_kind']);
     trace.query(['INSERT INTO core.receipt(command_kind) VALUES ($1)', ['library_label.create']]);
   });
@@ -59,11 +62,13 @@ test('delayed completion emits nothing early or after scope exit, error or close
 });
 
 test('concurrent callbacks and worlds retain separate sequences and SQL parameters', async () => {
-  const first = new NativeLabelCommandTrace(), second = new NativeLabelCommandTrace();
-  const run = (trace: NativeLabelCommandTrace, action: string) => trace.trace(async () => {
-    await trace.authorize(action, async () => true);
-    trace.query([{ text: receipt[0], values: [7, action] }]);
-  });
+  const first = new NativeLabelCommandTrace(),
+    second = new NativeLabelCommandTrace();
+  const run = (trace: NativeLabelCommandTrace, action: string) =>
+    trace.trace(async () => {
+      await trace.authorize(action, async () => true);
+      trace.query([{ text: receipt[0], values: [7, action] }]);
+    });
   const results = await Promise.all([run(first, 'a'), run(first, 'b'), run(second, 'c')]);
   for (const [index, action] of ['a', 'b', 'c'].entries())
     expect(results[index]!.events).toEqual([

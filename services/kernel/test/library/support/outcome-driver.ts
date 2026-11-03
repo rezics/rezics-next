@@ -540,7 +540,12 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
 
     workClient = await createWorkClient(databaseUrl);
     let activeInternalCapture: CapturedStatements | undefined;
-    restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture, commandTrace);
+    restorePoolInstrumentation = instrumentLibraryPools(
+      databaseUrl,
+      db.pool,
+      () => activeInternalCapture,
+      commandTrace,
+    );
 
     const accounts = {
       owner: { id: ownerAccount.id, route: ownerAccount.route, partition: ownerAccount.partition },
