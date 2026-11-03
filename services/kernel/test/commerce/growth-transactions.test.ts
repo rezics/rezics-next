@@ -1,10 +1,14 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import type { PoolClient, QueryConfig } from 'pg';
 import { createPayouts } from '../../src/commerce/payouts.ts';
-import type { StripeTransaction } from '../../src/commerce/model.ts';
+import type { Order, StripeTransaction } from '../../src/commerce/model.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readSettlementState } from '../../src/commerce/store.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { capture, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
+import { nativeAnchorFixture } from './support/checkout-anchor.ts';
 import { workFixture } from './support/work-fixture.ts';
+
+setDefaultTimeout(360_000);
 
 let fixture: Awaited<ReturnType<typeof workFixture>>;
 const connections = new Set<PoolClient>();
@@ -28,6 +32,148 @@ const transaction = (id: string): StripeTransaction => ({
   exchangeRate: null,
   created: '2026-01-01T00:00:00.000Z',
 });
+
+const namedScales = [64, 512, 4096] as const;
+const perOrderHistoryLimit = 255;
+type HistoryAxis = 'transactions' | 'orders' | 'receipts';
+type NamedOperation = 'settlement-first-apply' | 'settlement-replay' | 'royalty-first-apply';
+
+async function insertOrderRows(
+  database: GrowthDatabase,
+  anchor: Order,
+  count: number,
+) {
+  if (!count) return [] as string[];
+  const route = routeOf(anchor.id);
+  if (route === null) throw new Error('Growth anchor order has no route');
+  const now = new Date().toISOString();
+  const rows = Array.from({ length: count }, () => ({
+    route,
+    order_id: newId(route),
+    buyer_account_id: anchor.buyerAccountId,
+    offer_id: anchor.offerId,
+    offer_revision: anchor.offerRevision,
+    creator_account_id: anchor.creatorAccountId,
+    title: anchor.title,
+    currency: anchor.currency,
+    unit_amount_minor: anchor.unitAmountMinor,
+    tax_code: anchor.taxCode,
+    royalty_basis_points: anchor.royaltyBasisPoints,
+    settlement: 'pending',
+    checkout_session_id: null,
+    checkout_url: null,
+    checkout_expires_at: null,
+    payment_intent_id: null,
+    observed_at: null,
+    created_at: now,
+    updated_at: now,
+    revision: 1,
+    transaction_id: newId(route),
+    amount_tax_minor: null,
+    target_subject_id: anchor.targetSubjectId,
+  }));
+  await database.admin.query(
+    `INSERT INTO commerce.purchase_order (
+       route, order_id, buyer_account_id, offer_id, offer_revision, creator_account_id, title,
+       currency, unit_amount_minor, tax_code, royalty_basis_points, settlement, checkout_session_id,
+       checkout_url, checkout_expires_at, payment_intent_id, observed_at, created_at, updated_at,
+       revision, transaction_id, amount_tax_minor, target_subject_id
+     )
+     SELECT route, order_id, buyer_account_id, offer_id, offer_revision, creator_account_id, title,
+       currency, unit_amount_minor, tax_code, royalty_basis_points, settlement, checkout_session_id,
+       checkout_url, checkout_expires_at, payment_intent_id, observed_at, created_at, updated_at,
+       revision, transaction_id, amount_tax_minor, target_subject_id
+     FROM jsonb_to_recordset($1::jsonb) AS x(
+       route int, order_id uuid, buyer_account_id uuid, offer_id uuid, offer_revision int,
+       creator_account_id uuid, title text, currency text, unit_amount_minor bigint, tax_code text,
+       royalty_basis_points int, settlement text, checkout_session_id text, checkout_url text,
+       checkout_expires_at timestamptz, payment_intent_id text, observed_at timestamptz,
+       created_at timestamptz, updated_at timestamptz, revision int, transaction_id uuid,
+       amount_tax_minor bigint, target_subject_id uuid
+     )`,
+    [JSON.stringify(rows)],
+  );
+  return rows.map(({ order_id }) => order_id);
+}
+
+async function growTransactionRows(
+  database: GrowthDatabase,
+  route: number,
+  parentIds: readonly string[],
+  from: number,
+  to: number,
+) {
+  if (from === to) return;
+  if (!parentIds.length) throw new Error('Transaction growth needs fixed unrelated order anchors');
+  const rows = Array.from({ length: to - from }, (_, offset) => {
+    const ordinal = from + offset;
+    return {
+      route,
+      order_id: parentIds[ordinal % parentIds.length],
+      balance_transaction_id: `txn_growthn${ordinal}`,
+      kind: 'refund_reversal',
+      source_id: 're_growth',
+      currency: 'usd',
+      amount_minor: 1,
+      fee_minor: 0,
+      net_minor: 1,
+      fee_details: [],
+      exchange_rate: null,
+      stripe_created: '2026-01-01T00:00:00.000Z',
+      recorded_at: '2026-01-01T00:00:00.000Z',
+      transaction_id: newId(route),
+    };
+  });
+  await database.admin.query(
+    `INSERT INTO commerce.order_transaction (
+       route, order_id, balance_transaction_id, kind, source_id, currency, amount_minor, fee_minor,
+       net_minor, fee_details, exchange_rate, stripe_created, recorded_at, transaction_id
+     )
+     SELECT route, order_id, balance_transaction_id, kind, source_id, currency, amount_minor, fee_minor,
+       net_minor, fee_details, exchange_rate, stripe_created, recorded_at, transaction_id
+     FROM jsonb_to_recordset($1::jsonb) AS x(
+       route int, order_id uuid, balance_transaction_id text, kind text, source_id text, currency text,
+       amount_minor bigint, fee_minor bigint, net_minor bigint, fee_details jsonb, exchange_rate numeric,
+       stripe_created timestamptz, recorded_at timestamptz, transaction_id uuid
+     )`,
+    [JSON.stringify(rows)],
+  );
+}
+
+async function growReceiptRows(
+  database: GrowthDatabase,
+  partition: number,
+  principalId: string,
+  commandKind: string,
+  from: number,
+  to: number,
+) {
+  if (from === to) return;
+  const rows = Array.from({ length: to - from }, (_, offset) => ({
+    idempotency_key: `growth_history_${from + offset}`,
+    transaction_id: crypto.randomUUID(),
+    position: 1_000_000 + from + offset,
+  }));
+  await database.admin.query(
+    `INSERT INTO core.receipt (
+       partition_no, principal_kind, principal_id, command_kind, idempotency_key,
+       request_digest, epoch, position, transaction_id, response
+     )
+     SELECT $2, 'account', $3, $4, idempotency_key, decode(repeat('00', 32), 'hex'),
+       1, position, transaction_id, '{}'::jsonb
+     FROM jsonb_to_recordset($1::jsonb) AS x(idempotency_key text, transaction_id uuid, position bigint)`,
+    [JSON.stringify(rows), partition, principalId, commandKind],
+  );
+}
+
+function indexProbeBudget(axis: HistoryAxis, operation: NamedOperation) {
+  // Count only anchored descents into the independently growing relation: order identity reads/locks,
+  // named transaction/probe keys, and the command receipt key plus its unique insert.
+  if (operation === 'settlement-replay') return axis === 'receipts' ? 1 : 0;
+  if (axis === 'transactions') return operation === 'settlement-first-apply' ? 4 : 1;
+  if (axis === 'orders') return operation === 'settlement-first-apply' ? 4 : operation === 'royalty-first-apply' ? 1 : 0;
+  return 2;
+}
 
 // One method seeds both the buyer history and the creator's already recorded lines at every scale.
 async function seed(length: number) {
@@ -168,3 +314,144 @@ test('settlement and royalty read only named keys with equal statements and rows
   expect(measurements[1]).toEqual(measurements[0]);
   expect(measurements[2]).toEqual(measurements[0]);
 });
+
+for (const axis of ['transactions', 'orders', 'receipts'] as const) {
+  for (const operation of ['settlement-first-apply', 'settlement-replay', 'royalty-first-apply'] as const) {
+    test(`Commerce ${operation} keeps native work bounded across unrelated ${axis}`, async () => {
+      const native = await nativeAnchorFixture();
+      try {
+        const anchor = await native.checkout(true, false);
+        const orderRoute = routeOf(anchor.id);
+        if (orderRoute === null) throw new Error('Commerce growth anchor has no route');
+        const payouts = createPayouts({ pool: native.db.pool });
+        // Seventeen fixed parents keep all 4096 unrelated movements within the 255-row order cap.
+        const parentOrders =
+          axis === 'transactions'
+            ? await insertOrderRows(native.db, anchor, Math.ceil(namedScales[2] / perOrderHistoryLimit))
+            : [];
+        const royaltyCase = operation === 'royalty-first-apply';
+        const principalId = royaltyCase ? anchor.creatorAccountId : anchor.buyerAccountId;
+        const receiptRoute = royaltyCase ? routeOf(principalId) : orderRoute;
+        if (receiptRoute === null) throw new Error('Commerce receipt actor has no route');
+        const receiptPartition = partitionOf(receiptRoute);
+        const commandKind = royaltyCase ? 'commerce.royalty.record' : 'commerce.checkout.apply';
+
+        async function prepareScenario() {
+          const order = await native.checkout(true, false);
+          const sessionId = order.checkoutSessionId;
+          if (!sessionId) throw new Error('Commerce growth order has no Checkout Session');
+          native.fake.pay(sessionId);
+          const snapshot = await native.stripe.readCheckout(sessionId);
+          const tag = crypto.randomUUID().replaceAll('-', '');
+          snapshot.transactions = [
+            snapshot.transactions[0]!,
+            ...Array.from({ length: perOrderHistoryLimit - 1 }, (_, index) => transaction(`txn_seed${tag}n${index}`)),
+          ];
+          const seedIds = snapshot.transactions.map(({ id }) => id);
+          expect(
+            await native.commands.applyCheckoutSnapshot(snapshot, `growth:seed:${tag}`),
+          ).toMatchObject({ changed: true });
+          expect(
+            await payouts.recordTransactions(order.id, seedIds, `growth:royalty:seed:${tag}`),
+          ).toMatchObject({ changed: true });
+
+          const next = transaction(`txn_change${tag}`);
+          const delta = structuredClone(snapshot);
+          delta.transactions = [next];
+          delta.observedAt = new Date(Date.parse(snapshot.observedAt) + 1000).toISOString();
+          const applyKey = `growth:settle:${tag}`;
+          const royaltyKey = `growth:royalty:${tag}`;
+          if (operation !== 'settlement-first-apply')
+            expect(await native.commands.applyCheckoutSnapshot(delta, applyKey)).toMatchObject({
+              changed: true,
+            });
+          return { order, delta, next, applyKey, royaltyKey };
+        }
+
+        async function runScenario(scenario: Awaited<ReturnType<typeof prepareScenario>>) {
+          if (operation === 'royalty-first-apply') {
+            const result = await payouts.recordTransactions(
+              scenario.order.id,
+              [scenario.next.id],
+              scenario.royaltyKey,
+            );
+            expect(result).toMatchObject({ changed: true });
+            return result;
+          }
+          const result = await native.commands.applyCheckoutSnapshot(scenario.delta, scenario.applyKey);
+          expect(result).toMatchObject({ changed: operation === 'settlement-first-apply' });
+          return result;
+        }
+
+        // Prepare one fresh order for each warmup and measured sample before growth starts. Each
+        // order carries the owner's maximum 255-row preexisting history; fixed setup rows therefore
+        // do not co-grow with the unrelated history selected below.
+        const scenarios = new Map<
+          number,
+          {
+            warmup: Awaited<ReturnType<typeof prepareScenario>>;
+            measured: Awaited<ReturnType<typeof prepareScenario>>;
+          }
+        >();
+        for (const scale of namedScales)
+          scenarios.set(scale, { warmup: await prepareScenario(), measured: await prepareScenario() });
+
+        const report = await checkGrowth(native.db, {
+          name: `Commerce ${operation} / unrelated ${axis}`,
+          scales: namedScales,
+          bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+          indexProbes: indexProbeBudget(axis, operation),
+          includeBackends: true,
+          repetitions: 1,
+          warmups: 1,
+          async grow(database, scale, previous) {
+            if (axis === 'transactions')
+              await growTransactionRows(database, orderRoute, parentOrders, previous, scale);
+            else if (axis === 'orders') await insertOrderRows(database, anchor, scale - previous);
+            else await growReceiptRows(database, receiptPartition, principalId, commandKind, previous, scale);
+          },
+          async warmup(_database, scale) {
+            const scenario = scenarios.get(scale)?.warmup;
+            if (!scenario) throw new Error(`Missing Commerce ${operation} warmup at ${scale}`);
+            const measured = await capture(native.db, () => runScenario(scenario), { includeBackends: true });
+            const safetyProbes = measured.capture.statements.filter(
+              (sql) =>
+                /SELECT\s+1\s+AS\s+present/i.test(sql) &&
+                /FROM commerce\.order_transaction\b/i.test(sql) &&
+                /LIMIT\s+257\b/i.test(sql),
+            );
+            expect(safetyProbes).toHaveLength(operation === 'settlement-first-apply' ? 1 : 0);
+            expect(measured.capture.plans.length).toBeGreaterThan(0);
+            expect(measured.capture.statements.some((sql) => /FROM core\.receipt\b/i.test(sql))).toBe(true);
+            console.log(JSON.stringify({ axis, operation, scale, native: measured.capture }));
+          },
+          async operation(_database, scale) {
+            const scenario = scenarios.get(scale)?.measured;
+            if (!scenario) throw new Error(`Missing Commerce ${operation} measurement at ${scale}`);
+            return runScenario(scenario);
+          },
+        });
+
+        expect(report.samples.map(({ scale }) => scale)).toEqual([...namedScales]);
+        for (const sample of report.samples) {
+          const statements = sample.statementRepetitions.flat().map(({ statement }) => statement);
+          const safetyProbes = statements.filter(
+            (sql) =>
+              /SELECT\s+1\s+AS\s+present/i.test(sql) &&
+              /FROM commerce\.order_transaction\b/i.test(sql) &&
+              /LIMIT\s+257\b/i.test(sql),
+          );
+          expect(safetyProbes).toHaveLength(operation === 'settlement-first-apply' ? 1 : 0);
+          expect(sample.cost.statements).toBeGreaterThan(0);
+          expect(sample.cost.plans).toBeGreaterThan(0);
+          expect(sample.cost.rows).toBeGreaterThan(0);
+          expect(sample.cost.blocks).toBeGreaterThan(0);
+          expect(sample.cost.sharedHit + sample.cost.sharedRead).toBe(sample.cost.blocks);
+        }
+        console.log(JSON.stringify({ axis, operation, report }));
+      } finally {
+        await native.close();
+      }
+    });
+  }
+}
