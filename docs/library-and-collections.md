@@ -74,9 +74,11 @@ definitions Type; members keep their own Types. Neither changes membership or au
 [Collection presentation and editor contract](collection-presentation.md) owns the selected fields, editor operations
 and current delivery inventory.
 
-- **Everything** includes a subject with live explicit state, an effective live label assignment, retained
-  session/history or retained holding. Removing one fact leaves membership while another survives. Empty entry
-  shells, trash, follows, curated occurrences, ratings and published-log snapshots alone establish no membership.
+- **Everything** includes a subject with live explicit state, a nonempty private annotation, a reviewed provider
+  observation, an effective live label assignment, retained session/history or retained holding. Removing one fact
+  leaves membership while another survives. Empty entry shells, trash, follows, curated occurrences, ratings and
+  published-log snapshots alone establish no membership. An annotation or observation adds no state, session,
+  copy, label, rating or public disclosure.
 - **State Collections** match explicit state by `(profileId, stateSetId, stateId)`. Only live entry, retained copy
   and session facts with actual accepted pins support an in-use state set and all its sibling views, including empty
   siblings. Labels and soft-deleted snapshots support none. No current or historical type is guessed from metadata.
@@ -124,6 +126,44 @@ and materialization. Every account has an empty logical Everything; state discov
 default. Liked uses the same logical Collection contract. State identities remain pinnable. Dynamic DTOs omit
 curated member count, creation/update times, order epoch and occurrence fields; no fabricated zeros or occurrences.
 An explicit owner rename wins over the localized built-in title.
+
+## Private rich personal entries
+
+One authenticated owner entry combines locally edited notes and priority with independently addressed provider
+observations for one canonical Subject. The mounted owner API is `GET /v1/libraryEntries/{subjectId}/personal`,
+`PUT /v1/libraryEntries/{subjectId}/annotations`, `POST /v1/libraryEntries/{subjectId}/sourceObservations` and
+`PATCH /v1/libraryEntries/{subjectId}/sourceObservations`. The native commands use the existing Library receipt,
+current Subject, account and terminal lifecycle authorities. Reads and write responses are owner-private and
+`no-store`; they do not alter explicit state or the consumption-date/session owner.
+
+Annotation revision `0` creates the first version; each successful compare-and-set advances it. Note and priority
+each require `{op:"set",value:...}`, `{op:"clear"}` or `{op:"unchanged"}`. Notes are limited to 4,096 UTF-8 bytes.
+Priority is personal list position, not a catalogue rank or rating. Null means unranked.
+
+Decision: Personal priority is an owner-local list position from 1 through 100, where 1 is highest; null is unranked.
+
+Each source observation is separately addressed by owner, canonical Subject, provider key and provider record ID.
+Admission requires `confirmReviewed:true` and inserts once; a duplicate address conflicts. Correction requires the
+observation's current revision and confirmation; each privacy/timestamp field is set, cleared or left unchanged.
+Source privacy says only what the provider entry meant: `private`, `source_visible`, `unknown`, `absent` or explicitly
+`cleared`. `source_visible` is never a REZICS publication or disclosure grant. Original timestamp strings, precision
+and zone knowledge remain source evidence; they are not native audit time or consumption dates. See the detailed
+[annotation contract](library-entry-annotations.md) and [source provenance contract](library-entry-provenance.md).
+
+Annotation-only facts and any reviewed provider observation participate in Everything through the existing native
+`entry` owner support family. An empty/cleared annotation shell does not. State Collections still require their
+accepted explicit state pin. Ordinary state removal preserves annotations and provider observations. Terminal
+account fact deletion removes both, including all source observations.
+
+The four personal-list import owners use the same typed admission/read DTO. They address evidence only with an
+already-resolved canonical Subject and the provider's stable record identity; this API does not resolve provider
+IDs, parse provider payloads, or activate vocabulary. A field absent from the source is submitted as `absent`; a
+present but uninterpretable field is `unknown`. An import may write a note or priority only after the owner confirms
+the value and the adapter submits the current annotation revision. Unchanged incoming values use `unchanged`; only
+an explicit owner clear uses `clear`. Duplicate source admission returns `409`, stale correction returns `409`, and
+same-key/body retry replays the original response. If an adapter cannot preserve a source timestamp's original value,
+precision or zone knowledge, it leaves that evidence unsupported rather than coercing it. Omitted note/priority data
+never clears or overwrites local edits.
 
 Logical revision 0 becomes revision 1 only on the first authorized materializing write, atomically with native
 resource grants and the account fence. Read authorization stays native; materialization permits no read-grant bypass.

@@ -5,6 +5,19 @@ import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
+export type {
+  PersonalEntry,
+  PersonalEntryAnnotationWrite,
+  PersonalEntryFieldChange,
+  PersonalEntryObservation,
+  PersonalEntryPrivacy,
+  PersonalEntryPrivacyValue,
+  PersonalEntrySourceAdmission,
+  PersonalEntrySourceCorrection,
+  PersonalEntryTimestampValue,
+  PersonalEntryTimestamp,
+  PersonalEntryTimestampInput,
+} from './kernel/library/entry-personal-model';
 
 type Routes = KernelType['~Routes']['v1'];
 
@@ -36,7 +49,46 @@ type ClientApp = Elysia<
 >;
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
-export type KernelClient = Omit<ReturnType<typeof treaty<ClientApp>>['v1'], 'subjects'> & {
+type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
+type PersonalEntryCall<T> = Promise<{
+  data: T | null;
+  error: unknown;
+  response: Response;
+  status: number;
+}>;
+type PersonalReadOptions = { headers?: Record<string, string> };
+type PersonalWriteOptions = { headers: Record<string, string> & { 'idempotency-key': string } };
+type PersonalEntryEndpoints = {
+  personal: {
+    get(options?: PersonalReadOptions): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
+  };
+  annotations: {
+    put(
+      body: import('./kernel/library/entry-personal-model').PersonalEntryAnnotationWrite,
+      options: PersonalWriteOptions,
+    ): PersonalEntryCall<{ personalEntry: import('./kernel/library/entry-personal-model').PersonalEntry }>;
+  };
+  sourceObservations: {
+    post(
+      body: import('./kernel/library/entry-personal-model').PersonalEntrySourceAdmission,
+      options: PersonalWriteOptions,
+    ): PersonalEntryCall<{
+      sourceObservation: import('./kernel/library/entry-personal-model').PersonalEntryObservation;
+    }>;
+    patch(
+      body: import('./kernel/library/entry-personal-model').PersonalEntrySourceCorrection,
+      options: PersonalWriteOptions,
+    ): PersonalEntryCall<{
+      sourceObservation: import('./kernel/library/entry-personal-model').PersonalEntryObservation;
+    }>;
+  };
+};
+type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
+
+export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries'> & {
+  libraryEntries: PersonalLibraryEntries;
   subjects: KernelSubjectsClient;
 };
 export type KernelSubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
@@ -85,5 +137,5 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
       }
     },
   };
-  return treaty<ClientApp>(origin, config).v1;
+  return treaty<ClientApp>(origin, config).v1 as unknown as KernelClient;
 }
